@@ -113,6 +113,7 @@ defmodule Tempo do
   alias Tempo.FloatingTempoError
   alias Tempo.GroundedTempoError
   alias Tempo.Interval
+  alias Tempo.IntervalEndpointsError
   alias Tempo.IntervalSet
   alias Tempo.InvalidCalendarError
   alias Tempo.InvalidDateError
@@ -3904,6 +3905,24 @@ defmodule Tempo do
       ) do
     from_tempo = Math.subtract(to, duration)
     {:ok, %Tempo.Interval{from: from_tempo, to: to, metadata: metadata}}
+  end
+
+  # A recurrence with neither endpoint has nothing to materialise:
+  # `Tempo.RRule.parse("FREQ=WEEKLY;BYDAY=MO")` with no DTSTART is
+  # "every Monday" beginning nowhere, and no `:bound` can supply the
+  # missing anchor — a bound says where to stop looking, not where the
+  # series starts. Returning the rule unchanged would report success
+  # while handing back the very thing that could not be materialised,
+  # so the failure would surface much later, somewhere the cause is no
+  # longer visible.
+  def to_interval(%Tempo.Interval{from: from, to: to, recurrence: recurrence} = interval, _opts)
+      when from in [nil, :undefined] and to in [nil, :undefined] and recurrence != 1 do
+    {:error,
+     IntervalEndpointsError.exception(
+       interval: interval,
+       operation: "materialise a recurrence that has no start",
+       reason: :unanchored
+     )}
   end
 
   def to_interval(%Tempo.Interval{} = interval, _opts) do

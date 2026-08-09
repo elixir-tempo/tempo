@@ -10,6 +10,20 @@
 
 * `Tempo.Compare` is now doctested — its documented examples had never been executed.
 
+## [Unreleased]
+
+### Added
+
+* `Tempo.ICal.available_from_ical/2` and `available/2` read [RFC 7953](https://www.rfc-editor.org/rfc/rfc7953.html) `VAVAILABILITY` — the time a calendar user *offers*, as against the `VEVENT` time they have *taken*. Each `AVAILABLE` subcomponent expands through the same recurrence path as an event, and `PRIORITY` resolves overlapping components, the winner deciding its whole period so that its silence means busy.
+
+### Fixed
+
+* A component stating `DURATION` instead of `DTEND` is now materialised rather than refused with "Duration-only VEVENT (no DTEND) is not yet supported". RFC 5545 allows either on a `VEVENT` and RFC 7953 allows either on `VAVAILABILITY` and `AVAILABLE`, so all three now accept both.
+
+* An unanchored recurrence — `Tempo.RRule.parse("FREQ=WEEKLY;BYDAY=MO")` with no `:from`, which carries `nil` endpoints rather than the ISO parser's `:undefined` — passed the member validation and crashed several frames into set algebra with `UndefinedFunctionError` or `FunctionClauseError`. Both sentinels now count as unbounded, so `intersection/2`, `union/2` and `difference/2` return `Tempo.IntervalEndpointsError` as they always did for `2020Y/..`.
+
+* `Tempo.to_interval/2` returned `{:ok, recurrence}` for a recurrence with no start, reporting success while handing back the value that could not be materialised. It now returns `Tempo.IntervalEndpointsError` with `reason: :unanchored`, since no `:bound` can supply a missing anchor.
+
 ## [v1.1.1] — 2026-08-03
 
 ### Fixed

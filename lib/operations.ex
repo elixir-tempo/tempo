@@ -421,15 +421,28 @@ defmodule Tempo.Operations do
       a_cal == b_cal ->
         {:ok, b_set}
 
+      # An interval with unbounded endpoints — an unanchored
+      # recurrence such as `~o"R/../P1W/FL1KN"`, which RRULE parsing
+      # produces when no DTSTART is supplied — names no calendar.
+      # `nil` is not a calendar to convert *into*: passing it on asks
+      # `Date.convert!/2` to call a function on `nil`.
+      is_nil(a_cal) ->
+        {:ok, b_set}
+
       # Non-anchored intervals don't have calendar-bound components;
       # their time-of-day units work the same in any calendar.
-      not Tempo.anchored?(b_first.from) ->
+      not anchored_endpoint?(b_first.from) ->
         {:ok, b_set}
 
       true ->
         convert_calendar_intervals(b_set, a_cal)
     end
   end
+
+  # `Tempo.anchored?/1` takes a `%Tempo{}`, and an unbounded endpoint
+  # is `nil` — which is not anchored, rather than an error.
+  defp anchored_endpoint?(%Tempo{} = tempo), do: Tempo.anchored?(tempo)
+  defp anchored_endpoint?(_unbounded), do: false
 
   defp endpoint_calendar(%Interval{from: %Tempo{calendar: cal}}), do: cal
   defp endpoint_calendar(%Interval{to: %Tempo{calendar: cal}}), do: cal
@@ -451,6 +464,9 @@ defmodule Tempo.Operations do
   # Convert a single %Tempo{}'s year/month/day into the target
   # calendar. Non-anchored Tempos (no :year) pass through
   # unchanged — their components are calendar-independent.
+  # An unbounded endpoint carries no calendar-bound components.
+  defp convert_tempo_calendar(nil, _target_calendar), do: nil
+
   defp convert_tempo_calendar(%Tempo{} = tempo, target_calendar) do
     if Tempo.anchored?(tempo) do
       source_calendar = tempo.calendar
@@ -649,13 +665,15 @@ defmodule Tempo.Operations do
     end
   end
 
+  # An unbounded endpoint has no resolution to contribute, so it is
+  # skipped rather than asked for one. A set of nothing but unbounded
+  # endpoints falls back to the default, as an empty set already does.
   defp finest_resolution(%IntervalSet{} = set) do
     set
     |> IntervalSet.to_list()
-    |> Enum.flat_map(fn %Interval{from: from, to: to} ->
-      [Tempo.resolution(from), Tempo.resolution(to)]
-    end)
-    |> Enum.map(fn {unit, _span} -> unit end)
+    |> Enum.flat_map(fn %Interval{from: from, to: to} -> [from, to] end)
+    |> Enum.filter(&is_struct(&1, Tempo))
+    |> Enum.map(fn endpoint -> endpoint |> Tempo.resolution() |> elem(0) end)
     |> Enum.min_by(&Unit.sort_key/1, fn -> :day end)
   end
 
@@ -671,6 +689,9 @@ defmodule Tempo.Operations do
       _eq_or_gt -> {:ok, tempo}
     end
   end
+
+  # There is no resolution to extend an unbounded endpoint to.
+  defp extend_or_pass(unbounded, _target), do: {:ok, unbounded}
 
   defp extend_endpoint(tempo, target) do
     case Tempo.extend_resolution(tempo, target) do

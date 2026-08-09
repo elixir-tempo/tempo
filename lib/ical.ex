@@ -21,9 +21,23 @@ if Code.ensure_loaded?(ICal) do
     dependency tree; projects that don't import calendar data don't
     pay the compile cost.
 
+    ## Availability
+
+    `VEVENT`s say what is **taken**. `available_from_ical/2` reads the
+    complementary [RFC 7953](https://www.rfc-editor.org/rfc/rfc7953.html)
+    `VAVAILABILITY` components, which say what is **offered** — a
+    resource's open hours, with `AVAILABLE` subcomponents repeating
+    under their own `RRULE` and `PRIORITY` resolving overlaps. A
+    scheduler usually wants both, and they compose directly:
+
+        {:ok, free} = Tempo.ICal.available_from_ical(ics, within: week)
+        {:ok, busy} = Tempo.ICal.from_ical(ics, bound: week)
+        {:ok, bookable} = Tempo.difference(free, busy)
+
     ## Required reading
 
     * [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545) — the iCalendar spec.
+    * [RFC 7953](https://www.rfc-editor.org/rfc/rfc7953) — calendar availability.
     * `guides/set-operations.md` for how the imported data is used downstream.
 
     ## RFC 5545 coverage
@@ -43,6 +57,8 @@ if Code.ensure_loaded?(ICal) do
     | `RRULE`   | anyway. The `ical` library exposes only the       |
     | per       | first `RRULE` on `event.rrule`, so we materialise |
     | `VEVENT`  | that one and silently ignore the rest.            |
+    | `DURATION`| Supported as the alternative to `DTEND`, on       |
+    |           | `VEVENT`, `VAVAILABILITY` and `AVAILABLE` alike.  |
 
     ## Zoned, UTC, and floating times
 
@@ -175,6 +191,255 @@ if Code.ensure_loaded?(ICal) do
         from_ical(ics, options)
       end
     end
+
+    @doc """
+    Materialise the *available* time an iCalendar's `VAVAILABILITY`
+    components declare, as a `%Tempo.IntervalSet{}`.
+
+    Where `from_ical/2` reads `VEVENT`s — time that is **taken** —
+    this reads [RFC 7953](https://www.rfc-editor.org/rfc/rfc7953.html)
+    availability: time that is **offered**. The two are complements,
+    not variants, and a scheduler usually wants both: open hours from
+    here, existing claims from there.
+
+    ### How a VAVAILABILITY is read
+
+    A `VAVAILABILITY` covers a period — `DTSTART` to `DTEND`, either
+    end optional and unbounded when absent. Inside that period the
+    default is busy, and each `AVAILABLE` subcomponent carves out free
+    time, repeating under its own `RRULE`, `RDATE` and `EXDATE`. An
+    `AVAILABLE` is shaped exactly like a `VEVENT`, so it materialises
+    through the same expander — the occurrence span, the RDATE extras
+    and the EXDATE removals all behave identically.
+
+    Outside every component's period nothing is asserted, so nothing
+    is returned: absence of a statement is not a statement of absence.
+
+    ### Priority
+
+    Where two components overlap, `PRIORITY` decides which applies —
+    1 is the highest and 9 the lowest, while 0 or absent ranks below
+    all of them. The winner decides its whole period, including the
+    parts where it offers nothing: a high-priority component with no
+    `AVAILABLE` covering Tuesday makes Tuesday unavailable, whatever a
+    lower-priority component says.
+
+    ### Arguments
+
+    * `ics` is iCalendar data as a string.
+
+    * `options` is a keyword list of options.
+
+    ### Options
+
+    * `:within` is the query window, a `t:Tempo.Interval.t/0` or any
+      value `Tempo.to_interval/2` accepts. Required: an `AVAILABLE`
+      carrying an unbounded `RRULE` has no materialisation without
+      one.
+
+    ### Returns
+
+    * `{:ok, interval_set}` of the available time; or
+
+    * `{:error, reason}`.
+
+    ### Examples
+
+        iex> ics = \"\"\"
+        ...> BEGIN:VCALENDAR
+        ...> VERSION:2.0
+        ...> BEGIN:VAVAILABILITY
+        ...> UID:office-hours
+        ...> DTSTAMP:20260601T000000Z
+        ...> DTSTART:20260601T000000Z
+        ...> DTEND:20260608T000000Z
+        ...> BEGIN:AVAILABLE
+        ...> UID:weekday-mornings
+        ...> DTSTAMP:20260601T000000Z
+        ...> DTSTART:20260601T090000Z
+        ...> DTEND:20260601T120000Z
+        ...> RRULE:FREQ=DAILY;COUNT=5
+        ...> END:AVAILABLE
+        ...> END:VAVAILABILITY
+        ...> END:VCALENDAR
+        ...> \"\"\"
+        iex> {:ok, free} = Tempo.ICal.available_from_ical(ics, within: ~o"2026Y6M1D/2026Y6M8D")
+        iex> Tempo.IntervalSet.count(free)
+        5
+
+    """
+    @spec available_from_ical(binary(), keyword()) ::
+            {:ok, IntervalSet.t()} | {:error, term()}
+    def available_from_ical(ics, options \\ []) when is_binary(ics) do
+      available(ICal.from_ics(ics), options)
+    rescue
+      e in [ArgumentError, MatchError, FunctionClauseError] ->
+        {:error, Exception.message(e)}
+    end
+
+    @doc """
+    The available time an already-parsed calendar declares.
+
+    The `%ICal{}` counterpart of `available_from_ical/2`, for when the
+    calendar has been parsed once and is being asked several
+    questions.
+
+    ### Arguments
+
+    * `calendar` is an `%ICal{}` struct.
+
+    * `options` is a keyword list of options.
+
+    ### Options
+
+    See `available_from_ical/2`.
+
+    ### Returns
+
+    * `{:ok, interval_set}` or `{:error, reason}`.
+
+    ### Examples
+
+        iex> calendar = Elixir.ICal.from_ics(\"\"\"
+        ...> BEGIN:VCALENDAR
+        ...> VERSION:2.0
+        ...> BEGIN:VAVAILABILITY
+        ...> UID:clinic
+        ...> DTSTAMP:20260601T000000Z
+        ...> BEGIN:AVAILABLE
+        ...> UID:tuesday-clinic
+        ...> DTSTAMP:20260601T000000Z
+        ...> DTSTART:20260602T090000Z
+        ...> DTEND:20260602T170000Z
+        ...> END:AVAILABLE
+        ...> END:VAVAILABILITY
+        ...> END:VCALENDAR
+        ...> \"\"\")
+        iex> {:ok, free} = Tempo.ICal.available(calendar, within: ~o"2026Y6M1D/2026Y6M8D")
+        iex> [tuesday] = Tempo.IntervalSet.to_list(free)
+        iex> {tuesday.from.time[:day], tuesday.from.time[:hour], tuesday.to.time[:hour]}
+        {2, 9, 17}
+
+    """
+    @spec available(ICal.t(), keyword()) :: {:ok, IntervalSet.t()} | {:error, term()}
+    def available(%ICal{} = calendar, options \\ []) do
+      with {:ok, window} <- query_window(options) do
+        calendar
+        |> Map.get(:availabilities, [])
+        |> by_descending_priority()
+        |> resolve_priority(window, empty_set(), options)
+      end
+    end
+
+    defp query_window(options) do
+      case Keyword.fetch(options, :within) do
+        {:ok, within} -> Tempo.to_interval(within)
+        :error -> {:error, ":within is required — an unbounded RRULE has no materialisation"}
+      end
+    end
+
+    # RFC 7953 §3.2: 1 is the highest priority and 9 the lowest, while
+    # 0 — or an absent PRIORITY — is lower than all of them. Sorting
+    # on the number alone would put 0 first, which is exactly backwards.
+    defp by_descending_priority(availabilities) do
+      Enum.sort_by(availabilities, fn availability ->
+        case availability.priority do
+          nil -> 10
+          0 -> 10
+          priority -> priority
+        end
+      end)
+    end
+
+    # Walk the components highest priority first, each deciding the
+    # part of the window still unclaimed by a stronger one. What it
+    # offers becomes available; the rest of its period is busy by
+    # definition, so removing its whole scope from `undecided` is what
+    # makes a higher priority actually override a lower one rather
+    # than merely add to it.
+    defp resolve_priority([], _undecided, free, _options), do: {:ok, free}
+
+    defp resolve_priority([availability | rest], undecided, free, options) do
+      with {:ok, scope} <- component_scope(availability, undecided),
+           {:ok, offered} <- offered_within(availability, scope, options),
+           {:ok, free} <- Tempo.union(free, offered),
+           {:ok, undecided} <- Tempo.difference(undecided, scope) do
+        resolve_priority(rest, undecided, free, options)
+      end
+    end
+
+    # The period a component governs, clipped to what is still
+    # undecided. An absent DTSTART or DTEND is unbounded on that side,
+    # which within a query window means the window's own edge.
+    defp component_scope(%ICal.Availability{} = availability, undecided) do
+      case bounds(availability) do
+        :unbounded -> {:ok, undecided}
+        {:ok, period} -> Tempo.intersection(undecided, period)
+        {:error, _} = error -> error
+      end
+    end
+
+    defp bounds(%ICal.Availability{dtstart: nil, dtend: nil, duration: nil}), do: :unbounded
+
+    defp bounds(%ICal.Availability{} = availability) do
+      %ICal.Event{
+        dtstart: availability.dtstart,
+        dtend: availability.dtend,
+        duration: availability.duration
+      }
+      |> single_event_to_interval()
+    end
+
+    # Every AVAILABLE subcomponent, expanded and clipped to the scope
+    # this component governs.
+    defp offered_within(%ICal.Availability{available: []}, _scope, _options),
+      do: {:ok, empty_set()}
+
+    defp offered_within(%ICal.Availability{available: available}, scope, options) do
+      options = Keyword.put_new(options, :bound, scope)
+
+      Enum.reduce_while(available, {:ok, empty_set()}, fn subcomponent, {:ok, acc} ->
+        case expand_available(subcomponent, scope, options) do
+          {:ok, offered} -> {:cont, Tempo.union(acc, offered)}
+          {:error, _} = error -> {:halt, error}
+        end
+      end)
+    end
+
+    # An AVAILABLE is a VEVENT in all but name — DTSTART with DTEND or
+    # DURATION, optionally repeating under RRULE, RDATE and EXDATE.
+    # Converting rather than reimplementing means the occurrence span,
+    # the RDATE extras and the EXDATE removals cannot drift from the
+    # VEVENT path, because they *are* the VEVENT path.
+    defp expand_available(%ICal.Availability.Available{} = subcomponent, scope, options) do
+      with {:ok, intervals} <- event_to_intervals(as_event(subcomponent), options),
+           {:ok, offered} <- IntervalSet.new(intervals, coalesce: true) do
+        Tempo.intersection(offered, scope)
+      end
+    end
+
+    defp as_event(%ICal.Availability.Available{} = subcomponent) do
+      %ICal.Event{
+        uid: subcomponent.uid,
+        dtstamp: subcomponent.dtstamp,
+        dtstart: subcomponent.dtstart,
+        dtend: subcomponent.dtend,
+        duration: subcomponent.duration,
+        recurrence_id: subcomponent.recurrence_id,
+        rrule: subcomponent.rrule,
+        rdates: subcomponent.rdates,
+        exdates: subcomponent.exdates,
+        summary: subcomponent.summary,
+        description: subcomponent.description,
+        location: subcomponent.location,
+        categories: subcomponent.categories,
+        comments: subcomponent.comments,
+        contacts: subcomponent.contacts,
+        custom_properties: subcomponent.custom_properties
+      }
+    end
+
+    defp empty_set, do: IntervalSet.new!([])
 
     ## ------------------------------------------------------------
     ## Calendar → IntervalSet
@@ -521,16 +786,15 @@ if Code.ensure_loaded?(ICal) do
       {:ok, from}
     end
 
-    defp dtend_to_tempo(%ICal.Event{dtend: nil, duration: _duration}, _from) do
-      # Duration-only events are parseable but require
-      # `Tempo.Math.add/2` on a Duration token whose shape the
-      # `ical` library surfaces as a `Timex.Duration`-ish record.
-      # Not in v1.
-      {:error,
-       ConversionError.exception(
-         target: Tempo.Interval,
-         reason: "Duration-only VEVENT (no DTEND) is not yet supported."
-       )}
+    defp dtend_to_tempo(%ICal.Event{dtend: nil, duration: %ICal.Duration{} = duration}, from) do
+      # A component stating DURATION instead of DTEND ends that far
+      # after its start. RFC 7953 lists DURATION as the alternative on
+      # both VAVAILABILITY and AVAILABLE, so availability needs this
+      # as much as events do.
+      case duration_units(duration) do
+        [] -> {:ok, from}
+        units -> {:ok, Tempo.shift(from, units)}
+      end
     end
 
     defp dtend_to_tempo(%ICal.Event{dtend: %Date{} = date}, _from) do
@@ -552,6 +816,26 @@ if Code.ensure_loaded?(ICal) do
          target: Tempo,
          reason: "Unsupported DTEND type: #{inspect(other)}"
        )}
+    end
+
+    # RFC 5545 §3.3.6 spells a duration as weeks, days and an
+    # hour/minute/second triple, carrying its own sign. Tempo shifts by
+    # units, so the struct maps straight across; zero components are
+    # dropped so a shift is only asked for what actually moves.
+    defp duration_units(
+           %ICal.Duration{positive: positive, time: {hours, minutes, seconds}} = duration
+         ) do
+      sign = if positive, do: 1, else: -1
+
+      [
+        week: duration.weeks,
+        day: duration.days,
+        hour: hours,
+        minute: minutes,
+        second: seconds
+      ]
+      |> Enum.reject(fn {_unit, amount} -> amount == 0 end)
+      |> Enum.map(fn {unit, amount} -> {unit, sign * amount} end)
     end
 
     # Lift the iCalendar properties users most often care about.

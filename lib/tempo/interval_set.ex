@@ -28,8 +28,10 @@ defmodule Tempo.IntervalSet do
     semantics means `[a, b) ++ [b, c) == [a, c)` — the coalesce
     pass merges both overlap and touch cases.
 
-  * No `:undefined` endpoints. (Open-ended intervals cannot
-    participate in a set; the caller must bound them first.)
+  * No missing endpoints, spelled either `:undefined` (an ISO 8601
+    open interval such as `2020Y/..`) or `nil` (an unanchored
+    recurrence). Neither has an extent, so neither can participate
+    in a set; the caller must bound them first.
 
   ## Counting
 
@@ -106,9 +108,9 @@ defmodule Tempo.IntervalSet do
 
   ### Arguments
 
-  * `intervals` is a list of `t:Tempo.Interval.t/0` values. Open-
-    ended intervals (`from: :undefined` or `to: :undefined`) are
-    rejected.
+  * `intervals` is a list of `t:Tempo.Interval.t/0` values. Intervals
+    missing an endpoint are rejected, whether it is `:undefined` (an
+    ISO 8601 open interval) or `nil` (an unanchored recurrence).
 
   ### Options
 
@@ -707,8 +709,14 @@ defmodule Tempo.IntervalSet do
   # that is neither is reported rather than raised: `new/2` answers
   # with a tagged tuple, so a bad value arriving from user input —
   # a changeset, a decoded document — must not crash the caller.
+  #
+  # Two things spell "no endpoint here". `:undefined` is what ISO 8601
+  # open intervals (`2020Y/..`) parse to; `nil` is what an unanchored
+  # recurrence carries — `Tempo.RRule.parse("FREQ=WEEKLY;BYDAY=MO")`
+  # with no DTSTART is "every Monday" beginning nowhere. Neither has an
+  # extent to sweep, so both are unbounded for the purposes of a set.
   defp validate_member(%Interval{from: from, to: to} = interval)
-       when from == :undefined or to == :undefined do
+       when from in [nil, :undefined] or to in [nil, :undefined] do
     {:error,
      IntervalEndpointsError.exception(
        interval: interval,

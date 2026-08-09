@@ -180,7 +180,11 @@ defmodule Tempo.MixProject do
       {:calendrical, "~> 1.0"},
       {:astro, "~> 2.4"},
       {:localize, "~> 1.0"},
-      {:ical, "~> 2.0 or ~> 3.0", optional: true},
+      # TODO revert to {:ical, "~> 2.0 or ~> 3.0", optional: true} once the
+      # VAVAILABILITY (RFC 7953) support is released upstream.
+      {:ical, path: "../ical", optional: true},
+      # TODO point at the hex release once jscalendar is published.
+      {:jscalendar, path: "../jscalendar", optional: true},
       {:ex_doc, "~> 0.38", only: [:dev, :test, :release], optional: true, runtime: false},
       {:benchee, "~> 1.3", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
