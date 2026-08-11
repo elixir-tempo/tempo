@@ -213,6 +213,115 @@ defmodule Tempo.JSCalendarTest do
     end
   end
 
+  describe "recurrence overrides" do
+    test "an override with no matching rule adds an occurrence" do
+      assert {:ok, set} =
+               Tempo.JSCalendar.from_jscalendar(event(~s(
+                   "start":"2026-06-01T09:00:00","duration":"PT1H",
+                   "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"daily","count":2}],
+                   "recurrenceOverrides":{"2026-06-05T09:00:00":{}}
+                 )))
+
+      assert spans(set) == [
+               "2026Y6M1DT9H0M0S/2026Y6M1DT10H0M0S",
+               "2026Y6M2DT9H0M0S/2026Y6M2DT10H0M0S",
+               "2026Y6M5DT9H0M0S/2026Y6M5DT10H0M0S"
+             ]
+    end
+
+    test "an excluded override removes one occurrence" do
+      assert {:ok, set} =
+               Tempo.JSCalendar.from_jscalendar(event(~s(
+                   "start":"2026-06-01T09:00:00","duration":"PT1H",
+                   "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"daily","count":3}],
+                   "recurrenceOverrides":{"2026-06-02T09:00:00":{"excluded":true}}
+                 )))
+
+      assert spans(set) == [
+               "2026Y6M1DT9H0M0S/2026Y6M1DT10H0M0S",
+               "2026Y6M3DT9H0M0S/2026Y6M3DT10H0M0S"
+             ]
+    end
+
+    test "a patched start moves an occurrence without duplicating it" do
+      assert {:ok, set} =
+               Tempo.JSCalendar.from_jscalendar(event(~s(
+                   "start":"2026-06-01T09:00:00","duration":"PT1H",
+                   "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"daily","count":3}],
+                   "recurrenceOverrides":{
+                     "2026-06-02T09:00:00":{"start":"2026-06-02T14:00:00"}
+                   }
+                 )))
+
+      assert spans(set) == [
+               "2026Y6M1DT9H0M0S/2026Y6M1DT10H0M0S",
+               "2026Y6M2DT14H0M0S/2026Y6M2DT15H0M0S",
+               "2026Y6M3DT9H0M0S/2026Y6M3DT10H0M0S"
+             ]
+    end
+
+    test "a patched duration changes only that occurrence" do
+      assert {:ok, set} =
+               Tempo.JSCalendar.from_jscalendar(event(~s(
+                   "start":"2026-06-01T09:00:00","duration":"PT1H",
+                   "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"daily","count":2}],
+                   "recurrenceOverrides":{"2026-06-02T09:00:00":{"duration":"PT3H"}}
+                 )))
+
+      assert spans(set) == [
+               "2026Y6M1DT9H0M0S/2026Y6M1DT10H0M0S",
+               "2026Y6M2DT9H0M0S/2026Y6M2DT12H0M0S"
+             ]
+    end
+
+    test "an event with overrides and no rules is still recurring" do
+      assert {:ok, set} =
+               Tempo.JSCalendar.from_jscalendar(event(~s(
+                   "start":"2026-06-01T09:00:00","duration":"PT1H",
+                   "recurrenceOverrides":{"2026-06-08T09:00:00":{"duration":"PT2H"}}
+                 )))
+
+      assert spans(set) == [
+               "2026Y6M1DT9H0M0S/2026Y6M1DT10H0M0S",
+               "2026Y6M8DT9H0M0S/2026Y6M8DT11H0M0S"
+             ]
+    end
+
+    test "an override matches on the recurrence id in the event's own zone" do
+      assert {:ok, set} =
+               Tempo.JSCalendar.from_jscalendar(event(~s(
+                   "start":"2026-06-01T09:00:00","duration":"PT1H",
+                   "timeZone":"Australia/Sydney",
+                   "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"daily","count":3}],
+                   "recurrenceOverrides":{"2026-06-02T09:00:00":{"excluded":true}}
+                 )))
+
+      assert IntervalSet.count(set) == 2
+    end
+
+    test "an override title reaches the interval metadata" do
+      assert {:ok, set} =
+               Tempo.JSCalendar.from_jscalendar(event(~s(
+                   "start":"2026-06-01T09:00:00","duration":"PT1H","title":"Standup",
+                   "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"daily","count":2}],
+                   "recurrenceOverrides":{"2026-06-02T09:00:00":{"title":"Retro"}}
+                 )))
+
+      assert [first, second] = IntervalSet.to_list(set)
+      assert first.metadata.title == "Standup"
+      assert second.metadata.title == "Retro"
+      assert second.metadata.uid == "e"
+    end
+
+    test "an invalid patch fails the import rather than being half applied" do
+      assert {:error, _reason} =
+               Tempo.JSCalendar.from_jscalendar(event(~s(
+                   "start":"2026-06-01T09:00:00","duration":"PT1H",
+                   "recurrenceOverrides":{"2026-06-08T09:00:00":{"a":1,"a/b":2}}
+                 )))
+    end
+  end
+
   describe "tasks and groups" do
     test "a task occupies no time" do
       json = ~s({"@type":"Task","uid":"t","title":"Write it up","due":"2026-06-02T17:00:00"})

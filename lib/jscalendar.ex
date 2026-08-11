@@ -49,20 +49,39 @@ if Code.ensure_loaded?(JSCalendar) do
     morning". Neither is an error, because a calendar full of such
     events is ordinary and refusing to read them would be worse.
 
+    ## Overrides
+
+    RFC 8984 §4.3 builds a recurrence set in three steps: the rules
+    generate, the excluded rules remove, and `recurrenceOverrides`
+    adds, removes and varies. All three happen here, so a document
+    that cancels one week and moves another materialises what it
+    says rather than its unmodified series.
+
+    An override is keyed by *recurrence id* — the wall-clock moment
+    the rules produced — which is not necessarily where the
+    occurrence ends up, since a patch may move its `start`. Each key
+    is therefore resolved in the event's own zone and matched by
+    instant, the same way `excludedRecurrenceRules` is. A key that
+    matches nothing is an additional occurrence, iCalendar's `RDATE`
+    by another name, and an event may consist of nothing else: with
+    overrides and no rules it still recurs.
+
+    A patched occurrence carries its own metadata, so a renamed week
+    arrives with the new title on its interval.
+
     ## What is not expanded
 
-    `recurrenceOverrides` and `localizations` are carried through the
-    parser verbatim and ignored here. An override that moves or
-    cancels a single occurrence is therefore **not** applied, so a
-    document using them will materialise its unmodified series. This
-    is a known gap rather than an oversight, and it is the next thing
-    to do.
+    `localizations` are parsed but not applied. A localisation is a
+    choice about which language to render, and nothing in an interval
+    set expresses that — the patches are on the object for a caller
+    who knows which locale they want.
 
     """
 
     alias JSCalendar.Event
     alias JSCalendar.Group
     alias JSCalendar.NDay
+    alias JSCalendar.Occurrence
     alias JSCalendar.RecurrenceRule
     alias JSCalendar.Task
     alias Tempo.Compare
@@ -235,17 +254,22 @@ if Code.ensure_loaded?(JSCalendar) do
       end
     end
 
-    defp expand(%Event{recurrence_rules: nil} = _event, base, _options),
-      do: {:ok, [base]}
-
-    defp expand(%Event{recurrence_rules: []} = _event, base, _options),
-      do: {:ok, [base]}
+    # RFC 8984 §4.3 builds the recurrence set in three steps, in this
+    # order: the rules generate, the excluded rules remove, and the
+    # overrides add, remove and vary. An event with no rules but with
+    # overrides is still recurring — every occurrence is an additional
+    # one — so the rule-free clauses stop at the overrides rather than
+    # at the base.
+    defp expand(%Event{recurrence_rules: rules} = event, base, options)
+         when rules in [nil, []] do
+      override(event, [base], options)
+    end
 
     defp expand(%Event{} = event, base, options) do
       with {:ok, included} <- materialise(event.recurrence_rules, base, event, options),
            {:ok, excluded} <-
              materialise(event.excluded_recurrence_rules || [], base, event, options) do
-        {:ok, without(included, excluded)}
+        override(event, without(included, excluded), options)
       end
     end
 
@@ -272,6 +296,102 @@ if Code.ensure_loaded?(JSCalendar) do
       seconds = Compare.to_utc_seconds(to) - Compare.to_utc_seconds(from)
 
       %Tempo.Duration{time: [second: seconds]}
+    end
+
+    ## recurrenceOverrides
+    ## ------------------------------------------------------------
+
+    # An override is keyed by *recurrence id* — the wall-clock moment
+    # the rules produced — not by the moment the occurrence ends up at,
+    # which a patched `start` is free to move. So each key is resolved
+    # in the event's own zone and matched against the generated set by
+    # endpoint comparison, the same way `excludedRecurrenceRules` is:
+    # comparing `%Tempo{}` structs for equality would make a match
+    # depend on how a value happens to be written.
+    #
+    # A key that matches nothing is an additional occurrence — RDATE by
+    # another name — and the patch for one of those is often empty.
+    defp override(%Event{} = event, occurrences, options) do
+      case Occurrence.overridden(event) do
+        [] ->
+          {:ok, occurrences}
+
+        ids ->
+          with({:ok, keyed} <- resolve(ids, event), do: merge(keyed, event, occurrences, options))
+      end
+    end
+
+    defp merge(keyed, %Event{} = event, occurrences, options) do
+      varied = Enum.map(occurrences, &vary(&1, keyed, event, options))
+      matched = Enum.flat_map(varied, fn {_interval, id} -> List.wrap(id) end)
+
+      added =
+        keyed
+        |> Enum.reject(fn {id, _from} -> id in matched end)
+        |> Enum.map(fn {id, _from} -> {occurrence(event, id, options), id} end)
+
+      collect(varied ++ added)
+    end
+
+    defp resolve(ids, %Event{} = event) do
+      ids
+      |> Enum.reduce_while({:ok, []}, fn id, {:ok, acc} ->
+        case at_zone(id, event.time_zone) do
+          {:ok, from} -> {:cont, {:ok, [{id, from} | acc]}}
+          {:error, _reason} = error -> {:halt, error}
+        end
+      end)
+      |> case do
+        {:ok, keyed} -> {:ok, Enum.reverse(keyed)}
+        {:error, _reason} = error -> error
+      end
+    end
+
+    # `:keep` rather than the interval itself, so a generated occurrence
+    # that no override touches is not rebuilt — the expander already
+    # produced it, and rebuilding would discard whatever it knows.
+    defp vary(%Interval{from: from} = interval, keyed, event, options) do
+      case Enum.find(keyed, fn {_id, moment} ->
+             Compare.compare_endpoints(moment, from) == :same
+           end) do
+        nil -> {{:ok, interval}, nil}
+        {id, _moment} -> {occurrence(event, id, options), id}
+      end
+    end
+
+    # `Occurrence.at/2` strips the recurrence machinery, so the patched
+    # object is a single event and this cannot recurse.
+    defp occurrence(%Event{} = event, id, options) do
+      case Occurrence.at(event, id) do
+        {:ok, occurrence} ->
+          case occurrences(occurrence, options) do
+            {:ok, [interval]} -> {:ok, interval}
+            {:ok, []} -> :excluded
+            {:error, _reason} = error -> error
+          end
+
+        :excluded ->
+          :excluded
+
+        {:error, _reason} = error ->
+          error
+      end
+    end
+
+    defp collect(results) do
+      results
+      |> Enum.reduce_while({:ok, []}, fn
+        {:excluded, _id}, {:ok, acc} -> {:cont, {:ok, acc}}
+        {{:ok, interval}, _id}, {:ok, acc} -> {:cont, {:ok, [interval | acc]}}
+        {{:error, _reason} = error, _id}, {:ok, _acc} -> {:halt, error}
+      end)
+      |> case do
+        {:ok, intervals} ->
+          {:ok, Enum.sort_by(intervals, &Compare.to_utc_seconds(&1.from))}
+
+        {:error, _reason} = error ->
+          error
+      end
     end
 
     # `excludedRecurrenceRules` removes occurrences by start moment,

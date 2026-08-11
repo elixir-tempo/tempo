@@ -14,6 +14,10 @@
 
 ### Added
 
+* `Tempo.JSCalendar.from_jscalendar/2` reads [RFC 8984](https://www.rfc-editor.org/rfc/rfc8984.html) JSCalendar into a `t:Tempo.IntervalSet.t/0`, resolving each event's wall-clock `start` and `duration` in its own time zone. Requires the optional `jscalendar` dependency.
+
+* `Tempo.JSCalendar` applies `recurrenceOverrides`, so an override that cancels, moves, lengthens or renames a single occurrence is honoured, and an event with overrides and no rules still recurs. Keys match on the recurrence id resolved in the event's zone, so a patched `start` moves the occurrence rather than duplicating it.
+
 * `Tempo.ICal.available_from_ical/2` and `available/2` read [RFC 7953](https://www.rfc-editor.org/rfc/rfc7953.html) `VAVAILABILITY` — the time a calendar user *offers*, as against the `VEVENT` time they have *taken*. Each `AVAILABLE` subcomponent expands through the same recurrence path as an event, and `PRIORITY` resolves overlapping components, the winner deciding its whole period so that its silence means busy.
 
 ### Fixed
