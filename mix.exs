@@ -180,11 +180,9 @@ defmodule Tempo.MixProject do
       {:calendrical, "~> 1.0"},
       {:astro, "~> 2.4"},
       {:localize, "~> 1.0"},
-      # TODO revert to {:ical, "~> 2.0 or ~> 3.0", optional: true} once the
-      # VAVAILABILITY (RFC 7953) support is released upstream. Until then
-      # this tracks the branch the PR was raised from, so CI can resolve
-      # it; `mix.lock` pins the commit.
-      {:ical, github: "elixir-tempo/ical", branch: "vavailability", optional: true},
+      # 3.2 is the first release carrying VAVAILABILITY (RFC 7953), which
+      # `Tempo.ICal.available/2` needs, so the floor cannot go lower.
+      {:ical, "~> 3.2", optional: true},
       # TODO point at the hex release once jscalendar is published. Until
       # then this is a git dependency rather than a path one, so CI can
       # resolve it; `mix.lock` pins the commit.

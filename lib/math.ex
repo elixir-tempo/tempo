@@ -1039,6 +1039,21 @@ defmodule Tempo.Math do
     end
   end
 
+  # Fast path: adding N of a fixed-length sub-day unit (hour, minute,
+  # second) to a concrete datetime is O(1) via seconds-of-day
+  # arithmetic with a whole-day carry through `Date.add/2`, versus the
+  # O(N) single-unit stepping below. Without it a high-frequency
+  # recurrence (`FREQ=MINUTELY;COUNT=1440`) is quadratic to
+  # materialise — occurrence i adds an i-unit duration. Falls back to
+  # stepping for anything without an integer `[year, month, day, hour]`
+  # prefix (partials, masks, groups).
+  defp apply_n_units(time, unit, n, calendar) when unit in [:hour, :minute, :second] do
+    case fast_add_time_of_day(time, unit, n, calendar) do
+      {:ok, new_time} -> new_time
+      :fallback -> step_n_units(time, unit, n, calendar)
+    end
+  end
+
   defp apply_n_units(time, unit, n, calendar), do: step_n_units(time, unit, n, calendar)
 
   defp fast_add_days(time, n, calendar) do
@@ -1058,6 +1073,50 @@ defmodule Tempo.Math do
     else
       _ -> :fallback
     end
+  end
+
+  @seconds_in_day 86_400
+  defp unit_seconds(:hour), do: 3600
+  defp unit_seconds(:minute), do: 60
+  defp unit_seconds(:second), do: 1
+
+  # Add `n` sub-day units by seconds-of-day arithmetic. The time-of-day
+  # is a resolution prefix (`hour` present, `minute`/`second` optional
+  # and already extended by `ensure_resolution_for_duration/2`), so its
+  # seconds are exact; whole days overflow through `Date.add/2` (which
+  # rolls month/year in-calendar) and only the components that were
+  # present are written back, preserving the value's resolution. Wall
+  # clock, like the stepper — the zone rides on `shift`, untouched.
+  defp fast_add_time_of_day(time, unit, n, calendar) do
+    with year when is_integer(year) <- Keyword.get(time, :year),
+         month when is_integer(month) <- Keyword.get(time, :month),
+         day when is_integer(day) <- Keyword.get(time, :day),
+         hour when is_integer(hour) <- Keyword.get(time, :hour),
+         minute when is_integer(minute) <- Keyword.get(time, :minute, 0),
+         second when is_integer(second) <- Keyword.get(time, :second, 0),
+         {:ok, date} <- Date.new(year, month, day, calendar) do
+      total = hour * 3600 + minute * 60 + second + n * unit_seconds(unit)
+      day_carry = Integer.floor_div(total, @seconds_in_day)
+      rem_tod = Integer.mod(total, @seconds_in_day)
+      shifted = Date.add(date, day_carry)
+
+      new_time =
+        time
+        |> Keyword.replace!(:year, shifted.year)
+        |> Keyword.replace!(:month, shifted.month)
+        |> Keyword.replace!(:day, shifted.day)
+        |> Keyword.replace!(:hour, div(rem_tod, 3600))
+        |> replace_if_present(:minute, div(rem(rem_tod, 3600), 60))
+        |> replace_if_present(:second, rem(rem_tod, 60))
+
+      {:ok, new_time}
+    else
+      _ -> :fallback
+    end
+  end
+
+  defp replace_if_present(time, key, value) do
+    if Keyword.has_key?(time, key), do: Keyword.replace!(time, key, value), else: time
   end
 
   defp step_n_units(time, _unit, 0, _calendar), do: time

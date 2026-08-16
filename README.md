@@ -12,8 +12,9 @@ This conceptual shift — *time as interval, not instant* — removes a surprisi
 def deps do
   [
     {:ex_tempo, "~> 1.1"},
-    # Optional but recommended - needed for iCalendar import
-    {:ical, "~> 2.0 or ~> 3.0"}
+    # Optional but recommended - needed for iCalendar import. 3.2 is the
+    # first release with VAVAILABILITY (RFC 7953), which `available/2` needs.
+    {:ical, "~> 3.2"}
   ]
 end
 ```
