@@ -1,16 +1,6 @@
 # Changelog
 
-## [v1.2.0] — 2026-08-03
-
-### Added
-
-* `Tempo.compare/3` returns stdlib's ternary `:lt | :eq | :gt`, so `Tempo` can be passed as a sorter module anywhere `Date` or `DateTime` would be — `Enum.sort(values, Tempo)`, `Enum.sort_by(sessions, & &1.starts_at, Tempo)`, `Enum.min/2`, `Enum.max/2`. Consumers previously had to hand-roll a comparator around `Tempo.Compare.compare_endpoints/2`, and reaching for plain `Enum.sort/1` silently sorted by Erlang term order.
-
-* `Tempo.compare/3` orders `t:Tempo.t/0` by start-moment, `t:Tempo.Duration.t/0` by length, and `t:Tempo.Interval.t/0` by start with ties broken by end. Comparing a calendar-dependent duration such as `P1M` requires `relative_to:`, since a month has no fixed length; without it the call raises rather than guessing.
-
-* `Tempo.Compare` is now doctested — its documented examples had never been executed.
-
-## [Unreleased]
+## [v1.3.0] — 2026-08-16
 
 ### Added
 
@@ -22,11 +12,23 @@
 
 ### Fixed
 
+* Expanding a high-frequency recurrence (`FREQ=MINUTELY`, `FREQ=HOURLY`) is now linear rather than quadratic — adding a sub-day duration (`Tempo.Math.add/2` on hours, minutes or seconds) is O(1) instead of O(magnitude). A 1440-occurrence minutely rule materialises about 7× faster using roughly 13× less memory.
+
 * A component stating `DURATION` instead of `DTEND` is now materialised rather than refused with "Duration-only VEVENT (no DTEND) is not yet supported". RFC 5545 allows either on a `VEVENT` and RFC 7953 allows either on `VAVAILABILITY` and `AVAILABLE`, so all three now accept both.
 
 * An unanchored recurrence — `Tempo.RRule.parse("FREQ=WEEKLY;BYDAY=MO")` with no `:from`, which carries `nil` endpoints rather than the ISO parser's `:undefined` — passed the member validation and crashed several frames into set algebra with `UndefinedFunctionError` or `FunctionClauseError`. Both sentinels now count as unbounded, so `intersection/2`, `union/2` and `difference/2` return `Tempo.IntervalEndpointsError` as they always did for `2020Y/..`.
 
 * `Tempo.to_interval/2` returned `{:ok, recurrence}` for a recurrence with no start, reporting success while handing back the value that could not be materialised. It now returns `Tempo.IntervalEndpointsError` with `reason: :unanchored`, since no `:bound` can supply a missing anchor.
+
+## [v1.2.0] — 2026-08-03
+
+### Added
+
+* `Tempo.compare/3` returns stdlib's ternary `:lt | :eq | :gt`, so `Tempo` can be passed as a sorter module anywhere `Date` or `DateTime` would be — `Enum.sort(values, Tempo)`, `Enum.sort_by(sessions, & &1.starts_at, Tempo)`, `Enum.min/2`, `Enum.max/2`. Consumers previously had to hand-roll a comparator around `Tempo.Compare.compare_endpoints/2`, and reaching for plain `Enum.sort/1` silently sorted by Erlang term order.
+
+* `Tempo.compare/3` orders `t:Tempo.t/0` by start-moment, `t:Tempo.Duration.t/0` by length, and `t:Tempo.Interval.t/0` by start with ties broken by end. Comparing a calendar-dependent duration such as `P1M` requires `relative_to:`, since a month has no fixed length; without it the call raises rather than guessing.
+
+* `Tempo.Compare` is now doctested — its documented examples had never been executed.
 
 ## [v1.1.1] — 2026-08-03
 

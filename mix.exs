@@ -13,7 +13,7 @@ defmodule Tempo.MixProject do
     )
   end
 
-  @version "1.2.0"
+  @version "1.3.0"
 
   def project do
     [
@@ -183,10 +183,7 @@ defmodule Tempo.MixProject do
       # 3.2 is the first release carrying VAVAILABILITY (RFC 7953), which
       # `Tempo.ICal.available/2` needs, so the floor cannot go lower.
       {:ical, "~> 3.2", optional: true},
-      # TODO point at the hex release once jscalendar is published. Until
-      # then this is a git dependency rather than a path one, so CI can
-      # resolve it; `mix.lock` pins the commit.
-      {:jscalendar, github: "elixir-tempo/jscalendar", optional: true},
+      {:jscalendar, "~> 0.1", optional: true},
       {:ex_doc, "~> 0.38", only: [:dev, :test, :release], optional: true, runtime: false},
       {:benchee, "~> 1.3", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
