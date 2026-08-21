@@ -59,10 +59,14 @@ The value is not a point that we later stretch into a range. Its bounds are real
 ```elixir
 import Tempo.Sigils
 
-{:ok, interval} = Tempo.to_interval(~o"2026-09-02")
-{from, to} = Tempo.Interval.endpoints(interval)
+case Tempo.to_interval(~o"2026-09-02") do
+  {:ok, interval} ->
+    {from, to} = Tempo.Interval.endpoints(interval)
+    {Tempo.to_iso8601(from), Tempo.to_iso8601(to)}
 
-{Tempo.to_iso8601(from), Tempo.to_iso8601(to)}
+  {:error, reason} ->
+    reason
+end
 ```
 
 ## One type, any resolution
@@ -75,9 +79,10 @@ Half-open `[from, to)` throughout, so adjacent intervals join with no overlap an
 
 ```elixir
 for value <- [~o"2026", ~o"2026-09", ~o"2026-09-02", ~o"2026-09-02T18:00"] do
-  {:ok, i} = Tempo.to_interval(value)
-  {from, to} = Tempo.Interval.endpoints(i)
-  {Tempo.to_iso8601(value), Tempo.to_iso8601(from) <> " → " <> Tempo.to_iso8601(to)}
+  with {:ok, interval} <- Tempo.to_interval(value) do
+    {from, to} = Tempo.Interval.endpoints(interval)
+    {Tempo.to_iso8601(value), Tempo.to_iso8601(from) <> " → " <> Tempo.to_iso8601(to)}
+  end
 end
 ```
 
@@ -98,19 +103,18 @@ ISO 8601-2 §4.4.1 lets any component be negative, meaning *count back from the 
 <!-- slide: code -->
 
 ```elixir
-{:ok, feb_2024} = Tempo.select(~o"2024-02", ~o"-1D")
-{:ok, feb_2026} = Tempo.select(~o"2026-02", ~o"-1D")
-
-last = fn set ->
-  set
-  |> Tempo.IntervalSet.to_list()
-  |> hd()
-  |> Tempo.Interval.endpoints()
-  |> elem(0)
-  |> Tempo.day()
+last_day = fn month ->
+  with {:ok, set} <- Tempo.select(month, ~o"-1D") do
+    set
+    |> Tempo.IntervalSet.to_list()
+    |> hd()
+    |> Tempo.Interval.endpoints()
+    |> elem(0)
+    |> Tempo.day()
+  end
 end
 
-{last.(feb_2024), last.(feb_2026)}
+{last_day.(~o"2024-02"), last_day.(~o"2026-02")}
 ```
 
 ## Partial dates are real values
@@ -122,10 +126,10 @@ A birthday is not a date. It is a day-and-month that recurs, and most systems st
 <!-- slide: code -->
 
 ```elixir
-{:ok, fifteenths} = Tempo.to_interval(~o"1985-XX-15")
-
-{Tempo.IntervalSet.count(fifteenths),
- fifteenths |> Tempo.IntervalSet.to_list() |> Enum.take(3) |> Enum.map(&Tempo.to_iso8601/1)}
+with {:ok, fifteenths} <- Tempo.to_interval(~o"1985-XX-15") do
+  {Tempo.IntervalSet.count(fifteenths),
+   fifteenths |> Tempo.IntervalSet.to_list() |> Enum.take(3) |> Enum.map(&Tempo.to_iso8601/1)}
+end
 ```
 
 ## Enumeration, implicitly
@@ -165,9 +169,13 @@ First Wednesday of the month, 18:00 to 20:00, Melbourne time. That is an RFC 554
 
 ```elixir
 meetups =
-  "FREQ=MONTHLY;BYDAY=1WE;COUNT=6"
-  |> Tempo.RRule.parse!(from: ~o"2026-09-02T18:00:00[Australia/Melbourne]")
-  |> Tempo.to_interval!()
+  with {:ok, rule} <-
+         Tempo.RRule.parse("FREQ=MONTHLY;BYDAY=1WE;COUNT=6",
+           from: ~o"2026-09-02T18:00:00[Australia/Melbourne]"
+         ),
+       {:ok, set} <- Tempo.to_interval(rule) do
+    set
+  end
 
 meetups
 |> Tempo.IntervalSet.to_list()
@@ -215,7 +223,11 @@ END:VEVENT
 END:VCALENDAR
 """
 
-{:ok, holidays} = Tempo.ICal.from_ical(holidays_ics)
+holidays =
+  with {:ok, set} <- Tempo.ICal.from_ical(holidays_ics) do
+    set
+  end
+
 holidays |> Tempo.IntervalSet.to_list() |> Enum.map(&Tempo.to_iso8601/1)
 ```
 
@@ -228,13 +240,17 @@ The metadata survives the operation. An interval that came from a `VEVENT` still
 ```elixir
 # The first operand's metadata survives, so ask the holidays which
 # meetup they hit rather than the other way round.
-{:ok, clashes} = Tempo.intersection(holidays, meetups)
-{:ok, survivors} = Tempo.difference(meetups, holidays)
-
-%{
-  clashes: Enum.map(Tempo.IntervalSet.to_list(clashes), &{Tempo.to_iso8601(Tempo.Interval.from(&1)), &1.metadata[:summary]}),
-  meetups_left: Tempo.IntervalSet.count(survivors)
-}
+with {:ok, clashes} <- Tempo.intersection(holidays, meetups),
+     {:ok, survivors} <- Tempo.difference(meetups, holidays) do
+  %{
+    clashes:
+      Enum.map(
+        Tempo.IntervalSet.to_list(clashes),
+        &{Tempo.to_iso8601(Tempo.Interval.from(&1)), &1.metadata[:summary]}
+      ),
+    meetups_left: Tempo.IntervalSet.count(survivors)
+  }
+end
 ```
 
 ## Free and busy is set difference
@@ -247,13 +263,17 @@ This is the whole trick. "Free" is not a stored state to be kept in sync — it 
 rehearsal_window = ~o"2026-09-01T09:00:00[Australia/Melbourne]/2026-09-01T17:00:00[Australia/Melbourne]"
 
 commitments =
-  Tempo.IntervalSet.new!([
-    ~o"2026-09-01T10:00:00[Australia/Melbourne]/2026-09-01T11:30:00[Australia/Melbourne]",
-    ~o"2026-09-01T13:00:00[Australia/Melbourne]/2026-09-01T14:00:00[Australia/Melbourne]"
-  ])
+  with {:ok, set} <-
+         Tempo.IntervalSet.new([
+           ~o"2026-09-01T10:00:00[Australia/Melbourne]/2026-09-01T11:30:00[Australia/Melbourne]",
+           ~o"2026-09-01T13:00:00[Australia/Melbourne]/2026-09-01T14:00:00[Australia/Melbourne]"
+         ]) do
+    set
+  end
 
-{:ok, free} = Tempo.difference(rehearsal_window, commitments)
-free |> Tempo.IntervalSet.to_list() |> Enum.map(&Tempo.to_iso8601/1)
+with {:ok, free} <- Tempo.difference(rehearsal_window, commitments) do
+  free |> Tempo.IntervalSet.to_list() |> Enum.map(&Tempo.to_iso8601/1)
+end
 ```
 
 ## Daylight saving, unasked
@@ -266,10 +286,13 @@ Wall clock and elapsed time are different questions, and the zone belongs in the
 
 ```elixir
 for date <- ["2026-09-02", "2026-10-07", "2026-11-04"] do
-  {:ok, meetup} = Tempo.from_iso8601("#{date}T18:00:00[Australia/Melbourne]/#{date}T20:00:00[Australia/Melbourne]")
-  {:ok, utc} = Tempo.shift_zone(Tempo.Interval.from(meetup), "Etc/UTC")
-
-  {date, Tempo.to_iso8601(utc)}
+  with {:ok, meetup} <-
+         Tempo.from_iso8601(
+           "#{date}T18:00:00[Australia/Melbourne]/#{date}T20:00:00[Australia/Melbourne]"
+         ),
+       {:ok, utc} <- Tempo.shift_zone(Tempo.Interval.from(meetup), "Etc/UTC") do
+    {date, Tempo.to_iso8601(utc)}
+  end
 end
 ```
 
@@ -299,10 +322,10 @@ network =
   |> Network.add_relation(:before, :cfp, :review)
   |> Network.add_relation(:before, :review, :conference)
 
-{:ok, solved} = Network.Solver.tighten(network)
-
-review = solved.periods[:review]
-%{earliest_start: review.earliest_start, latest_end: review.latest_end}
+with {:ok, solved} <- Network.Solver.tighten(network) do
+  review = solved.periods[:review]
+  %{earliest_start: review.earliest_start, latest_end: review.latest_end}
+end
 ```
 
 ## The trace
@@ -312,8 +335,9 @@ No hidden assumptions. Every computed bound can name the inputs it rests on, in 
 <!-- slide: code -->
 
 ```elixir
-{:ok, trace} = Network.Solver.trace(network, {:start, :conference}, bound: :earliest)
-trace.prose
+with {:ok, trace} <- Network.Solver.trace(network, {:start, :conference}, bound: :earliest) do
+  trace.prose
+end
 ```
 
 ## Why a network, not a schedule
