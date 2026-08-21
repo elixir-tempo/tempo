@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.3.1] — 2026-08-22
+
+### Changed
+
+* Expanding a plain frequency recurrence (`FREQ=MINUTELY`, `FREQ=HOURLY`, `FREQ=DAILY`) is roughly 2× faster: each occurrence reuses the next occurrence's start as its own end — one date add per step instead of two — and adding a fixed-length unit to a crisp datetime skips `Tempo.Math.add/2`'s mask, annotation, and resolution prelude. The `Math.add/2` fast path speeds up every fixed-length shift, not only recurrence expansion.
+
 ## [v1.3.0] — 2026-08-16
 
 ### Added
