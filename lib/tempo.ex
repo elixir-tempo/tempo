@@ -4062,20 +4062,15 @@ defmodule Tempo do
   defp iterate_recurrence(
          %Tempo{} = from,
          %Tempo.Duration{} = cadence,
-         occurrence_end_fn,
+         occurrence_end,
          start_predicate,
          selection_fn,
          metadata,
          output_limit \\ @recurrence_safety_cap
        )
-       when is_function(occurrence_end_fn, 2) and is_function(start_predicate, 1) and
-              is_function(selection_fn, 1) do
-    0
-    |> Stream.iterate(&(&1 + 1))
-    |> Stream.map(fn i ->
-      start = add_n_durations(from, cadence, i)
-      {start, %Tempo.Interval{from: start, to: occurrence_end_fn.(start, i), metadata: metadata}}
-    end)
+       when is_function(start_predicate, 1) and is_function(selection_fn, 1) do
+    from
+    |> recurrence_candidates(cadence, occurrence_end, metadata)
     |> Stream.take_while(fn {start, _} -> start_predicate.(start) end)
     |> Stream.take(@recurrence_safety_cap)
     |> Stream.flat_map(fn {_start, candidate} -> selection_fn.(candidate) end)
@@ -4087,6 +4082,31 @@ defmodule Tempo do
     |> Stream.reject(fn %Tempo.Interval{from: f} -> before_dtstart?(f, from) end)
     |> Stream.take(output_limit)
     |> Enum.to_list()
+  end
+
+  # Contiguous fast path: walk the starts once and pair each with the
+  # next, so occurrence i's `to` is occurrence i+1's `from`. One
+  # `Math.add` per occurrence instead of two.
+  defp recurrence_candidates(from, cadence, :contiguous, metadata) do
+    from
+    |> Stream.iterate(&Math.add(&1, cadence))
+    |> Stream.chunk_every(2, 1, :discard)
+    |> Stream.map(fn [start, next_start] ->
+      {start, %Tempo.Interval{from: start, to: next_start, metadata: metadata}}
+    end)
+  end
+
+  # General path: each start is `from + i × cadence` (scaled, so
+  # month/year cadences don't clamp-drift) and the `to` comes from the
+  # end function.
+  defp recurrence_candidates(from, cadence, occurrence_end_fn, metadata)
+       when is_function(occurrence_end_fn, 2) do
+    0
+    |> Stream.iterate(&(&1 + 1))
+    |> Stream.map(fn i ->
+      start = add_n_durations(from, cadence, i)
+      {start, %Tempo.Interval{from: start, to: occurrence_end_fn.(start, i), metadata: metadata}}
+    end)
   end
 
   defp before_dtstart?(%Tempo{} = candidate_from, %Tempo{} = dtstart) do
@@ -4164,7 +4184,7 @@ defmodule Tempo do
   defp occurrence_end_fn(
          %Tempo{} = _from,
          %Tempo.Duration{} = cadence,
-         %Tempo.Interval{metadata: metadata, duration: duration}
+         %Tempo.Interval{metadata: metadata, duration: duration} = interval
        ) do
     cond do
       match?(%{occurrence_base_to: %Tempo{}}, metadata) ->
@@ -4175,10 +4195,32 @@ defmodule Tempo do
         span = metadata.occurrence_duration
         fn start, _i -> Math.add(start, span) end
 
+      contiguous_occurrences?(cadence, interval) ->
+        :contiguous
+
       true ->
         fn start, _i -> Math.add(start, duration) end
     end
   end
+
+  # A plain frequency recurrence (no BY-rules) whose cadence is a
+  # fixed-length unit and that runs forward has *contiguous*
+  # occurrences: each occurrence's `to` is exactly the next
+  # occurrence's `from`. The loop can then reuse every computed start
+  # as the previous occurrence's end — one `Math.add` per occurrence
+  # rather than two. Excluded: month/year cadences (they clamp, so
+  # `start + 2×month` ≠ `(start + month) + month`); backward
+  # recurrences (the next start precedes this one); and BY-filtered
+  # recurrences (selection resizes each occurrence anyway).
+  defp contiguous_occurrences?(
+         %Tempo.Duration{time: [{unit, _amount} | _]},
+         %Tempo.Interval{repeat_rule: repeat_rule, direction: direction}
+       ) do
+    is_nil(repeat_rule) and direction != -1 and
+      unit in [:week, :day, :hour, :minute, :second]
+  end
+
+  defp contiguous_occurrences?(_cadence, _interval), do: false
 
   # Termination predicates for the recurrence loop.
   defp under_until?(%Tempo{} = from, %Tempo{} = until) do
