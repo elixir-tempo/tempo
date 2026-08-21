@@ -655,6 +655,43 @@ defmodule Tempo.Math do
           | Tempo.IntervalSet.t()
           | {:error, RequiresAnchorError.t()}
   def add(%Tempo{} = tempo, %Tempo.Duration{time: duration_time} = duration) do
+    case fast_add(tempo, duration_time) do
+      {:ok, shifted} -> shifted
+      :fallback -> add_general(tempo, duration)
+    end
+  end
+
+  # Fast path for the overwhelmingly common shift: a single fixed-length
+  # unit (day or finer) added to a plain crisp anchored datetime. Such a
+  # value carries no masks and no ±/significant-digit annotations, the
+  # duration needs no week-normalisation, and its resolution already
+  # covers the unit — so every step of the `add_general/2` prelude (mask
+  # scan, annotation strip, resolution extend, re-annotate) is a no-op.
+  # Going straight to the arithmetic the general path ends in is ~4×
+  # faster and returns byte-identical values.
+  defp fast_add(%Tempo{time: time, calendar: calendar} = tempo, [{unit, n}])
+       when unit in [:day, :hour, :minute, :second] and is_integer(n) do
+    if plain_datetime?(time) and Keyword.has_key?(time, unit) do
+      {:ok, %{tempo | time: apply_n_units(time, unit, n, calendar)}}
+    else
+      :fallback
+    end
+  end
+
+  defp fast_add(_tempo, _duration_time), do: :fallback
+
+  # A plain crisp anchored datetime: an integer year/month/day prefix
+  # with every remaining component a plain integer — no mask, no
+  # `{value, opts}` annotation, no `{value, precision}` microsecond, no
+  # range or group.
+  defp plain_datetime?([{:year, y}, {:month, m}, {:day, d} | rest])
+       when is_integer(y) and is_integer(m) and is_integer(d) do
+    Enum.all?(rest, fn {_unit, value} -> is_integer(value) end)
+  end
+
+  defp plain_datetime?(_time), do: false
+
+  defp add_general(%Tempo{} = tempo, %Tempo.Duration{time: duration_time} = duration) do
     masks = find_masks(tempo.time)
 
     # Route to the mask path only when the shift actually reaches a mask.
