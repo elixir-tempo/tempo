@@ -168,10 +168,15 @@ defmodule Tempo.Compare do
 
     # Structural comparison of the time lists is calendar-blind — `5786`
     # (Hebrew) would read as later than `2025` (Gregorian) — so it is only
-    # valid within a single calendar. Values in different calendars are
-    # compared by projecting both to the shared absolute UTC frame, which
-    # routes each through its calendar's `date_to_iso_days` conversion.
-    if a.calendar == b.calendar and zones_compatible?(a, b) do
+    # valid within a single calendar. It is also axis-blind: a week-axis
+    # list (`[year, week]`) and a month-axis list (`[year, month, day]`)
+    # share only the `:year` head, so the structural walk degenerates to
+    # comparing years alone and mixed-axis endpoints all read `:same`.
+    # Values in different calendars, or anchored values on different
+    # sub-year axes, are compared by projecting both to the shared
+    # absolute UTC frame, which resolves each axis to a real date.
+    if a.calendar == b.calendar and zones_compatible?(a, b) and
+         comparable_axes?(a.time, b.time) do
       case compare_time(a.time, b.time) do
         :lt -> :earlier
         :gt -> :later
@@ -179,6 +184,31 @@ defmodule Tempo.Compare do
       end
     else
       compare_via_utc(a, b)
+    end
+  end
+
+  # Two anchored time lists on different sub-year axes (week vs month vs
+  # ordinal day) cannot be compared structurally — route them through the
+  # UTC projection instead. Non-anchored lists stay on the structural
+  # path: they have no year to project through, and the set-operations
+  # layer already rejects cross-axis non-anchored operands upstream.
+  defp comparable_axes?(time_a, time_b) do
+    cond do
+      not (Keyword.has_key?(time_a, :year) and Keyword.has_key?(time_b, :year)) -> true
+      date_axis(time_a) == :none or date_axis(time_b) == :none -> true
+      true -> date_axis(time_a) == date_axis(time_b)
+    end
+  end
+
+  # `:week` marks the week-of-year axis only when no `:month` qualifies
+  # it — `[year, month, week]` is a week *of the month*, which lives on
+  # the month axis and compares structurally against month-axis dates.
+  defp date_axis(time) do
+    cond do
+      Keyword.has_key?(time, :month) -> :month
+      Keyword.has_key?(time, :week) -> :week
+      Keyword.has_key?(time, :day) or Keyword.has_key?(time, :day_of_year) -> :ordinal
+      true -> :none
     end
   end
 

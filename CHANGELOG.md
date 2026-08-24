@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+* `Tempo.Duration.add/2` and `Tempo.Duration.sum/1` — component-wise duration addition and list summation: like units sum without conversion, fractional seconds carry and borrow, and cancelling components drop. `sum([])` is the zero duration.
+
+### Fixed
+
+* `Tempo.relation/2` and `within?/2` between a week-axis value and a month/day-axis value no longer answer `:meets` for every pairing — mixed-axis anchored endpoints now compare by real dates, so `Tempo.within?(~o"2026-08-05", ~o"2026Y32W")` is `true`.
+
+* Negative fractional-second durations are now correct end to end: `PT-1.5S` parses as −1.5 s (previously −0.5 s — the fraction ignored the sign), renders with a single leading sign (previously `PT-1.-5S`), `PT-0.2S` keeps its sign through a round-trip, and `-PT1.5S` no longer raises.
+
+* The zero duration renders as `PT0S` (previously the unparseable `P`), so it round-trips.
+
 ## [v1.3.1] — 2026-08-22
 
 ### Changed

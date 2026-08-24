@@ -534,4 +534,36 @@ defmodule Tempo.Interval.PredicatesTest do
       end
     end
   end
+
+  describe "week-axis operands compare by real dates" do
+    # Regression: a month-axis day against a week-axis value compared
+    # structurally on the shared `:year` head alone, so every pairing
+    # read `:meets` and `within?/2` answered `false` for genuine
+    # members. Mixed-axis anchored endpoints now project through UTC.
+    # ISO week 32 of 2026 spans Monday 2026-08-03 .. Sunday 2026-08-09.
+
+    test "the week's first day starts it" do
+      assert Tempo.relation(~o"2026-08-03", ~o"2026Y32W") == :starts
+      assert Tempo.relation(~o"2026Y32W", ~o"2026-08-03") == :started_by
+    end
+
+    test "a mid-week day is during it and within it" do
+      assert Tempo.relation(~o"2026-08-05", ~o"2026Y32W") == :during
+      assert Tempo.within?(~o"2026-08-05", ~o"2026Y32W")
+    end
+
+    test "the week's last day finishes it" do
+      assert Tempo.relation(~o"2026-08-09", ~o"2026Y32W") == :finishes
+    end
+
+    test "the day before the week genuinely meets it" do
+      assert Tempo.relation(~o"2026-08-02", ~o"2026Y32W") == :meets
+      refute Tempo.within?(~o"2026-08-02", ~o"2026Y32W")
+    end
+
+    test "within? agrees with the set-algebra subset?" do
+      assert Tempo.within?(~o"2026-08-03", ~o"2026Y32W") ==
+               Tempo.subset?(~o"2026-08-03", ~o"2026Y32W")
+    end
+  end
 end

@@ -620,6 +620,10 @@ defmodule Tempo.Inspect do
     [?R, recurrence(recurrence), ?/, inspect_value(from), ?/, inspect_value(duration)]
   end
 
+  # The zero duration has no components to imply the `T`/units, and a
+  # bare `P` does not re-parse; ISO 8601's zero duration is `PT0S`.
+  defp inspect_value(%Tempo.Duration{time: []}), do: "PT0S"
+
   defp inspect_value(%Tempo.Duration{time: time}) do
     [?P, inspect_value(fold_microsecond(time))]
   end
@@ -658,6 +662,16 @@ defmodule Tempo.Inspect do
   defp inspect_value({:day_of_year, day}), do: [inspect_list(day), ?O]
   defp inspect_value({:hour, hour}), do: [inspect_list(hour), ?H]
   defp inspect_value({:minute, minute}), do: [inspect_list(minute), ?M]
+
+  # A negative fractional second is a sign-consistent pair
+  # (`[second: -1, microsecond: {-500000, 1}]` is −1.5 s); render one
+  # leading sign with the fraction's absolute digits — `-1.5S`, never
+  # `-1.-5S`. A zero second still needs the explicit sign: `-0.2S`.
+  defp inspect_value({:second, {:micro, second, {value, precision}}}) when value < 0 do
+    digits = Microsecond.to_digits_string({-value, precision})
+    leading = if second == 0, do: "-0", else: inspect_list(second)
+    [leading, ?., digits, ?S]
+  end
 
   defp inspect_value({:second, {:micro, second, microsecond}}),
     do: [inspect_list(second), ?., Microsecond.to_digits_string(microsecond), ?S]

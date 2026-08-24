@@ -213,6 +213,125 @@ defmodule Tempo.Duration do
   defp negate_component({unit, value}), do: {unit, -value}
 
   @doc """
+  Add two durations component-wise, returning a new duration.
+
+  Corresponding components sum — hours with hours, months with months —
+  and no unit is converted into another, so calendar-length units
+  (`:year`, `:month`) add exactly without needing a reference date.
+  Fractional seconds carry into whole seconds when they overflow.
+  Components that sum to zero are dropped, so a duration and its
+  `negate/1` add to the zero duration.
+
+  ### Arguments
+
+  * `duration_a` is a `t:t/0`.
+
+  * `duration_b` is a `t:t/0`.
+
+  ### Returns
+
+  * A `t:t/0` with each unit's components summed.
+
+  ### Examples
+
+      iex> Tempo.Duration.add(~o"PT7H30M", ~o"PT6H")
+      ~o"PT13H30M"
+
+      iex> Tempo.Duration.add(~o"P1Y", ~o"P2M3D")
+      ~o"P1Y2M3D"
+
+      iex> Tempo.Duration.add(~o"PT1.5S", ~o"PT0.7S")
+      ~o"PT2.2S"
+
+      iex> Tempo.Duration.add(~o"PT1H", Tempo.Duration.negate(~o"PT1H")).time
+      []
+
+  """
+  @spec add(t(), t()) :: t()
+  def add(%__MODULE__{time: time_a}, %__MODULE__{time: time_b}) do
+    merged =
+      for unit <- @canonical_unit_order,
+          summed = add_components(Keyword.get(time_a, unit), Keyword.get(time_b, unit)),
+          not zero_component?(summed),
+          do: {unit, summed}
+
+    %__MODULE__{time: normalise_microseconds(merged)}
+  end
+
+  @doc """
+  Sum a list of durations, returning a new duration.
+
+  Reduces the list with `add/2`, so the same component-wise rules
+  apply: like units sum, nothing converts, fractional seconds carry.
+  An empty list sums to the zero duration.
+
+  ### Arguments
+
+  * `durations` is a list of `t:t/0` values.
+
+  ### Returns
+
+  * A `t:t/0` with each unit's components summed across the list.
+
+  ### Raises
+
+  * `FunctionClauseError` when a list member is not a
+    `t:Tempo.Duration.t/0`.
+
+  ### Examples
+
+      iex> Tempo.Duration.sum([~o"PT7H30M", ~o"PT6H", ~o"PT8H"])
+      ~o"PT21H30M"
+
+      iex> Tempo.Duration.sum([]).time
+      []
+
+  """
+  @spec sum([t()]) :: t()
+  def sum(durations) when is_list(durations) do
+    Enum.reduce(durations, %__MODULE__{time: []}, &add(&2, &1))
+  end
+
+  defp add_components(nil, nil), do: nil
+  defp add_components(value, nil), do: value
+  defp add_components(nil, value), do: value
+
+  defp add_components({value_a, precision_a}, {value_b, precision_b}),
+    do: {value_a + value_b, max(precision_a, precision_b)}
+
+  defp add_components(value_a, value_b), do: value_a + value_b
+
+  defp zero_component?(nil), do: true
+  defp zero_component?({0, _precision}), do: true
+  defp zero_component?(0), do: true
+  defp zero_component?(_summed), do: false
+
+  # Recombine the second and its fraction from their microsecond total,
+  # so a summed fraction that overflows (`0.5 + 0.7`) carries into the
+  # second, mixed signs borrow (`1 s − 0.2 s` is `0.8 s`, not
+  # `1 s and −0.2 s`), and the surviving components always share one
+  # sign. `div`/`rem` truncate toward zero, so a negative total keeps
+  # negative components.
+  defp normalise_microseconds(time) do
+    case Keyword.get(time, :microsecond) do
+      nil ->
+        time
+
+      {micro, precision} ->
+        total = Keyword.get(time, :second, 0) * 1_000_000 + micro
+        seconds = div(total, 1_000_000)
+        remainder = rem(total, 1_000_000)
+        base = time |> Keyword.delete(:second) |> Keyword.delete(:microsecond)
+
+        cond do
+          remainder == 0 and seconds == 0 -> base
+          remainder == 0 -> base ++ [second: seconds]
+          true -> base ++ [second: seconds, microsecond: {remainder, precision}]
+        end
+    end
+  end
+
+  @doc """
   Express a duration as a single magnitude in `unit`, as a float.
 
   For a duration built only from fixed-length units (microsecond
@@ -377,10 +496,27 @@ defmodule Tempo.Duration do
   # {digits, count}}` token; lift it into a `:microsecond {value,
   # precision}` component (same shape as the clock second) so it
   # round-trips with its digit count and participates in arithmetic.
+  # The tokenizer's reduced duration-second: sign applied to both the
+  # second and its lifted fraction, keeping component signs consistent.
+  defp lift_microsecond([{:second, {:signed_fraction, sign, second, {digits, count}}} | rest]) do
+    {value, precision} = Microsecond.from_fraction(digits, count)
+
+    [
+      {:second, sign * second},
+      {:microsecond, {sign * value, precision}}
+      | lift_microsecond(rest)
+    ]
+  end
+
   defp lift_microsecond([{:second, second}, {:fraction, {digits, count}} | rest]) do
+    # The fraction extends the second's magnitude and inherits its sign
+    # (`-1.5 s` is `second: -1, microsecond: {-500000, 1}`).
+    {micro_value, precision} = Microsecond.from_fraction(digits, count)
+    microsecond = if second < 0, do: {-micro_value, precision}, else: {micro_value, precision}
+
     [
       {:second, second},
-      {:microsecond, Microsecond.from_fraction(digits, count)}
+      {:microsecond, microsecond}
       | lift_microsecond(rest)
     ]
   end

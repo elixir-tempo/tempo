@@ -316,6 +316,23 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
     ])
   end
 
+  # Reduction for a duration second: sign, integer, and optional
+  # fraction arrive together so `-0.2` keeps its sign (the integer
+  # part alone cannot carry a `-0`). A fractional second reduces to a
+  # `{:signed_fraction, sign, second, {digits, count}}` tuple that
+  # `Tempo.Duration.build/1` lifts into sign-consistent `:second` +
+  # `:microsecond` components; a whole second stays an integer.
+  def form_duration_second([?-, integer, {:fraction, {digits, count}}])
+      when is_integer(integer),
+      do: {:signed_fraction, -1, integer, {digits, count}}
+
+  def form_duration_second([integer, {:fraction, {digits, count}}])
+      when is_integer(integer),
+      do: {:signed_fraction, 1, integer, {digits, count}}
+
+  def form_duration_second([?-, integer]) when is_integer(integer), do: -integer
+  def form_duration_second([integer]) when is_integer(integer), do: integer
+
   def form_number([number]) when is_number(number) do
     number
   end
@@ -386,7 +403,13 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
   # comes from the digit count (leading zeros significant).
   def apply_fraction([{:second, value}, {:fraction, {fraction, digit_count}} | rest])
       when is_integer(value) do
-    microsecond = Microsecond.from_fraction(fraction, digit_count)
+    # The fraction extends the second's magnitude, so it inherits the
+    # second's sign: `PT-1.5S` is −1.5 s, i.e. `[second: -1,
+    # microsecond: {-500000, 1}]` — component signs stay consistent for
+    # arithmetic. Clock seconds are never negative, so this only
+    # affects durations.
+    {micro_value, precision} = Microsecond.from_fraction(fraction, digit_count)
+    microsecond = if value < 0, do: {-micro_value, precision}, else: {micro_value, precision}
     [{:second, value}, {:microsecond, microsecond} | apply_fraction(rest)]
   end
 

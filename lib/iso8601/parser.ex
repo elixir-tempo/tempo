@@ -661,16 +661,26 @@ defmodule Tempo.Iso8601.Parser do
     end
   end
 
-  # If the duratation direction is negative, negate all the
-  # units.
+  # If the duration direction is negative, negate all the units —
+  # shape-aware, since a fractional second reduces to a
+  # `{:signed_fraction, sign, second, fraction}` tuple and a lifted
+  # microsecond is a `{value, precision}` pair.
 
   def adjust_for_direction([{:direction, :negative} | rest]) do
-    Enum.map(rest, fn {k, v} -> {k, -v} end)
+    Enum.map(rest, &negate_duration_component/1)
   end
 
   def adjust_for_direction(other) do
     other
   end
+
+  defp negate_duration_component({:second, {:signed_fraction, sign, second, fraction}}),
+    do: {:second, {:signed_fraction, -sign, second, fraction}}
+
+  defp negate_duration_component({:microsecond, {value, precision}}),
+    do: {:microsecond, {-value, precision}}
+
+  defp negate_duration_component({unit, value}) when is_number(value), do: {unit, -value}
 
   defp put_calendar(%Tempo{} = tempo, calendar) do
     %{tempo | calendar: calendar}
