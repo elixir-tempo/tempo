@@ -249,6 +249,7 @@ Interactive, runnable tours — every cell executes live in [Livebook](https://l
 ## Related links
 
 * [Computerphile on Timezones](https://www.youtube.com/watch?v=-5wpm-gesOY) — excellent primer on why timezones are hard.
+* [Time words don't mean what you think](https://www.youtube.com/watch?v=TK-8gfqmFNo) - a fun look at the etymology of the words we use to decribe time.
 * [Allen's Interval Algebra](https://ics.uci.edu/~alspaugh/cls/shr/allen.html) — the reference.
 * [RFC 3339 and ISO 8601](https://ijmacd.github.io/rfc3339-iso8601/) — helpful visual crossref.
 * [EDTF specification](https://www.loc.gov/standards/datetime/) — Library of Congress.
