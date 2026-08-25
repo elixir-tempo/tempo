@@ -236,7 +236,9 @@ defmodule Tempo.IntervalSet do
 
   When you want to operate on the **member intervals** instead
   — filter them, count them, map them — `to_list/1` gives you
-  a plain list you can pipe into `Enum`.
+  a plain list you can pipe into `Enum`. `members/1` is the same
+  function under a name that says which list you are getting, and
+  reads better at a call site where the distinction matters.
 
   ### Examples
 
@@ -259,6 +261,58 @@ defmodule Tempo.IntervalSet do
     ensure_bounded!(set, "Tempo.IntervalSet.to_list/1")
     backend.to_list(state)
   end
+
+  @doc """
+  The member intervals, as a plain list.
+
+  The same value and the same cost as `to_list/1`, under a name that
+  says *which* list you get. An IntervalSet has two plausible ones and
+  they are wildly different sizes: `Enum` walks the sub-points inside
+  the set, while this walks the intervals the set is made of.
+
+      {:ok, set} = Tempo.IntervalSet.new([
+        ~o"2026-06-15T09:00:00/2026-06-15T12:00:00",
+        ~o"2026-06-15T13:00:00/2026-06-15T17:00:00"
+      ])
+
+      Enum.count(set)                       #=> 25200 — every second
+      Tempo.IntervalSet.members(set) |> length()  #=> 2 — the two blocks
+
+  Prefer `members/1` wherever the intent is "the intervals this set is
+  made of". `to_list/1` remains, because converting a collection to a
+  list is an idiom Elixir readers expect to find, and the two are
+  interchangeable.
+
+  The trap `members/1` is named to avoid: at day resolution the two
+  counts *agree* — a five-member set of days enumerates as five days —
+  so code that reaches for `Enum` is correct until the day someone
+  passes it hours, and then it is silently wrong by a factor of the
+  granularity. See `walk/1` for the lazy counterpart.
+
+  ### Arguments
+
+  * `set` is a `t:t/0`.
+
+  ### Returns
+
+  * The member intervals in time order, as a list.
+
+  ### Examples
+
+      iex> {:ok, set} = Tempo.IntervalSet.new([
+      ...>   %Tempo.Interval{from: ~o"2026-06-01", to: ~o"2026-06-10"},
+      ...>   %Tempo.Interval{from: ~o"2026-07-01", to: ~o"2026-07-10"}
+      ...> ])
+      iex> Tempo.IntervalSet.members(set) |> length()
+      2
+
+      iex> {:ok, set} = Tempo.IntervalSet.new([~o"2026-06-15T09:00:00/2026-06-15T12:00:00"])
+      iex> Tempo.IntervalSet.members(set) == Tempo.IntervalSet.to_list(set)
+      true
+
+  """
+  @spec members(t()) :: [Interval.t()]
+  def members(%__MODULE__{} = set), do: to_list(set)
 
   @doc """
   An enumerable yielding the member intervals in time order.

@@ -4,6 +4,8 @@
 
 ### Added
 
+* `Tempo.IntervalSet.members/1` — the member intervals as a plain list, the same value as `to_list/1` under a name that says which list you get. An IntervalSet enumerates the sub-points *inside* it, so `Enum.count/1` on two blocks totalling seven hours is 25,200 where `members/1` is 2; the two agree at day resolution, which is what makes the confusion hide until someone passes hours.
+
 * `Tempo.from_date_range/1,2` (and a `Date.Range` clause on `from_elixir/2`) — converts Elixir's inclusive `Date.Range` to a half-open interval covering exactly the enumerated days, preserving the range's calendar. Stepped, descending, and empty ranges are refused; `from_date_range!/1,2` raises.
 
 * Interval selectors in `Tempo.select/2` project as **spans**: `Tempo.select(workdays, ~o"T09/T17")` yields each member's half-open eight-hour window (previously a granule at the start). Lists give several windows per member, the duration form (`~o"T09/PT7H36M"`) expresses non-hour-aligned windows, and a window crossing midnight (`~o"T21/T05"`) rolls its end to the following day.

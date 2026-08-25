@@ -515,4 +515,72 @@ defmodule Tempo.IntervalSet.Test do
     {:ok, interval} = Tempo.to_interval(tempo)
     interval
   end
+
+  describe "members/1" do
+    test "returns the member intervals, not the points inside them" do
+      {:ok, set} =
+        Tempo.IntervalSet.new([
+          ~o"2026-06-15T09:00:00/2026-06-15T12:00:00",
+          ~o"2026-06-15T13:00:00/2026-06-15T17:00:00"
+        ])
+
+      assert [%Interval{}, %Interval{}] = Tempo.IntervalSet.members(set)
+      assert length(Tempo.IntervalSet.members(set)) == 2
+    end
+
+    test "and that is a different answer from Enum" do
+      # The trap the name exists to avoid: `Enum` walks every second
+      # in the set, which is seven hours' worth.
+      {:ok, set} =
+        Tempo.IntervalSet.new([
+          ~o"2026-06-15T09:00:00/2026-06-15T12:00:00",
+          ~o"2026-06-15T13:00:00/2026-06-15T17:00:00"
+        ])
+
+      assert length(Tempo.IntervalSet.members(set)) == 2
+      assert Enum.count(set) == 25_200
+    end
+
+    test "the two agree at day resolution, which is why the trap hides" do
+      {:ok, set} = Tempo.select(~o"2026-08-10/2026-08-15", Tempo.workdays(:AU))
+
+      assert length(Tempo.IntervalSet.members(set)) == 5
+      assert Enum.count(set) == 5
+    end
+
+    test "is exactly to_list/1" do
+      {:ok, set} =
+        Tempo.IntervalSet.new([
+          ~o"2026-06-01/2026-06-10",
+          ~o"2026-07-01/2026-07-10"
+        ])
+
+      assert Tempo.IntervalSet.members(set) == Tempo.IntervalSet.to_list(set)
+    end
+
+    test "agrees with count/1" do
+      {:ok, set} =
+        Tempo.IntervalSet.new([
+          ~o"2026-06-01/2026-06-10",
+          ~o"2026-07-01/2026-07-10"
+        ])
+
+      assert length(Tempo.IntervalSet.members(set)) == Tempo.IntervalSet.count(set)
+    end
+
+    test "an empty set has no members" do
+      assert Tempo.IntervalSet.members(Tempo.IntervalSet.new!([])) == []
+    end
+
+    test "members are in time order" do
+      {:ok, set} =
+        Tempo.IntervalSet.new([
+          ~o"2026-07-01/2026-07-10",
+          ~o"2026-06-01/2026-06-10"
+        ])
+
+      assert [first, second] = Tempo.IntervalSet.members(set)
+      assert Tempo.compare(Interval.from(first), Interval.from(second)) == :lt
+    end
+  end
 end
