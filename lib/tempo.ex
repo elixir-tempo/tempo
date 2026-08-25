@@ -1199,6 +1199,120 @@ defmodule Tempo do
   end
 
   @doc """
+  Create a `t:Tempo.Interval.t/0` from an Elixir `Date.Range`,
+  converting the range's inclusive bounds to Tempo's half-open
+  convention.
+
+  A `Date.Range` enumerates its `last` day; a Tempo interval excludes
+  its `to` endpoint. The conversion sets `to` to the day *after*
+  `range.last`, so the interval covers exactly the days the range
+  enumerates — doing the inclusive-to-half-open bridge once, here,
+  instead of leaving an off-by-one for every caller. The range's
+  calendar is preserved: a range of fiscal-calendar dates yields an
+  interval in that calendar, which composes with Gregorian values
+  through Tempo's cross-calendar comparison.
+
+  A stepped range (`Date.range(a, b, 2)`) enumerates a set of days
+  rather than a contiguous span, and a descending or empty range is
+  not a calendar period — both are refused rather than guessed.
+
+  ### Arguments
+
+  * `range` is a `t:Date.Range.t/0` with step `1` and
+    `first <= last`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:resolution` is a time unit atom applied to both endpoints via
+    `at_resolution/2`. The default is `:day`.
+
+  ### Returns
+
+  * `{:ok, interval}` where `interval` is a `t:Tempo.Interval.t/0`
+    covering exactly the range's days, or
+
+  * `{:error, %Tempo.ConversionError{}}` for a stepped, descending,
+    or empty range.
+
+  ### Examples
+
+      iex> {:ok, q3} = Tempo.from_date_range(Calendrical.Interval.quarter(2026, 3, Calendrical.Gregorian))
+      iex> q3
+      ~o"2026Y7M1D/2026Y10M1D"
+
+      iex> {:error, %Tempo.ConversionError{}} =
+      ...>   Tempo.from_date_range(Date.range(~D[2026-07-01], ~D[2026-07-31], 2))
+
+  """
+  @spec from_date_range(Date.Range.t(), Keyword.t()) ::
+          {:ok, Tempo.Interval.t()} | {:error, error_reason()}
+  def from_date_range(range, options \\ [])
+
+  def from_date_range(%Date.Range{step: 1, first: first, last: last} = range, options) do
+    if Date.compare(first, last) == :gt do
+      {:error,
+       ConversionError.exception(
+         value: range,
+         target: Tempo.Interval,
+         reason:
+           "An empty Date.Range spans no days, so it cannot become an interval " <>
+             "(Tempo intervals have positive extent)."
+       )}
+    else
+      resolution = Keyword.get(options, :resolution, :day)
+
+      with %Tempo{} = from <- at_resolution(from_date(first), resolution),
+           %Tempo{} = to <- at_resolution(from_date(Date.add(last, 1)), resolution) do
+        Interval.new(from: from, to: to)
+      end
+    end
+  end
+
+  def from_date_range(%Date.Range{step: step} = range, _options) do
+    {:error,
+     ConversionError.exception(
+       value: range,
+       target: Tempo.Interval,
+       reason:
+         "A stepped or descending Date.Range (step #{step}) enumerates a set of days, " <>
+           "not a contiguous span, so it cannot become a single interval. " <>
+           "Express the selection with `Tempo.select/2` instead."
+     )}
+  end
+
+  @doc """
+  Raising version of `from_date_range/2`.
+
+  ### Arguments
+
+  * `range` is a `t:Date.Range.t/0` with step `1` and
+    `first <= last`.
+
+  * `options` is a keyword list of options — see
+    `from_date_range/2`.
+
+  ### Returns
+
+  * The `t:Tempo.Interval.t/0` covering exactly the range's days.
+
+  ### Examples
+
+      iex> Tempo.from_date_range!(Date.range(~D[2026-07-01], ~D[2026-07-31]))
+      ~o"2026Y7M1D/2026Y8M1D"
+
+  """
+  @spec from_date_range!(Date.Range.t(), Keyword.t()) :: Tempo.Interval.t()
+  def from_date_range!(range, options \\ []) do
+    case from_date_range(range, options) do
+      {:ok, interval} -> interval
+      {:error, exception} when is_exception(exception) -> raise exception
+      {:error, reason} -> raise ArgumentError, inspect(reason)
+    end
+  end
+
+  @doc """
   Creates a `t:Tempo.t/0` struct from a `t:Time.t/0`.
 
   ### Arguments
@@ -2034,6 +2148,13 @@ defmodule Tempo do
     `:resolution` to widen to a coarser span (e.g. `:day` for a
     midnight value you want to treat as a whole day).
 
+  * `Date.Range` → a half-open `t:Tempo.Interval.t/0` covering
+    exactly the days the range enumerates (the inclusive `last`
+    becomes an exclusive day-after `to`), in the range's own
+    calendar. Returned as `{:ok, interval}` / `{:error, reason}`
+    because a stepped, descending, or empty range is refused — see
+    `from_date_range/2`.
+
   When an explicit `:resolution` is given, the resulting Tempo is
   passed through `at_resolution/2` to either truncate or pad to
   that resolution.
@@ -2070,6 +2191,10 @@ defmodule Tempo do
       iex> Tempo.from_elixir(~N[2022-06-15 00:00:00])
       ~o"2022Y6M15DT0H0M0S"
 
+      iex> {:ok, july} = Tempo.from_elixir(Date.range(~D[2026-07-01], ~D[2026-07-31]))
+      iex> july
+      ~o"2026Y7M1D/2026Y8M1D"
+
       iex> Tempo.from_elixir(~D[2022-06-15], resolution: :hour)
       ~o"2022Y6M15DT0H"
 
@@ -2078,9 +2203,9 @@ defmodule Tempo do
 
   """
   @spec from_elixir(
-          value :: Date.t() | Time.t() | NaiveDateTime.t() | DateTime.t(),
+          value :: Date.t() | Time.t() | NaiveDateTime.t() | DateTime.t() | Date.Range.t(),
           options :: Keyword.t()
-        ) :: t() | {:error, error_reason()}
+        ) :: t() | Duration.t() | {:ok, Tempo.Interval.t()} | {:error, error_reason()}
   def from_elixir(value, options \\ [])
 
   def from_elixir(%Date{} = date, options) do
@@ -2089,6 +2214,14 @@ defmodule Tempo do
     date
     |> from_date()
     |> at_resolution(resolution)
+  end
+
+  # A `Date.Range` describes a span, so it converts to an interval —
+  # the inclusive-to-half-open bridge lives in `from_date_range/2`,
+  # and the result is tagged (`{:ok, interval}`) because a stepped,
+  # descending, or empty range is refused.
+  def from_elixir(%Date.Range{} = range, options) do
+    from_date_range(range, options)
   end
 
   def from_elixir(%Time{} = time, options) do

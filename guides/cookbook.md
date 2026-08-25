@@ -632,6 +632,22 @@ iex> Tempo.to_calendar(~o"2026-06-15", Calendrical.Hebrew)
 # Returns {:ok, %Tempo{...calendar: Calendrical.Hebrew}}
 ```
 
+### How do I get a fiscal quarter from the calendar that defines it?
+
+Calendrical's period functions answer *"which days are in this quarter?"* in any calendar — fiscal, retail, academic — and return an inclusive `Date.Range`. `Tempo.from_elixir/2` (or the named `Tempo.from_date_range/2`) converts it to a half-open interval covering exactly those days, with the calendar preserved:
+
+```elixir
+iex> {:ok, calendar} = Calendrical.FiscalYear.calendar_for(:AU)
+iex> {:ok, quarter} = Tempo.from_elixir(calendar.quarter(2027, 1))
+iex> {:ok, workdays} = Tempo.select(quarter, Tempo.workdays(:AU))
+iex> Tempo.IntervalSet.count(workdays)
+66
+```
+
+> *"The first quarter of Australian financial year 2027 has **66 working days**"* — including the quarter's final day, which a hand-written `range.first`-to-`range.last` interval silently drops (the inclusive/half-open off-by-one this conversion exists to prevent). The literal alternative, `~o"2026-07-01/2026-10-01"`, encodes the fiscal boundary by hand — right when written, wrong the year the rules change; the calendar itself says which days it is.
+
+Fiscal values compose with Gregorian ones directly — `Tempo.relation(Tempo.Interval.from(quarter), ~o"2026-07-01")` is `:equals` — so nothing needs converting before the set algebra. A stepped or descending `Date.Range` is refused rather than guessed: it enumerates a set of days, not a span.
+
 ---
 
 ## 10. Archaeological / approximate dates
