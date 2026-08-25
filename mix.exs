@@ -100,15 +100,22 @@ defmodule Tempo.MixProject do
           "README.md",
           "LICENSE.md",
           "CHANGELOG.md"
-        ] ++ Path.wildcard("guides/*.md") ++ Path.wildcard("livebooks/*.livemd"),
+        ] ++ Path.wildcard("guides/*.md") ++ livebooks(),
       formatters: ["html", "markdown"],
       groups_for_modules: groups_for_modules(),
       groups_for_extras: groups_for_extras(),
       skip_undefined_reference_warnings_on:
         [
           "CHANGELOG.md"
-        ] ++ Path.wildcard("guides/*.md") ++ Path.wildcard("livebooks/*.livemd")
+        ] ++ Path.wildcard("guides/*.md") ++ livebooks()
     ]
+  end
+
+  # Livebooks published as documentation. The Melbourne deck is a
+  # conference talk rather than a guide — it lives here to be run, not
+  # read on hexdocs, and its slide markers render as noise there.
+  defp livebooks do
+    Path.wildcard("livebook/*.livemd") -- ["livebook/tempo_melbourne_september_2026.livemd"]
   end
 
   def groups_for_modules do
@@ -134,9 +141,10 @@ defmodule Tempo.MixProject do
         "guides/tutorial-booking-availability.md"
       ],
       Livebooks: [
-        "livebooks/getting-started.livemd",
-        "livebooks/scheduling-workbook.livemd",
-        "livebooks/uncertain-dates-workbook.livemd"
+        "livebook/getting-started.livemd",
+        "livebook/tempo_tour.livemd",
+        "livebook/scheduling-workbook.livemd",
+        "livebook/uncertain-dates-workbook.livemd"
       ],
       Cookbooks: [
         "guides/cookbook.md",
