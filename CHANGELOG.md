@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [v1.4.0] — 2026-08-26
 
 ### Added
 
@@ -11,6 +11,8 @@
 * `Tempo.Duration.add/2` and `Tempo.Duration.sum/1` — component-wise duration addition and list summation: like units sum without conversion, fractional seconds carry and borrow, and cancelling components drop. `sum([])` is the zero duration.
 
 ### Fixed
+
+* A count-1 recurrence carrying a BY-rule — `FREQ=DAILY;BYDAY=SU;COUNT=1` — now materialises the first occurrence that *survives* the filter, agreeing with `COUNT >= 2`. Previously it returned the raw `DTSTART` period even when the rule excluded it (a Monday `DTSTART` under `BYDAY=SU`).
 
 * `Tempo.select/2` with integer indices takes the unit from the base's own resolution, not from where its endpoints differ: `Tempo.select(~o"2026-07-31/2026-08-01", 9..16)` selects the hours of 31 July (previously the days 9–16 of July, and months at a year boundary — silently corrupting month-long traversals at their last day).
 

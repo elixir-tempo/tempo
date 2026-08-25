@@ -4004,6 +4004,48 @@ defmodule Tempo do
     end
   end
 
+  # A count-1 recurrence carrying a BY-rule selection —
+  # `FREQ=DAILY;BYDAY=SU;COUNT=1` — is "the first occurrence that
+  # survives the filter", not the raw `[from, from + duration)` period
+  # (DTSTART itself need not satisfy the rule — it may be a Monday). So
+  # apply the selection and return that first occurrence, still a single
+  # interval per the count-1 contract and consistent with COUNT ≥ 2.
+  def to_interval(
+        %Tempo.Interval{
+          recurrence: 1,
+          direction: direction,
+          from: %Tempo{} = from,
+          duration: %Tempo.Duration{} = duration,
+          repeat_rule: %Tempo{},
+          to: to
+        } = interval,
+        _opts
+      )
+      when to in [nil, :undefined] do
+    step = if direction == -1, do: negate_duration(duration), else: duration
+
+    case iterate_recurrence(
+           from,
+           step,
+           occurrence_end_fn(from, duration, interval),
+           fn _start -> true end,
+           selection_fn(interval, duration),
+           interval.metadata,
+           1
+         ) do
+      [%Tempo.Interval{} = first | _] ->
+        {:ok, first}
+
+      [] ->
+        {:error,
+         IntervalEndpointsError.exception(
+           interval: interval,
+           operation: "materialise a count-1 recurrence whose BY-rule selects no occurrence",
+           reason: :empty_selection
+         )}
+    end
+  end
+
   # A `from + duration` interval (`1985-01/P3M`). Materialise to
   # a closed `[from, from + duration)` interval. Preserves the
   # source interval's metadata — callers like `Tempo.ICal` need

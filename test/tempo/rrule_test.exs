@@ -282,6 +282,41 @@ defmodule Tempo.RRuleTest do
     end
   end
 
+  describe "COUNT=1 with a BY-rule materialises the first matching occurrence" do
+    # Regression: a count-1 recurrence carrying a BY-filter used to
+    # return the raw DTSTART period, bypassing the selection — so
+    # COUNT=1 disagreed with COUNT >= 2. DTSTART 2024-07-01 is a Monday.
+    test "DAILY;BYDAY=SU;COUNT=1 selects the first Sunday, not DTSTART" do
+      {:ok, i} = RRule.parse("FREQ=DAILY;BYDAY=SU;COUNT=1", from: ~o"2024-07-01")
+      {:ok, %Tempo.Interval{from: from}} = Tempo.to_interval(i)
+      assert {Tempo.year(from), Tempo.month(from), Tempo.day(from)} == {2024, 7, 7}
+      assert Tempo.day_of_week(from) == 7
+    end
+
+    test "COUNT=1 agrees with the first occurrence of COUNT=3" do
+      {:ok, one} = RRule.parse("FREQ=DAILY;BYDAY=SU;COUNT=1", from: ~o"2024-07-01")
+      {:ok, three} = RRule.parse("FREQ=DAILY;BYDAY=SU;COUNT=3", from: ~o"2024-07-01")
+      {:ok, %Tempo.Interval{from: one_from}} = Tempo.to_interval(one)
+      {:ok, set} = Tempo.to_interval(three)
+      [first | _] = IntervalSet.to_list(set)
+      assert one_from == first.from
+    end
+
+    test "BYSETPOS;COUNT=1 selects the last weekday of the first month" do
+      {:ok, i} =
+        RRule.parse("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1;COUNT=1", from: ~o"2024-07-01")
+
+      {:ok, %Tempo.Interval{from: from}} = Tempo.to_interval(i)
+      assert {Tempo.year(from), Tempo.month(from), Tempo.day(from)} == {2024, 7, 31}
+    end
+
+    test "a plain COUNT=1 (no BY-rule) still returns the DTSTART period" do
+      {:ok, i} = RRule.parse("FREQ=DAILY;COUNT=1", from: ~o"2024-07-01")
+      {:ok, %Tempo.Interval{from: from}} = Tempo.to_interval(i)
+      assert {Tempo.year(from), Tempo.month(from), Tempo.day(from)} == {2024, 7, 1}
+    end
+  end
+
   defp first_occurrence(value) do
     {:ok, set} = Tempo.to_interval(value, bound: ~o"2025")
     set |> IntervalSet.to_list() |> hd()
