@@ -46,12 +46,37 @@ defmodule Tempo.Select do
   | `%Tempo{day_of_week: [...]}` | `Tempo.select(m, Tempo.workdays(:US))` | Day-of-week list — every matching weekday in the base |
   | `%Tempo{day: N}` (ordinal) | `Tempo.select(y, ~o"10O")` | Ordinal day in the year — the Nth day (ISO 8601-2 `O` suffix) |
   | Negative components | `Tempo.select(y, ~o"-1M")` | ISO 8601-2 §4.4.1 — count from the end of the containing unit |
-  | `%Tempo.Interval{}` or list | `Tempo.select(y, vacation)` | Same, for explicit intervals |
+  | `%Tempo.Interval{}` or list | `Tempo.select(days, ~o"T09/T17")` | Project as a **span** — coarser units from the base, finer from each endpoint, half-open `[from, to)` |
+  | Interval duration form | `Tempo.select(days, ~o"T09/PT7H36M")` | Span from the projected start plus the duration |
   | Function | `Tempo.select(y, &fn/1)` | The function returns any of the above; evaluated against the base |
 
   Base can be a `t:Tempo.t/0`, `t:Tempo.Interval.t/0`, or
   `t:Tempo.IntervalSet.t/0`. IntervalSet bases flat-map the
   selector across each member and collect the results.
+
+  ## Time-of-day windows — interval selectors project as spans
+
+  Narrowing every member of a day set to the same part of each day is
+  one expression: an interval selector keeps its whole extent, so
+  "nine to five" is a single eight-hour span per member — half-open,
+  written as nine to five, with no off-by-one and no `coalesce/1`. A
+  list gives several windows per member (the business-hours-with-lunch
+  case), and the duration form expresses windows that are not
+  hour-aligned:
+
+  ```elixir
+  {:ok, workdays} = Tempo.select(~o"2026-07", Tempo.workdays(:AU))
+  {:ok, open}     = Tempo.select(workdays, [~o"T09/T12", ~o"T13/T17"])
+  {:ok, shift}    = Tempo.select(workdays, ~o"T09/PT7H36M")
+  ```
+
+  > *"The workdays of July, nine to five with an hour for lunch."*
+
+  A window whose `to` is at or before its `from` crosses midnight and
+  **rolls forward**: `~o"T21/T05"` on the 15th is the span from the
+  15th 21:00 to the 16th 05:00 — a night shift reads the way a roster
+  writes it. Use the duration form (`~o"T21/PT8H"`) to say the same
+  thing explicitly.
 
   ## Negative components — "last N from the end"
 
@@ -98,12 +123,14 @@ defmodule Tempo.Select do
   """
 
   alias Tempo.Compare
+  alias Tempo.Duration
   alias Tempo.Interval
   alias Tempo.Interval.Steps
   alias Tempo.IntervalEndpointsError
   alias Tempo.IntervalSet
   alias Tempo.Iso8601.Unit
   alias Tempo.MaterialisationError
+  alias Tempo.Math
 
   @type selector ::
           [integer()]
@@ -414,8 +441,14 @@ defmodule Tempo.Select do
   ## is the authoritative resolution for the "next finer unit"
   ## derivation.
 
-  defp select_indices(%Interval{from: %Tempo{} = from} = base, indices) do
-    base_unit = Interval.resolution(base)
+  defp select_indices(%Interval{from: %Tempo{} = from} = _base, indices) do
+    # The base's own resolution comes from its endpoint, not from where
+    # the endpoints happen to differ (`Interval.resolution/1`):
+    # `2026-07-31/2026-08-01` is a day-resolution span whose endpoints
+    # first differ at the month, and indices must land on the hours of
+    # the 31st — not the days of July, nor (at a year boundary) the
+    # months of the year.
+    {base_unit, _count_or_finer} = Tempo.resolution(from)
     truncated_time = truncate_to_unit(from.time, base_unit)
     select_indices_at(from, truncated_time, base_unit, indices)
   end
@@ -511,20 +544,76 @@ defmodule Tempo.Select do
     end
   end
 
-  defp project_onto_base(%Interval{} = base, %Interval{from: %Tempo{} = c_from}) do
-    # For an Interval constraint, project using its from-endpoint.
-    # Extending to preserve the constraint's own span is a v2 concern.
-    project_onto_base(base, c_from)
+  # An interval selector projects as a *span*: the coarser units come
+  # from the base member and the finer units from each endpoint, and
+  # the result is `[from_projected, to_projected)` — so
+  # `select(workdays, ~o"T09/T17")` is each day's eight open hours,
+  # not a granule at 09:00. A window whose `to` is at or before its
+  # `from` (`~o"T21/T05"`, a night shift) rolls the end forward to the
+  # following day. The duration form (`~o"T09/PT7H36M"`) adds the
+  # duration to the projected start. Recurring or open selectors fall
+  # back to point projection of the from-endpoint.
+  defp project_onto_base(%Interval{} = base, %Interval{from: %Tempo{} = c_from} = constraint) do
+    case span_endpoint(constraint) do
+      {:to, %Tempo{} = c_to} -> project_span(base, c_from, c_to)
+      {:duration, %Duration{} = duration} -> project_span_duration(base, c_from, duration)
+      :point -> project_onto_base(base, c_from)
+    end
   end
 
-  defp project_merge(%Interval{from: %Tempo{calendar: calendar} = base_from} = base, c_time) do
-    # Projection merges the constraint into the base's lower bound, so
-    # it needs the walk-ready anchor: a materialised base carries its
-    # iteration granularity on `:unit` with bounds at the value's own
-    # resolution, and merging `day: 10` into an unfilled `[year: 2026]`
-    # would produce an ordinal-shaped list no calendar math accepts.
-    # Fill to the unit first (`[year: 2026, month: 1]`), exactly the
-    # anchor the walk itself starts from.
+  defp span_endpoint(%Interval{recurrence: recurrence}) when recurrence != 1, do: :point
+  defp span_endpoint(%Interval{to: %Tempo{} = to}), do: {:to, to}
+
+  defp span_endpoint(%Interval{to: nil, duration: %Duration{} = duration}),
+    do: {:duration, duration}
+
+  defp span_endpoint(%Interval{}), do: :point
+
+  defp project_span(%Interval{} = base, %Tempo{} = c_from, %Tempo{} = c_to) do
+    from_anchor = merged_constraint_tempo(base, c_from.time)
+    to_anchor = merged_constraint_tempo(base, c_to.time)
+    build_span(from_anchor, roll_past_midnight(from_anchor, to_anchor))
+  end
+
+  defp project_span_duration(%Interval{} = base, %Tempo{} = c_from, %Duration{} = duration) do
+    with %Tempo{} = from_anchor <- merged_constraint_tempo(base, c_from.time),
+         %Tempo{} = to_anchor <- Math.add(from_anchor, duration) do
+      build_span(from_anchor, to_anchor)
+    else
+      _other -> nil
+    end
+  end
+
+  # Both endpoints merge onto the same base member, so a window whose
+  # `to` does not land after its `from` crossed midnight — its end
+  # belongs to the following day. `:same` rolls too: "21:00 to 21:00"
+  # reads as a full day, and a zero-extent interval is not a value.
+  defp roll_past_midnight(%Tempo{} = from_anchor, %Tempo{} = to_anchor) do
+    if Compare.compare_endpoints(to_anchor, from_anchor) == :later do
+      to_anchor
+    else
+      Math.add(to_anchor, Duration.build(day: 1))
+    end
+  end
+
+  defp build_span(%Tempo{} = from_anchor, %Tempo{} = to_anchor) do
+    case Interval.new(from: from_anchor, to: to_anchor) do
+      {:ok, %Interval{} = interval} -> interval
+      _other -> nil
+    end
+  end
+
+  # Merge a constraint's time units onto the base's walk-ready lower
+  # bound: a materialised base carries its iteration granularity on
+  # `:unit` with bounds at the value's own resolution, and merging
+  # `day: 10` into an unfilled `[year: 2026]` would produce an
+  # ordinal-shaped list no calendar math accepts. Fill to the unit
+  # first (`[year: 2026, month: 1]`), exactly the anchor the walk
+  # itself starts from.
+  defp merged_constraint_tempo(
+         %Interval{from: %Tempo{calendar: calendar} = base_from} = base,
+         c_time
+       ) do
     %Tempo{} = base_from = Steps.fill_to_unit(base_from, base.unit, calendar)
     base_time = base_from.time
     base_res = Interval.resolution(base)
@@ -538,7 +627,11 @@ defmodule Tempo.Select do
       |> reorder_coarse_to_fine()
       |> resolve_negatives(calendar)
 
-    merged = %Tempo{base_from | time: merged_time}
+    %Tempo{base_from | time: merged_time}
+  end
+
+  defp project_merge(%Interval{} = base, c_time) do
+    merged = merged_constraint_tempo(base, c_time)
 
     case Tempo.to_interval(merged) do
       {:ok, %Interval{} = iv} ->

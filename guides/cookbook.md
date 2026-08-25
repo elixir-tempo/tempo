@@ -458,6 +458,23 @@ iex> last_minute |> Tempo.IntervalSet.to_list() |> hd() |> Tempo.minute()
 
 Negative components compose with the rest of the selector vocabulary — `Tempo.select(~o"2026", [~o"-1D", ~o"12-25"])` projects *both* "last day of year" and "Christmas" onto 2026, yielding Dec 25 and Dec 31 as separate members.
 
+### How do I express business hours across a quarter?
+
+An interval selector projects as a **span** — the coarser units come from each base member, the finer units from the selector's endpoints — so a time-of-day window applies to every day in one expression. A list gives several windows per day:
+
+```elixir
+iex> {:ok, workdays} = Tempo.select(~o"2026-07/2026-10", Tempo.workdays(:AU))
+iex> {:ok, open} = Tempo.select(workdays, [~o"T09/T12", ~o"T13/T17"])
+iex> Tempo.IntervalSet.count(open)
+132
+iex> Tempo.Duration.to_unit(Tempo.IntervalSet.total_duration(open), :hour)
+{:ok, 462.0}
+```
+
+> *"The **workdays** of the quarter, **nine to five** with an **hour for lunch**"* — 66 days, two windows each, 462 open hours. Bounds are half-open throughout Tempo, so nine-to-five is written as nine to five: `~o"T09/T17"` is eight hours, no off-by-one, no `coalesce/1`.
+
+Subtract the public holidays with `Tempo.members_outside(open, holidays)` and the result is still one pipeline. A window that is not hour-aligned uses the duration form — `~o"T09/PT7H36M"` is a statutory 7.6-hour day — and a window crossing midnight rolls its end to the following day: `~o"T21/T05"` is the night shift a roster writes.
+
 See `Tempo.Select` for the full selector vocabulary.
 
 ---

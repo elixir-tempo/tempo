@@ -4,9 +4,13 @@
 
 ### Added
 
+* Interval selectors in `Tempo.select/2` project as **spans**: `Tempo.select(workdays, ~o"T09/T17")` yields each member's half-open eight-hour window (previously a granule at the start). Lists give several windows per member, the duration form (`~o"T09/PT7H36M"`) expresses non-hour-aligned windows, and a window crossing midnight (`~o"T21/T05"`) rolls its end to the following day.
+
 * `Tempo.Duration.add/2` and `Tempo.Duration.sum/1` — component-wise duration addition and list summation: like units sum without conversion, fractional seconds carry and borrow, and cancelling components drop. `sum([])` is the zero duration.
 
 ### Fixed
+
+* `Tempo.select/2` with integer indices takes the unit from the base's own resolution, not from where its endpoints differ: `Tempo.select(~o"2026-07-31/2026-08-01", 9..16)` selects the hours of 31 July (previously the days 9–16 of July, and months at a year boundary — silently corrupting month-long traversals at their last day).
 
 * `Tempo.relation/2` and `within?/2` between a week-axis value and a month/day-axis value no longer answer `:meets` for every pairing — mixed-axis anchored endpoints now compare by real dates, so `Tempo.within?(~o"2026-08-05", ~o"2026Y32W")` is `true`.
 
