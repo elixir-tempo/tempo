@@ -2,7 +2,7 @@
 
 ```elixir
 Mix.install([
-  {:ex_tempo, "~> 1.3"},
+  {:ex_tempo, "~> 1.4"},
   {:ical, "~> 3.2"},
   {:tz, "~> 0.28"}
 ])
@@ -106,7 +106,7 @@ ISO 8601-2 §4.4.1 lets any component be negative, meaning *count back from the 
 last_day = fn month ->
   with {:ok, set} <- Tempo.select(month, ~o"-1D") do
     set
-    |> Tempo.IntervalSet.to_list()
+    |> Tempo.IntervalSet.members()
     |> hd()
     |> Tempo.Interval.endpoints()
     |> elem(0)
@@ -128,7 +128,7 @@ A birthday is not a date. It is a day-and-month that recurs, and most systems st
 ```elixir
 with {:ok, fifteenths} <- Tempo.to_interval(~o"1985-XX-15") do
   {Tempo.IntervalSet.count(fifteenths),
-   fifteenths |> Tempo.IntervalSet.to_list() |> Enum.take(3) |> Enum.map(&Tempo.to_iso8601/1)}
+   fifteenths |> Tempo.IntervalSet.members() |> Enum.take(3) |> Enum.map(&Tempo.to_iso8601/1)}
 end
 ```
 
@@ -178,7 +178,7 @@ meetups =
   end
 
 meetups
-|> Tempo.IntervalSet.to_list()
+|> Tempo.IntervalSet.members()
 |> Enum.map(&Tempo.to_iso8601(Tempo.Interval.from(&1)))
 ```
 
@@ -228,7 +228,7 @@ holidays =
     set
   end
 
-holidays |> Tempo.IntervalSet.to_list() |> Enum.map(&Tempo.to_iso8601/1)
+holidays |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.to_iso8601/1)
 ```
 
 ## Composing them
@@ -245,8 +245,8 @@ with {:ok, clashes} <- Tempo.intersection(holidays, meetups),
   %{
     clashes:
       Enum.map(
-        Tempo.IntervalSet.to_list(clashes),
-        &{Tempo.to_iso8601(Tempo.Interval.from(&1)), &1.metadata[:summary]}
+        Tempo.IntervalSet.members(clashes),
+        &{Tempo.to_iso8601(Tempo.Interval.from(&1)), Tempo.Interval.metadata(&1)[:summary]}
       ),
     meetups_left: Tempo.IntervalSet.count(survivors)
   }
@@ -272,7 +272,7 @@ commitments =
   end
 
 with {:ok, free} <- Tempo.difference(rehearsal_window, commitments) do
-  free |> Tempo.IntervalSet.to_list() |> Enum.map(&Tempo.to_iso8601/1)
+  free |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.to_iso8601/1)
 end
 ```
 
@@ -285,15 +285,24 @@ Wall clock and elapsed time are different questions, and the zone belongs in the
 <!-- slide: code -->
 
 ```elixir
-for date <- ["2026-09-02", "2026-10-07", "2026-11-04"] do
-  with {:ok, meetup} <-
-         Tempo.from_iso8601(
-           "#{date}T18:00:00[Australia/Melbourne]/#{date}T20:00:00[Australia/Melbourne]"
-         ),
-       {:ok, utc} <- Tempo.shift_zone(Tempo.Interval.from(meetup), "Etc/UTC") do
-    {date, Tempo.to_iso8601(utc)}
+# No literal dates: reuse the meetup calendar, and let `at/2` set the
+# 20:00 close. The same wall-clock window (18:00–20:00 Melbourne)
+# projects to a different UTC instant once the city moves to AEDT.
+meetups
+|> Tempo.IntervalSet.members()
+|> Enum.take(3)
+|> Enum.map(fn meetup ->
+  opening = Tempo.Interval.from(meetup)
+  closing = Tempo.at!(opening, ~o"T20")
+
+  with {:ok, opening_utc} <- Tempo.shift_zone(opening, "Etc/UTC"),
+       {:ok, closing_utc} <- Tempo.shift_zone(closing, "Etc/UTC") do
+    %{
+      melbourne: Tempo.to_iso8601(opening),
+      utc: Tempo.to_iso8601(opening_utc) <> " → " <> Tempo.to_iso8601(closing_utc)
+    }
   end
-end
+end)
 ```
 
 ## The DST trap, avoided
@@ -360,7 +369,7 @@ Being honest about the edges is more useful than a feature list.
 
 ## Thank you
 
-* [github.com/kipcole9/tempo](https://github.com/kipcole9/tempo) — `{:ex_tempo, "~> 1.3"}`
+* [github.com/kipcole9/tempo](https://github.com/kipcole9/tempo) — `{:ex_tempo, "~> 1.4"}`
 * [github.com/elixir-tempo/agenda](https://github.com/elixir-tempo/agenda) — scheduling, built on Tempo
 * Guides: ISO 8601 conformance, set operations, enumeration, chronological networks
 * Questions?
