@@ -317,6 +317,83 @@ defmodule Tempo.RRuleTest do
     end
   end
 
+  # These options mirror `Tempo.RRule.Expander.to_ast/3` so the
+  # string-parsing and struct-building RRULE paths accept the same
+  # occurrence-span controls (the iCalendar DTSTART + DURATION / DTEND
+  # pairing, expressed against a parsed RRULE string).
+  describe ":duration, :base_to and :metadata options" do
+    test ":duration attaches an occurrence_duration to the AST metadata" do
+      {:ok, i} =
+        RRule.parse("FREQ=MONTHLY;BYDAY=1WE;COUNT=6",
+          from: ~o"2026-09-02T18:00:00",
+          duration: ~o"PT2H"
+        )
+
+      assert i.metadata.occurrence_duration == ~o"PT2H"
+    end
+
+    test ":duration spans each occurrence rather than one unit of its resolution" do
+      {:ok, i} =
+        RRule.parse("FREQ=MONTHLY;BYDAY=1WE;COUNT=3",
+          from: ~o"2026-09-02T18:00:00",
+          duration: ~o"PT2H"
+        )
+
+      {:ok, set} = Tempo.to_interval(i)
+      first = set |> IntervalSet.to_list() |> hd()
+
+      assert Tempo.hour(first.from) == 18
+      assert Tempo.hour(first.to) == 20
+    end
+
+    test "the span directive is stripped from every emitted occurrence" do
+      {:ok, i} =
+        RRule.parse("FREQ=MONTHLY;BYDAY=1WE;COUNT=3",
+          from: ~o"2026-09-02T18:00:00",
+          duration: ~o"PT2H"
+        )
+
+      {:ok, set} = Tempo.to_interval(i)
+
+      for occurrence <- IntervalSet.to_list(set) do
+        refute Map.has_key?(occurrence.metadata, :occurrence_duration)
+      end
+    end
+
+    test "with no span options an interval carries empty metadata" do
+      {:ok, i} = RRule.parse("FREQ=MONTHLY;BYDAY=1WE;COUNT=3", from: ~o"2026-09-02T18:00:00")
+      assert i.metadata == %{}
+    end
+
+    test ":base_to attaches an occurrence_base_to to the AST metadata" do
+      {:ok, i} =
+        RRule.parse("FREQ=DAILY;COUNT=3",
+          from: ~o"2026-01-01T09",
+          base_to: ~o"2026-01-01T11"
+        )
+
+      assert i.metadata.occurrence_base_to == ~o"2026-01-01T11"
+    end
+
+    test ":metadata is merged and its summary survives onto occurrences alongside a stripped directive" do
+      {:ok, i} =
+        RRule.parse("FREQ=DAILY;COUNT=2",
+          from: ~o"2026-01-01T09:00:00",
+          metadata: %{summary: "Standup"},
+          duration: ~o"PT30M"
+        )
+
+      assert i.metadata.summary == "Standup"
+
+      {:ok, set} = Tempo.to_interval(i)
+
+      for occurrence <- IntervalSet.to_list(set) do
+        assert occurrence.metadata.summary == "Standup"
+        refute Map.has_key?(occurrence.metadata, :occurrence_duration)
+      end
+    end
+  end
+
   defp first_occurrence(value) do
     {:ok, set} = Tempo.to_interval(value, bound: ~o"2025")
     set |> IntervalSet.to_list() |> hd()

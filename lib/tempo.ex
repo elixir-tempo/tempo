@@ -4263,11 +4263,13 @@ defmodule Tempo do
   # next, so occurrence i's `to` is occurrence i+1's `from`. One
   # `Math.add` per occurrence instead of two.
   defp recurrence_candidates(from, cadence, :contiguous, metadata) do
+    occurrence_metadata = strip_span_directives(metadata)
+
     from
     |> Stream.iterate(&Math.add(&1, cadence))
     |> Stream.chunk_every(2, 1, :discard)
     |> Stream.map(fn [start, next_start] ->
-      {start, %Tempo.Interval{from: start, to: next_start, metadata: metadata}}
+      {start, %Tempo.Interval{from: start, to: next_start, metadata: occurrence_metadata}}
     end)
   end
 
@@ -4276,13 +4278,32 @@ defmodule Tempo do
   # end function.
   defp recurrence_candidates(from, cadence, occurrence_end_fn, metadata)
        when is_function(occurrence_end_fn, 2) do
+    occurrence_metadata = strip_span_directives(metadata)
+
     0
     |> Stream.iterate(&(&1 + 1))
     |> Stream.map(fn i ->
       start = add_n_durations(from, cadence, i)
-      {start, %Tempo.Interval{from: start, to: occurrence_end_fn.(start, i), metadata: metadata}}
+
+      {start,
+       %Tempo.Interval{
+         from: start,
+         to: occurrence_end_fn.(start, i),
+         metadata: occurrence_metadata
+       }}
     end)
   end
+
+  # `occurrence_duration` / `occurrence_base_to` are *directives* to
+  # this materialiser — they say how to span each occurrence. Once the
+  # span is fixed in `from`/`to` they've done their job, so they're
+  # dropped from the emitted occurrences rather than riding along as
+  # pseudo-semantic metadata (which would surface, e.g., in inspect).
+  defp strip_span_directives(metadata) when is_map(metadata) do
+    Map.drop(metadata, [:occurrence_duration, :occurrence_base_to])
+  end
+
+  defp strip_span_directives(metadata), do: metadata
 
   defp before_dtstart?(%Tempo{} = candidate_from, %Tempo{} = dtstart) do
     Compare.compare_endpoints(candidate_from, dtstart) == :earlier

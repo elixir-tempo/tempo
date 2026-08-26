@@ -2,7 +2,7 @@
 
 ```elixir
 Mix.install([
-  {:ex_tempo, "~> 1.4"},
+  {:ex_tempo, "~> 1.5"},
   {:ical, "~> 3.2"},
   {:tz, "~> 0.28"}
 ])
@@ -101,13 +101,8 @@ ISO 8601-2 §4.4.1 lets any component be negative, meaning *count back from the 
 
 ```elixir
 last_day = fn month ->
-  {:ok, set} = Tempo.select(month, ~o"-1D")
-
-  set
-  |> Tempo.IntervalSet.members()
-  |> hd()
-  |> Tempo.Interval.from()
-  |> Tempo.day()
+  {:ok, days} = Tempo.select(month, ~o"-1D")
+  days |> Tempo.IntervalSet.first() |> Tempo.Interval.from()
 end
 
 {last_day.(~o"2024-02"), last_day.(~o"2026-02")}
@@ -136,10 +131,10 @@ Every Tempo coarser than its finest unit is enumerable, and it walks its own sub
 
 ```elixir
 %{
-  "a year"  => ~o"2026" |> Enum.take(3) |> Enum.map(&Tempo.to_iso8601/1),
-  "a month" => ~o"2026-09" |> Enum.take(3) |> Enum.map(&Tempo.to_iso8601/1),
-  "a day"   => ~o"2026-09-02" |> Enum.take(3) |> Enum.map(&Tempo.to_iso8601/1),
-  "a decade with an unknown digit" => ~o"202X" |> Enum.take(4) |> Enum.map(&Tempo.to_iso8601/1)
+  "a year"  => ~o"2026" |> Enum.take(3),
+  "a month" => ~o"2026-09" |> Enum.take(3),
+  "a day"   => ~o"2026-09-02" |> Enum.take(3),
+  "a decade with an unknown digit" => ~o"202X" |> Enum.take(4)
 }
 ```
 
@@ -151,31 +146,27 @@ Any component may carry a range, a step, or a set — so the *shape* of the recu
 
 ```elixir
 %{
-  "months 1..3"        => ~o"2026Y{1..3}M" |> Enum.take(3) |> Enum.map(&Tempo.to_iso8601/1),
-  "every second week"  => ~o"2026Y{1..10//2}W" |> Enum.take(5) |> Enum.map(&Tempo.to_iso8601/1),
-  "just these years"   => ~o"[1984,1986,1988]" |> Enum.take(3) |> Enum.map(&Tempo.to_iso8601/1)
+  "months 1..3"        => ~o"2026Y{1..3}M" |> Enum.take(3),
+  "every second week"  => ~o"2026Y{1..10//2}W" |> Enum.take(5),
+  "just these years"   => ~o"[1984,1986,1988]" |> Enum.take(3)
 }
 ```
 
 ## Our meetup, as a value
 
-First Wednesday of the month, 18:00 to 20:00, Melbourne time. That is an RFC 5545 rule, and Tempo parses `RRULE` into the same interval machinery as everything else.
+First Wednesday of the month, 18:00 to 20:00, Melbourne time. That is an RFC 5545 `RRULE` paired with a two-hour `DURATION`, and Tempo parses it straight into the same interval machinery as everything else.
 
 <!-- slide: code -->
 
 ```elixir
-meetups =
-  with {:ok, rule} <-
-         Tempo.RRule.parse("FREQ=MONTHLY;BYDAY=1WE;COUNT=6",
-           from: ~o"2026-09-02T18:00:00[Australia/Melbourne]"
-         ),
-       {:ok, set} <- Tempo.to_interval(rule) do
-    set
-  end
+{:ok, rule} =
+  Tempo.RRule.parse("FREQ=MONTHLY;BYDAY=1WE;COUNT=6",
+    from: ~o"2026-09-02T18:00:00[Australia/Melbourne]",
+    duration: ~o"PT2H"
+  )
 
+{:ok, meetups} = Tempo.to_interval(rule)
 meetups
-|> Tempo.IntervalSet.members()
-|> Enum.map(&Tempo.to_iso8601(Tempo.Interval.from(&1)))
 ```
 
 ## Set operations
@@ -240,7 +231,7 @@ with {:ok, clashes} <- Tempo.intersection(holidays, meetups),
     clashes:
       Enum.map(
         Tempo.IntervalSet.members(clashes),
-        &{Tempo.to_iso8601(Tempo.Interval.from(&1)), Tempo.Interval.metadata(&1)[:summary]}
+        &{Tempo.Interval.from(&1), Tempo.Interval.metadata(&1)[:summary]}
       ),
     meetups_left: Tempo.IntervalSet.count(survivors)
   }
@@ -276,15 +267,15 @@ Wall clock and elapsed time are different questions, and the zone belongs in the
 <!-- slide: code -->
 
 ```elixir
-# No literal dates: reuse the meetup calendar, and let `at/2` set the
-# 20:00 close. The same wall-clock window (18:00–20:00 Melbourne)
-# projects to a different UTC instant once the city moves to AEDT.
+# No literal dates: the meetup already spans 18:00–20:00, so read both
+# ends straight from the value. The same wall-clock window projects to a
+# different UTC instant once the city moves to AEDT.
 meetups
 |> Tempo.IntervalSet.members()
 |> Enum.take(3)
 |> Enum.map(fn meetup ->
   opening = Tempo.Interval.from(meetup)
-  closing = Tempo.at!(opening, ~o"T20")
+  closing = Tempo.Interval.to(meetup)
 
   with {:ok, opening_utc} <- Tempo.shift_zone(opening, "Etc/UTC"),
        {:ok, closing_utc} <- Tempo.shift_zone(closing, "Etc/UTC") do
@@ -358,7 +349,7 @@ Being honest about the edges is more useful than a feature list.
 
 ## Thank you
 
-* [github.com/kipcole9/tempo](https://github.com/kipcole9/tempo) — `{:ex_tempo, "~> 1.4"}`
+* [github.com/elixir-tempo/tempo](https://github.com/elixir-tempo/tempo) — `{:ex_tempo, "~> 1.5"}`
 * [github.com/elixir-tempo/agenda](https://github.com/elixir-tempo/agenda) — scheduling, built on Tempo
 * Guides: ISO 8601 conformance, set operations, enumeration, chronological networks
 * Questions?

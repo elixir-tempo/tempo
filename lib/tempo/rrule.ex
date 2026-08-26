@@ -84,6 +84,18 @@ defmodule Tempo.RRule do
     so occurrence enumeration has a starting point. Optional;
     callers that intend to enumerate must supply this.
 
+  * `:duration` — a `%Tempo.Duration{}` span for each occurrence,
+    the RRULE echo of iCalendar's `DURATION`. Each occurrence spans
+    this rather than one unit of its own resolution, so a
+    `FREQ=MONTHLY;BYDAY=1WE` rule anchored at 18:00 with a two-hour
+    duration emits `18:00/20:00` occurrences.
+
+  * `:base_to` — a `%Tempo{}` upper endpoint for occurrence #0, the
+    `DTEND`-style span used by `Tempo.ICal`. Shifted by one cadence
+    per iteration so every occurrence preserves the event's span.
+
+  * `:metadata` — a map merged into the interval's metadata.
+
   ### Returns
 
   * `{:ok, %Tempo.Interval{}}` on success.
@@ -95,6 +107,13 @@ defmodule Tempo.RRule do
       iex> {:ok, i} = Tempo.RRule.parse("FREQ=DAILY;COUNT=10")
       iex> i.recurrence
       10
+
+      iex> {:ok, i} =
+      ...>   Tempo.RRule.parse("FREQ=DAILY;COUNT=3",
+      ...>     duration: %Tempo.Duration{time: [hour: 2]}
+      ...>   )
+      iex> i.metadata.occurrence_duration.time
+      [hour: 2]
 
       iex> {:error, _} = Tempo.RRule.parse("FREQ=NOPE")
 
@@ -269,7 +288,7 @@ defmodule Tempo.RRule do
     until = Keyword.get(parts, :until)
     from = Keyword.get(options, :from)
 
-    duration = %Tempo.Duration{time: [{freq_unit, interval}]}
+    cadence = %Tempo.Duration{time: [{freq_unit, interval}]}
 
     recurrence = if is_integer(count), do: count, else: :infinity
 
@@ -278,10 +297,45 @@ defmodule Tempo.RRule do
     %Tempo.Interval{
       from: from,
       to: until,
-      duration: duration,
+      duration: cadence,
       recurrence: recurrence,
-      repeat_rule: repeat_rule
+      repeat_rule: repeat_rule,
+      metadata: occurrence_metadata(options)
     }
+  end
+
+  # Build the recurring interval's metadata from the parse options,
+  # mirroring `Tempo.RRule.Expander.to_ast/3` so the string-parsing
+  # and struct-building RRULE paths accept the same span controls:
+  #
+  #   * `:metadata` — a base map, merged first.
+  #
+  #   * `:duration` — a `%Tempo.Duration{}` occurrence span, attached
+  #     as `occurrence_duration` (the iCalendar `DURATION` echo: each
+  #     occurrence spans this rather than one unit of its resolution).
+  #
+  #   * `:base_to` — a `%Tempo{}` occurrence-0 upper endpoint, attached
+  #     as `occurrence_base_to` (the `DTEND`-style span).
+  #
+  # The materialiser consumes these directives to span each occurrence
+  # and strips them from the emitted occurrences.
+  defp occurrence_metadata(options) do
+    options
+    |> Keyword.get(:metadata, %{})
+    |> put_if_given(
+      :occurrence_duration,
+      Keyword.get(options, :duration),
+      &match?(%Tempo.Duration{}, &1)
+    )
+    |> put_if_given(
+      :occurrence_base_to,
+      Keyword.get(options, :base_to),
+      &match?(%Tempo{}, &1)
+    )
+  end
+
+  defp put_if_given(metadata, key, value, valid?) do
+    if valid?.(value), do: Map.put(metadata, key, value), else: metadata
   end
 
   # The parsed `BY*` parts become the `%Tempo{}` selection carried in the

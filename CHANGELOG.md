@@ -1,5 +1,15 @@
 # Changelog
 
+## [v1.5.0] — unreleased
+
+### Added
+
+* `Tempo.RRule.parse/2` accepts `:duration`, `:base_to` and `:metadata` — the occurrence-span controls `Tempo.RRule.Expander.to_ast/3` already had — so a parsed `RRULE` can carry a per-occurrence span rather than a granule at its resolution. `parse("FREQ=MONTHLY;BYDAY=1WE", from: dtstart, duration: ~o"PT2H")` emits two-hour occurrences, the RRULE echo of iCalendar's `DTSTART` + `DURATION`.
+
+### Fixed
+
+* Materialised recurrence occurrences no longer carry the internal `occurrence_duration` / `occurrence_base_to` span directives in their metadata: they are consumed to size each occurrence and then dropped, so occurrences from a `DURATION`-bearing rule inspect cleanly instead of showing a spurious metadata key.
+
 ## [v1.4.0] — 2026-08-26
 
 ### Added
