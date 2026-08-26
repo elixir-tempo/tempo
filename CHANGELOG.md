@@ -12,7 +12,7 @@
 
 ### Fixed
 
-* `Tempo.trunc/2` refuses a unit on another calendar axis instead of silently answering with a coarser one from its own. `trunc(~o"2026-08-16", :week)` returned `~o"2026Y8M"` — it walked past `:day`, found `:month` still coarser than `:week`, and gave back the **month**: a plausible-looking value that was never a week. It now returns a `Tempo.ResolutionError` naming both axes. Coarsening within an axis is unchanged.
+* `Tempo.trunc/2` with `:week` names the day that value's week begins on, at day resolution, instead of silently answering with the month. `trunc(~o"2026-08-16", :week)` returned `~o"2026Y8M"` — it walked past `:day`, found `:month` still coarser than `:week`, and gave back the **month**. It now answers `~o"2026Y8M10D"`, taking the week boundary from the value's own calendar so a Sunday-start calendar gives a different day from an ISO one. Units on another axis that name nothing expressible — `:day_of_week`, `:day_of_year` against a Gregorian value — return a `Tempo.ResolutionError` rather than an unrelated coarser unit. Coarsening within an axis is unchanged.
 
 * Component accessors (`Tempo.year/1`, `month/1`, `day/1`, `hour/1`, …) on an interval exactly one granule wide now read the component instead of raising "ambiguous" when the half-open upper bound rolls into a coarser unit — so `Tempo.month/1` of `[2026Y12M, 2027Y1M)` (December 2026, e.g. from `Tempo.select(~o"2026", ~o"-1M")`) is `12`. A genuinely multi-unit span still raises.
 

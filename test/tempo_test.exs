@@ -111,14 +111,14 @@ defmodule TempoTest do
              Tempo.to_date_time(~o"2022-11")
   end
 
-  describe "beginning_of_week/1" do
-    defmodule SundayStart do
-      use Calendrical.Base.Month,
-        month_of_year: 1,
-        min_days_in_first_week: 1,
-        day_of_week: Calendrical.sunday()
-    end
+  defmodule SundayStart do
+    use Calendrical.Base.Month,
+      month_of_year: 1,
+      min_days_in_first_week: 1,
+      day_of_week: Calendrical.sunday()
+  end
 
+  describe "beginning_of_week/1" do
     test "an ISO calendar puts a Sunday in the week that preceded it" do
       assert Tempo.beginning_of_week(~o"2026-08-16") == ~o"2026Y8M10DT0H0M0S"
     end
@@ -145,14 +145,33 @@ defmodule TempoTest do
   end
 
   describe "trunc/2 refuses to cross calendar axes" do
-    test ":week on a Gregorian value is an error, not the month" do
+    test ":week names the day that week begins on, not the month" do
       # It used to answer `~o"2026Y8M"` — `trunc` walked past `:day`,
       # found `:month` still coarser than `:week`, and returned it.
-      assert {:error, %Tempo.ResolutionError{} = error} =
-               Tempo.trunc(~o"2026-08-16T10:00:00", :week)
+      assert Tempo.trunc(~o"2026-08-16T10:00:00", :week) == ~o"2026Y8M10D"
+    end
 
-      assert Exception.message(error) =~ "week axis"
-      assert Exception.message(error) =~ "gregorian axis"
+    test "every day of one week truncates to the same day" do
+      week = Enum.map(10..16, &Tempo.trunc(Tempo.from_iso8601!("2026-08-#{&1}"), :week))
+
+      assert Enum.uniq(week) == [~o"2026Y8M10D"]
+    end
+
+    test "and the day comes from the value's own calendar" do
+      sunday = Tempo.from_iso8601!("2026-08-16T10:00:00", SundayStart)
+
+      assert Tempo.to_iso8601(Tempo.trunc(sunday, :week)) == "2026Y8M16D"
+      assert Tempo.trunc(~o"2026-08-16T10:00:00", :week) == ~o"2026Y8M10D"
+    end
+
+    test "a week-axis value coarsens normally instead" do
+      assert %Tempo{} = Tempo.trunc(~o"2026-08-16T10:00:00", :week)
+    end
+
+    test "agrees with beginning_of_week/1 on the day it names" do
+      value = ~o"2026-08-16T10:00:00"
+
+      assert Tempo.trunc(value, :week) == Tempo.trunc(Tempo.beginning_of_week(value), :day)
     end
 
     test ":day_of_year on a Gregorian value is refused too" do

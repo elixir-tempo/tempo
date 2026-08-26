@@ -1808,24 +1808,71 @@ defmodule Tempo do
       iex> Tempo.trunc ~o"2022-11-21T09:30:00", :year
       ~o"2022Y"
 
+  ## Truncating to a week
+
+  A Gregorian value has no week component, so `:week` does not coarsen
+  it the way `:month` does — it names **the day that value's week
+  begins on**, at day resolution:
+
+      iex> Tempo.trunc(~o"2026-08-16T10:00:00", :week)
+      ~o"2026Y8M10D"
+
+  Which day that is comes from the value's own calendar, so a Sunday
+  belongs to the preceding week under `Calendrical.Gregorian` and
+  begins one of its own under a Sunday-start calendar. A value already
+  on the week axis holds `:week` as a component and coarsens normally.
+
+  Units belonging to another axis and naming nothing expressible —
+  `:day_of_week`, `:day_of_year` against a Gregorian value — return a
+  `t:Tempo.ResolutionError.t/0` rather than an unrelated coarser unit.
+
   """
   @spec trunc(tempo :: t, truncate_to :: time_unit()) :: t | {:error, error_reason()}
-  def trunc(%__MODULE__{time: time} = tempo, truncate_to \\ :day) do
-    with {:ok, truncate_to} <- validate_unit(truncate_to),
-         :ok <- same_axis(time, truncate_to, tempo) do
-      case Enum.take_while(time, &(Unit.compare(&1, truncate_to) in [:gt, :eq])) do
-        [] ->
-          {:error,
-           ResolutionError.exception(
-             operation: :trunc,
-             target: truncate_to,
-             current: resolution(tempo) |> elem(0),
-             reason: :empty_resolution
-           )}
+  def trunc(%__MODULE__{} = tempo, truncate_to \\ :day) do
+    with {:ok, truncate_to} <- validate_unit(truncate_to) do
+      truncate(tempo, truncate_to)
+    end
+  end
 
-        other ->
-          %{tempo | time: other}
-      end
+  # A value already on the week axis holds `:week` as a component, so
+  # the ordinary rule applies.
+  defp truncate(%__MODULE__{time: time} = tempo, :week) when is_list(time) do
+    if Keyword.has_key?(time, :week) do
+      take_units(tempo, :week)
+    else
+      week_of(tempo)
+    end
+  end
+
+  defp truncate(%__MODULE__{time: time} = tempo, truncate_to) do
+    with :ok <- same_axis(time, truncate_to, tempo) do
+      take_units(tempo, truncate_to)
+    end
+  end
+
+  # A Gregorian value cannot hold a week as a component, but the day
+  # its week begins on is a perfectly good Gregorian value — and it is
+  # what "the week containing this" means when the calendar has no week
+  # granule to name. Day resolution, matching `trunc(tempo, :day)`.
+  defp week_of(%__MODULE__{} = tempo) do
+    with %__MODULE__{} = start <- beginning_of_week(tempo) do
+      take_units(start, :day)
+    end
+  end
+
+  defp take_units(%__MODULE__{time: time} = tempo, truncate_to) do
+    case Enum.take_while(time, &(Unit.compare(&1, truncate_to) in [:gt, :eq])) do
+      [] ->
+        {:error,
+         ResolutionError.exception(
+           operation: :trunc,
+           target: truncate_to,
+           current: resolution(tempo) |> elem(0),
+           reason: :empty_resolution
+         )}
+
+      other ->
+        %{tempo | time: other}
     end
   end
 
@@ -1833,14 +1880,15 @@ defmodule Tempo do
   # `:hour`, `:minute` and `:second` are shared by all three and so
   # constrain nothing.
   @gregorian_only [:month, :day]
-  @week_only [:week, :day_of_week]
+  @week_only [:day_of_week]
   @ordinal_only [:day_of_year]
 
   # Truncating to a unit the value's axis does not have is a category
-  # error, not a coarsening. Without this guard `trunc(~o"2026-08-16",
-  # :week)` walks past `:day`, finds `:month` still coarser than
-  # `:week`, and answers with the *month* — a plausible-looking value
-  # that is not a week and never was.
+  # error rather than a coarsening: without a guard, `take_units/2`
+  # walks past the units it cannot match and answers with whatever
+  # coarser one it lands on — a plausible-looking value of the wrong
+  # kind. `:week` is the exception and is handled above, because the
+  # day a week begins on *is* expressible on every axis.
   defp same_axis(time, truncate_to, tempo) do
     with target when target != :any <- axis_of([truncate_to]),
          value when value != :any <- time |> Keyword.keys() |> axis_of(),
