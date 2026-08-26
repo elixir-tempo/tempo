@@ -94,4 +94,22 @@ defmodule Tempo.DurationAddTest do
       assert {:ok, _zero} = Tempo.from_iso8601("PT0S")
     end
   end
+
+  describe "subtract/2" do
+    test "hours remaining is the budget minus the logged time" do
+      budget = ~o"PT40H"
+      logged = Duration.sum([~o"PT7H30M", ~o"PT6H", ~o"PT8H"])
+
+      assert Duration.subtract(budget, logged) == ~o"PT18H30M"
+    end
+
+    test "is add of the negation" do
+      assert Duration.subtract(~o"P1Y6M", ~o"P6M") ==
+               Duration.add(~o"P1Y6M", Duration.negate(~o"P6M"))
+    end
+
+    test "subtracting a duration from itself cancels" do
+      assert Duration.subtract(~o"PT1H30M", ~o"PT1H30M").time == []
+    end
+  end
 end

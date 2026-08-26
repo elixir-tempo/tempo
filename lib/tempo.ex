@@ -3002,6 +3002,36 @@ defmodule Tempo do
      )}
   end
 
+  @doc """
+  Raising version of `to_calendar/2`.
+
+  ### Arguments
+
+  * `value` is a `t:t/0`, `t:Tempo.Interval.t/0`, or
+    `t:Tempo.IntervalSet.t/0` — see `to_calendar/2`.
+
+  * `calendar` is the target calendar module.
+
+  ### Returns
+
+  * The converted value in the target calendar.
+
+  ### Examples
+
+      iex> Tempo.to_calendar!(~o"2026-06-15", Calendrical.Hebrew)
+      Tempo.from_iso8601!("5786Y10M30D", Calendrical.Hebrew)
+
+  """
+  @spec to_calendar!(t() | Tempo.Interval.t() | Tempo.IntervalSet.t(), module()) ::
+          t() | Tempo.Interval.t() | Tempo.IntervalSet.t()
+  def to_calendar!(value, calendar) do
+    case to_calendar(value, calendar) do
+      {:ok, converted} -> converted
+      {:error, exception} when is_exception(exception) -> raise exception
+      {:error, reason} -> raise ArgumentError, inspect(reason)
+    end
+  end
+
   # An endpoint that names no day — absent, or unbounded in either
   # direction — has nothing to convert and is carried across as it is.
   # Converting only what is there is what lets an open-ended span cross
@@ -4978,6 +5008,38 @@ defmodule Tempo do
   end
 
   @doc """
+  Raising version of `to_interval_set/1`.
+
+  ### Arguments
+
+  * `value` is any value `to_interval_set/1` accepts.
+
+  ### Returns
+
+  * The `t:Tempo.IntervalSet.t/0`.
+
+  ### Examples
+
+      iex> Tempo.to_interval_set!(~o"2026-06")
+      #Tempo.IntervalSet<[#Tempo.Interval<~o"2026Y6M/2026Y7M" unit: day>]>
+
+  """
+  @spec to_interval_set!(
+          Tempo.t()
+          | Tempo.Interval.t()
+          | Tempo.IntervalSet.t()
+          | Tempo.Set.t()
+          | Tempo.Duration.t()
+        ) :: Tempo.IntervalSet.t()
+  def to_interval_set!(value) do
+    case to_interval_set(value) do
+      {:ok, set} -> set
+      {:error, exception} when is_exception(exception) -> raise exception
+      {:error, reason} -> raise ArgumentError, inspect(reason)
+    end
+  end
+
+  @doc """
   Map `fun` over an enumerable of Tempo values, collecting the results into
   a `t:Tempo.IntervalSet.t/0`.
 
@@ -5875,6 +5937,35 @@ defmodule Tempo do
 
   """
   defdelegate select(base, selector), to: Tempo.Select
+
+  @doc """
+  Raising version of `select/2`.
+
+  ### Arguments
+
+  * `base` and `selector` — see `select/2`.
+
+  ### Returns
+
+  * The selected `t:Tempo.IntervalSet.t/0`.
+
+  ### Examples
+
+      iex> Tempo.select!(~o"2026-06", [15])
+      #Tempo.IntervalSet<[#Tempo.Interval<~o"2026Y6M15D/2026Y6M16D" unit: hour>]>
+
+  """
+  @spec select!(
+          t() | Tempo.Interval.t() | Tempo.IntervalSet.t(),
+          Tempo.Select.selector()
+        ) :: Tempo.IntervalSet.t()
+  def select!(base, selector) do
+    case select(base, selector) do
+      {:ok, set} -> set
+      {:error, exception} when is_exception(exception) -> raise exception
+      {:error, reason} -> raise ArgumentError, inspect(reason)
+    end
+  end
 
   @doc """
   Return a selector that matches the workdays of a territory —

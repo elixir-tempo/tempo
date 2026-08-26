@@ -101,4 +101,17 @@ defmodule Tempo.CalendarWeekdayTest do
       assert Tempo.shift(~o"2026-06-15", week: 1) == ~o"2026-06-22"
     end
   end
+
+  describe "week-axis day durations" do
+    test "a day duration steps day_of_week, carrying across weeks" do
+      # The sigil parses week-dates to the month axis, so pin the
+      # week-axis components directly.
+      assert Tempo.shift(~o"2026Y32W", day: 2).time == [year: 2026, week: 32, day_of_week: 3]
+      assert Tempo.shift(~o"2026Y32W", day: 7).time == [year: 2026, week: 33, day_of_week: 1]
+    end
+
+    test "a sub-day duration refuses with a resolution error" do
+      assert {:error, %Tempo.ResolutionError{}} = Tempo.shift(~o"2026Y32W", hour: 1)
+    end
+  end
 end

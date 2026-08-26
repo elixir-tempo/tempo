@@ -744,18 +744,32 @@ defmodule Tempo.Math do
     # converting them to days would demand month/day keys the axis lacks.
     duration_time =
       if Keyword.has_key?(crisp_time, :week) do
-        duration_time
+        translate_week_axis_duration(duration_time)
       else
         normalise_duration(duration_time)
       end
 
-    tempo =
-      %{tempo | time: crisp_time}
-      |> ensure_resolution_for_duration(duration_time)
+    case ensure_resolution_for_duration(%{tempo | time: crisp_time}, duration_time) do
+      {:error, _} = error ->
+        error
 
-    tempo
-    |> apply_duration(duration_time)
-    |> Map.update!(:time, &reapply_component_annotations(&1, annotations))
+      %Tempo{} = tempo ->
+        tempo
+        |> apply_duration(duration_time)
+        |> Map.update!(:time, &reapply_component_annotations(&1, annotations))
+    end
+  end
+
+  # On the week axis a day of duration is a `:day_of_week` step —
+  # `[year, week]` has no month/day slots, and `day_of_week` carries
+  # into `:week` (and the week into the year) exactly as day-arithmetic
+  # requires. `2026Y32W + P2D` is `2026Y32W3K`, and seven days later is
+  # the next week's Monday.
+  defp translate_week_axis_duration(duration_time) do
+    case Keyword.pop(duration_time, :day, 0) do
+      {0, rest} -> rest
+      {days, rest} -> rest ++ [day_of_week: days]
+    end
   end
 
   # ------------------------------------------------------------------
@@ -982,13 +996,25 @@ defmodule Tempo.Math do
       tempo
     else
       case Tempo.extend_resolution(tempo, finest) do
-        %Tempo{} = extended -> extended
-        _ -> tempo
+        %Tempo{} = extended ->
+          extended
+
+        # An axis with no path to the duration's unit (an hour under a
+        # week-axis value) cannot take the shift — refuse with the
+        # resolution error rather than marching into key errors below.
+        # Any other extension failure (the value is already finer than
+        # the duration's unit) keeps the value as-is; the arithmetic
+        # handles it.
+        {:error, %Tempo.ResolutionError{reason: :no_path} = error} ->
+          {:error, error}
+
+        _other ->
+          tempo
       end
     end
   end
 
-  @unit_order_coarse_to_fine [:year, :month, :week, :day, :hour, :minute, :second]
+  @unit_order_coarse_to_fine [:year, :month, :week, :day, :day_of_week, :hour, :minute, :second]
 
   defp finest_duration_unit(duration_time) do
     duration_units = Keyword.keys(duration_time)
@@ -1002,7 +1028,7 @@ defmodule Tempo.Math do
   # to the valid range for the resulting month. `:week` appears only
   # for week-axis values (month-axis durations normalise weeks to
   # days before this loop runs).
-  @duration_apply_order [:year, :month, :week, :day, :hour, :minute, :second]
+  @duration_apply_order [:year, :month, :week, :day, :day_of_week, :hour, :minute, :second]
 
   defp apply_duration(%Tempo{time: time, calendar: calendar} = tempo, duration_time) do
     stepped =

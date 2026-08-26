@@ -218,9 +218,11 @@ defmodule Tempo.Duration do
   Corresponding components sum — hours with hours, months with months —
   and no unit is converted into another, so calendar-length units
   (`:year`, `:month`) add exactly without needing a reference date.
-  Fractional seconds carry into whole seconds when they overflow.
-  Components that sum to zero are dropped, so a duration and its
-  `negate/1` add to the zero duration.
+  Fractional seconds carry into whole seconds when they overflow, and
+  when the time-of-day components would otherwise disagree in sign
+  (`40 h − 21 h 30 m`) they borrow into canonical components sharing
+  one sign (`18 h 30 m`). Components that sum to zero are dropped, so
+  a duration and its `negate/1` add to the zero duration.
 
   ### Arguments
 
@@ -255,7 +257,7 @@ defmodule Tempo.Duration do
           not zero_component?(summed),
           do: {unit, summed}
 
-    %__MODULE__{time: normalise_microseconds(merged)}
+    %__MODULE__{time: merged |> normalise_microseconds() |> borrow_time_of_day()}
   end
 
   @doc """
@@ -292,6 +294,41 @@ defmodule Tempo.Duration do
     Enum.reduce(durations, %__MODULE__{time: []}, &add(&2, &1))
   end
 
+  @doc """
+  Subtract one duration from another component-wise, returning a new
+  duration.
+
+  Equivalent to `add(duration_a, negate(duration_b))`: like units
+  subtract, no unit converts into another, fractional seconds borrow,
+  and components that cancel are dropped.
+
+  ### Arguments
+
+  * `duration_a` is a `t:t/0`.
+
+  * `duration_b` is a `t:t/0` to subtract from `duration_a`.
+
+  ### Returns
+
+  * A `t:t/0` with `duration_b`'s components subtracted.
+
+  ### Examples
+
+      iex> Tempo.Duration.subtract(~o"PT21H30M", ~o"PT8H")
+      ~o"PT13H30M"
+
+      iex> Tempo.Duration.subtract(~o"P1Y6M", ~o"P6M")
+      ~o"P1Y"
+
+      iex> Tempo.Duration.subtract(~o"PT1H", ~o"PT1H").time
+      []
+
+  """
+  @spec subtract(t(), t()) :: t()
+  def subtract(%__MODULE__{} = duration_a, %__MODULE__{} = duration_b) do
+    add(duration_a, negate(duration_b))
+  end
+
   defp add_components(nil, nil), do: nil
   defp add_components(value, nil), do: value
   defp add_components(nil, value), do: value
@@ -305,6 +342,70 @@ defmodule Tempo.Duration do
   defp zero_component?({0, _precision}), do: true
   defp zero_component?(0), do: true
   defp zero_component?(_summed), do: false
+
+  # When the time-of-day components disagree in sign (`40 h − 21 h 30 m`
+  # summing to `19 h, −30 m`), borrow across them: recombine hour,
+  # minute, second, and microsecond from their signed total into
+  # canonical components sharing one sign (`18 h 30 m`). Same-sign
+  # components are left exactly as they sum — no unit converts into
+  # another (`45 m + 50 m` stays `95 m`).
+  defp borrow_time_of_day(time) do
+    components = Keyword.take(time, [:hour, :minute, :second, :microsecond])
+
+    if mixed_signs?(components) do
+      total = time_of_day_microseconds(components)
+      sign = if total < 0, do: -1, else: 1
+      rebuilt = rebuild_time_of_day(sign, abs(total), micro_precision(components))
+      Keyword.drop(time, [:hour, :minute, :second, :microsecond]) ++ rebuilt
+    else
+      time
+    end
+  end
+
+  defp rebuild_time_of_day(sign, magnitude, precision) do
+    parts = [
+      hour: sign * div(magnitude, 3_600_000_000),
+      minute: sign * div(rem(magnitude, 3_600_000_000), 60_000_000),
+      second: sign * div(rem(magnitude, 60_000_000), 1_000_000)
+    ]
+
+    parts
+    |> Enum.reject(fn {_unit, value} -> value == 0 end)
+    |> append_micro(sign, rem(magnitude, 1_000_000), precision)
+  end
+
+  defp append_micro(parts, _sign, 0, _precision), do: parts
+
+  defp append_micro(parts, sign, micro, precision),
+    do: parts ++ [microsecond: {sign * micro, precision}]
+
+  defp component_sign({:microsecond, {value, _precision}}), do: sign_of(value)
+  defp component_sign({_unit, value}), do: sign_of(value)
+
+  defp sign_of(value) when value > 0, do: 1
+  defp sign_of(value) when value < 0, do: -1
+  defp sign_of(_zero), do: 0
+
+  defp mixed_signs?(components) do
+    signs = components |> Enum.map(&component_sign/1) |> Enum.reject(&(&1 == 0)) |> Enum.uniq()
+    length(signs) > 1
+  end
+
+  defp time_of_day_microseconds(components) do
+    Enum.reduce(components, 0, fn
+      {:hour, hours}, acc -> acc + hours * 3_600_000_000
+      {:minute, minutes}, acc -> acc + minutes * 60_000_000
+      {:second, seconds}, acc -> acc + seconds * 1_000_000
+      {:microsecond, {value, _precision}}, acc -> acc + value
+    end)
+  end
+
+  defp micro_precision(components) do
+    case Keyword.get(components, :microsecond) do
+      {_value, precision} -> precision
+      nil -> 6
+    end
+  end
 
   # Recombine the second and its fraction from their microsecond total,
   # so a summed fraction that overflows (`0.5 + 0.7`) carries into the

@@ -16,7 +16,10 @@ defmodule Tempo.IntervalSet do
   every function here reaches the members through that contract. The
   default is `Tempo.IntervalSet.Backend.List` — a sorted plain list.
   Select a backend at construction with `new(intervals, backend: ...)`;
-  member-preserving operations keep their operand's backend.
+  member-preserving operations keep their operand's backend. Two sets
+  holding the same members on different backends are **not** `==`
+  (struct equality compares the backend state) — compare extents with
+  `Tempo.equal?/2` instead.
 
   ## Invariants
 
