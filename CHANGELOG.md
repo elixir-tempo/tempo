@@ -1,28 +1,16 @@
 # Changelog
 
-## [Unreleased]
+## [v1.5.0] — 2026-08-26
+
+### Changed
+
+* Calendrical 1.3 and Astro 2.5 in the lock: every calendar-touching example in the cookbook, guides, and livebooks re-validated by execution; Hebrew and Islamic calendar weeks now parse and materialise through Tempo (`Tempo.from_iso8601("5786-W03", Calendrical.Hebrew)`), and `beginning_of_week/1` on those calendars lands on their own week start.
 
 ### Added
 
 * `Tempo.Duration.subtract/2` (`add/2` of the negation) and the missing bang variants `Tempo.to_calendar!/2`, `to_interval_set!/1`, and `select!/2`, completing the `!` convention across the conversion and selection API.
 
 * `Tempo.week/1` completes the component-accessor family for week-axis values (`~o"2026Y32W"`, Hebrew/Islamic calendar weeks, retail weeks): the week number, `nil` off the week axis, and an `ArgumentError` for an interval spanning more than one week.
-
-### Fixed
-
-* Shifting a week-axis value by weeks (`Tempo.shift(~o"2026Y32W", week: 1)`) steps weeks natively with year-rollover carry instead of raising `KeyError`; component accessors (`Tempo.year/1`) on single-week intervals no longer crash for the same reason. Month-axis values still take a week as seven days.
-
-* A day duration on a week-axis value computes as a `day_of_week` step (`~o"2026Y32W" + P2D` is `~o"2026Y32W3K"`, carrying across week and year boundaries), and a sub-day duration (`PT1H`) returns `{:error, %Tempo.ResolutionError{}}` instead of raising `KeyError` — the week axis has no path to an hour slot.
-
-* The tour livebook called `Tempo.precedes?/2` (not a Tempo function — the predicate is `before?/2`) and compared a zoned time against a floating window; both cells now run. The `weekend?/2` doc describes the actual mechanism: the date converts to `Calendar.ISO` before the weekday is read, so Calendrical 1.3's culturally-native weekday numbering (Hebrew/Islamic weeks from Sunday, Persian from Saturday) cannot misclassify a weekend.
-
-### Changed
-
-* Calendrical 1.3 and Astro 2.5 in the lock: every calendar-touching example in the cookbook, guides, and livebooks re-validated by execution; Hebrew and Islamic calendar weeks now parse and materialise through Tempo (`Tempo.from_iso8601("5786-W03", Calendrical.Hebrew)`), and `beginning_of_week/1` on those calendars lands on their own week start.
-
-## [v1.5.0] — 2026-08-26
-
-### Added
 
 * `Tempo.RRule.parse/2` accepts `:duration`, `:base_to` and `:metadata` — the occurrence-span controls `Tempo.RRule.Expander.to_ast/3` already had — so a parsed `RRULE` can carry a per-occurrence span rather than a granule at its resolution. `parse("FREQ=MONTHLY;BYDAY=1WE", from: dtstart, duration: ~o"PT2H")` emits two-hour occurrences, the RRULE echo of iCalendar's `DTSTART` + `DURATION`.
 
@@ -31,6 +19,12 @@
 * `Tempo.to_calendar/2` converts a day-resolution value from its calendar into another via `Date.convert/2` — `Tempo.to_calendar(~o"2026-06-15", Calendrical.Hebrew)` is 30 Tevet 5786, and it round-trips. `Tempo.to_calendar/1` is now a deprecated alias for `Tempo.to_elixir/1`, the outbound mirror of `from_elixir/2` that also converts durations. `Tempo.to_calendar/2` also takes a `t:Tempo.Interval.t/0` — converting both endpoints and carrying duration, recurrence, repeat rule, unit and metadata across untouched, with an unbounded end left unbounded — and a `t:Tempo.IntervalSet.t/0`, converting each member. Taking the whole span saves the caller pulling it apart and rebuilding it, which silently drops whatever it was carrying.
 
 ### Fixed
+
+* Shifting a week-axis value by weeks (`Tempo.shift(~o"2026Y32W", week: 1)`) steps weeks natively with year-rollover carry instead of raising `KeyError`; component accessors (`Tempo.year/1`) on single-week intervals no longer crash for the same reason. Month-axis values still take a week as seven days.
+
+* A day duration on a week-axis value computes as a `day_of_week` step (`~o"2026Y32W" + P2D` is `~o"2026Y32W3K"`, carrying across week and year boundaries), and a sub-day duration (`PT1H`) returns `{:error, %Tempo.ResolutionError{}}` instead of raising `KeyError` — the week axis has no path to an hour slot.
+
+* The tour livebook called `Tempo.precedes?/2` (not a Tempo function — the predicate is `before?/2`) and compared a zoned time against a floating window; both cells now run. The `weekend?/2` doc describes the actual mechanism: the date converts to `Calendar.ISO` before the weekday is read, so Calendrical 1.3's culturally-native weekday numbering (Hebrew/Islamic weeks from Sunday, Persian from Saturday) cannot misclassify a weekend.
 
 * `Tempo.trunc/2` with `:week` names the day that value's week begins on, at day resolution, instead of silently answering with the month. `trunc(~o"2026-08-16", :week)` returned `~o"2026Y8M"` — it walked past `:day`, found `:month` still coarser than `:week`, and gave back the **month**. It now answers `~o"2026Y8M10D"`, taking the week boundary from the value's own calendar so a Sunday-start calendar gives a different day from an ISO one. Units on another axis that name nothing expressible — `:day_of_week`, `:day_of_year` against a Gregorian value — return a `Tempo.ResolutionError` rather than an unrelated coarser unit. Coarsening within an axis is unchanged.
 
