@@ -61,8 +61,7 @@ import Tempo.Sigils
 
 case Tempo.to_interval(~o"2026-09-02") do
   {:ok, interval} ->
-    {from, to} = Tempo.Interval.endpoints(interval)
-    {Tempo.to_iso8601(from), Tempo.to_iso8601(to)}
+    Tempo.Interval.endpoints(interval)
 
   {:error, reason} ->
     reason
@@ -79,10 +78,8 @@ Half-open `[from, to)` throughout, so adjacent intervals join with no overlap an
 
 ```elixir
 for value <- [~o"2026", ~o"2026-09", ~o"2026-09-02", ~o"2026-09-02T18:00"] do
-  with {:ok, interval} <- Tempo.to_interval(value) do
-    {from, to} = Tempo.Interval.endpoints(interval)
-    {Tempo.to_iso8601(value), Tempo.to_iso8601(from) <> " → " <> Tempo.to_iso8601(to)}
-  end
+  {:ok, interval} = Tempo.to_interval(value)
+  {value, Tempo.Interval.endpoints(interval)}
 end
 ```
 
@@ -104,14 +101,13 @@ ISO 8601-2 §4.4.1 lets any component be negative, meaning *count back from the 
 
 ```elixir
 last_day = fn month ->
-  with {:ok, set} <- Tempo.select(month, ~o"-1D") do
-    set
-    |> Tempo.IntervalSet.members()
-    |> hd()
-    |> Tempo.Interval.endpoints()
-    |> elem(0)
-    |> Tempo.day()
-  end
+  {:ok, set} = Tempo.select(month, ~o"-1D")
+
+  set
+  |> Tempo.IntervalSet.members()
+  |> hd()
+  |> Tempo.Interval.from()
+  |> Tempo.day()
 end
 
 {last_day.(~o"2024-02"), last_day.(~o"2026-02")}
@@ -126,10 +122,10 @@ A birthday is not a date. It is a day-and-month that recurs, and most systems st
 <!-- slide: code -->
 
 ```elixir
-with {:ok, fifteenths} <- Tempo.to_interval(~o"1985-XX-15") do
-  {Tempo.IntervalSet.count(fifteenths),
-   fifteenths |> Tempo.IntervalSet.members() |> Enum.take(3) |> Enum.map(&Tempo.to_iso8601/1)}
-end
+{:ok, fifteenths} = Tempo.to_interval(~o"1985-XX-15")
+
+{Tempo.IntervalSet.count(fifteenths),
+ fifteenths |> Tempo.IntervalSet.members() |> Enum.take(3) |> Enum.map(&Tempo.to_iso8601/1)}
 ```
 
 ## Enumeration, implicitly
@@ -223,12 +219,10 @@ END:VEVENT
 END:VCALENDAR
 """
 
-holidays =
-  with {:ok, set} <- Tempo.ICal.from_ical(holidays_ics) do
-    set
-  end
+{:ok, holidays} = Tempo.ICal.from_ical(holidays_ics)
 
-holidays |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.to_iso8601/1)
+# The set inspects with each interval's summary intact — the point of the slide.
+holidays
 ```
 
 ## Composing them
@@ -263,17 +257,14 @@ This is the whole trick. "Free" is not a stored state to be kept in sync — it 
 rehearsal_window = ~o"2026-09-01T09:00:00[Australia/Melbourne]/2026-09-01T17:00:00[Australia/Melbourne]"
 
 commitments =
-  with {:ok, set} <-
-         Tempo.IntervalSet.new([
-           ~o"2026-09-01T10:00:00[Australia/Melbourne]/2026-09-01T11:30:00[Australia/Melbourne]",
-           ~o"2026-09-01T13:00:00[Australia/Melbourne]/2026-09-01T14:00:00[Australia/Melbourne]"
-         ]) do
-    set
-  end
+  Tempo.IntervalSet.new!([
+    ~o"2026-09-01T10:00:00[Australia/Melbourne]/2026-09-01T11:30:00[Australia/Melbourne]",
+    ~o"2026-09-01T13:00:00[Australia/Melbourne]/2026-09-01T14:00:00[Australia/Melbourne]"
+  ])
 
-with {:ok, free} <- Tempo.difference(rehearsal_window, commitments) do
-  free |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.to_iso8601/1)
-end
+# `free` inspects to legible `~o` intervals — no need to map it to strings.
+{:ok, free} = Tempo.difference(rehearsal_window, commitments)
+free
 ```
 
 ## Daylight saving, unasked
@@ -331,10 +322,9 @@ network =
   |> Network.add_relation(:before, :cfp, :review)
   |> Network.add_relation(:before, :review, :conference)
 
-with {:ok, solved} <- Network.Solver.tighten(network) do
-  review = solved.periods[:review]
-  %{earliest_start: review.earliest_start, latest_end: review.latest_end}
-end
+{:ok, solved} = Network.Solver.tighten(network)
+review = solved.periods[:review]
+%{earliest_start: review.earliest_start, latest_end: review.latest_end}
 ```
 
 ## The trace
@@ -344,9 +334,8 @@ No hidden assumptions. Every computed bound can name the inputs it rests on, in 
 <!-- slide: code -->
 
 ```elixir
-with {:ok, trace} <- Network.Solver.trace(network, {:start, :conference}, bound: :earliest) do
-  trace.prose
-end
+{:ok, trace} = Network.Solver.trace(network, {:start, :conference}, bound: :earliest)
+trace.prose
 ```
 
 ## Why a network, not a schedule
