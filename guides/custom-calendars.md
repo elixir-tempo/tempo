@@ -15,7 +15,7 @@ The US federal fiscal year runs October → September. Calendrical ships the fis
 {:ok, fiscal_months} = Tempo.to_interval(fiscal_2026)
 
 Enum.count(fiscal_months)                       #=> 12
-fiscal_months |> Enum.at(0) |> Tempo.to_iso8601 #=> "2026Y1M"
+fiscal_months |> Enum.at(0) #=> ~o"2026Y1M"
 ```
 
 > *"Fiscal year 2026 is twelve fiscal months; iterating it walks them in order."*
@@ -42,7 +42,7 @@ Retailers count time in **weeks**, grouped 4-4-5 into thirteen-week quarters. Bu
 {:ok, retail_weeks} = Tempo.to_interval(retail_2026)
 
 Enum.count(retail_weeks)                        #=> 52
-retail_weeks |> Enum.at(0) |> Tempo.to_iso8601  #=> "2026Y1W"
+retail_weeks |> Enum.at(0) #=> ~o"2026Y1W"
 ```
 
 > *"The 2026 retail year is fifty-two retail weeks; iterating it walks week by week."*

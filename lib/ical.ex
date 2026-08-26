@@ -151,9 +151,9 @@ if Code.ensure_loaded?(ICal) do
         iex> Tempo.IntervalSet.count(set)
         1
         iex> [iv] = Tempo.IntervalSet.to_list(set)
-        iex> iv.metadata.summary
+        iex> Tempo.Interval.metadata(iv).summary
         "Test meeting"
-        iex> iv.metadata.location
+        iex> Tempo.Interval.metadata(iv).location
         "Paris"
 
     """
@@ -317,7 +317,9 @@ if Code.ensure_loaded?(ICal) do
         ...> \"\"\")
         iex> {:ok, free} = Tempo.ICal.available(calendar, within: ~o"2026Y6M1D/2026Y6M8D")
         iex> [tuesday] = Tempo.IntervalSet.to_list(free)
-        iex> {tuesday.from.time[:day], tuesday.from.time[:hour], tuesday.to.time[:hour]}
+        iex> from = Tempo.Interval.from(tuesday)
+        iex> to = Tempo.Interval.to(tuesday)
+        iex> {Tempo.day(from), Tempo.hour(from), Tempo.hour(to)}
         {2, 9, 17}
 
     """

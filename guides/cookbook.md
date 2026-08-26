@@ -426,16 +426,16 @@ ISO 8601-2 §4.4.1 allows any component to be negative, meaning "count from the 
 
 ```elixir
 iex> {:ok, last_month} = Tempo.select(~o"2026", ~o"-1M")
-iex> Tempo.month(Tempo.IntervalSet.to_list(last_month) |> hd())
-12
+iex> Tempo.Interval.from(Tempo.IntervalSet.first(last_month))
+~o"2026Y12M"
 
 iex> {:ok, last_day_of_feb} = Tempo.select(~o"2024-02", ~o"-1D")
-iex> Tempo.day(Tempo.IntervalSet.to_list(last_day_of_feb) |> hd())
-29
+iex> Tempo.Interval.from(Tempo.IntervalSet.first(last_day_of_feb))
+~o"2024Y2M29D"
 
 iex> {:ok, last_day_of_feb} = Tempo.select(~o"2026-02", ~o"-1D")
-iex> Tempo.day(Tempo.IntervalSet.to_list(last_day_of_feb) |> hd())
-28
+iex> Tempo.Interval.from(Tempo.IntervalSet.first(last_day_of_feb))
+~o"2026Y2M28D"
 ```
 
 > **`-1M`** on a year base is the **last month**. **`-1D`** on a month base is the **last day of that month** — **leap-aware** (Feb 29 in 2024, Feb 28 in 2026). **`-1W`** on a year base is the **last ISO week** (52 or 53 depending on year).
@@ -446,12 +446,12 @@ Time-of-day units work the same way. `~o"-1H"` is hour 23, `~o"T-1M"` is minute 
 
 ```elixir
 iex> {:ok, last_hour} = Tempo.select(~o"2026-06-15", ~o"-1H")
-iex> last_hour |> Tempo.IntervalSet.to_list() |> hd() |> Tempo.hour()
-23
+iex> last_hour |> Tempo.IntervalSet.first() |> Tempo.Interval.from()
+~o"2026Y6M15DT23H"
 
 iex> {:ok, last_minute} = Tempo.select(~o"2026-06-15T14", ~o"T-1M")
-iex> last_minute |> Tempo.IntervalSet.to_list() |> hd() |> Tempo.minute()
-59
+iex> last_minute |> Tempo.IntervalSet.first() |> Tempo.Interval.from()
+~o"2026Y6M15DT14H59M"
 ```
 
 > **`~o"-1M"`** is always **month** (last month of year). Use **`~o"T-1M"`** — with the `T` time designator — to select **minute-of-hour**. The bare-form `M` belongs to the date axis; the `T`-prefixed form belongs to time-of-day.
@@ -587,7 +587,7 @@ ada_meetings =
   schedule
   |> Tempo.IntervalSet.to_list()
   |> Enum.filter(fn meeting ->
-    "ada@example.com" in (meeting.metadata[:attendees] || [])
+    "ada@example.com" in (Tempo.Interval.metadata(meeting)[:attendees] || [])
   end)
 ```
 

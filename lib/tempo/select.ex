@@ -191,7 +191,7 @@ defmodule Tempo.Select do
   ### Examples
 
       iex> {:ok, set} = Tempo.Select.select(~o"2026-02", [1, 15])
-      iex> Enum.map(Tempo.IntervalSet.to_list(set), & &1.from.time[:day])
+      iex> Enum.map(Tempo.IntervalSet.to_list(set), &Tempo.day(Tempo.Interval.from(&1)))
       [1, 15]
 
       iex> {:ok, set} = Tempo.Select.select(~o"2026", ~o"12-25")
@@ -201,11 +201,12 @@ defmodule Tempo.Select do
 
       iex> {:ok, set} = Tempo.Select.select(~o"2026", ~o"10O")
       iex> [day10] = Tempo.IntervalSet.to_list(set)
-      iex> {day10.from.time[:month], day10.from.time[:day]}
+      iex> from = Tempo.Interval.from(day10)
+      iex> {Tempo.month(from), Tempo.day(from)}
       {1, 10}
 
       iex> {:ok, set} = Tempo.Select.select(~o"2026-06", ~o"5K")
-      iex> set |> Tempo.IntervalSet.to_list() |> Enum.map(& &1.from.time[:day])
+      iex> set |> Tempo.IntervalSet.to_list() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [5, 12, 19, 26]
 
       iex> {:ok, set} = Tempo.Select.select(~o"2026-02", Tempo.workdays(:US))

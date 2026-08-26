@@ -112,7 +112,7 @@ defmodule Tempo.RRule do
       ...>   Tempo.RRule.parse("FREQ=DAILY;COUNT=3",
       ...>     duration: %Tempo.Duration{time: [hour: 2]}
       ...>   )
-      iex> i.metadata.occurrence_duration.time
+      iex> Tempo.Interval.metadata(i).occurrence_duration.time
       [hour: 2]
 
       iex> {:error, _} = Tempo.RRule.parse("FREQ=NOPE")

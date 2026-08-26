@@ -360,7 +360,10 @@ The qualifier decorates the value but doesn't shift its bounds — this is still
 
 ```elixir
 [~o"1985/..", ~o"../2024", ~o"../.."]
-|> Enum.map(fn iv -> %{input: inspect(iv), from: inspect(iv.from), to: inspect(iv.to)} end)
+|> Enum.map(fn iv ->
+  {from, to} = Tempo.Interval.endpoints(iv)
+  %{input: inspect(iv), from: inspect(from), to: inspect(to)}
+end)
 |> Kino.DataTable.new()
 ```
 

@@ -5021,8 +5021,7 @@ defmodule Tempo do
 
       iex> [~o"2026-06-16", ~o"2026-06-15"]
       ...> |> Enum.sort(Tempo)
-      ...> |> Enum.map(&Tempo.to_iso8601/1)
-      ["2026Y6M15D", "2026Y6M16D"]
+      [~o"2026Y6M15D", ~o"2026Y6M16D"]
 
       iex> Tempo.compare(~o"PT1H", ~o"PT90M")
       :lt
@@ -5516,12 +5515,13 @@ defmodule Tempo do
   ### Examples
 
       iex> {:ok, set} = Tempo.select(~o"2026-02", [1, 15])
-      iex> set |> Tempo.IntervalSet.to_list() |> Enum.map(& &1.from.time[:day])
+      iex> set |> Tempo.IntervalSet.to_list() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [1, 15]
 
       iex> {:ok, set} = Tempo.select(~o"2026", ~o"12-25")
       iex> [xmas] = Tempo.IntervalSet.to_list(set)
-      iex> {xmas.from.time[:year], xmas.from.time[:month], xmas.from.time[:day]}
+      iex> from = Tempo.Interval.from(xmas)
+      iex> {Tempo.year(from), Tempo.month(from), Tempo.day(from)}
       {2026, 12, 25}
 
   """
@@ -5585,11 +5585,11 @@ defmodule Tempo do
   ### Examples
 
       iex> {:ok, us} = Tempo.select(~o"2026-02", Tempo.weekend(:US))
-      iex> us |> Tempo.IntervalSet.to_list() |> Enum.map(& &1.from.time[:day])
+      iex> us |> Tempo.IntervalSet.to_list() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [1, 7, 8, 14, 15, 21, 22, 28]
 
       iex> {:ok, sa} = Tempo.select(~o"2026-02", Tempo.weekend(:SA))
-      iex> sa |> Tempo.IntervalSet.to_list() |> Enum.map(& &1.from.time[:day])
+      iex> sa |> Tempo.IntervalSet.to_list() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [6, 7, 13, 14, 20, 21, 27, 28]
 
   """
@@ -5689,11 +5689,11 @@ defmodule Tempo do
   ### Examples
 
       iex> weekends = Tempo.weekends(from: ~o"2026-06-15")
-      iex> weekends |> Tempo.IntervalSet.walk() |> Enum.take(2) |> Enum.map(& &1.from.time[:day])
+      iex> weekends |> Tempo.IntervalSet.walk() |> Enum.take(2) |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [20, 21]
 
       iex> saudi = Tempo.weekends(from: ~o"2026-06-15", territory: :SA)
-      iex> saudi |> Tempo.IntervalSet.walk() |> Enum.take(2) |> Enum.map(& &1.from.time[:day])
+      iex> saudi |> Tempo.IntervalSet.walk() |> Enum.take(2) |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [19, 20]
 
   """

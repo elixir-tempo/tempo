@@ -243,7 +243,7 @@ For the member-preserving filter — keep whole A members that don't overlap, dr
 
 ```elixir
 iex> {:ok, r} = Tempo.members_outside(~o"2022Y", ~o"2022-06")
-iex> r.intervals
+iex> Tempo.IntervalSet.members(r)
 []                                   # the year overlaps June, so it's dropped entirely
 ```
 

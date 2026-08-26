@@ -201,7 +201,7 @@ defmodule Tempo.IntervalSet do
 
       iex> mondays = Stream.iterate(~o"2026-01-05", &Tempo.shift(&1, week: 1))
       iex> set = mondays |> Stream.map(&Tempo.to_interval!/1) |> Tempo.IntervalSet.from_stream()
-      iex> set |> Tempo.IntervalSet.walk() |> Enum.take(2) |> Enum.map(& &1.from.time[:day])
+      iex> set |> Tempo.IntervalSet.walk() |> Enum.take(2) |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [5, 12]
 
   """
@@ -403,7 +403,10 @@ defmodule Tempo.IntervalSet do
   is empty.
 
   Members are held in time order, so this is the interval with the
-  earliest `from` endpoint.
+  earliest `from` endpoint. `first/1` peeks that member in constant
+  time without materialising the set, so it is safe even on an
+  unbounded (lazy) set — unlike `last/1`, which must walk to the end
+  (see its performance note).
 
   ### Arguments
 
@@ -419,7 +422,7 @@ defmodule Tempo.IntervalSet do
       ...>   %Tempo.Interval{from: ~o"2026-07-01", to: ~o"2026-07-10"},
       ...>   %Tempo.Interval{from: ~o"2026-06-01", to: ~o"2026-06-10"}
       ...> ])
-      iex> Tempo.IntervalSet.first(set).from
+      iex> Tempo.Interval.from(Tempo.IntervalSet.first(set))
       ~o"2026Y6M1D"
 
       iex> Tempo.IntervalSet.first(Tempo.IntervalSet.new!([]))
@@ -428,6 +431,51 @@ defmodule Tempo.IntervalSet do
   """
   @spec first(t()) :: Interval.t() | nil
   def first(%__MODULE__{backend: backend, intervals: state}), do: backend.first(state)
+
+  @doc """
+  The latest member interval of the set, or `nil` when the set
+  is empty.
+
+  Members are held in time order, so this is the interval with the
+  latest `from` endpoint.
+
+  Unlike `first/1` — which peeks the earliest member in constant time
+  without materialising the set, and so is safe on an unbounded (lazy)
+  set — `last/1` must walk to the end. It is O(n) in the number of
+  members, forces the whole set into memory, and is defined only for
+  **bounded** sets: an unbounded set has no last member, so `last/1`
+  raises `Tempo.UnboundedSetError` rather than walking forever. Prefer
+  `first/1` on the hot path; reach for `last/1` only when you need the
+  final member of a finite set.
+
+  ### Arguments
+
+  * `set` is a `t:t/0`.
+
+  ### Returns
+
+  * The last `t:Tempo.Interval.t/0`, or `nil` for an empty set.
+
+  * Raises `Tempo.UnboundedSetError` when the set is unbounded.
+
+  ### Examples
+
+      iex> set = Tempo.IntervalSet.new!([
+      ...>   %Tempo.Interval{from: ~o"2026-06-01", to: ~o"2026-06-10"},
+      ...>   %Tempo.Interval{from: ~o"2026-07-01", to: ~o"2026-07-10"}
+      ...> ])
+      iex> Tempo.Interval.from(Tempo.IntervalSet.last(set))
+      ~o"2026Y7M1D"
+
+      iex> Tempo.IntervalSet.last(Tempo.IntervalSet.new!([]))
+      nil
+
+  """
+  @spec last(t()) :: Interval.t() | nil
+  def last(%__MODULE__{backend: backend, intervals: state} = set) do
+    ensure_bounded!(set, "Tempo.IntervalSet.last/1")
+    state |> backend.to_list() |> List.last()
+  end
 
   @doc """
   Whether the set's backend holds a finite member list.
@@ -957,9 +1005,8 @@ defmodule Tempo.IntervalSet do
       ...> ])
       iex> set
       ...> |> Tempo.IntervalSet.overlapping(at_least: 2)
-      ...> |> Tempo.IntervalSet.to_list()
-      ...> |> Enum.map(&Tempo.to_iso8601/1)
-      ["2026Y6M15DT11H0M0S/2026Y6M15DT12H0M0S"]
+      ...> |> Tempo.IntervalSet.members()
+      [~o"2026Y6M15DT11H0M0S/2026Y6M15DT12H0M0S"]
 
   Members that merely meet do not overlap:
 

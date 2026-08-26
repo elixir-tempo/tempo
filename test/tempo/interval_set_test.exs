@@ -190,6 +190,26 @@ defmodule Tempo.IntervalSet.Test do
     end
   end
 
+  describe "first/1 and last/1" do
+    test "first/1 is the earliest member and last/1 the latest, in time order not input order" do
+      {:ok, set} =
+        Tempo.IntervalSet.new([
+          interval(~o"2022Y5M"),
+          interval(~o"2022Y1M"),
+          interval(~o"2022Y3M")
+        ])
+
+      assert Tempo.month(Tempo.IntervalSet.first(set)) == 1
+      assert Tempo.month(Tempo.IntervalSet.last(set)) == 5
+    end
+
+    test "both return nil for an empty set" do
+      {:ok, set} = Tempo.IntervalSet.new([])
+      assert Tempo.IntervalSet.first(set) == nil
+      assert Tempo.IntervalSet.last(set) == nil
+    end
+  end
+
   describe "map/2" do
     test "applies the mapper to each member interval" do
       jan = interval(~o"2022Y1M")

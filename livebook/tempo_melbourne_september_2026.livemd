@@ -120,7 +120,7 @@ A birthday is not a date. It is a day-and-month that recurs, and most systems st
 {:ok, fifteenths} = Tempo.to_interval(~o"1985-XX-15")
 
 {Tempo.IntervalSet.count(fifteenths),
- fifteenths |> Tempo.IntervalSet.members() |> Enum.take(3) |> Enum.map(&Tempo.to_iso8601/1)}
+ fifteenths |> Tempo.IntervalSet.members() |> Enum.take(3) |> Enum.map(&Tempo.Interval.from/1)}
 ```
 
 ## Enumeration, implicitly

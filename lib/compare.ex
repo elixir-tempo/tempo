@@ -275,8 +275,7 @@ defmodule Tempo.Compare do
 
       iex> [~o"2026-06-16", ~o"2026-06-15"]
       ...> |> Enum.sort(Tempo)
-      ...> |> Enum.map(&Tempo.to_iso8601/1)
-      ["2026Y6M15D", "2026Y6M16D"]
+      [~o"2026Y6M15D", ~o"2026Y6M16D"]
 
   Durations compare by length:
 

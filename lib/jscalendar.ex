@@ -131,7 +131,7 @@ if Code.ensure_loaded?(JSCalendar) do
         iex> [interval] = Tempo.IntervalSet.to_list(set)
         iex> Tempo.to_iso8601(interval)
         "2026Y6M2DT9H0M0S/2026Y6M2DT10H0M0S"
-        iex> interval.metadata.title
+        iex> Tempo.Interval.metadata(interval).title
         "Quarterly review"
 
     """

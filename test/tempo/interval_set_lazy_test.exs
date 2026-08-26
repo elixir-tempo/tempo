@@ -53,6 +53,7 @@ defmodule Tempo.IntervalSetLazyTest do
 
       assert_raise Tempo.UnboundedSetError, ~r/walk\/1/, fn -> IntervalSet.to_list(set) end
       assert_raise Tempo.UnboundedSetError, fn -> IntervalSet.count(set) end
+      assert_raise Tempo.UnboundedSetError, fn -> IntervalSet.last(set) end
     end
 
     test "Enum.count refuses rather than hanging" do

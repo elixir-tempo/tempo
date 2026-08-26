@@ -83,7 +83,7 @@ defmodule Tempo.RRule.Expander do
       iex> {:ok, occurrences} = Tempo.RRule.Expander.expand(rule, ~o"2022-06-01")
       iex> length(occurrences)
       3
-      iex> Enum.map(occurrences, & &1.from.time[:day])
+      iex> Enum.map(occurrences, &Tempo.day(Tempo.Interval.from(&1)))
       [1, 2, 3]
 
   """

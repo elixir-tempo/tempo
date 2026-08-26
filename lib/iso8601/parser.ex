@@ -109,9 +109,7 @@ defmodule Tempo.Iso8601.Parser do
       |> Enum.map(&parse_date/1)
       |> Tempo.Set.new(:one)
     else
-      with parsed <- parse_date(tokens) do
-        AST.build(parsed)
-      end
+      AST.build(parse_date(tokens))
     end
   end
 
@@ -124,18 +122,15 @@ defmodule Tempo.Iso8601.Parser do
       |> Enum.map(&{:interval, &1})
       |> then(&parse(one_of: &1))
     else
-      with parsed <- parse_date(tokens) do
-        AST.build_interval(parsed)
-      end
+      AST.build_interval(parse_date(tokens))
     end
   end
 
   def parse(duration: tokens) do
-    with parsed <- parse_date(tokens) do
-      parsed
-      |> adjust_for_direction()
-      |> Duration.build()
-    end
+    tokens
+    |> parse_date()
+    |> adjust_for_direction()
+    |> Duration.build()
   end
 
   def parse(all_of: tokens) do

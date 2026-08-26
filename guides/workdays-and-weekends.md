@@ -135,11 +135,11 @@ This is a direct `Enum.count/1` on the members. For inclusive/exclusive day-coun
 
 ```elixir
 {:ok, workdays} = Tempo.select(~o"2026-06", Tempo.workdays(:US))
-members         = Tempo.IntervalSet.to_list(workdays)
+members         = Tempo.IntervalSet.members(workdays)
 
-first = hd(members).from                       #=> ~o"2026Y6M1D"
-last  = List.last(members).from                #=> ~o"2026Y6M30D"
-third = Enum.at(members, 2).from               #=> ~o"2026Y6M3D"
+first = Tempo.Interval.from(Tempo.IntervalSet.first(workdays))  #=> ~o"2026Y6M1D"
+last  = Tempo.Interval.from(Tempo.IntervalSet.last(workdays))   #=> ~o"2026Y6M30D"
+third = Tempo.Interval.from(Enum.at(members, 2))                #=> ~o"2026Y6M3D"
 ```
 
 Passing a month-resolution Tempo value to `Tempo.select/2` is the cleanest form — the selector treats the implicit month-span as the search window. Read aloud: *"The US workdays of June 2026 are these; take the first / last / third."*
@@ -252,7 +252,7 @@ defmodule MyApp.BusinessDays do
     with {:ok, workdays} <- Tempo.select(window, Tempo.workdays(territory)) do
       case workdays |> Tempo.IntervalSet.to_list() |> Enum.at(n) do
         nil -> {:error, :not_enough_workdays_in_window}
-        interval -> {:ok, interval.from}
+        interval -> {:ok, Tempo.Interval.from(interval)}
       end
     end
   end

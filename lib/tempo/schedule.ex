@@ -219,7 +219,7 @@ defmodule Tempo.Schedule do
       ...>   |> Tempo.Schedule.task(:b, duration: ~o"P3D", after: :a)
       ...>   |> Tempo.Schedule.solve()
       iex> span = Tempo.Schedule.span(plan)
-      iex> {span.from, span.to}
+      iex> Tempo.Interval.endpoints(span)
       {~o"2026Y6M1D", ~o"2026Y6M6D"}
 
   """

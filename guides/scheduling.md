@@ -171,7 +171,8 @@ When you write an interval as an ISO 8601 string, the zone goes once at the end,
 
 ```elixir
 {:ok, iv} = Tempo.from_iso8601("2030-03-01T08:00/2030-03-05T08:00[Europe/Paris]")
-{Tempo.grounded?(iv.from), Tempo.grounded?(iv.to)}   #=> {true, true}
+{from, to} = Tempo.Interval.endpoints(iv)
+{Tempo.grounded?(from), Tempo.grounded?(to)}   #=> {true, true}
 ```
 
 Propagation is one-directional and non-destructive: it flows only from the upper endpoint (`to`) back to a floating lower one (`from`), never forward, and never over a zone an endpoint already carries — so `2030-03-01T08:00[Europe/Paris]/2030-03-05T08:00[Europe/London]` keeps both zones as written. It applies only to parsed interval *strings*; `Tempo.Interval.new/2` builds exactly the endpoints you hand it, mixed frames included.

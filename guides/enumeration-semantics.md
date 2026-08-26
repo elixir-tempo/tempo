@@ -294,9 +294,9 @@ Per-endpoint qualifiers attach to that endpoint's `%Tempo{}` struct, not to the 
 
 ```
 iex> {:ok, interval} = Tempo.from_iso8601("1984?/2004~")
-iex> interval.from.qualification
+iex> Tempo.Interval.from(interval).qualification
 :uncertain
-iex> interval.to.qualification
+iex> Tempo.Interval.to(interval).qualification
 :approximate
 ```
 
