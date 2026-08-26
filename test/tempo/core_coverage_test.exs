@@ -8,7 +8,7 @@ defmodule Tempo.CoreCoverageTest do
   alias Tempo.MaterialisationError
 
   describe "duration predicates (delegated to Tempo.Interval)" do
-    @one_day ~o"2020Y1M1D/2020Y1M2D"
+    @one_day ~o"2020Y1M1D/2D"
 
     test "at_most? / exactly?" do
       assert Tempo.at_most?(@one_day, ~o"P1D")

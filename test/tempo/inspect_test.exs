@@ -20,6 +20,12 @@ defmodule Tempo.Iso8601.InspectTest do
     assert inspect(Tempo.from_iso8601!("2022Y2M/4M")) == "~o\"2022Y2M/4M\""
   end
 
+  test "Inspect interval whose end omits higher order components" do
+    # ISO 8601-1 §5.5.1 — the omitted components are taken from the
+    # start, so the end is a fully anchored value and inspects as one.
+    assert inspect(Tempo.from_iso8601!("2022Y2M/4M")) == "~o\"2022Y2M/4M\""
+  end
+
   test "Inspect duration" do
     assert inspect(Tempo.from_iso8601!("P2022Y2M1Y")) == "~o\"P2022Y2M1Y\""
     assert inspect(Tempo.from_iso8601!("P2022Y")) == "~o\"P2022Y\""
@@ -119,7 +125,7 @@ defmodule Tempo.Iso8601.InspectTest do
       iv = %Tempo.Interval{from: from, to: to}
 
       assert inspect(iv) ==
-               "~o\"2011Y12M29DT12H0M0S[Pacific/Apia]/2011Y12M31DT12H0M0S[Pacific/Apia]\""
+               "~o\"2011Y12M29DT12H0M0S[Pacific/Apia]/31DT12H0M0S[Pacific/Apia]\""
     end
 
     test "Interval with mixed zones shows each endpoint's zone" do
@@ -128,7 +134,7 @@ defmodule Tempo.Iso8601.InspectTest do
       iv = %Tempo.Interval{from: from, to: to}
 
       assert inspect(iv) ==
-               "~o\"2026Y6M15DT10H0M0S[Europe/Paris]/2026Y6M15DT17H0M0S[America/New_York]\""
+               "~o\"2026Y6M15DT10H0M0S[Europe/Paris]/T17H0M0S[America/New_York]\""
     end
 
     test "Interval with [u-ca=calendar] tag preserves it per endpoint" do
@@ -137,12 +143,12 @@ defmodule Tempo.Iso8601.InspectTest do
       iv = %Tempo.Interval{from: from, to: to}
 
       assert inspect(iv) ==
-               "~o\"5786Y10M30D[u-ca=hebrew]/5786Y11M1D[u-ca=hebrew]\""
+               "~o\"5786Y10M30D[u-ca=hebrew]/11M1D[u-ca=hebrew]\""
     end
 
     test "Interval with no extended info renders cleanly (no empty brackets)" do
       iv = %Tempo.Interval{from: ~o"2026-06-15", to: ~o"2026-06-20"}
-      assert inspect(iv) == "~o\"2026Y6M15D/2026Y6M20D\""
+      assert inspect(iv) == "~o\"2026Y6M15D/20D\""
     end
 
     test "round-trip: inspect then parse restores the same zoned value" do

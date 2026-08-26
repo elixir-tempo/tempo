@@ -85,7 +85,7 @@ defmodule Tempo.CalendarWeekdayTest do
     end
 
     test "a multi-week interval is ambiguous" do
-      {:ok, fortnight} = Tempo.to_interval(~o"2026Y32W/2026Y34W")
+      {:ok, fortnight} = Tempo.to_interval(~o"2026Y32W/34W")
       assert_raise ArgumentError, ~r/ambiguous/, fn -> Tempo.week(fortnight) end
     end
 

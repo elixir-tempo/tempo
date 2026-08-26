@@ -28,7 +28,7 @@ defmodule Tempo.JSCalendarTest do
                  event(~s("start":"2026-06-02T09:00:00","duration":"PT1H"))
                )
 
-      assert spans(set) == ["2026Y6M2DT9H0M0S/2026Y6M2DT10H0M0S"]
+      assert spans(set) == ["2026Y6M2DT9H0M0S/T10H0M0S"]
     end
 
     test "a missing duration is an instant, per the PT0S default" do
@@ -49,7 +49,7 @@ defmodule Tempo.JSCalendarTest do
                  event(~s("start":"2026-06-02T09:00:00","duration":"P1DT2H30M"))
                )
 
-      assert spans(set) == ["2026Y6M2DT9H0M0S/2026Y6M3DT11H30M0S"]
+      assert spans(set) == ["2026Y6M2DT9H0M0S/3DT11H30M0S"]
     end
 
     test "an event with no start is skipped, not fatal" do
@@ -160,7 +160,7 @@ defmodule Tempo.JSCalendarTest do
 
       assert {:error, _needs_bound} = Tempo.JSCalendar.from_jscalendar(json)
 
-      assert {:ok, set} = Tempo.JSCalendar.from_jscalendar(json, bound: ~o"2026Y6M1D/2026Y6M5D")
+      assert {:ok, set} = Tempo.JSCalendar.from_jscalendar(json, bound: ~o"2026Y6M1D/5D")
       assert IntervalSet.count(set) == 4
     end
 
@@ -223,9 +223,9 @@ defmodule Tempo.JSCalendarTest do
                  )))
 
       assert spans(set) == [
-               "2026Y6M1DT9H0M0S/2026Y6M1DT10H0M0S",
-               "2026Y6M2DT9H0M0S/2026Y6M2DT10H0M0S",
-               "2026Y6M5DT9H0M0S/2026Y6M5DT10H0M0S"
+               "2026Y6M1DT9H0M0S/T10H0M0S",
+               "2026Y6M2DT9H0M0S/T10H0M0S",
+               "2026Y6M5DT9H0M0S/T10H0M0S"
              ]
     end
 
@@ -238,8 +238,8 @@ defmodule Tempo.JSCalendarTest do
                  )))
 
       assert spans(set) == [
-               "2026Y6M1DT9H0M0S/2026Y6M1DT10H0M0S",
-               "2026Y6M3DT9H0M0S/2026Y6M3DT10H0M0S"
+               "2026Y6M1DT9H0M0S/T10H0M0S",
+               "2026Y6M3DT9H0M0S/T10H0M0S"
              ]
     end
 
@@ -254,9 +254,9 @@ defmodule Tempo.JSCalendarTest do
                  )))
 
       assert spans(set) == [
-               "2026Y6M1DT9H0M0S/2026Y6M1DT10H0M0S",
-               "2026Y6M2DT14H0M0S/2026Y6M2DT15H0M0S",
-               "2026Y6M3DT9H0M0S/2026Y6M3DT10H0M0S"
+               "2026Y6M1DT9H0M0S/T10H0M0S",
+               "2026Y6M2DT14H0M0S/T15H0M0S",
+               "2026Y6M3DT9H0M0S/T10H0M0S"
              ]
     end
 
@@ -269,8 +269,8 @@ defmodule Tempo.JSCalendarTest do
                  )))
 
       assert spans(set) == [
-               "2026Y6M1DT9H0M0S/2026Y6M1DT10H0M0S",
-               "2026Y6M2DT9H0M0S/2026Y6M2DT12H0M0S"
+               "2026Y6M1DT9H0M0S/T10H0M0S",
+               "2026Y6M2DT9H0M0S/T12H0M0S"
              ]
     end
 
@@ -282,8 +282,8 @@ defmodule Tempo.JSCalendarTest do
                  )))
 
       assert spans(set) == [
-               "2026Y6M1DT9H0M0S/2026Y6M1DT10H0M0S",
-               "2026Y6M8DT9H0M0S/2026Y6M8DT11H0M0S"
+               "2026Y6M1DT9H0M0S/T10H0M0S",
+               "2026Y6M8DT9H0M0S/T11H0M0S"
              ]
     end
 
@@ -343,8 +343,8 @@ defmodule Tempo.JSCalendarTest do
       assert {:ok, set} = Tempo.JSCalendar.from_jscalendar(json)
 
       assert spans(set) == [
-               "2026Y6M2DT9H0M0S/2026Y6M2DT10H0M0S",
-               "2026Y6M3DT9H0M0S/2026Y6M3DT10H0M0S"
+               "2026Y6M2DT9H0M0S/T10H0M0S",
+               "2026Y6M3DT9H0M0S/T10H0M0S"
              ]
     end
   end

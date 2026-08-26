@@ -28,7 +28,7 @@ defmodule Tempo.UnanchoredRecurrenceTest do
     %{
       unanchored: unanchored,
       anchored: anchored,
-      window: ~o"2026Y6M1D/2026Y7M1D"
+      window: ~o"2026Y6M1D/7M1D"
     }
   end
 
@@ -63,7 +63,7 @@ defmodule Tempo.UnanchoredRecurrenceTest do
     end
 
     test "an ordinary interval is unaffected" do
-      assert {:ok, ~o"2026Y6M1D/2026Y7M1D"} = Tempo.to_interval(~o"2026Y6M1D/2026Y7M1D")
+      assert {:ok, ~o"2026Y6M1D/7M1D"} = Tempo.to_interval(~o"2026Y6M1D/7M1D")
     end
   end
 
@@ -132,7 +132,7 @@ defmodule Tempo.UnanchoredRecurrenceTest do
     end
 
     test "a bounded interval still is" do
-      assert {:ok, set} = IntervalSet.new([~o"2026Y6M1D/2026Y7M1D"])
+      assert {:ok, set} = IntervalSet.new([~o"2026Y6M1D/7M1D"])
       assert IntervalSet.count(set) == 1
     end
   end
@@ -146,7 +146,7 @@ defmodule Tempo.UnanchoredRecurrenceTest do
         intervals: [%Interval{from: nil, to: nil, recurrence: :infinity}]
       }
 
-      bounded = %IntervalSet{intervals: [~o"2026Y6M1D/2026Y7M1D"]}
+      bounded = %IntervalSet{intervals: [~o"2026Y6M1D/7M1D"]}
 
       assert {:ok, {_a, _b}} = Operations.align(unbounded, bounded)
       assert {:ok, {_a, _b}} = Operations.align(bounded, unbounded)

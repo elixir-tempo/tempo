@@ -6,7 +6,7 @@ defmodule Tempo.ICal.AvailabilityTest do
   alias Tempo.ICal
   alias Tempo.IntervalSet
 
-  @week ~o"2026Y6M1D/2026Y6M8D"
+  @week ~o"2026Y6M1D/8D"
 
   defp calendar(components) do
     """
@@ -162,7 +162,7 @@ defmodule Tempo.ICal.AvailabilityTest do
     end
 
     test "an unbounded component is bounded by the query window" do
-      free = available(office_hours("unbounded", "RRULE:FREQ=DAILY"), ~o"2026Y6M1D/2026Y6M4D")
+      free = available(office_hours("unbounded", "RRULE:FREQ=DAILY"), ~o"2026Y6M1D/4D")
 
       assert spans(free) == [{1, 9, 17}, {2, 9, 17}, {3, 9, 17}]
     end
@@ -289,7 +289,7 @@ defmodule Tempo.ICal.AvailabilityTest do
 
   describe "the query window" do
     test "clips what is returned" do
-      free = available(office_hours(), ~o"2026Y6M2D/2026Y6M4D")
+      free = available(office_hours(), ~o"2026Y6M2D/4D")
 
       assert spans(free) == [{2, 9, 17}, {3, 9, 17}]
     end

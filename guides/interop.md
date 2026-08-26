@@ -74,7 +74,7 @@ Two notes:
 
 * **Sub-second spans and `duration/1`.** `duration/1` reports whole seconds, so a one-microsecond interval reads as `~o"PT0S"`. The span is still one microsecond wide — inspect the endpoints (`from/1`, `to/1`) when you need sub-second extent.
 
-* **A bare `Time` materialises non-anchored.** `~T[14:30:00]` becomes `T14H30M0S/T14H30M1S` — a one-second span on the *time-of-day* axis with no date. Operations that need an absolute position (duration in wall-clock seconds, cross-zone comparison) require anchoring it to a date first.
+* **A bare `Time` materialises non-anchored.** `~T[14:30:00]` becomes `T14H30M0S/T1S` — a one-second span on the *time-of-day* axis with no date. Operations that need an absolute position (duration in wall-clock seconds, cross-zone comparison) require anchoring it to a date first.
 
 * **A pure time-of-day group materialises non-anchored too.** A grouped time value with no date — for example the first quarter-hour `[hour: 16, minute: {:group, 1..15}]` — becomes the relative span `[16:01, 16:16)` on the time-of-day axis. The same anchoring caveat applies. A group whose upper bound would carry off the end of the day (`23:45..`, with no date to carry into) or any group with a date component (`5G10DU`) needs anchoring first and returns a `Tempo.MaterialisationError` until then.
 

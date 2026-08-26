@@ -1,6 +1,8 @@
 defmodule Tempo.Parser.Interval.Test do
   use ExUnit.Case, async: true
 
+  alias Tempo.Compare
+  alias Tempo.Interval
   alias Tempo.Iso8601.Tokenizer
 
   test "Intervals" do
@@ -303,6 +305,64 @@ defmodule Tempo.Parser.Interval.Test do
       assert {:ok, _} = Tempo.from_iso8601("2026/..")
       assert {:ok, _} = Tempo.from_iso8601("../2026")
       assert {:ok, _} = Tempo.from_iso8601("2026/P1Y")
+    end
+  end
+
+  describe "ISO 8601-1 §5.5.1 — an end that omits higher order components" do
+    # "higher order time scale components may be omitted from the 'end
+    # of time interval' … In this case the omitted higher order
+    # components from the 'start of time interval' expression apply."
+    test "the spec's own example expands to the full form" do
+      assert Tempo.from_iso8601!("2018-01-15/02-20") ==
+               Tempo.from_iso8601!("2018-01-15/2018-02-20")
+    end
+
+    test "a time-only end takes the date from the start" do
+      assert Tempo.from_iso8601!("2025-08-28T09:00/T10:15") ==
+               Tempo.from_iso8601!("2025-08-28T09:00/2025-08-28T10:15")
+    end
+
+    test "the end is anchored, so it can be projected onto the time line" do
+      # The defect this guards: an unanchored end compares equal via
+      # `compare_endpoints/2` but raises in `to_utc_seconds/1`, so the
+      # value looks correct until something needs an instant from it.
+      interval = Tempo.from_iso8601!("2025-08-28T09:00/T10:15")
+
+      assert is_integer(Compare.to_utc_seconds(Interval.to(interval)))
+    end
+
+    test "an end that is already complete is left alone" do
+      assert Tempo.from_iso8601!("2025-08-28/2025-09-02") ==
+               Tempo.from_iso8601!("2025-08-28/2025-09-02")
+
+      interval = Tempo.from_iso8601!("2018-01-15/2019-02-20")
+
+      assert Tempo.year(Interval.to(interval)) == 2019
+    end
+
+    test "only components coarser than the end's own coarsest unit are taken" do
+      # The end states an hour, so it inherits the date and stops. The
+      # start's own minute must not follow it in.
+      interval = Tempo.from_iso8601!("2022-02-15T10:00/T11:30")
+
+      assert Interval.to(interval).time ==
+               [year: 2022, month: 2, day: 15, hour: 11, minute: 30]
+    end
+
+    test "a two-digit end is a century, not a day, so nothing is inherited" do
+      # §5.5.1 allows the omission only "provided that the resulting
+      # expression is unambiguous", and §5.2.2.2 makes a bare two-digit
+      # date component a century. `2022-02-15/04` is therefore century 04,
+      # not April, and must not quietly acquire the start's year.
+      interval = Tempo.from_iso8601!("2022-02-15/04")
+
+      assert Interval.to(interval).time == [year: {:group, 400..499}]
+    end
+
+    test "a duration end is unaffected" do
+      assert {:ok, interval} = Tempo.from_iso8601("2025-08-28/P1D")
+      assert interval.to == nil
+      assert interval.duration
     end
   end
 end

@@ -357,7 +357,7 @@ defmodule Tempo.IntervalSet.Test do
       set = Tempo.IntervalSet.new!([at("09", "12"), at("11", "14")])
 
       assert spans(Tempo.IntervalSet.overlapping(set, at_least: 2)) ==
-               ["2026Y6M15DT11H0M0S/2026Y6M15DT12H0M0S"]
+               ["2026Y6M15DT11H0M0S/T12H0M0S"]
     end
 
     test "a threshold no member reaches yields nothing" do
@@ -376,10 +376,10 @@ defmodule Tempo.IntervalSet.Test do
       set = Tempo.IntervalSet.new!([at("09", "14"), at("10", "13"), at("11", "12")])
 
       assert spans(Tempo.IntervalSet.overlapping(set, at_least: 3)) ==
-               ["2026Y6M15DT11H0M0S/2026Y6M15DT12H0M0S"]
+               ["2026Y6M15DT11H0M0S/T12H0M0S"]
 
       assert spans(Tempo.IntervalSet.overlapping(set, at_least: 2)) ==
-               ["2026Y6M15DT10H0M0S/2026Y6M15DT13H0M0S"]
+               ["2026Y6M15DT10H0M0S/T13H0M0S"]
     end
 
     test "several separate regions can reach the threshold" do
@@ -392,8 +392,8 @@ defmodule Tempo.IntervalSet.Test do
         ])
 
       assert spans(Tempo.IntervalSet.overlapping(set, at_least: 2)) == [
-               "2026Y6M15DT10H0M0S/2026Y6M15DT11H0M0S",
-               "2026Y6M15DT15H0M0S/2026Y6M15DT16H0M0S"
+               "2026Y6M15DT10H0M0S/T11H0M0S",
+               "2026Y6M15DT15H0M0S/T16H0M0S"
              ]
     end
 

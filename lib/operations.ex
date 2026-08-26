@@ -812,7 +812,7 @@ defmodule Tempo.Operations do
       iex> room = ~o"2026-06-15T11:00:00/2026-06-15T15:00:00"
       iex> {:ok, mutual} = Tempo.intersection(alice, [bob, room])
       iex> Tempo.IntervalSet.members(mutual)
-      [~o"2026Y6M15DT11H0M0S/2026Y6M15DT12H0M0S"]
+      [~o"2026Y6M15DT11H0M0S/T12H0M0S"]
 
   ### Examples
 
@@ -864,7 +864,7 @@ defmodule Tempo.Operations do
       iex> bookings = Tempo.IntervalSet.new!([~o"2026-01-05/2026-01-06", ~o"2026-01-20/2026-01-21"])
       iex> {:ok, hits} = Tempo.members_overlapping(bookings, ~o"2026-01-01/2026-01-10")
       iex> Tempo.IntervalSet.members(hits)
-      [~o"2026Y1M5D/2026Y1M6D"]
+      [~o"2026Y1M5D/6D"]
 
   """
   @spec members_overlapping(operand, operand, keyword()) ::
@@ -1011,7 +1011,7 @@ defmodule Tempo.Operations do
       iex> day = ~o"2026-06-15T09:00:00/2026-06-15T17:00:00"
       iex> {:ok, free} = Tempo.complement(lunch, bound: day)
       iex> Tempo.IntervalSet.members(free)
-      [~o"2026Y6M15DT9H0M0S/2026Y6M15DT12H0M0S", ~o"2026Y6M15DT13H0M0S/2026Y6M15DT17H0M0S"]
+      [~o"2026Y6M15DT9H0M0S/T12H0M0S", ~o"2026Y6M15DT13H0M0S/T17H0M0S"]
 
   """
   @spec complement(operand, keyword()) :: {:ok, IntervalSet.t()} | {:error, term()}
@@ -1143,7 +1143,7 @@ defmodule Tempo.Operations do
       iex> bookings = Tempo.IntervalSet.new!([~o"2026-01-05/2026-01-06", ~o"2026-01-20/2026-01-21"])
       iex> {:ok, missed} = Tempo.members_outside(bookings, ~o"2026-01-01/2026-01-10")
       iex> Tempo.IntervalSet.members(missed)
-      [~o"2026Y1M20D/2026Y1M21D"]
+      [~o"2026Y1M20D/21D"]
 
   """
   @spec members_outside(operand, operand, keyword()) ::
@@ -1236,7 +1236,7 @@ defmodule Tempo.Operations do
 
       iex> {:ok, either} = Tempo.symmetric_difference(~o"2026-01/2026-04", ~o"2026-03/2026-06")
       iex> Tempo.IntervalSet.members(either)
-      [~o"2026Y1M/2026Y3M", ~o"2026Y4M/2026Y6M"]
+      [~o"2026Y1M/3M", ~o"2026Y4M/6M"]
 
   """
   @spec symmetric_difference(operand, operand, keyword()) ::
@@ -1267,7 +1267,7 @@ defmodule Tempo.Operations do
       iex> yours = Tempo.IntervalSet.new!([~o"2026-01-20/2026-01-21", ~o"2026-01-25/2026-01-26"])
       iex> {:ok, unshared} = Tempo.members_in_exactly_one(mine, yours)
       iex> Tempo.IntervalSet.members(unshared)
-      [~o"2026Y1M5D/2026Y1M6D", ~o"2026Y1M25D/2026Y1M26D"]
+      [~o"2026Y1M5D/6D", ~o"2026Y1M25D/26D"]
 
   """
   @spec members_in_exactly_one(operand, operand, keyword()) ::

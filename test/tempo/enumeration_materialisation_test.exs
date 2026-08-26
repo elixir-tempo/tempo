@@ -22,7 +22,7 @@ defmodule Tempo.EnumerationMaterialisationTest do
     test "day drills to hours" do
       assert Enum.count(~o"2020-06-15") == 24
       assert {:ok, interval} = Tempo.to_interval(~o"2020-06-15")
-      assert inspect(interval) == ~S|#Tempo.Interval<~o"2020Y6M15D/2020Y6M16D" unit: hour>|
+      assert inspect(interval) == ~S|#Tempo.Interval<~o"2020Y6M15D/16D" unit: hour>|
     end
   end
 
@@ -32,7 +32,7 @@ defmodule Tempo.EnumerationMaterialisationTest do
       assert Enum.member?(~o"2020-06-XX", ~o"2020Y6M1D")
       assert Enum.member?(~o"2020-06-XX", ~o"2020Y6M30D")
       assert {:ok, interval} = Tempo.to_interval(~o"2020-06-XX")
-      assert inspect(interval) == ~S|~o"2020Y6M/2020Y7M"|
+      assert inspect(interval) == ~S|~o"2020Y6M/7M"|
     end
 
     test "leap-February day mask stops at 29" do

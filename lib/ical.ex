@@ -263,7 +263,7 @@ if Code.ensure_loaded?(ICal) do
         ...> END:VAVAILABILITY
         ...> END:VCALENDAR
         ...> \"\"\"
-        iex> {:ok, free} = Tempo.ICal.available_from_ical(ics, within: ~o"2026Y6M1D/2026Y6M8D")
+        iex> {:ok, free} = Tempo.ICal.available_from_ical(ics, within: ~o"2026Y6M1D/8D")
         iex> Tempo.IntervalSet.count(free)
         5
 
@@ -315,7 +315,7 @@ if Code.ensure_loaded?(ICal) do
         ...> END:VAVAILABILITY
         ...> END:VCALENDAR
         ...> \"\"\")
-        iex> {:ok, free} = Tempo.ICal.available(calendar, within: ~o"2026Y6M1D/2026Y6M8D")
+        iex> {:ok, free} = Tempo.ICal.available(calendar, within: ~o"2026Y6M1D/8D")
         iex> [tuesday] = Tempo.IntervalSet.to_list(free)
         iex> from = Tempo.Interval.from(tuesday)
         iex> to = Tempo.Interval.to(tuesday)

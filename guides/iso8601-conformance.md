@@ -59,6 +59,7 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 | Durations `PnYnMnDTnHnMnS` | `P1Y`, `PT30M`, `P3Y6M4DT12H30M5S` |
 | Negative duration | `-P100D` |
 | Fixed-endpoint interval | `2022-01/2022-06`, `20220101/20220630` |
+| Interval with an abbreviated end (§5.5.1) | `2018-01-15/02-20`, `2025-08-28T09:00/T10:15` |
 | Duration-relative interval | `2022-01-01/P1Y`, `P1Y/2022-12-31` |
 | Recurring interval | `R/2022-01/P1M`, `R5/2022-01/P1M` |
 | Expanded (large) years | `+002022`, `-0001` |
@@ -125,6 +126,29 @@ A `?` (uncertain), `~` (approximate), or `%` (both) qualifier's **position** set
 Overlapping qualifiers on one component combine: `2004-?06~-11` (individual `?` on the month, group `~` on the month and year) yields `%{year: :approximate, month: :uncertain_and_approximate}`.
 
 The **explicit** (designator) form is also parsed: a qualifier between a value and its designator (`2004~Y6?M11D`, §8.3, including a qualified BC year `2004~YB`) is always individual. `inspect/1` and `to_iso8601/1` render the `:qualifications` map back in this form, so component qualification **round-trips** — a parsed group such as `2004-06~-11` re-encodes as the equivalent explicit individual qualifiers `2004~Y6~M11D`. Per §8.2.4, a value whose every present component shares one qualifier collapses to the compact complete form (`2004%Y6%M11%D` → `2004Y6M11D%`); group collapse is not attempted, as the explicit output form has no group representation.
+
+## 3a. Intervals whose end omits higher order components
+
+ISO 8601-1 §5.5.1 lets the end of an interval leave out the components it shares with the start: *"higher order time scale components may be omitted from the 'end of time interval', provided that the resulting expression is unambiguous. In this case the omitted higher order components from the 'start of time interval' expression apply."*
+
+Tempo applies them, so the end is a fully anchored value rather than a fragment:
+
+```elixir
+iex> Tempo.from_iso8601!("2018-01-15/02-20") == Tempo.from_iso8601!("2018-01-15/2018-02-20")
+true
+
+iex> Tempo.from_iso8601!("2025-08-28T09:00/T10:15") == Tempo.from_iso8601!("2025-08-28T09:00/2025-08-28T10:15")
+true
+```
+
+Rendering goes the other way — `inspect/1` and `to_iso8601/1` drop the shared prefix again, so a value prints as compactly as it was written and round-trips unchanged:
+
+```elixir
+iex> Tempo.to_iso8601(Tempo.from_iso8601!("2026-06-15/2026-06-16"))
+"2026Y6M15D/16D"
+```
+
+**The "unambiguous" proviso is load-bearing.** §5.2.2.2 makes a bare two-digit date component a *century*, so `2022-02-15/04` is century 04 — years 400–499 — not April, and nothing is inherited into it. Omit a component only where a designator or a separator keeps the reading clear: `/02-20` is a month and a day, `/04` is not.
 
 ## 4. IXDTF — Internet Extended Date/Time Format
 

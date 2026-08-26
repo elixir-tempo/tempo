@@ -551,7 +551,7 @@ defmodule Tempo.Inspect do
   end
 
   defp inspect_value(%Tempo.Interval{recurrence: 1, from: from, to: to, duration: nil}) do
-    [inspect_value(from), ?/, inspect_value(to)]
+    [inspect_value(from), ?/, inspect_value(abbreviate(to, from))]
   end
 
   defp inspect_value(%Tempo.Interval{recurrence: 1, from: from, to: nil, duration: duration}) do
@@ -608,7 +608,7 @@ defmodule Tempo.Inspect do
   end
 
   defp inspect_value(%Tempo.Interval{recurrence: recurrence, from: from, to: to, duration: nil}) do
-    [?R, recurrence(recurrence), ?/, inspect_value(from), ?/, inspect_value(to)]
+    [?R, recurrence(recurrence), ?/, inspect_value(from), ?/, inspect_value(abbreviate(to, from))]
   end
 
   defp inspect_value(%Tempo.Interval{
@@ -836,4 +836,41 @@ defmodule Tempo.Inspect do
 
   defp recurrence(:infinity), do: <<>>
   defp recurrence(recurrence), do: Integer.to_string(recurrence)
+
+  # ISO 8601-1 §5.5.1 lets an interval omit from its end the higher
+  # order components it shares with its start, and that is how people
+  # write one: `2025-08-28T09:00/T10:15` rather than repeating the
+  # date. Rendering it back the same way keeps the printed form as
+  # short as the written one, and the parser expands it again, so the
+  # value round-trips unchanged.
+  #
+  # The shared prefix must be a true prefix — the first component that
+  # differs stops it — because only leading components can be implied
+  # by the start. Anything that changes how a component is *read* has
+  # to match too: a different zone, calendar or qualification on the
+  # end is not implied by the start and would be lost.
+  defp abbreviate(%Tempo{time: to_units} = to, %Tempo{time: from_units} = from)
+       when is_list(to_units) and is_list(from_units) do
+    if implied_by?(to, from) do
+      case shared_prefix(to_units, from_units) do
+        # Identical endpoints, or nothing in common: there is no
+        # shorter form that still says the same thing.
+        [] -> to
+        ^to_units -> to
+        remaining -> %{to | time: remaining}
+      end
+    else
+      to
+    end
+  end
+
+  defp abbreviate(to, _from), do: to
+
+  defp implied_by?(%Tempo{} = to, %Tempo{} = from) do
+    to.shift == from.shift and to.calendar == from.calendar and
+      to.qualification == from.qualification and to.qualifications == from.qualifications
+  end
+
+  defp shared_prefix([same | to_rest], [same | from_rest]), do: shared_prefix(to_rest, from_rest)
+  defp shared_prefix(to_units, _from_units), do: to_units
 end

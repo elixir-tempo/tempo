@@ -150,7 +150,7 @@ Tempo.intersection(~o"2026-01-04", ~o"T10:30")
 
 # With bound — works
 Tempo.intersection(~o"2026-01-04", ~o"T10:30", bound: ~o"2026-01-04")
-# {:ok, #Tempo.IntervalSet<[~o"2026Y1M4DT10H30M0S/2026Y1M4DT10H31M0S"]>}
+# {:ok, #Tempo.IntervalSet<[~o"2026Y1M4DT10H30M/T31M"]>}
 ```
 
 The `:bound` option is also required on `complement/2` — for the same reason. An unbounded complement is infinite; Tempo refuses to pick a universe.
@@ -304,7 +304,7 @@ Once you hold a result set, three different "how much" questions each have their
 
 ```elixir
 iex> {:ok, free} = Tempo.union(~o"2026Y1M", ~o"2026Y3M")
-{:ok, #Tempo.IntervalSet<[~o"2026Y1M1D/2026Y2M1D", ~o"2026Y3M1D/2026Y4M1D"]>}
+{:ok, #Tempo.IntervalSet<[~o"2026Y1M1D/2M1D", ~o"2026Y3M1D/4M1D"]>}
 
 iex> Tempo.IntervalSet.count(free)
 2                                    # two windows: January and March
@@ -313,7 +313,7 @@ iex> Enum.count(free)
 62                                   # 62 sub-points: 31 + 31 days
 
 iex> free |> Tempo.IntervalSet.to_list() |> Enum.filter(&Tempo.at_least?(&1, ~o"P1M"))
-[~o"2026Y1M1D/2026Y2M1D", ~o"2026Y3M1D/2026Y4M1D"]   # both windows ≥ 1 month
+[~o"2026Y1M1D/2M1D", ~o"2026Y3M1D/4M1D"]   # both windows ≥ 1 month
 ```
 
 `to_list/1` exposes the windows for `Enum`; `Tempo.at_least?/2` (and its companions) then select by duration — the member-level idiom that keeps the sub-point walk and the window count from being confused.

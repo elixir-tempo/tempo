@@ -70,7 +70,7 @@ iex> ~o"P1Y6M".time
 
 ```elixir
 iex> ~o"2026-06-01/2026-06-30"
-~o"2026Y6M1D/2026Y6M30D"
+~o"2026Y6M1D/30D"
 ```
 
 Tempo uses the half-open `[from, to)` convention. Adjacent intervals concatenate cleanly.

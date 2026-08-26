@@ -555,7 +555,7 @@ defmodule Tempo.Operations.Test do
     end
 
     test "week ∩ week stays on the week axis" do
-      {:ok, r} = Tempo.intersection(~o"2026Y1W/2026Y3W", ~o"2026Y2W/2026Y5W")
+      {:ok, r} = Tempo.intersection(~o"2026Y1W/3W", ~o"2026Y2W/5W")
 
       [iv] = r.intervals
       assert iv.from.time[:week] == 2
@@ -777,7 +777,7 @@ defmodule Tempo.Operations.Test do
 
     test "per-endpoint u-ca suffixes determine each endpoint's calendar on re-parse" do
       {:ok, interval} =
-        Tempo.from_iso8601("1447Y9M1D[u-ca=islamic-civil]/1447Y10M1D[u-ca=islamic-civil]")
+        Tempo.from_iso8601("1447Y9M1D[u-ca=islamic-civil]/10M1D[u-ca=islamic-civil]")
 
       assert interval.from.calendar == Calendrical.Islamic.Civil
       assert interval.to.calendar == Calendrical.Islamic.Civil
@@ -786,7 +786,7 @@ defmodule Tempo.Operations.Test do
     test "an explicit calendar argument still wins over per-endpoint u-ca suffixes" do
       {:ok, interval} =
         Tempo.from_iso8601(
-          "1447Y9M1D[u-ca=islamic-civil]/1447Y10M1D[u-ca=islamic-civil]",
+          "1447Y9M1D[u-ca=islamic-civil]/10M1D[u-ca=islamic-civil]",
           Calendrical.Gregorian
         )
 

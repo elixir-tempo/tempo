@@ -1240,7 +1240,7 @@ defmodule Tempo do
 
       iex> {:ok, q3} = Tempo.from_date_range(Calendrical.Interval.quarter(2026, 3, Calendrical.Gregorian))
       iex> q3
-      ~o"2026Y7M1D/2026Y10M1D"
+      ~o"2026Y7M1D/10M1D"
 
       iex> {:error, %Tempo.ConversionError{}} =
       ...>   Tempo.from_date_range(Date.range(~D[2026-07-01], ~D[2026-07-31], 2))
@@ -1300,7 +1300,7 @@ defmodule Tempo do
   ### Examples
 
       iex> Tempo.from_date_range!(Date.range(~D[2026-07-01], ~D[2026-07-31]))
-      ~o"2026Y7M1D/2026Y8M1D"
+      ~o"2026Y7M1D/8M1D"
 
   """
   @spec from_date_range!(Date.Range.t(), Keyword.t()) :: Tempo.Interval.t()
@@ -2383,7 +2383,7 @@ defmodule Tempo do
 
       iex> {:ok, july} = Tempo.from_elixir(Date.range(~D[2026-07-01], ~D[2026-07-31]))
       iex> july
-      ~o"2026Y7M1D/2026Y8M1D"
+      ~o"2026Y7M1D/8M1D"
 
       iex> Tempo.from_elixir(~D[2022-06-15], resolution: :hour)
       ~o"2022Y6M15DT0H"
@@ -2945,14 +2945,14 @@ defmodule Tempo do
       iex> {:ok, quarter} = Tempo.from_elixir(calendar.quarter(2027, 1))
       iex> {:ok, gregorian} = Tempo.to_calendar(quarter, Calendrical.Gregorian)
       iex> Tempo.to_iso8601(gregorian)
-      "2026Y7M1D/2026Y10M1D"
+      "2026Y7M1D/10M1D"
 
   An interval set converts member by member:
 
       iex> {:ok, set} = Tempo.IntervalSet.new([~o"2026-06-15/2026-06-16"])
       iex> {:ok, hebrew} = Tempo.to_calendar(set, Calendrical.Hebrew)
       iex> hebrew |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.to_iso8601/1)
-      ["5786Y10M30D/5786Y11M1D"]
+      ["5786Y10M30D/11M1D"]
 
   """
   @spec to_calendar(t() | Interval.t() | IntervalSet.t(), module()) ::
@@ -5021,7 +5021,7 @@ defmodule Tempo do
   ### Examples
 
       iex> Tempo.to_interval_set!(~o"2026-06")
-      #Tempo.IntervalSet<[#Tempo.Interval<~o"2026Y6M/2026Y7M" unit: day>]>
+      #Tempo.IntervalSet<[#Tempo.Interval<~o"2026Y6M/7M" unit: day>]>
 
   """
   @spec to_interval_set!(
@@ -5185,7 +5185,7 @@ defmodule Tempo do
 
       iex> {:ok, either} = Tempo.union(~o"2026-01", ~o"2026-03")
       iex> either
-      #Tempo.IntervalSet<[#Tempo.Interval<~o"2026Y1M/2026Y2M" unit: day>, #Tempo.Interval<~o"2026Y3M/2026Y4M" unit: day>]>
+      #Tempo.IntervalSet<[#Tempo.Interval<~o"2026Y1M/2M" unit: day>, #Tempo.Interval<~o"2026Y3M/4M" unit: day>]>
 
   """
   defdelegate union(a, b, opts \\ []), to: Tempo.Operations
@@ -5200,7 +5200,7 @@ defmodule Tempo do
 
       iex> {:ok, both} = Tempo.intersection(~o"2026-06-15T09/2026-06-15T17", ~o"2026-06-15T14/2026-06-15T20")
       iex> both
-      #Tempo.IntervalSet<[~o"2026Y6M15DT14H/2026Y6M15DT17H"]>
+      #Tempo.IntervalSet<[~o"2026Y6M15DT14H/T17H"]>
 
   """
   defdelegate intersection(a, b, opts \\ []), to: Tempo.Operations
@@ -5214,7 +5214,7 @@ defmodule Tempo do
       iex> meeting = ~o"2026-06-15T10:00/2026-06-15T11:00"
       iex> {:ok, free} = Tempo.complement(meeting, bound: ~o"2026-06-15T09:00/2026-06-15T17:00")
       iex> free
-      #Tempo.IntervalSet<[~o"2026Y6M15DT9H0M/2026Y6M15DT10H0M", ~o"2026Y6M15DT11H0M/2026Y6M15DT17H0M"]>
+      #Tempo.IntervalSet<[~o"2026Y6M15DT9H0M/T10H0M", ~o"2026Y6M15DT11H0M/T17H0M"]>
 
   """
   defdelegate complement(set, opts), to: Tempo.Operations
@@ -5231,7 +5231,7 @@ defmodule Tempo do
       iex> lunch = ~o"2026-06-15T12/2026-06-15T13"
       iex> {:ok, working} = Tempo.difference(workday, lunch)
       iex> working
-      #Tempo.IntervalSet<[~o"2026Y6M15DT9H/2026Y6M15DT12H", ~o"2026Y6M15DT13H/2026Y6M15DT17H"]>
+      #Tempo.IntervalSet<[~o"2026Y6M15DT9H/T12H", ~o"2026Y6M15DT13H/T17H"]>
 
   """
   defdelegate difference(a, b, opts \\ []), to: Tempo.Operations
@@ -5245,7 +5245,7 @@ defmodule Tempo do
 
       iex> {:ok, exactly_one} = Tempo.symmetric_difference(~o"2026-06-15T09/2026-06-15T13", ~o"2026-06-15T11/2026-06-15T17")
       iex> exactly_one
-      #Tempo.IntervalSet<[~o"2026Y6M15DT9H/2026Y6M15DT11H", ~o"2026Y6M15DT13H/2026Y6M15DT17H"]>
+      #Tempo.IntervalSet<[~o"2026Y6M15DT9H/T11H", ~o"2026Y6M15DT13H/T17H"]>
 
   """
   defdelegate symmetric_difference(a, b, opts \\ []), to: Tempo.Operations
@@ -5264,7 +5264,7 @@ defmodule Tempo do
       ...> ])
       iex> {:ok, monday_events} = Tempo.members_overlapping(busy, ~o"2026-06-15")
       iex> monday_events
-      #Tempo.IntervalSet<[~o"2026Y6M15DT10H0M/2026Y6M15DT11H0M"]>
+      #Tempo.IntervalSet<[~o"2026Y6M15DT10H0M/T11H0M"]>
 
   """
   defdelegate members_overlapping(a, b, opts \\ []), to: Tempo.Operations
@@ -5285,7 +5285,7 @@ defmodule Tempo do
       ...> ])
       iex> {:ok, not_monday} = Tempo.members_outside(busy, ~o"2026-06-15")
       iex> not_monday
-      #Tempo.IntervalSet<[~o"2026Y6M16DT14H0M/2026Y6M16DT15H0M"]>
+      #Tempo.IntervalSet<[~o"2026Y6M16DT14H0M/T15H0M"]>
 
   """
   defdelegate members_outside(a, b, opts \\ []), to: Tempo.Operations
@@ -5304,7 +5304,7 @@ defmodule Tempo do
       iex> monday_only = Tempo.IntervalSet.new!([Tempo.to_interval!(~o"2026-06-15T10:00/2026-06-15T11:00")])
       iex> {:ok, unshared} = Tempo.members_in_exactly_one(busy, monday_only)
       iex> unshared
-      #Tempo.IntervalSet<[~o"2026Y6M16DT14H0M/2026Y6M16DT15H0M"]>
+      #Tempo.IntervalSet<[~o"2026Y6M16DT14H0M/T15H0M"]>
 
   """
   defdelegate members_in_exactly_one(a, b, opts \\ []), to: Tempo.Operations
@@ -5952,7 +5952,7 @@ defmodule Tempo do
   ### Examples
 
       iex> Tempo.select!(~o"2026-06", [15])
-      #Tempo.IntervalSet<[#Tempo.Interval<~o"2026Y6M15D/2026Y6M16D" unit: hour>]>
+      #Tempo.IntervalSet<[#Tempo.Interval<~o"2026Y6M15D/16D" unit: hour>]>
 
   """
   @spec select!(

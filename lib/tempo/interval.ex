@@ -496,7 +496,9 @@ defmodule Tempo.Interval do
   ## two-element clauses).
 
   def build([{_from_tag, from}, {_to_tag, to}]) do
-    %__MODULE__{from: AST.build(from), to: AST.build(to)}
+    from = AST.build(from)
+
+    %__MODULE__{from: from, to: to |> AST.build() |> inherit_from_start(from)}
   end
 
   ## Three-element forms with a repeat_rule.
@@ -536,6 +538,54 @@ defmodule Tempo.Interval do
       repeat_rule: AST.build(repeat_rule)
     }
   end
+
+  # ISO 8601-1:2019 §5.5.1: "For expression of a time interval by a
+  # start and an end, higher order time scale components may be omitted
+  # from the 'end of time interval' … In this case the omitted higher
+  # order components from the 'start of time interval' expression
+  # apply." So `2018-01-15/02-20` *is* `2018-01-15/2018-02-20`, and
+  # `2025-08-28T09:00/T10:15` ends on the day it started.
+  #
+  # Applying them here rather than leaving the end short is what keeps
+  # the value anchored. An end carrying only `[hour: 10, minute: 15]`
+  # has no year, so it cannot be projected onto the time line at all —
+  # `Tempo.Compare.to_utc_seconds/1` refuses it — while
+  # `compare_endpoints/2` resolves it contextually and reports it equal
+  # to the anchored form. One value, two answers, and the failure
+  # surfaces far from the parse that caused it.
+  defp inherit_from_start(%Tempo{time: to_units} = to, %Tempo{time: from_units})
+       when is_list(to_units) and is_list(from_units) do
+    with [{coarsest, _value} | _rest] <- to_units,
+         rank when is_integer(rank) <- unit_rank(coarsest) do
+      %{to | time: higher_order_than(from_units, rank) ++ to_units}
+    else
+      _not_inheritable -> to
+    end
+  end
+
+  defp inherit_from_start(to, _from), do: to
+
+  # Only components strictly coarser than the end's own coarsest unit
+  # are borrowed, and only while they remain plain values: a group, a
+  # selection or a mask on the start says something about a *set* of
+  # times, which cannot be read as the end's missing prefix.
+  defp higher_order_than(from_units, rank) do
+    Enum.take_while(from_units, fn {unit, value} ->
+      is_integer(value) and
+        case unit_rank(unit) do
+          nil -> false
+          from_rank -> from_rank > rank
+        end
+    end)
+  end
+
+  defp unit_rank(unit) when is_atom(unit) do
+    Unit.sort_key(unit)
+  rescue
+    KeyError -> nil
+  end
+
+  defp unit_rank(_unit), do: nil
 
   ## Implicit → explicit materialisation
   ##

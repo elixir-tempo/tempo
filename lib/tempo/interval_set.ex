@@ -1009,7 +1009,7 @@ defmodule Tempo.IntervalSet do
       iex> set
       ...> |> Tempo.IntervalSet.overlapping(at_least: 2)
       ...> |> Tempo.IntervalSet.members()
-      [~o"2026Y6M15DT11H0M0S/2026Y6M15DT12H0M0S"]
+      [~o"2026Y6M15DT11H0M0S/T12H0M0S"]
 
   Members that merely meet do not overlap:
 
