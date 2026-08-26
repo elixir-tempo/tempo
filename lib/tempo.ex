@@ -1811,7 +1811,8 @@ defmodule Tempo do
   """
   @spec trunc(tempo :: t, truncate_to :: time_unit()) :: t | {:error, error_reason()}
   def trunc(%__MODULE__{time: time} = tempo, truncate_to \\ :day) do
-    with {:ok, truncate_to} <- validate_unit(truncate_to) do
+    with {:ok, truncate_to} <- validate_unit(truncate_to),
+         :ok <- same_axis(time, truncate_to, tempo) do
       case Enum.take_while(time, &(Unit.compare(&1, truncate_to) in [:gt, :eq])) do
         [] ->
           {:error,
@@ -1825,6 +1826,46 @@ defmodule Tempo do
         other ->
           %{tempo | time: other}
       end
+    end
+  end
+
+  # Units that belong to one calendar axis and no other. `:year`,
+  # `:hour`, `:minute` and `:second` are shared by all three and so
+  # constrain nothing.
+  @gregorian_only [:month, :day]
+  @week_only [:week, :day_of_week]
+  @ordinal_only [:day_of_year]
+
+  # Truncating to a unit the value's axis does not have is a category
+  # error, not a coarsening. Without this guard `trunc(~o"2026-08-16",
+  # :week)` walks past `:day`, finds `:month` still coarser than
+  # `:week`, and answers with the *month* — a plausible-looking value
+  # that is not a week and never was.
+  defp same_axis(time, truncate_to, tempo) do
+    with target when target != :any <- axis_of([truncate_to]),
+         value when value != :any <- time |> Keyword.keys() |> axis_of(),
+         true <- target != value do
+      {:error,
+       ResolutionError.exception(
+         operation: :trunc,
+         target: truncate_to,
+         current: resolution(tempo) |> elem(0),
+         reason:
+           "#{inspect(truncate_to)} is on the #{target} axis and this value is on the " <>
+             "#{value} axis — truncating between axes is not a coarsening. Convert the " <>
+             "value to the #{target} axis first."
+       )}
+    else
+      _same_axis_or_unconstrained -> :ok
+    end
+  end
+
+  defp axis_of(units) do
+    cond do
+      Enum.any?(units, &(&1 in @week_only)) -> :week
+      Enum.any?(units, &(&1 in @ordinal_only)) -> :ordinal
+      Enum.any?(units, &(&1 in @gregorian_only)) -> :gregorian
+      true -> :any
     end
   end
 
@@ -3594,6 +3635,54 @@ defmodule Tempo do
     tempo
     |> trunc(:day)
     |> extend_to_second()
+  end
+
+  @doc """
+  Return a second-resolution `t:t/0` at the start of `tempo`'s week.
+
+  **The week starts where the value's own calendar starts its weeks.**
+  `Calendrical.Gregorian` begins on Monday, so a Sunday belongs to the
+  week that preceded it; a calendar configured `day_of_week:
+  Calendrical.sunday()` begins on Sunday, so the same Sunday begins a
+  week of its own. Reading the convention off the value rather than
+  assuming ISO is what keeps a weekly total counting the seven days
+  its holder actually keeps.
+
+  Completes the family with `beginning_of_day/1` and
+  `beginning_of_month/1`.
+
+  ### Arguments
+
+  * `tempo` is a `t:t/0` with at least year/month/day components.
+
+  ### Returns
+
+  * A second-resolution `t:t/0`; or
+
+  * `{:error, reason}` when the value has no day to place, or its
+    calendar defines no week.
+
+  ### Examples
+
+      iex> Tempo.beginning_of_week(~o"2026-06-17T14:30:00")
+      ~o"2026Y6M15DT0H0M0S"
+
+  A Sunday belongs to the preceding week under an ISO calendar:
+
+      iex> Tempo.beginning_of_week(~o"2026-08-16")
+      ~o"2026Y8M10DT0H0M0S"
+
+  """
+  @spec beginning_of_week(t()) :: t() | {:error, error_reason()}
+  def beginning_of_week(%Tempo{} = tempo) do
+    with %Tempo{} = day <- trunc(tempo, :day),
+         {:ok, date} <- to_date(day) do
+      date
+      |> Date.beginning_of_week(:default)
+      |> from_date()
+      |> then(&%{&1 | shift: tempo.shift, extended: tempo.extended})
+      |> extend_to_second()
+    end
   end
 
   @doc """

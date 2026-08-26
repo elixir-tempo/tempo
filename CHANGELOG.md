@@ -12,6 +12,8 @@
 
 ### Fixed
 
+* `Tempo.trunc/2` refuses a unit on another calendar axis instead of silently answering with a coarser one from its own. `trunc(~o"2026-08-16", :week)` returned `~o"2026Y8M"` — it walked past `:day`, found `:month` still coarser than `:week`, and gave back the **month**: a plausible-looking value that was never a week. It now returns a `Tempo.ResolutionError` naming both axes. Coarsening within an axis is unchanged.
+
 * Component accessors (`Tempo.year/1`, `month/1`, `day/1`, `hour/1`, …) on an interval exactly one granule wide now read the component instead of raising "ambiguous" when the half-open upper bound rolls into a coarser unit — so `Tempo.month/1` of `[2026Y12M, 2027Y1M)` (December 2026, e.g. from `Tempo.select(~o"2026", ~o"-1M")`) is `12`. A genuinely multi-unit span still raises.
 
 * Materialised recurrence occurrences no longer carry the internal `occurrence_duration` / `occurrence_base_to` span directives in their metadata: they are consumed to size each occurrence and then dropped, so occurrences from a `DURATION`-bearing rule inspect cleanly instead of showing a spurious metadata key.
@@ -21,6 +23,8 @@
 ## [v1.4.0] — 2026-08-26
 
 ### Added
+
+* `Tempo.beginning_of_week/1` completes the family with `beginning_of_day/1` and `beginning_of_month/1`. **The week starts where the value's own calendar starts its weeks**, read from that calendar's `:day_of_week`, so a Sunday belongs to the preceding week under `Calendrical.Gregorian` and begins one of its own under a Sunday-start calendar.
 
 * `Tempo.IntervalSet.members/1` — the member intervals as a plain list, the same value as `to_list/1` under a name that says which list you get. An IntervalSet enumerates the sub-points *inside* it, so `Enum.count/1` on two blocks totalling seven hours is 25,200 where `members/1` is 2; the two agree at day resolution, which is what makes the confusion hide until someone passes hours.
 
