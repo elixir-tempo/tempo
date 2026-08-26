@@ -331,8 +331,26 @@ defmodule Tempo.Format do
   defp default_format_for_unit(:year, _tempo), do: :y
   defp default_format_for_unit(:month, _tempo), do: :yMMM
   defp default_format_for_unit(:day, _tempo), do: :medium
-  defp default_format_for_unit(:hour, _tempo), do: :h
-  defp default_format_for_unit(:minute, _tempo), do: :hm
+
+  # `:h` and `:hm` are *time-only* skeletons: they name an hour and a
+  # minute and nothing else. That is right for a value with no date,
+  # and wrong for one with a date, because `dispatch/2` sends anything
+  # carrying both to `Localize.DateTime`, where a skeleton with no date
+  # fields leaves the date half of the pattern empty — `2025-08-28T10:45`
+  # rendered as ": , 10:45 am".
+  #
+  # `:medium` names both halves and follows the components actually
+  # present, so it shows seconds for a second-resolution value and
+  # omits them for a minute-resolution one. It is therefore the right
+  # default at every resolution that has a date.
+  defp default_format_for_unit(unit, tempo) when unit in [:hour, :minute] do
+    if time_only?(tempo) do
+      (unit == :hour && :h) || :hm
+    else
+      :medium
+    end
+  end
+
   defp default_format_for_unit(:second, _tempo), do: :medium
   defp default_format_for_unit(_other, _tempo), do: :medium
 

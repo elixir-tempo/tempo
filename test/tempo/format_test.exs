@@ -10,6 +10,10 @@ defmodule Tempo.FormatTest do
   # The CLDR range separator is a thin-space + en-dash + thin-space.
   @en_dash_sep "\u2009\u2013\u2009"
 
+  # CLDR separates a time from its meridiem with a narrow no-break
+  # space, not an ordinary one.
+  @nbsp "\u202F"
+
   describe "Tempo.to_string/1 — Rule B expansion" do
     test "year resolution expands to Jan–Dec (closed interval)" do
       assert Tempo.to_string(~o"2026") == "Jan#{@en_dash_sep}Dec 2026"
@@ -217,6 +221,32 @@ defmodule Tempo.FormatTest do
     test "inspect returns the sigil form, not the localized form" do
       assert inspect(~o"2026-06-15") == ~s|~o"2026Y6M15D"|
       assert inspect(~o"2026") == ~s|~o"2026Y"|
+    end
+  end
+
+  describe "Tempo.to_string/1 — resolutions between day and second" do
+    # `:hour` and `:minute` resolution defaulted to the time-only
+    # skeletons `:h` and `:hm`, which name no date fields. A value
+    # carrying both a date and a time routes to `Localize.DateTime`,
+    # so the date half of the pattern came back empty: `": , 10:45 am"`.
+    test "a minute-resolution datetime renders both halves" do
+      assert Tempo.to_string(~o"2025-08-28T10:45", locale: :en) == "Aug 28, 2025, 10:45#{@nbsp}AM"
+    end
+
+    test "an hour-resolution datetime renders both halves" do
+      assert Tempo.to_string(~o"2025-08-28T10", locale: :en) == "Aug 28, 2025, 10#{@nbsp}AM"
+    end
+
+    test "seconds appear only when the value carries them" do
+      assert Tempo.to_string(~o"2025-08-28T10:45:00", locale: :en) ==
+               "Aug 28, 2025, 10:45:00#{@nbsp}AM"
+
+      refute Tempo.to_string(~o"2025-08-28T10:45", locale: :en) =~ ":00"
+    end
+
+    test "a time-only value keeps its time-only rendering" do
+      assert Tempo.to_string(~o"T10:45", locale: :en) == "10:45#{@nbsp}AM"
+      assert Tempo.to_string(~o"T10", locale: :en) == "10#{@nbsp}AM"
     end
   end
 end
