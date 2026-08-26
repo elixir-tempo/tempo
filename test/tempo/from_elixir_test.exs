@@ -2,6 +2,10 @@ defmodule Tempo.FromElixir.Test do
   use ExUnit.Case, async: true
   import Tempo.Sigils
 
+  alias Calendrical.FiscalYear
+  alias Tempo.Interval
+  alias Tempo.IntervalSet
+
   # `Tempo.from_elixir/2` unifies Date, Time, NaiveDateTime, and
   # DateTime into `%Tempo{}`. The intended resolution is inferred
   # from the input (or overridden by `:resolution`), then applied
@@ -292,6 +296,90 @@ defmodule Tempo.FromElixir.Test do
   end
 
   describe "to_calendar/2 — cross-calendar conversion" do
+    test "an interval converts both endpoints" do
+      {:ok, converted} =
+        Tempo.to_calendar(~o"2026-06-15/2026-06-16", Calendrical.Hebrew)
+
+      assert Tempo.to_iso8601(converted) == "5786Y10M30D/5786Y11M1D"
+    end
+
+    test "a fiscal quarter reads back as the Gregorian dates it covers" do
+      {:ok, calendar} = FiscalYear.calendar_for(:AU)
+      {:ok, quarter} = Tempo.from_elixir(calendar.quarter(2027, 1))
+
+      {:ok, gregorian} = Tempo.to_calendar(quarter, Calendrical.Gregorian)
+
+      assert Tempo.to_iso8601(gregorian) == "2026Y7M1D/2026Y10M1D"
+    end
+
+    test "an interval keeps what it was carrying" do
+      # A rebuilt interval loses these, which is the reason for taking
+      # the whole value rather than its endpoints.
+      original = %Interval{
+        from: ~o"2026-06-15",
+        to: ~o"2026-06-16",
+        recurrence: 3,
+        unit: :day,
+        metadata: %{summary: "Standup"}
+      }
+
+      {:ok, converted} = Tempo.to_calendar(original, Calendrical.Hebrew)
+
+      assert converted.recurrence == 3
+      assert converted.unit == :day
+      assert converted.metadata == %{summary: "Standup"}
+    end
+
+    test "an unbounded end stays unbounded" do
+      {:ok, converted} = Tempo.to_calendar(~o"2026-06-15/..", Calendrical.Hebrew)
+
+      assert Tempo.to_iso8601(Interval.from(converted)) == "5786Y10M30D"
+      assert Interval.to(converted) in [nil, :undefined]
+    end
+
+    test "an interval whose endpoints are not days is refused" do
+      assert {:error, %Tempo.ConversionError{}} =
+               Tempo.to_calendar(
+                 ~o"2026-06-15T09:00:00/2026-06-15T17:00:00",
+                 Calendrical.Hebrew
+               )
+    end
+
+    test "an interval set converts every member" do
+      {:ok, set} =
+        IntervalSet.new([~o"2026-06-15/2026-06-16", ~o"2026-07-01/2026-07-02"])
+
+      {:ok, converted} = Tempo.to_calendar(set, Calendrical.Hebrew)
+
+      assert IntervalSet.count(converted) == 2
+      assert [first, _second] = IntervalSet.members(converted)
+      assert Tempo.to_iso8601(first) == "5786Y10M30D/5786Y11M1D"
+    end
+
+    test "one unconvertible member fails the whole set" do
+      {:ok, set} =
+        IntervalSet.new([
+          ~o"2026-06-15/2026-06-16",
+          ~o"2026-07-01T09:00:00/2026-07-01T17:00:00"
+        ])
+
+      assert {:error, %Tempo.ConversionError{}} =
+               Tempo.to_calendar(set, Calendrical.Hebrew)
+    end
+
+    test "an empty set converts to an empty set" do
+      {:ok, converted} = Tempo.to_calendar(IntervalSet.new!([]), Calendrical.Hebrew)
+
+      assert IntervalSet.count(converted) == 0
+    end
+
+    test "a converted interval round-trips" do
+      {:ok, hebrew} = Tempo.to_calendar(~o"2026-06-15/2026-06-16", Calendrical.Hebrew)
+      {:ok, back} = Tempo.to_calendar(hebrew, Calendrical.Gregorian)
+
+      assert Tempo.to_iso8601(back) == "2026Y6M15D/2026Y6M16D"
+    end
+
     test "converts a value into another calendar, preserving the day" do
       {:ok, hebrew} = Tempo.to_calendar(~o"2026-06-15", Calendrical.Hebrew)
 

@@ -8,7 +8,7 @@
 
 * `Tempo.IntervalSet.last/1` — the latest member interval, or `nil` when empty, pairing with `first/1`. Unlike `first/1`'s constant-time peek, it is O(n) and bounded-only: an unbounded set raises `Tempo.UnboundedSetError` rather than walking to find an end that isn't there.
 
-* `Tempo.to_calendar/2` converts a day-resolution value from its calendar into another via `Date.convert/2` — `Tempo.to_calendar(~o"2026-06-15", Calendrical.Hebrew)` is 30 Tevet 5786, and it round-trips. `Tempo.to_calendar/1` is now a deprecated alias for `Tempo.to_elixir/1`, the outbound mirror of `from_elixir/2` that also converts durations.
+* `Tempo.to_calendar/2` converts a day-resolution value from its calendar into another via `Date.convert/2` — `Tempo.to_calendar(~o"2026-06-15", Calendrical.Hebrew)` is 30 Tevet 5786, and it round-trips. `Tempo.to_calendar/1` is now a deprecated alias for `Tempo.to_elixir/1`, the outbound mirror of `from_elixir/2` that also converts durations. `Tempo.to_calendar/2` also takes a `t:Tempo.Interval.t/0` — converting both endpoints and carrying duration, recurrence, repeat rule, unit and metadata across untouched, with an unbounded end left unbounded — and a `t:Tempo.IntervalSet.t/0`, converting each member. Taking the whole span saves the caller pulling it apart and rebuilding it, which silently drops whatever it was carrying.
 
 ### Fixed
 

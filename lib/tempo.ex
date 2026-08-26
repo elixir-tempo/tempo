@@ -2737,17 +2737,26 @@ defmodule Tempo do
   def to_calendar(%Tempo{} = tempo), do: to_elixir(tempo)
 
   @doc """
-  Convert a day-resolution `t:t/0` from its current calendar into
-  `calendar`, preserving the day it names.
+  Convert a day-resolution value from its current calendar into
+  `calendar`, preserving the days it names.
 
   The value is read as a native `Date` in its own calendar, converted
   with `Date.convert/2`, and brought back as a `%Tempo{}` in `calendar`.
   A value that is not a plain day — a bare year or month, a time-of-day,
   or a zoned value — returns an error.
 
+  An interval converts its endpoints and keeps everything else: its
+  duration, recurrence, repeat rule, iteration unit and metadata are
+  carried across untouched, and an unbounded end stays unbounded. An
+  interval set converts each member. That saves the caller taking a
+  span apart and putting it back together, which is the library's job
+  and easy to get subtly wrong — a rebuilt interval loses whatever the
+  original was carrying.
+
   ### Arguments
 
-  * `value` is a day-resolution `t:t/0`.
+  * `value` is a day-resolution `t:t/0`, a `t:Tempo.Interval.t/0` whose
+    endpoints are days, or a `t:Tempo.IntervalSet.t/0` of those.
 
   * `calendar` is a calendar module — a `Calendrical.*` calendar or any
     module implementing Elixir's `Calendar` behaviour.
@@ -2764,9 +2773,47 @@ defmodule Tempo do
       iex> {Tempo.year(hebrew), Tempo.month(hebrew), Tempo.day(hebrew)}
       {5786, 10, 30}
 
+  A whole span converts as one value. This is a fiscal quarter read back
+  as the Gregorian dates it covers:
+
+      iex> {:ok, calendar} = Calendrical.FiscalYear.calendar_for(:AU)
+      iex> {:ok, quarter} = Tempo.from_elixir(calendar.quarter(2027, 1))
+      iex> {:ok, gregorian} = Tempo.to_calendar(quarter, Calendrical.Gregorian)
+      iex> Tempo.to_iso8601(gregorian)
+      "2026Y7M1D/2026Y10M1D"
+
+  An interval set converts member by member:
+
+      iex> {:ok, set} = Tempo.IntervalSet.new([~o"2026-06-15/2026-06-16"])
+      iex> {:ok, hebrew} = Tempo.to_calendar(set, Calendrical.Hebrew)
+      iex> hebrew |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.to_iso8601/1)
+      ["5786Y10M30D/5786Y11M1D"]
+
   """
-  @spec to_calendar(t(), module()) ::
-          {:ok, t()} | {:error, Tempo.ConversionError.t()}
+  @spec to_calendar(t() | Interval.t() | IntervalSet.t(), module()) ::
+          {:ok, t() | Interval.t() | IntervalSet.t()} | {:error, Tempo.ConversionError.t()}
+  def to_calendar(%Interval{} = interval, calendar) when is_atom(calendar) do
+    with {:ok, from} <- convert_endpoint(interval.from, calendar),
+         {:ok, to} <- convert_endpoint(interval.to, calendar) do
+      {:ok, %{interval | from: from, to: to}}
+    end
+  end
+
+  def to_calendar(%IntervalSet{} = set, calendar) when is_atom(calendar) do
+    set
+    |> IntervalSet.members()
+    |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
+      case to_calendar(member, calendar) do
+        {:ok, converted} -> {:cont, {:ok, [converted | acc]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, members} -> IntervalSet.new(Enum.reverse(members))
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   def to_calendar(
         %Tempo{time: [year: year, month: month, day: day], shift: nil, calendar: source} = value,
         calendar
@@ -2789,6 +2836,14 @@ defmodule Tempo do
        reason: "only day-resolution, unzoned values convert between calendars"
      )}
   end
+
+  # An endpoint that names no day — absent, or unbounded in either
+  # direction — has nothing to convert and is carried across as it is.
+  # Converting only what is there is what lets an open-ended span cross
+  # calendars at all.
+  defp convert_endpoint(nil, _calendar), do: {:ok, nil}
+  defp convert_endpoint(:undefined, _calendar), do: {:ok, :undefined}
+  defp convert_endpoint(%Tempo{} = endpoint, calendar), do: to_calendar(endpoint, calendar)
 
   @doc """
   Convert a Tempo value to its native Elixir equivalent — the
