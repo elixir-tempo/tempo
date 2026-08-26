@@ -42,7 +42,7 @@ Retailers count time in **weeks**, grouped 4-4-5 into thirteen-week quarters. Bu
 {:ok, retail_weeks} = Tempo.to_interval(retail_2026)
 
 Enum.count(retail_weeks)                        #=> 52
-retail_weeks |> Enum.at(0) #=> ~o"2026Y1W"
+retail_weeks |> Enum.at(0) #=> Tempo.from_iso8601!("2026Y1W", MyApp.Retail)
 ```
 
 > *"The 2026 retail year is fifty-two retail weeks; iterating it walks week by week."*

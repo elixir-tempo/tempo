@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+* The tour livebook called `Tempo.precedes?/2` (not a Tempo function — the predicate is `before?/2`) and compared a zoned time against a floating window; both cells now run. The `weekend?/2` doc describes the actual mechanism: the date converts to `Calendar.ISO` before the weekday is read, so Calendrical 1.3's culturally-native weekday numbering (Hebrew/Islamic weeks from Sunday, Persian from Saturday) cannot misclassify a weekend.
+
+### Changed
+
+* Calendrical 1.3 and Astro 2.5 in the lock: every calendar-touching example in the cookbook, guides, and livebooks re-validated by execution; Hebrew and Islamic calendar weeks now parse and materialise through Tempo (`Tempo.from_iso8601("5786-W03", Calendrical.Hebrew)`), and `beginning_of_week/1` on those calendars lands on their own week start.
+
 ## [v1.5.0] — 2026-08-26
 
 ### Added

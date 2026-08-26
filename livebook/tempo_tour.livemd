@@ -86,7 +86,7 @@ Enum.take(~o"156X", 10)
 
 ## Comparison and predicates
 
-Tempo implements Allen's interval algebra — `overlaps?`, `contains?`, `precedes?`, `meets?`, `starts?`, `finishes?`, `equal?`, and the inverse relations.
+Tempo implements Allen's interval algebra: `Tempo.relation/2` names the precise relation (all thirteen, `:precedes` through `:preceded_by`), and the everyday questions have named predicates — `overlaps?`, `contains?`, `before?`, `after?`, `meets?`, `adjacent?`, `during?`, `within?`, `equal?`, `disjoint?`.
 
 ```elixir
 a = ~o"2026-06-01/2026-06-15"
@@ -95,7 +95,7 @@ b = ~o"2026-06-10/2026-06-20"
 %{
   "a contains 2026-06-10": Tempo.contains?(a, ~o"2026-06-10"),
   "a overlaps b": Tempo.overlaps?(a, b),
-  "a precedes 2026-07": Tempo.precedes?(a, ~o"2026-07")
+  "a before 2026-07": Tempo.before?(a, ~o"2026-07")
 }
 ```
 
@@ -324,10 +324,12 @@ Tempo converts via `Date.convert!/2` internally, so the operation is calendar-ne
 
 ```elixir
 paris = Tempo.from_elixir(DateTime.new!(~D[2026-06-15], ~T[10:00:00], "Europe/Paris"))
-utc_window = ~o"2026-06-15T07/2026-06-15T09"
+utc_window = ~o"2026-06-15T07Z/2026-06-15T09Z"
 
 Tempo.overlaps?(paris, utc_window)
 ```
+
+Both values are *grounded* — the Paris time by its zone, the window by `Z`. Comparing a grounded value with a floating one (no zone or offset) raises `Tempo.FloatingTempoError` rather than silently assuming UTC; ground the floating side first.
 
 Paris 10:00 CEST is UTC 08:00 — inside the UTC 07:00-09:00 window. Tempo projects to UTC via `Tzdata` per-call; the wall-clock representation is preserved on the struct.
 

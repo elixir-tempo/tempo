@@ -5882,10 +5882,13 @@ defmodule Tempo do
 
   Different territories weekend on different days — the United States
   on `[Saturday, Sunday]`, Saudi Arabia on `[Friday, Saturday]`, India
-  on `[Sunday]` — read from CLDR via Localize. The day of week is taken
-  from `Date.day_of_week/1` (ISO `1` = Monday … `7` = Sunday), computed
-  in the value's own calendar so a non-Gregorian value (Japanese,
-  Islamic, Indian, …) is classified by the correct weekday.
+  on `[Sunday]` — read from CLDR via Localize. The value's date is
+  converted to `Calendar.ISO` first and the day of week read as ISO
+  (`1` = Monday … `7` = Sunday), so a non-Gregorian value (Japanese,
+  Islamic, Hebrew, …) is classified by the correct weekday regardless
+  of its calendar's own weekday numbering — Hebrew and Islamic weeks
+  number from Sunday and Persian from Saturday, while CLDR's weekend
+  data is ISO-numbered.
 
   ### Arguments
 
