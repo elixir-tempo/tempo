@@ -6,8 +6,6 @@
 
 * An interval whose end omits the higher order components it shares with its start — `2018-01-15/02-20`, ISO 8601-1 §5.5.1's own example — now takes those components from the start, as the clause requires.
 
-* `Tempo.to_string/1,2` renders every resolution against every format without an empty field or a raise. The requested format is now reconciled against the fields the value actually carries: one asking for finer precision is narrowed (`:hms` on a minute value renders `10:45 AM`, not `10:45:`), one naming a single axis renders that axis (`:hm` on a datetime renders the time; `:yMMMd` renders the date), and one naming an axis the value lacks falls back to the value's own shape. Three failures shared that cause — a datetime with a time-only default rendered `": , 10:45 am"`, a skeleton finer than the value left a dangling separator, and a skeleton on a year or month raised because Rule B expanded it to an interval, which accepts only widths. Rule B expansion is now what it was always meant to be: the answer when no format is given, so an explicit skeleton renders the value rather than its span.
-
 * Fix `Tempo.to_string/1` for partial dates/times.
 
 ### Changed
