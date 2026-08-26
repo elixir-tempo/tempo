@@ -329,6 +329,71 @@ defmodule Tempo.Duration do
     add(duration_a, negate(duration_b))
   end
 
+  @doc """
+  Compare two durations by length.
+
+  Present so that `Enum.sort/2`, `Enum.max/2` and `Enum.min/2` accept
+  this module the way they accept `Date`, `Time` and `Tempo`:
+
+      Enum.max([~o"PT30M", ~o"PT2H"], Tempo.Duration)
+
+  Without it, "which of these is longer" is answered by converting both
+  to seconds by hand at the call site, or worse by shifting a fabricated
+  epoch and diffing — arithmetic that has nothing to do with the
+  question being asked.
+
+  Comparison is by length, not by shape: `PT90M` and `PT1H30M` are the
+  same duration written two ways and compare `:eq`.
+
+  ### Arguments
+
+  * `duration_a` and `duration_b` are each a `t:t/0`.
+
+  ### Options
+
+  * `:relative_to` is a `t:Tempo.t/0` to resolve calendar-variable
+    components against. A duration containing `:month` or `:year` has
+    no fixed length — February and August are not the same size — so
+    comparing one without an anchor raises.
+
+  ### Returns
+
+  * `:lt`, `:eq` or `:gt`; or raises `ArgumentError` when either
+    duration has no fixed length and no `:relative_to` was given.
+
+  ### Examples
+
+      iex> Tempo.Duration.compare(~o"PT30M", ~o"PT2H")
+      :lt
+
+      iex> Tempo.Duration.compare(~o"PT90M", ~o"PT1H30M")
+      :eq
+
+      iex> Enum.sort([~o"PT2H", ~o"PT30M", ~o"PT1H"], Tempo.Duration)
+      [~o"PT30M", ~o"PT1H", ~o"PT2H"]
+
+  A month is only comparable against a date that says which month:
+
+      iex> Tempo.Duration.compare(~o"P1M", ~o"P30D", relative_to: ~o"2026-02-01")
+      :lt
+
+  """
+  @spec compare(t(), t(), keyword()) :: :lt | :eq | :gt
+  def compare(duration_a, duration_b, options \\ [])
+
+  def compare(%__MODULE__{} = duration_a, %__MODULE__{} = duration_b, options) do
+    with {:ok, a} <- to_unit(duration_a, :second, options),
+         {:ok, b} <- to_unit(duration_b, :second, options) do
+      cond do
+        a < b -> :lt
+        a > b -> :gt
+        true -> :eq
+      end
+    else
+      {:error, exception} -> raise exception
+    end
+  end
+
   defp add_components(nil, nil), do: nil
   defp add_components(value, nil), do: value
   defp add_components(nil, value), do: value

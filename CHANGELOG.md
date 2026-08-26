@@ -8,6 +8,8 @@
 
 ### Added
 
+* `Tempo.Duration.compare/3` — compare two durations by length, so `Enum.sort/2`, `Enum.max/2` and `Enum.min/2` take the module the way they take `Date`, `Time` and `Tempo`. Length, not shape: `PT90M` and `PT1H30M` are `:eq`. A duration containing `:month` or `:year` has no fixed length and raises unless given `relative_to:` — February and August are not the same size.
+
 * `Tempo.Duration.subtract/2` (`add/2` of the negation) and the missing bang variants `Tempo.to_calendar!/2`, `to_interval_set!/1`, and `select!/2`, completing the `!` convention across the conversion and selection API.
 
 * `Tempo.week/1` completes the component-accessor family for week-axis values (`~o"2026Y32W"`, Hebrew/Islamic calendar weeks, retail weeks): the week number, `nil` off the week axis, and an `ArgumentError` for an interval spanning more than one week.
