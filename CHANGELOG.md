@@ -2,7 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+
+* `Tempo.week/1` completes the component-accessor family for week-axis values (`~o"2026Y32W"`, Hebrew/Islamic calendar weeks, retail weeks): the week number, `nil` off the week axis, and an `ArgumentError` for an interval spanning more than one week.
+
 ### Fixed
+
+* Shifting a week-axis value by weeks (`Tempo.shift(~o"2026Y32W", week: 1)`) steps weeks natively with year-rollover carry instead of raising `KeyError`; component accessors (`Tempo.year/1`) on single-week intervals no longer crash for the same reason. Month-axis values still take a week as seven days.
 
 * The tour livebook called `Tempo.precedes?/2` (not a Tempo function — the predicate is `before?/2`) and compared a zoned time against a floating window; both cells now run. The `weekend?/2` doc describes the actual mechanism: the date converts to `Calendar.ISO` before the weekday is read, so Calendrical 1.3's culturally-native weekday numbering (Hebrew/Islamic weeks from Sunday, Persian from Saturday) cannot misclassify a weekend.
 

@@ -739,7 +739,15 @@ defmodule Tempo.Math do
     # Normalise weeks to days *before* extending resolution, so a `P1W` shift
     # extends the value to day resolution (not week) and the day arithmetic has
     # a `:day` slot to operate on — e.g. `~o"3M"` + `P1W` becomes `~o"3M8D"`.
-    duration_time = normalise_duration(duration_time)
+    # A week-axis value (`[year, week]`) is the exception: it has a `:week`
+    # slot and no `:day`, so weeks step natively via `add_unit(:week)` —
+    # converting them to days would demand month/day keys the axis lacks.
+    duration_time =
+      if Keyword.has_key?(crisp_time, :week) do
+        duration_time
+      else
+        normalise_duration(duration_time)
+      end
 
     tempo =
       %{tempo | time: crisp_time}
@@ -991,8 +999,10 @@ defmodule Tempo.Math do
   end
 
   # Apply duration components largest-to-smallest, then clamp day
-  # to the valid range for the resulting month.
-  @duration_apply_order [:year, :month, :day, :hour, :minute, :second]
+  # to the valid range for the resulting month. `:week` appears only
+  # for week-axis values (month-axis durations normalise weeks to
+  # days before this loop runs).
+  @duration_apply_order [:year, :month, :week, :day, :hour, :minute, :second]
 
   defp apply_duration(%Tempo{time: time, calendar: calendar} = tempo, duration_time) do
     stepped =

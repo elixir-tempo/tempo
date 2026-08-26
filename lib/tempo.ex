@@ -1645,6 +1645,82 @@ defmodule Tempo do
     def unquote(unit)(value), do: component(value, unquote(unit))
   end
 
+  @doc """
+  Return the `week` component of a Tempo value, or `nil` if the
+  value doesn't specify one.
+
+  Completes the component-accessor family (`year/1` … `second/1`) for
+  week-axis values — `~o"2026Y32W"`, a Hebrew or Islamic calendar
+  week, or a retail-calendar week — so callers never reach into
+  struct fields. `:week` lives on its own axis rather than in the
+  linear year-to-second order, so its interval ambiguity rule is
+  axis-aware instead of generated with the others: an interval
+  answers when it spans exactly one week, or sits inside one.
+
+  ### Arguments
+
+  * `value` is a `t:t/0` or `t:Tempo.Interval.t/0`.
+
+  ### Returns
+
+  * The week number as an integer when unambiguous.
+
+  * `nil` when the value doesn't specify a week (e.g.
+    `Tempo.week(~o"2026-06-15")` — a month-axis date has no week
+    component).
+
+  * Raises `ArgumentError` when called on an interval spanning more
+    than one week.
+
+  ### Examples
+
+      iex> Tempo.week(~o"2026Y32W")
+      32
+
+      iex> Tempo.week(~o"2026-06-15")
+      nil
+
+      iex> {:ok, hebrew_week} = Tempo.from_iso8601("5786-W03", Calendrical.Hebrew)
+      iex> Tempo.week(hebrew_week)
+      3
+
+      iex> {:ok, interval} = Tempo.to_interval(~o"2026Y32W")
+      iex> Tempo.week(interval)
+      32
+
+  """
+  @spec week(t() | Tempo.Interval.t()) :: integer() | nil
+  def week(%__MODULE__{time: time}) do
+    case Keyword.get(time, :week) do
+      value when is_integer(value) -> value
+      _other -> nil
+    end
+  end
+
+  def week(%Tempo.Interval{from: %__MODULE__{} = from, to: to}) do
+    from_week = week(from)
+
+    cond do
+      from_week == nil ->
+        nil
+
+      not match?(%__MODULE__{}, to) ->
+        from_week
+
+      single_granule_unit(from, to) == :week ->
+        from_week
+
+      week(to) == from_week ->
+        from_week
+
+      true ->
+        raise ArgumentError,
+              "Tempo.week/1 is ambiguous for an interval spanning more than one week. " <>
+                "Use `Tempo.Interval.endpoints/1` and extract the component from each " <>
+                "endpoint explicitly."
+    end
+  end
+
   # Polymorphic component extraction. A Tempo value reads straight
   # from its time keyword list — nil if absent. An Interval checks
   # unambiguity via the span resolution and raises otherwise.

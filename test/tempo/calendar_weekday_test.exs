@@ -56,9 +56,9 @@ defmodule Tempo.CalendarWeekdayTest do
       {:ok, week} = Tempo.from_iso8601("5786-W03", Calendrical.Hebrew)
       {:ok, interval} = Tempo.to_interval(week)
 
-      assert week.time[:week] == 3
+      assert Tempo.week(week) == 3
       assert interval.from.calendar == Calendrical.Hebrew
-      assert interval.to.time[:week] == 4
+      assert Tempo.week(interval.to) == 4
     end
 
     test "a Hebrew week compares with Gregorian values across calendars" do
@@ -71,6 +71,34 @@ defmodule Tempo.CalendarWeekdayTest do
                :meets,
                :met_by
              ]
+    end
+  end
+
+  describe "week-axis arithmetic and accessors" do
+    test "Tempo.week/1 reads week-axis values and single-week intervals" do
+      assert Tempo.week(~o"2026Y32W") == 32
+      assert Tempo.week(~o"2026-06-15") == nil
+
+      {:ok, interval} = Tempo.to_interval(~o"2026Y32W")
+      assert Tempo.week(interval) == 32
+      assert Tempo.year(interval) == 2026
+    end
+
+    test "a multi-week interval is ambiguous" do
+      {:ok, fortnight} = Tempo.to_interval(~o"2026Y32W/2026Y34W")
+      assert_raise ArgumentError, ~r/ambiguous/, fn -> Tempo.week(fortnight) end
+    end
+
+    test "shifting a week-axis value steps weeks natively" do
+      # Regression: normalising the week duration to days demanded
+      # month/day keys the week axis lacks, raising KeyError.
+      assert Tempo.shift(~o"2026Y32W", week: 1) == ~o"2026Y33W"
+      assert Tempo.shift(~o"2026Y32W", week: -1) == ~o"2026Y31W"
+      assert Tempo.shift(~o"2026Y52W", week: 2) == ~o"2027Y2W"
+    end
+
+    test "a month-axis value still takes weeks as seven days" do
+      assert Tempo.shift(~o"2026-06-15", week: 1) == ~o"2026-06-22"
     end
   end
 end
