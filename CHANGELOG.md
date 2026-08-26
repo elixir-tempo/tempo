@@ -1,16 +1,22 @@
 # Changelog
 
+## [v1.5.2] — 2026-08-26
+
+### Fixed
+
+* `Tempo.equal?/2,3` now ignores per-member metadata, honouring its contract: two extent-equal values differing only in metadata (a summary, PRODID) compare equal and agree with `Tempo.compare/3`'s `:eq`. The internal unit-strip was leaving metadata on the struct comparison.
+
 ## [v1.5.1] — 2026-08-26
 
 ### Fixed
 
-* An interval whose end omits the higher order components it shares with its start — `2018-01-15/02-20`, ISO 8601-1 §5.5.1's own example — now takes those components from the start, as the clause requires.
+* An interval end that omits the components it shares with its start — `2018-01-15/02-20`, ISO 8601-1 §5.5.1 — now inherits them, so it is anchored rather than a fragment.
 
 * Fix `Tempo.to_string/1` for partial dates/times.
 
 ### Changed
 
-* `inspect/1` and `Tempo.to_iso8601/1` render an interval's end without the components it shares with its start, so `2026-06-15/2026-06-16` prints as `~o"2026Y6M15D/16D"`. This is the form §5.5.1 defines and the one people write; it round-trips unchanged now that the parser expands it.
+* `inspect/1` and `Tempo.to_iso8601/1` drop the prefix an interval's end shares with its start: `2026-06-15/2026-06-16` prints as `~o"2026Y6M15D/16D"` and round-trips.
 
 ## [v1.5.0] — 2026-08-26
 

@@ -452,6 +452,24 @@ defmodule Tempo.Operations.Test do
       {:ok, explicit} = Tempo.from_iso8601("2022-01-01/2023-01-01")
       assert Tempo.equal?(~o"2022Y", explicit)
     end
+
+    test "equal?/2 ignores per-member metadata (only covered instants matter)" do
+      a = %Tempo.Interval{
+        from: ~o"2026-06-15",
+        to: ~o"2026-06-16",
+        metadata: %{summary: "Standup"}
+      }
+
+      b = %Tempo.Interval{from: ~o"2026-06-15", to: ~o"2026-06-16", metadata: %{}}
+
+      # Extent-equal, differing only in metadata: equal? agrees with compare/2.
+      assert Tempo.equal?(a, b)
+      assert Tempo.compare(a, b) == :eq
+
+      # Genuinely different extents stay unequal despite matching metadata.
+      c = %Tempo.Interval{from: ~o"2026-06-15", to: ~o"2026-06-17", metadata: %{}}
+      refute Tempo.equal?(a, c)
+    end
   end
 
   describe "cross-axis with bound" do

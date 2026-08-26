@@ -1392,10 +1392,10 @@ defmodule Tempo.Operations do
 
   # Instant-set equality is about extents. A member that passed through
   # a set operation unchanged keeps the iteration `:unit` a
-  # materialisation gave it (so `Enum` over a union still drills into
-  # its members), but that walk state must not make extent-equal sets
-  # compare unequal here.
+  # materialisation gave it (so `Enum` over a union still drills into its
+  # members) and its `:metadata`; neither is an extent, and the contract
+  # ignores metadata outright, so drop both before the struct comparison.
   defp strip_units(intervals) when is_list(intervals) do
-    Enum.map(intervals, &%{&1 | unit: nil})
+    Enum.map(intervals, &%{&1 | unit: nil, metadata: %{}})
   end
 end
