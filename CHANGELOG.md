@@ -4,7 +4,7 @@
 
 ### Fixed
 
-* An interval whose end omits the higher order components it shares with its start — `2018-01-15/02-20`, ISO 8601-1 §5.5.1's own example — now takes those components from the start, as the clause requires. The tokenizer has always read the short form correctly; what was missing was the expansion at build time, so the end stayed unanchored and could not be projected onto the time line. `Tempo.Compare.compare_endpoints/2` resolved it contextually and reported it equal to the full form while `to_utc_seconds/1` refused it, so the value looked correct until something needed an instant from it.
+* An interval whose end omits the higher order components it shares with its start — `2018-01-15/02-20`, ISO 8601-1 §5.5.1's own example — now takes those components from the start, as the clause requires.
 
 ### Changed
 
