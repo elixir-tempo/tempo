@@ -19,6 +19,8 @@ The crisp span of `1200±60` is exactly the span of `1200` — the `±60` is met
 
 Every graded relation answers three-valued. Take a dig with two radiocarbon-dated contexts, a clearly later wall, and the site's known occupation span:
 
+<!-- guides:run -->
+
 ```elixir
 hearth     = ~o"1200±60Y"   # a hearth, dated to ~1200, give or take 60 years
 midden     = ~o"1240±40Y"   # a midden, ~1240 ± 40

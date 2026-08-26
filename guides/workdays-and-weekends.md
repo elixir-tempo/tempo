@@ -87,6 +87,8 @@ Every scheduling question you'd ask about business days is a small variation on 
 
 ### Is today a business day?
 
+<!-- guides:skip -->
+
 ```elixir
 tempo
 |> Tempo.day_of_week()
@@ -95,6 +97,8 @@ tempo
 ```
 
 This is the fast path — no interval needed. For territory-aware weekend detection, use the selector:
+
+<!-- guides:skip -->
 
 ```elixir
 {:ok, set} = Tempo.select(tempo, Tempo.workdays(:SA))

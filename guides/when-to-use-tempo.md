@@ -94,7 +94,7 @@ Tempo.from_elixir(value, resolution: :day)  # unified gateway
 Tempo.to_date(tempo)
 Tempo.to_time(tempo)
 Tempo.to_naive_date_time(tempo)
-Tempo.to_calendar(tempo)  # returns DateTime when possible, else NaiveDateTime or Date
+Tempo.to_elixir(tempo)  # best-fit Date | Time | NaiveDateTime (durations too)
 ```
 
 A healthy Tempo-using application looks like this:

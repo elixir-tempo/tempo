@@ -1656,8 +1656,11 @@ defmodule Tempo do
     end
   end
 
-  defp component(%Tempo.Interval{from: %__MODULE__{time: from_time}} = interval, unit) do
-    span_res = Interval.resolution(interval)
+  defp component(
+         %Tempo.Interval{from: %__MODULE__{time: from_time} = from, to: to} = interval,
+         unit
+       ) do
+    span_res = interval_component_resolution(from, to, interval)
 
     cond do
       span_res == :undefined ->
@@ -1672,6 +1675,28 @@ defmodule Tempo do
                 "Use `Tempo.Interval.endpoints/1` and extract the component from each endpoint explicitly."
     end
   end
+
+  # An interval one granule wide at `from`'s own resolution — e.g.
+  # `[2026Y12M, 2027Y1M)`, which is December 2026, exactly one month — is
+  # unambiguous at that resolution. Its half-open upper bound rolls into
+  # the next coarser unit (here the year), which `Interval.resolution/1`
+  # reports as the span resolution and so masks the real one. Report
+  # `from`'s resolution for such single-granule spans; a wider span keeps
+  # the coarsest unit at which the endpoints genuinely differ.
+  defp interval_component_resolution(from, to, interval) do
+    case single_granule_unit(from, to) do
+      nil -> Interval.resolution(interval)
+      unit -> unit
+    end
+  end
+
+  defp single_granule_unit(%__MODULE__{} = from, %__MODULE__{} = to) do
+    {unit, _value} = resolution(from)
+    stepped = Math.add(from, %Tempo.Duration{time: [{unit, 1}]})
+    if Compare.compare_endpoints(stepped, to) == :same, do: unit
+  end
+
+  defp single_granule_unit(_from, _to), do: nil
 
   # `u_res` is finer-or-equal to `u_target` iff u_res's index in
   # @unit_order is >= u_target's index. (:year is coarsest at 0;
@@ -2466,17 +2491,17 @@ defmodule Tempo do
 
   """
   @spec to_date(t()) :: {:ok, Date.t()} | {:error, error_reason()}
-  def to_date(%Tempo{time: [year: year, month: month, day: day]}) do
-    Date.new(year, month, day)
+  def to_date(%Tempo{time: [year: year, month: month, day: day]} = tempo) do
+    Date.new(year, month, day, native_calendar(tempo))
   end
 
   # Ordinal date: year plus day-of-year. Both `~o"...O"` and the
   # bare `~o"YYYY-DDD"` form land here because Tempo's grammar
   # stores `D` and `O` under the same `:day` key; the absence of
   # `:month` is the disambiguator.
-  def to_date(%Tempo{time: [year: year, day: day_of_year]})
+  def to_date(%Tempo{time: [year: year, day: day_of_year]} = tempo)
       when is_integer(year) and is_integer(day_of_year) do
-    with {:ok, jan_1} <- Date.new(year, 1, 1) do
+    with {:ok, jan_1} <- Date.new(year, 1, 1, native_calendar(tempo)) do
       result = Date.add(jan_1, day_of_year - 1)
 
       if result.year == year and day_of_year >= 1 do
@@ -2494,12 +2519,12 @@ defmodule Tempo do
   end
 
   # ISO week date: year plus week-of-year plus day-of-week.
-  def to_date(%Tempo{time: [year: year, week: week, day_of_week: dow]})
+  def to_date(%Tempo{time: [year: year, week: week, day_of_week: dow]} = tempo)
       when is_integer(year) and is_integer(week) and is_integer(dow) do
     # ISO 8601-1 §5.2.3: week 01 is the week containing the year's
     # first Thursday, equivalently the week containing Jan 4. Take
     # the Monday of that week and add (week − 1) × 7 + (dow − 1).
-    with {:ok, jan_4} <- Date.new(year, 1, 4) do
+    with {:ok, jan_4} <- Date.new(year, 1, 4, native_calendar(tempo)) do
       jan_4_dow = Date.day_of_week(jan_4)
       week_1_monday = Date.add(jan_4, -(jan_4_dow - 1))
       target = Date.add(week_1_monday, (week - 1) * 7 + (dow - 1))
@@ -2567,24 +2592,28 @@ defmodule Tempo do
 
   """
   @spec to_naive_date_time(t()) :: {:ok, NaiveDateTime.t()} | {:error, error_reason()}
-  def to_naive_date_time(%Tempo{
-        time: [
-          year: year,
-          month: month,
-          day: day,
-          hour: hour,
-          minute: minute,
-          second: second,
-          microsecond: microsecond
-        ]
-      }) do
-    NaiveDateTime.new(year, month, day, hour, minute, second, microsecond)
+  def to_naive_date_time(
+        %Tempo{
+          time: [
+            year: year,
+            month: month,
+            day: day,
+            hour: hour,
+            minute: minute,
+            second: second,
+            microsecond: microsecond
+          ]
+        } = tempo
+      ) do
+    NaiveDateTime.new(year, month, day, hour, minute, second, microsecond, native_calendar(tempo))
   end
 
-  def to_naive_date_time(%Tempo{
-        time: [year: year, month: month, day: day, hour: hour, minute: minute, second: second]
-      }) do
-    NaiveDateTime.new(year, month, day, hour, minute, second, 0)
+  def to_naive_date_time(
+        %Tempo{
+          time: [year: year, month: month, day: day, hour: hour, minute: minute, second: second]
+        } = tempo
+      ) do
+    NaiveDateTime.new(year, month, day, hour, minute, second, 0, native_calendar(tempo))
   end
 
   def to_naive_date_time(%Tempo{} = value) do
@@ -2684,12 +2713,9 @@ defmodule Tempo do
   @doc """
   Convert a `t:t/0` to its best-fit native Elixir calendar type.
 
-  Dispatches by resolution: a full date becomes a `Date`, a
-  time-of-day becomes a `Time`, and a full date-and-time becomes a
-  `NaiveDateTime`. A value too coarse to pin an instant (a bare year
-  or month) or one carrying a UTC offset cannot be represented by a
-  single native type and returns an error. For a specific target
-  type use `to_date/1`, `to_time/1`, or `to_naive_date_time/1`.
+  Deprecated: use `to_elixir/1`, the outbound mirror of `from_elixir/2`,
+  which converts `%Tempo{}` values and durations alike. This is kept as a
+  delegating alias so existing callers keep working.
 
   ### Arguments
 
@@ -2703,30 +2729,65 @@ defmodule Tempo do
   * `{:error, t:Tempo.ConversionError.t/0}` when the value is too
     coarse to convert, or carries a zone offset.
 
-  ### Examples
-
-      iex> Tempo.to_calendar(~o"2026-06-15")
-      {:ok, ~D[2026-06-15]}
-
-      iex> Tempo.to_calendar(~o"2026-06-15T10:30:00")
-      {:ok, ~N[2026-06-15 10:30:00.000000]}
-
-      iex> match?({:error, %Tempo.ConversionError{}}, Tempo.to_calendar(~o"2026"))
-      true
-
   """
+  @deprecated "Use Tempo.to_elixir/1"
   @spec to_calendar(t()) ::
           {:ok, Date.t() | Time.t() | NaiveDateTime.t()}
           | {:error, Tempo.ConversionError.t()}
-  def to_calendar(%Tempo{shift: nil} = tempo) do
-    with {:error, %Tempo.ConversionError{target: Date}} <- to_date(tempo),
-         {:error, %Tempo.ConversionError{target: Time}} <- to_time(tempo) do
-      to_naive_date_time(tempo)
+  def to_calendar(%Tempo{} = tempo), do: to_elixir(tempo)
+
+  @doc """
+  Convert a day-resolution `t:t/0` from its current calendar into
+  `calendar`, preserving the day it names.
+
+  The value is read as a native `Date` in its own calendar, converted
+  with `Date.convert/2`, and brought back as a `%Tempo{}` in `calendar`.
+  A value that is not a plain day — a bare year or month, a time-of-day,
+  or a zoned value — returns an error.
+
+  ### Arguments
+
+  * `value` is a day-resolution `t:t/0`.
+
+  * `calendar` is a calendar module — a `Calendrical.*` calendar or any
+    module implementing Elixir's `Calendar` behaviour.
+
+  ### Returns
+
+  * `{:ok, t:t/0}` — the value in `calendar`; or
+
+  * `{:error, t:Tempo.ConversionError.t/0}`.
+
+  ### Examples
+
+      iex> {:ok, hebrew} = Tempo.to_calendar(~o"2026-06-15", Calendrical.Hebrew)
+      iex> {Tempo.year(hebrew), Tempo.month(hebrew), Tempo.day(hebrew)}
+      {5786, 10, 30}
+
+  """
+  @spec to_calendar(t(), module()) ::
+          {:ok, t()} | {:error, Tempo.ConversionError.t()}
+  def to_calendar(
+        %Tempo{time: [year: year, month: month, day: day], shift: nil, calendar: source} = value,
+        calendar
+      )
+      when is_atom(calendar) do
+    with {:ok, in_source} <- Date.new(year, month, day, source || Calendar.ISO),
+         {:ok, converted} <- Date.convert(in_source, calendar) do
+      {:ok, from_elixir(converted)}
+    else
+      {:error, reason} ->
+        {:error, ConversionError.exception(value: value, target: calendar, reason: reason)}
     end
   end
 
-  def to_calendar(%Tempo{} = value) do
-    {:error, ConversionError.exception(value: value, target: DateTime)}
+  def to_calendar(%Tempo{} = value, calendar) when is_atom(calendar) do
+    {:error,
+     ConversionError.exception(
+       value: value,
+       target: calendar,
+       reason: "only day-resolution, unzoned values convert between calendars"
+     )}
   end
 
   @doc """
@@ -2738,10 +2799,11 @@ defmodule Tempo do
     only components (`:day_of_year`, `:day_of_week`) have no Elixir
     `Duration` equivalent and return an error.
 
-  * A `t:t/0` becomes its best-fit calendar type via `to_calendar/1`
-    — a `Date`, `Time`, or `NaiveDateTime`. For a specific target
+  * A `t:t/0` becomes its best-fit native calendar type by resolution —
+    a `Date`, `Time`, or `NaiveDateTime`. For a specific target
     (including a zoned `DateTime`) use `to_date/1`, `to_time/1`,
-    `to_date_time/1`, or `to_naive_date_time/1`.
+    `to_date_time/1`, or `to_naive_date_time/1`. To change a value's
+    *calendar* (e.g. Gregorian to Hebrew) use `to_calendar/2`.
 
   ### Arguments
 
@@ -2782,8 +2844,15 @@ defmodule Tempo do
     end
   end
 
-  def to_elixir(%Tempo{} = tempo) do
-    to_calendar(tempo)
+  def to_elixir(%Tempo{shift: nil} = tempo) do
+    with {:error, %Tempo.ConversionError{target: Date}} <- to_date(tempo),
+         {:error, %Tempo.ConversionError{target: Time}} <- to_time(tempo) do
+      to_naive_date_time(tempo)
+    end
+  end
+
+  def to_elixir(%Tempo{} = value) do
+    {:error, ConversionError.exception(value: value, target: DateTime)}
   end
 
   # The present (non-zero) components of an Elixir `Duration`, as the
@@ -3407,6 +3476,18 @@ defmodule Tempo do
   # every accessor uses the same rule.
   defp calendar_of(%Tempo{calendar: nil}), do: Calendrical.Gregorian
   defp calendar_of(%Tempo{calendar: calendar}), do: calendar
+
+  # The native Elixir calendar for a value at the outbound boundary
+  # (`to_date/1`, `to_naive_date_time/1`, `to_elixir/1`): Tempo's internal
+  # `Calendrical.Gregorian` becomes Elixir's `Calendar.ISO`, while any other
+  # calendar passes through — so a non-Gregorian value converts to a native
+  # type in its own calendar rather than being mislabelled ISO.
+  defp native_calendar(%Tempo{} = tempo) do
+    case calendar_of(tempo) do
+      Calendrical.Gregorian -> Calendar.ISO
+      calendar -> calendar
+    end
+  end
 
   # Extract {year, month, day} from a Tempo or raise a uniform
   # error. Missing month or day default to 1 (start-of-unit) so

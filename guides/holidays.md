@@ -28,6 +28,8 @@ Country names are lowercase with hyphens: `usa`, `united-kingdom`, `germany`, `j
 
 The end-to-end fetch-and-parse is three lines:
 
+<!-- guides:skip -->
+
 ```elixir
 %Req.Response{body: ics} =
   Req.get!("https://www.officeholidays.com/ics-fed/usa")
@@ -41,6 +43,8 @@ Tempo.IntervalSet.count(holidays)
 (Any HTTP client works — the examples use [`:req`](https://hex.pm/packages/req); `:httpc` from OTP or another library is equally fine. What Tempo needs is the response body as a string.)
 
 `Tempo.ICal.from_ical/1` returns a `%Tempo.IntervalSet{}` where each member is a `%Tempo.Interval{}` with the iCal event metadata preserved on `:metadata` — `summary`, `description`, `location`, `uid`, custom `X-*` properties. The intervals themselves are half-open `[from, to)` day-spans in Tempo's standard convention.
+
+<!-- guides:skip -->
 
 ```elixir
 holidays
@@ -106,6 +110,8 @@ Assume the calendar has been fetched and parsed into `holidays`.
 
 Pure set algebra: workdays minus holidays.
 
+<!-- guides:skip -->
+
 ```elixir
 q3 = ~o"2026-07-01/2026-10-01"
 
@@ -143,6 +149,8 @@ The same composition works for **seasons** (ISO 8601-2 codes 25–32, astronomic
 
 `Tempo.members_overlapping/2` returns the holiday members that fall inside the query window — with their iCal metadata intact:
 
+<!-- guides:skip -->
+
 ```elixir
 q3 = ~o"2026-07/2026-10"
 {:ok, q3_holidays} = Tempo.members_overlapping(holidays, q3)
@@ -164,6 +172,8 @@ Because `Tempo.members_overlapping/2` keeps surviving members whole — with the
 ### 3. What's five business days from today, skipping holidays?
 
 Four composed set operations. The whole pipeline is set-algebra; no list-level filtering required.
+
+<!-- guides:skip -->
 
 ```elixir
 today  = ~o"2026-06-30"
@@ -225,6 +235,8 @@ Then compute "working days for the global team" as `Tempo.members_outside(workda
 ## Scheduling a training week
 
 A concrete example that ties it together: pick the first five-day work week in Q3 2026 with no US federal holidays, suitable for scheduling a training course.
+
+<!-- guides:skip -->
 
 ```elixir
 q3 = ~o"2026-07/2026-10"

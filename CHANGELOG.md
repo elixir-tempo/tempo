@@ -1,6 +1,6 @@
 # Changelog
 
-## [v1.5.0] — unreleased
+## [v1.5.0] — 2026-08-26
 
 ### Added
 
@@ -8,9 +8,15 @@
 
 * `Tempo.IntervalSet.last/1` — the latest member interval, or `nil` when empty, pairing with `first/1`. Unlike `first/1`'s constant-time peek, it is O(n) and bounded-only: an unbounded set raises `Tempo.UnboundedSetError` rather than walking to find an end that isn't there.
 
+* `Tempo.to_calendar/2` converts a day-resolution value from its calendar into another via `Date.convert/2` — `Tempo.to_calendar(~o"2026-06-15", Calendrical.Hebrew)` is 30 Tevet 5786, and it round-trips. `Tempo.to_calendar/1` is now a deprecated alias for `Tempo.to_elixir/1`, the outbound mirror of `from_elixir/2` that also converts durations.
+
 ### Fixed
 
+* Component accessors (`Tempo.year/1`, `month/1`, `day/1`, `hour/1`, …) on an interval exactly one granule wide now read the component instead of raising "ambiguous" when the half-open upper bound rolls into a coarser unit — so `Tempo.month/1` of `[2026Y12M, 2027Y1M)` (December 2026, e.g. from `Tempo.select(~o"2026", ~o"-1M")`) is `12`. A genuinely multi-unit span still raises.
+
 * Materialised recurrence occurrences no longer carry the internal `occurrence_duration` / `occurrence_base_to` span directives in their metadata: they are consumed to size each occurrence and then dropped, so occurrences from a `DURATION`-bearing rule inspect cleanly instead of showing a spurious metadata key.
+
+* `Tempo.to_elixir/1`, `to_date/1` and `to_naive_date_time/1` now preserve a non-Gregorian value's calendar at the native boundary, mapping only Tempo's internal `Calendrical.Gregorian` to Elixir's `Calendar.ISO`. Previously a Hebrew value converted to a `Date` mislabelled `Calendar.ISO` carrying the Hebrew numbers — a corrupt value; Gregorian conversions are unchanged.
 
 ## [v1.4.0] — 2026-08-26
 

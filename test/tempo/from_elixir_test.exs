@@ -268,13 +268,51 @@ defmodule Tempo.FromElixir.Test do
       end
     end
 
-    test "to_elixir of a Tempo value delegates to to_calendar" do
+    test "to_elixir of a Tempo value returns its best-fit native calendar type" do
       assert Tempo.to_elixir(~o"2026-06-15") == {:ok, ~D[2026-06-15]}
+    end
+
+    test "to_elixir maps a Gregorian value to Calendar.ISO at the boundary" do
+      {:ok, date} = Tempo.to_elixir(~o"2026-06-15")
+      assert date.calendar == Calendar.ISO
+    end
+
+    test "to_elixir preserves a non-Gregorian value's calendar at the boundary" do
+      {:ok, hebrew_tempo} = Tempo.to_calendar(~o"2026-06-15", Calendrical.Hebrew)
+      {:ok, hebrew_date} = Tempo.to_elixir(hebrew_tempo)
+
+      assert hebrew_date.calendar == Calendrical.Hebrew
+      assert {hebrew_date.year, hebrew_date.month, hebrew_date.day} == {5786, 10, 30}
     end
 
     test "to_elixir errors on a Tempo-only duration component" do
       weekday_duration = %Tempo.Duration{time: [day_of_week: 3]}
       assert {:error, %Tempo.ConversionError{}} = Tempo.to_elixir(weekday_duration)
+    end
+  end
+
+  describe "to_calendar/2 — cross-calendar conversion" do
+    test "converts a value into another calendar, preserving the day" do
+      {:ok, hebrew} = Tempo.to_calendar(~o"2026-06-15", Calendrical.Hebrew)
+
+      assert hebrew.calendar == Calendrical.Hebrew
+      assert {Tempo.year(hebrew), Tempo.month(hebrew), Tempo.day(hebrew)} == {5786, 10, 30}
+    end
+
+    test "round-trips back to the Gregorian day" do
+      {:ok, hebrew} = Tempo.to_calendar(~o"2026-06-15", Calendrical.Hebrew)
+      {:ok, gregorian} = Tempo.to_calendar(hebrew, Calendar.ISO)
+
+      assert {Tempo.year(gregorian), Tempo.month(gregorian), Tempo.day(gregorian)} ==
+               {2026, 6, 15}
+    end
+
+    test "refuses a value that is not a plain day" do
+      assert {:error, %Tempo.ConversionError{}} =
+               Tempo.to_calendar(~o"2026", Calendrical.Hebrew)
+
+      assert {:error, %Tempo.ConversionError{}} =
+               Tempo.to_calendar(~o"2026-06-15T10:30:00", Calendrical.Hebrew)
     end
   end
 end

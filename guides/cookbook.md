@@ -327,6 +327,8 @@ lunch    = ~o"2026-06-15T12/2026-06-15T13"
 
 ### How do I compose free/busy across a real schedule?
 
+<!-- guides:skip -->
+
 ```elixir
 {:ok, schedule} = Tempo.ICal.from_ical_file("~/work.ics")
 
@@ -560,6 +562,8 @@ iex> Tempo.IntervalSet.count(set)
 
 ### How do I import an `.ics` file?
 
+<!-- guides:skip -->
+
 ```elixir
 iex> {:ok, schedule} = Tempo.ICal.from_ical_file("~/work.ics")
 iex> Tempo.IntervalSet.count(schedule)
@@ -572,6 +576,8 @@ Each event becomes a `%Tempo.Interval{}` with full metadata (summary, location, 
 
 Pass a `:bound` so unbounded recurrences terminate:
 
+<!-- guides:skip -->
+
 ```elixir
 iex> {:ok, schedule} = Tempo.ICal.from_ical(ics, bound: ~o"2026-04-01/2026-07-01")
 ```
@@ -579,6 +585,8 @@ iex> {:ok, schedule} = Tempo.ICal.from_ical(ics, bound: ~o"2026-04-01/2026-07-01
 Every RRULE part (including BY-rules, BYSETPOS, WKST, RDATE, EXDATE) materialises correctly — one `%Tempo.Interval{}` per occurrence carrying the event's metadata.
 
 ### How do I find when a specific attendee is in a meeting?
+
+<!-- guides:skip -->
 
 ```elixir
 {:ok, schedule} = Tempo.ICal.from_ical(ics)
@@ -615,7 +623,7 @@ Tempo.overlaps?(hebrew, gregorian)
 
 ```elixir
 paris      = Tempo.from_elixir(DateTime.new!(~D[2026-06-15], ~T[10:00:00], "Europe/Paris"))
-utc_window = ~o"2026-06-15T07/2026-06-15T09"
+utc_window = ~o"2026-06-15T07/2026-06-15T09Z"
 
 Tempo.overlaps?(paris, utc_window)
 #=> true
@@ -628,8 +636,9 @@ Tempo projects to UTC via the configured time zone database for cross-zone compa
 ### How do I convert a Tempo to a specific calendar?
 
 ```elixir
-iex> Tempo.to_calendar(~o"2026-06-15", Calendrical.Hebrew)
-# Returns {:ok, %Tempo{...calendar: Calendrical.Hebrew}}
+iex> {:ok, hebrew} = Tempo.to_calendar(~o"2026-06-15", Calendrical.Hebrew)
+iex> {Tempo.year(hebrew), Tempo.month(hebrew), Tempo.day(hebrew)}
+{5786, 10, 30}
 ```
 
 ### How do I get a fiscal quarter from the calendar that defines it?
@@ -817,6 +826,8 @@ century = ~o"2000-01-01/2100-01-01"
 
 ### Find when two people are both free for at least 1 hour
 
+<!-- guides:skip -->
+
 ```elixir
 {:ok, ada}   = Tempo.ICal.from_ical_file("~/ada.ics")
 {:ok, grace} = Tempo.ICal.from_ical_file("~/grace.ics")
@@ -876,6 +887,8 @@ Tempo.overlaps?(dig_layer, ming_period)
 
 ### How do I find free time across multiple schedules and timezones?
 
+<!-- guides:skip -->
+
 ```elixir
 {:ok, ny}     = Tempo.ICal.from_ical_file("~/cal_ny.ics")
 {:ok, london} = Tempo.ICal.from_ical_file("~/cal_london.ics")
@@ -921,6 +934,8 @@ weekdays =
 Brazilian fixed-income instruments accrue interest on the BUS/252 day count: the year fraction between two dates is the number of business days between them divided by a fixed 252, where a business day is Monday–Friday minus the [ANBIMA](https://www.anbima.com.br/feriados/feriados.asp) national banking holidays. Tempo's half-open `[from, to)` convention is exactly the counting rule BUS/252 requires — two consecutive business days count as 1.
 
 ANBIMA publishes the holiday list (2001–2099) as a spreadsheet; `scripts/anbima_xls_to_ics.py` in this repository converts it to an iCalendar file that Tempo loads directly.
+
+<!-- guides:skip -->
 
 ```elixir
 {:ok, holidays} = Tempo.ICal.from_ical_file("feriados_anbima.ics")

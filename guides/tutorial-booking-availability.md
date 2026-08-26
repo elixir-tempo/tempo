@@ -26,6 +26,8 @@ The `Z` grounds the hours on the UTC timeline. Tempo distinguishes *grounded* va
 
 Studio Nine's bookings live where everyone's do: an iCalendar feed. Tempo imports it with every event's metadata intact:
 
+<!-- guides:run -->
+
 ```elixir
 ics = """
 BEGIN:VCALENDAR

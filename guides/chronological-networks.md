@@ -54,6 +54,8 @@ A bare integer year (`1200`, `-664`) and an ISO 8601 string are also accepted as
 
 The paper's worked example. In the Kingdom of ChronoLand, kings **K1** then **K2** reigned in succession, both between 1200 and 1300 CE; K1 reigned at most 10 years and K2 at least 35. Two strata follow one another: **S1** (built by K1, who founded the city) and **S2** (destroyed by fire under K2). Each stratum lasted 20 to 100 years.
 
+<!-- guides:run -->
+
 ```elixir
 import Tempo.Sigils
 alias Tempo.Network
@@ -174,6 +176,8 @@ A network earns its keep when something is *uncertain* or the structure is *not 
 
 The Egyptian 26th dynasty (after Kitchen 2000) is six reigns in succession with known lengths, anchored at Psammetichus I's accession in 664 BCE. Each reign runs from its accession to its accession plus its length, and the next begins where the last ended:
 
+<!-- guides:run -->
+
 ```elixir
 import Tempo.Sigils
 
@@ -216,8 +220,10 @@ A network would give the identical answer, but it adds nothing here. Reach for `
 
 Every period boundary is an ordinary Tempo value, so it round-trips through ISO 8601 / EDTF for exchange with other tools:
 
+<!-- guides:skip -->
+
 ```elixir
-Tempo.to_iso8601(solved.periods[:psammetichus_i].earliest_start)
+Tempo.to_iso8601(solved.periods["Psammetichus I"].earliest_start)
 #=> "-664Y"
 ```
 
@@ -226,6 +232,8 @@ Tempo.to_iso8601(solved.periods[:psammetichus_i].earliest_start)
 Tempo's network model *is* the ChronoLog scheme, so the proof it is faithful is that it re-solves ChronoLog's own models and gets ChronoLog's own answers. Tempo's test suite decodes a corpus of published `.clog` files — the Egyptian 26th dynasty, three Near-Eastern models from the 2022 Radiocarbon Dating and Chronology workshop (Dynasty 18, the Aegean LH→PG ceramic sequence, the Iron Age Levant), and the Mediterranean Late Bronze Age study — and checks each one is consistent and, where the model is anchored, recovers the same dates.
 
 The Egyptian dynasty is the sharpest demonstration. In §6 we assumed exact reign lengths *and* a known accession, so no network was needed. The original ChronoLog model assumes neither: every reign length is only a **lower bound**, and the sole calendar anchor — the Persian conquest of Egypt in 525 BCE — sits at the dynasty's *end*. What pins the accessions is a web of epigraphic **delay synchronisms**: dated Apis-bull installations, each tied to a specific regnal year. A delay synchronism is a metric relation, the one constraint Allen's algebra cannot state — "this boundary falls exactly *n* years after that one":
+
+<!-- guides:run -->
 
 ```elixir
 import Tempo.Sigils

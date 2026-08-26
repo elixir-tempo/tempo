@@ -151,6 +151,8 @@ Tempo.grounded?(paris)                                   #=> true
 
 A floating value has no position on the universal time line, so **it cannot be compared with a grounded one** — there is no fact of the matter about whether "8am somewhere" falls before or after "8am in Paris" until you say *which* somewhere. Rather than silently grounding the floating side to UTC and inventing an answer, Tempo refuses the comparison:
 
+<!-- guides:skip -->
+
 ```elixir
 Tempo.relation(~o"2030-03-01T08:00:00", ~o"2030-03-01T08:00:00[Europe/Paris]")
 #=> ** (Tempo.FloatingTempoError) Cannot compare on a floating Tempo (no zone or offset information) ...
