@@ -224,29 +224,103 @@ defmodule Tempo.FormatTest do
     end
   end
 
-  describe "Tempo.to_string/1 — resolutions between day and second" do
-    # `:hour` and `:minute` resolution defaulted to the time-only
-    # skeletons `:h` and `:hm`, which name no date fields. A value
-    # carrying both a date and a time routes to `Localize.DateTime`,
-    # so the date half of the pattern came back empty: `": , 10:45 am"`.
-    test "a minute-resolution datetime renders both halves" do
-      assert Tempo.to_string(~o"2025-08-28T10:45", locale: :en) == "Aug 28, 2025, 10:45#{@nbsp}AM"
+  describe "Tempo.to_string/2 — every resolution against every format" do
+    # The whole space, because the failures here were not one bug but
+    # three, and each hid in a different corner of it:
+    #
+    #   * a skeleton naming a field the value lacks rendered the
+    #     separator with nothing around it — `:hms` on a minute value
+    #     gave "10:45:", `:hm` on a date gave ": ";
+    #   * a skeleton naming an axis the value lacks left that half of
+    #     the datetime pattern empty — ": , 10:45 am";
+    #   * a skeleton on a year or month raised, because Rule B expanded
+    #     it to an interval and interval formatting takes only widths.
+    #
+    # Nothing below may render an empty field, and nothing may raise.
+    @values [
+      {"year", ~o"2025"},
+      {"month", ~o"2025-08"},
+      {"day", ~o"2025-08-28"},
+      {"datetime hour", ~o"2025-08-28T10"},
+      {"datetime minute", ~o"2025-08-28T10:45"},
+      {"datetime second", ~o"2025-08-28T10:45:30"},
+      {"time hour", ~o"T10"},
+      {"time minute", ~o"T10:45"},
+      {"time second", ~o"T10:45:30"}
+    ]
+
+    @formats [nil, :short, :medium, :long, :full, :y, :yMMM, :yMMMd, :h, :hm, :hms]
+
+    test "no combination raises" do
+      for {label, value} <- @values, format <- @formats do
+        options = if format, do: [format: format, locale: :en], else: [locale: :en]
+
+        assert is_binary(Tempo.to_string(value, options)),
+               "#{label} with #{inspect(format)} did not return a string"
+      end
     end
 
-    test "an hour-resolution datetime renders both halves" do
-      assert Tempo.to_string(~o"2025-08-28T10", locale: :en) == "Aug 28, 2025, 10#{@nbsp}AM"
+    test "no combination renders an empty field" do
+      # An empty field shows up as a separator with nothing before or
+      # after it: a leading ":", a doubled "::", or a stray ", ".
+      for {label, value} <- @values, format <- @formats do
+        options = if format, do: [format: format, locale: :en], else: [locale: :en]
+        rendered = Tempo.to_string(value, options)
+
+        refute rendered =~ ~r/(^|\s):/,
+               "#{label} with #{inspect(format)} rendered an empty leading field: #{inspect(rendered)}"
+
+        refute rendered =~ "::",
+               "#{label} with #{inspect(format)} rendered an empty field: #{inspect(rendered)}"
+
+        refute rendered =~ ~r/:\s*$|,\s*$/,
+               "#{label} with #{inspect(format)} rendered a trailing separator: #{inspect(rendered)}"
+      end
+    end
+
+    test "a format asking for more precision than the value carries is narrowed" do
+      assert Tempo.to_string(~o"2025-08-28T10", format: :hms, locale: :en) == "10#{@nbsp}AM"
+      assert Tempo.to_string(~o"2025-08-28T10:45", format: :hms, locale: :en) == "10:45#{@nbsp}AM"
+      assert Tempo.to_string(~o"T10", format: :hm, locale: :en) == "10#{@nbsp}AM"
+      assert Tempo.to_string(~o"2025-08", format: :yMMMd, locale: :en) == "Aug 2025"
+      assert Tempo.to_string(~o"2025", format: :yMMM, locale: :en) == "2025"
+    end
+
+    test "a time-only format renders the time of a value that also has a date" do
+      assert Tempo.to_string(~o"2025-08-28T10:45", format: :hm, locale: :en) == "10:45#{@nbsp}AM"
+
+      assert Tempo.to_string(~o"2025-08-28T10:45:30", format: :hms, locale: :en) ==
+               "10:45:30#{@nbsp}AM"
+    end
+
+    test "a date-only format renders the date of a value that also has a time" do
+      assert Tempo.to_string(~o"2025-08-28T10:45", format: :yMMMd, locale: :en) == "Aug 28, 2025"
+      assert Tempo.to_string(~o"2025-08-28T10:45", format: :y, locale: :en) == "2025"
+    end
+
+    test "a format for an axis the value does not have falls back to the value" do
+      assert Tempo.to_string(~o"2025-08-28", format: :hm, locale: :en) == "Aug 28, 2025"
+      assert Tempo.to_string(~o"T10:45", format: :yMMMd, locale: :en) == "10:45#{@nbsp}AM"
+    end
+
+    test "the default still expands a year and a month as closed intervals" do
+      assert Tempo.to_string(~o"2026", locale: :en) == "Jan#{@en_dash_sep}Dec 2026"
+
+      assert Tempo.to_string(~o"2026", format: :medium, locale: :en) ==
+               "Jan#{@en_dash_sep}Dec 2026"
+    end
+
+    test "an explicit skeleton renders the value rather than expanding it" do
+      assert Tempo.to_string(~o"2026", format: :y, locale: :en) == "2026"
+      assert Tempo.to_string(~o"2026-08", format: :yMMM, locale: :en) == "Aug 2026"
     end
 
     test "seconds appear only when the value carries them" do
-      assert Tempo.to_string(~o"2025-08-28T10:45:00", locale: :en) ==
-               "Aug 28, 2025, 10:45:00#{@nbsp}AM"
+      assert Tempo.to_string(~o"2025-08-28T10:45:30", locale: :en) ==
+               "Aug 28, 2025, 10:45:30#{@nbsp}AM"
 
+      refute Tempo.to_string(~o"2025-08-28T10:45", locale: :en) =~ ":30"
       refute Tempo.to_string(~o"2025-08-28T10:45", locale: :en) =~ ":00"
-    end
-
-    test "a time-only value keeps its time-only rendering" do
-      assert Tempo.to_string(~o"T10:45", locale: :en) == "10:45#{@nbsp}AM"
-      assert Tempo.to_string(~o"T10", locale: :en) == "10#{@nbsp}AM"
     end
   end
 end

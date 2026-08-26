@@ -73,7 +73,7 @@ defmodule Tempo.Format do
   def to_string(%Tempo{} = tempo, options) do
     {unit, _} = Tempo.resolution(tempo)
 
-    if expand_as_closed_interval?(unit, tempo) do
+    if expand_as_closed_interval?(unit, tempo, options) do
       render_tempo_as_closed_interval(tempo, unit, options)
     else
       render_single_value(tempo, options)
@@ -208,15 +208,28 @@ defmodule Tempo.Format do
   # non-anchored values collapse. A non-anchored Tempo has no
   # enumeration start in interval terms — we fall through to the
   # single-value path which routes to Localize.Time.
-  defp expand_as_closed_interval?(:year, %Tempo{time: time}) do
-    Keyword.has_key?(time, :year)
+  defp expand_as_closed_interval?(unit, tempo, options)
+
+  defp expand_as_closed_interval?(unit, %Tempo{time: time}, options)
+       when unit in [:year, :month] do
+    Keyword.has_key?(time, :year) and expandable_format?(Keyword.get(options, :format))
   end
 
-  defp expand_as_closed_interval?(:month, %Tempo{time: time}) do
-    Keyword.has_key?(time, :year)
-  end
+  defp expand_as_closed_interval?(_unit, _tempo, _options), do: false
 
-  defp expand_as_closed_interval?(_unit, _tempo), do: false
+  # Expanding a year into "Jan – Dec 2026" is Rule B's answer to the
+  # question "how should a year be shown?" — it is what to do when the
+  # caller has not said. A caller who names a skeleton has said: `:y`
+  # asks for a year, and rendering its twelve months instead answers a
+  # question they did not ask. Interval formatting cannot honour a
+  # skeleton anyway — Localize accepts only widths across a range — so
+  # expanding would fail rather than merely surprise.
+  #
+  # A named width names both ends of a range as readily as a single
+  # value, so those still expand.
+  defp expandable_format?(nil), do: true
+  defp expandable_format?(format) when format in [:short, :medium, :long, :full], do: true
+  defp expandable_format?(_skeleton), do: false
 
   # Materialise the Tempo, compute first and closed-last at the
   # iteration unit (one level finer than the Tempo's resolution),
@@ -266,28 +279,111 @@ defmodule Tempo.Format do
   ## ---------------------------------------------------------
 
   defp render_single_value(%Tempo{} = tempo, options) do
-    options = with_default_format(options, tempo)
-
     case dispatch(tempo, options) do
       {:ok, string} -> string
       {:error, exception} -> raise exception
     end
   end
 
-  # Route a plain Tempo to the right Localize function based on
-  # whether it's date-like, time-like, or both.
+  # Route a plain Tempo to the right Localize function.
+  #
+  # Two things decide where a value goes: the fields it actually
+  # carries, and the fields the requested format names. They are not
+  # the same question, and conflating them is what produced renderings
+  # like `": , 10:45 am"` — a date-and-time value sent to
+  # `Localize.DateTime` with a skeleton naming no date fields, leaving
+  # that half of the pattern with nothing to fill it.
+  #
+  # So the format is reconciled against the value first (see
+  # `reconcile/2`), and the *reconciled* format decides the axis:
+  #
+  #   * a format naming only time fields renders the time alone, even
+  #     when the value also carries a date — asking for `:hm` is asking
+  #     for an hour and a minute;
+  #   * a format naming only date fields renders the date alone;
+  #   * a named width (`:short`, `:medium`, …) names both halves, so
+  #     the value's own shape decides.
   defp dispatch(%Tempo{} = tempo, options) do
-    cond do
-      date_only?(tempo) ->
-        Localize.Date.to_string(to_locale_map(tempo), options)
+    {format, options} = Keyword.pop(options, :format)
+    format = reconcile(format, tempo)
+    options = Keyword.put(options, :format, format)
 
-      time_only?(tempo) ->
-        Localize.Time.to_string(to_locale_map(tempo), options)
-
-      true ->
-        Localize.DateTime.to_string(to_locale_map(tempo), options)
+    case axis(format) do
+      :time -> Localize.Time.to_string(to_locale_map(tempo), options)
+      :date -> Localize.Date.to_string(to_locale_map(tempo), options)
+      :both -> dispatch_by_value(tempo, options)
     end
   end
+
+  defp dispatch_by_value(%Tempo{} = tempo, options) do
+    cond do
+      date_only?(tempo) -> Localize.Date.to_string(to_locale_map(tempo), options)
+      time_only?(tempo) -> Localize.Time.to_string(to_locale_map(tempo), options)
+      true -> Localize.DateTime.to_string(to_locale_map(tempo), options)
+    end
+  end
+
+  # A skeleton asking for finer precision than the value carries would
+  # render empty fields — `:hms` on a value with no second gives
+  # `"10:45:"`. Trim the request to what is actually there. A skeleton
+  # asking for an axis the value does not have at all (`:yMMMd` on a
+  # time) cannot be honoured, so the value's own shape takes over.
+  defp reconcile(nil, %Tempo{} = tempo) do
+    {unit, _span} = Tempo.resolution(tempo)
+    default_format_for_unit(unit, tempo)
+  end
+
+  defp reconcile(format, %Tempo{} = tempo) when is_atom(format) do
+    case axis(format) do
+      :time -> trim_time(format, tempo)
+      :date -> trim_date(format, tempo)
+      :both -> format
+    end
+  end
+
+  # A pattern string is the caller spelling out exactly what they want.
+  defp reconcile(format, _tempo), do: format
+
+  defp trim_time(format, %Tempo{} = tempo) do
+    if date_only?(tempo) do
+      # No time to render at all; fall back to the value's own shape.
+      reconcile(nil, tempo)
+    else
+      finest = Enum.find([:second, :minute, :hour], &has_field?(tempo, &1))
+
+      case {format, finest} do
+        {_any, nil} -> reconcile(nil, tempo)
+        {:hms, :minute} -> :hm
+        {:hms, :hour} -> :h
+        {:hm, :hour} -> :h
+        {given, _finest} -> given
+      end
+    end
+  end
+
+  defp trim_date(format, %Tempo{} = tempo) do
+    if time_only?(tempo) do
+      reconcile(nil, tempo)
+    else
+      finest = Enum.find([:day, :month, :year], &has_field?(tempo, &1))
+
+      case {format, finest} do
+        {_any, nil} -> reconcile(nil, tempo)
+        {:yMMMd, :month} -> :yMMM
+        {:yMMMd, :year} -> :y
+        {:yMMM, :year} -> :y
+        {given, _finest} -> given
+      end
+    end
+  end
+
+  # Which half of the clock a format names. Named widths name both.
+  defp axis(format) when format in [:short, :medium, :long, :full], do: :both
+  defp axis(format) when format in [:h, :hm, :hms], do: :time
+  defp axis(format) when format in [:y, :yMMM, :yMMMd], do: :date
+  defp axis(_format), do: :both
+
+  defp has_field?(%Tempo{time: time}, field), do: Keyword.has_key?(time, field)
 
   # A Tempo is date-only when its time kv list contains none of
   # :hour, :minute, :second. It is time-only when it contains
@@ -316,33 +412,14 @@ defmodule Tempo.Format do
     |> Map.put(:calendar, calendar || Calendrical.Gregorian)
   end
 
-  # Pick a default skeleton for single-value rendering.
-  defp with_default_format(options, %Tempo{} = tempo) do
-    case Keyword.has_key?(options, :format) do
-      true ->
-        options
-
-      false ->
-        {unit, _span} = Tempo.resolution(tempo)
-        Keyword.put(options, :format, default_format_for_unit(unit, tempo))
-    end
-  end
-
   defp default_format_for_unit(:year, _tempo), do: :y
   defp default_format_for_unit(:month, _tempo), do: :yMMM
   defp default_format_for_unit(:day, _tempo), do: :medium
 
-  # `:h` and `:hm` are *time-only* skeletons: they name an hour and a
-  # minute and nothing else. That is right for a value with no date,
-  # and wrong for one with a date, because `dispatch/2` sends anything
-  # carrying both to `Localize.DateTime`, where a skeleton with no date
-  # fields leaves the date half of the pattern empty — `2025-08-28T10:45`
-  # rendered as ": , 10:45 am".
-  #
-  # `:medium` names both halves and follows the components actually
-  # present, so it shows seconds for a second-resolution value and
-  # omits them for a minute-resolution one. It is therefore the right
-  # default at every resolution that has a date.
+  # `:h` and `:hm` are time-only skeletons. They are right for a value
+  # with no date and wrong for one that has both halves, where
+  # `:medium` names each and follows the components present — showing
+  # seconds for a second-resolution value and omitting them otherwise.
   defp default_format_for_unit(unit, tempo) when unit in [:hour, :minute] do
     if time_only?(tempo) do
       (unit == :hour && :h) || :hm
