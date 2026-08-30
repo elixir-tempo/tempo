@@ -11,9 +11,8 @@ This conceptual shift — *time as interval, not instant* — removes a surprisi
 ```elixir
 def deps do
   [
-    {:ex_tempo, "~> 1.1"},
-    # Optional but recommended - needed for iCalendar import. 3.2 is the
-    # first release with VAVAILABILITY (RFC 7953), which `available/2` needs.
+    {:ex_tempo, "~> 1.5"},
+    # Optional but recommended - needed for iCalendar import.
     {:ical, "~> 3.2"}
   ]
 end
