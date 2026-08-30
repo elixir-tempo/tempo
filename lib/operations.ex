@@ -1379,23 +1379,26 @@ defmodule Tempo.Operations do
   def equal?(a, b, opts \\ []) do
     case align(a, b, opts) do
       {:ok, {a_set, b_set}} ->
-        coalesced_a = IntervalSet.coalesce(a_set)
-        coalesced_b = IntervalSet.coalesce(b_set)
+        a_members = IntervalSet.to_list(IntervalSet.coalesce(a_set))
+        b_members = IntervalSet.to_list(IntervalSet.coalesce(b_set))
 
-        strip_units(IntervalSet.to_list(coalesced_a)) ==
-          strip_units(IntervalSet.to_list(coalesced_b))
+        length(a_members) == length(b_members) and
+          a_members |> Enum.zip(b_members) |> Enum.all?(&same_extent?/1)
 
       {:error, exception} ->
         raise exception
     end
   end
 
-  # Instant-set equality is about extents. A member that passed through
-  # a set operation unchanged keeps the iteration `:unit` a
-  # materialisation gave it (so `Enum` over a union still drills into its
-  # members) and its `:metadata`; neither is an extent, and the contract
-  # ignores metadata outright, so drop both before the struct comparison.
-  defp strip_units(intervals) when is_list(intervals) do
-    Enum.map(intervals, &%{&1 | unit: nil, metadata: %{}})
+  # Instant-set equality is about extents, so members compare by their
+  # endpoint *instants* — `compare_endpoints/2` projects through zones
+  # and offsets, making `09:00+05:30` equal `03:30Z`. Iteration `:unit`,
+  # `:metadata`, and the wall-clock representation are not extents; a
+  # struct comparison would resurrect all three.
+  defp same_extent?({%Interval{from: a_from, to: a_to}, %Interval{from: b_from, to: b_to}}) do
+    endpoint_same?(a_from, b_from) and endpoint_same?(a_to, b_to)
   end
+
+  defp endpoint_same?(%Tempo{} = a, %Tempo{} = b), do: Compare.compare_endpoints(a, b) == :same
+  defp endpoint_same?(a, b), do: a == b
 end

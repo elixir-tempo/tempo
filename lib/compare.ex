@@ -733,11 +733,22 @@ defmodule Tempo.Compare do
 
   defp explicit_offset_seconds(_extended, _shift), do: nil
 
+  @doc false
+  # The signed offset in seconds denoted by a parsed ISO 8601 shift
+  # list. Shared with `Tempo.to_date_time/1`'s offset-grounded
+  # conversion.
+  def offset_seconds(shift) when is_list(shift), do: shift_to_seconds(shift)
+
+  # The parsed shift carries its sign on the hour alone
+  # (`-05:30` is `[hour: -5, minute: 30]`), so the finer components
+  # inherit it: −05:30 is −(5 h 30 m), not −5 h + 30 m — the
+  # difference is real for half-hour zones (Newfoundland −03:30).
   defp shift_to_seconds(shift) do
     hour = shift_component(shift, :hour)
     minute = shift_component(shift, :minute)
     second = shift_component(shift, :second)
-    hour * 3600 + minute * 60 + second
+    sign = if hour < 0, do: -1, else: 1
+    sign * (abs(hour) * 3600 + minute * 60 + second)
   end
 
   # `Keyword.get/3` returns `any()`, so any arithmetic on its result

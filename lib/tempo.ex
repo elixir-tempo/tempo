@@ -2827,8 +2827,43 @@ defmodule Tempo do
     end
   end
 
+  # A value grounded by a UTC offset (`+10:00`; `Z` is offset zero)
+  # denotes an exact instant. Convert the wall clock to UTC and return
+  # the instant as an `Etc/UTC` DateTime — the same normalisation
+  # Elixir's `DateTime.from_iso8601/1` applies to offset strings.
+  # iCalendar `DATE-TIME` values commonly carry offsets rather than
+  # named zones, so this is the common third-party path.
+  def to_date_time(%Tempo{shift: shift} = tempo) when is_list(shift) do
+    with {:ok, naive} <- to_naive_date_time(tempo) do
+      utc_naive = NaiveDateTime.add(naive, -Compare.offset_seconds(shift), :second)
+
+      # `Etc/UTC` has no transitions, so `:ambiguous`/`:gap` cannot
+      # occur — but they are in `from_naive/2`'s contract, so convert
+      # any non-ok shape into the conversion error it would be.
+      case DateTime.from_naive(utc_naive, "Etc/UTC") do
+        {:ok, utc} ->
+          {:ok, utc}
+
+        _other ->
+          {:error,
+           ConversionError.exception(
+             value: tempo,
+             target: DateTime,
+             reason: "could not project the offset-grounded value to UTC"
+           )}
+      end
+    end
+  end
+
   def to_date_time(%Tempo{} = value) do
-    {:error, ConversionError.exception(value: value, target: DateTime)}
+    {:error,
+     ConversionError.exception(
+       value: value,
+       target: DateTime,
+       reason:
+         "a floating value (no zone or offset) does not denote an instant — " <>
+           "ground it with `Tempo.in_zone/2`, or parse it with a zone, offset, or `Z`"
+     )}
   end
 
   # Rebuild a `DateTime` from a wall-clock `NaiveDateTime` and a
@@ -3094,15 +3129,23 @@ defmodule Tempo do
     end
   end
 
-  def to_elixir(%Tempo{shift: nil} = tempo) do
+  # A grounded value — a named zone, or a UTC offset (`Z` included) —
+  # denotes an instant and converts to a `DateTime`; only floating
+  # values fall through to the Date/Time/NaiveDateTime cascade.
+  def to_elixir(%Tempo{extended: %{zone_id: zone_id}} = tempo)
+      when is_binary(zone_id) and zone_id != "" do
+    to_date_time(tempo)
+  end
+
+  def to_elixir(%Tempo{shift: shift} = tempo) when is_list(shift) do
+    to_date_time(tempo)
+  end
+
+  def to_elixir(%Tempo{} = tempo) do
     with {:error, %Tempo.ConversionError{target: Date}} <- to_date(tempo),
          {:error, %Tempo.ConversionError{target: Time}} <- to_time(tempo) do
       to_naive_date_time(tempo)
     end
-  end
-
-  def to_elixir(%Tempo{} = value) do
-    {:error, ConversionError.exception(value: value, target: DateTime)}
   end
 
   # The present (non-zero) components of an Elixir `Duration`, as the
@@ -4048,6 +4091,30 @@ defmodule Tempo do
     case Keyword.fetch(options, :skipping) do
       {:ok, busy} -> Math.shift_skipping(tempo, duration, busy)
       :error -> Math.add(tempo, duration)
+    end
+  end
+
+  # Every ISO 8601 duration arriving from outside is a string —
+  # iCalendar `DURATION`, `TRIGGER`, `REPEAT` — so accept the string
+  # and parse it here rather than at every call site. `"-PT30M"`
+  # (leading-sign form) parses to the negated duration.
+  def shift(%Tempo{} = tempo, duration_string, options) when is_binary(duration_string) do
+    case from_iso8601(duration_string) do
+      {:ok, %Duration{} = duration} ->
+        shift(tempo, duration, options)
+
+      {:ok, other} ->
+        {:error,
+         ConversionError.exception(
+           value: duration_string,
+           target: Duration,
+           reason:
+             "the string parsed as #{inspect(other)}, not a duration — " <>
+               "`Tempo.shift/2` takes an ISO 8601 duration such as \"PT30M\" or \"-P1D\""
+         )}
+
+      {:error, _} = error ->
+        error
     end
   end
 

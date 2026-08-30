@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+* `Tempo.to_elixir/1` and `to_date_time/1` convert offset-grounded values: a `Z` or `+10:00` value becomes the instant as an `Etc/UTC` `DateTime` (matching `DateTime.from_iso8601/1`'s normalisation), a zoned value keeps its zone instead of degrading to a `NaiveDateTime`, and a floating value's refusal now says why and points at `Tempo.in_zone/2`.
+
+* A negative UTC offset with minutes (`-03:30`) projects as −(3 h 30 m), not −3 h + 30 m — comparisons and conversions for half-hour zones west of Greenwich were off by an hour.
+
+* `Tempo.equal?/2` compares member extents by instant, so the same moment expressed at different offsets (`09:00+05:30` vs `03:30Z`) is equal, agreeing with `relation/2`.
+
+### Added
+
+* `Tempo.shift/2,3` accepts an ISO 8601 duration string (`Tempo.shift(t, "-PT30M")`) — iCalendar `DURATION`/`TRIGGER`/`REPEAT` values shift without a parse at every call site; a string that parses to a non-duration is refused with direction.
+
 ## [v1.5.2] — 2026-08-26
 
 ### Fixed
