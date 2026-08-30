@@ -3097,7 +3097,8 @@ defmodule Tempo do
   ### Returns
 
   * `{:ok, native}` where `native` is an Elixir `Duration`, `Date`,
-    `Time`, or `NaiveDateTime`.
+    `Time`, `NaiveDateTime`, or — for a grounded value (a zone, an
+    offset, or `Z`) — a `DateTime`.
 
   * `{:error, t:Tempo.ConversionError.t/0}` when the value cannot be
     represented by a single native type.
@@ -3112,7 +3113,7 @@ defmodule Tempo do
 
   """
   @spec to_elixir(t() | Duration.t()) ::
-          {:ok, Elixir.Duration.t() | Date.t() | Time.t() | NaiveDateTime.t()}
+          {:ok, Elixir.Duration.t() | Date.t() | Time.t() | NaiveDateTime.t() | DateTime.t()}
           | {:error, Tempo.ConversionError.t()}
   def to_elixir(%Duration{time: time} = duration) do
     case Enum.find(time, fn {unit, _value} -> unit in [:day_of_year, :day_of_week] end) do
