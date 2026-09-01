@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+* RRULE `BYMONTH` expansion no longer lets DTSTART's day-of-month filter occurrences: when `BYMONTHDAY`/`BYDAY` determine the day, results are identical from any DTSTART (a rule anchored on the 31st no longer returns leap-years-only or empty sets), and when nothing later sets the day, the anchor's *original* day clamps to each occurrence's month — per occurrence, leap-aware, in every calendar (Feb 29 anchors restore the 29th in leap years; Hebrew day-30 anchors track each year's month length; leap months drop in common years).
+
 ## [v1.5.3] — 2026-08-30
 
 ### Fixed

@@ -80,18 +80,30 @@ defmodule Tempo.RRule.Selection do
 
   """
   @spec apply(Interval.t(), Tempo.t() | nil, atom()) :: [Interval.t()]
-  def apply(candidate, repeat_rule, freq)
+  def apply(candidate, repeat_rule, freq, options \\ [])
 
-  def apply(%Interval{} = candidate, nil, _freq), do: [candidate]
+  def apply(%Interval{} = candidate, nil, _freq, _options), do: [candidate]
 
-  def apply(%Interval{} = candidate, %Tempo{time: [selection: selection]}, freq) do
+  def apply(%Interval{} = candidate, %Tempo{time: [selection: selection]}, freq, options) do
+    # The recurrence's *original* start day rides along as a tagged
+    # entry: cadence stepping clamps the candidate's day (Feb 29 →
+    # Feb 28 in a common year), and an expansion that repositions the
+    # month must clamp from the day the rule was anchored on, per
+    # occurrence — not from an intermediate clamp. Handlers that
+    # don't consume the tag pass it through.
+    selection =
+      case Keyword.get(options, :origin_day) do
+        day when is_integer(day) -> selection ++ [origin_day: day]
+        _other -> selection
+      end
+
     apply_selection(candidate, selection, freq)
   end
 
   # No selection shape we recognise — pass through rather than
   # crash. Future phases replace this catch-all with a specific
   # error once every shape is accounted for.
-  def apply(%Interval{} = candidate, _, _freq), do: [candidate]
+  def apply(%Interval{} = candidate, _, _freq, _options), do: [candidate]
 
   ## ------------------------------------------------------------
   ## Selection dispatch
@@ -167,9 +179,18 @@ defmodule Tempo.RRule.Selection do
   # occurrence in each listed month of each year; finer FREQs
   # already iterate at finer-than-year granularity, so they
   # just filter.
-  defp apply_entry({:month, months}, candidates, :year, _selection, _wkst) do
+  defp apply_entry({:month, months}, candidates, :year, selection, _wkst) do
+    # RFC 5545 §3.3.10: the BY* parts apply in order BYMONTH,
+    # BYWEEKNO, BYYEARDAY, BYMONTHDAY, BYDAY — so when any later
+    # part determines the day, the day this expansion carries from
+    # DTSTART is provisional and must not validity-filter the month
+    # (a DTSTART on the 31st must still produce a November for
+    # `BYDAY=4TH;BYMONTH=11` to select within).
+    provisional_day? = day_determined_by_later_part?(selection)
+    origin_day = Keyword.get(selection, :origin_day)
+
     Enum.flat_map(candidates, fn candidate ->
-      expand_candidate_months(candidate, List.wrap(months))
+      expand_candidate_months(candidate, List.wrap(months), provisional_day?, origin_day)
     end)
   end
 
@@ -319,6 +340,16 @@ defmodule Tempo.RRule.Selection do
   defp apply_entry(_entry, candidates, _freq, _selection, _wkst), do: candidates
 
   # BYDAY-no-ordinal role dispatcher (RFC §3.3.10 notes).
+  defp day_determined_by_later_part?(selection) do
+    Enum.any?(selection, fn
+      {token, _value} ->
+        token in [:day, :byday, :day_of_week, :day_of_year, :nearest_weekday, :or_day]
+
+      _other ->
+        false
+    end)
+  end
+
   defp no_ordinal_byday_role(:month, selection) do
     if Keyword.has_key?(selection, :day), do: :limit, else: {:expand, :month}
   end
@@ -713,17 +744,45 @@ defmodule Tempo.RRule.Selection do
   ## ------------------------------------------------------------
 
   # BYMONTH with FREQ=YEARLY: for each candidate, produce one
-  # occurrence per listed month at the candidate's day-of-month.
-  # Invalid dates (e.g. Feb 30) are silently dropped per the
-  # RFC's "invalid dates are ignored" semantic.
-  defp expand_candidate_months(%Interval{from: %Tempo{calendar: calendar}} = candidate, months) do
+  # occurrence per listed month. When a later BY-part will set the
+  # day, carry day 1 as a placeholder — valid in every month of
+  # every calendar, and overwritten by the later expansion — so
+  # DTSTART's day-of-month cannot drop a month it has no business
+  # filtering. When no later part sets the day, DTSTART's day IS
+  # the day (it fills the components the rule leaves unstated) and
+  # a day past the month's end **clamps** to the month's last day,
+  # per occurrence — the same clamping rule as Tempo's month
+  # arithmetic, so February yields the 28th in common years and the
+  # 29th in leap years. A month absent from the year entirely (a
+  # leap month in a common year) drops — there is nothing to clamp
+  # to.
+  defp expand_candidate_months(
+         %Interval{from: %Tempo{calendar: calendar}} = candidate,
+         months,
+         provisional_day?,
+         origin_day
+       ) do
+    year = candidate.from.time[:year]
+    months_in_year = calendar.months_in_year(year)
+
     months
     |> Enum.map(fn month ->
-      year = candidate.from.time[:year]
-      day = candidate.from.time[:day]
+      day =
+        cond do
+          provisional_day? -> 1
+          is_integer(origin_day) -> origin_day
+          true -> candidate.from.time[:day]
+        end
 
-      if valid_date?(calendar, year, month, day) do
-        swap_date(candidate, year, month, day)
+      cond do
+        not (is_integer(month) and month >= 1 and month <= months_in_year) ->
+          nil
+
+        not is_integer(day) ->
+          nil
+
+        true ->
+          swap_date(candidate, year, month, min(day, calendar.days_in_month(year, month)))
       end
     end)
     |> Enum.reject(&is_nil/1)
@@ -925,14 +984,6 @@ defmodule Tempo.RRule.Selection do
       n > 0 and n <= max -> n
       n < 0 and -n <= max -> max + n + 1
       true -> nil
-    end
-  end
-
-  # Validate a {year, month, day} in the given calendar.
-  defp valid_date?(calendar, year, month, day) do
-    case Date.new(year, month, day, calendar) do
-      {:ok, _} -> true
-      _ -> false
     end
   end
 

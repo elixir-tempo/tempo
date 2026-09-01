@@ -4765,18 +4765,31 @@ defmodule Tempo do
   end
 
   defp selection_fn(
-         %Tempo.Interval{repeat_rule: %Tempo{} = rule, metadata: metadata},
+         %Tempo.Interval{repeat_rule: %Tempo{} = rule, metadata: metadata} = interval,
          %Tempo.Duration{} = cadence
        ) do
     freq = freq_of(cadence)
     resize? = not explicit_occurrence_span?(metadata)
+    origin_day = origin_day_of(interval)
 
     fn candidate ->
       candidate
-      |> Selection.apply(rule, freq)
+      |> Selection.apply(rule, freq, origin_day: origin_day)
       |> resize_selected_occurrences(resize?)
     end
   end
+
+  # The day the recurrence was anchored on — DTSTART's day-of-month —
+  # which cadence stepping may have clamped away on individual
+  # candidates (Feb 29 anchors step to Feb 28 in common years).
+  defp origin_day_of(%Tempo.Interval{from: %Tempo{time: time}}) do
+    case Keyword.get(time, :day) do
+      day when is_integer(day) -> day
+      _other -> nil
+    end
+  end
+
+  defp origin_day_of(_interval), do: nil
 
   # A selection picks *points* at its own resolution — "the 15th"
   # is the day the 15th, not the month it sits in. The candidate the
