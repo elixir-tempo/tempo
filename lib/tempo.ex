@@ -5005,10 +5005,23 @@ defmodule Tempo do
     # cartesian-product combination. Each of those is a single
     # Tempo we can pass through the single-interval path. Collect
     # the intervals, then build a coalesced IntervalSet.
+    #
+    # A negative component under a set-valued container
+    # (`2026Y{1..12}M-1D`) cannot resolve at parse time — there is
+    # no single month for `-1D` to count back from — so it survives
+    # into the members. Each member's context is concrete now:
+    # re-validate, which resolves the negative against that member's
+    # own month or year (leap-aware, per ISO 8601-2 §4.4.1), exactly
+    # as a scalar literal resolves at parse.
     intervals =
       tempo
       |> Enum.to_list()
-      |> Enum.map(&to_interval/1)
+      |> Enum.map(fn member ->
+        case resolve_member_negatives(member) do
+          {:ok, %Tempo{} = resolved} -> to_interval(resolved)
+          {:error, _} = err -> err
+        end
+      end)
 
     case Enum.find(intervals, &match?({:error, _}, &1)) do
       nil ->
@@ -5018,6 +5031,23 @@ defmodule Tempo do
 
       {:error, _} = err ->
         err
+    end
+  end
+
+  # Years keep a negative sign (BC); any other negative integer
+  # component is an unresolved count-from-the-end that the member's
+  # now-concrete context can resolve.
+  defp resolve_member_negatives(%Tempo{time: time} = member) do
+    negative? =
+      Enum.any?(time, fn
+        {:year, _value} -> false
+        {_unit, value} -> is_integer(value) and value < 0
+      end)
+
+    if negative? do
+      Validation.validate(member)
+    else
+      {:ok, member}
     end
   end
 

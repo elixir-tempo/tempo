@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+* A negative component under a set-valued container (`~o"2026Y{1..12}M-1D"`, the last day of each month) resolves against each expanded member's own context — leap-aware, per ISO 8601-2 §4.4.1 — instead of leaking an unresolved `-1` into the materialised intervals. The literal, the recurrence (`R12/2026-01-01/P1M/FL-1DN`), and `Tempo.select/2` now agree.
+
 ## [v1.5.4] — 2026-09-01
 
 ### Fixed
