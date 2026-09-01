@@ -1,14 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [v1.5.4] — 2026-09-01
 
 ### Fixed
 
 * A negative component under a set-valued container (`~o"2026Y{1..12}M-1D"`, the last day of each month) resolves against each expanded member's own context — leap-aware, per ISO 8601-2 §4.4.1 — instead of leaking an unresolved `-1` into the materialised intervals. The literal, the recurrence (`R12/2026-01-01/P1M/FL-1DN`), and `Tempo.select/2` now agree.
-
-## [v1.5.4] — 2026-09-01
-
-### Fixed
 
 * RRULE `BYMONTH` expansion no longer lets DTSTART's day-of-month filter occurrences: when `BYMONTHDAY`/`BYDAY` determine the day, results are identical from any DTSTART (a rule anchored on the 31st no longer returns leap-years-only or empty sets), and when nothing later sets the day, the anchor's *original* day clamps to each occurrence's month — per occurrence, leap-aware, in every calendar (Feb 29 anchors restore the 29th in leap years; Hebrew day-30 anchors track each year's month length; leap months drop in common years).
 
