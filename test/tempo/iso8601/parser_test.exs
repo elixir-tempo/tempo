@@ -681,8 +681,11 @@ defmodule Tempo.Iso8601.Parser.Test do
   end
 
   test "Integer sets with negative bounds" do
+    # An hour's extent is fixed, so a count-from-the-end bound resolves
+    # at parse just as the scalar form does (`T-1M` is minute 59) —
+    # `{-4..-1}H` is the last four hours of the day.
     assert Tempo.from_iso8601("T{-4..-1}H") ==
-             {:ok, %Tempo{time: [hour: [-4..-1]], shift: nil, calendar: Calendrical.Gregorian}}
+             {:ok, %Tempo{time: [hour: [20..23]], shift: nil, calendar: Calendrical.Gregorian}}
   end
 
   test "Ranges must have the same time unit keys" do

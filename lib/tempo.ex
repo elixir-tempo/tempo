@@ -4991,10 +4991,27 @@ defmodule Tempo do
 
   defp multi_slot?({_unit, values}) when is_list(values) do
     case values do
-      [] -> false
-      [%Range{first: f, last: l, step: s}] -> Enum.count(f..l//s) > 1
-      [_single] -> false
-      _ -> true
+      [] ->
+        false
+
+      # A count-from-the-end bound that survived parsing could not be
+      # resolved there — a coarser component is itself set-valued, so
+      # this unit's extent is not yet known. Counting it now would
+      # read the inverted range as empty and send a value that needs
+      # expansion down the single-interval path, where the unresolved
+      # bound reaches calendar arithmetic. Expansion resolves it
+      # against each concrete context instead.
+      [%Range{first: first, last: last}] when first < 0 or last < 0 ->
+        true
+
+      [%Range{first: first, last: last, step: step}] ->
+        Enum.count(first..last//step) > 1
+
+      [_single] ->
+        false
+
+      _ ->
+        true
     end
   end
 
@@ -5017,7 +5034,7 @@ defmodule Tempo do
       tempo
       |> expand_members()
       |> Enum.map(fn member ->
-        case resolve_member_negatives(member) do
+        case normalise_member(member) do
           {:ok, %Tempo{} = resolved} -> to_interval(resolved)
           {:error, _} = err -> err
         end
@@ -5046,21 +5063,22 @@ defmodule Tempo do
     end
   end
 
-  # Years keep a negative sign (BC); any other negative integer
-  # component is an unresolved count-from-the-end that the member's
-  # now-concrete context can resolve.
-  defp resolve_member_negatives(%Tempo{time: time} = member) do
-    negative? =
-      Enum.any?(time, fn
-        {:year, _value} -> false
-        {_unit, value} -> is_integer(value) and value < 0
-      end)
+  # An expanded member is a raw combination of component values, in
+  # whatever axis the source value used. The parser normalises such a
+  # value on its way in — a week-and-weekday becomes a calendar date,
+  # an ordinal day becomes a month and day — and `to_interval/1`
+  # expects that normalised form, so each member takes the same route
+  # through the validator. It also resolves any count-from-the-end
+  # component against the member's now-concrete context.
+  # The member's *own* calendar decides what its components mean —
+  # validating a Hebrew member against the default Gregorian calendar
+  # would reject its thirteenth month.
+  defp normalise_member(%Tempo{calendar: calendar} = member) when not is_nil(calendar) do
+    Validation.validate(member, calendar)
+  end
 
-    if negative? do
-      Validation.validate(member)
-    else
-      {:ok, member}
-    end
+  defp normalise_member(%Tempo{} = member) do
+    Validation.validate(member)
   end
 
   defp members_to_interval_set(members) do

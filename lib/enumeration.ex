@@ -432,6 +432,18 @@ defmodule Tempo.Enumeration do
   defp resolve_bound(bound, %Range{last: valid_last}) when bound < 0, do: valid_last + 1 + bound
   defp resolve_bound(bound, _valid), do: bound
 
+  # A count-from-the-end bound must already have been resolved — by
+  # the calendar for date units, by the unit's fixed extent for clock
+  # units, both in `Tempo.Validation`. One surviving here would
+  # enumerate to nothing, turning a wrong answer into an empty one
+  # silently, so fail loudly instead.
+  defp flatten_integers(%Range{first: first, last: last} = range)
+       when first < 0 or last < 0 do
+    raise ArgumentError,
+          "Unresolved count-from-the-end bound #{inspect(range)} reached expansion. " <>
+            "This is a bug in Tempo's resolution of set-valued values; please report it."
+  end
+
   # `Enum.to_list/1` respects the range's step, so a descending range
   # enumerates descending and a range whose step cannot reach its end
   # is empty.

@@ -70,6 +70,55 @@ defmodule Tempo.Iso8601.Unit do
   end
 
   @doc """
+  The range of values a unit can take, where that range is fixed
+  rather than calendar-dependent.
+
+  Clock units and the day-of-week have the same extent in every
+  context — an hour is always `0..23`, a minute `0..59` — so a
+  negative bound on one of them (`{0..-1}M`, "every minute of the
+  hour") resolves against this range. Units whose extent depends on
+  the date (`:month`, `:day`, `:week`, `:day_of_year`) return
+  `:unknown`; those resolve against a concrete year and month
+  through `Tempo.Validation`, which is the only thing that knows the
+  calendar's answer.
+
+  ### Arguments
+
+  * `unit` is a time unit atom.
+
+  * `calendar` is the calendar module, consulted for the length of
+    the week.
+
+  ### Returns
+
+  * `{:ok, range}` when the unit's extent is fixed.
+
+  * `:unknown` when the extent depends on the date.
+
+  ### Examples
+
+      iex> Tempo.Iso8601.Unit.value_range(:minute, Calendrical.Gregorian)
+      {:ok, 0..59}
+
+      iex> Tempo.Iso8601.Unit.value_range(:month, Calendrical.Gregorian)
+      :unknown
+
+  """
+  @spec value_range(atom(), module()) :: {:ok, Range.t()} | :unknown
+  def value_range(:day_of_week, calendar), do: {:ok, 1..calendar.days_in_week()}
+
+  def value_range(unit, _calendar) do
+    Enum.find_value(@unit_after, :unknown, fn
+      {_parent, {^unit, %Range{first: first, last: last} = range}}
+      when first >= 0 and last >= 0 ->
+        {:ok, range}
+
+      _other ->
+        false
+    end)
+  end
+
+  @doc """
   Sorts a list of time units.
 
   A list of time units is the underlying representation

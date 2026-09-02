@@ -4,6 +4,12 @@
 
 ### Fixed
 
+* Ranges now expand in *every* component position, not only the date ones: a set-valued clock component (`T{9..10}H{0..-1}M`, "every minute of two hours") expanded to nothing, because a count-from-the-end bound on a unit of fixed extent — the clock units and the day-of-week — was never resolved and an inverted range enumerates empty. Those bounds resolve at validation now, consistently with the units whose extent the calendar decides, so `T{-4..-1}H` is the last four hours of the day rather than an unresolved range.
+
+* A week-and-weekday or ordinal-day value with ranges (`{1..3}W{1..-1}K`, `{1..-1}O`) expands to real calendar dates; expanded members take the same normalisation route through the validator that the parser applies, in the member's own calendar. `{1..-1}O` previously raised a `KeyError`.
+
+* A set that resolves to a single member collapses to that member (`{12..-1}M` is `12M`), so calendar arithmetic receives a concrete component: `2020Y{12..-1}M1D` and `2020Y{12..-1}M{1..-1}D` raised a `FunctionClauseError` in `days_in_month/3`.
+
 * Any combination of ranges, in any component position or positions, now expands: `~o"{2000..2010}Y{1..-1}M{1..-1}D"` — open ranges in three positions at once — yields its 4018 days instead of looping forever. Each component resolves against its already-concrete coarser units, so a month range follows the year's own month count (13 in a Hebrew leap year) and a day range the month's own length (29 in a leap February, 28 otherwise). `Tempo.to_interval/1` and the `Enumerable` protocol expand identically.
 
 * A day set under a month whose length is not yet known — because the year is set-valued and still to be expanded, or absent — is bounded by the month's maximum length across years rather than refused: `{2020,2021}Y2M{1..-1}D` resolves (29 days in 2020, 28 in 2021), and yearless `2M{1..-1}D` is now consistent with the eleven other months and with `2M29D`. Days that exist in no year (`2M30D`, `2M{28..30}D`) are still rejected, as is a day set overflowing a concrete month (`2026Y9M{28..31}D`).

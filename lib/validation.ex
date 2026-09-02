@@ -8,6 +8,7 @@ defmodule Tempo.Validation do
   alias Tempo.IntervalEndpointsError
   alias Tempo.InvalidDateError
   alias Tempo.InvalidTimeError
+  alias Tempo.Iso8601.Unit
   alias Tempo.Microsecond
   alias Tempo.ParseError
   alias Tempo.TimeZoneDatabase
@@ -31,9 +32,9 @@ defmodule Tempo.Validation do
   def validate(%Tempo{time: units} = tempo, calendar) do
     with :ok <- validate_leap_second(units, tempo),
          :ok <- validate_time_shift(tempo.shift) do
-      case resolve(units, calendar) do
+      case units |> resolve_fixed_extent_negatives(calendar) |> resolve(calendar) do
         {:error, reason} -> {:error, reason}
-        other -> {:ok, %{tempo | time: other}}
+        other -> {:ok, %{tempo | time: collapse_single_member_sets(other)}}
       end
     end
   end
@@ -78,6 +79,60 @@ defmodule Tempo.Validation do
   def validate(:undefined, _calendar) do
     {:ok, :undefined}
   end
+
+  # A set with one member denotes exactly what that member denotes, so
+  # collapse it to the bare value: `{12..12}M` becomes `12M`. Calendar
+  # arithmetic takes concrete components — `days_in_month(2020, 12)`,
+  # not `days_in_month(2020, [12..12])` — and a value written as a
+  # one-member set is otherwise indistinguishable from one written
+  # plainly.
+  defp collapse_single_member_sets(units) when is_list(units) do
+    Enum.map(units, fn
+      {unit, [value]} when is_integer(value) -> {unit, value}
+      {unit, [first..first//_step]} -> {unit, first}
+      {unit, first..first//_step} -> {unit, first}
+      other -> other
+    end)
+  end
+
+  defp collapse_single_member_sets(units), do: units
+
+  # A count-from-the-end bound on a unit whose extent is fixed — the
+  # clock units and the day-of-week — can always be resolved, because
+  # nothing about the date changes how many minutes an hour has.
+  # Resolving them here keeps them consistent with the units whose
+  # extent the calendar decides (`{1..-1}M` as months becomes
+  # `{1..12}M`), so a set-valued clock component is recognised as
+  # set-valued rather than surviving as an inverted range that would
+  # enumerate to nothing.
+  defp resolve_fixed_extent_negatives(units, calendar) when is_list(units) do
+    Enum.map(units, fn
+      {unit, value} -> {unit, resolve_fixed_extent(value, unit, calendar)}
+      other -> other
+    end)
+  end
+
+  defp resolve_fixed_extent_negatives(units, _calendar), do: units
+
+  defp resolve_fixed_extent(%Range{first: first, last: last} = range, unit, calendar)
+       when first < 0 or last < 0 do
+    case Unit.value_range(unit, calendar) do
+      {:ok, valid} ->
+        %{range | first: from_end(first, valid), last: from_end(last, valid)}
+
+      :unknown ->
+        range
+    end
+  end
+
+  defp resolve_fixed_extent(value, unit, calendar) when is_list(value) do
+    Enum.map(value, &resolve_fixed_extent(&1, unit, calendar))
+  end
+
+  defp resolve_fixed_extent(value, _unit, _calendar), do: value
+
+  defp from_end(bound, %Range{last: last}) when bound < 0, do: last + 1 + bound
+  defp from_end(bound, _valid), do: bound
 
   # An endpoint validates against its own calendar when it carries one —
   # a per-endpoint IXDTF `u-ca` suffix can make one endpoint of an
