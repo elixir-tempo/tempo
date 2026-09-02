@@ -401,21 +401,27 @@ defmodule Tempo.Validation do
     end
   end
 
-  def resolve([{:month, month}, {:day, days} | _rest], calendar)
-      when is_integer(month) and is_list(days) do
-    with days_in_month when is_integer(days_in_month) <- calendar.days_in_month(month),
-         {:ok, days} <- conform(days, 1..days_in_month) do
-      [{:month, month}, {:day, days}]
-    else
-      {:ambiguous, _values} ->
-        {:error,
-         InvalidDateError.exception(
-           month: month,
-           reason: "Cannot resolve days in month #{month} without knowing the year"
-         )}
+  # A day *set* under a month whose length is not yet known — because
+  # the year is absent, or set-valued and still to be expanded — is
+  # bounded by the month's maximum length across years, exactly as a
+  # single day is above: `2M{1..-1}D` is possible (February has a 29th
+  # in some year) while `2M{30..31}D` is not. Which days actually
+  # exist is settled per member during expansion, where the year is
+  # concrete — so this must bound rather than refuse, or
+  # `{2020,2021}Y2M{1..-1}D` could never resolve at all.
+  def resolve([{:month, month}, {:day, days} | rest], calendar)
+      when is_integer(month) and (is_list(days) or is_struct(days, Range)) do
+    case max_day_in_month(calendar, month) do
+      {:ok, max_day} ->
+        with {:ok, days} <- conform(days, 1..max_day),
+             rest when is_list(rest) <- resolve(rest, calendar) do
+          [{:month, month}, {:day, days} | rest]
+        end
 
-      other ->
-        other
+      :unknown ->
+        with rest when is_list(rest) <- resolve(rest, calendar) do
+          [{:month, month}, {:day, days} | rest]
+        end
     end
   end
 

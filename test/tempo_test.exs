@@ -26,10 +26,14 @@ defmodule TempoTest do
     assert Tempo.from_iso8601("4M{1..-1}D") == {:ok, ~o"4M{1..30}D"}
     assert Tempo.from_iso8601("1M{1..-1}D") == {:ok, ~o"1M{1..31}D"}
 
-    assert {:error, %Tempo.InvalidDateError{month: 2} = e} =
-             Tempo.from_iso8601("2M{1..-1}D")
+    # February's length depends on the year, so a yearless day set is
+    # bounded by the days it can have in *some* year — the same rule
+    # `2M29D` (accepted) and `2M30D` (rejected) already follow. Which
+    # days a particular February actually has is settled when the
+    # value is anchored or expanded against a concrete year.
+    assert Tempo.from_iso8601("2M{1..-1}D") == {:ok, ~o"2M{1..29}D"}
 
-    assert Exception.message(e) =~ "Cannot resolve days in month 2"
+    assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("2M{28..30}D")
   end
 
   # 5.4.2 Group Example 8

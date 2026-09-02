@@ -65,7 +65,59 @@ defimpl Enumerable, for: Tempo do
   end
 
   @impl Enumerable
-  def reduce(enum, {:cont, acc}, fun) do
+  def reduce(%Tempo{} = tempo, {:cont, _acc} = acc, fun) do
+    # Any combination of ranges in any positions expands as a
+    # cartesian product whose components resolve against their
+    # concrete ancestors — the odometer's backtracking cannot
+    # converge on several nested open ranges. Shapes the expander
+    # does not cover (masks, groups, `:any`, selections) keep the
+    # odometer walk below.
+    case Enumeration.expand(tempo) do
+      {:ok, members} -> reduce_members(members, acc, fun)
+      :not_expandable -> reduce_odometer(tempo, acc, fun)
+    end
+  end
+
+  def reduce(enum, acc, fun), do: reduce_odometer(enum, acc, fun)
+
+  # Emit pre-expanded members in time order, applying the same
+  # DST zone reading each odometer value gets.
+  defp reduce_members(_members, {:halt, acc}, _fun), do: {:halted, acc}
+
+  defp reduce_members(members, {:suspend, acc}, fun),
+    do: {:suspended, acc, &reduce_members(members, &1, fun)}
+
+  defp reduce_members([], {:cont, acc}, _fun), do: {:done, acc}
+
+  defp reduce_members([member | rest], {:cont, acc}, fun) do
+    case Zone.zone_status(member) do
+      :gap ->
+        reduce_members(rest, {:cont, acc}, fun)
+
+      {:ambiguous, first_shift, second_shift} ->
+        emit_members(
+          [%{member | shift: first_shift}, %{member | shift: second_shift}],
+          rest,
+          acc,
+          fun
+        )
+
+      :ok ->
+        reduce_members(rest, fun.(member, acc), fun)
+    end
+  end
+
+  defp emit_members([], rest, acc, fun), do: reduce_members(rest, {:cont, acc}, fun)
+
+  defp emit_members([value | values], rest, acc, fun) do
+    case fun.(value, acc) do
+      {:cont, acc2} -> emit_members(values, rest, acc2, fun)
+      {:halt, acc2} -> {:halted, acc2}
+      {:suspend, acc2} -> {:suspended, acc2, &emit_members(values, rest, &1, fun)}
+    end
+  end
+
+  defp reduce_odometer(enum, {:cont, acc}, fun) do
     enum = make_enum(enum)
 
     case Enumeration.next(enum) do
@@ -79,7 +131,7 @@ defimpl Enumerable, for: Tempo do
           # Wall clock never shows this moment (DST spring-forward):
           # skip and advance.
           :gap ->
-            reduce(next, {:cont, acc}, fun)
+            reduce_odometer(next, {:cont, acc}, fun)
 
           # Wall clock shows this moment twice (DST fall-back): emit
           # both occurrences, distinguished by their `:shift` — first
@@ -97,23 +149,23 @@ defimpl Enumerable, for: Tempo do
             )
 
           :ok ->
-            reduce(next, fun.(tempo, acc), fun)
+            reduce_odometer(next, fun.(tempo, acc), fun)
         end
     end
   end
 
-  def reduce(_enum, {:halt, acc}, _fun) do
+  defp reduce_odometer(_enum, {:halt, acc}, _fun) do
     {:halted, acc}
   end
 
-  def reduce(enum, {:suspend, acc}, fun) do
-    {:suspended, acc, &reduce(enum, &1, fun)}
+  defp reduce_odometer(enum, {:suspend, acc}, fun) do
+    {:suspended, acc, &reduce_odometer(enum, &1, fun)}
   end
 
   # Apply `fun` to each pending value (typically the two occurrences
   # of a DST fold), threading the accumulator, then continue normal
   # iteration from `next`.
-  defp emit_values([], next, acc, fun), do: reduce(next, {:cont, acc}, fun)
+  defp emit_values([], next, acc, fun), do: reduce_odometer(next, {:cont, acc}, fun)
 
   defp emit_values([value | rest], next, acc, fun) do
     case fun.(value, acc) do

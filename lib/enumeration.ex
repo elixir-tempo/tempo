@@ -322,6 +322,123 @@ defmodule Tempo.Enumeration do
     [h | collect(t)]
   end
 
+  @doc false
+  # Cartesian expansion of a value whose components are concrete
+  # integers, ranges, or lists of either — `{2000..2010}Y{1..-1}M{1..-1}D`
+  # and any other combination of ranges in any position or positions.
+  #
+  # The odometer in `next/1` walks one component at a time and resolves
+  # an open range (`1..-1`) by backtracking into the previous reading;
+  # with several such ranges nested that backtrack does not converge.
+  # This expander sidesteps the question: it walks the components
+  # coarse-to-fine, and because every coarser component is already
+  # concrete at each step, each range or negative resolves against a
+  # *known* context through `Validation.validate/2` — the same
+  # calendar-aware resolver a scalar literal uses. So `1..-1` months is
+  # 12 in a Gregorian year and 13 in a Hebrew leap year, `1..-1` days is
+  # 28, 29, 30 or 31 according to the month it lands in, and no unit's
+  # length is ever assumed.
+  #
+  # Returns `{:ok, members}` with one concrete `%Tempo{}` per
+  # combination in time order, or `:not_expandable` for values the
+  # odometer must still handle (masks, groups, `:any`, continuations,
+  # selections).
+  def expand(%Tempo{time: time, calendar: calendar} = tempo) do
+    if expandable?(time) do
+      {:ok, expand_components(time, [], tempo, calendar)}
+    else
+      :not_expandable
+    end
+  end
+
+  # Expandable when every component is a plain integer, an annotated
+  # integer (`{value, options}` — a margin of error), a range, or a
+  # list of those, and at least one component is set-valued. A single
+  # concrete value has nothing to expand and keeps the implicit
+  # enumeration path.
+  defp expandable?(time) do
+    Enum.all?(time, &finite_component?/1) and Enum.any?(time, &set_valued?/1)
+  end
+
+  defp finite_component?({_unit, value}), do: finite_value?(value)
+
+  defp finite_value?(value) when is_integer(value), do: true
+  defp finite_value?(%Range{}), do: true
+  defp finite_value?({value, options}) when is_integer(value) and is_list(options), do: true
+  defp finite_value?(value) when is_list(value), do: Enum.all?(value, &finite_value?/1)
+  defp finite_value?(_other), do: false
+
+  defp set_valued?({_unit, %Range{}}), do: true
+  defp set_valued?({_unit, value}) when is_list(value), do: true
+  defp set_valued?(_component), do: false
+
+  defp expand_components([], acc, tempo, _calendar) do
+    [%{tempo | time: Enum.reverse(acc)}]
+  end
+
+  defp expand_components([{unit, value} | rest], acc, tempo, calendar) do
+    ancestors = Enum.reverse(acc)
+
+    value
+    |> raw_candidates()
+    |> Enum.flat_map(&resolve_candidate(unit, &1, ancestors, calendar))
+    |> Enum.flat_map(&expand_components(rest, [{unit, &1} | acc], tempo, calendar))
+  end
+
+  defp raw_candidates(value) when is_list(value), do: Enum.flat_map(value, &raw_candidates/1)
+  defp raw_candidates(value), do: [value]
+
+  # Resolve one candidate against its concrete ancestors. A range or a
+  # negative resolves to this context's real values; a value the
+  # context cannot hold is not an occurrence and drops out — the set
+  # semantics ISO 8601-2 and RFC 5545 share ("invalid dates are
+  # ignored"), so `{28..31}D` over January and February is 31 days
+  # then 1, not four days then four invalid ones.
+  defp resolve_candidate(unit, raw, ancestors, calendar) do
+    partial = %Tempo{time: ancestors ++ [{unit, raw}], calendar: calendar}
+
+    case Validation.validate(partial, calendar) do
+      {:ok, %Tempo{time: validated}} ->
+        validated |> Keyword.fetch!(unit) |> flatten_integers()
+
+      # The validator names the range this unit can hold in this
+      # context (12 months in a common Hebrew year, 28 days in a
+      # non-leap February). Clip an overflowing range to it rather
+      # than discarding the whole range.
+      {:error, %Tempo.InvalidDateError{valid_range: %Range{} = valid}} when is_struct(raw, Range) ->
+        clip_range(raw, valid)
+
+      {:error, _reason} ->
+        []
+    end
+  end
+
+  # Clip to the range the unit can hold in this context, honouring the
+  # range's own direction: a descending range (`{5..1}`) clips at the
+  # opposite ends from an ascending one, and either may be emptied by
+  # the clip.
+  defp clip_range(%Range{first: first, last: last, step: step}, %Range{} = valid) do
+    first = resolve_bound(first, valid)
+    last = resolve_bound(last, valid)
+
+    if step > 0 do
+      max(first, valid.first)..min(last, valid.last)//step
+    else
+      min(first, valid.last)..max(last, valid.first)//step
+    end
+    |> flatten_integers()
+  end
+
+  defp resolve_bound(bound, %Range{last: valid_last}) when bound < 0, do: valid_last + 1 + bound
+  defp resolve_bound(bound, _valid), do: bound
+
+  # `Enum.to_list/1` respects the range's step, so a descending range
+  # enumerates descending and a range whose step cannot reach its end
+  # is empty.
+  defp flatten_integers(%Range{} = range), do: Enum.to_list(range)
+  defp flatten_integers(value) when is_list(value), do: Enum.flat_map(value, &flatten_integers/1)
+  defp flatten_integers(value), do: [value]
+
   def explicitly_enumerable?(%Tempo{time: time}) do
     Enum.any?(time, fn
       # A selection is a constraint, not a sequence — it doesn't

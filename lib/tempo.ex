@@ -5015,7 +5015,7 @@ defmodule Tempo do
     # as a scalar literal resolves at parse.
     intervals =
       tempo
-      |> Enum.to_list()
+      |> expand_members()
       |> Enum.map(fn member ->
         case resolve_member_negatives(member) do
           {:ok, %Tempo{} = resolved} -> to_interval(resolved)
@@ -5031,6 +5031,18 @@ defmodule Tempo do
 
       {:error, _} = err ->
         err
+    end
+  end
+
+  # Any combination of ranges, in any component positions, expands
+  # through the cartesian expander — each component resolves against
+  # its already-concrete coarser units, so nested open ranges
+  # (`{2000..2010}Y{1..-1}M{1..-1}D`) terminate. Shapes it does not
+  # cover (masks, groups, `:any`) keep the odometer walk.
+  defp expand_members(%Tempo{} = tempo) do
+    case Enumeration.expand(tempo) do
+      {:ok, members} -> members
+      :not_expandable -> Enum.to_list(tempo)
     end
   end
 

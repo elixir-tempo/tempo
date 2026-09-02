@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+* Any combination of ranges, in any component position or positions, now expands: `~o"{2000..2010}Y{1..-1}M{1..-1}D"` — open ranges in three positions at once — yields its 4018 days instead of looping forever. Each component resolves against its already-concrete coarser units, so a month range follows the year's own month count (13 in a Hebrew leap year) and a day range the month's own length (29 in a leap February, 28 otherwise). `Tempo.to_interval/1` and the `Enumerable` protocol expand identically.
+
+* A day set under a month whose length is not yet known — because the year is set-valued and still to be expanded, or absent — is bounded by the month's maximum length across years rather than refused: `{2020,2021}Y2M{1..-1}D` resolves (29 days in 2020, 28 in 2021), and yearless `2M{1..-1}D` is now consistent with the eleven other months and with `2M29D`. Days that exist in no year (`2M30D`, `2M{28..30}D`) are still rejected, as is a day set overflowing a concrete month (`2026Y9M{28..31}D`).
+
 ## [v1.5.4] — 2026-09-01
 
 ### Fixed

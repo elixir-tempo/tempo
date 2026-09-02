@@ -108,6 +108,15 @@ end
 {last_day.(~o"2024-02"), last_day.(~o"2026-02")}
 ```
 
+And it composes: *the last day of every month of the year* is one literal — first through last month, last day of each. Nothing hard-codes a `12`, so the same sentence works in a 13-month calendar.
+
+<!-- slide: code -->
+
+```elixir
+{:ok, month_ends} = Tempo.to_interval(~o"2026Y{1..-1}M-1D")
+month_ends
+```
+
 ## Partial dates are real values
 
 A birthday is not a date. It is a day-and-month that recurs, and most systems store it as a date in an arbitrary year and then apologise.
