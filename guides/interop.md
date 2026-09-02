@@ -6,6 +6,7 @@ This guide answers the two questions that follow from that:
 
 * **At what resolution** does a converted value land?
 * **What interval** does a "point in time" actually become — and why does the width matter?
+* **What shape** does a string become — and how do you say which shape you expected?
 
 ## Setup — required for every example
 
@@ -161,7 +162,78 @@ Enum.count(reparsed)
 
 This is why such an interval inspects in the decorated form (`#Tempo.Interval<~o"2025-07-04/2025-07-05" unit: hour>`) rather than as a bare sigil: the decoration marks state the string cannot round-trip, exactly as it does for iCal metadata. If walk behaviour must survive persistence, store the *source* value (`~o"2025-07-04"` — its implicit enumeration is derived, so it round-trips fully) or re-attach the granularity on load with `Tempo.Interval.new(from: from, to: to, unit: :hour)`.
 
-## 6. Where to convert
+## 6. Strings → Tempo: declare the shape you expect
+
+`Tempo.from_iso8601/1` admits every shape ISO 8601 defines and returns whichever one the string turned out to be. That is the right tool when the shape is genuinely unknown — a single text field a user may fill with anything. At an edge where the shape *is* known, declaring it turns a wrong value into an error at the point of parsing:
+
+```elixir
+Tempo.parse_date("2026-06-15")
+#=> {:ok, ~o"2026Y6M15D"}
+
+Tempo.parse_date("2026-06-15T10:30")
+#=> {:error, %Tempo.ParseError{}}   # a datetime is not a date
+```
+
+One function per shape, each with a bang variant:
+
+| Function | Admits | Returns |
+| --- | --- | --- |
+| `Tempo.parse_date/2` | a date at any resolution — `2026`, `2026-06`, `2026-06-15`, `2026-W12`, `2026-166` | `%Tempo{}` |
+| `Tempo.parse_datetime/2` | a date *and* a time of day | `%Tempo{}` |
+| `Tempo.parse_time/2` | a time of day alone | `%Tempo{}` |
+| `Tempo.parse_interval/2` | any interval form, including a repeat rule | `%Tempo.Interval{}` |
+| `Tempo.parse_duration/1` | a duration | `%Tempo.Duration{}` |
+
+The whole string must be the declared shape, so a value that merely *begins* with one is rejected rather than truncated:
+
+```elixir
+Tempo.parse_duration("P1D/2026-06-15")
+#=> {:error, %Tempo.ParseError{}}   # that is an interval, not a duration
+```
+
+### Why this matters most for dates, datetimes and times
+
+An interval and a duration are already distinguishable by their struct, so a caller can pattern match on `%Tempo.Interval{}` and be certain. A date, a datetime and a time are **all** `%Tempo{}` — there is no struct to match on, so a time of day arriving in a date column parses successfully and the problem surfaces somewhere downstream, or not at all:
+
+<!-- guides:run -->
+```elixir
+# Both succeed, and both are a %Tempo{}. The general parser cannot
+# tell a date field that it received something else.
+{:ok, %Tempo{}} = Tempo.from_iso8601("2026-06-15")
+{:ok, %Tempo{}} = Tempo.from_iso8601("10:30")
+
+# Declaring the shape is what makes the second one an error.
+{:ok, %Tempo{}} = Tempo.parse_date("2026-06-15")
+{:error, %Tempo.ParseError{}} = Tempo.parse_date("10:30")
+```
+
+Everything downstream of tokenization is unchanged, so a profile parse resolves calendars, honours an IXDTF suffix, keeps an EDTF qualification, and validates exactly as `from_iso8601/1` does:
+
+```elixir
+Tempo.parse_date!("2026-06-15[u-ca=gregory]") == Tempo.from_iso8601!("2026-06-15[u-ca=gregory]")
+#=> true
+
+Tempo.parse_date("2026-02-30")
+#=> {:error, %Tempo.InvalidDateError{}}   # rejected by validation, not admitted by the profile
+```
+
+### One ambiguity the profile resolves
+
+ISO 8601 basic format makes some strings both a valid year and a valid time of day: `2026` is the year 2026 and also 20:26. The general grammar resolves this structurally, preferring the date reading. A caller of `parse_time/2` has declared the field holds a time, and that declaration is what selects the other reading:
+
+```elixir
+Tempo.from_iso8601!("2026")
+#=> ~o"2026Y"
+
+Tempo.parse_time!("2026")
+#=> ~o"T20H26M"
+```
+
+This is the only profile whose *result* can differ from `from_iso8601/1` rather than only its acceptance. Reach for it when the field genuinely holds a time; the ambiguity it resolves is in the format, not in the parser.
+
+Being narrower grammars, the profile parsers are also faster than `from_iso8601/1` — around 11× on dates, 28× on times — but correctness is the reason to prefer them.
+
+## 7. Where to convert
 
 Convert at the **edges**, compute in the **middle**:
 
@@ -174,6 +246,14 @@ See [When to use Tempo](when-to-use-tempo.md) for the full decision tree.
 ## Cheat sheet
 
 ```elixir
+# String → Tempo  (declare the shape; the whole string must be it)
+Tempo.parse_date("2026-06-15")                   # {:ok, %Tempo{}}
+Tempo.parse_datetime("2026-06-15T14:30")         # {:ok, %Tempo{}}
+Tempo.parse_time("14:30")                        # {:ok, %Tempo{}}
+Tempo.parse_interval("2026-06-15/2026-06-20")    # {:ok, %Tempo.Interval{}}
+Tempo.parse_duration("PT1H30M")                  # {:ok, %Tempo.Duration{}}
+Tempo.from_iso8601("2026-06-15")                 # any shape, when the shape is unknown
+
 # Stdlib → Tempo  (resolution = the type's precision; override with :resolution)
 Tempo.from_date(~D[2026-06-15])                  # :day
 Tempo.from_time(~T[14:30:00])                    # :second (time-of-day, non-anchored)
