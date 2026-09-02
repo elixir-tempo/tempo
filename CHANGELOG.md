@@ -4,6 +4,10 @@
 
 ### Added
 
+* `Tempo.parse_date/2`, `parse_datetime/2`, `parse_time/2` and `parse_interval/2` (with bang variants) — the same profile parsing for the remaining shapes. A date, a datetime and a time are all `%Tempo{}`, so `from_iso8601/1` cannot tell a caller that its date field received a time of day; declaring the profile makes that an error at the point of parsing. Being narrower grammars they are 4–28× faster than `from_iso8601/1` on dates, datetimes and times.
+
+* `Tempo.parse_time/2` resolves the ISO 8601 basic-format ambiguity in favour of the declared profile: `"2026"` is the year 2026 to `from_iso8601/1` and 20:26 to `parse_time/2`. This is the only profile whose result, rather than only its acceptance, can differ from the general parser.
+
 * `Tempo.parse_duration/1` and `parse_duration!/1` — parse a string that must be an ISO 8601 duration. `from_iso8601/1` admits every shape the standard defines and returns whichever type the string turned out to be, so an iCalendar `DURATION` property holding a date-time parsed *successfully as the wrong type*; declaring the profile makes that an error. The whole string must be a duration, so a qualified duration (`P1D~`, whose qualifier `from_iso8601/1` silently drops), a set of durations (`{P1D,P2D}`), and a value that merely begins with one (`P1D/2026-06-15`) are rejected rather than truncated. Being a narrower grammar it is also 17–42× faster on durations, though correctness is the reason to prefer it.
 
 ### Fixed

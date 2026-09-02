@@ -22,6 +22,21 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     |> label("ISO8601 interval, duration, date, time or datetime")
   end
 
+  # A profile tokenizer admits exactly one of the shapes the standard
+  # defines, rather than the full alternation `iso8601_tokenizer/0`
+  # offers. The EDTF qualification and IXDTF extended suffix wrappers are
+  # kept: they are orthogonal to which shape sits between them, so an
+  # approximate date (`2026-06-15~`) and a calendar-tagged one
+  # (`2026-06-15[u-ca=hebrew]`) remain dates. The caller of a profile has
+  # declared the type its value must have, so `eos/0` is applied by the
+  # entry point to reject a value that merely *starts* with that shape.
+  def profile_tokenizer(core) do
+    optional(qualification())
+    |> concat(core)
+    |> optional(qualification())
+    |> optional(extended_suffix())
+  end
+
   def interval_or_time_or_duration(combinator \\ empty()) do
     combinator
     |> choice([

@@ -692,8 +692,18 @@ defmodule Tempo do
   end
 
   defp do_from_iso8601(string, requested_calendar) do
-    with {:ok, {tokens, extended}} <- Tokenizer.tokenize(string),
-         {:ok, effective_calendar} <- resolve_calendar(requested_calendar, extended),
+    with {:ok, {tokens, extended}} <- Tokenizer.tokenize(string) do
+      from_tokens(tokens, extended, requested_calendar)
+    end
+  end
+
+  # Everything after tokenization. Shared by `from_iso8601/1,2` and by
+  # the profile parsers (`parse_date/1` and friends), which differ only
+  # in which tokenizer entry point produced the tokens — the calendar,
+  # group, validation and IXDTF stages are identical whatever shape the
+  # value turned out to be.
+  defp from_tokens(tokens, extended, requested_calendar) do
+    with {:ok, effective_calendar} <- resolve_calendar(requested_calendar, extended),
          {:ok, parsed} <- Parser.parse(tokens, effective_calendar),
          {:ok, expanded} <- Group.expand_groups(parsed),
          expanded = maybe_resolve_endpoint_calendars(expanded, requested_calendar),
@@ -952,8 +962,327 @@ defmodule Tempo do
     end
   end
 
+  @doc """
+  Parse a string that must be an ISO 8601 date.
+
+  Unlike `from_iso8601/1`, which returns whichever shape the string
+  turns out to be, this requires the value to be a date and says so
+  when it is not. A date at any resolution is accepted — `"2026"`,
+  `"2026-06"`, `"2026-06-15"`, `"2026-W12"` and `"2026-166"` are all
+  dates, being intervals of a year, month, day, week and day
+  respectively. A date carrying a time of day is not.
+
+  Prefer this over `from_iso8601/1` wherever the field is known to hold
+  a date. A date, a datetime and a time all come back from
+  `from_iso8601/1` as a `t:Tempo.t/0`, so a time-of-day string arriving
+  in a date field is not detected at the point of parsing — it is
+  detected much later, or not at all.
+
+  ### Arguments
+
+  * `string` is the candidate ISO 8601 date.
+
+  ### Options
+
+  * `:calendar` is the calendar to parse against. Defaults to the
+    calendar named by an IXDTF `[u-ca=NAME]` suffix, or
+    `Calendrical.Gregorian`.
+
+  * `:strict` when `true` rejects a value whose numeric offset
+    disagrees with its IXDTF zone (RFC 9557 §4.2). Defaults to `false`.
+
+  ### Returns
+
+  * `{:ok, t:Tempo.t/0}` when the string is a date.
+
+  * `{:error, exception}` when it is not a date, or is a date followed
+    by anything else.
+
+  ### Examples
+
+      iex> Tempo.parse_date("2026-06-15")
+      {:ok, ~o"2026Y6M15D"}
+
+      iex> Tempo.parse_date("2026-06")
+      {:ok, ~o"2026Y6M"}
+
+  A datetime is not a date, and says so rather than succeeding as the
+  wrong shape:
+
+      iex> {:error, %Tempo.ParseError{}} = Tempo.parse_date("2026-06-15T10:30")
+
+  """
+  @spec parse_date(String.t(), keyword()) :: {:ok, t()} | {:error, error_reason()}
+  def parse_date(string, options \\ []) when is_binary(string) and is_list(options) do
+    parse_profile(string, :date, options)
+  end
+
+  @doc """
+  Raising version of `parse_date/2`.
+
+  ### Arguments
+
+  * `string` is the candidate ISO 8601 date.
+
+  ### Options
+
+  See `parse_date/2`.
+
+  ### Returns
+
+  * The `t:Tempo.t/0`.
+
+  ### Examples
+
+      iex> Tempo.parse_date!("2026-06-15")
+      ~o"2026Y6M15D"
+
+  """
+  @spec parse_date!(String.t(), keyword()) :: t() | no_return()
+  def parse_date!(string, options \\ []) when is_binary(string) and is_list(options) do
+    raise_on_error(parse_date(string, options))
+  end
+
+  @doc """
+  Parse a string that must be an ISO 8601 datetime.
+
+  A datetime carries both a date and a time of day. A date alone is not
+  a datetime — use `parse_date/2` for that — and neither is a time
+  alone.
+
+  ### Arguments
+
+  * `string` is the candidate ISO 8601 datetime.
+
+  ### Options
+
+  See `parse_date/2`.
+
+  ### Returns
+
+  * `{:ok, t:Tempo.t/0}` when the string is a datetime.
+
+  * `{:error, exception}` when it is not.
+
+  ### Examples
+
+      iex> Tempo.parse_datetime("2026-06-15T10:30")
+      {:ok, ~o"2026Y6M15DT10H30M"}
+
+      iex> Tempo.parse_datetime("2026-06-15T10:30Z")
+      {:ok, ~o"2026Y6M15DT10H30MZ"}
+
+  A date with no time of day is not a datetime:
+
+      iex> {:error, %Tempo.ParseError{}} = Tempo.parse_datetime("2026-06-15")
+
+  """
+  @spec parse_datetime(String.t(), keyword()) :: {:ok, t()} | {:error, error_reason()}
+  def parse_datetime(string, options \\ []) when is_binary(string) and is_list(options) do
+    parse_profile(string, :datetime, options)
+  end
+
+  @doc """
+  Raising version of `parse_datetime/2`.
+
+  ### Arguments
+
+  * `string` is the candidate ISO 8601 datetime.
+
+  ### Options
+
+  See `parse_date/2`.
+
+  ### Returns
+
+  * The `t:Tempo.t/0`.
+
+  ### Examples
+
+      iex> Tempo.parse_datetime!("2026-06-15T10:30")
+      ~o"2026Y6M15DT10H30M"
+
+  """
+  @spec parse_datetime!(String.t(), keyword()) :: t() | no_return()
+  def parse_datetime!(string, options \\ []) when is_binary(string) and is_list(options) do
+    raise_on_error(parse_datetime(string, options))
+  end
+
+  @doc """
+  Parse a string that must be an ISO 8601 time of day.
+
+  ### Ambiguity is resolved in favour of the profile
+
+  ISO 8601 basic format makes some strings both a valid year and a
+  valid time of day: `"2026"` is the year 2026 and also 20:26. The
+  general grammar resolves the ambiguity structurally, preferring the
+  date reading, so `from_iso8601("2026")` is a year. A caller of
+  `parse_time/2` has declared the field holds a time, and that
+  declaration is what resolves the ambiguity here — the same string
+  reads as 20:26.
+
+      iex> Tempo.from_iso8601("2026")
+      {:ok, ~o"2026Y"}
+
+      iex> Tempo.parse_time("2026")
+      {:ok, ~o"T20H26M"}
+
+  This is the only profile whose *result* can differ from
+  `from_iso8601/1` rather than only its acceptance. Reach for
+  `parse_time/2` when the field genuinely holds a time; the ambiguity
+  it resolves is in the format, not in the parser.
+
+  ### Arguments
+
+  * `string` is the candidate ISO 8601 time of day.
+
+  ### Options
+
+  See `parse_date/2`.
+
+  ### Returns
+
+  * `{:ok, t:Tempo.t/0}` when the string is a time of day.
+
+  * `{:error, exception}` when it is not.
+
+  ### Examples
+
+      iex> Tempo.parse_time("10:30")
+      {:ok, ~o"T10H30M"}
+
+      iex> Tempo.parse_time("T10:30")
+      {:ok, ~o"T10H30M"}
+
+  A datetime is not a time of day:
+
+      iex> {:error, %Tempo.ParseError{}} = Tempo.parse_time("2026-06-15T10:30")
+
+  """
+  @spec parse_time(String.t(), keyword()) :: {:ok, t()} | {:error, error_reason()}
+  def parse_time(string, options \\ []) when is_binary(string) and is_list(options) do
+    parse_profile(string, :time, options)
+  end
+
+  @doc """
+  Raising version of `parse_time/2`.
+
+  ### Arguments
+
+  * `string` is the candidate ISO 8601 time of day.
+
+  ### Options
+
+  See `parse_date/2`.
+
+  ### Returns
+
+  * The `t:Tempo.t/0`.
+
+  ### Examples
+
+      iex> Tempo.parse_time!("10:30")
+      ~o"T10H30M"
+
+  """
+  @spec parse_time!(String.t(), keyword()) :: t() | no_return()
+  def parse_time!(string, options \\ []) when is_binary(string) and is_list(options) do
+    raise_on_error(parse_time(string, options))
+  end
+
+  @doc """
+  Parse a string that must be an ISO 8601 interval.
+
+  Every form the standard gives an interval is accepted: a pair of
+  datetimes, a datetime and a duration in either order, an open-ended
+  pair, and any of those carrying a repeat rule.
+
+  A `t:Tempo.Interval.t/0` is already distinguishable from the other
+  shapes `from_iso8601/1` returns, so this adds a named error where a
+  match would otherwise raise `MatchError`, rather than a type
+  guarantee unavailable by other means.
+
+  ### Arguments
+
+  * `string` is the candidate ISO 8601 interval.
+
+  ### Options
+
+  See `parse_date/2`.
+
+  ### Returns
+
+  * `{:ok, t:Tempo.Interval.t/0}` when the string is an interval.
+
+  * `{:error, exception}` when it is not.
+
+  ### Examples
+
+      iex> Tempo.parse_interval("2026-06-15/2026-06-20")
+      {:ok, ~o"2026Y6M15D/20D"}
+
+      iex> Tempo.parse_interval("R5/2026-06-15/P1D")
+      {:ok, ~o"R5/2026Y6M15D/P1D"}
+
+  A single date is not an interval, even though every Tempo value spans
+  one — an implicit span is not written with a range operator:
+
+      iex> {:error, %Tempo.ParseError{}} = Tempo.parse_interval("2026-06-15")
+
+  """
+  @spec parse_interval(String.t(), keyword()) ::
+          {:ok, Tempo.Interval.t()} | {:error, error_reason()}
+  def parse_interval(string, options \\ []) when is_binary(string) and is_list(options) do
+    parse_profile(string, :interval, options)
+  end
+
+  @doc """
+  Raising version of `parse_interval/2`.
+
+  ### Arguments
+
+  * `string` is the candidate ISO 8601 interval.
+
+  ### Options
+
+  See `parse_date/2`.
+
+  ### Returns
+
+  * The `t:Tempo.Interval.t/0`.
+
+  ### Examples
+
+      iex> Tempo.parse_interval!("2026-06-15/2026-06-20")
+      ~o"2026Y6M15D/20D"
+
+  """
+  @spec parse_interval!(String.t(), keyword()) :: Tempo.Interval.t() | no_return()
+  def parse_interval!(string, options \\ []) when is_binary(string) and is_list(options) do
+    raise_on_error(parse_interval(string, options))
+  end
+
+  # The shared profile pipeline. Only the tokenizer entry point differs
+  # from `from_iso8601/2` — everything downstream of tokenization is the
+  # same, so a profile parse resolves calendars, expands groups and
+  # validates exactly as the general one does.
+  defp parse_profile(string, profile, options) do
+    calendar = Keyword.get(options, :calendar, :from_ixdtf_or_default)
+
+    with {:ok, {tokens, extended}} <- Tokenizer.tokenize(string, profile),
+         {:ok, value} <- from_tokens(tokens, extended, calendar) do
+      enforce_strict(value, options)
+    end
+  end
+
+  defp raise_on_error({:ok, value}), do: value
+  defp raise_on_error({:error, exception}) when is_exception(exception), do: raise(exception)
+  defp raise_on_error({:error, reason}), do: raise(ArgumentError, inspect(reason))
+
   # Apply the `strict: true` IXDTF offset/zone consistency check when
   # requested; otherwise the value passes through unchanged.
+  # Intervals and sets carry no top-level zone/offset pair to check, so
+  # `strict:` is a no-op for them.
   defp enforce_strict(%Tempo{} = tempo, options) do
     if Keyword.get(options, :strict, false) do
       case Compare.validate_zone_offset(tempo) do
@@ -964,6 +1293,8 @@ defmodule Tempo do
       {:ok, tempo}
     end
   end
+
+  defp enforce_strict(other, _options), do: {:ok, other}
 
   # RFC 9557 §4.2: marking a zone critical (`[!Europe/Paris]`) makes
   # offset/zone consistency mandatory — a disagreeing offset is rejected
