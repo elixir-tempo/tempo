@@ -870,6 +870,88 @@ defmodule Tempo do
     end
   end
 
+  @doc """
+  Parse a string that must be an ISO 8601 duration.
+
+  `from_iso8601/1` admits every shape the standard defines and returns
+  whichever type the string turned out to be. When the caller already
+  knows the profile its value belongs to — an iCalendar `DURATION`
+  property, a duration-form `TRIGGER` (RFC 5545 §3.3.6) — that is one
+  guarantee short: a property holding a date-time parses *successfully
+  as the wrong type*, and the mistake surfaces later, somewhere else.
+
+  This function takes the profile as the caller's declaration. Only a
+  duration is admitted, and the whole string must be one, so a
+  duration carrying a qualifier (`P1D~`), a set of durations
+  (`{P1D,P2D}`), and a value that merely begins with a duration
+  (`P1D/2026-06-15`) are all rejected rather than silently truncated
+  or stripped.
+
+  Being a narrower grammar it is also a shorter path — the interval
+  and set alternatives are never tried — though correctness, not
+  speed, is the reason to prefer it.
+
+  ### Arguments
+
+  * `string` is the candidate ISO 8601 duration.
+
+  ### Returns
+
+  * `{:ok, duration}` where `duration` is a `t:Tempo.Duration.t/0`.
+
+  * `{:error, %Tempo.ParseError{}}` when the string is not a duration,
+    or is not *only* a duration.
+
+  ### Examples
+
+      iex> Tempo.parse_duration("PT1H")
+      {:ok, ~o"PT1H"}
+
+      iex> Tempo.parse_duration("P1Y2M3DT4H5M6S")
+      {:ok, ~o"P1Y2M3DT4H5M6S"}
+
+      iex> Tempo.parse_duration("-PT30M")
+      {:ok, ~o"PT-30M"}
+
+  A date-time is not a duration, and says so rather than succeeding as
+  the wrong type:
+
+      iex> {:error, %Tempo.ParseError{}} = Tempo.parse_duration("2026-06-15")
+
+  """
+  @spec parse_duration(String.t()) :: {:ok, Duration.t()} | {:error, error_reason()}
+  def parse_duration(string) when is_binary(string) do
+    with {:ok, tokens} <- Tokenizer.tokenize_duration(string) do
+      {:ok, Parser.parse(tokens)}
+    end
+  end
+
+  @doc """
+  Raising version of `parse_duration/1`.
+
+  ### Arguments
+
+  * `string` is the candidate ISO 8601 duration.
+
+  ### Returns
+
+  * The `t:Tempo.Duration.t/0`.
+
+  ### Examples
+
+      iex> Tempo.parse_duration!("PT1H30M")
+      ~o"PT1H30M"
+
+  """
+  @spec parse_duration!(String.t()) :: Duration.t() | no_return()
+  def parse_duration!(string) when is_binary(string) do
+    case parse_duration(string) do
+      {:ok, duration} -> duration
+      {:error, exception} when is_exception(exception) -> raise exception
+      {:error, reason} -> raise ArgumentError, inspect(reason)
+    end
+  end
+
   # Apply the `strict: true` IXDTF offset/zone consistency check when
   # requested; otherwise the value passes through unchanged.
   defp enforce_strict(%Tempo{} = tempo, options) do

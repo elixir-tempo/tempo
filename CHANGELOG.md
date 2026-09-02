@@ -1,6 +1,10 @@
 # Changelog
 
-## [v1.5.5] — 2026-09-02
+## [v1.6.0] — 2026-09-02
+
+### Added
+
+* `Tempo.parse_duration/1` and `parse_duration!/1` — parse a string that must be an ISO 8601 duration. `from_iso8601/1` admits every shape the standard defines and returns whichever type the string turned out to be, so an iCalendar `DURATION` property holding a date-time parsed *successfully as the wrong type*; declaring the profile makes that an error. The whole string must be a duration, so a qualified duration (`P1D~`, whose qualifier `from_iso8601/1` silently drops), a set of durations (`{P1D,P2D}`), and a value that merely begins with one (`P1D/2026-06-15`) are rejected rather than truncated. Being a narrower grammar it is also 17–42× faster on durations, though correctness is the reason to prefer it.
 
 ### Fixed
 

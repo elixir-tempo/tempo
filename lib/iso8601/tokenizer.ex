@@ -75,6 +75,59 @@ defmodule Tempo.Iso8601.Tokenizer do
     end
   end
 
+  @doc """
+  Tokenise a string that must be an ISO 8601 duration.
+
+  Unlike `tokenize/1`, which admits every shape the standard defines,
+  this recognises only a duration and requires the whole input to be
+  one — the caller has declared the profile its value belongs to.
+
+  ### Arguments
+
+  * `string` is the candidate duration.
+
+  ### Returns
+
+  * `{:ok, tokens}` where `tokens` is `[duration: components]`, the
+    same shape `tokenize/1` produces for a duration.
+
+  * `{:error, %Tempo.ParseError{}}` when the string is not a duration,
+    or is a duration followed by anything else.
+
+  """
+  def tokenize_duration(string) when byte_size(string) > @max_input_bytes do
+    {:error,
+     ParseError.exception(
+       input: binary_part(string, 0, 64) <> "…",
+       reason: "Input of #{byte_size(string)} bytes exceeds the #{@max_input_bytes}-byte limit"
+     )}
+  end
+
+  def tokenize_duration(string) do
+    case duration_only(string) do
+      {:ok, tokens, "", _context, _line, _column} ->
+        {:ok, tokens}
+
+      {:ok, _tokens, remaining, _context, _line, _column} ->
+        {:error,
+         ParseError.exception(
+           input: string,
+           reason:
+             "Could not parse #{inspect(string)} as a duration. " <>
+               "Error detected at #{inspect(remaining)}"
+         )}
+
+      {:error, message, detected_at, _context, _line, _column} ->
+        {:error,
+         ParseError.exception(
+           input: string,
+           reason:
+             "Could not parse #{inspect(string)} as a duration. " <>
+               String.capitalize(message) <> ". Error detected at #{inspect(detected_at)}"
+         )}
+    end
+  end
+
   # Walk the string once, tracking `{`/`[` open-bracket depth, and
   # report whether it ever exceeds the limit (an unbalanced run of
   # openers keeps climbing and is caught the same way).
@@ -122,6 +175,16 @@ defmodule Tempo.Iso8601.Tokenizer do
   # combinator, so the grammar is split across modules without changing
   # behaviour.
   defparsec :iso8601, iso8601_tokenizer()
+
+  # A second entry point admitting *only* a duration. `duration_parser`
+  # already tags its result `:duration`, so the token shape matches what
+  # the general entry produces for a duration and the parser stage is
+  # shared. Requiring `eos/0` is what makes the profile a profile: a
+  # value that merely *starts* with a duration (`P1D/2026-06-15`, or a
+  # duration carrying a qualifier) is rejected rather than silently
+  # truncated.
+  defparsec :duration_only,
+            parsec({Tempo.Iso8601.Tokenizer.Set, :duration_parser}) |> eos()
 
   # `set` and `datetime_or_date_or_time` stay here but are now referenced
   # from the sibling modules, so they are exported combinators. Their inner

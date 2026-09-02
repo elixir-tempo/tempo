@@ -13,7 +13,7 @@ defmodule Tempo.MixProject do
     )
   end
 
-  @version "1.5.5"
+  @version "1.6.0"
 
   def project do
     [
