@@ -161,6 +161,52 @@ Any component may carry a range, a step, or a set — so the *shape* of the recu
 }
 ```
 
+## Ranges in every position
+
+Put a range in more than one component and the value stops being a rectangle. Each range's extent is decided by the components above it — how long February is depends on *which* year. One literal, three Februaries, three right answers.
+
+<!-- slide: code -->
+
+```elixir
+~o"{2024..2026}Y2M{1..-1}D"
+|> Enum.group_by(&Tempo.year/1, &Tempo.day/1)
+|> Map.new(fn {year, days} -> {year, length(days)} end)
+```
+
+The same sentence in a calendar with leap *months*. Nothing in the literal knows that 5784 is a Hebrew leap year — the calendar answers when asked.
+
+<!-- slide: code -->
+
+```elixir
+{:ok, hebrew_years} = Tempo.from_iso8601("{5784,5785}Y{1..-1}M", Calendrical.Hebrew)
+
+hebrew_years
+|> Enum.group_by(&Tempo.year/1)
+|> Map.new(fn {year, months} -> {year, length(months)} end)
+```
+
+## The whole product, in order
+
+Date and clock components compose the same way, and members arrive in time order — which falls out of walking the components coarse-to-fine rather than from any sort.
+
+<!-- slide: code -->
+
+```elixir
+%{
+  "every minute of three hours" => ~o"2026Y9M2DT{9..11}H{0..-1}M" |> Enum.count(),
+  "every day of a decade" => ~o"{2000..2010}Y{1..-1}M{1..-1}D" |> Enum.count()
+}
+```
+
+Eleven years, each with its own months, each with its own days — 4018 of them, the leap years included without asking.
+
+<!-- slide: code -->
+
+```elixir
+decade = ~o"{2000..2010}Y{1..-1}M{1..-1}D"
+{Enum.at(decade, 0), Enum.at(decade, -1)}
+```
+
 ## Our meetup, as a value
 
 First Wednesday of the month, 18:00 to 20:00, Melbourne time. That is an RFC 5545 `RRULE` paired with a two-hour `DURATION`, and Tempo parses it straight into the same interval machinery as everything else.
