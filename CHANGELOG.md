@@ -4,23 +4,23 @@
 
 ### Added
 
-* `Tempo.parse_date/2`, `parse_datetime/2`, `parse_time/2` and `parse_interval/2` (with bang variants) — the same profile parsing for the remaining shapes. A date, a datetime and a time are all `%Tempo{}`, so `from_iso8601/1` cannot tell a caller that its date field received a time of day; declaring the profile makes that an error at the point of parsing. Being narrower grammars they are 4–28× faster than `from_iso8601/1` on dates, datetimes and times.
+* `Tempo.parse_date/2`, `parse_datetime/2`, `parse_time/2`, `parse_interval/2` and `parse_duration/1`, with bang variants, parse a string that must be one ISO 8601 shape. A date, a datetime and a time are all `%Tempo{}`, so `from_iso8601/1` cannot report a time of day arriving in a date field; declaring the profile makes it an error.
 
-* `Tempo.parse_time/2` resolves the ISO 8601 basic-format ambiguity in favour of the declared profile: `"2026"` is the year 2026 to `from_iso8601/1` and 20:26 to `parse_time/2`. This is the only profile whose result, rather than only its acceptance, can differ from the general parser.
+* Profile parsing is 4–28× faster than `from_iso8601/1`, being a narrower grammar. Correctness, not speed, is the reason to prefer it.
 
-* `Tempo.parse_duration/1` and `parse_duration!/1` — parse a string that must be an ISO 8601 duration. `from_iso8601/1` admits every shape the standard defines and returns whichever type the string turned out to be, so an iCalendar `DURATION` property holding a date-time parsed *successfully as the wrong type*; declaring the profile makes that an error. The whole string must be a duration, so a qualified duration (`P1D~`, whose qualifier `from_iso8601/1` silently drops), a set of durations (`{P1D,P2D}`), and a value that merely begins with one (`P1D/2026-06-15`) are rejected rather than truncated. Being a narrower grammar it is also 17–42× faster on durations, though correctness is the reason to prefer it.
+* `parse_time/2` reads `"2026"` as 20:26 where `from_iso8601/1` reads the year 2026 — the declared profile resolves the ISO 8601 basic-format ambiguity.
 
 ### Fixed
 
-* Ranges now expand in *every* component position, not only the date ones: a set-valued clock component (`T{9..10}H{0..-1}M`, "every minute of two hours") expanded to nothing, because a count-from-the-end bound on a unit of fixed extent — the clock units and the day-of-week — was never resolved and an inverted range enumerates empty. Those bounds resolve at validation now, consistently with the units whose extent the calendar decides, so `T{-4..-1}H` is the last four hours of the day rather than an unresolved range.
+* Count-from-the-end bounds on fixed-extent units now resolve at validation, so a set-valued clock component expands instead of yielding nothing. `T{-4..-1}H` is the last four hours of the day.
 
-* A week-and-weekday or ordinal-day value with ranges (`{1..3}W{1..-1}K`, `{1..-1}O`) expands to real calendar dates; expanded members take the same normalisation route through the validator that the parser applies, in the member's own calendar. `{1..-1}O` previously raised a `KeyError`.
+* Week-and-weekday and ordinal-day values with ranges (`{1..3}W{1..-1}K`, `{1..-1}O`) expand to real calendar dates. `{1..-1}O` previously raised a `KeyError`.
 
-* A set that resolves to a single member collapses to that member (`{12..-1}M` is `12M`), so calendar arithmetic receives a concrete component: `2020Y{12..-1}M1D` and `2020Y{12..-1}M{1..-1}D` raised a `FunctionClauseError` in `days_in_month/3`.
+* A set resolving to a single member collapses to that member (`{12..-1}M` is `12M`), fixing a `FunctionClauseError` in `days_in_month/3`.
 
-* Any combination of ranges, in any component position or positions, now expands: `~o"{2000..2010}Y{1..-1}M{1..-1}D"` — open ranges in three positions at once — yields its 4018 days instead of looping forever. Each component resolves against its already-concrete coarser units, so a month range follows the year's own month count (13 in a Hebrew leap year) and a day range the month's own length (29 in a leap February, 28 otherwise). `Tempo.to_interval/1` and the `Enumerable` protocol expand identically.
+* Ranges in any combination of component positions now expand: `{2000..2010}Y{1..-1}M{1..-1}D` yields its 4018 days instead of looping forever. Each component resolves against its already-concrete coarser units, so a month range follows the year's own month count and a day range the month's own length.
 
-* A day set under a month whose length is not yet known — because the year is set-valued and still to be expanded, or absent — is bounded by the month's maximum length across years rather than refused: `{2020,2021}Y2M{1..-1}D` resolves (29 days in 2020, 28 in 2021), and yearless `2M{1..-1}D` is now consistent with the eleven other months and with `2M29D`. Days that exist in no year (`2M30D`, `2M{28..30}D`) are still rejected, as is a day set overflowing a concrete month (`2026Y9M{28..31}D`).
+* A day set under a month of unknown length is bounded by that month's maximum across years rather than refused, so `{2020,2021}Y2M{1..-1}D` and yearless `2M{1..-1}D` resolve. Days that exist in no year (`2M30D`) and day sets overflowing a concrete month (`2026Y9M{28..31}D`) are still rejected.
 
 ## [v1.5.4] — 2026-09-01
 
