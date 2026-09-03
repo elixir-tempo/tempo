@@ -117,7 +117,7 @@ And it composes: *the last day of every month of the year* is one literal — fi
 month_ends
 ```
 
-## Some days have no date
+## Some days are rules, not dates
 
 Thanksgiving is not a date. It is *the fourth Thursday of November* — a rule that lands on a different day every year. So is Memorial Day, Easter, the AGM, and the sprint review.
 
