@@ -4,6 +4,8 @@
 
 ### Added
 
+* `Tempo.Interval.RelationNetwork` — Allen's path-consistency propagation over a network of partially known intervals, deriving what a web of relation constraints implies. It represents disjunction (`[:precedes, :preceded_by]`), which `Tempo.Network`'s convex metric vocabulary cannot.
+
 * `Tempo.Interval.Relations` — converse, narrowing and composition over *sets* of Allen relations, for reasoning when the relation between two intervals is constrained but not known. `narrow/2` combines two sources of knowledge; it is not `Tempo.intersection/2`, which operates on time values.
 
 ## [v1.6.4] — 2026-09-03

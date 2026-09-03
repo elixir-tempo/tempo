@@ -123,7 +123,7 @@ defmodule Tempo.MixProject do
       Core: ~r/^Tempo(?:\.(Interval|IntervalSet|Duration|Set))?$/,
       "Clock and current time": ~r/^Tempo\.Clock(\.|$)/,
       "Set algebra and comparison":
-        ~r/^Tempo\.(Operations|Compare|Select|Territory)$|^Tempo\.Interval\.Relations$/,
+        ~r/^Tempo\.(Operations|Compare|Select|Territory)$|^Tempo\.Interval\.(Relations|RelationNetwork)$/,
       "Recurrence (RRULE)": ~r/^Tempo\.RRule(\.|$)/,
       "iCalendar integration": ~r/^Tempo\.ICal(\.|$)/,
       # `Tempo.Range` is the ISO 8601-2 set-member range element, not a
