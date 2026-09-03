@@ -52,3 +52,6 @@ ical_apple_example_export.ics
 
 # ISO8601 standards
 /iso8601/
+papers/**/*.aux
+papers/**/*.log
+papers/**/*.out
