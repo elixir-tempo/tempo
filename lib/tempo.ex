@@ -1959,6 +1959,8 @@ defmodule Tempo do
 
   """
   @spec resolution(tempo :: t()) :: {time_unit(), time_unit() | non_neg_integer()}
+  def resolution(%__MODULE__{time: []}), do: {:none, 0}
+
   def resolution(%__MODULE__{time: units}) do
     units
     |> Enum.reverse()
@@ -2002,6 +2004,9 @@ defmodule Tempo do
     case time_unit do
       {:selection, selection} -> unit_min_max(selection)
       {unit, {:group, first..last//_}} -> {unit, last - first + 1}
+      # A materialised group is `{unit, {:group, members}, size}` — the
+      # third element is the group's own size, which is its resolution.
+      {unit, {:group, _members}, size} when is_integer(size) -> {unit, size}
       {unit, %Range{last: last}} -> {unit, last}
       # A microsecond component is `{value, precision}`; the precision
       # (digit count) is its resolution scale — `{:microsecond, 3}` is
@@ -4988,6 +4993,7 @@ defmodule Tempo do
     # where it is still in scope.
     case do_to_interval(tempo) do
       {:error, :requires_anchor} -> {:error, RequiresAnchorError.exception(value: tempo)}
+      {:error, :grouped_component} -> {:error, materialisation_error(tempo, :grouped_component)}
       other -> other
     end
   end
@@ -5682,6 +5688,10 @@ defmodule Tempo do
       {:error, _} = error -> error
       intervals -> IntervalSet.new(Enum.reverse(intervals))
     end
+  end
+
+  defp materialisation_error(tempo, reason) do
+    MaterialisationError.exception(value: tempo, reason: reason)
   end
 
   defp do_to_interval(%Tempo{} = tempo) do

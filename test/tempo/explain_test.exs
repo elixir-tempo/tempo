@@ -233,6 +233,81 @@ defmodule Tempo.Explain.Test do
     end
   end
 
+  describe "every representation explains" do
+    # An audit over every ISO literal in the repo (1777 of them) found 140
+    # values `explain/1` either crashed on, described generically, or
+    # described *wrongly* — a yearless date reported itself as "anchored"
+    # with a `[?, ?)` span. One representative per failing class is kept
+    # here; the property is that none of them raises and none reports a
+    # placeholder.
+    @shapes [
+      # yearless and partial dates — the birthday case
+      "4M3D",
+      "12M31D",
+      "14D",
+      "1M",
+      # clock-only values, including resolved negatives
+      "T-1H",
+      "T-1M",
+      "T-1S",
+      "T{-4..-1}H",
+      # week and ordinal axes without a year
+      "1W",
+      "{10,20}W",
+      # bare offsets, which carry no components at all
+      "Z",
+      "Z8H",
+      # groups, whose components are 3-tuples rather than a keyword list
+      "{1,4,7..9}G1YU",
+      "2018-{1,3,5}G2MU",
+      "{1,4,7..9}G2YU3M1D",
+      # bare selections — a rule, not a span
+      "2018YL1K1IN",
+      "L2I1KN",
+      # sub-second durations, stored as `{value, precision}`
+      "PT1.5S",
+      "-PT1.5S",
+      "P1Y2MT1.5S",
+      # masked and margin-of-error interval endpoints
+      "198X/1999",
+      "2018±2Y/2020±2Y"
+    ]
+
+    test "no representation raises, goes generic, or renders a placeholder" do
+      for iso <- @shapes do
+        {:ok, value} = Tempo.from_iso8601(iso)
+        prose = Tempo.explain(value)
+
+        refute prose =~ "unusual shape", "#{iso} explained generically"
+        refute prose =~ "doesn't know how to describe", "#{iso} was not described"
+
+        refute Regex.match?(~r/(Span|From|To|bound):[^\n]*\?/, prose),
+               "#{iso} rendered an endpoint as `?`:\n#{prose}"
+      end
+    end
+
+    test "a yearless date is not described as anchored" do
+      prose = Tempo.explain(~o"4M3D")
+
+      refute Tempo.anchored?(~o"4M3D")
+      refute prose =~ "An anchored"
+      assert prose =~ "in any year"
+      assert prose =~ "--04-03"
+    end
+
+    test "a bare selection is explained as the rule it is" do
+      prose = Tempo.explain(~o"2018YL1K1IN")
+
+      assert prose =~ "selection"
+      assert prose =~ "In 2018, selects"
+      assert prose =~ "Monday"
+    end
+
+    test "a sub-second duration renders its fraction" do
+      assert Tempo.explain(~o"PT1.5S") =~ "0.5 seconds"
+    end
+  end
+
   describe "Tempo.IntervalSet" do
     test "empty set is classified :empty_interval_set" do
       {:ok, set} = IntervalSet.new([])

@@ -128,9 +128,11 @@ defmodule Tempo.Select do
   alias Tempo.Interval.Steps
   alias Tempo.IntervalEndpointsError
   alias Tempo.IntervalSet
+  alias Tempo.InvalidDateError
   alias Tempo.Iso8601.Unit
   alias Tempo.MaterialisationError
   alias Tempo.Math
+  alias Tempo.Validation
 
   @type selector ::
           [integer()]
@@ -628,12 +630,36 @@ defmodule Tempo.Select do
       |> reorder_coarse_to_fine()
       |> resolve_negatives(calendar)
 
-    %Tempo{base_from | time: merged_time}
+    validated_projection(%Tempo{base_from | time: merged_time})
   end
 
   defp project_merge(%Interval{} = base, c_time) do
-    merged = merged_constraint_tempo(base, c_time)
+    with %Tempo{} = merged <- merged_constraint_tempo(base, c_time) do
+      materialise_projection(merged, base, c_time)
+    end
+  end
 
+  # The merge builds its `%Tempo{}` field-by-field rather than through the
+  # parser, so nothing has checked that the result is a date that exists.
+  # Selecting `~o"2M29D"` across `~o"{2026..2029}Y"` merges a 29 February
+  # onto every year, and only 2028 has one — the other three materialised
+  # into phantom spans.
+  #
+  # A member the constraint cannot land on is skipped, not an error: that
+  # is what selecting across a range means, and it matches RFC 5545 §3.3.10
+  # ("invalid dates are ignored") for the same rule expressed as a
+  # recurrence. `Tempo.anchor/2`, which projects onto exactly one year,
+  # still reports the impossible case rather than silently yielding
+  # nothing.
+  defp validated_projection(%Tempo{calendar: calendar} = merged) do
+    case Validation.validate(merged, calendar) do
+      {:ok, %Tempo{} = validated} -> validated
+      {:error, %InvalidDateError{}} -> nil
+      {:error, _other} -> merged
+    end
+  end
+
+  defp materialise_projection(merged, base, c_time) do
     case Tempo.to_interval(merged) do
       {:ok, %Interval{} = iv} ->
         intersect_with_base(trim_iv_to_constraint(iv, c_time), base)

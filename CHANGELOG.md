@@ -1,5 +1,17 @@
 # Changelog
 
+## [v1.6.4] — 2026-09-03
+
+### Fixed
+
+* `Tempo.explain/1` describes every representation. An audit over all 1777 ISO literals in the repository found 140 values it crashed on, described generically, or described wrongly; all of them now explain.
+
+* A yearless date (`~o"4M3D"`, a birthday) is no longer reported as "an anchored Tempo value" with a `[?, ?)` span. It reads as "April 3, in any year" spanning `--04-03`.
+
+* `Tempo.to_interval/1` no longer raises on a yearless week (`1W`), a clock-only value (`T-1S`), a bare offset (`Z`), or a grouped component (`2018-{1,3,5}G2MU`). Grouped components report `Tempo.MaterialisationError` rather than crashing inside `Keyword`.
+
+* `Tempo.resolution/1` handles a value with no components, and grouped components resolve to their group size instead of raising `CaseClauseError`.
+
 ## [v1.6.3] — 2026-09-03
 
 ### Fixed

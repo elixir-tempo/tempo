@@ -187,7 +187,44 @@ defmodule Tempo.Explain do
   ## Scalar Tempo
   ## ------------------------------------------------------------
 
-  defp scalar_parts(%Tempo{} = tempo) do
+  # A bare selection (`2018YL1K1IN`, "in 2018, the first Monday") is a
+  # rule rather than a span: it names which occurrences are wanted, not an
+  # extent. `selection_prose/1` already renders exactly this for
+  # recurrences, so reuse it rather than asking for a span that does not
+  # exist.
+  defp scalar_parts(%Tempo{time: time} = tempo) do
+    case find_unit(time, :selection) do
+      nil -> scalar_value_parts(tempo)
+      selection -> selection_parts(tempo, time, selection)
+    end
+  end
+
+  # A grouped component is a 3-tuple, so the time list is not always a
+  # valid keyword list and `Keyword.get/3` raises on it.
+  defp find_unit(time, key) do
+    Enum.find_value(time, fn
+      {^key, value} -> value
+      _entry -> nil
+    end)
+  end
+
+  defp selection_parts(%Tempo{} = tempo, time, selection) do
+    scope =
+      case find_unit(time, :year) do
+        year when is_integer(year) -> "In #{year}, selects"
+        _no_year -> "Selects"
+      end
+
+    [
+      {:headline, "A selection — a rule naming which occurrences are wanted."},
+      {:span, "#{scope} #{selection_prose(selection)}."},
+      {:calendar, calendar_text(tempo)},
+      {:hint, "Pair it with a recurrence (`R/../P1Y/FL…N`) to materialise occurrences."}
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp scalar_value_parts(%Tempo{} = tempo) do
     [
       {:headline, scalar_headline(tempo)},
       {:span, scalar_span(tempo)},
@@ -210,19 +247,39 @@ defmodule Tempo.Explain do
   end
 
   defp anchored_headline(time) do
-    y = Keyword.get(time, :year)
-    m = Keyword.get(time, :month)
-    d = Keyword.get(time, :day)
-    h = Keyword.get(time, :hour)
-    mi = Keyword.get(time, :minute)
+    y = find_unit(time, :year)
+    m = find_unit(time, :month)
+    d = find_unit(time, :day)
 
     case anchored_precision(time) do
-      :datetime -> "#{month_name(m)} #{d}, #{y} at #{two_digit(h)}:#{two_digit(mi || 0)}."
+      :datetime -> datetime_headline(time, y, m, d)
       :date -> "#{month_name(m)} #{d}, #{y}."
       :month -> "#{month_name(m)} #{y}."
       :year -> "The year #{y}."
-      :none -> "An anchored Tempo value."
+      other -> yearless_headline(other, m, d, time)
     end
+  end
+
+  defp datetime_headline(time, y, m, d) do
+    h = find_unit(time, :hour)
+    mi = find_unit(time, :minute)
+    "#{month_name(m)} #{d}, #{y} at #{two_digit(h)}:#{two_digit(mi || 0)}."
+  end
+
+  # No year at all: a recurring day-and-month (a birthday), a month, or a
+  # bare day — values in their own right, not partial anchored ones.
+  defp yearless_headline(:yearless_date, m, d, _time),
+    do: "#{month_name(m)} #{d}, in any year (no year — it recurs)."
+
+  defp yearless_headline(:yearless_month, m, _d, _time),
+    do: "#{month_name(m)}, in any year (no year — it recurs)."
+
+  defp yearless_headline(:day_only, _m, d, _time),
+    do: "Day #{d} of any month (no year or month — it recurs)."
+
+  defp yearless_headline(:none, _m, _d, time) do
+    {unit, _scale} = Tempo.resolution(%Tempo{time: time})
+    "A Tempo value at #{inspect(unit)} resolution."
   end
 
   defp anchored_precision(time) do
@@ -231,11 +288,17 @@ defmodule Tempo.Explain do
       all_present?(time, [:year, :month, :day]) -> :date
       all_present?(time, [:year, :month]) -> :month
       all_present?(time, [:year]) -> :year
+      # No year at all: a recurring day-and-month (a birthday), a month,
+      # or a bare day. These are values in their own right, not partial
+      # anchored ones.
+      all_present?(time, [:month, :day]) -> :yearless_date
+      all_present?(time, [:month]) -> :yearless_month
+      all_present?(time, [:day]) -> :day_only
       true -> :none
     end
   end
 
-  defp all_present?(time, keys), do: Enum.all?(keys, &is_integer(Keyword.get(time, &1)))
+  defp all_present?(time, keys), do: Enum.all?(keys, &is_integer(find_unit(time, &1)))
 
   defp time_of_day_headline(time) do
     h = Keyword.get(time, :hour, 0)
@@ -641,12 +704,13 @@ defmodule Tempo.Explain do
     end)
   end
 
+  @date_units [:year, :month, :day, :week, :day_of_week, :day_of_year]
+
   defp only_time_of_day?(time) do
-    not Keyword.has_key?(time, :year) and
-      Enum.any?(time, fn
-        {u, _} when u in [:hour, :minute, :second] -> true
-        _ -> false
-      end)
+    units = Enum.map(time, &elem(&1, 0))
+
+    not Enum.any?(units, &(&1 in @date_units)) and
+      Enum.any?(units, &(&1 in [:hour, :minute, :second]))
   end
 
   defp find_first_mask(time) do
@@ -675,9 +739,13 @@ defmodule Tempo.Explain do
   # Render an endpoint in a consistent `YYYY-MM-DDTHH:MM` shape,
   # padding missing trailing units with their minimum so the
   # output reads as a concrete moment rather than a span.
-  defp render_endpoint(%Tempo{time: time}) do
+  defp render_endpoint(%Tempo{time: time} = tempo) do
     case {render_date_part(time), render_time_part(time)} do
-      {nil, nil} -> "?"
+      # A mask (`198X`), a margin of error (`2018±2Y`) or a grouped
+      # component has no plain calendar spelling, so show the value's own
+      # rendering rather than `?`. `Inspect` is total — it falls back to a
+      # labelled struct view for anything it cannot encode.
+      {nil, nil} -> inspect(tempo)
       {date, nil} -> date
       {nil, time} -> "T#{time}"
       {date, time} -> "#{date}T#{time}"
@@ -687,17 +755,60 @@ defmodule Tempo.Explain do
   defp render_endpoint(other), do: inspect(other)
 
   defp render_date_part(time) do
-    y = Keyword.get(time, :year)
-    m = Keyword.get(time, :month)
-    d = Keyword.get(time, :day)
+    y = find_unit(time, :year)
+    m = find_unit(time, :month)
+    d = find_unit(time, :day)
 
     cond do
       is_integer(y) and is_integer(m) and is_integer(d) -> "#{y}-#{two_digit(m)}-#{two_digit(d)}"
       is_integer(y) and is_integer(m) -> "#{y}-#{two_digit(m)}-01"
       is_integer(y) -> "#{y}-01-01"
-      true -> nil
+      true -> render_yearless_date(time)
     end
   end
+
+  # ISO 8601 writes a yearless date `--MM-DD`, a yearless month `--MM`,
+  # and a bare day `---DD`. Use the standard's own spelling so a span
+  # reads as a date rather than as `?`.
+  defp render_yearless_date(time) do
+    m = find_unit(time, :month)
+    d = find_unit(time, :day)
+
+    cond do
+      is_integer(m) and is_integer(d) -> "--#{two_digit(m)}-#{two_digit(d)}"
+      is_integer(m) -> "--#{two_digit(m)}"
+      is_integer(d) -> "---#{two_digit(d)}"
+      true -> render_alternate_axis(time)
+    end
+  end
+
+  # The week and ordinal axes have their own ISO spellings.
+  defp render_alternate_axis(time) do
+    y = find_unit(time, :year)
+    w = find_unit(time, :week)
+    dw = find_unit(time, :day_of_week)
+    dy = find_unit(time, :day_of_year)
+
+    cond do
+      is_integer(y) and is_integer(dy) -> "#{y}-#{dy}"
+      is_integer(dy) -> "day #{dy} of the year"
+      true -> render_week_axis(y, w, dw)
+    end
+  end
+
+  # ISO 8601 week spellings, by which parts the value actually carries.
+  defp render_week_axis(y, w, dw) when is_integer(y) and is_integer(w) and is_integer(dw),
+    do: "#{y}-W#{two_digit(w)}-#{dw}"
+
+  defp render_week_axis(y, w, _dw) when is_integer(y) and is_integer(w),
+    do: "#{y}-W#{two_digit(w)}"
+
+  defp render_week_axis(_y, w, dw) when is_integer(w) and is_integer(dw),
+    do: "-W#{two_digit(w)}-#{dw}"
+
+  defp render_week_axis(_y, w, _dw) when is_integer(w), do: "-W#{two_digit(w)}"
+  defp render_week_axis(_y, _w, dw) when is_integer(dw), do: "day #{dw} of the week"
+  defp render_week_axis(_y, _w, _dw), do: nil
 
   defp render_time_part(time) do
     h = Keyword.get(time, :hour)
@@ -712,8 +823,19 @@ defmodule Tempo.Explain do
   end
 
   defp duration_prose(time) do
-    Enum.map_join(time, ", ", fn {unit, n} -> "#{n} #{pluralise(unit, n)}" end)
+    Enum.map_join(time, ", ", &duration_component/1)
   end
+
+  # A sub-second component is stored as `{value, precision}` — `PT1.5S`
+  # is `[second: 1, microsecond: {500_000, 1}]` — so it cannot be
+  # interpolated directly. Render it at its own precision: 500000 µs at
+  # precision 1 is "0.5 seconds".
+  defp duration_component({:microsecond, {value, precision}}) do
+    seconds = value / 1_000_000
+    "#{:erlang.float_to_binary(seconds, decimals: max(precision, 1))} seconds"
+  end
+
+  defp duration_component({unit, n}), do: "#{n} #{pluralise(unit, n)}"
 
   defp pluralise(unit, 1), do: Atom.to_string(unit)
   defp pluralise(unit, _), do: Atom.to_string(unit) <> "s"

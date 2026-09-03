@@ -69,6 +69,11 @@ defmodule Tempo.Iso8601.Unit do
     Map.get(@unit_after, unit)
   end
 
+  # A value with no components has no unit to enumerate below — the same
+  # answer as the finest unit, rather than a FunctionClauseError four
+  # frames down.
+  def implicit_enumerator(_unit, _calendar), do: nil
+
   @doc """
   The range of values a unit can take, where that range is fixed
   rather than calendar-dependent.

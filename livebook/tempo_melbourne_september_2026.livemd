@@ -208,20 +208,49 @@ Enum.map(2026..2032, anzac_day)
 
 Four lines, and every noun in the sentence is a function. `weekend?` is territory-aware — Australia weekends Saturday and Sunday, Saudi Arabia Friday and Saturday — so the same rule expresses any jurisdiction's substitution without a `case` on country codes.
 
-## Partial dates are real values
+## A birthday has no year
 
-A birthday is not a date. It is a day-and-month that recurs, and most systems store it as a date in an arbitrary year and then apologise.
+A birthday is a day and a month. The year is not missing information — it was never part of the fact. Most systems store it as a date in some arbitrary year and spend the rest of their life apologising for the year they invented.
 
-`XX` says *"this component is unknown"* — so `1985-XX-15` is the 15th of every month, and `XXXX-09-02` is the 2nd of September in any year.
+In Tempo the partial date **is** the value. Nothing is standing in for anything.
 
 <!-- slide: code -->
 
 ```elixir
-{:ok, fifteenths} = Tempo.to_interval(~o"1985-XX-15")
+birthday = ~o"4M3D"
 
-{Tempo.IntervalSet.count(fifteenths),
- fifteenths |> Tempo.IntervalSet.members() |> Enum.take(3)}
+Tempo.anchor(birthday, ~o"2026")
 ```
+
+## Project it when you need a point on the line
+
+The year arrives later, from the question being asked — not from the fact. Anchor it onto one year, or onto a decade, and it becomes an ordinary Tempo value that every other operation already understands.
+
+<!-- slide: code -->
+
+```elixir
+~o"{2026..2035}Y"
+|> Enum.map(&Tempo.anchor(birthday, &1))
+|> Enum.filter(&Tempo.weekend?(&1, :AU))
+```
+
+> *"Over the next decade, which of my birthdays fall on a **weekend** in **Australia**?"*
+
+The year range from three slides ago, the territory-aware weekend from the ANZAC rule, and a date with no year — composed, because they are all just values.
+
+## The one that breaks every date column
+
+29 February is a perfectly good birthday. It is simply not a date in 2027.
+
+Stored as a real date it forces a lie at write time — the 28th, or the 1st of March, chosen by whoever wrote the migration. Stored as what it is, the lie is never told, and the projection is where reality gets to object.
+
+<!-- slide: code -->
+
+```elixir
+{Tempo.anchor(~o"2M29D", ~o"2027"), Tempo.anchor(~o"2M29D", ~o"2028")}
+```
+
+*"29 is not valid. The valid values are 1..28"* — and 2028 is fine. The value was always correct; only its projection onto a particular year can fail, and it fails loudly.
 
 ## Enumeration, implicitly
 
