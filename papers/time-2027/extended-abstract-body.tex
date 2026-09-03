@@ -19,8 +19,7 @@
   (\texttt{overlaps?}, \texttt{within?}, \texttt{adjacent?}). This
   extended abstract describes the conceptual model, the unification of
   partial dates with explicit intervals, and the design of set
-  operations over intervals and interval sets that is the library's
-  current focus.
+  operations over intervals and interval sets.
 \end{abstract}
 
 \section{Motivation: the instant--span impedance mismatch}
@@ -210,6 +209,18 @@ relations are returned directly from the relation primitive:
     :met_by | :preceded_by
 \end{verbatim}
 
+Beyond the relations themselves, the library ships Allen's
+\emph{composition} table --- the transitivity result of~\cite{allen1983}
+Fig.~4 --- as a first-class operation, \texttt{Tempo.compose/2}: given
+$A\;r_1\;B$ and $B\;r_2\;C$, it returns the set of relations that can
+hold between $A$ and $C$. Each of the 169 cells was derived
+independently, by a difference-bound consistency check over the six
+endpoints under the half-open convention, and then checked
+cell-for-cell against the published table. Composition is at present a
+standalone query rather than the engine of a propagation algorithm ---
+see \S\ref{sec:discussion} --- but it is the piece on which qualitative
+reasoning over non-grounded intervals would be built.
+
 This is rarely the right surface for application code, however ---
 business questions tend to name unions of Allen relations.
 ``Does the meeting fall within the workday?'' is the set
@@ -228,7 +239,7 @@ manual endpoint comparison, that is taken as evidence that the
 abstraction is missing, and the predicate is added before the example
 is written. The same discipline applies to durations
 (\texttt{at\_least?}, \texttt{shorter\_than?}) and to interval-set
-queries (\texttt{any\_overlaps?}, \texttt{disjoint?}). The library's
+queries (\texttt{covered?}, \texttt{disjoint?}). The library's
 public surface is, deliberately, an English-prose description of
 Allen's algebra over ISO~8601 values.
 
@@ -355,6 +366,7 @@ given a calendar of meetings), and reductions across an
 \texttt{IntervalSet} (total duration, longest gap, densest hour).
 
 \section{Discussion and open questions}
+\label{sec:discussion}
 
 Tempo is a working library; this submission's contribution is a
 \emph{design} contribution rather than a \emph{result} contribution,
@@ -377,10 +389,13 @@ questions seem particularly worth the TIME audience's attention:
     underlies them, are defined on convex intervals
     only~\cite{gruninger2017allenontology}. Their lifting to interval
     sets admits several reasonable definitions
-    (existential, universal, set-of-relations); the library currently
-    offers the existential lifting, but the right default is not
-    obvious, and a principled extension of the ontology to non-convex
-    interval sets would settle the question.
+    (existential, universal, set-of-relations). The library now offers
+    two of the three --- the existential lifting through the
+    predicates, and the set-of-relations lifting through
+    \texttt{relation\_matrix/2}, which returns the relation holding
+    between every pair of members --- but which should be the
+    \emph{default} is not obvious, and a principled extension of the
+    ontology to non-convex interval sets would settle it.
 
   \item \textbf{Cross-calendar comparison.} Comparing a Hebrew date
     with a Gregorian one resolves cleanly when both project to the
