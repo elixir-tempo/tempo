@@ -445,6 +445,32 @@ defmodule Tempo.Explain do
     |> Enum.reject(&is_nil/1)
   end
 
+  # An unanchored recurrence — `R/../P1Y/FL11M4I4KN`, "every year, the
+  # fourth Thursday of November", beginning nowhere. Two sentinels spell
+  # "no endpoint": `:undefined` from the ISO 8601 parser and `nil` from
+  # the RRULE parser, and the clauses above match only the first. The
+  # rule itself is fully described, so explain the selection and name
+  # what is missing rather than falling through to the generic shape.
+  defp interval_parts(
+         %Tempo.Interval{
+           recurrence: recurrence,
+           from: nil,
+           duration: %Tempo.Duration{time: duration_time}
+         } = interval
+       )
+       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
+    selection = selection_of(interval.repeat_rule)
+
+    [
+      {:headline, recurrence_headline(recurrence)},
+      {:span, "Starting: unanchored — the rule names no start."},
+      selection && {:span, "Selects: #{selection_prose(selection)}."},
+      {:span, "Cadence: #{duration_prose(duration_time)}."},
+      {:hint, unanchored_hint()}
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
   defp interval_parts(%Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to} = interval) do
     [
       {:headline, "A closed interval."},
@@ -661,6 +687,13 @@ defmodule Tempo.Explain do
 
   defp recurrence_headline(:infinity), do: "An unbounded recurrence."
   defp recurrence_headline(n) when is_integer(n), do: "A recurrence of #{n} occurrences."
+
+  defp unanchored_hint do
+    "Not enumerable until anchored — a bound says where to stop looking, " <>
+      "not where the series starts. Give the literal a start " <>
+      "(`R/2026-01-01/…`) or re-parse with one " <>
+      "(`Tempo.RRule.parse(rule, from: ~o\"2026-01-01\")`)."
+  end
 
   defp recurrence_hint(:infinity, from),
     do:

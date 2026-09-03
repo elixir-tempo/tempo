@@ -124,6 +124,39 @@ defmodule Tempo.Explain.Test do
       assert prose =~ "unbounded recurrence"
       assert prose =~ "in November, on the 2nd–8th, on a Tuesday"
     end
+
+    test "an unanchored recurrence explains its selection and names what is missing" do
+      # `R/../…` has no start at all. Two sentinels spell "no endpoint" —
+      # `:undefined` from the ISO 8601 parser and `nil` from the RRULE
+      # parser — and only the first was recognised, so a fully described
+      # rule reported "an unusual shape" and said nothing useful.
+      thanksgiving = ~o"R/../P1Y/FL11M4I4KN"
+
+      prose = Tempo.explain(thanksgiving)
+
+      assert prose =~ "unbounded recurrence"
+      assert prose =~ "in November, on the 4th Thursday"
+      assert prose =~ "1 year"
+      assert prose =~ "unanchored"
+      refute prose =~ "unusual shape"
+    end
+
+    test "an unanchored recurrence says a bound cannot supply the anchor" do
+      # The hint has to distinguish the two, because `to_interval/2`
+      # accepts a `:bound` and it does not rescue an unanchored rule.
+      assert {:error, %Tempo.IntervalEndpointsError{reason: :unanchored}} =
+               Tempo.to_interval(~o"R/../P1W/FL1KN", bound: ~o"2026Y")
+
+      assert Tempo.explain(~o"R/../P1W/FL1KN") =~ "not where the series starts"
+    end
+
+    test "a counted but unanchored recurrence is explained the same way" do
+      prose = Tempo.explain(~o"R5/../P1Y/FL5M-1I1KN")
+
+      assert prose =~ "recurrence of 5 occurrences"
+      assert prose =~ "in May, on the last Monday"
+      assert prose =~ "unanchored"
+    end
   end
 
   describe "Tempo.IntervalSet" do

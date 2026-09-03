@@ -117,6 +117,103 @@ And it composes: *the last day of every month of the year* is one literal — fi
 month_ends
 ```
 
+## Some days have no date
+
+Thanksgiving is not a date. It is *the fourth Thursday of November* — a rule that lands on a different day every year. So is Memorial Day, Easter, the AGM, and the sprint review.
+
+The usual answers are a hard-coded table that runs out, or a cron string in a format only your app understands. ISO 8601-2 has a syntax for it, and it round-trips.
+
+```
+R/../P1Y/FL11M4I4KN
+```
+
+Read it left to right: `R/../P1Y` is an unbounded yearly recurrence. `FL…N` wraps a selection. Inside, `11M` is November, `4I` is the fourth instance, `4K` is Thursday.
+
+*"Every year, in November, the fourth Thursday."*
+
+<!-- slide: code -->
+
+```elixir
+{:ok, thanksgiving} = Tempo.to_interval(~o"R5/2026-01-01/P1Y/FL11M4I4KN")
+
+thanksgiving
+|> Tempo.IntervalSet.members()
+|> Enum.map(&Tempo.Interval.from/1)
+```
+
+## The last one, and the awkward one
+
+`-1I` is the *last* instance — the same count-from-the-end idea two slides ago, applied to instances instead of components. Memorial Day is the last Monday in May, and no leap-year branch appears anywhere.
+
+<!-- slide: code -->
+
+```elixir
+{:ok, memorial_day} = Tempo.to_interval(~o"R5/2026-01-01/P1Y/FL5M-1I1KN")
+
+memorial_day
+|> Tempo.IntervalSet.members()
+|> Enum.map(&Tempo.Interval.from/1)
+```
+
+US Election Day is the rule everyone quotes as unrepresentable: *the first Tuesday after a Monday in November* — deliberately never the 1st. Written out, that is "a Tuesday, on a day between the 2nd and the 8th", every fourth year.
+
+<!-- slide: code -->
+
+```elixir
+{:ok, election_day} = Tempo.to_interval(~o"R3/2028-01-01/P4Y/FL11M{2..8}D2KN")
+
+election_day
+|> Tempo.IntervalSet.members()
+|> Enum.map(&Tempo.Interval.from/1)
+```
+
+Three holidays, three literals, no calendar arithmetic. Each one parses back from its own string, so it stores in a column and travels over a wire.
+
+## It reads them back
+
+`FL11M{2..8}D2KN` is dense. Nobody wants to decode that at 2am when the roster is wrong.
+
+Every Tempo value can explain itself — the same prose whether you wrote the literal or parsed it out of a database column.
+
+<!-- slide: code -->
+
+```elixir
+[
+  ~o"R5/2026-01-01/P1Y/FL11M4I4KN",
+  ~o"R5/2026-01-01/P1Y/FL5M-1I1KN",
+  ~o"R3/2028-01-01/P4Y/FL11M{2..8}D2KN"
+]
+|> Enum.each(fn rule -> IO.puts(Tempo.explain(rule) <> "\n") end)
+```
+
+## Where the standard stops
+
+ANZAC Day is the 25th of April. If that lands on a weekend, the public holiday moves to the following Monday. (Which states actually substitute is its own argument — the *rule* is what matters here.)
+
+ISO 8601 cannot say that. A substitution is a conditional, not a calendrical pattern, and no amount of selector syntax will express "unless".
+
+That is the right place for the standard to stop. It describes the pattern; the language handles the exception — and the exception should read like the sentence a person would say.
+
+<!-- slide: code -->
+
+```elixir
+anzac_day = fn year ->
+  day = Tempo.new!(year: year, month: 4, day: 25)
+
+  if Tempo.weekend?(day, :AU) do
+    Tempo.next_working_day(day, :AU)
+  else
+    day
+  end
+end
+
+Enum.map(2026..2032, anzac_day)
+```
+
+> *"ANZAC Day is the 25th of April. If that lands on a **weekend** in **Australia**, the holiday is the **next working day**."*
+
+Four lines, and every noun in the sentence is a function. `weekend?` is territory-aware — Australia weekends Saturday and Sunday, Saudi Arabia Friday and Saturday — so the same rule expresses any jurisdiction's substitution without a `case` on country codes.
+
 ## Partial dates are real values
 
 A birthday is not a date. It is a day-and-month that recurs, and most systems store it as a date in an arbitrary year and then apologise.
