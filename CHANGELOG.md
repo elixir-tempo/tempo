@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+* `Tempo.Interval.Relations` — converse, narrowing and composition over *sets* of Allen relations, for reasoning when the relation between two intervals is constrained but not known. `narrow/2` combines two sources of knowledge; it is not `Tempo.intersection/2`, which operates on time values.
+
 ## [v1.6.4] — 2026-09-03
 
 ### Fixed
