@@ -367,6 +367,15 @@ defimpl Enumerable, for: Tempo.Interval do
   # over into coarser units as needed. Delegates to `Tempo.Math`.
   defp increment(%Tempo{calendar: calendar} = tempo) do
     {unit, _span} = Tempo.resolution(tempo)
-    Math.add_unit(tempo, unit, calendar)
+
+    case Math.add_unit(tempo, unit, calendar) do
+      {:ok, stepped} ->
+        stepped
+
+      # `Enumerable.reduce/3` has no error channel, so a value whose next
+      # step depends on a year it does not carry has to signal by raising.
+      {:error, :requires_anchor} ->
+        raise Tempo.RequiresAnchorError, value: tempo
+    end
   end
 end

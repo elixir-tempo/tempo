@@ -65,14 +65,20 @@ defmodule Tempo.Math do
   ### Examples
 
       iex> Tempo.Math.add_unit(~o"2022Y12M31D", :day, Calendrical.Gregorian)
-      ~o"2023Y1M1D"
+      {:ok, ~o"2023Y1M1D"}
 
       iex> Tempo.Math.add_unit(~o"2022Y6M", :month, Calendrical.Gregorian)
-      ~o"2022Y7M"
+      {:ok, ~o"2022Y7M"}
+
+  A step whose result would depend on a year the value does not carry
+  reports that rather than guessing:
+
+      iex> Tempo.Math.add_unit(~o"2M28D", :day, Calendrical.Gregorian)
+      {:error, :requires_anchor}
 
   """
   def add_unit(%Tempo{time: time, calendar: calendar} = tempo, unit, calendar) do
-    %{tempo | time: add_unit(time, unit, calendar)}
+    with {:ok, stepped} <- add_unit(time, unit, calendar), do: {:ok, %{tempo | time: stepped}}
   end
 
   def add_unit(%Tempo{time: time, calendar: struct_calendar} = tempo, unit, calendar)
@@ -80,7 +86,7 @@ defmodule Tempo.Math do
     # If caller explicitly passes a calendar that differs from the
     # struct's own, honour the explicit one but keep the struct
     # shape. (Normal callers pass the struct's calendar.)
-    %{tempo | time: add_unit(time, unit, calendar)}
+    with {:ok, stepped} <- add_unit(time, unit, calendar), do: {:ok, %{tempo | time: stepped}}
   end
 
   # On an un-anchored value (no `:year`) a whole-year step is a no-op: the
@@ -88,8 +94,8 @@ defmodule Tempo.Math do
   # "one year after January 31st" is January 31st. This is always unambiguous.
   def add_unit(time, :year, _calendar) when is_list(time) do
     if concrete_year?(time),
-      do: Keyword.update!(time, :year, &(&1 + 1)),
-      else: time
+      do: {:ok, Keyword.update!(time, :year, &(&1 + 1))},
+      else: {:ok, time}
   end
 
   def add_unit(time, :month, calendar) when is_list(time) do
@@ -99,11 +105,12 @@ defmodule Tempo.Math do
       months_in_year = calendar.months_in_year(year)
 
       if month < months_in_year do
-        Keyword.replace!(time, :month, month + 1)
+        {:ok, Keyword.replace!(time, :month, month + 1)}
       else
-        time
-        |> Keyword.replace!(:year, year + 1)
-        |> Keyword.replace!(:month, 1)
+        {:ok,
+         time
+         |> Keyword.replace!(:year, year + 1)
+         |> Keyword.replace!(:month, 1)}
       end
     else
       advance_month_unanchored(time, calendar)
@@ -119,18 +126,20 @@ defmodule Tempo.Math do
 
       cond do
         day < days_in_month ->
-          Keyword.replace!(time, :day, day + 1)
+          {:ok, Keyword.replace!(time, :day, day + 1)}
 
         month < calendar.months_in_year(year) ->
-          time
-          |> Keyword.replace!(:month, month + 1)
-          |> Keyword.replace!(:day, 1)
+          {:ok,
+           time
+           |> Keyword.replace!(:month, month + 1)
+           |> Keyword.replace!(:day, 1)}
 
         true ->
-          time
-          |> Keyword.replace!(:year, year + 1)
-          |> Keyword.replace!(:month, 1)
-          |> Keyword.replace!(:day, 1)
+          {:ok,
+           time
+           |> Keyword.replace!(:year, year + 1)
+           |> Keyword.replace!(:month, 1)
+           |> Keyword.replace!(:day, 1)}
       end
     else
       advance_day_unanchored(time, calendar)
@@ -141,7 +150,7 @@ defmodule Tempo.Math do
     hour = Keyword.fetch!(time, :hour)
 
     if hour < 23 do
-      Keyword.replace!(time, :hour, hour + 1)
+      {:ok, Keyword.replace!(time, :hour, hour + 1)}
     else
       time
       |> Keyword.replace!(:hour, 0)
@@ -153,7 +162,7 @@ defmodule Tempo.Math do
     minute = Keyword.fetch!(time, :minute)
 
     if minute < 59 do
-      Keyword.replace!(time, :minute, minute + 1)
+      {:ok, Keyword.replace!(time, :minute, minute + 1)}
     else
       time
       |> Keyword.replace!(:minute, 0)
@@ -165,7 +174,7 @@ defmodule Tempo.Math do
     second = Keyword.fetch!(time, :second)
 
     if second < 59 do
-      Keyword.replace!(time, :second, second + 1)
+      {:ok, Keyword.replace!(time, :second, second + 1)}
     else
       time
       |> Keyword.replace!(:second, 0)
@@ -181,12 +190,12 @@ defmodule Tempo.Math do
     incremented = value + Integer.pow(10, 6 - precision)
 
     if incremented >= 1_000_000 do
-      time
-      |> Keyword.delete(:microsecond)
-      |> add_unit(:second, calendar)
-      |> Kernel.++([{:microsecond, {incremented - 1_000_000, precision}}])
+      with {:ok, stepped} <-
+             time |> Keyword.delete(:microsecond) |> add_unit(:second, calendar) do
+        {:ok, stepped ++ [{:microsecond, {incremented - 1_000_000, precision}}]}
+      end
     else
-      Keyword.replace(time, :microsecond, {incremented, precision})
+      {:ok, Keyword.replace(time, :microsecond, {incremented, precision})}
     end
   end
 
@@ -196,11 +205,12 @@ defmodule Tempo.Math do
     {weeks_in_year, _days_in_last_week} = calendar.weeks_in_year(year)
 
     if week < weeks_in_year do
-      Keyword.replace!(time, :week, week + 1)
+      {:ok, Keyword.replace!(time, :week, week + 1)}
     else
-      time
-      |> Keyword.replace!(:year, year + 1)
-      |> Keyword.replace!(:week, 1)
+      {:ok,
+       time
+       |> Keyword.replace!(:year, year + 1)
+       |> Keyword.replace!(:week, 1)}
     end
   end
 
@@ -210,11 +220,12 @@ defmodule Tempo.Math do
     days_in_year = calendar.days_in_year(year)
 
     if day_of_year < days_in_year do
-      Keyword.replace!(time, :day_of_year, day_of_year + 1)
+      {:ok, Keyword.replace!(time, :day_of_year, day_of_year + 1)}
     else
-      time
-      |> Keyword.replace!(:year, year + 1)
-      |> Keyword.replace!(:day_of_year, 1)
+      {:ok,
+       time
+       |> Keyword.replace!(:year, year + 1)
+       |> Keyword.replace!(:day_of_year, 1)}
     end
   end
 
@@ -223,7 +234,7 @@ defmodule Tempo.Math do
     days_in_week = calendar.days_in_week()
 
     if day_of_week < days_in_week do
-      Keyword.replace!(time, :day_of_week, day_of_week + 1)
+      {:ok, Keyword.replace!(time, :day_of_week, day_of_week + 1)}
     else
       time
       |> Keyword.replace!(:day_of_week, 1)
@@ -288,26 +299,28 @@ defmodule Tempo.Math do
 
   defp advance_day_in_month(time, day, count, calendar) when is_integer(count) do
     if day < count,
-      do: Keyword.replace!(time, :day, day + 1),
+      do: {:ok, Keyword.replace!(time, :day, day + 1)},
       else: start_of_next_month_unanchored(time, calendar)
   end
 
   defp advance_day_in_month(time, day, {:ambiguous, range}, calendar) do
     cond do
-      day < Enum.min(range) -> Keyword.replace!(time, :day, day + 1)
+      day < Enum.min(range) -> {:ok, Keyword.replace!(time, :day, day + 1)}
       day >= Enum.max(range) -> start_of_next_month_unanchored(time, calendar)
-      true -> throw({:tempo_math, :requires_anchor})
+      true -> {:error, :requires_anchor}
     end
   end
 
   defp advance_day_in_month(_time, _day, _undefined, _calendar) do
-    throw({:tempo_math, :requires_anchor})
+    {:error, :requires_anchor}
   end
 
   defp advance_day_no_month(time, day, calendar) do
-    if day < shortest_month(calendar),
-      do: Keyword.replace!(time, :day, day + 1),
-      else: throw({:tempo_math, :requires_anchor})
+    case shortest_month(calendar) do
+      {:ok, shortest} when day < shortest -> {:ok, Keyword.replace!(time, :day, day + 1)}
+      {:ok, _shortest} -> {:error, :requires_anchor}
+      {:error, _reason} = error -> error
+    end
   end
 
   # The fewest days any month of the calendar can have. A day-only value's day
@@ -315,49 +328,59 @@ defmodule Tempo.Math do
   # roll-over depends on which month, which the value doesn't carry.
   defp shortest_month(calendar) do
     case months_in_year_unanchored(calendar) do
-      count when is_integer(count) ->
-        1..count |> Enum.map(&shortest_month_length(calendar, &1)) |> Enum.min()
-
-      _undefined_or_ambiguous ->
-        throw({:tempo_math, :requires_anchor})
+      count when is_integer(count) -> shortest_of_months(calendar, 1..count)
+      _undefined_or_ambiguous -> {:error, :requires_anchor}
     end
   end
 
+  defp shortest_of_months(calendar, months) do
+    Enum.reduce_while(months, {:ok, nil}, fn month, {:ok, shortest} ->
+      case shortest_month_length(calendar, month) do
+        {:ok, length} -> {:cont, {:ok, min_length(shortest, length)}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp min_length(nil, length), do: length
+  defp min_length(shortest, length), do: min(shortest, length)
+
   defp shortest_month_length(calendar, month) do
     case calendar.days_in_month(month) do
-      count when is_integer(count) -> count
-      {:ambiguous, range} -> Enum.min(range)
-      _undefined -> throw({:tempo_math, :requires_anchor})
+      count when is_integer(count) -> {:ok, count}
+      {:ambiguous, range} -> {:ok, Enum.min(range)}
+      _undefined -> {:error, :requires_anchor}
     end
   end
 
   defp start_of_next_month_unanchored(time, calendar) do
-    time
-    |> advance_month_unanchored(calendar)
-    |> Keyword.replace!(:day, 1)
+    case advance_month_unanchored(time, calendar) do
+      {:ok, advanced} -> {:ok, Keyword.replace!(advanced, :day, 1)}
+      {:error, _reason} = error -> error
+    end
   end
 
   defp advance_month_unanchored(time, calendar) do
     case Keyword.fetch(time, :month) do
       # No month field (a day-only value): a whole-month step leaves the day
       # axis unchanged — the untracked month simply advances.
-      :error -> time
+      :error -> {:ok, time}
       {:ok, month} -> advance_month_present(time, month, months_in_year_unanchored(calendar))
     end
   end
 
   defp advance_month_present(time, month, count) when is_integer(count) do
-    Keyword.replace!(time, :month, if(month < count, do: month + 1, else: 1))
+    {:ok, Keyword.replace!(time, :month, if(month < count, do: month + 1, else: 1))}
   end
 
   defp advance_month_present(time, month, {:ambiguous, range}) do
     if month < Enum.min(range),
-      do: Keyword.replace!(time, :month, month + 1),
-      else: throw({:tempo_math, :requires_anchor})
+      do: {:ok, Keyword.replace!(time, :month, month + 1)},
+      else: {:error, :requires_anchor}
   end
 
   defp advance_month_present(_time, _month, _undefined) do
-    throw({:tempo_math, :requires_anchor})
+    {:error, :requires_anchor}
   end
 
   # `months_in_year/0` is an optional calendar callback — a calendar
@@ -379,17 +402,16 @@ defmodule Tempo.Math do
 
   defp retreat_month_unanchored(time, calendar) do
     case Keyword.fetch(time, :month) do
-      :error ->
-        time
+      :error -> {:ok, time}
+      {:ok, month} when month > 1 -> {:ok, Keyword.replace!(time, :month, month - 1)}
+      {:ok, _month} -> retreat_to_last_month(time, calendar)
+    end
+  end
 
-      {:ok, month} when month > 1 ->
-        Keyword.replace!(time, :month, month - 1)
-
-      {:ok, _month} ->
-        case months_in_year_unanchored(calendar) do
-          count when is_integer(count) -> Keyword.replace!(time, :month, count)
-          _undefined -> throw({:tempo_math, :requires_anchor})
-        end
+  defp retreat_to_last_month(time, calendar) do
+    case months_in_year_unanchored(calendar) do
+      count when is_integer(count) -> {:ok, Keyword.replace!(time, :month, count)}
+      _undefined -> {:error, :requires_anchor}
     end
   end
 
@@ -398,36 +420,41 @@ defmodule Tempo.Math do
 
     case Keyword.fetch(time, :month) do
       {:ok, _month} when day > 1 ->
-        Keyword.replace!(time, :day, day - 1)
+        {:ok, Keyword.replace!(time, :day, day - 1)}
 
       {:ok, month} when month > 1 ->
         end_of_previous_month_unanchored(time, month - 1, calendar)
 
       {:ok, _month} ->
-        case months_in_year_unanchored(calendar) do
-          count when is_integer(count) -> end_of_previous_month_unanchored(time, count, calendar)
-          _undefined -> throw({:tempo_math, :requires_anchor})
-        end
+        retreat_to_end_of_last_month(time, calendar)
 
       # Day-only value: retreating stays valid while the day is above the 1st;
       # the 1st's predecessor is the last day of an unknown month, so it needs
       # an anchor.
       :error ->
         if day > 1,
-          do: Keyword.replace!(time, :day, day - 1),
-          else: throw({:tempo_math, :requires_anchor})
+          do: {:ok, Keyword.replace!(time, :day, day - 1)},
+          else: {:error, :requires_anchor}
+    end
+  end
+
+  defp retreat_to_end_of_last_month(time, calendar) do
+    case months_in_year_unanchored(calendar) do
+      count when is_integer(count) -> end_of_previous_month_unanchored(time, count, calendar)
+      _undefined -> {:error, :requires_anchor}
     end
   end
 
   defp end_of_previous_month_unanchored(time, previous_month, calendar) do
     case calendar.days_in_month(previous_month) do
       count when is_integer(count) ->
-        time
-        |> Keyword.replace!(:month, previous_month)
-        |> Keyword.replace!(:day, count)
+        {:ok,
+         time
+         |> Keyword.replace!(:month, previous_month)
+         |> Keyword.replace!(:day, count)}
 
       _ambiguous_or_undefined ->
-        throw({:tempo_math, :requires_anchor})
+        {:error, :requires_anchor}
     end
   end
 
@@ -452,26 +479,28 @@ defmodule Tempo.Math do
   ### Examples
 
       iex> Tempo.Math.subtract_unit(~o"2023Y1M1D", :day, Calendrical.Gregorian)
-      ~o"2022Y12M31D"
+      {:ok, ~o"2022Y12M31D"}
 
       iex> Tempo.Math.subtract_unit(~o"2022Y1M", :month, Calendrical.Gregorian)
-      ~o"2021Y12M"
+      {:ok, ~o"2021Y12M"}
 
   """
   def subtract_unit(%Tempo{time: time, calendar: calendar} = tempo, unit, calendar) do
-    %{tempo | time: subtract_unit(time, unit, calendar)}
+    with {:ok, stepped} <- subtract_unit(time, unit, calendar),
+         do: {:ok, %{tempo | time: stepped}}
   end
 
   def subtract_unit(%Tempo{time: time} = tempo, unit, calendar) do
-    %{tempo | time: subtract_unit(time, unit, calendar)}
+    with {:ok, stepped} <- subtract_unit(time, unit, calendar),
+         do: {:ok, %{tempo | time: stepped}}
   end
 
   # Mirror of the year no-op in `add_unit/3`: a whole-year step on an
   # un-anchored value leaves its month/day/time axis untouched.
   def subtract_unit(time, :year, _calendar) when is_list(time) do
     if concrete_year?(time),
-      do: Keyword.update!(time, :year, &(&1 - 1)),
-      else: time
+      do: {:ok, Keyword.update!(time, :year, &(&1 - 1))},
+      else: {:ok, time}
   end
 
   def subtract_unit(time, :month, calendar) when is_list(time) do
@@ -480,13 +509,14 @@ defmodule Tempo.Math do
       month = Keyword.fetch!(time, :month)
 
       if month > 1 do
-        Keyword.replace!(time, :month, month - 1)
+        {:ok, Keyword.replace!(time, :month, month - 1)}
       else
         prev_year = year - 1
 
-        time
-        |> Keyword.replace!(:year, prev_year)
-        |> Keyword.replace!(:month, calendar.months_in_year(prev_year))
+        {:ok,
+         time
+         |> Keyword.replace!(:year, prev_year)
+         |> Keyword.replace!(:month, calendar.months_in_year(prev_year))}
       end
     else
       retreat_month_unanchored(time, calendar)
@@ -501,23 +531,25 @@ defmodule Tempo.Math do
 
       cond do
         day > 1 ->
-          Keyword.replace!(time, :day, day - 1)
+          {:ok, Keyword.replace!(time, :day, day - 1)}
 
         month > 1 ->
           prev_month = month - 1
 
-          time
-          |> Keyword.replace!(:month, prev_month)
-          |> Keyword.replace!(:day, calendar.days_in_month(year, prev_month))
+          {:ok,
+           time
+           |> Keyword.replace!(:month, prev_month)
+           |> Keyword.replace!(:day, calendar.days_in_month(year, prev_month))}
 
         true ->
           prev_year = year - 1
           prev_month = calendar.months_in_year(prev_year)
 
-          time
-          |> Keyword.replace!(:year, prev_year)
-          |> Keyword.replace!(:month, prev_month)
-          |> Keyword.replace!(:day, calendar.days_in_month(prev_year, prev_month))
+          {:ok,
+           time
+           |> Keyword.replace!(:year, prev_year)
+           |> Keyword.replace!(:month, prev_month)
+           |> Keyword.replace!(:day, calendar.days_in_month(prev_year, prev_month))}
       end
     else
       retreat_day_unanchored(time, calendar)
@@ -528,7 +560,7 @@ defmodule Tempo.Math do
     hour = Keyword.fetch!(time, :hour)
 
     if hour > 0 do
-      Keyword.replace!(time, :hour, hour - 1)
+      {:ok, Keyword.replace!(time, :hour, hour - 1)}
     else
       time
       |> Keyword.replace!(:hour, 23)
@@ -540,7 +572,7 @@ defmodule Tempo.Math do
     minute = Keyword.fetch!(time, :minute)
 
     if minute > 0 do
-      Keyword.replace!(time, :minute, minute - 1)
+      {:ok, Keyword.replace!(time, :minute, minute - 1)}
     else
       time
       |> Keyword.replace!(:minute, 59)
@@ -552,7 +584,7 @@ defmodule Tempo.Math do
     second = Keyword.fetch!(time, :second)
 
     if second > 0 do
-      Keyword.replace!(time, :second, second - 1)
+      {:ok, Keyword.replace!(time, :second, second - 1)}
     else
       time
       |> Keyword.replace!(:second, 59)
@@ -565,14 +597,15 @@ defmodule Tempo.Math do
     week = Keyword.fetch!(time, :week)
 
     if week > 1 do
-      Keyword.replace!(time, :week, week - 1)
+      {:ok, Keyword.replace!(time, :week, week - 1)}
     else
       prev_year = year - 1
       {weeks, _} = calendar.weeks_in_year(prev_year)
 
-      time
-      |> Keyword.replace!(:year, prev_year)
-      |> Keyword.replace!(:week, weeks)
+      {:ok,
+       time
+       |> Keyword.replace!(:year, prev_year)
+       |> Keyword.replace!(:week, weeks)}
     end
   end
 
@@ -581,13 +614,14 @@ defmodule Tempo.Math do
     day_of_year = Keyword.fetch!(time, :day_of_year)
 
     if day_of_year > 1 do
-      Keyword.replace!(time, :day_of_year, day_of_year - 1)
+      {:ok, Keyword.replace!(time, :day_of_year, day_of_year - 1)}
     else
       prev_year = year - 1
 
-      time
-      |> Keyword.replace!(:year, prev_year)
-      |> Keyword.replace!(:day_of_year, calendar.days_in_year(prev_year))
+      {:ok,
+       time
+       |> Keyword.replace!(:year, prev_year)
+       |> Keyword.replace!(:day_of_year, calendar.days_in_year(prev_year))}
     end
   end
 
@@ -595,7 +629,7 @@ defmodule Tempo.Math do
     day_of_week = Keyword.fetch!(time, :day_of_week)
 
     if day_of_week > 1 do
-      Keyword.replace!(time, :day_of_week, day_of_week - 1)
+      {:ok, Keyword.replace!(time, :day_of_week, day_of_week - 1)}
     else
       time
       |> Keyword.replace!(:day_of_week, calendar.days_in_week())
@@ -661,13 +695,20 @@ defmodule Tempo.Math do
           Tempo.t()
           | Tempo.Set.t()
           | Tempo.IntervalSet.t()
-          | {:error, RequiresAnchorError.t()}
+          | {:error, RequiresAnchorError.t() | :requires_anchor}
   def add(%Tempo{} = tempo, %Tempo.Duration{time: duration_time} = duration) do
     case fast_add(tempo, duration_time) do
       {:ok, shifted} -> shifted
-      :fallback -> add_general(tempo, duration)
+      :fallback -> unwrap_shift(add_general(tempo, duration))
     end
   end
+
+  # The stepper threads `{:ok, tempo}`; `add/2` and `subtract/2` are
+  # public and documented to return the value itself, so unwrap at that
+  # boundary and let an error pass straight through.
+  defp unwrap_shift({:ok, value}), do: value
+  defp unwrap_shift({:error, _reason} = error), do: error
+  defp unwrap_shift(other), do: other
 
   # Fast path for the overwhelmingly common shift: a single fixed-length
   # unit (day or finer) added to a plain crisp anchored datetime. Such a
@@ -680,7 +721,9 @@ defmodule Tempo.Math do
   defp fast_add(%Tempo{time: time, calendar: calendar} = tempo, [{unit, n}])
        when unit in [:day, :hour, :minute, :second] and is_integer(n) do
     if plain_datetime?(time) and Keyword.has_key?(time, unit) do
-      {:ok, %{tempo | time: apply_n_units(time, unit, n, calendar)}}
+      with {:ok, stepped} <- apply_n_units(time, unit, n, calendar) do
+        {:ok, %{tempo | time: stepped}}
+      end
     else
       :fallback
     end
@@ -699,15 +742,17 @@ defmodule Tempo.Math do
 
   defp plain_datetime?(_time), do: false
 
-  # Un-anchored arithmetic that would depend on the missing year throws
-  # `:requires_anchor` from deep in the stepper; catch it here and surface
-  # a clean error rather than letting it crash the caller. The body is a
-  # separate clause so this is an implicit `try`.
+  # Un-anchored arithmetic that would depend on the missing year returns
+  # `{:error, :requires_anchor}` from the stepper; name the value and the
+  # duration here, where both are still in scope.
   defp add_general(%Tempo{} = tempo, %Tempo.Duration{} = duration) do
-    route_general(tempo, duration)
-  catch
-    {:tempo_math, :requires_anchor} ->
-      {:error, RequiresAnchorError.exception(value: tempo, duration: duration)}
+    case route_general(tempo, duration) do
+      {:error, :requires_anchor} ->
+        {:error, RequiresAnchorError.exception(value: tempo, duration: duration)}
+
+      other ->
+        other
+    end
   end
 
   # Route to the mask path only when the shift actually reaches a mask.
@@ -764,9 +809,9 @@ defmodule Tempo.Math do
         error
 
       %Tempo{} = tempo ->
-        tempo
-        |> apply_duration(duration_time)
-        |> Map.update!(:time, &reapply_component_annotations(&1, annotations))
+        with {:ok, shifted} <- apply_duration(tempo, duration_time) do
+          {:ok, Map.update!(shifted, :time, &reapply_component_annotations(&1, annotations))}
+        end
     end
   end
 
@@ -808,9 +853,9 @@ defmodule Tempo.Math do
       # A contiguous (trailing) block shifts as a whole, so its min and
       # max candidate bound it exactly.
       with {:ok, min_time} <- fill_masks(time, calendar, :min),
-           {:ok, max_time} <- fill_masks(time, calendar, :max) do
-        first = add_crisp(%{tempo | time: min_time}, duration)
-        last = add_crisp(%{tempo | time: max_time}, duration)
+           {:ok, max_time} <- fill_masks(time, calendar, :max),
+           {:ok, first} <- add_crisp(%{tempo | time: min_time}, duration),
+           {:ok, last} <- add_crisp(%{tempo | time: max_time}, duration) do
         remask_or_set(masks, first, last)
       else
         {:error, :requires_anchor} ->
@@ -837,7 +882,8 @@ defmodule Tempo.Math do
   defp shift_masked_disjoint(masked, duration) do
     intervals =
       Enum.map(masked, fn candidate ->
-        {:ok, interval} = Tempo.to_interval(add_crisp(candidate, duration))
+        {:ok, shifted} = add_crisp(candidate, duration)
+        {:ok, interval} = Tempo.to_interval(shifted)
         interval
       end)
 
@@ -1059,33 +1105,41 @@ defmodule Tempo.Math do
   defp apply_duration(%Tempo{time: time, calendar: calendar} = tempo, duration_time) do
     stepped =
       @duration_apply_order
-      |> Enum.reduce(time, fn unit, acc ->
+      |> Enum.reduce_while({:ok, time}, fn unit, {:ok, acc} ->
         case Keyword.get(duration_time, unit, 0) do
-          0 -> acc
-          n -> apply_n_units(acc, unit, n, calendar)
+          0 -> {:cont, {:ok, acc}}
+          n -> step_or_halt(apply_n_units(acc, unit, n, calendar))
         end
       end)
-      |> apply_microsecond_duration(Keyword.get(duration_time, :microsecond), calendar)
+      |> thread_microsecond(Keyword.get(duration_time, :microsecond), calendar)
 
     # Only a month/year step can leave the day past the new month's length
     # ("Jan 31 + 1 month = Feb 31"); day/week/time steps already carry into the
     # next month as they go. Clamping only when a month or year is present
     # avoids a spurious anchor requirement for a value that already sits on an
     # ambiguous day — e.g. `~o"2M29D"` shifted by an hour keeps its 29th.
-    new_time =
-      if Keyword.has_key?(duration_time, :month) or Keyword.has_key?(duration_time, :year),
-        do: clamp_day_to_month(stepped, calendar),
-        else: stepped
+    with {:ok, new_time} <- maybe_clamp(stepped, duration_time, calendar) do
+      {:ok, %{tempo | time: new_time}}
+    end
+  end
 
-    %{tempo | time: new_time}
+  defp step_or_halt({:ok, _time} = ok), do: {:cont, ok}
+  defp step_or_halt({:error, _reason} = error), do: {:halt, error}
+
+  defp maybe_clamp({:error, _reason} = error, _duration_time, _calendar), do: error
+
+  defp maybe_clamp({:ok, time}, duration_time, calendar) do
+    if Keyword.has_key?(duration_time, :month) or Keyword.has_key?(duration_time, :year),
+      do: clamp_day_to_month(time, calendar),
+      else: {:ok, time}
   end
 
   # Sub-second durations are applied as a single signed shift of the
   # microsecond value rather than iterated `add_unit` calls (which
   # would be O(value)). A negative value (produced by `subtract/2`)
   # borrows from the second.
-  defp apply_microsecond_duration(time, nil, _calendar), do: time
-  defp apply_microsecond_duration(time, {0, _precision}, _calendar), do: time
+  defp apply_microsecond_duration(time, nil, _calendar), do: {:ok, time}
+  defp apply_microsecond_duration(time, {0, _precision}, _calendar), do: {:ok, time}
 
   defp apply_microsecond_duration(time, {value, _precision}, calendar) do
     shift_microseconds(time, value, calendar)
@@ -1108,6 +1162,14 @@ defmodule Tempo.Math do
     |> apply_n_units(:second, whole_seconds, calendar)
   end
 
+  # The microsecond shift runs after the coarse units, so it receives an
+  # already-wrapped time. Kept separate from `apply_microsecond_duration/3`
+  # so a `{:ok, time}` first argument cannot match one of its clauses.
+  defp thread_microsecond({:ok, time}, microsecond, calendar),
+    do: apply_microsecond_duration(time, microsecond, calendar)
+
+  defp thread_microsecond({:error, _reason} = error, _microsecond, _calendar), do: error
+
   # Set the microsecond component, preserving position if present and
   # appending (after the second) if absent.
   defp put_microsecond(time, value, precision) do
@@ -1123,7 +1185,7 @@ defmodule Tempo.Math do
   # O(N) calls. For the durations we see in practice (months,
   # days, hours), this is fine; we can switch to calendar-specific
   # arithmetic if profiling demands it.
-  defp apply_n_units(time, _unit, 0, _calendar), do: time
+  defp apply_n_units(time, _unit, 0, _calendar), do: {:ok, time}
 
   # Fast path: adding N days to a concrete date is O(1) via
   # absolute-day arithmetic (`Date.add/2`), versus O(N) single-day
@@ -1133,7 +1195,7 @@ defmodule Tempo.Math do
   # (masks, groups, ranges, or a coarser shape).
   defp apply_n_units(time, :day, n, calendar) do
     case fast_add_days(time, n, calendar) do
-      {:ok, new_time} -> new_time
+      {:ok, new_time} -> {:ok, new_time}
       :fallback -> step_n_units(time, :day, n, calendar)
     end
   end
@@ -1148,7 +1210,7 @@ defmodule Tempo.Math do
   # prefix (partials, masks, groups).
   defp apply_n_units(time, unit, n, calendar) when unit in [:hour, :minute, :second] do
     case fast_add_time_of_day(time, unit, n, calendar) do
-      {:ok, new_time} -> new_time
+      {:ok, new_time} -> {:ok, new_time}
       :fallback -> step_n_units(time, unit, n, calendar)
     end
   end
@@ -1218,36 +1280,36 @@ defmodule Tempo.Math do
     if Keyword.has_key?(time, key), do: Keyword.replace!(time, key, value), else: time
   end
 
-  defp step_n_units(time, _unit, 0, _calendar), do: time
+  defp step_n_units(time, _unit, 0, _calendar), do: {:ok, time}
 
   defp step_n_units(time, unit, n, calendar) when n > 0 do
-    time
-    |> add_unit(unit, calendar)
-    |> step_n_units(unit, n - 1, calendar)
+    with {:ok, stepped} <- add_unit(time, unit, calendar) do
+      step_n_units(stepped, unit, n - 1, calendar)
+    end
   end
 
   defp step_n_units(time, unit, n, calendar) when n < 0 do
-    time
-    |> subtract_unit(unit, calendar)
-    |> step_n_units(unit, n + 1, calendar)
+    with {:ok, stepped} <- subtract_unit(time, unit, calendar) do
+      step_n_units(stepped, unit, n + 1, calendar)
+    end
   end
 
   # After month arithmetic, the day field may exceed days-in-month
   # (e.g. Jan 31 + 1 month = "Feb 31"). Clamp once at the end.
   defp clamp_day_to_month(time, calendar) do
     case Keyword.get(time, :day) do
-      nil -> time
+      nil -> {:ok, time}
       day when is_integer(day) -> clamp_integer_day(time, day, calendar)
-      _non_integer -> time
+      _non_integer -> {:ok, time}
     end
   end
 
   defp clamp_integer_day(time, day, calendar) do
     cond do
-      concrete_year?(time) -> clamp_day_to_month_anchored(time, day, calendar)
+      concrete_year?(time) -> {:ok, clamp_day_to_month_anchored(time, day, calendar)}
       Keyword.has_key?(time, :month) -> clamp_day_to_month_unanchored(time, day, calendar)
       # Day-only value (no month): there is nothing to clamp the day against.
-      true -> time
+      true -> {:ok, time}
     end
   end
 
@@ -1266,13 +1328,13 @@ defmodule Tempo.Math do
   defp clamp_day_to_month_unanchored(time, day, calendar) do
     case calendar.days_in_month(Keyword.fetch!(time, :month)) do
       count when is_integer(count) ->
-        if day > count, do: Keyword.replace!(time, :day, count), else: time
+        {:ok, if(day > count, do: Keyword.replace!(time, :day, count), else: time)}
 
       {:ambiguous, range} ->
-        if day <= Enum.min(range), do: time, else: throw({:tempo_math, :requires_anchor})
+        if day <= Enum.min(range), do: {:ok, time}, else: {:error, :requires_anchor}
 
       _undefined ->
-        throw({:tempo_math, :requires_anchor})
+        {:error, :requires_anchor}
     end
   end
 

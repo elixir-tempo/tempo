@@ -4975,17 +4975,14 @@ defmodule Tempo do
   end
 
   def to_interval(%Tempo{} = tempo, _opts) do
-    # Un-anchored arithmetic that would depend on the missing year throws
-    # `:requires_anchor` from deep in the stepper — `X*Y2M28D` is "28
-    # February of an unspecified year", and whether the next day is the
-    # 29th or 1 March depends on which year. `Tempo.Math.shift/2` already
-    # catches this signal at its own entry point; materialisation is the
-    # other way in, so catch it here too rather than let it escape as an
-    # uncaught throw.
-    do_to_interval(tempo)
-  catch
-    {:tempo_math, :requires_anchor} ->
-      {:error, RequiresAnchorError.exception(value: tempo)}
+    # `X*Y2M28D` is "28 February of an unspecified year", and whether the
+    # next day is the 29th or 1 March depends on which year. The stepper
+    # reports that as `{:error, :requires_anchor}`; name the value here,
+    # where it is still in scope.
+    case do_to_interval(tempo) do
+      {:error, :requires_anchor} -> {:error, RequiresAnchorError.exception(value: tempo)}
+      other -> other
+    end
   end
 
   # An all-of `%Tempo.Set{}` (`{a,b,c}` syntax at the expression

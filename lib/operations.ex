@@ -239,7 +239,9 @@ defmodule Tempo.Operations do
 
     Stream.unfold(from_day, fn day ->
       if Compare.compare_time(day.time, to_day.time) == :lt do
-        next_time = Math.add_unit(day.time, :day, calendar)
+        # `from_day` is `trunc_to_day/1` of a concrete endpoint, so the
+        # year is always present and the step cannot need an anchor.
+        {:ok, next_time} = Math.add_unit(day.time, :day, calendar)
         {day, %{day | time: next_time}}
       else
         nil
@@ -262,7 +264,8 @@ defmodule Tempo.Operations do
     if crosses_midnight?(na_from, na_to) do
       # Non-anchored interval like `T23:30/T01:00` anchored to
       # day D → `[D T23:30, (D+1) T01:00)`. Advance `to`'s day.
-      next_day_time = Math.add_unit(day_time, :day, calendar)
+      # The anchoring day is a concrete date, so this step is total.
+      {:ok, next_day_time} = Math.add_unit(day_time, :day, calendar)
       new_from = %{na_from | time: day_time ++ na_from.time}
       new_to = %{na_to | time: next_day_time ++ na_to.time}
       %Interval{from: new_from, to: new_to}

@@ -247,7 +247,10 @@ if Code.ensure_loaded?(JSCalendar) do
         :same ->
           {unit, _span} = Tempo.resolution(from)
 
-          {from, Math.add_unit(from, unit, from.calendar), Map.put(metadata, :punctual, true)}
+          # `from` is a parsed JSCalendar start — always concrete.
+          {:ok, widened} = Math.add_unit(from, unit, from.calendar)
+
+          {from, widened, Map.put(metadata, :punctual, true)}
 
         _earlier_or_later ->
           {from, to, metadata}

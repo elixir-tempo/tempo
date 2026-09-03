@@ -737,7 +737,8 @@ if Code.ensure_loaded?(ICal) do
       case Compare.compare_endpoints(from, to) do
         :same ->
           {unit, _span} = Tempo.resolution(from)
-          widened = Math.add_unit(from, unit, from.calendar)
+          # `from` is a parsed DTSTART — a concrete date or date-time.
+          {:ok, widened} = Math.add_unit(from, unit, from.calendar)
           {from, widened, Map.put(metadata, :punctual, true)}
 
         _earlier_or_later ->
@@ -776,7 +777,8 @@ if Code.ensure_loaded?(ICal) do
       # resolution, which keeps the endpoint at day resolution so the
       # half-open span is exactly `[from, from + 1 day)`.
       {unit, _span} = Tempo.resolution(from)
-      {:ok, Math.add_unit(from, unit, from.calendar)}
+      # `from` is a parsed DTSTART — a concrete date or date-time.
+      Math.add_unit(from, unit, from.calendar)
     end
 
     defp dtend_to_tempo(%ICal.Event{dtend: nil, duration: nil}, from) do

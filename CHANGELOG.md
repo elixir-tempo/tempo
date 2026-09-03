@@ -1,6 +1,12 @@
 # Changelog
 
-## [v1.6.1] — 2026-09-03
+## [v1.7.0] — 2026-09-03
+
+### Changed
+
+* **Breaking:** `Tempo.Math.add_unit/3` and `subtract_unit/3` return `{:ok, time} | {:error, :requires_anchor}` rather than the value alone. Every other public function keeps its contract — `Tempo.shift/2` and `Tempo.Math.add/2` still return the value or `{:error, exception}`.
+
+* Un-anchored arithmetic reports a missing anchor by return value, not by `throw`. `lib/` now contains no `throw`, `catch` or explicit `try`, so every error path is visible in the call graph.
 
 ### Fixed
 

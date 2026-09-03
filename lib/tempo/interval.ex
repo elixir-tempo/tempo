@@ -639,8 +639,7 @@ defmodule Tempo.Interval do
             {:ok, build_bounds(tempo, lower_time, upper_time), nil}
 
           {:widen, prefix, unit} ->
-            upper_time = Math.add_unit(prefix, unit, calendar)
-            {:ok, build_bounds(tempo, prefix, upper_time), nil}
+            widened_span(tempo, prefix, unit, calendar)
 
           {:error, _} = err ->
             err
@@ -693,8 +692,10 @@ defmodule Tempo.Interval do
 
   defp materialise_group(tempo, prefix, unit, first, last, calendar) do
     lower_time = prefix ++ [{unit, first}]
-    upper_time = Math.add_unit(prefix ++ [{unit, last}], unit, calendar)
-    {:ok, build_bounds(tempo, lower_time, upper_time), nil}
+
+    with {:ok, upper_time} <- Math.add_unit(prefix ++ [{unit, last}], unit, calendar) do
+      {:ok, build_bounds(tempo, lower_time, upper_time), nil}
+    end
   end
 
   defp anchored_prefix?(prefix, unit) do
@@ -760,8 +761,9 @@ defmodule Tempo.Interval do
       # 3) spans `[45.123, 45.124)`, i.e. +1000 µs; `45.123456`
       # (precision 6) spans a single microsecond.
       {:microsecond, {_value, _precision}} ->
-        upper_time = Math.add_unit(time, :microsecond, calendar)
-        {:ok, build_bounds(tempo, time, upper_time), nil}
+        with {:ok, upper_time} <- Math.add_unit(time, :microsecond, calendar) do
+          {:ok, build_bounds(tempo, time, upper_time), nil}
+        end
 
       # A second-resolution value is no longer the finest unit once
       # sub-second (microsecond) resolution exists below it, so it
@@ -770,8 +772,9 @@ defmodule Tempo.Interval do
       # the upper is one second later, keeping both endpoints at
       # second resolution instead of drilling into microseconds.
       {:second, _value} ->
-        upper_time = Math.add_unit(time, :second, calendar)
-        {:ok, build_bounds(tempo, time, upper_time), nil}
+        with {:ok, upper_time} <- Math.add_unit(time, :second, calendar) do
+          {:ok, build_bounds(tempo, time, upper_time), nil}
+        end
 
       _ ->
         {unit, _span} = Tempo.resolution(tempo)
@@ -781,15 +784,24 @@ defmodule Tempo.Interval do
             {:error, MaterialisationError.exception(value: tempo, reason: :finest_resolution)}
 
           {next_unit, _range} ->
-            # The implicit span is one unit wide at the value's own
-            # resolution — a day spans `[day, day+1)`, not
-            # `[day T0H, day+1 T0H)`. The next-finer unit the old code
-            # drilled into the endpoints is returned separately as the
-            # iteration granularity; the walk fills the anchor to it
-            # at iteration time (`Steps.fill_to_unit/3`).
-            upper_time = Math.add_unit(time, unit, calendar)
-            {:ok, build_bounds(tempo, time, upper_time), next_unit}
+            implicit_span(tempo, time, unit, next_unit, calendar)
         end
+    end
+  end
+
+  # The implicit span is one unit wide at the value's own resolution — a
+  # day spans `[day, day+1)`, not `[day T0H, day+1 T0H)`. The next-finer
+  # unit is returned separately as the iteration granularity; the walk
+  # fills the anchor to it at iteration time (`Steps.fill_to_unit/3`).
+  defp implicit_span(tempo, time, unit, next_unit, calendar) do
+    with {:ok, upper_time} <- Math.add_unit(time, unit, calendar) do
+      {:ok, build_bounds(tempo, time, upper_time), next_unit}
+    end
+  end
+
+  defp widened_span(tempo, prefix, unit, calendar) do
+    with {:ok, upper_time} <- Math.add_unit(prefix, unit, calendar) do
+      {:ok, build_bounds(tempo, prefix, upper_time), nil}
     end
   end
 

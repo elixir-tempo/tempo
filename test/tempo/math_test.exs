@@ -4,6 +4,11 @@ defmodule Tempo.Math.Test do
 
   alias Tempo.Math
 
+  # `Tempo.Math`'s examples were not executed by anything, so the
+  # `add_unit/3` and `subtract_unit/3` examples went on documenting a
+  # bare return long after the functions began threading `{:ok, _}`.
+  doctest Tempo.Math, import: true
+
   describe "large day-count arithmetic (absolute-day fast path)" do
     defp add_days(tempo, n), do: Math.add(tempo, %Tempo.Duration{time: [day: n]})
 
@@ -143,32 +148,32 @@ defmodule Tempo.Math.Test do
   describe "subtract_unit/3 — primitive" do
     test "day with month borrow" do
       assert Math.subtract_unit(~o"2022Y2M1D", :day, Calendrical.Gregorian) ==
-               ~o"2022Y1M31D"
+               {:ok, ~o"2022Y1M31D"}
     end
 
     test "day with year borrow" do
       assert Math.subtract_unit(~o"2023Y1M1D", :day, Calendrical.Gregorian) ==
-               ~o"2022Y12M31D"
+               {:ok, ~o"2022Y12M31D"}
     end
 
     test "month across year boundary" do
-      assert Math.subtract_unit(~o"2022Y1M", :month, Calendrical.Gregorian) == ~o"2021Y12M"
+      assert Math.subtract_unit(~o"2022Y1M", :month, Calendrical.Gregorian) == {:ok, ~o"2021Y12M"}
     end
 
     test "hour with day borrow" do
       assert Math.subtract_unit(~o"2022Y1M2DT0H", :hour, Calendrical.Gregorian) ==
-               ~o"2022Y1M1DT23H"
+               {:ok, ~o"2022Y1M1DT23H"}
     end
 
     test "minute with hour borrow" do
       assert Math.subtract_unit(~o"2022Y1M1DT1H0M", :minute, Calendrical.Gregorian) ==
-               ~o"2022Y1M1DT0H59M"
+               {:ok, ~o"2022Y1M1DT0H59M"}
     end
 
     test "week across year boundary" do
       # Week 1 - 1 week → previous year's last week. Gregorian has
       # 52 or 53 ISO weeks per year.
-      result = Math.subtract_unit(~o"2023Y1W", :week, Calendrical.Gregorian)
+      {:ok, result} = Math.subtract_unit(~o"2023Y1W", :week, Calendrical.Gregorian)
       assert result.time[:year] == 2022
       assert result.time[:week] in [52, 53]
     end
