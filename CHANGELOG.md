@@ -8,6 +8,8 @@
 
 * `Tempo.to_interval/1` resolves a yearless masked month (`XX-15`, the 15th of any month) instead of raising a `KeyError`. Calendars whose month count varies by year return `Tempo.RequiresAnchorError`.
 
+* Enumerating a masked value that needs an anchor (`XX-15` in a calendar whose month count varies by year) raises `Tempo.RequiresAnchorError` rather than a bare `KeyError`. `Enumerable` has no error channel; `Tempo.to_interval/1` returns an error tuple for the same value.
+
 * `Tempo.explain/1` describes a start-and-duration interval (`2026-06-15T09:00/PT8H`) rather than reporting "an unusual shape".
 
 * `Tempo.explain/1` no longer calls a duration-and-end interval (`P1D/2026-06-15`) open-lower. The duration implies the lower bound, so the value is bounded.
