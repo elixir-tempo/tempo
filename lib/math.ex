@@ -1,24 +1,5 @@
 defmodule Tempo.Math do
-  @moduledoc """
-  Time-unit arithmetic primitives used by enumeration, interval
-  materialisation (`Tempo.to_interval/1`), and eventually
-  `Tempo + Duration` / `Tempo − Duration` operations.
-
-  The core function is `add_unit/3`: given a keyword-list time
-  representation (or a `%Tempo{}`), advance it by exactly one unit
-  at a specified resolution, carrying into coarser units as needed.
-  Carry is calendar-aware — months per year and days per month vary
-  by calendar, week counts too.
-
-  `unit_minimum/1` answers "what is the start-of-unit value?" —
-  used when reasoning about mixed-resolution intervals and when
-  constructing the lower bound of an implicit span.
-
-  The module is kept deliberately minimal and pure: no Tempo struct
-  construction, no side effects, no exceptions beyond the
-  `ArgumentError` raised when a unit has no known carry rule.
-
-  """
+  @moduledoc false
 
   alias Tempo.Compare
   alias Tempo.Duration

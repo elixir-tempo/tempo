@@ -4411,8 +4411,8 @@ defmodule Tempo do
 
   The shift amount may be given either as a `t:Tempo.Duration.t/0`
   (when you already have one, e.g. `~o"P1M"`) or as a keyword list of
-  signed unit amounts (the ergonomic ad-hoc form). Both delegate to
-  `Tempo.Math.add/2`, which is the principled path when composing
+  signed unit amounts (the ergonomic ad-hoc form). Both take the same
+  path internally, so pass a `t:Tempo.Duration.t/0` when composing
   durations directly.
 
   Units are applied largest-to-smallest with the standard

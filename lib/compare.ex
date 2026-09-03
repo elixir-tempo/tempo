@@ -130,8 +130,8 @@ defmodule Tempo.Compare do
   The start-of-unit minimum — 1 for `:month`, `:day`, `:week`,
   `:day_of_year`, `:day_of_week`; 0 for everything else.
 
-  Exposed on `Tempo.Compare` and `Tempo.Math` as the same
-  definition (both modules re-export via delegation).
+  Exposed on `Tempo.Compare` and on the internal arithmetic module
+  as the same definition (both re-export via delegation).
 
   """
   @spec unit_minimum(atom()) :: integer()

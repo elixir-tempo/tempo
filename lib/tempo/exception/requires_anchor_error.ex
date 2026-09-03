@@ -8,7 +8,7 @@ defmodule Tempo.RequiresAnchorError do
   one day is `~o"2M1D"`, because January always has 31 days. But
   shifting `~o"1M31D"` by one month lands in February, whose length
   depends on the year, so there is no single answer. In that case
-  `Tempo.shift/2` (and the `Tempo.Math` arithmetic beneath it) returns
+  `Tempo.shift/2` (and the arithmetic beneath it) returns
   `{:error, %Tempo.RequiresAnchorError{}}` rather than guessing or
   crashing.
 
