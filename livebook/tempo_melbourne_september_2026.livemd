@@ -31,7 +31,7 @@ One idea, followed all the way down. Every example tonight builds one thing: the
 
 ## Where it fits
 
-Elixir's `Date`, `Time`, `DateTime` and `NaiveDateTime` are excellent scalars. Tempo is not a replacement for them — it is the layer above, for the questions scalars make awkward.
+* Elixir's `Date`, `Time`, `DateTime` and `NaiveDateTime` are excellent scalars. Tempo is not a replacement for them — it is the layer above, for the questions scalars make awkward.
 
 | Question                              | Scalars         | Tempo           |
 | ------------------------------------- | --------------- | --------------- |
@@ -70,9 +70,8 @@ end
 
 ## One type, any resolution
 
-A year, a month, a meeting, a millennium — the same struct. The resolution is carried by the value, not by its type.
-
-Half-open `[from, to)` throughout, so adjacent intervals join with no overlap and no gap.
+* A year, a month, a meeting, a millennium — the same struct. The resolution is carried by the value, not by its type.
+* Half-open `[from, to)` throughout, so adjacent intervals join with no overlap and no gap.
 
 <!-- slide: code -->
 
@@ -83,9 +82,9 @@ for value <- [~o"2026", ~o"2026-09", ~o"2026-09-02", ~o"2026-09-02T18:00"] do
 end
 ```
 
-## ISO 8601 is more expressive than we use
+## ISO 8601 is more expressive than you think
 
-Most of us know a tenth of the standard. Tempo implements Parts 1 *and* 2, which is where the interesting shapes live.
+Most of us know only a small part the standard. Tempo implements Parts 1 *and* 2, which is where the interesting shapes live.
 
 * `2026-09-02` — a day
 * `2026-W36` — an ISO week
@@ -95,7 +94,8 @@ Most of us know a tenth of the standard. Tempo implements Parts 1 *and* 2, which
 
 ## Counting from the end
 
-ISO 8601-2 §4.4.1 lets any component be negative, meaning *count back from the end of the containing unit*. No `days_in_month/2`, no leap-year branch.
+* ISO 8601-2 §4.4.1 lets any component be negative, meaning *count back from the end of the containing unit*.
+* No `days_in_month/2`, no leap-year branch.
 
 <!-- slide: code -->
 
@@ -108,7 +108,7 @@ end
 {last_day.(~o"2024-02"), last_day.(~o"2026-02")}
 ```
 
-And it composes: *the last day of every month of the year* is one literal — first through last month, last day of each. Nothing hard-codes a `12`, so the same sentence works in a 13-month calendar.
+* And it composes: *the last day of every month of the year* is one literal — first through last month, last day of each. Nothing hard-codes a `12`, so the same sentence works in a 13-month calendar.
 
 <!-- slide: code -->
 
@@ -119,17 +119,15 @@ month_ends
 
 ## Some days are rules, not dates
 
-Thanksgiving is not a date. It is *the fourth Thursday of November* — a rule that lands on a different day every year. So is Memorial Day, Easter, the AGM, and the sprint review.
+* Thanksgiving is not a date. It is *the fourth Thursday of November* — a rule that lands on a different day every year. So is Memorial Day, Easter, the AGM, and the sprint review.
 
-The usual answers are a hard-coded table that runs out, or a cron string in a format only your app understands. ISO 8601-2 has a syntax for it, and it round-trips.
+* The usual answers are a hard-coded table that runs out, or a cron string in a format only your app understands. ISO 8601-2 has a syntax for it, and it round-trips.
 
-```
-R/../P1Y/FL11M4I4KN
-```
+* ~o"R/../P1Y/FL11M4I4KN"
 
-Read it left to right: `R/../P1Y` is an unbounded yearly recurrence. `FL…N` wraps a selection. Inside, `11M` is November, `4I` is the fourth instance, `4K` is Thursday.
+  * Read it left to right: `R/../P1Y` is an unbounded yearly recurrence. `FL…N` wraps a selection. Inside, `11M` is November, `4I` is the fourth instance, `4K` is Thursday.
 
-*"Every year, in November, the fourth Thursday."*
+  * "Every year, in November, the fourth Thursday."
 
 <!-- slide: code -->
 
@@ -139,9 +137,19 @@ Read it left to right: `R/../P1Y` is an unbounded yearly recurrence. `FL…N` wr
 thanksgiving
 ```
 
+* The syntax isn't always easy to understand, but we can always ask for an explanation.
+
+<!-- slide: code -->
+
+```elixir
+Tempo.explain(~o"R5/2026-01-01/P1Y/FL11M4I4KN") |> IO.puts()
+```
+
 ## The last one, and the awkward one
 
-`-1I` is the *last* instance — the same count-from-the-end idea two slides ago, applied to instances instead of components. Memorial Day is the last Monday in May, and no leap-year branch appears anywhere.
+* `-1I` is the *last* instance — the same count-from-the-end idea two slides ago, applied to instances instead of components.
+
+* Memorial Day is the last Monday in May, note that no leap-year branch appears anywhere.
 
 <!-- slide: code -->
 
@@ -151,9 +159,10 @@ thanksgiving
 memorial_day
 ```
 
-US Election Day is the rule everyone quotes as unrepresentable: *the first Tuesday after a Monday in November* — deliberately never the 1st. Written out, that is "a Tuesday, on a day between the 2nd and the 8th", every fourth year.
-
-<!-- slide: code -->
+* US Election Day is the rule is tricky: 
+  * *the first Tuesday after a Monday in November* — deliberately never the 1st.
+  * Written out, that is "a Tuesday, on a day between the 2nd and the 8th", every fourth year.
+    <!-- slide: code -->
 
 ```elixir
 {:ok, election_day} = Tempo.to_interval(~o"R3/2028-01-01/P4Y/FL11M{2..8}D2KN")
@@ -161,13 +170,13 @@ US Election Day is the rule everyone quotes as unrepresentable: *the first Tuesd
 election_day
 ```
 
-Three holidays, three literals, no calendar arithmetic. Each one parses back from its own string, so it stores in a column and travels over a wire.
+* Three holidays, three literals, no calendar arithmetic. Each one parses back from its own string, so it stores in a column and travels over a wire.
 
 ## It reads them back
 
-`FL11M{2..8}D2KN` is dense. Nobody wants to decode that at 2am when the roster is wrong.
+* `FL11M{2..8}D2KN` is dense. Nobody wants to decode that at 2am when the roster is wrong.
 
-Every Tempo value can explain itself — the same prose whether you wrote the literal or parsed it out of a database column.
+* Every Tempo value can explain itself — the same prose whether you wrote the literal or parsed it out of a database column.
 
 <!-- slide: code -->
 
@@ -182,11 +191,11 @@ Every Tempo value can explain itself — the same prose whether you wrote the li
 
 ## Where the standard stops
 
-ANZAC Day is the 25th of April. If that lands on a weekend, the public holiday moves to the following Monday. (Which states actually substitute is its own argument — the *rule* is what matters here.)
+* ANZAC Day is the 25th of April. If that lands on a weekend, the public holiday moves to the following Monday (depending on juristiction).
 
-ISO 8601 cannot say that. A substitution is a conditional, not a calendrical pattern, and no amount of selector syntax will express "unless".
+* ISO 8601 cannot say that. A substitution is a conditional, not a calendrical pattern, and no amount of selector syntax will express "unless".
 
-That is the right place for the standard to stop. It describes the pattern; the language handles the exception — and the exception should read like the sentence a person would say.
+* That is the good place for the standard to stop. It describes the pattern; the language handles the exception — and the exception should read like the sentence a person would say.
 
 <!-- slide: code -->
 
@@ -240,9 +249,9 @@ The year range from three slides ago, the territory-aware weekend from the ANZAC
 
 ## The one that breaks every date column
 
-29 February is a perfectly good birthday. It is simply not a date in 2027.
+* 29 February is a perfectly good birthday. It is simply not a date in 2027.
 
-Stored as a real date it forces a lie at write time — the 28th, or the 1st of March, chosen by whoever wrote the migration. Stored as what it is, the lie is never told, and the projection is where reality gets to object.
+* Stored as a real date it forces a lie at write time — the 28th, or the 1st of March, chosen by whoever wrote the migration. Stored as what it is, the lie is never told, and the projection is where reality gets to object.
 
 <!-- slide: code -->
 
@@ -254,7 +263,7 @@ Stored as a real date it forces a lie at write time — the 28th, or the 1st of 
 
 ## Enumeration, implicitly
 
-Every Tempo coarser than its finest unit is enumerable, and it walks its own sub-units. Nothing to configure — the value already knows what it contains.
+* Every Tempo coarser than its finest unit is enumerable, and it walks its own sub-units. Nothing to configure — the value already knows what it contains.
 
 <!-- slide: code -->
 
@@ -269,7 +278,7 @@ Every Tempo coarser than its finest unit is enumerable, and it walks its own sub
 
 ## Enumeration, explicitly
 
-Any component may carry a range, a step, or a set — so the *shape* of the recurrence is part of the literal rather than an argument to a function.
+* Any component may carry a range, a step, or a set — so the *shape* of the recurrence is part of the literal rather than an argument to a function.
 
 <!-- slide: code -->
 
@@ -283,7 +292,8 @@ Any component may carry a range, a step, or a set — so the *shape* of the recu
 
 ## Ranges in every position
 
-Put a range in more than one component and the value stops being a rectangle. Each range's extent is decided by the components above it — how long February is depends on *which* year. One literal, three Februaries, three right answers.
+* Put a range in more than one component and the value stops being a rectangle.
+* Each range's extent is decided by the components above it — how long February is depends on *which* year. One literal, three Februaries, three right answers.
 
 <!-- slide: code -->
 
@@ -307,7 +317,7 @@ hebrew_years
 
 ## The whole product, in order
 
-Date and clock components compose the same way, and members arrive in time order — which falls out of walking the components coarse-to-fine rather than from any sort.
+* Date and clock components compose the same way, and members arrive in time order — which falls out of walking the components coarse-to-fine rather than from any sort.
 
 <!-- slide: code -->
 
@@ -318,7 +328,7 @@ Date and clock components compose the same way, and members arrive in time order
 }
 ```
 
-Eleven years, each with its own months, each with its own days — 4018 of them, the leap years included without asking.
+* Eleven years, each with its own months, each with its own days — 4018 of them, the leap years included without asking.
 
 <!-- slide: code -->
 
@@ -327,9 +337,9 @@ decade = ~o"{2000..2010}Y{1..-1}M{1..-1}D"
 {Enum.at(decade, 0), Enum.at(decade, -1)}
 ```
 
-## Our meetup, as a value
+## Melbourne Elixir meetup, as a value
 
-First Wednesday of the month, 18:00 to 20:00, Melbourne time. That is an RFC 5545 `RRULE` paired with a two-hour `DURATION`, and Tempo parses it straight into the same interval machinery as everything else.
+* First Wednesday of the month, 18:00 to 20:00, Melbourne time. That is an RFC 5545 `RRULE` paired with a two-hour `DURATION`, and Tempo parses it straight into the same interval machinery as everything else.
 
 <!-- slide: code -->
 
@@ -415,7 +425,7 @@ end
 
 ## Free and busy is set difference
 
-This is the whole trick. "Free" is not a stored state to be kept in sync — it is *open minus busy*, computed on every call, so it cannot go stale and no release step can be forgotten.
+* This is the whole trick. "Free" is not a stored state to be kept in sync — it is *open minus busy*, computed on every call, so it cannot go stale and no release step can be forgotten.
 
 <!-- slide: code -->
 
@@ -435,9 +445,9 @@ free
 
 ## The calendar travels in the value
 
-Ramadan is a month in the Islamic calendar. It is not a Gregorian date range that happens to move each year — that is just how it looks from outside.
+* Ramadan is a month in the Islamic calendar. It is not a Gregorian date range that happens to move each year — that is just how it looks from outside.
 
-Ask the question in the calendar that defines the answer, and let the algebra do the conversion. No `if calendar == :islamic` at the call site, no lookup table of Gregorian equivalents to go stale.
+* Ask the question in the calendar that defines the answer, and let the algebra do the conversion. No `if calendar == :islamic` at the call site, no lookup table of Gregorian equivalents to go stale.
 
 <!-- slide: code -->
 
@@ -450,11 +460,10 @@ ramadan = Tempo.from_iso8601!("1448Y9M", Calendrical.Islamic.Civil)
 Tempo.intersection(nights, ramadan)
 ```
 
-> *"Which of next year's **meetup nights** fall during **Ramadan**?"*
+* "Which of next year's **meetup nights** fall during **Ramadan**?"
+  * One does — 3 March 2027. The Islamic month was never converted by hand; `intersection/2` compared a Gregorian recurrence with an Islamic month because both are just spans on the same line.
 
-One does — 3 March 2027. The Islamic month was never converted by hand; `intersection/2` compared a Gregorian recurrence with an Islamic month because both are just spans on the same line.
-
-And the answer comes back in the calendar you asked the question in. Swap the operands and the same night is `1448Y9M24D`, carrying its own `u-ca` tag — the same rule as zones two slides from now: **the first operand's frame wins.**
+  * And the answer comes back in the calendar you asked the question in. Swap the operands and the same night is `1448Y9M24D`, carrying its own `u-ca` tag — the same rule as zones two slides from now: **the first operand's frame wins.**
 
 <!-- slide: code -->
 
@@ -464,9 +473,9 @@ Tempo.intersection(ramadan, nights)
 
 ## Daylight saving, unasked
 
-Melbourne moves to AEDT on the first Sunday in October. A meetup that is "18:00 to 20:00 local" is two hours long in September and two hours long in October — but the *instants* differ by an hour.
-
-Wall clock and elapsed time are different questions, and the zone belongs in the value rather than in an argument you might forget to pass.
+* Melbourne moves to AEDT on the first Sunday in October.
+* A meetup that is "18:00 to 20:00 local" is two hours long in September and two hours long in October — but the *instants* differ by an hour.
+* Wall clock and elapsed time are different questions, and the zone belongs in the value rather than in an argument you might forget to pass.
 
 <!-- slide: code -->
 
@@ -502,7 +511,7 @@ The spring-forward night is where hand-rolled arithmetic quietly breaks: 02:00 d
 
 ## When the dates are not known
 
-Sometimes you do not have a calendar, you have constraints — "K1 reigned before K2", "the stratum lasted twenty to a hundred years". A chronological network propagates those into the tightest bounds the evidence supports.
+* Sometimes you do not have a calendar, you have constraints — "K1 reigned before K2", "the stratum lasted twenty to a hundred years". A chronological network propagates those into the tightest bounds the evidence supports.
 
 <!-- slide: code -->
 
@@ -524,7 +533,7 @@ review = solved.periods[:review]
 
 ## The trace
 
-No hidden assumptions. Every computed bound can name the inputs it rests on, in the order they apply — so a colleague who disputes the conclusion can point at exactly which input they reject.
+* No hidden assumptions. Every computed bound can name the inputs it rests on, in the order they apply — so a colleague who disputes the conclusion can point at exactly which input they reject.
 
 <!-- slide: code -->
 
@@ -535,12 +544,11 @@ trace.prose
 
 ## Why a network, not a schedule
 
-A schedule says *when things are*. A network says *what you know*, and works out what follows.
-
-* Bounds propagate both ways — a late conference pulls the CFP earlier
-* Every bound carries a **trace**: the chain of constraints that forces it
-* Contradictions are reported, not silently resolved
-* Built for archaeology; useful anywhere the dates are inferred
+* A schedule says *when things are*. A network says *what you know*, and works out what follows.
+  * Bounds propagate both ways — a late conference pulls the CFP earlier
+  * Every bound carries a **trace**: the chain of constraints that forces it
+  * Contradictions are reported, not silently resolved
+  * Built for archaeology; useful anywhere the dates are inferred
 
 ## What Tempo is not
 
