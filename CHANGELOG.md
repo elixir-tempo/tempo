@@ -4,6 +4,8 @@
 
 ### Fixed
 
+* `Tempo.select/2` no longer projects a date that cannot exist. Selecting `~o"2M29D"` across `~o"{2026..2029}Y"` yields only 2028, where before it fabricated four February 29ths.
+
 * `Tempo.explain/1` describes every representation. An audit over all 1777 ISO literals in the repository found 140 values it crashed on, described generically, or described wrongly; all of them now explain.
 
 * A yearless date (`~o"4M3D"`, a birthday) is no longer reported as "an anchored Tempo value" with a `[?, ?)` span. It reads as "April 3, in any year" spanning `--04-03`.

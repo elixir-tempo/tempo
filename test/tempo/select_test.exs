@@ -2,7 +2,9 @@ defmodule Tempo.Select.Test do
   use ExUnit.Case, async: false
   import Tempo.Sigils
 
+  alias Tempo.Interval
   alias Tempo.IntervalSet
+  alias Tempo.InvalidDateError
 
   doctest Tempo.Select
 
@@ -644,6 +646,37 @@ defmodule Tempo.Select.Test do
 
     test "an unmaterialisable set returns {:error, _} rather than raising" do
       assert {:error, _} = Tempo.select(~o"{2026-01-05/2026-01-12}", :nonsense)
+    end
+  end
+
+  describe "a projection that cannot land is skipped" do
+    # The merge builds its `%Tempo{}` field-by-field rather than through
+    # the parser, so nothing had checked the result was a date that
+    # exists. Every year got a 29 February.
+    test "29 February selects only in leap years" do
+      {:ok, set} = Tempo.select(~o"{2026..2029}Y", ~o"2M29D")
+
+      assert set |> IntervalSet.members() |> Enum.map(&Interval.from/1) ==
+               [~o"2028Y2M29D"]
+    end
+
+    test "a single non-leap year selects nothing rather than a phantom date" do
+      assert {:ok, empty} = Tempo.select(~o"2026", ~o"2M29D")
+      assert IntervalSet.count(empty) == 0
+    end
+
+    test "anchor/2 reports the same impossible date, because it names one year" do
+      # Selecting across a range skips what cannot exist; anchoring onto
+      # exactly one year has nothing to skip to, so it says so.
+      assert {:error, %InvalidDateError{}} = Tempo.anchor(~o"2M29D", ~o"2026")
+      assert Tempo.anchor(~o"2M29D", ~o"2028") == ~o"2028Y2M29D"
+    end
+
+    test "a date that always exists is unaffected" do
+      {:ok, set} = Tempo.select(~o"{2026..2028}Y", ~o"4M3D")
+
+      assert set |> IntervalSet.members() |> Enum.map(&Interval.from/1) ==
+               [~o"2026Y4M3D", ~o"2027Y4M3D", ~o"2028Y4M3D"]
     end
   end
 end
