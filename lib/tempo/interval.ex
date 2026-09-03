@@ -580,9 +580,10 @@ defmodule Tempo.Interval do
   end
 
   defp unit_rank(unit) when is_atom(unit) do
-    Unit.sort_key(unit)
-  rescue
-    KeyError -> nil
+    case Unit.fetch_sort_key(unit) do
+      {:ok, key} -> key
+      :error -> nil
+    end
   end
 
   defp unit_rank(_unit), do: nil

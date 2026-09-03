@@ -404,6 +404,35 @@ commitments =
 free
 ```
 
+## The calendar travels in the value
+
+Ramadan is a month in the Islamic calendar. It is not a Gregorian date range that happens to move each year — that is just how it looks from outside.
+
+Ask the question in the calendar that defines the answer, and let the algebra do the conversion. No `if calendar == :islamic` at the call site, no lookup table of Gregorian equivalents to go stale.
+
+<!-- slide: code -->
+
+```elixir
+{:ok, rule} = Tempo.RRule.parse("FREQ=MONTHLY;BYDAY=1WE;COUNT=12", from: ~o"2027-01-06")
+{:ok, nights} = Tempo.to_interval(rule)
+
+ramadan = Tempo.from_iso8601!("1448Y9M", Calendrical.Islamic.Civil)
+
+Tempo.intersection(nights, ramadan)
+```
+
+> *"Which of next year's **meetup nights** fall during **Ramadan**?"*
+
+One does — 3 March 2027. The Islamic month was never converted by hand; `intersection/2` compared a Gregorian recurrence with an Islamic month because both are just spans on the same line.
+
+And the answer comes back in the calendar you asked the question in. Swap the operands and the same night is `1448Y9M24D`, carrying its own `u-ca` tag — the same rule as zones two slides from now: **the first operand's frame wins.**
+
+<!-- slide: code -->
+
+```elixir
+Tempo.intersection(ramadan, nights)
+```
+
 ## Daylight saving, unasked
 
 Melbourne moves to AEDT on the first Sunday in October. A meetup that is "18:00 to 20:00 local" is two hours long in September and two hours long in October — but the *instants* differ by an hour.

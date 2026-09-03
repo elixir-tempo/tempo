@@ -384,19 +384,31 @@ defmodule Tempo.Explain do
   defp calendar_text(%Tempo{calendar: Calendar.ISO}), do: nil
   defp calendar_text(%Tempo{calendar: cal}), do: "Calendar: #{inspect(cal)}."
 
+  # A value with no components has no resolution to report — `resolution/1`
+  # takes the last unit and there is none.
+  defp enumeration_text(%Tempo{time: []}), do: nil
+
   defp enumeration_text(%Tempo{} = tempo) do
-    {unit, _} = Tempo.resolution(tempo)
-
-    case Unit.implicit_enumerator(unit, tempo.calendar) do
-      nil ->
-        "At finest supported resolution — cannot be enumerated further."
-
-      {next_unit, _} ->
-        "Iterates at #{inspect(next_unit)} granularity."
-    end
-  rescue
-    _ -> nil
+    {unit, _count} = Tempo.resolution(tempo)
+    enumerator_text(unit, tempo.calendar)
   end
+
+  # `Unit.implicit_enumerator/2` is defined only over the known time
+  # units, so ask whether this is one rather than rescue the
+  # `FunctionClauseError` for those that are not. `fetch_sort_key/1`
+  # answers exactly that question: its map's keys *are* `@units`.
+  defp enumerator_text(unit, calendar) do
+    case Unit.fetch_sort_key(unit) do
+      {:ok, _key} -> describe_enumerator(Unit.implicit_enumerator(unit, calendar))
+      :error -> nil
+    end
+  end
+
+  defp describe_enumerator(nil),
+    do: "At finest supported resolution — cannot be enumerated further."
+
+  defp describe_enumerator({next_unit, _range}),
+    do: "Iterates at #{inspect(next_unit)} granularity."
 
   ## ------------------------------------------------------------
   ## Tempo.Interval

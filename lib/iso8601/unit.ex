@@ -138,6 +138,34 @@ defmodule Tempo.Iso8601.Unit do
   end
 
   @doc """
+  Non-raising variant of `sort_key/1`.
+
+  ### Arguments
+
+  * `time_unit` is the unit to look up.
+
+  ### Returns
+
+  * `{:ok, key}` when the unit is a known time unit.
+
+  * `:error` when it is not, so a caller ordering a heterogeneous
+    list can skip the entry rather than rescue a `KeyError`.
+
+  ### Examples
+
+      iex> Tempo.Iso8601.Unit.fetch_sort_key(:day)
+      {:ok, 19}
+
+      iex> Tempo.Iso8601.Unit.fetch_sort_key(:not_a_unit)
+      :error
+
+  """
+  @spec fetch_sort_key(atom()) :: {:ok, integer()} | :error
+  def fetch_sort_key(time_unit) do
+    Map.fetch(@sort_keys, time_unit)
+  end
+
+  @doc """
   Compares two units or unit tuples returning an indicator
   of precedemce.
 
