@@ -30,12 +30,16 @@ defmodule Tempo.Mask do
   # context narrows them), so they defer to `valid_values/4` — the single
   # resolver — just like the month/day path below. `valid_values/4` ignores
   # `previous`/`calendar` for years.
+  # A year mask never depends on a coarser unit, so `valid_values/4`
+  # cannot report a missing anchor here — unwrap it.
   def fill_unspecified(:year, [:negative | _] = mask, calendar, previous) do
-    valid_values(:year, mask, previous, calendar)
+    {:ok, values} = valid_values(:year, mask, previous, calendar)
+    values
   end
 
   def fill_unspecified(:year, mask, calendar, previous) when is_list(mask) do
-    valid_values(:year, mask, previous, calendar)
+    {:ok, values} = valid_values(:year, mask, previous, calendar)
+    values
   end
 
   # Month and day masks still need calendar context (month-of-year
@@ -67,7 +71,21 @@ defmodule Tempo.Mask do
     # match the old inline `adjusted_range`/`padded_matches_mask?` computed,
     # now shared with the materialisation path so the two cannot diverge.
     concrete = previous |> backtrack(calendar) |> current_units() |> Enum.reverse()
-    valid_values(unit, mask, concrete, calendar)
+
+    case valid_values(unit, mask, concrete, calendar) do
+      {:ok, values} ->
+        values
+
+      # `Enumerable.reduce/3` has no error channel — its contract admits
+      # only `{:done, acc}`, `{:halted, acc}` and `{:suspended, …}` — so a
+      # value that cannot be enumerated has to signal by raising. This is
+      # a documented exception with a message, not a bare `throw`: callers
+      # can match on it, and it names the anchor the value is missing.
+      {:error, :requires_anchor} ->
+        raise Tempo.RequiresAnchorError,
+          value: Enum.reverse(concrete),
+          reason: :mask_requires_anchor
+    end
   end
 
   @doc """
@@ -99,20 +117,26 @@ defmodule Tempo.Mask do
 
   ### Returns
 
-  * A sorted list of integers that are (a) in the valid range
-    for the unit given `previous`, and (b) match the mask
-    pattern when formatted to the mask's width with zero-padding.
+  * `{:ok, values}` — a sorted list of integers that are (a) in
+    the valid range for the unit given `previous`, and (b) match
+    the mask pattern when formatted to the mask's width with
+    zero-padding.
+
+  * `{:error, :requires_anchor}` when the range depends on a
+    coarser unit that `previous` does not supply — a month range
+    in a calendar whose month count varies by year, or a day range
+    with no month.
 
   ### Examples
 
       iex> Tempo.Mask.valid_values(:month, [:X, :X], [year: 1985], Calendrical.Gregorian)
-      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+      {:ok, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]}
 
       iex> Tempo.Mask.valid_values(:month, [:X, 5], [year: 1985], Calendrical.Gregorian)
-      [5]
+      {:ok, [5]}
 
       iex> Tempo.Mask.valid_values(:day, [:X, :X], [year: 1985, month: 2], Calendrical.Gregorian)
-      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28]
+      {:ok, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28]}
 
   """
   @spec valid_values(
@@ -120,25 +144,26 @@ defmodule Tempo.Mask do
           mask :: list(),
           previous :: keyword(),
           calendar :: module()
-        ) :: [integer()]
+        ) :: {:ok, [integer()]} | {:error, :requires_anchor}
   # Year masks are digit-bounded — there is no calendar range for years —
   # so their candidates come straight from the digit pattern.
   def valid_values(:year, [:negative | rest], _previous, _calendar) do
     {min, max} = mask_bounds(rest)
-    for candidate <- min..max, matches_mask?(candidate, rest), do: -candidate
+    {:ok, for(candidate <- min..max, matches_mask?(candidate, rest), do: -candidate)}
   end
 
   def valid_values(:year, mask, _previous, _calendar) do
     {min, max} = mask_bounds(mask)
-    Enum.filter(min..max, &matches_mask?(&1, mask))
+    {:ok, Enum.filter(min..max, &matches_mask?(&1, mask))}
   end
 
   def valid_values(unit, mask, previous, calendar) do
     width = length(mask)
 
-    unit
-    |> valid_range(previous, calendar)
-    |> Enum.filter(&padded_matches_mask?(&1, mask, width))
+    case valid_range(unit, previous, calendar) do
+      {:ok, range} -> {:ok, Enum.filter(range, &padded_matches_mask?(&1, mask, width))}
+      {:error, _reason} = error -> error
+    end
   end
 
   # A yearless value (`XX-15`, "the 15th of any month") has no year to
@@ -150,7 +175,7 @@ defmodule Tempo.Mask do
   # on the missing year, and `:requires_anchor` says so.
   defp valid_range(:month, previous, calendar) do
     case Keyword.get(previous, :year) do
-      year when is_integer(year) -> 1..calendar.months_in_year(year)
+      year when is_integer(year) -> {:ok, 1..calendar.months_in_year(year)}
       _no_concrete_year -> unanchored_range(calendar.months_in_year())
     end
   end
@@ -160,18 +185,18 @@ defmodule Tempo.Mask do
     month = Keyword.get(previous, :month)
 
     cond do
-      is_integer(year) and is_integer(month) -> 1..calendar.days_in_month(year, month)
+      is_integer(year) and is_integer(month) -> {:ok, 1..calendar.days_in_month(year, month)}
       is_integer(month) -> unanchored_range(calendar.days_in_month(month))
-      true -> throw({:tempo_math, :requires_anchor})
+      true -> {:error, :requires_anchor}
     end
   end
 
-  defp valid_range(:hour, _previous, _calendar), do: 0..23
-  defp valid_range(:minute, _previous, _calendar), do: 0..59
-  defp valid_range(:second, _previous, _calendar), do: 0..59
+  defp valid_range(:hour, _previous, _calendar), do: {:ok, 0..23}
+  defp valid_range(:minute, _previous, _calendar), do: {:ok, 0..59}
+  defp valid_range(:second, _previous, _calendar), do: {:ok, 0..59}
 
-  defp unanchored_range(count) when is_integer(count), do: 1..count
-  defp unanchored_range(_ambiguous_or_undefined), do: throw({:tempo_math, :requires_anchor})
+  defp unanchored_range(count) when is_integer(count), do: {:ok, 1..count}
+  defp unanchored_range(_ambiguous_or_undefined), do: {:error, :requires_anchor}
 
   # Pad candidate to the mask's width with leading zeros, then
   # compare digit-by-digit: `:X` matches any digit; any other

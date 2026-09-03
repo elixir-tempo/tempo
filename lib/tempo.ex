@@ -4735,6 +4735,11 @@ defmodule Tempo do
     handle the disjunction themselves), or an unbounded recurrence
     with no `:bound`.
 
+  * `{:error, %Tempo.RequiresAnchorError{}}` when the value has no
+    concrete year and resolving the span would depend on the missing
+    one — `~o"X*Y2M28D"` (February is 28 or 29 days), or a yearless
+    masked month in a calendar whose month count varies by year.
+
   ### Examples
 
       iex> {:ok, tempo} = Tempo.from_iso8601("2026-01")
@@ -5332,11 +5337,9 @@ defmodule Tempo do
   # the enclosing year interval is the right representation.
   defp expand_non_contiguous_mask(%Tempo{time: time, calendar: calendar} = tempo) do
     case find_non_contiguous_mask(time, [], calendar) do
-      nil ->
-        tempo
-
-      {new_time} ->
-        %{tempo | time: new_time}
+      nil -> {:ok, tempo}
+      {new_time} -> {:ok, %{tempo | time: new_time}}
+      {:error, :requires_anchor} -> {:error, RequiresAnchorError.exception(value: tempo)}
     end
   end
 
@@ -5345,19 +5348,7 @@ defmodule Tempo do
   defp find_non_contiguous_mask([{unit, {:mask, mask}} | rest], previous, calendar) do
     if tail_has_concrete?(rest) do
       # Non-contiguous: substitute the mask with candidate values.
-      # Use a scalar when exactly one candidate survives the
-      # calendar constraint; otherwise a list (which the multi
-      # path expands via Enumerable).
-      candidates = Mask.valid_values(unit, mask, Enum.reverse(previous), calendar)
-      prefix = Enum.reverse(previous)
-
-      value =
-        case candidates do
-          [single] -> single
-          many -> many
-        end
-
-      {prefix ++ [{unit, value}] ++ rest}
+      substitute_mask(unit, mask, Enum.reverse(previous), rest, calendar)
     else
       nil
     end
@@ -5365,6 +5356,17 @@ defmodule Tempo do
 
   defp find_non_contiguous_mask([entry | rest], previous, calendar) do
     find_non_contiguous_mask(rest, [entry | previous], calendar)
+  end
+
+  # Use a scalar when exactly one candidate survives the calendar
+  # constraint; otherwise a list, which the multi path expands via
+  # `Enumerable`.
+  defp substitute_mask(unit, mask, prefix, rest, calendar) do
+    case Mask.valid_values(unit, mask, prefix, calendar) do
+      {:ok, [single]} -> {prefix ++ [{unit, single}] ++ rest}
+      {:ok, many} -> {prefix ++ [{unit, many}] ++ rest}
+      {:error, :requires_anchor} = error -> error
+    end
   end
 
   defp tail_has_concrete?([]), do: false
@@ -5684,8 +5686,12 @@ defmodule Tempo do
     # time list to substitute the mask with the list of valid
     # values. This turns a previously-widened case into a proper
     # multi-interval expansion.
-    tempo = expand_non_contiguous_mask(tempo)
+    with {:ok, tempo} <- expand_non_contiguous_mask(tempo) do
+      materialise_expanded(tempo)
+    end
+  end
 
+  defp materialise_expanded(%Tempo{} = tempo) do
     # Step 2: detect whether the resulting Tempo expands to
     # multiple intervals. A "multi" shape is any time slot whose
     # value is a list containing more than one candidate (ranges,

@@ -699,26 +699,28 @@ defmodule Tempo.Math do
 
   defp plain_datetime?(_time), do: false
 
-  defp add_general(%Tempo{} = tempo, %Tempo.Duration{time: duration_time} = duration) do
+  # Un-anchored arithmetic that would depend on the missing year throws
+  # `:requires_anchor` from deep in the stepper; catch it here and surface
+  # a clean error rather than letting it crash the caller. The body is a
+  # separate clause so this is an implicit `try`.
+  defp add_general(%Tempo{} = tempo, %Tempo.Duration{} = duration) do
+    route_general(tempo, duration)
+  catch
+    {:tempo_math, :requires_anchor} ->
+      {:error, RequiresAnchorError.exception(value: tempo, duration: duration)}
+  end
+
+  # Route to the mask path only when the shift actually reaches a mask.
+  # A shift coarser than every mask (or a value with no masks) never
+  # touches a masked component, so the crisp path shifts around them and
+  # keeps the masks intact (`2020-XX` + `P1Y` → `2021-XX`).
+  defp route_general(%Tempo{} = tempo, %Tempo.Duration{time: duration_time} = duration) do
     masks = find_masks(tempo.time)
 
-    # Route to the mask path only when the shift actually reaches a mask.
-    # A shift coarser than every mask (or a value with no masks) never
-    # touches a masked component, so the crisp path shifts around them and
-    # keeps the masks intact (`2020-XX` + `P1Y` → `2021-XX`).
-    #
-    # Un-anchored arithmetic that would depend on the missing year
-    # throws `:requires_anchor` from deep in the stepper; catch it here
-    # and surface a clean error rather than letting it crash the caller.
-    try do
-      if Enum.any?(masks, fn {unit, _mask} -> duration_reaches?(duration_time, unit) end) do
-        shift_masked(tempo, masks, duration)
-      else
-        add_crisp(tempo, duration)
-      end
-    catch
-      {:tempo_math, :requires_anchor} ->
-        {:error, RequiresAnchorError.exception(value: tempo, duration: duration)}
+    if Enum.any?(masks, fn {unit, _mask} -> duration_reaches?(duration_time, unit) end) do
+      shift_masked(tempo, masks, duration)
+    else
+      add_crisp(tempo, duration)
     end
   end
 
@@ -805,9 +807,15 @@ defmodule Tempo.Math do
     if trailing_masks?(time) do
       # A contiguous (trailing) block shifts as a whole, so its min and
       # max candidate bound it exactly.
-      first = add_crisp(%{tempo | time: fill_masks(time, calendar, :min)}, duration)
-      last = add_crisp(%{tempo | time: fill_masks(time, calendar, :max)}, duration)
-      remask_or_set(masks, first, last)
+      with {:ok, min_time} <- fill_masks(time, calendar, :min),
+           {:ok, max_time} <- fill_masks(time, calendar, :max) do
+        first = add_crisp(%{tempo | time: min_time}, duration)
+        last = add_crisp(%{tempo | time: max_time}, duration)
+        remask_or_set(masks, first, last)
+      else
+        {:error, :requires_anchor} ->
+          {:error, RequiresAnchorError.exception(value: tempo, duration: duration)}
+      end
     else
       # A mask with a concrete component after it denotes *disjoint*
       # blocks (`19XX-06-XX` is only the Junes), which a single range
@@ -842,31 +850,41 @@ defmodule Tempo.Math do
   # depends on (a month's valid range needs its year).
   defp fill_masks(time, calendar, which) do
     time
-    |> Enum.reduce([], fn
-      {unit, {:mask, mask}}, filled ->
-        {min_value, max_value} = mask_candidate_bounds(unit, mask, Enum.reverse(filled), calendar)
-        [{unit, if(which == :min, do: min_value, else: max_value)} | filled]
+    |> Enum.reduce_while({:ok, []}, fn
+      {unit, {:mask, mask}}, {:ok, filled} ->
+        case mask_candidate_bounds(unit, mask, Enum.reverse(filled), calendar) do
+          {:ok, {min_value, max_value}} ->
+            {:cont, {:ok, [{unit, if(which == :min, do: min_value, else: max_value)} | filled]}}
 
-      entry, filled ->
-        [entry | filled]
+          {:error, _reason} = error ->
+            {:halt, error}
+        end
+
+      entry, {:ok, filled} ->
+        {:cont, {:ok, [entry | filled]}}
     end)
-    |> Enum.reverse()
+    |> case do
+      {:ok, filled} -> {:ok, Enum.reverse(filled)}
+      {:error, _reason} = error -> error
+    end
   end
 
   # Year masks are digit-bounded; sub-year masks are calendar-bounded by
   # the already-filled coarser components.
   defp mask_candidate_bounds(:year, [:negative | rest], _previous, _calendar) do
     {min, max} = Mask.mask_bounds(rest)
-    {-max, -min}
+    {:ok, {-max, -min}}
   end
 
   defp mask_candidate_bounds(:year, mask, _previous, _calendar) do
-    Mask.mask_bounds(mask)
+    {:ok, Mask.mask_bounds(mask)}
   end
 
   defp mask_candidate_bounds(unit, mask, previous, calendar) do
-    candidates = Mask.valid_values(unit, mask, previous, calendar)
-    {Enum.min(candidates), Enum.max(candidates)}
+    case Mask.valid_values(unit, mask, previous, calendar) do
+      {:ok, candidates} -> {:ok, {Enum.min(candidates), Enum.max(candidates)}}
+      {:error, _reason} = error -> error
+    end
   end
 
   # A single, same-width, block-aligned year mask re-masks; everything
