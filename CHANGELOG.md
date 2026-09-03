@@ -4,6 +4,10 @@
 
 ### Fixed
 
+* `Tempo.explain/1` describes a start-and-duration interval (`2026-06-15T09:00/PT8H`) rather than reporting "an unusual shape".
+
+* `Tempo.explain/1` no longer calls a duration-and-end interval (`P1D/2026-06-15`) open-lower. The duration implies the lower bound, so the value is bounded.
+
 * `Tempo.explain/1` explains an unanchored recurrence (`R/../P1Y/FL11M4I4KN`) instead of reporting "an unusual shape". Its selection, cadence and missing anchor are now named in prose.
 
 ## [v1.6.0] — 2026-09-02

@@ -150,6 +150,42 @@ defmodule Tempo.Explain.Test do
       assert Tempo.explain(~o"R/../P1W/FL1KN") =~ "not where the series starts"
     end
 
+    test "a start-and-duration interval is described, not called an unusual shape" do
+      # `<start>/<duration>` is ordinary ISO 8601 — "an 8-hour shift from
+      # 09:00". It carries no `to`, so it matched no clause and reported
+      # an unusual shape.
+      prose = Tempo.explain(~o"2026-06-15T09:00/PT8H")
+
+      assert prose =~ "start and a duration"
+      assert prose =~ "2026-06-15T09:00"
+      assert prose =~ "8 hours"
+      refute prose =~ "unusual shape"
+    end
+
+    test "a duration-and-end interval is not called open-lower" do
+      # The lower bound is implied by the duration, not absent. Calling
+      # this open-lower was wrong rather than merely vague: the value
+      # materialises to a bounded one-day span.
+      assert {:ok, ~o"2026Y6M14D/15D"} = Tempo.to_interval(~o"P1D/2026-06-15")
+
+      prose = Tempo.explain(~o"P1D/2026-06-15")
+
+      assert prose =~ "duration and an end"
+      refute prose =~ "open-lower"
+      refute prose =~ "requires a lower bound"
+    end
+
+    test "genuinely open intervals still explain as open" do
+      assert Tempo.explain(~o"../2026-06-15") =~ "open-lower"
+      assert Tempo.explain(~o"2026-06-15/..") =~ "open-upper"
+      assert Tempo.explain(~o"../..") =~ "fully open"
+    end
+
+    test "a real recurrence still wins over the start-and-duration clause" do
+      assert Tempo.explain(~o"R3/2026-01-01/P1M") =~ "recurrence of 3 occurrences"
+      assert Tempo.explain(~o"R1/2026-01-01/P1Y") =~ "start and a duration"
+    end
+
     test "a counted but unanchored recurrence is explained the same way" do
       prose = Tempo.explain(~o"R5/../P1Y/FL5M-1I1KN")
 

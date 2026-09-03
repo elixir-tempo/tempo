@@ -409,6 +409,23 @@ defmodule Tempo.Explain do
     ]
   end
 
+  # `P1D/2026-06-15` — a duration and an end. The lower bound is implied
+  # by the duration, not absent, so this must be matched before the
+  # open-lower clause below: that clause would call a bounded one-day
+  # interval "open-lower", which is not merely vague but wrong.
+  defp interval_parts(%Tempo.Interval{
+         from: :undefined,
+         to: %Tempo{} = to,
+         duration: %Tempo.Duration{time: duration_time}
+       }) do
+    [
+      {:headline, "An interval given as a duration and an end."},
+      {:span, "Ends: #{render_endpoint(to)} (exclusive — half-open `[from, to)`)."},
+      {:span, "Duration: #{duration_prose(duration_time)}."},
+      {:hint, "Resolve the implied start with `Tempo.to_interval/1`."}
+    ]
+  end
+
   defp interval_parts(%Tempo.Interval{from: :undefined, to: %Tempo{} = to}) do
     [
       {:headline, "An open-lower interval (`../#{render_endpoint(to)}`)."},
@@ -469,6 +486,24 @@ defmodule Tempo.Explain do
       {:hint, unanchored_hint()}
     ]
     |> Enum.reject(&is_nil/1)
+  end
+
+  # `2026-06-15/P1D`, `2026-06-15T09:00/PT8H` — a start and a duration,
+  # the ordinary ISO 8601 spelling of "an 8-hour shift from 09:00". It
+  # carries no `to`, so every clause above missed it and it reported an
+  # unusual shape. Sits below the recurrence clause so a real recurrence
+  # still matches there; what reaches here repeats once or not at all.
+  defp interval_parts(%Tempo.Interval{
+         from: %Tempo{} = from,
+         to: nil,
+         duration: %Tempo.Duration{time: duration_time}
+       }) do
+    [
+      {:headline, "An interval given as a start and a duration."},
+      {:span, "Starts: #{render_endpoint(from)}."},
+      {:span, "Duration: #{duration_prose(duration_time)}."},
+      {:hint, "Resolve the implied end with `Tempo.to_interval/1`."}
+    ]
   end
 
   defp interval_parts(%Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to} = interval) do
