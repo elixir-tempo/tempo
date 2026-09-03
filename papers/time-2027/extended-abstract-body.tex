@@ -216,10 +216,23 @@ $A\;r_1\;B$ and $B\;r_2\;C$, it returns the set of relations that can
 hold between $A$ and $C$. Each of the 169 cells was derived
 independently, by a difference-bound consistency check over the six
 endpoints under the half-open convention, and then checked
-cell-for-cell against the published table. Composition is at present a
-standalone query rather than the engine of a propagation algorithm ---
-see \S\ref{sec:discussion} --- but it is the piece on which qualitative
-reasoning over non-grounded intervals would be built.
+cell-for-cell against the published table.
+
+Composition drives a propagation algorithm. Lifting it from single
+relations to \emph{sets} of them gives the operations a qualitative
+constraint network is built from --- the converse of a set, the
+narrowing of one set by another, and set composition --- and Allen's
+path-consistency step is then their composite,
+$R(i,k) \leftarrow R(i,k) \cap (R(i,j) \circ R(j,k))$, iterated to a
+fixpoint. This is what lets Tempo reason about intervals that are
+\emph{not} grounded: a period known only as ``before or after the
+rebuild, never during'' is the set
+$\{\textit{precedes}, \textit{preceded\_by}\}$, and propagation derives
+what that implies elsewhere in the network. Pruning is sound --- every
+relation removed is genuinely impossible --- but path consistency does
+not decide satisfiability, which is NP-complete for the full
+algebra~\cite{vilainkautz1986,nebel1995}; the library says so at the
+call site rather than letting a clean pass be read as a proof.
 
 This is rarely the right surface for application code, however ---
 business questions tend to name unions of Allen relations.

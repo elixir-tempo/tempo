@@ -383,9 +383,9 @@ defmodule Tempo.Network.Relation do
   @doc """
   The chronological relation type naming a given Allen relation.
 
-  The inverse of `to_allen/1` for the one-to-one cases. The two
-  direction-symmetric Allen relations (`:overlapped_by`) name the same
-  chronological type with the operands read in the other order.
+  The inverse of `to_allen/1`, direction-preserving for every relation
+  that has a chronological type: `from_allen(to_allen(type)) == type` for
+  all thirteen one-to-one cases.
 
   ### Examples
 
@@ -402,7 +402,7 @@ defmodule Tempo.Network.Relation do
   def from_allen(:meets), do: :immediately_precedes
   def from_allen(:met_by), do: :immediately_follows
   def from_allen(:overlaps), do: :overlaps
-  def from_allen(:overlapped_by), do: :overlaps
+  def from_allen(:overlapped_by), do: :overlapped_by
   def from_allen(:contains), do: :includes
   def from_allen(:during), do: :included_in
   def from_allen(:equals), do: :equals

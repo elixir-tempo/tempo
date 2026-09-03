@@ -3,6 +3,7 @@ defmodule Tempo.Network.RelationTest do
 
   import Tempo.Sigils
 
+  alias Tempo.Interval.Relations
   alias Tempo.Network.Relation
 
   describe "to_atomic/1 — qualitative relations" do
@@ -168,6 +169,7 @@ defmodule Tempo.Network.RelationTest do
             :immediately_precedes,
             :immediately_follows,
             :overlaps,
+            :overlapped_by,
             :includes,
             :included_in,
             :equals,
@@ -177,6 +179,19 @@ defmodule Tempo.Network.RelationTest do
             :finished_by
           ] do
         assert Relation.from_allen(Relation.to_allen(type)) == type
+      end
+    end
+
+    test "from_allen preserves direction for every Allen relation" do
+      # `:overlapped_by` used to map to `:overlaps`, silently reversing
+      # the operands — a trap for anything feeding derived relations back
+      # into a network.
+      for allen <- Relations.full() do
+        type = Relation.from_allen(allen)
+
+        assert Relation.to_allen(type) == allen,
+               "from_allen(#{inspect(allen)}) gave #{inspect(type)}, " <>
+                 "which reads back as #{inspect(Relation.to_allen(type))}"
       end
     end
 

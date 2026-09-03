@@ -4,9 +4,15 @@
 
 ### Added
 
+* `Tempo.Network.Qualitative` — bridges the metric and qualitative networks. `from_network/1` seeds relation sets from what a solved network's bounds already prove, `apply_to_network/2` feeds determined relations back, and `refine/1` runs the round trip.
+
 * `Tempo.Interval.RelationNetwork` — Allen's path-consistency propagation over a network of partially known intervals, deriving what a web of relation constraints implies. It represents disjunction (`[:precedes, :preceded_by]`), which `Tempo.Network`'s convex metric vocabulary cannot.
 
 * `Tempo.Interval.Relations` — converse, narrowing and composition over *sets* of Allen relations, for reasoning when the relation between two intervals is constrained but not known. `narrow/2` combines two sources of knowledge; it is not `Tempo.intersection/2`, which operates on time values.
+
+### Fixed
+
+* `Tempo.Network.Relation.from_allen/1` preserves direction for `:overlapped_by`, which previously mapped to `:overlaps` and silently reversed the operands. Every Allen relation now round-trips through `to_allen/1`.
 
 ## [v1.6.4] — 2026-09-03
 
