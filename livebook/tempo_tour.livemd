@@ -6,8 +6,8 @@ The cell below installs Tempo, pulls in Kino for rich output, and — critically
 
 ```elixir
 Mix.install([
-  {:ex_tempo, github: "elixir-tempo/tempo"},
-  {:kino, "~> 0.14"}
+  {:ex_tempo, "~> 1.6"},
+  {:kino, "~> 0.19"}
 ])
 
 import Tempo.Sigils

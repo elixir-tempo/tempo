@@ -2,7 +2,7 @@
 
 ```elixir
 Mix.install([
-  {:ex_tempo, "~> 1.0"},
+  {:ex_tempo, "~> 1.6"},
   {:tz, "~> 0.28"}
 ])
 
