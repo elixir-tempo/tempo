@@ -2,7 +2,7 @@
 
 ```elixir
 Mix.install([
-  {:ex_tempo, "~> 1.6"},
+  {:ex_tempo, "~> 1.6.2"},
   {:ical, "~> 3.2"},
   {:tz, "~> 0.28"}
 ])
@@ -524,7 +524,7 @@ Being honest about the edges is more useful than a feature list.
 
 ## Thank you
 
-* [github.com/elixir-tempo/tempo](https://github.com/elixir-tempo/tempo) — `{:ex_tempo, "~> 1.6"}`
+* [github.com/elixir-tempo/tempo](https://github.com/elixir-tempo/tempo) — `{:ex_tempo, "~> 1.6.2"}`
 * [github.com/elixir-tempo/agenda](https://github.com/elixir-tempo/agenda) — scheduling, built on Tempo
 * Guides: ISO 8601 conformance, set operations, enumeration, chronological networks
 * Questions?

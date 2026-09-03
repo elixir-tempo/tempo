@@ -335,6 +335,14 @@ defmodule Tempo.Interval do
   # `[zone]` binds to the upper endpoint) and `new/1`, so a constructed
   # interval and its re-parsed ISO 8601 string cannot disagree.
   def propagate_endpoint_frame(%Tempo{} = from, %Tempo{} = to) do
+    {from, to}
+    |> propagate_zone()
+    |> propagate_calendar()
+  end
+
+  def propagate_endpoint_frame(from, to), do: {from, to}
+
+  defp propagate_zone({%Tempo{} = from, %Tempo{} = to}) do
     if Tempo.floating?(from) and not Tempo.floating?(to) do
       {copy_frame(to, from), to}
     else
@@ -342,7 +350,44 @@ defmodule Tempo.Interval do
     end
   end
 
-  def propagate_endpoint_frame(from, to), do: {from, to}
+  # A `[u-ca=…]` at the end names the calendar the interval is written in,
+  # and an endpoint carrying none of its own inherits it — the same
+  # backward flow as the zone. Without this,
+  # `1448Y9M24D/25D[u-ca=islamic-civil]` parses as a *mixed*
+  # Gregorian/Islamic pair, which cannot be what it means: the abbreviated
+  # `25D` is only readable against `from`'s own year and month.
+  #
+  # Never overwrites, so a deliberately mixed pair
+  # (`1447Y9M1D[u-ca=islamic-civil]/2026Y6M1D`) and a pair tagging both
+  # ends keep exactly the calendars they name.
+  defp propagate_calendar({%Tempo{} = from, %Tempo{} = to}) do
+    if is_nil(tagged_calendar(from)) and not is_nil(tagged_calendar(to)) do
+      {copy_calendar(to, from), to}
+    else
+      {from, to}
+    end
+  end
+
+  defp tagged_calendar(%Tempo{extended: %{calendar: calendar}}) when not is_nil(calendar),
+    do: calendar
+
+  defp tagged_calendar(%Tempo{}), do: nil
+
+  defp copy_calendar(%Tempo{} = source, %Tempo{} = target) do
+    %{
+      target
+      | calendar: source.calendar,
+        extended: put_calendar_field(target.extended, tagged_calendar(source))
+    }
+  end
+
+  defp put_calendar_field(nil, calendar) do
+    %{zone_id: nil, zone_offset: nil, zone_critical: false, calendar: calendar, tags: %{}}
+  end
+
+  defp put_calendar_field(target_extended, calendar) do
+    %{target_extended | calendar: calendar}
+  end
 
   # Overlay `source`'s grounding frame — its numeric `shift` and the zone
   # fields of its `extended` — onto `target`, leaving target's own units,

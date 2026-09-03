@@ -843,21 +843,21 @@ defmodule Tempo.Inspect do
   # the same *zone*, writing it twice is redundant — the single-suffix
   # form re-parses to the same value.
   #
-  # Only the zone is elided. A `u-ca` calendar tag decides how its own
-  # endpoint's components are *read* (`maybe_resolve_endpoint_calendars/2`),
-  # and nothing propagates it backward, so dropping it from `from` would
-  # re-parse that endpoint in the default calendar — a different value.
-  # Tags are per-endpoint metadata for the same reason.
+  # Both the zone and a `u-ca` calendar propagate backward, so either may
+  # be written once. Arbitrary IXDTF tags do not propagate — they are
+  # per-endpoint metadata — so a suffix carrying any is kept on both ends.
   defp drop_shared_suffix(%Tempo{extended: same} = from, %Tempo{extended: same})
        when not is_nil(same) do
-    if zone_only?(same), do: %{from | extended: nil}, else: from
+    if propagating_suffix?(same), do: %{from | extended: nil}, else: from
   end
 
   defp drop_shared_suffix(from, _to), do: from
 
-  defp zone_only?(%{} = extended) do
-    is_nil(Map.get(extended, :calendar)) and Map.get(extended, :tags, %{}) == %{} and
-      (is_binary(Map.get(extended, :zone_id)) or not is_nil(Map.get(extended, :zone_offset)))
+  defp propagating_suffix?(%{} = extended) do
+    Map.get(extended, :tags, %{}) == %{} and
+      (is_binary(Map.get(extended, :zone_id)) or
+         not is_nil(Map.get(extended, :zone_offset)) or
+         not is_nil(Map.get(extended, :calendar)))
   end
 
   # ISO 8601-1 §5.5.1 lets an interval omit from its end the higher

@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+* An interval's `[u-ca=…]` calendar now propagates backward from its end onto an endpoint carrying no tag of its own, as the zone already did. `1448Y9M24D/25D[u-ca=islamic-civil]` was parsing as a mixed Gregorian/Islamic pair, which its abbreviated end cannot mean.
+
+* An interval whose endpoints share a calendar writes `[u-ca=…]` once, at the end. A deliberately mixed pair still names the calendar on each endpoint.
+
 ## [v1.6.2] — 2026-09-03
 
 ### Fixed
