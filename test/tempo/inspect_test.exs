@@ -119,13 +119,25 @@ defmodule Tempo.Iso8601.InspectTest do
       assert inspect(t) == "~o\"2011Y12M29DT12H0M0S[Pacific/Apia]\""
     end
 
-    test "Interval with zoned endpoints preserves [zone] on each" do
+    test "Interval with one shared zone writes it once, at the end" do
+      # IXDTF binds the suffix to the interval's end and
+      # `propagate_endpoint_frame/2` flows it back onto a floating
+      # `from`, so repeating it on both endpoints says nothing extra.
       {:ok, from} = Tempo.from_iso8601("2011-12-29T12:00:00[Pacific/Apia]")
       {:ok, to} = Tempo.from_iso8601("2011-12-31T12:00:00[Pacific/Apia]")
       iv = %Tempo.Interval{from: from, to: to}
 
-      assert inspect(iv) ==
-               "~o\"2011Y12M29DT12H0M0S[Pacific/Apia]/31DT12H0M0S[Pacific/Apia]\""
+      assert inspect(iv) == "~o\"2011Y12M29DT12H0M0S/31DT12H0M0S[Pacific/Apia]\""
+    end
+
+    test "the single-suffix form re-parses to the same value" do
+      both =
+        Tempo.from_iso8601!("2011-12-29T12:00:00[Pacific/Apia]/2011-12-31T12:00:00[Pacific/Apia]")
+
+      once = Tempo.from_iso8601!("2011-12-29T12:00:00/2011-12-31T12:00:00[Pacific/Apia]")
+
+      assert both == once
+      assert Tempo.from_iso8601!(Tempo.to_iso8601(both)) == both
     end
 
     test "Interval with mixed zones shows each endpoint's zone" do

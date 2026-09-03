@@ -708,6 +708,13 @@ defmodule Tempo do
          {:ok, parsed} <- Parser.parse(tokens, effective_calendar),
          {:ok, expanded} <- Group.expand_groups(parsed),
          expanded = maybe_resolve_endpoint_calendars(expanded, requested_calendar),
+         # Propagate before validating. `2026-09-02T18:00/2026-09-02T20:00[Australia/Melbourne]`
+         # binds the suffix to the `to` endpoint, so an unpropagated pair reaches
+         # `validate_endpoint_order/2` as a floating `from` against a grounded `to` and
+         # is rejected as out of order. Propagation never overwrites, so running it
+         # again after `attach_extended/2` (which applies a *top-level* suffix) is a
+         # no-op for the endpoints this pass already grounded.
+         expanded = propagate_endpoint_frame(expanded),
          {:ok, validated} <- Validation.validate(expanded, effective_calendar),
          attached = attach_extended(validated, extended),
          propagated = propagate_endpoint_frame(attached),

@@ -33,13 +33,13 @@ One idea, followed all the way down. Every example tonight builds one thing: the
 
 Elixir's `Date`, `Time`, `DateTime` and `NaiveDateTime` are excellent scalars. Tempo is not a replacement for them — it is the layer above, for the questions scalars make awkward.
 
-| Question | Scalars | Tempo |
-| --- | --- | --- |
-| "Is this the day, or midnight on it?" | ambiguous | it *is* the day |
-| "Last Friday of the month" | helper function | `-1FR` |
-| "Sometime in the 1560s" | inexpressible | `~o"156X"` |
-| "When are we both free?" | hand-rolled | set difference |
-| "Every second Tuesday, forever" | a library | a value |
+| Question                              | Scalars         | Tempo           |
+| ------------------------------------- | --------------- | --------------- |
+| "Is this the day, or midnight on it?" | ambiguous       | it *is* the day |
+| "Last Friday of the month"            | helper function | `-1FR`          |
+| "Sometime in the 1560s"               | inexpressible   | `~o"156X"`      |
+| "When are we both free?"              | hand-rolled     | set difference  |
+| "Every second Tuesday, forever"       | a library       | a value         |
 
 ## Three classes of bug it removes
 
@@ -220,7 +220,7 @@ A birthday is not a date. It is a day-and-month that recurs, and most systems st
 {:ok, fifteenths} = Tempo.to_interval(~o"1985-XX-15")
 
 {Tempo.IntervalSet.count(fifteenths),
- fifteenths |> Tempo.IntervalSet.members() |> Enum.take(3) |> Enum.map(&Tempo.Interval.from/1)}
+ fifteenths |> Tempo.IntervalSet.members() |> Enum.take(3)}
 ```
 
 ## Enumeration, implicitly
@@ -391,12 +391,12 @@ This is the whole trick. "Free" is not a stored state to be kept in sync — it 
 <!-- slide: code -->
 
 ```elixir
-rehearsal_window = ~o"2026-09-01T09:00:00[Australia/Melbourne]/2026-09-01T17:00:00[Australia/Melbourne]"
+rehearsal_window = ~o"2026-09-01T09:00:00/2026-09-01T17:00:00[Australia/Melbourne]"
 
 commitments =
   Tempo.IntervalSet.new!([
-    ~o"2026-09-01T10:00:00[Australia/Melbourne]/2026-09-01T11:30:00[Australia/Melbourne]",
-    ~o"2026-09-01T13:00:00[Australia/Melbourne]/2026-09-01T14:00:00[Australia/Melbourne]"
+    ~o"2026-09-01T10:00:00/2026-09-01T11:30:00[Australia/Melbourne]",
+    ~o"2026-09-01T13:00:00/2026-09-01T14:00:00[Australia/Melbourne]"
   ])
 
 # `free` inspects to legible `~o` intervals — no need to map it to strings.

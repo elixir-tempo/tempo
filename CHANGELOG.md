@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+* An interval whose endpoints share a zone writes the IXDTF suffix once, at the end (`2026Y9M2DT18H/T20H[Australia/Melbourne]`), where before it was repeated on both. A per-endpoint `[u-ca=…]` is still written on each, because it decides how that endpoint is read.
+
+* `2026-09-02T18:00/2026-09-02T20:00[Australia/Melbourne]` — the suffix written once, as IXDTF defines it — no longer fails endpoint-order validation. The endpoint frame now propagates before the order check rather than after.
+
 ## [v1.6.1] — 2026-09-03
 
 ### Fixed
