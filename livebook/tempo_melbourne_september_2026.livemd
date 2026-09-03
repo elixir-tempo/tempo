@@ -31,7 +31,7 @@ One idea, followed all the way down. Every example tonight builds one thing: the
 
 ## Where it fits
 
-* Elixir's `Date`, `Time`, `DateTime` and `NaiveDateTime` are excellent scalars. Tempo is not a replacement for them — it is the layer above, for the questions scalars make awkward.
+* Elixir's `Date`, `Time`, `DateTime` and `NaiveDateTime` and `Duration` are excellent scalars (and don't forget `Date.Range`). Tempo is not a replacement for them — it is the layer above, for the questions scalars make awkward.
 
 | Question                              | Scalars         | Tempo           |
 | ------------------------------------- | --------------- | --------------- |
@@ -213,15 +213,15 @@ end
 Enum.map(2026..2032, anzac_day)
 ```
 
-> *"ANZAC Day is the 25th of April. If that lands on a **weekend** in **Australia**, the holiday is the **next working day**."*
+* *"ANZAC Day is the 25th of April. If that lands on a **weekend** in **Australia**, the holiday is the **next working day**."*
 
-Four lines, and every noun in the sentence is a function. `weekend?` is territory-aware — Australia weekends Saturday and Sunday, Saudi Arabia Friday and Saturday — so the same rule expresses any jurisdiction's substitution without a `case` on country codes.
+* Four lines, and every noun in the sentence is a function. `weekend?` is territory-aware — Australia weekends Saturday and Sunday, Saudi Arabia Friday and Saturday — so the same rule expresses any jurisdiction's substitution without a `case` on country codes.
 
 ## A birthday has no year
 
-A birthday is a day and a month. The year is not missing information — it was never part of the fact. Most systems store it as a date in some arbitrary year and spend the rest of their life apologising for the year they invented.
+* A birthday is a day and a month. The year is not missing information — it was never part of the fact. Most systems store it as a date in some arbitrary year and spend the rest of their life apologising for the year they invented.
 
-In Tempo the partial date **is** the value. Nothing is standing in for anything.
+* In Tempo the partial date **is** the value. Nothing is standing in for anything.
 
 <!-- slide: code -->
 
@@ -233,7 +233,7 @@ Tempo.anchor(birthday, ~o"2026")
 
 ## Project it when you need a point on the line
 
-The year arrives later, from the question being asked — not from the fact. Anchor it onto one year, or onto a decade, and it becomes an ordinary Tempo value that every other operation already understands.
+* The year arrives later, from the question being asked — not from the fact. Anchor it onto one year, or onto a decade, and it becomes an ordinary Tempo value that every other operation already understands.
 
 <!-- slide: code -->
 
@@ -243,9 +243,9 @@ The year arrives later, from the question being asked — not from the fact. Anc
 |> Enum.filter(&Tempo.weekend?(&1, :AU))
 ```
 
-> *"Over the next decade, which of my birthdays fall on a **weekend** in **Australia**?"*
+* *"Over the next decade, which of my birthdays fall on a **weekend** in **Australia**?"*
 
-The year range from three slides ago, the territory-aware weekend from the ANZAC rule, and a date with no year — composed, because they are all just values.
+* The year range from three slides ago, the territory-aware weekend from the ANZAC rule, and a date with no year — composed, because they are all just values.
 
 ## The one that breaks every date column
 
@@ -356,16 +356,15 @@ meetups
 
 ## Set operations
 
-Four operations and a handful of predicates, over any combination of Tempo values — across resolutions, zones and calendars.
-
-* `union/2` — everything in either
-* `intersection/2` — everything in both
-* `difference/2` — in the first, not the second
-* `overlaps?/2`, `subset?/2`, `contains?/2`
+* Four operations and a handful of predicates, over any combination of Tempo values — across resolutions, zones and calendars.
+  * `union/2` — everything in either
+  * `intersection/2` — everything in both
+  * `difference/2` — in the first, not the second
+  * `overlaps?/2`, `subset?/2`, `contains?/2`
 
 ## Holidays arrive as an .ics
 
-Nobody types their public holidays in by hand. They come from a calendar feed, and an `.ics` is a set of intervals wearing a costume.
+* Nobody types their public holidays in by hand. They come from a calendar feed, and an `.ics` is a set of intervals wearing a costume.
 
 <!-- slide: code -->
 
@@ -403,7 +402,7 @@ holidays
 
 ## Composing them
 
-The metadata survives the operation. An interval that came from a `VEVENT` still knows its summary after being intersected with something else — which is why the answer can explain itself.
+* The metadata survives the operation. An interval that came from a `VEVENT` still knows its summary after being intersected with something else — which is why the answer can explain itself.
 
 <!-- slide: code -->
 
