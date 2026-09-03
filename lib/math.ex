@@ -87,13 +87,13 @@ defmodule Tempo.Math do
   # untracked year advances but the month/day/time axis is unchanged, so
   # "one year after January 31st" is January 31st. This is always unambiguous.
   def add_unit(time, :year, _calendar) when is_list(time) do
-    if Keyword.has_key?(time, :year),
+    if concrete_year?(time),
       do: Keyword.update!(time, :year, &(&1 + 1)),
       else: time
   end
 
   def add_unit(time, :month, calendar) when is_list(time) do
-    if Keyword.has_key?(time, :year) do
+    if concrete_year?(time) do
       year = Keyword.fetch!(time, :year)
       month = Keyword.fetch!(time, :month)
       months_in_year = calendar.months_in_year(year)
@@ -111,7 +111,7 @@ defmodule Tempo.Math do
   end
 
   def add_unit(time, :day, calendar) when is_list(time) do
-    if Keyword.has_key?(time, :year) do
+    if concrete_year?(time) do
       year = Keyword.fetch!(time, :year)
       month = Keyword.fetch!(time, :month)
       day = Keyword.fetch!(time, :day)
@@ -265,6 +265,14 @@ defmodule Tempo.Math do
   #
   # `add/2` catches the internal `:requires_anchor` throw and converts it to the
   # error tuple, so callers see a value or a clean error, never a crash.
+
+  # `Keyword.has_key?(time, :year)` is not the same question as "is this
+  # value anchored". An unspecified year (`X*Y12M28D`, parsed as
+  # `year: :any`) has the key but not a number, and every anchored branch
+  # above either hands the year to a calendar function that guards
+  # `is_integer/1` or does arithmetic on it. Asking for a concrete year
+  # routes those values down the un-anchored path, which is what they are.
+  defp concrete_year?(time), do: is_integer(Keyword.get(time, :year))
 
   defp advance_day_unanchored(time, calendar) do
     day = Keyword.fetch!(time, :day)
@@ -461,13 +469,13 @@ defmodule Tempo.Math do
   # Mirror of the year no-op in `add_unit/3`: a whole-year step on an
   # un-anchored value leaves its month/day/time axis untouched.
   def subtract_unit(time, :year, _calendar) when is_list(time) do
-    if Keyword.has_key?(time, :year),
+    if concrete_year?(time),
       do: Keyword.update!(time, :year, &(&1 - 1)),
       else: time
   end
 
   def subtract_unit(time, :month, calendar) when is_list(time) do
-    if Keyword.has_key?(time, :year) do
+    if concrete_year?(time) do
       year = Keyword.fetch!(time, :year)
       month = Keyword.fetch!(time, :month)
 
@@ -486,7 +494,7 @@ defmodule Tempo.Math do
   end
 
   def subtract_unit(time, :day, calendar) when is_list(time) do
-    if Keyword.has_key?(time, :year) do
+    if concrete_year?(time) do
       year = Keyword.fetch!(time, :year)
       month = Keyword.fetch!(time, :month)
       day = Keyword.fetch!(time, :day)
@@ -1218,7 +1226,7 @@ defmodule Tempo.Math do
 
   defp clamp_integer_day(time, day, calendar) do
     cond do
-      Keyword.has_key?(time, :year) -> clamp_day_to_month_anchored(time, day, calendar)
+      concrete_year?(time) -> clamp_day_to_month_anchored(time, day, calendar)
       Keyword.has_key?(time, :month) -> clamp_day_to_month_unanchored(time, day, calendar)
       # Day-only value (no month): there is nothing to clamp the day against.
       true -> time

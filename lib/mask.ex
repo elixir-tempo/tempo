@@ -141,20 +141,37 @@ defmodule Tempo.Mask do
     |> Enum.filter(&padded_matches_mask?(&1, mask, width))
   end
 
+  # A yearless value (`XX-15`, "the 15th of any month") has no year to
+  # ask the calendar about, and `Keyword.fetch!/2` raised a bare
+  # `KeyError` from four frames down. The calendars answer the
+  # un-anchored question too: Gregorian always has 12 months, so the
+  # candidates are exact, while Hebrew reports `{:ambiguous, 12..13}`
+  # because a leap year adds one — there the answer really does depend
+  # on the missing year, and `:requires_anchor` says so.
   defp valid_range(:month, previous, calendar) do
-    year = Keyword.fetch!(previous, :year)
-    1..calendar.months_in_year(year)
+    case Keyword.get(previous, :year) do
+      year when is_integer(year) -> 1..calendar.months_in_year(year)
+      _no_concrete_year -> unanchored_range(calendar.months_in_year())
+    end
   end
 
   defp valid_range(:day, previous, calendar) do
-    year = Keyword.fetch!(previous, :year)
-    month = Keyword.fetch!(previous, :month)
-    1..calendar.days_in_month(year, month)
+    year = Keyword.get(previous, :year)
+    month = Keyword.get(previous, :month)
+
+    cond do
+      is_integer(year) and is_integer(month) -> 1..calendar.days_in_month(year, month)
+      is_integer(month) -> unanchored_range(calendar.days_in_month(month))
+      true -> throw({:tempo_math, :requires_anchor})
+    end
   end
 
   defp valid_range(:hour, _previous, _calendar), do: 0..23
   defp valid_range(:minute, _previous, _calendar), do: 0..59
   defp valid_range(:second, _previous, _calendar), do: 0..59
+
+  defp unanchored_range(count) when is_integer(count), do: 1..count
+  defp unanchored_range(_ambiguous_or_undefined), do: throw({:tempo_math, :requires_anchor})
 
   # Pad candidate to the mask's width with leading zeros, then
   # compare digit-by-digit: `:X` matches any digit; any other

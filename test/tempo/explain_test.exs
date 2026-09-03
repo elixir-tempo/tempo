@@ -150,6 +150,44 @@ defmodule Tempo.Explain.Test do
       assert Tempo.explain(~o"R/../P1W/FL1KN") =~ "not where the series starts"
     end
 
+    test "an unspecified year materialises instead of crashing in the calendar" do
+      # `X*Y12M28D` is "28 December of an unspecified year". The year key
+      # is present but holds `:any`, and the anchored branches guarded on
+      # key *presence*, so `:any` reached `days_in_month/3`, which guards
+      # `is_integer/1`, as a FunctionClauseError.
+      assert {:ok, interval} = Tempo.to_interval(~o"X*Y12M28D")
+      assert Tempo.explain(interval) =~ "interval"
+
+      # December is 31 days in every year, so the step is answerable
+      # without one; the roll-over into January likewise.
+      assert {:ok, %Tempo.Interval{}} = Tempo.to_interval(~o"X*Y12M31D")
+    end
+
+    test "an unspecified year reports the anchor it needs when the answer depends on one" do
+      # February's length does depend on the year, so this is the case
+      # `RequiresAnchorError` exists for — an error, not a guess.
+      assert {:error, %Tempo.RequiresAnchorError{}} = Tempo.to_interval(~o"X*Y2M28D")
+    end
+
+    test "a yearless masked month resolves against the calendar's own month count" do
+      # `XX-15` is "the 15th of any month" with no year at all.
+      # `Keyword.fetch!(previous, :year)` raised a bare KeyError; the
+      # un-anchored calendar callback answers it exactly for Gregorian.
+      assert {:ok, set} = Tempo.to_interval(~o"XX-15")
+      assert IntervalSet.count(set) == 12
+
+      assert Enum.take(~o"XX-15", 3) == [~o"1M15D", ~o"2M15D", ~o"3M15D"]
+      assert Tempo.explain(~o"XX-15") =~ "12 disjoint intervals"
+    end
+
+    test "a yearless masked month needs an anchor where the month count varies" do
+      # A Hebrew leap year has 13 months, so "any month" is genuinely
+      # unanswerable without knowing the year.
+      hebrew = Tempo.from_iso8601!("XX-15", Calendrical.Hebrew)
+
+      assert {:error, %Tempo.RequiresAnchorError{}} = Tempo.to_interval(hebrew)
+    end
+
     test "a start-and-duration interval is described, not called an unusual shape" do
       # `<start>/<duration>` is ordinary ISO 8601 — "an 8-hour shift from
       # 09:00". It carries no `to`, so it matched no clause and reported

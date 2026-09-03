@@ -4,6 +4,10 @@
 
 ### Fixed
 
+* `Tempo.to_interval/1` materialises an unspecified year (`X*Y12M28D`) instead of raising a `FunctionClauseError`. Where the answer depends on the missing year (`X*Y2M28D`) it returns `Tempo.RequiresAnchorError`.
+
+* `Tempo.to_interval/1` resolves a yearless masked month (`XX-15`, the 15th of any month) instead of raising a `KeyError`. Calendars whose month count varies by year return `Tempo.RequiresAnchorError`.
+
 * `Tempo.explain/1` describes a start-and-duration interval (`2026-06-15T09:00/PT8H`) rather than reporting "an unusual shape".
 
 * `Tempo.explain/1` no longer calls a duration-and-end interval (`P1D/2026-06-15`) open-lower. The duration implies the lower bound, so the value is bounded.

@@ -127,6 +127,7 @@ defmodule Tempo do
   alias Tempo.MaterialisationError
   alias Tempo.Math
   alias Tempo.NonAnchoredError
+  alias Tempo.RequiresAnchorError
   alias Tempo.ResolutionError
   alias Tempo.Rounding
   alias Tempo.RRule.Encoder
@@ -4969,30 +4970,17 @@ defmodule Tempo do
   end
 
   def to_interval(%Tempo{} = tempo, _opts) do
-    # Step 1: if the Tempo has a non-contiguous mask (a mask
-    # followed by concrete units — e.g. `1985-XX-15`), rewrite the
-    # time list to substitute the mask with the list of valid
-    # values. This turns a previously-widened case into a proper
-    # multi-interval expansion.
-    tempo = expand_non_contiguous_mask(tempo)
-
-    # Step 2: detect whether the resulting Tempo expands to
-    # multiple intervals. A "multi" shape is any time slot whose
-    # value is a list containing more than one candidate (ranges,
-    # multi-element lists). Masks, scalars, and single-element
-    # lists use the existing single-interval path in
-    # `next_unit_boundary/1`.
-    if multi_tempo?(tempo) do
-      materialise_multi(tempo)
-    else
-      # The bounds keep the value's own resolution; the iteration
-      # granularity of the implicit span travels on `:unit` (see
-      # `Tempo.Interval.next_unit_boundary/1`).
-      case Interval.next_unit_boundary(tempo) do
-        {:ok, {lower, upper}, unit} -> {:ok, %Tempo.Interval{from: lower, to: upper, unit: unit}}
-        {:error, _} = err -> err
-      end
-    end
+    # Un-anchored arithmetic that would depend on the missing year throws
+    # `:requires_anchor` from deep in the stepper — `X*Y2M28D` is "28
+    # February of an unspecified year", and whether the next day is the
+    # 29th or 1 March depends on which year. `Tempo.Math.shift/2` already
+    # catches this signal at its own entry point; materialisation is the
+    # other way in, so catch it here too rather than let it escape as an
+    # uncaught throw.
+    do_to_interval(tempo)
+  catch
+    {:tempo_math, :requires_anchor} ->
+      {:error, RequiresAnchorError.exception(value: tempo)}
   end
 
   # An all-of `%Tempo.Set{}` (`{a,b,c}` syntax at the expression
@@ -5687,6 +5675,33 @@ defmodule Tempo do
     |> case do
       {:error, _} = error -> error
       intervals -> IntervalSet.new(Enum.reverse(intervals))
+    end
+  end
+
+  defp do_to_interval(%Tempo{} = tempo) do
+    # Step 1: if the Tempo has a non-contiguous mask (a mask
+    # followed by concrete units — e.g. `1985-XX-15`), rewrite the
+    # time list to substitute the mask with the list of valid
+    # values. This turns a previously-widened case into a proper
+    # multi-interval expansion.
+    tempo = expand_non_contiguous_mask(tempo)
+
+    # Step 2: detect whether the resulting Tempo expands to
+    # multiple intervals. A "multi" shape is any time slot whose
+    # value is a list containing more than one candidate (ranges,
+    # multi-element lists). Masks, scalars, and single-element
+    # lists use the existing single-interval path in
+    # `next_unit_boundary/1`.
+    if multi_tempo?(tempo) do
+      materialise_multi(tempo)
+    else
+      # The bounds keep the value's own resolution; the iteration
+      # granularity of the implicit span travels on `:unit` (see
+      # `Tempo.Interval.next_unit_boundary/1`).
+      case Interval.next_unit_boundary(tempo) do
+        {:ok, {lower, upper}, unit} -> {:ok, %Tempo.Interval{from: lower, to: upper, unit: unit}}
+        {:error, _} = err -> err
+      end
     end
   end
 
