@@ -218,7 +218,7 @@ Without a configured database, parsing still works fully — zone names in IXDTF
 
 ## Livebooks
 
-Interactive, runnable tours — every cell executes live in [Livebook](https://livebook.dev):
+Interactive, runnable tours for [Livebook](https://livebook.dev):
 
 * [![Run in Livebook](https://livebook.dev/badge/v1/blue.svg)](https://livebook.dev/run?url=https%3A%2F%2Fraw.githubusercontent.com%2Felixir-tempo%2Ftempo%2Fmain%2Flivebook%2Fgetting-started.livemd) **Getting started** — time as intervals: the sigil, resolutions, iteration, Allen relations, set algebra, and locale-aware formatting.
 
@@ -249,11 +249,26 @@ Interactive, runnable tours — every cell executes live in [Livebook](https://l
 
 ## Related links
 
-* [Computerphile on Timezones](https://www.youtube.com/watch?v=-5wpm-gesOY) — excellent primer on why timezones are hard.
-* [Time words don't mean what you think](https://www.youtube.com/watch?v=TK-8gfqmFNo) - a fun look at the etymology of the words we use to decribe time.
-* [Allen's Interval Algebra](https://ics.uci.edu/~alspaugh/cls/shr/allen.html) — the reference.
-* [RFC 3339 and ISO 8601](https://ijmacd.github.io/rfc3339-iso8601/) — helpful visual crossref.
-* [EDTF specification](https://www.loc.gov/standards/datetime/) — Library of Congress.
+Tempo implements or interoperates with these standards:
+
+* [ISO 8601-1:2019](https://www.iso.org/standard/70907.html) — date and time representations: the base grammar for dates, times, durations, and intervals.
+* [ISO 8601-2:2019](https://www.iso.org/standard/70908.html) — extensions: uncertain and approximate dates, unspecified digits, seasons, sets, and negative components.
+* [EDTF](https://www.loc.gov/standards/datetime/) — the Library of Congress Extended Date/Time Format, aligned with ISO 8601-2.
+* [RFC 9557](https://www.rfc-editor.org/rfc/rfc9557.html) — Internet Extended Date/Time Format (IXDTF): the `[zone]`, `[u-ca=…]`, and `[key=value]` suffixes and the critical `!` flag.
+* [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) — Date and Time on the Internet: Timestamps, the internet profile of ISO 8601.
+* [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545.html) — iCalendar: `RRULE` recurrences and `VEVENT` parsing.
+* [RFC 7953](https://www.rfc-editor.org/rfc/rfc7953.html) — Calendar Availability: `VAVAILABILITY` and `AVAILABLE`.
+* [RFC 8984](https://www.rfc-editor.org/rfc/rfc8984.html) — JSCalendar.
+* [BCP 47](https://www.rfc-editor.org/info/bcp47) — language and territory tags, used by the `u-ca` calendar and `u-rg` territory subtags.
+* [Unicode CLDR](https://cldr.unicode.org/) — calendar, locale, and territory data (via Calendrical and Localize).
+* [Allen's Interval Algebra](https://ics.uci.edu/~alspaugh/cls/shr/allen.html) — the 13 interval relations behind `Tempo.relation/2`.
+
+Further reading:
+
+* [RFC 3339 and ISO 8601](https://ijmacd.github.io/rfc3339-iso8601/) — a helpful visual crossref of the two.
+* [Computerphile: Timezones](https://www.youtube.com/watch?v=-5wpm-gesOY) — an excellent primer on why timezones are hard.
+* [Time words don't mean what you think](https://www.youtube.com/watch?v=TK-8gfqmFNo) — a fun look at the etymology of the words we use to describe time.
+* [Computerphile: Why CPU Time ≠ Wall Clock Time](https://www.youtube.com/watch?v=xs5iOwkX9fU).
 
 ## Licence
 
