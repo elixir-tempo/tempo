@@ -2,7 +2,7 @@
 
 ![Tempo](https://raw.githubusercontent.com/elixir-tempo/tempo/main/assets/logo-social-cropped.png)
 
-Tempo is an Elixir library that models time the way humans actually use it — as bounded spans on a shared timeline rather than as scalar instants. One type represents every temporal value you might deal with: a year, a month, an afternoon, a meeting, an archaeological period, a recurring event, a free-busy calendar. Every value is a bounded interval at some resolution, and every operation (iteration, comparison, set-theoretic combination) is defined uniformly.
+Tempo is an Elixir library that models time the way humans actually use it — as bounded spans on a shared timeline rather than as scalar instants. Everything positioned is an interval — a year, a month, an afternoon, a meeting, an archaeological period, a recurring event — each a bounded interval at some resolution. Collections of them, like a free-busy calendar, are *derivations* over that one type rather than new types; the sole companion is `Duration`, an unpositioned width from which an interval is formed once anchored. Every operation (iteration, comparison, set-theoretic combination) is defined uniformly.
 
 This conceptual shift — *time as interval, not instant* — removes a surprising number of real-world bugs (off-by-one day errors, ambiguous "end of day", last day of month, last day of year, DST edge cases, "what date does this year mean?") while unlocking queries that are awkward or impossible in other libraries.
 
@@ -158,7 +158,7 @@ Full specification including modifier-binding, container patterns, and calendar-
 
 ## Objectives
 
-* **A single type for every temporal value.** No more `Date` for days, `Time` for hours, `DateTime` for both, `NaiveDateTime` for "I don't know what I have." One `%Tempo{}` representing any interval at any resolution. Conversion from native Elixir types is `Tempo.from_elixir/2`.
+* **One interval type; sets of them are derivations.** No more `Date` for days, `Time` for hours, `DateTime` for both, `NaiveDateTime` for "I don't know what I have" — one `%Tempo{}` represents any interval at any resolution. Collections (`Tempo.IntervalSet`, `Tempo.Set`) are *derivations* over that type, not new types; the one genuinely distinct companion is `Tempo.Duration`, a calendar-relative width — not an interval. Conversion from native Elixir types is `Tempo.from_elixir/2`.
 
 * **Correctness by construction.** Every value is a bounded interval under the half-open `[from, to)` convention. Adjacent intervals concatenate cleanly (`[a, b) ++ [b, c) == [a, c)`). "End of day" ambiguity, midnight off-by-ones, and DST-hour confusion vanish at the type level.
 
