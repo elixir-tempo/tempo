@@ -1,5 +1,7 @@
 # Implementing Allen's formalisms
 
+**Status:** planning, 2026-09-04
+
 ## Where we are
 
 Allen's 1983 paper has four parts. Tempo implements two of them completely and substitutes a different formalism for the third.

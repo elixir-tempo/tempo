@@ -4960,22 +4960,33 @@ defmodule Tempo do
     {:ok, %Tempo.Interval{from: from_tempo, to: to, metadata: metadata}}
   end
 
-  # A recurrence with neither endpoint has nothing to materialise:
-  # `Tempo.RRule.parse("FREQ=WEEKLY;BYDAY=MO")` with no DTSTART is
-  # "every Monday" beginning nowhere, and no `:bound` can supply the
-  # missing anchor — a bound says where to stop looking, not where the
-  # series starts. Returning the rule unchanged would report success
-  # while handing back the very thing that could not be materialised,
-  # so the failure would surface much later, somewhere the cause is no
-  # longer visible.
-  def to_interval(%Tempo.Interval{from: from, to: to, recurrence: recurrence} = interval, _opts)
+  # An unanchored recurrence — `Tempo.RRule.parse("FREQ=WEEKLY;BYDAY=MO")`
+  # ("every Monday" beginning nowhere), or the ISO 8601 holiday form
+  # `R/../P1Y/FL…N` — has no start of its own. A `:bound` supplies one: it
+  # is the window to materialise into, so the recurrence anchors to the
+  # bound's start and yields every occurrence the window contains. The
+  # anchor is taken at day resolution so a per-occurrence selection
+  # (`FL6M2I1KN` = "the 2nd Monday of June") can drill to a day. With no
+  # `:bound` there is nothing to anchor against, so it stays an error
+  # rather than reporting success while handing back the unmaterialised
+  # rule.
+  def to_interval(%Tempo.Interval{from: from, to: to, recurrence: recurrence} = interval, opts)
       when from in [nil, :undefined] and to in [nil, :undefined] and recurrence != 1 do
-    {:error,
-     IntervalEndpointsError.exception(
-       interval: interval,
-       operation: "materialise a recurrence that has no start",
-       reason: :unanchored
-     )}
+    case Keyword.get(opts, :bound) do
+      nil ->
+        {:error,
+         IntervalEndpointsError.exception(
+           interval: interval,
+           operation: "materialise a recurrence that has no start",
+           reason: :unanchored
+         )}
+
+      bound ->
+        case bound_anchor(bound) do
+          {:ok, anchor} -> to_interval(%{interval | from: anchor}, opts)
+          {:error, _} = error -> error
+        end
+    end
   end
 
   def to_interval(%Tempo.Interval{} = interval, _opts) do
@@ -5329,6 +5340,38 @@ defmodule Tempo do
 
       {:ok, upper}
     end
+  end
+
+  # The anchor for an unanchored recurrence materialised against a
+  # `:bound`: the bound's lower endpoint, taken at day resolution so a
+  # per-occurrence selection (`FL6M2I1KN` = "the 2nd Monday of June") can
+  # drill to a day. The bound already says where the window starts, so a
+  # separate `:anchor` would be redundant.
+  defp bound_anchor(bound) do
+    case to_interval_set(bound) do
+      {:ok, %Tempo.IntervalSet{} = set} -> bound_anchor_from_set(set)
+      {:error, _} = err -> err
+    end
+  end
+
+  defp bound_anchor_from_set(set) do
+    case IntervalSet.first(set) do
+      %Tempo.Interval{from: %Tempo{} = from} -> anchor_at_day(from)
+      _ -> {:error, empty_bound_error()}
+    end
+  end
+
+  defp anchor_at_day(%Tempo{} = from) do
+    case at_resolution(from, :day) do
+      %Tempo{} = anchor -> {:ok, anchor}
+      {:error, _} = error -> error
+    end
+  end
+
+  defp empty_bound_error do
+    UnboundedRecurrenceError.exception(
+      reason: "Empty `:bound` — no anchor to start the recurrence from."
+    )
   end
 
   defp later_endpoint(a, b) do

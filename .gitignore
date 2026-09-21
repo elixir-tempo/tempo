@@ -55,3 +55,6 @@ ical_apple_example_export.ics
 papers/**/*.aux
 papers/**/*.log
 papers/**/*.out
+
+# Session context written by Claude; personal, never committed.
+CLAUDE.local.md

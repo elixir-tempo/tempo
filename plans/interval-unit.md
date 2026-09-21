@@ -1,6 +1,8 @@
 # Decouple iteration granularity from endpoint resolution
 
-**Status:** implemented (2026-07-11) — all phases landed, six gates green. Two consumers surfaced during phase 2 beyond the plan's list and were given the walk-time fill: `Tempo.Select.project_merge/2` (merges constraints into the walk anchor) and `Tempo.Format` (renders the sub-unit range). `equal?/2` normalises `:unit` before comparing; member-preserving set operations keep member units so `Enum` over a union still drills. **Prerequisite reading:** `guides/enumeration-semantics.md`, the implicit/explicit span rules in `CLAUDE.md`.
+**Status:** implemented, 2026-07-11
+
+All phases landed, six gates green. Two consumers surfaced during phase 2 beyond the plan's list and were given the walk-time fill: `Tempo.Select.project_merge/2` (merges constraints into the walk anchor) and `Tempo.Format` (renders the sub-unit range). `equal?/2` normalises `:unit` before comparing; member-preserving set operations keep member units so `Enum` over a union still drills. **Prerequisite reading:** `guides/enumeration-semantics.md`, the implicit/explicit span rules in `CLAUDE.md`.
 
 ## Problem
 

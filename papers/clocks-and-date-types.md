@@ -66,6 +66,7 @@ Multics Calendar Clock, primary sources:
 - [Saltzer, *Proposal: A System of Clocks for Multics*, 27 October 1965](https://web.mit.edu/~saltzer/www/publications/multics/M0054.pdf) — the original design proposal.
 - [Saltzer's later note on the epoch choice](https://multicians.org/jhs-clock.html) — why 1901 rather than 1900, and the consequences of IBM's contrary choice for the S/370.
 - [Multicians, on clocks that did not survive power-off](https://multicians.org/multo-antes.html).
+- [Multics source code](https://github.com/dancrossnyc/multics).
 
 COBOL specification:
 

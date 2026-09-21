@@ -141,13 +141,15 @@ defmodule Tempo.Explain.Test do
       refute prose =~ "unusual shape"
     end
 
-    test "an unanchored recurrence says a bound cannot supply the anchor" do
-      # The hint has to distinguish the two, because `to_interval/2`
-      # accepts a `:bound` and it does not rescue an unanchored rule.
-      assert {:error, %Tempo.IntervalEndpointsError{reason: :unanchored}} =
+    test "an unanchored recurrence materialises into a bound and the hint says so" do
+      # A bound is the window to materialise into: "every Monday" bounded
+      # to 2026 lists that year's 52 Mondays, and the explain hint points
+      # at exactly that path.
+      assert {:ok, %IntervalSet{} = set} =
                Tempo.to_interval(~o"R/../P1W/FL1KN", bound: ~o"2026Y")
 
-      assert Tempo.explain(~o"R/../P1W/FL1KN") =~ "not where the series starts"
+      assert IntervalSet.count(set) == 52
+      assert Tempo.explain(~o"R/../P1W/FL1KN") =~ "Materialise it into a window"
     end
 
     test "an unspecified year materialises instead of crashing in the calendar" do

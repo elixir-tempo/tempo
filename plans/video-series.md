@@ -1,5 +1,7 @@
 # Tempo — Educational Video Series Plan
 
+**Status:** draft, 2026-07-06
+
 A Computerphile-flavoured series: one presenter, paper or a terminal, no slides-deck gloss. Informal voice, rigorous content. Each video opens *in medias res* — a bug, a paradox, or a blunt question — never with "Hi, in this video…". Hard ceiling 15 minutes; **aim for 12–13** so the edit has room to breathe.
 
 ## The spine (say it, in some form, in every video)

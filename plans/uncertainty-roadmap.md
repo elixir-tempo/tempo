@@ -1,6 +1,8 @@
 # Uncertainty Roadmap — graded relations and beyond
 
-> **Status:** design / not yet implemented. This document records the strategy for adding uncertainty-aware reasoning to Tempo once the crisp interval algebra (Allen relations, set operations, IntervalSet coalescing, the STP/Network solver, CPM scheduling) is feature-complete. It exists to commit the team to a *framework choice* and an *architectural boundary* before any code is written.
+**Status:** draft, 2026-07-06
+
+This document records the strategy for adding uncertainty-aware reasoning to Tempo once the crisp interval algebra (Allen relations, set operations, IntervalSet coalescing, the STP/Network solver, CPM scheduling) is feature-complete. It exists to commit the team to a *framework choice* and an *architectural boundary* before any code is written.
 
 ## Why now
 

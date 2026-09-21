@@ -33,24 +33,52 @@ defmodule Tempo.UnanchoredRecurrenceTest do
   end
 
   describe "to_interval/2" do
-    test "an unanchored recurrence cannot be materialised", context do
-      assert {:error, %IntervalEndpointsError{} = error} =
+    test "a bound materialises an unanchored recurrence into its window", context do
+      # "Every Monday" has no start of its own; the bound supplies one.
+      # Materialising it into June 2026 yields that month's five Mondays,
+      # and the half-open upper bound keeps the following Monday out.
+      assert {:ok, %IntervalSet{} = set} =
                Tempo.to_interval(context.unanchored, bound: context.window)
+
+      assert IntervalSet.count(set) == 5
+      assert Interval.from(IntervalSet.first(set)) == ~o"2026Y6M1D"
+    end
+
+    test "a wider bound materialises more occurrences", context do
+      # The same recurrence, a decade-wide window: the bound is the
+      # extent to walk, so it materialises every Monday it spans.
+      assert {:ok, %IntervalSet{} = set} =
+               Tempo.to_interval(context.unanchored, bound: ~o"2020Y/2030Y")
+
+      assert IntervalSet.count(set) > 500
+    end
+
+    test "with no bound there is still nothing to anchor against", context do
+      # A bound is the window to materialise into. Without one, an
+      # unanchored recurrence has neither a start nor a stop, so it stays
+      # a clean refusal rather than an open-ended walk.
+      assert {:error, %IntervalEndpointsError{} = error} =
+               Tempo.to_interval(context.unanchored)
 
       assert error.reason == :unanchored
     end
 
-    test "a bound does not supply the missing anchor", context do
-      # A bound says where to stop looking, not where the series
-      # starts, so no bound can rescue an unanchored rule.
-      assert {:error, _} = Tempo.to_interval(context.unanchored, bound: context.window)
-      assert {:error, _} = Tempo.to_interval(context.unanchored, bound: ~o"2020Y/2030Y")
-      assert {:error, _} = Tempo.to_interval(context.unanchored)
+    test "the bound may be given at any resolution — year, month or day" do
+      # The ISO 8601 holiday form for the fourth Thursday of November.
+      # Whatever the resolution of the bound that anchors it — the whole
+      # year, that November, or Thanksgiving Day itself — it lands on the
+      # same day. The bound says where to walk, not at what grain.
+      {:ok, thanksgiving} = Tempo.from_iso8601("R/../P1Y/FL11M4I4KN")
+
+      for bound <- [~o"2026", ~o"2026-11", ~o"2026-11-26"] do
+        assert {:ok, %IntervalSet{} = set} = Tempo.to_interval(thanksgiving, bound: bound)
+        assert Interval.from(IntervalSet.first(set)) == ~o"2026Y11M26D"
+      end
     end
 
-    test "it does not report success while handing back the rule", context do
-      # The defect: `{:ok, unanchored}` — the very value that could not
-      # be materialised, returned as though it had been.
+    test "it returns the materialised set, never the rule itself", context do
+      # A materialised recurrence is the set of its occurrences — never
+      # the rule handed straight back as though it had been expanded.
       refute Tempo.to_interval(context.unanchored, bound: context.window) ==
                {:ok, context.unanchored}
     end

@@ -1,5 +1,7 @@
 # Tempo MCP — tool schema spec
 
+**Status:** draft, 2026-07-06
+
 Companion to the `tempo` skill. The skill teaches an LLM *how to think* about a time problem and write Tempo; this MCP lets it **execute and ground** — validate representations and run pipelines — with no Elixir project or terminal, so a researcher in a chat client gets real answers.
 
 ## Architecture principles

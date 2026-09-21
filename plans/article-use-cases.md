@@ -1,5 +1,7 @@
 # Plan — Cookbook-grade use cases for further articles
 
+**Status:** planning, 2026-07-09
+
 A pipeline of real-world use cases to receive the "Business/252 treatment": a cookbook recipe in pipeline-prose style, executed and verified, then posted to the [ElixirForum Tempo thread](https://forum.elixirforum.com/t/tempo-a-unified-time-type-that-models-time-as-interval-sets-not-instants/75083).
 
 ## The treatment (what makes one work)

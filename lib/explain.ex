@@ -858,9 +858,10 @@ defmodule Tempo.Explain do
   defp recurrence_headline(n) when is_integer(n), do: "A recurrence of #{n} occurrences."
 
   defp unanchored_hint do
-    "Not enumerable until anchored — a bound says where to stop looking, " <>
-      "not where the series starts. Give the literal a start " <>
-      "(`R/2026-01-01/…`) or re-parse with one " <>
+    "The rule names no start of its own. Materialise it into a window " <>
+      "with a bound — `Tempo.to_interval(interval, bound: ~o\"2026\")` " <>
+      "lists the occurrences that fall inside it — or give the literal a " <>
+      "start (`R/2026-01-01/…`) or re-parse with one " <>
       "(`Tempo.RRule.parse(rule, from: ~o\"2026-01-01\")`)."
   end
 

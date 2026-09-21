@@ -1,5 +1,7 @@
 # A short history of date and time types in programming languages
 
+**Status:** reference, 2026-07-06
+
 *What and when was the first computer language to define a date and/or time type? How, historically, did we end up with separate types for dates, times, and datetime (with zone and naive)?*
 
 Short version: it depends entirely on what you count as a *type*, and the honest answer splits three ways. If you mean date-shaped **data**, COBOL (1960). If you mean a first-class **broken-down/scalar time type** in the type system, Unix C's `<time.h>` (`time_t` + `struct tm`, 1970s). If you mean the named **civil type family** (DATE / TIME / TIMESTAMP) we'd recognise today, the database world — Oracle's `DATE` (1979), standardised in **SQL-92** (1992). The interesting part is *why* those are three different answers, because that history is exactly how we ended up with the separate-types mess.
