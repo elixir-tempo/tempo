@@ -76,6 +76,24 @@ defmodule Tempo.UnanchoredRecurrenceTest do
       end
     end
 
+    test "an occurrence takes the resolution its selection names" do
+      # A day selection spans a day, a month selection a whole month, a
+      # week selection a whole week — the occurrence is at the grain the
+      # selection names, not forced down to a day.
+      {:ok, christmas} = Tempo.from_iso8601("R/../P1Y/FL12M25DN")
+      {:ok, june} = Tempo.from_iso8601("R/../P1Y/FL6MN")
+      {:ok, week10} = Tempo.from_iso8601("R/../P1Y/FL10WN")
+
+      assert {:ok, day_set} = Tempo.to_interval(christmas, bound: ~o"2026")
+      assert Interval.from(IntervalSet.first(day_set)) == ~o"2026Y12M25D"
+
+      assert {:ok, month_set} = Tempo.to_interval(june, bound: ~o"2026")
+      assert Interval.from(IntervalSet.first(month_set)) == ~o"2026Y6M"
+
+      assert {:ok, week_set} = Tempo.to_interval(week10, bound: ~o"2026")
+      assert Interval.from(IntervalSet.first(week_set)) == ~o"2026Y10W"
+    end
+
     test "it returns the materialised set, never the rule itself", context do
       # A materialised recurrence is the set of its occurrences — never
       # the rule handed straight back as though it had been expanded.

@@ -14,6 +14,8 @@
 
 * `Tempo.Network.Relation.from_allen/1` preserves direction for `:overlapped_by`, which previously mapped to `:overlaps` and silently reversed the operands. Every Allen relation now round-trips through `to_allen/1`.
 
+* An unanchored recurrence materialises against a `:bound` alone: `Tempo.to_interval(~o"R/../P1Y/FL6M2I1KN", bound: ~o"2026")` projects "the second Monday of June" onto 2026 with no separate `:anchor`. Each occurrence takes the resolution its selection names — `FL6MN` a month (`~o"2026Y6M"`), `FL10WN` a week (`~o"2026Y10W"`), `FL12M25DN` a day — with RRULE `BYMONTH`/`BYWEEKNO` semantics unchanged.
+
 ## [v1.6.4] — 2026-09-03
 
 ### Fixed

@@ -6,7 +6,7 @@ decision taken on the way to 1.0, is in
 
 ## Open
 
-* [ ] **Coarse (month/year) selection spans in a recurrence** — `R/../P1Y/FL6MN` ("every June") materialises to June 1st (a day), not June (a whole month); day- and hour-resolution selections are correct. Pre-existing and independent of anchoring. Root cause and options in [plans/recurrence-selection-resolution.md](plans/recurrence-selection-resolution.md).
+* [ ] **Week-of-month selections, and calendar-aware RRULE `BYWEEKNO`** — parse `2026Y6M2W` ("2nd week of June", a positional `W` after a month) and materialise it via `Calendrical.week_of_month/3`; and replace the hard-coded ISO week walk still used by RRULE `BYWEEKNO` with Calendrical's calendar-aware functions. Month and native week-of-year selections are done. Plan in [plans/recurrence-selection-resolution.md](plans/recurrence-selection-resolution.md).
 * [ ] **`Tempo.Intervallic` protocol** — let user-defined structs such as `%Booking{check_in, check_out}` take part in Allen comparisons and set operations without being copied into `%Tempo.Interval{}`; default implementations for `Tempo.Interval`, `Tempo` and single-member `Tempo.IntervalSet`.
 * [ ] **Lazy backend follow-ups** — splicing a lazy set into a busy list (needs a sorted stream merge), lazy set algebra (union and intersection of generators), and holiday generator sources. The refusal semantics must hold: an answer that needs an unbounded walk without a `:bound` refuses rather than hangs.
 * [ ] **Astronomical events** — a way to express Easter, new moon and similar events as Tempo values, pairing with `astro`.

@@ -1,74 +1,63 @@
 # Recurrence selection resolution
 
-**Status:** planning, 2026-09-21
+**Status:** in progress, 2026-09-21
 
-An unanchored recurrence now materialises against a `:bound` alone
-(`plans/` companion to the `to_interval/2` bound-anchoring change). That fix
-is correct for every selection whose occurrences are **day resolution or
-finer** — every holiday form, and time-of-day recurrences. A gap remains for
-selections **coarser than a day**.
+An unanchored recurrence materialises against a `:bound` alone. Each
+occurrence should land at the grain the selection names — day for
+`FL6M2I1KN`, month for `FL6MN`, week for `FL10WN` — using the **calendar**
+as the source of truth, never a hard-coded week rule.
 
-## The gap
+## Month selections — done
 
-A native "every June" materialises to June 1st, a single day, instead of
-June, a whole month:
+`R/../P1Y/FL6MN` ("every June") now yields the month `~o"2026Y6M/7M"`, not
+June 1st. Two changes: the bound-derived anchor takes the selection's
+resolution (`anchor_unit/1` in `lib/tempo.ex`), and `expand_candidate_months/4`
+in `lib/tempo/rrule/selection.ex` produces a month occurrence for a dayless
+candidate instead of rejecting it (`swap_date` preserves the candidate's own
+resolution).
 
-```elixir
-Tempo.select(~o"2026", ~o"6M")
-#=> ~o"2026Y6M/7M"                     # the month — the intended shape
+RRULE is untouched: `FREQ=YEARLY;BYMONTH=6` with `DTSTART=2026-06-15` still
+means June 15 (a day) — `BYMONTH` filters, `DTSTART` pins the day — because
+RRULE carries a real day anchor and never routes through the bound anchor.
+The native-vs-RRULE split is exactly the day/month resolution difference.
 
-{:ok, june} = Tempo.from_iso8601("R/../P1Y/FL6MN")
-Tempo.to_interval(june, bound: ~o"2026")
-#=> {:ok, IntervalSet<[~o"2026Y6M1D/2D"]>}   # June 1st — wrong
-```
+## Week of year — done
 
-It is **pre-existing and independent of the bound**: an explicit anchor
-fails the same way (`R/2026-01-01/P1Y/FL6MN` → June 1st), and a coarse
-anchor is worse still (`R/2026-01/P1Y/FL6MN` → empty, count 0).
+`R/../P1Y/FL10WN` now yields the week span `~o"2026Y10W/11W"`, matching
+`Tempo.select(~o"2026", ~o"10W")`. A week selection anchors on its enclosing
+year (`calendar_anchor_unit(:week) → :year` — the week axis has no
+`at_resolution/2` path from a year), which makes the candidate dayless;
+`expand_candidate_week_numbers/2` then builds the `[year, week]` value rather
+than walking to dates, and the calendar resolves its span. RRULE `BYWEEKNO`
+is unchanged: its `DTSTART` day makes the candidate day-carrying, so it still
+expands each week to its seven days per RFC 5545.
 
-## Root cause
+Calendar-awareness lives in the `[year, week]` value's own resolution (which
+already rejects `~o"2026Y53W"` for a 52-week year), not in
+`lib/tempo/rrule/selection.ex`. So the native path never touches the
+hard-coded ISO walk.
 
-Two facts combine:
+## Still to do
 
-* `Selection.apply/4` returns **nothing** for a month-resolution candidate
-  and a month selection, so the materialiser is forced to feed it a
-  day-resolution candidate (the bound-anchor floor, and any real day
-  anchor). The selected point then carries day resolution.
+The `week_dates_in_year/3` ISO walk (Monday-first, Jan-4 anchor) is
+**still** what RRULE `BYWEEKNO` uses, and it is wrong for non-ISO calendars.
+Calendrical is the source of truth: `week_of_year/3`, `weeks_in_year/2`,
+`min_days_in_first_week` with `min_days_for_territory/1` /
+`min_days_for_locale/1`, and per-calendar schemes (`NRF`, `BasicWeek`,
+`Julian`, ISO).
 
-* `resize_to_resolution/1` sizes each occurrence to `resolution(from)` of
-  that **selected point** — day — so "June" comes back a day wide.
-
-## Why the obvious fix breaks RRULE
-
-Sizing to the **selection's** resolution instead (month for `L6M`, day for
-`L15D`, hour for `LT9H`) fixes native selections but breaks RFC 5545: there
-`FREQ=YEARLY;BYMONTH=6` with `DTSTART=2026-06-15` means **June 15**, a day —
-`BYMONTH` *filters*, `DTSTART` pins the day. Both carry
-`[selection: [month: 6]]`, so the selection's resolution cannot tell "the
-month of June" (native) from "filter to June, keep the DTSTART day" (RRULE).
-A prototype that sized to the selection resolution turned 12 BYMONTH /
-BYWEEKNO tests red.
-
-The distinguishing signal is whether the day component is **named** (RRULE's
-`DTSTART`) or an **artefact** of anchoring (the native selection has no day).
-`origin_day` is set in both cases, so presence alone does not separate them.
-
-## Options
-
-* **Fix `Selection.apply/4` for coarse candidates** — make a month selection
-  on a month candidate yield the month. Then anchor at the selection's
-  resolution and leave `resize_to_resolution/1` reading the selected point.
-  RRULE is untouched (its day lives in `DTSTART`, not the candidate). This is
-  the principled fix; it is a change inside the `Selection` engine.
-
-* **Mark the synthesised anchor** — flag the bound-derived day anchor so the
-  resize can coarsen only artefact days, never a real `DTSTART` day. Smaller
-  blast radius, but it is scar tissue on the shared engine.
+Week **of month** ("the 2nd week of June") needs no new designator: the
+natural spelling is `2026Y6M2W` — a `W` component read positionally, week-of-
+year after a bare year, week-of-month after a month. The tokenizer rejects
+`W` after a month today (`Error detected at "2W"`), so the work is a parser
+extension plus materialisation via `Calendrical.week_of_month/3`.
 
 ## Tasks
 
-* [ ] Reproduce the `Selection.apply/4` empty result for a coarse candidate in a focused `Selection` test.
+* [x] Month selections yield a month span; RRULE `BYMONTH` unchanged.
 
-* [ ] Decide between the two options above; the first is preferred.
+* [x] Native week-of-year selection (`FL10WN`) yields a week span, resolved by the calendar; RRULE `BYWEEKNO` unchanged.
 
-* [ ] Extend the resolution matrix (year and month selections) once a fix lands.
+* [ ] Parse `W` after a month (`2026Y6M2W`) as week-of-month, and materialise it via `Calendrical.week_of_month/3`.
+
+* [ ] Replace the hard-coded ISO `week_dates_in_year/3` on the RRULE `BYWEEKNO` path with Calendrical's calendar-aware week functions.

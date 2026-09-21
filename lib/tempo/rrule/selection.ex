@@ -778,11 +778,16 @@ defmodule Tempo.RRule.Selection do
         not (is_integer(month) and month >= 1 and month <= months_in_year) ->
           nil
 
-        not is_integer(day) ->
-          nil
+        is_integer(day) ->
+          swap_date(candidate, year, month, min(day, calendar.days_in_month(year, month)))
 
         true ->
-          swap_date(candidate, year, month, min(day, calendar.days_in_month(year, month)))
+          # A pure month selection (`L6M`) on a month-resolution
+          # candidate: no day is named or carried, so the occurrence is
+          # the month itself. `swap_date` rewrites only the units the
+          # candidate already has, so a dayless candidate stays at month
+          # resolution.
+          swap_date(candidate, year, month, day)
       end
     end)
     |> Enum.reject(&is_nil/1)
@@ -906,13 +911,22 @@ defmodule Tempo.RRule.Selection do
   # occurrences (each day of the week). Days outside the year
   # are dropped.
   defp expand_candidate_week_numbers(
-         %Interval{from: %Tempo{calendar: calendar}} = candidate,
+         %Interval{from: %Tempo{calendar: calendar, time: time}} = candidate,
          weeks
        ) do
-    year = candidate.from.time[:year]
+    year = time[:year]
     wiy = weeks_in_year(calendar, year)
 
-    Enum.flat_map(weeks, fn wk -> week_candidate_dates(wk, candidate, calendar, year, wiy) end)
+    if Keyword.has_key?(time, :day) do
+      # RRULE `BYWEEKNO` carries `DTSTART`'s day, so it expands each week
+      # to its seven days per RFC 5545 §3.3.10.
+      Enum.flat_map(weeks, fn wk -> week_candidate_dates(wk, candidate, calendar, year, wiy) end)
+    else
+      # A native week selection (`FL10WN`) names the week itself. The
+      # occurrence is the `[year, week]` value; its span is resolved by
+      # the calendar, so there is no ISO week walk here.
+      Enum.flat_map(weeks, fn wk -> week_candidate_span(wk, candidate, year, wiy) end)
+    end
   end
 
   defp week_candidate_dates(wk, candidate, calendar, year, wiy) do
@@ -921,6 +935,18 @@ defmodule Tempo.RRule.Selection do
     if is_integer(resolved) and resolved >= 1 and resolved <= wiy do
       week_dates_in_year(calendar, year, resolved)
       |> Enum.map(fn {m, day} -> swap_date(candidate, year, m, day) end)
+    else
+      []
+    end
+  end
+
+  defp week_candidate_span(wk, %Interval{from: %Tempo{} = from} = candidate, year, wiy) do
+    resolved = signed_index_to_value(wk, wiy)
+
+    if is_integer(resolved) and resolved >= 1 and resolved <= wiy do
+      # `to` is sized from the `[year, week]` resolution by
+      # `resize_to_resolution/1` back in the recurrence loop.
+      [%{candidate | from: %{from | time: [year: year, week: resolved]}, to: nil}]
     else
       []
     end

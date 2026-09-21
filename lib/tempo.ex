@@ -4965,11 +4965,12 @@ defmodule Tempo do
   # `R/../P1Y/FL…N` — has no start of its own. A `:bound` supplies one: it
   # is the window to materialise into, so the recurrence anchors to the
   # bound's start and yields every occurrence the window contains. The
-  # anchor is taken at day resolution so a per-occurrence selection
-  # (`FL6M2I1KN` = "the 2nd Monday of June") can drill to a day. With no
-  # `:bound` there is nothing to anchor against, so it stays an error
-  # rather than reporting success while handing back the unmaterialised
-  # rule.
+  # anchor takes the recurrence's own selection resolution — day for
+  # `FL6M2I1KN` ("the 2nd Monday of June"), month for `FL6MN` ("June") —
+  # so each occurrence lands at the grain the selection names rather than
+  # being forced to a day. With no `:bound` there is nothing to anchor
+  # against, so it stays an error rather than reporting success while
+  # handing back the unmaterialised rule.
   def to_interval(%Tempo.Interval{from: from, to: to, recurrence: recurrence} = interval, opts)
       when from in [nil, :undefined] and to in [nil, :undefined] and recurrence != 1 do
     case Keyword.get(opts, :bound) do
@@ -4982,7 +4983,7 @@ defmodule Tempo do
          )}
 
       bound ->
-        case bound_anchor(bound) do
+        case bound_anchor(bound, interval) do
           {:ok, anchor} -> to_interval(%{interval | from: anchor}, opts)
           {:error, _} = error -> error
         end
@@ -5343,30 +5344,73 @@ defmodule Tempo do
   end
 
   # The anchor for an unanchored recurrence materialised against a
-  # `:bound`: the bound's lower endpoint, taken at day resolution so a
-  # per-occurrence selection (`FL6M2I1KN` = "the 2nd Monday of June") can
-  # drill to a day. The bound already says where the window starts, so a
-  # separate `:anchor` would be redundant.
-  defp bound_anchor(bound) do
+  # `:bound`: the bound's lower endpoint, taken at the resolution the
+  # recurrence's selection names — day for `FL6M2I1KN` ("the 2nd Monday
+  # of June"), month for `FL6MN` ("June"), hour for a time-of-day rule.
+  # Anchoring at that grain (rather than always a day) is what lets a
+  # coarse selection yield a coarse occurrence; the bound already says
+  # where the window starts, so a separate `:anchor` would be redundant.
+  defp bound_anchor(bound, %Tempo.Interval{} = interval) do
     case to_interval_set(bound) do
-      {:ok, %Tempo.IntervalSet{} = set} -> bound_anchor_from_set(set)
+      {:ok, %Tempo.IntervalSet{} = set} -> bound_anchor_from_set(set, anchor_unit(interval))
       {:error, _} = err -> err
     end
   end
 
-  defp bound_anchor_from_set(set) do
+  defp bound_anchor_from_set(set, unit) do
     case IntervalSet.first(set) do
-      %Tempo.Interval{from: %Tempo{} = from} -> anchor_at_day(from)
+      %Tempo.Interval{from: %Tempo{} = from} -> anchor_at_unit(from, unit)
       _ -> {:error, empty_bound_error()}
     end
   end
 
-  defp anchor_at_day(%Tempo{} = from) do
+  defp anchor_at_unit(%Tempo{} = from, :day) do
     case at_resolution(from, :day) do
       %Tempo{} = anchor -> {:ok, anchor}
       {:error, _} = error -> error
     end
   end
+
+  # A selection whose resolution the bound's start cannot reach — a week
+  # selection over a year value, where the ISO-week axis has no path from
+  # the calendar axis — falls back to the day floor rather than failing.
+  # Day is reachable from every value, so the recurrence still
+  # materialises (at day grain) instead of erroring.
+  defp anchor_at_unit(%Tempo{} = from, unit) do
+    case at_resolution(from, unit) do
+      %Tempo{} = anchor -> {:ok, anchor}
+      {:error, _} -> anchor_at_unit(from, :day)
+    end
+  end
+
+  # The grain to anchor a recurrence at: the finest unit its selection
+  # names, mapped onto the calendar axis (a weekday or ordinal selects a
+  # *day*). With no selection, the day floor keeps a plain cadence
+  # (`R/../P1D`) walking days.
+  defp anchor_unit(%Tempo.Interval{repeat_rule: %Tempo{time: [selection: selection]}})
+       when selection != [] do
+    # The finest unit is the last selection component (they are written
+    # coarse-to-fine). Read it straight from the AST rather than through
+    # `resolution/1`, whose declared `time_unit()` return elides the
+    # selection-only keys (`:byday`, `:day_of_week`) this must normalise.
+    {finest_unit, _value} = List.last(selection)
+    calendar_anchor_unit(finest_unit)
+  end
+
+  defp anchor_unit(%Tempo.Interval{}), do: :day
+
+  # A week-of-year selection anchors on its enclosing year (a dayless
+  # year value), not the week axis: `at_resolution/2` has no path from a
+  # calendar year to a week, and the week expander builds the week from
+  # the candidate's year. The dayless anchor is also what marks the
+  # selection as native (a whole week), distinct from RRULE `BYWEEKNO`,
+  # whose `DTSTART` day expands the week to its seven days.
+  defp calendar_anchor_unit(:week), do: :year
+
+  defp calendar_anchor_unit(unit) when unit in [:byday, :day_of_week, :day_of_year, :instance],
+    do: :day
+
+  defp calendar_anchor_unit(unit), do: unit
 
   defp empty_bound_error do
     UnboundedRecurrenceError.exception(
