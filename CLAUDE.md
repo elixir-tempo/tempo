@@ -134,6 +134,14 @@ When reviewing new code or docs, grep for `region` / `:region` / `default_region
 
 The global "never work around a library deficiency" rule applies to Tempo's upstreams — Calendrical, Localize, Astro, Tzdata, any hex dep. A bug or gap there is reported back with a minimal reproducer (name the function/module), a fix suggested in the upstream's own idiom, and paused on until the user coordinates the fix (a hex release or a path-dep to the fixed branch); resume against the upstream behaviour, no scar tissue left behind. The only exception is an explicit "work around it in Tempo for now", which also gets a TODO.md entry flagging the upstream fix and what to remove once it lands.
 
+## Calendar calculations belong in Calendrical
+
+**Tempo does not do calendar calculations — they are ALWAYS done in Calendrical.** Anything that computes a date, a month length, a leap month or year, a solar term's longitude or moment, a lunisolar conversion, an ecclesiastical (Easter) date, or any other calendar-arithmetic result goes through Calendrical — never re-derived in Tempo or a downstream (`tempo_holidays`, a guide, a helper). Tempo is the *representation and selection* layer (ISO 8601 syntax, intervals, recurrences, Allen relations, set algebra); the calendar maths underneath is Calendrical's. `Tempo.Event` is the pattern — it holds selection-layer data (event names) and delegates every computation to Calendrical (and Astro for astronomy).
+
+A formula like `rem(300 + term * 15, 360)` to derive a solar term's longitude, or a hand-rolled leap-month or traditional-to-ordinal conversion, is a defect wherever it appears outside Calendrical — move it into Calendrical.
+
+**If Calendrical cannot provide a capability the work needs, stop and ask the user what to do** — do not fill the gap with a calculation in Tempo. This is the calendar-specific case of the upstream "report and pause" rule above.
+
 ## Definition of done — Credo
 
 This library adds a sixth gate to the global definition of done: `mix credo --strict` must report **no issues** before a change is complete, run alongside the global's five gates.

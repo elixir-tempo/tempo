@@ -141,8 +141,6 @@ defmodule Tempo.GuidesRunner do
   defp append_expected([current | rest], line),
     do: [%{current | expected: current.expected <> line <> "\n"} | rest]
 
-  defp append_expected([], _line), do: []
-
   defp flag_raises(%{expected: expected} = example) do
     Map.put(example, :raises, String.starts_with?(String.trim_leading(expected), "** ("))
   end
