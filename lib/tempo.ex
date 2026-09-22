@@ -5057,13 +5057,62 @@ defmodule Tempo do
          {unit, _span} <- resolution(converted),
          %Tempo{} = period <- at_resolution(converted, freq_of(cadence)),
          %Tempo{} = aligned <- at_resolution(period, unit) do
-      aligned
+      tag_anchor_calendar(aligned, calendar)
     else
       _other -> anchor
     end
   end
 
   defp anchor_in_repeat_calendar(%Tempo{} = anchor, _interval), do: anchor
+
+  # Attach the calendar's IXDTF `u-ca` identifier to the synthesised anchor's
+  # extended metadata, so each materialised occurrence round-trips as
+  # `[u-ca=tag]` — the same self-describing form a written calendared anchor
+  # gives its occurrences. A calendar with no faithful identifier is left as is.
+  defp tag_anchor_calendar(%Tempo{} = anchor, calendar) do
+    case repeat_calendar_tag(calendar) do
+      nil ->
+        anchor
+
+      tag ->
+        attach_extended(anchor, %{
+          calendar: tag,
+          zone_id: nil,
+          zone_offset: nil,
+          zone_critical: false,
+          tags: %{}
+        })
+    end
+  end
+
+  # A calendar module's IXDTF `u-ca` identifier: a non-CLDR calendar Calendrical
+  # resolves (`Calendrical.Julian` → `:julian`) through its additional-calendar
+  # registry, otherwise the CLDR type — but only when that type round-trips back
+  # to the same module, so a calendar whose type names a different one
+  # (`Calendrical.ISOWeek`, typed `:gregorian`) stays untagged rather than
+  # mis-tagged.
+  defp repeat_calendar_tag(calendar) do
+    case additional_calendar_tag(calendar) do
+      nil -> faithful_cldr_tag(calendar)
+      tag -> tag
+    end
+  end
+
+  defp additional_calendar_tag(calendar) do
+    Enum.find_value(Calendrical.additional_calendars(), fn {tag, module} ->
+      if module == calendar, do: tag
+    end)
+  end
+
+  defp faithful_cldr_tag(calendar) do
+    with true <- function_exported?(calendar, :cldr_calendar_type, 0),
+         calendar_type = calendar.cldr_calendar_type(),
+         {:ok, ^calendar} <- Calendrical.calendar_from_cldr_calendar_type(calendar_type) do
+      calendar_type
+    else
+      _other -> nil
+    end
+  end
 
   # A calendar-aligned unanchored recurrence walks whole calendar years, so the
   # year it anchors on can place occurrences just outside the Gregorian bound

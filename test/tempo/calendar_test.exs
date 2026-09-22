@@ -140,6 +140,16 @@ defmodule Tempo.CalendarTest do
       end
     end
 
+    test "each materialised occurrence is tagged with its calendar, like a written anchor" do
+      # A synthesised anchor still yields self-describing `[u-ca=cal]` values, so
+      # a materialised occurrence is struct-equal to the date written by hand.
+      {:ok, orthodox_christmas} = Tempo.from_iso8601("R/../P1Y/FL12M25DN[u-ca=julian]")
+      {:ok, set} = Tempo.to_interval(orthodox_christmas, bound: Tempo.from_iso8601!("2025Y"))
+      [occurrence] = IntervalSet.to_list(set)
+
+      assert Interval.from(occurrence) == Tempo.from_iso8601!("2024Y12M25D[u-ca=julian]")
+    end
+
     test "a lunar date that falls twice in one Gregorian year yields both" do
       # Islamic New Year fell twice in 2008 — 10 January and 29 December —
       # because the Hijri year is ~11 days shorter than the Gregorian one.
