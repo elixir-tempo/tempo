@@ -10,6 +10,8 @@
 
 * `Tempo.Event` and the `(name)E` computed-event selection — a recurrence resolved by algorithm rather than the calendar. `~o"R/../P1Y/FL(easter)EN"` is Western Easter and `(orthodox-easter)E` the Julian-calendar computus (both from `Calendrical.Ecclesiastical`); the equinoxes, solstices and first `(new-moon)E` of the year come from `Astro`; and the 24 East Asian solar terms (`(qingming)E`, …) from `Calendrical`, for the Chinese meridian by default or another via `Tempo.Event.date/3`.
 
+* `Tempo.Event.Resolver` — a behaviour that lets a consumer register its own `(name)E` events (a fiscal calendar, a feast day) through `config :ex_tempo, :event_resolvers`. Registered names resolve beside the built-ins and appear in `Tempo.Event.known/0`; a name no resolver claims yields zero occurrences.
+
 * ISO 8601-2 §12.10 selection with a time interval — `[selection]/[duration]` makes each resolved date the start of a window and nested selectors pick within it. `~o"R/../P1Y/FLLL(easter)EN/-P7DN5K-1IN"` is Good Friday; `~o"R/../P1Y/FL11MLL1K1IN/P9DN2K1IN"` is US Election Day.
 
 * `Tempo.Network.Qualitative` — bridges the metric and qualitative networks. `from_network/1` seeds relation sets from what a solved network's bounds already prove, `apply_to_network/2` feeds determined relations back, and `refine/1` runs the round trip.

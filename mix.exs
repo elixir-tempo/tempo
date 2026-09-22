@@ -125,6 +125,7 @@ defmodule Tempo.MixProject do
       "Set algebra and comparison":
         ~r/^Tempo\.(Operations|Compare|Select|Territory)$|^Tempo\.Interval\.(Relations|RelationNetwork)$/,
       "Recurrence (RRULE)": ~r/^Tempo\.RRule(\.|$)/,
+      "Computed events": ~r/^Tempo\.Event(\.|$)/,
       "iCalendar integration": ~r/^Tempo\.ICal(\.|$)/,
       # `Tempo.Range` is the ISO 8601-2 set-member range element, not a
       # core algebra type — see its moduledoc.

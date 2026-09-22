@@ -22,6 +22,12 @@ defmodule Tempo.Event do
   once per period, when a recurrence such as `~o"R/../P1Y/FL(easter)EN"` is
   materialised into a bound. The primary public API is `date/2` (or `date/3`).
 
+  A consumer application can add its own `(name)E` events — a fiscal calendar,
+  a liturgical feast, any algorithm-fixed date — by implementing the
+  `Tempo.Event.Resolver` behaviour and registering it with `config :ex_tempo,
+  :event_resolvers`. Registered names resolve here alongside the built-ins and
+  appear in `known/0`; a name no resolver claims yields zero occurrences.
+
   """
 
   alias Calendrical.Chinese
@@ -79,7 +85,8 @@ defmodule Tempo.Event do
 
   ### Returns
 
-  * A sorted list of the recognised event-name strings.
+  * A sorted list of the recognised event-name strings — the built-ins plus
+    every name a registered `Tempo.Event.Resolver` claims.
 
   ### Examples
 
@@ -92,7 +99,8 @@ defmodule Tempo.Event do
   """
   @spec known() :: [String.t()]
   def known do
-    @events |> Map.keys() |> Enum.sort()
+    registered = Enum.flat_map(registered_resolvers(), & &1.known())
+    (Map.keys(@events) ++ registered) |> Enum.uniq() |> Enum.sort()
   end
 
   @doc """
@@ -130,12 +138,15 @@ defmodule Tempo.Event do
 
   ### Returns
 
-  * `{:ok, date}` with the event's `Date` (in `Calendar.ISO`).
+  * `{:ok, date}` with the event's `Date` (in `Calendar.ISO` for a built-in
+    event, or whatever a registered resolver returns).
 
-  * `{:error, {:unknown_event, name}}` when the name is not recognised.
+  * `{:error, {:unknown_event, name}}` when no built-in and no registered
+    `Tempo.Event.Resolver` claims the name.
 
   * `{:error, :year_out_of_range}` when an astronomical event is requested
-    outside the range `Astro` supports (1000–3000 CE).
+    outside the range `Astro` supports (1000–3000 CE); a registered resolver
+    may return its own `{:error, reason}` for a year it cannot compute.
 
   ### Examples
 
@@ -155,14 +166,12 @@ defmodule Tempo.Event do
       {:error, {:unknown_event, "brigadoon"}}
 
   """
-  @spec date(String.t(), integer(), module()) ::
-          {:ok, Date.t()}
-          | {:error, {:unknown_event | :uncomputable_event, term()} | :year_out_of_range}
+  @spec date(String.t(), integer(), module()) :: {:ok, Date.t()} | {:error, term()}
   def date(name, year, calendar \\ Calendrical.Gregorian)
       when is_binary(name) and is_integer(year) do
     case Map.fetch(@events, name) do
       {:ok, spec} -> resolve(spec, year, calendar)
-      :error -> {:error, {:unknown_event, name}}
+      :error -> resolve_via_resolvers(name, year, calendar)
     end
   end
 
@@ -230,4 +239,18 @@ defmodule Tempo.Event do
   defp solar_term_location(Korean), do: &Korean.location/1
   defp solar_term_location(LunarJapanese), do: &LunarJapanese.location/1
   defp solar_term_location(_calendar), do: &Chinese.location/1
+
+  # A name that is not built in is offered to each registered resolver
+  # (`config :ex_tempo, :event_resolvers`) in turn; the first whose `known/0`
+  # claims it computes it. A name no resolver claims is the unknown-event error,
+  # which the selection resolver turns into zero occurrences.
+  defp resolve_via_resolvers(name, year, calendar) do
+    Enum.find_value(registered_resolvers(), {:error, {:unknown_event, name}}, fn resolver ->
+      if name in resolver.known(), do: resolver.date(name, year, calendar)
+    end)
+  end
+
+  defp registered_resolvers do
+    List.wrap(Application.get_env(:ex_tempo, :event_resolvers, []))
+  end
 end
