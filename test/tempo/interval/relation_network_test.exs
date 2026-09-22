@@ -27,6 +27,15 @@ defmodule Tempo.Interval.RelationNetworkTest do
     ~o"2026-06-20/2026-06-25"
   ]
 
+  # Distinct ordered triples, sampled directly so the generator never rejects a
+  # duplicate — `uniq_list_of` over a six-element pool exhausts its retry budget
+  # on some PRNG sequences (OTP 29).
+  @distinct_triples for x <- @intervals,
+                        y <- @intervals,
+                        z <- @intervals,
+                        x != y and y != z and x != z,
+                        do: [x, y, z]
+
   describe "new/1" do
     test "asserts nothing between distinct labels" do
       net = Net.new([:a, :b, :c])
@@ -156,7 +165,7 @@ defmodule Tempo.Interval.RelationNetworkTest do
     # propagation may only remove what is genuinely impossible.
     property "propagation never removes a relation that actually holds" do
       check all(
-              triple <- uniq_list_of(member_of(@intervals), length: 3),
+              triple <- member_of(@distinct_triples),
               decoy <- member_of(Relations.full()),
               max_runs: 200
             ) do
