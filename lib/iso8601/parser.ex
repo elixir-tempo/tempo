@@ -641,10 +641,20 @@ defmodule Tempo.Iso8601.Parser do
     %{tempo | calendar: calendar}
   end
 
-  defp put_calendar(%Tempo.Interval{from: from, to: to} = interval, calendar) do
-    to = put_calendar(to, calendar)
-    from = put_calendar(from, calendar)
-    %{interval | from: from, to: to}
+  defp put_calendar(
+         %Tempo.Interval{from: from, to: to, repeat_rule: repeat_rule} = interval,
+         calendar
+       ) do
+    # A recurrence's selection lives in `repeat_rule` (a `%Tempo{}`), not in
+    # `from`/`to`, so the effective calendar — an IXDTF `[u-ca=…]` suffix on the
+    # whole expression — must reach it there for the selection to resolve in
+    # that calendar. `nil`/`:undefined` endpoints fall through unchanged.
+    %{
+      interval
+      | from: put_calendar(from, calendar),
+        to: put_calendar(to, calendar),
+        repeat_rule: put_calendar(repeat_rule, calendar)
+    }
   end
 
   defp put_calendar(other, _calendar) do

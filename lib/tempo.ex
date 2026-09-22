@@ -4984,8 +4984,13 @@ defmodule Tempo do
 
       bound ->
         case bound_anchor(bound, interval) do
-          {:ok, anchor} -> to_interval(%{interval | from: anchor}, opts)
-          {:error, _} = error -> error
+          {:ok, anchor} ->
+            %{interval | from: anchor_in_repeat_calendar(anchor, interval)}
+            |> to_interval(opts)
+            |> filter_to_bound_window(interval, bound)
+
+          {:error, _} = error ->
+            error
         end
     end
   end
@@ -5028,6 +5033,68 @@ defmodule Tempo do
   def to_interval(%Tempo.Duration{} = value, _opts) do
     {:error, MaterialisationError.exception(value: value, reason: :bare_duration)}
   end
+
+  # The `:bound` supplies the anchor in its own (typically Gregorian) calendar.
+  # When the recurrence's selection resolves in another calendar — an IXDTF
+  # `[u-ca=…]` suffix on the whole expression, carried on the `repeat_rule` —
+  # the anchor is converted into that calendar and aligned to the cadence
+  # period it sits in, so the recurrence walks whole calendar periods (a `P1Y`
+  # cadence walks whole calendar years) and the selection resolves in-calendar,
+  # with the bound intersection converting back. Aligning matters because a
+  # mid-year anchor puts each period boundary mid-year, where it can coincide
+  # with the Gregorian bound and drop the very year the selection needed. This
+  # makes `R/../P1Y/FL1M1DN[u-ca=persian]` behave like the calendared-anchor
+  # form `R/<persian new year>[u-ca=persian]/P1Y`.
+  defp anchor_in_repeat_calendar(
+         %Tempo{} = anchor,
+         %Tempo.Interval{
+           repeat_rule: %Tempo{calendar: calendar},
+           duration: %Tempo.Duration{} = cadence
+         }
+       )
+       when calendar not in [nil, Calendrical.Gregorian, Calendrical.ISOWeek] do
+    with {:ok, %Tempo{} = converted} <- to_calendar(anchor, calendar),
+         {unit, _span} <- resolution(converted),
+         %Tempo{} = period <- at_resolution(converted, freq_of(cadence)),
+         %Tempo{} = aligned <- at_resolution(period, unit) do
+      aligned
+    else
+      _other -> anchor
+    end
+  end
+
+  defp anchor_in_repeat_calendar(%Tempo{} = anchor, _interval), do: anchor
+
+  # A calendar-aligned unanchored recurrence walks whole calendar years, so the
+  # year it anchors on can place occurrences just outside the Gregorian bound
+  # window — before `bound_from` (a year-start anchor's first year) or past
+  # `bound_to` (a calendar year straddling the window's end). Trim the
+  # materialised set to `[bound_from, bound_to)`. Only the calendar case shifts
+  # its anchor off the bound's start, so a Gregorian recurrence — whose anchor
+  # is the bound's start and whose `before_dtstart`/termination already bound
+  # it — is passed through untouched, preserving its exact behaviour.
+  defp filter_to_bound_window(
+         {:ok, %Tempo.IntervalSet{} = set},
+         %Tempo.Interval{repeat_rule: %Tempo{calendar: calendar}},
+         bound
+       )
+       when calendar not in [nil, Calendrical.Gregorian, Calendrical.ISOWeek] do
+    with {:ok, bound_to} <- bound_upper(bound),
+         bound_from = bound_lower(bound),
+         trimmed =
+           set
+           |> IntervalSet.to_list()
+           |> Enum.filter(fn %Tempo.Interval{from: from} ->
+             in_bound_window?(from, bound_from, bound_to)
+           end),
+         {:ok, %Tempo.IntervalSet{} = filtered} <- IntervalSet.new(trimmed) do
+      {:ok, filtered}
+    else
+      _other -> {:ok, set}
+    end
+  end
+
+  defp filter_to_bound_window(result, _interval, _bound), do: result
 
   # Apply a duration N times as a single scalar-multiplied step:
   # `tempo + (n × duration)` in one call, not `n` successive
@@ -5329,6 +5396,20 @@ defmodule Tempo do
     Compare.compare_endpoints(from, bound_to) == :earlier
   end
 
+  defp at_or_after_bound?(%Tempo{} = from, %Tempo{} = bound_from) do
+    Compare.compare_endpoints(from, bound_from) in [:same, :later]
+  end
+
+  # An occurrence lies in the half-open bound window `[bound_from, bound_to)`.
+  # A nil `bound_from` (empty bound) enforces only the upper edge.
+  defp in_bound_window?(%Tempo{} = from, nil, %Tempo{} = bound_to) do
+    under_bound?(from, bound_to)
+  end
+
+  defp in_bound_window?(%Tempo{} = from, %Tempo{} = bound_from, %Tempo{} = bound_to) do
+    at_or_after_bound?(from, bound_from) and under_bound?(from, bound_to)
+  end
+
   # Compute the upper endpoint of a `:bound` option. Accepts any
   # Tempo value that `to_interval_set/1` handles; uses the
   # highest `:to` across the set's intervals as the termination
@@ -5354,6 +5435,29 @@ defmodule Tempo do
         |> Enum.reduce(&later_endpoint/2)
 
       {:ok, upper}
+    end
+  end
+
+  # The lower endpoint of a `:bound` — the earliest `:from` across its
+  # intervals. Used to drop occurrences that a calendar-aligned anchor places
+  # before the window (an anchor at the start of the calendar year that
+  # contains the bound's start can precede the bound itself). `nil` when the
+  # bound is empty, so the window has no lower edge to enforce.
+  defp bound_lower(bound) do
+    case to_interval_set(bound) do
+      {:ok, %Tempo.IntervalSet{} = set} -> bound_lower_from_set(set)
+      {:error, _} -> nil
+    end
+  end
+
+  defp bound_lower_from_set(set) do
+    if IntervalSet.empty?(set) do
+      nil
+    else
+      set
+      |> IntervalSet.to_list()
+      |> Enum.map(& &1.from)
+      |> Enum.reduce(&earlier_endpoint/2)
     end
   end
 
@@ -5435,6 +5539,10 @@ defmodule Tempo do
 
   defp later_endpoint(a, b) do
     if Compare.compare_endpoints(a, b) == :later, do: a, else: b
+  end
+
+  defp earlier_endpoint(a, b) do
+    if Compare.compare_endpoints(a, b) == :earlier, do: a, else: b
   end
 
   # A "non-contiguous mask" is a mask at some unit followed by

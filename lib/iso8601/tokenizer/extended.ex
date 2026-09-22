@@ -384,15 +384,8 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
       {:ok, {:ca, calendar}} ->
         {:ok, %{acc | calendar: calendar}}
 
-      {:error, _} when critical ->
-        {:error,
-         ParseError.exception(
-           input: raw,
-           reason: "Unknown calendar identifier #{inspect(raw)} in extended suffix"
-         )}
-
       {:error, _} ->
-        {:ok, acc}
+        apply_additional_calendar(raw, critical, acc)
     end
   end
 
@@ -402,6 +395,35 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
 
   defp apply_tag(key, values, false, acc) do
     {:ok, put_in(acc, [:tags, key], values)}
+  end
+
+  # Localize keeps strictly to CLDR calendar identifiers, so a calendar
+  # Calendrical implements outside CLDR (e.g. `julian`, which BCP 47 has no
+  # identifier for) is resolved against Calendrical's additional-calendar
+  # registry, letting `[u-ca=julian]` attach the way a CLDR identifier does.
+  # A genuinely unknown identifier is dropped, or rejected when critical, as
+  # before.
+  defp apply_additional_calendar(raw, critical, acc) do
+    case additional_calendar_identifier(raw) do
+      {:ok, identifier} ->
+        {:ok, %{acc | calendar: identifier}}
+
+      :error when critical ->
+        {:error,
+         ParseError.exception(
+           input: raw,
+           reason: "Unknown calendar identifier #{inspect(raw)} in extended suffix"
+         )}
+
+      :error ->
+        {:ok, acc}
+    end
+  end
+
+  defp additional_calendar_identifier(raw) do
+    Enum.find_value(Calendrical.additional_calendars(), :error, fn {identifier, _module} ->
+      if Atom.to_string(identifier) == raw, do: {:ok, identifier}
+    end)
   end
 
   defp valid_zone?(zone) do

@@ -138,13 +138,62 @@ defmodule Tempo.Inspect do
 
   defp calendar_trailer(_), do: []
 
-  # `U.encode/2` raises on an atom that is not a calendar; guard it so
-  # inspect/`to_iso8601` never crash on an unexpected value.
+  # `U.encode/2` raises on an atom that is not a CLDR calendar; guard it so
+  # inspect/`to_iso8601` never crash on an unexpected value. A non-CLDR calendar
+  # Calendrical resolves (e.g. `:julian`) is not a CLDR identifier, so Localize
+  # will not encode it — its IXDTF value is the atom's own spelling.
   defp encode_calendar(cal) do
     {"ca", value} = U.encode(:ca, cal)
     {:ok, value}
   rescue
-    _error -> :error
+    _error -> additional_calendar_identifier(cal)
+  end
+
+  defp additional_calendar_identifier(cal) do
+    if Map.has_key?(Calendrical.additional_calendars(), cal) do
+      {:ok, Atom.to_string(cal)}
+    else
+      :error
+    end
+  end
+
+  # The `[u-ca=…]` suffix for a recurrence whose selection resolves in a
+  # non-default calendar, carried on its `repeat_rule`. The calendar is a
+  # module here (not the parsed identifier atom), so it is mapped back to its
+  # IXDTF identifier: a non-CLDR calendar (`Calendrical.Julian`) through
+  # Calendrical's additional-calendar registry, a CLDR one through its calendar
+  # type. Gregorian and the ISO week calendar are the defaults and add nothing.
+  defp repeat_rule_calendar_trailer(%Tempo{calendar: Calendrical.Gregorian}), do: []
+  defp repeat_rule_calendar_trailer(%Tempo{calendar: Calendrical.ISOWeek}), do: []
+
+  defp repeat_rule_calendar_trailer(%Tempo{calendar: calendar}) when is_atom(calendar) do
+    case calendar_module_identifier(calendar) do
+      {:ok, value} -> ["[u-ca=", value, "]"]
+      :error -> []
+    end
+  end
+
+  defp repeat_rule_calendar_trailer(_), do: []
+
+  defp calendar_module_identifier(calendar) do
+    case additional_calendar_module_name(calendar) do
+      {:ok, name} -> {:ok, Atom.to_string(name)}
+      :error -> cldr_calendar_identifier(calendar)
+    end
+  end
+
+  defp additional_calendar_module_name(calendar) do
+    Enum.find_value(Calendrical.additional_calendars(), :error, fn {name, module} ->
+      if module == calendar, do: {:ok, name}
+    end)
+  end
+
+  defp cldr_calendar_identifier(calendar) do
+    if function_exported?(calendar, :cldr_calendar_type, 0) do
+      encode_calendar(calendar.cldr_calendar_type())
+    else
+      :error
+    end
   end
 
   defp tags_trailer(%{tags: tags}) when is_map(tags) and map_size(tags) > 0 do
@@ -446,7 +495,7 @@ defmodule Tempo.Inspect do
          from: nil,
          to: nil,
          duration: %Tempo.Duration{} = duration,
-         repeat_rule: %Tempo{time: rule_time}
+         repeat_rule: %Tempo{time: rule_time} = repeat_rule
        }) do
     [
       ?R,
@@ -457,7 +506,8 @@ defmodule Tempo.Inspect do
       inspect_value(duration),
       ?/,
       ?F,
-      inspect_value(rule_time)
+      inspect_value(rule_time),
+      repeat_rule_calendar_trailer(repeat_rule)
     ]
   end
 
@@ -466,7 +516,7 @@ defmodule Tempo.Inspect do
          from: nil,
          to: %Tempo{} = to,
          duration: %Tempo.Duration{} = duration,
-         repeat_rule: %Tempo{time: rule_time}
+         repeat_rule: %Tempo{time: rule_time} = repeat_rule
        }) do
     [
       ?R,
@@ -479,7 +529,8 @@ defmodule Tempo.Inspect do
       inspect_value(duration),
       ?/,
       ?F,
-      inspect_value(rule_time)
+      inspect_value(rule_time),
+      repeat_rule_calendar_trailer(repeat_rule)
     ]
   end
 

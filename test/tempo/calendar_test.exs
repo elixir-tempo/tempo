@@ -1,6 +1,19 @@
 defmodule Tempo.CalendarTest do
   use ExUnit.Case, async: true
 
+  alias Tempo.{Interval, IntervalSet}
+
+  # The Gregorian ISO-8601 day each interval in a materialised set falls on.
+  defp gregorian_days(set) do
+    set
+    |> IntervalSet.to_list()
+    |> Enum.map(fn interval ->
+      {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
+      {:ok, gregorian} = Date.convert(date, Calendar.ISO)
+      Date.to_iso8601(gregorian)
+    end)
+  end
+
   # The IXDTF `[u-ca=NAME]` suffix, when no explicit calendar
   # argument is given to `Tempo.from_iso8601/1`, resolves to a
   # concrete `Calendrical.*` module via
@@ -55,6 +68,29 @@ defmodule Tempo.CalendarTest do
       assert buddhist.calendar == Calendrical.Buddhist
     end
 
+    test "[u-ca=julian] resolves the non-CLDR Julian calendar via Calendrical" do
+      # CLDR/BCP 47 has no `julian` identifier, so Localize never validates it.
+      # Calendrical implements the calendar and registers it in
+      # `additional_calendars/0`, which the resolver consults ahead of CLDR.
+      {:ok, tempo} = Tempo.from_iso8601("1900-12-25[u-ca=julian]")
+      assert tempo.calendar == Calendrical.Julian
+      assert tempo.extended.calendar == :julian
+    end
+
+    test "[u-ca=julian] round-trips losslessly through to_iso8601/1" do
+      iso = "R/2025Y12M25D[u-ca=julian]/P1Y"
+      {:ok, tempo} = Tempo.from_iso8601(iso)
+      assert Tempo.to_iso8601(tempo) == iso
+    end
+
+    test "a Julian recurrence materialises to the Gregorian day it falls on" do
+      # Orthodox Christmas: Julian 25 December, projected onto Gregorian 2026.
+      {:ok, recurrence} = Tempo.from_iso8601("R/2025Y12M25D[u-ca=julian]/P1Y")
+      {:ok, set} = Tempo.to_interval(recurrence, bound: Tempo.from_iso8601!("2026Y"))
+
+      assert gregorian_days(set) == ["2026-01-07"]
+    end
+
     test "without a u-ca tag the default calendar is Gregorian" do
       {:ok, tempo} = Tempo.from_iso8601("2026-06-15")
       assert tempo.calendar == Calendrical.Gregorian
@@ -74,6 +110,62 @@ defmodule Tempo.CalendarTest do
                Tempo.from_iso8601("2026-06-15[u-ca=fakecalendar]")
 
       assert tempo.calendar == Calendrical.Gregorian
+    end
+  end
+
+  # The natural way to write a calendar-specific holiday: the `[u-ca=…]` suffix
+  # on the whole recurrence, applying to the selection, rather than only to a
+  # written-out anchor date. The selection resolves in that calendar and the
+  # bound projects it onto the Gregorian year.
+  describe "a [u-ca=NAME] suffix on a whole recurrence expression" do
+    test "applies the calendar to the selection, not just a written-out anchor" do
+      {:ok, orthodox_christmas} = Tempo.from_iso8601("R/../P1Y/FL12M25DN[u-ca=julian]")
+      assert orthodox_christmas.repeat_rule.calendar == Calendrical.Julian
+
+      {:ok, set} = Tempo.to_interval(orthodox_christmas, bound: Tempo.from_iso8601!("2026Y"))
+      assert gregorian_days(set) == ["2026-01-07"]
+    end
+
+    test "projects each calendar onto the Gregorian day it falls on in 2026" do
+      cases = [
+        {"R/../P1Y/FL10M1DN[u-ca=islamic]", "2026-03-20"},
+        {"R/../P1Y/FL1M1DN[u-ca=persian]", "2026-03-21"},
+        {"R/../P1Y/FL4M29DN[u-ca=coptic]", "2026-01-07"}
+      ]
+
+      for {iso, gregorian} <- cases do
+        {:ok, recurrence} = Tempo.from_iso8601(iso)
+        {:ok, set} = Tempo.to_interval(recurrence, bound: Tempo.from_iso8601!("2026Y"))
+        assert gregorian_days(set) == [gregorian], "#{iso} should fall on #{gregorian}"
+      end
+    end
+
+    test "a lunar date that falls twice in one Gregorian year yields both" do
+      # Islamic New Year fell twice in 2008 — 10 January and 29 December —
+      # because the Hijri year is ~11 days shorter than the Gregorian one.
+      {:ok, islamic_new_year} = Tempo.from_iso8601("R/../P1Y/FL1M1DN[u-ca=islamic]")
+      {:ok, set} = Tempo.to_interval(islamic_new_year, bound: Tempo.from_iso8601!("2008Y"))
+
+      assert gregorian_days(set) == ["2008-01-10", "2008-12-29"]
+    end
+
+    test "round-trips losslessly, keeping the suffix on the whole expression" do
+      for iso <- [
+            "R/../P1Y/FL12M25DN[u-ca=julian]",
+            "R/../P1Y/FL10M1DN[u-ca=islamic]",
+            "R/../P1Y/FL1M1DN[u-ca=persian]"
+          ] do
+        {:ok, recurrence} = Tempo.from_iso8601(iso)
+        assert Tempo.to_iso8601(recurrence) == iso
+      end
+    end
+
+    test "a Gregorian recurrence is unaffected — no suffix, its own day" do
+      {:ok, christmas} = Tempo.from_iso8601("R/../P1Y/FL12M25DN")
+      assert Tempo.to_iso8601(christmas) == "R/../P1Y/FL12M25DN"
+
+      {:ok, set} = Tempo.to_interval(christmas, bound: Tempo.from_iso8601!("2026Y"))
+      assert gregorian_days(set) == ["2026-12-25"]
     end
   end
 
