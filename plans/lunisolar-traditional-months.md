@@ -1,6 +1,6 @@
 # Lunisolar traditional-month input
 
-**Status:** in progress, 2026-09-23 — the `+` leap-month input capability is implemented in Tempo; the tempo_holidays `:lunisolar` clause conversion remains.
+**Status:** implemented, 2026-09-23 — the `+` leap-month input capability shipped in Tempo; the tempo_holidays `:lunisolar` clause stays a Calendrical query, by design (see Findings).
 
 ## Problem
 
@@ -42,4 +42,16 @@ So the concrete value — `%Date{}`, `Tempo.to_date`, `.time`, inspect — is ir
 * [x] Render ordinal (unchanged) — `6+M` → `7M`, `6M` unchanged, verified.
 * [x] Conformance note in `guides/iso8601-conformance.md` (§5, after the `E` designator).
 * [x] Tests in `test/tempo/calendar_test.exs`: `6+M`→`7M`, regular unchanged, non-leap year / wrong traditional month / non-lunisolar / Islamic (leap years not months) all error cleanly. All six gates green (4398 tests).
-* [ ] `tempo_holidays`: use `+` where it constructs a leap-month lunisolar date; the non-leap traditional query stays (documented as a legitimate calendar computation, not imperative date math).
+* [x] `tempo_holidays`: `:lunisolar` clause reviewed and left as a Calendrical-dispatching query — see Findings. 2026-09-23.
+
+## Findings (2026-09-23) — the clause stays a Calendrical query
+
+Investigating the conversion settled it against a declarative recurrence, on three grounds verified against the code and the upstream data:
+
+* **No holiday needs `+`.** All 71 lunisolar rules in the entire date-holidays corpus (CN/VN/KR, chinese/korean/vietnamese) are non-leap — every one is `<m>-0-<d>`. There is not a single leap-month lunisolar holiday, so the leap-month *input* form buys `tempo_holidays` nothing.
+
+* **`+` does not reach a selection frame anyway.** `<n>+M` is parsed by `Grammar.explicit_month`, which the §12 selection sublanguage (`FL…N`) does not route through — `R/../P1Y/FL6+M1DN[u-ca=chinese]` is a parse error. `+` is a concrete-date convenience only.
+
+* **A bare selection month is ordinal, and the traditional→ordinal step is year-dependent *and* year-attributed.** `R/../P1Y/FL8M15DN[u-ca=chinese]` bound to 2025 yields ordinal `4662Y8M15D`, but Mid-Autumn (traditional 8) is `4662Y9M15D` in that leap year — a fixed ordinal cannot stand in for a traditional month, and *which* lunar year's month lands in the Gregorian target is itself data (Ông Táo, month 12, belongs to the following Gregorian year). Both are exactly what the clause's per-year `Calendrical.<cal>.gregorian_date_for_lunar/3` + Gregorian-year filter compute.
+
+So the clause already dispatches all calendar arithmetic to Calendrical; there is no ISO selection spelling for a traditional lunisolar month (bare = ordinal, by the compatibility decision), and inventing one would serve zero real holidays. It stays a Calendrical query — the same class as Easter's computus.
