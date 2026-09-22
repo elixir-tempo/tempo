@@ -408,6 +408,18 @@ defmodule Tempo.Validation do
     end
   end
 
+  # A lunisolar intercalary month `{n, :leap}` (parsed from `<n>+M`) resolves to
+  # its ordinal position for the year against a lunisolar calendar; the rest of
+  # the pipeline then sees an ordinary integer month. Any calendar without a
+  # leap month at that traditional position is rejected.
+  def resolve([{:year, year}, {:month, {month, :leap}} | rest], calendar)
+      when is_integer(year) and is_integer(month) do
+    case leap_month_ordinal(calendar, year, month) do
+      {:ok, ordinal} -> resolve([{:year, year}, {:month, ordinal} | rest], calendar)
+      {:error, _} = error -> error
+    end
+  end
+
   def resolve([{:year, year}, {:month, month}, {:day, day} | rest], calendar)
       when is_integer(year) and is_integer(month) and
              (is_number(day) or is_struct(day, Range) or is_list(day)) do
@@ -739,6 +751,40 @@ defmodule Tempo.Validation do
            year: year,
            month: month,
            reason: "month #{month} does not exist in #{inspect(calendar)} year #{year}"
+         )}
+    end
+  end
+
+  # The ordinal position of the intercalary month following traditional month
+  # `month` in `year`. Only a lunisolar calendar has one — it exposes
+  # `leap_month/1` (the ordinal of the leap month, or a non-integer when the
+  # year has none) and `traditional_leap_month/1` (its traditional number).
+  defp leap_month_ordinal(calendar, year, month) do
+    if function_exported?(calendar, :leap_month, 1) and
+         function_exported?(calendar, :traditional_leap_month, 1) do
+      resolve_leap_month_ordinal(calendar, year, month)
+    else
+      {:error,
+       InvalidDateError.exception(
+         year: year,
+         month: month,
+         reason: "#{inspect(calendar)} has no leap months, so `#{month}+M` is invalid"
+       )}
+    end
+  end
+
+  defp resolve_leap_month_ordinal(calendar, year, month) do
+    with ordinal when is_integer(ordinal) <- calendar.leap_month(year),
+         ^month <- calendar.traditional_leap_month(year) do
+      {:ok, ordinal}
+    else
+      _no_such_leap_month ->
+        {:error,
+         InvalidDateError.exception(
+           year: year,
+           month: month,
+           reason:
+             "#{inspect(calendar)} year #{year} has no leap month following traditional month #{month}"
          )}
     end
   end

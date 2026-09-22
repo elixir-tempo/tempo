@@ -179,6 +179,50 @@ defmodule Tempo.CalendarTest do
     end
   end
 
+  # A lunisolar intercalary month, written `<n>+M` — the leap month following
+  # traditional month `n`. A Tempo extension (ISO 8601 has no such concept), it
+  # is an input convenience only: it resolves to the ordinal month and renders
+  # ordinal, so `%Date{}` and round-trips stay Elixir-compatible.
+  describe "the `<n>+M` lunisolar leap-month input" do
+    test "resolves to the ordinal month and renders ordinal" do
+      # Chinese year 4662 carries a leap month 6 (閏6月) at ordinal position 7.
+      {:ok, tempo} = Tempo.from_iso8601("4662Y6+M1D[u-ca=chinese]")
+      assert tempo.time[:month] == 7
+      assert Tempo.to_iso8601(tempo) == "4662Y7M1D[u-ca=chinese]"
+    end
+
+    test "a regular month is unaffected" do
+      {:ok, tempo} = Tempo.from_iso8601("4662Y6M1D[u-ca=chinese]")
+      assert tempo.time[:month] == 6
+      assert Tempo.to_iso8601(tempo) == "4662Y6M1D[u-ca=chinese]"
+    end
+
+    test "a year with no such leap month is rejected" do
+      # 4661 is an ordinary year; 4662's leap month follows month 6, not 7.
+      assert {:error, _} = Tempo.from_iso8601("4661Y6+M1D[u-ca=chinese]")
+      assert {:error, _} = Tempo.from_iso8601("4662Y7+M1D[u-ca=chinese]")
+    end
+
+    test "a non-lunisolar calendar is rejected" do
+      assert {:error, message} = Tempo.from_iso8601("2026Y6+M1D")
+      assert Exception.message(message) =~ "no leap months"
+    end
+
+    test "a leap-year calendar without leap months (Islamic) is rejected" do
+      # The Islamic calendars have leap *years* — an extra day in the final
+      # month — not leap *months*, so there is no `<n>+M` to name; every leap
+      # month, valid or not, is rejected the same clean way.
+      for iso <- [
+            "1447Y6+M1D[u-ca=islamic-umalqura]",
+            "1447Y12+M1D[u-ca=islamic]",
+            "1447Y99+M1D[u-ca=islamic-civil]"
+          ] do
+        assert {:error, message} = Tempo.from_iso8601(iso)
+        assert Exception.message(message) =~ "no leap months"
+      end
+    end
+  end
+
   # Tempo borrowed the `[…]` suffix from IXDTF (which uses `[u-ca=value]`),
   # but the value is a BCP 47 Unicode Calendar Identifier, whose native form
   # is hyphenated (`u-ca-hebrew`). So Tempo reads BOTH separators (liberal in)

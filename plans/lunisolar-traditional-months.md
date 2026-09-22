@@ -1,6 +1,6 @@
 # Lunisolar traditional-month input
 
-**Status:** planning, 2026-09-23
+**Status:** in progress, 2026-09-23 — the `+` leap-month input capability is implemented in Tempo; the tempo_holidays `:lunisolar` clause conversion remains.
 
 ## Problem
 
@@ -37,9 +37,9 @@ So the concrete value — `%Date{}`, `Tempo.to_date`, `.time`, inspect — is ir
 
 ## Tasks
 
-* [ ] Tempo tokenizer/grammar: accept `<n>+M` (a month with a leap flag); the tokenizer is calendar-blind, so it emits `{month, leap: true}` structurally.
-* [ ] Tempo validation: for a lunisolar calendar with a year, resolve `{n, :leap}` → ordinal via Calendrical (`calendar.new(year, {n, :leap}, day)` already returns the ordinal Date); reject `+` for non-lunisolar calendars or an absent leap month. Store ordinal.
-* [ ] Tempo: render ordinal (unchanged — nothing to do beyond confirming `+` is not emitted).
-* [ ] Tempo: syntax-guide conformance note (non-conformant extension, cf. the `E` selector and `{n,:leap}`).
-* [ ] Round-trip + validation tests (`6+M` → `7M`; `6M` unchanged; `+` on gregorian errors).
+* [x] Tempo tokenizer/grammar: `<n>+M` → `{:month, {n, :leap}}` (`Grammar.leap_month`, in `explicit_month`).
+* [x] Tempo validation: `resolve/2` clause lowers `{n, :leap}` → ordinal via `leap_month/1` guarded by `traditional_leap_month/1 == n`, gated by `function_exported?(calendar, :leap_month, 1)`; a clean `InvalidDateError` otherwise.
+* [x] Render ordinal (unchanged) — `6+M` → `7M`, `6M` unchanged, verified.
+* [x] Conformance note in `guides/iso8601-conformance.md` (§5, after the `E` designator).
+* [x] Tests in `test/tempo/calendar_test.exs`: `6+M`→`7M`, regular unchanged, non-leap year / wrong traditional month / non-lunisolar / Islamic (leap years not months) all error cleanly. All six gates green (4398 tests).
 * [ ] `tempo_holidays`: use `+` where it constructs a leap-month lunisolar date; the non-leap traditional query stays (documented as a legitimate calendar computation, not imperative date math).

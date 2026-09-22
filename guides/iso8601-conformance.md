@@ -250,6 +250,18 @@ Tempo.to_interval(~o"R/../P1Y/FL(easter)EN", bound: ~o"{2026..2028}Y")
 
 An unknown event name parses but resolves to no occurrences, so a typo yields an empty result rather than a crash. Like `Q`, an `E` selection round-trips through `inspect/1`/`Tempo.to_iso8601/1`; there is no RFC 5545 equivalent, so `Tempo.to_rrule/1` cannot express it.
 
+### Lunisolar leap month — the `+` marker
+
+ISO 8601 has no notation for the intercalary ("leap") month a lunisolar calendar inserts in some years — the Chinese 閏6月, say. Tempo writes it `<n>+M`: the leap month following traditional month `n`, in a `[u-ca=chinese]` (or `dangi`, `vietnamese`, japanese-lunisolar) context. It is an **input convenience only**. Elixir's `%Date{}` stores an integer month and cannot hold a leap flag, so `<n>+M` resolves to the leap month's **ordinal** position for that year and is stored and rendered ordinally — `+` never survives a round-trip:
+
+```elixir
+# 閏6月 (leap month 6) of Chinese year 4662 is ordinal month 7
+Tempo.from_iso8601!("4662Y6+M1D[u-ca=chinese]")
+#=> Tempo.from_iso8601!("4662Y7M1D[u-ca=chinese]", Calendrical.Chinese)
+```
+
+A bare `<n>M` is always the ordinal month, unchanged, so existing values keep their meaning. `<n>+M` on a non-lunisolar calendar, or in a year with no leap month at that position, is a parse error rather than a silent misreading. It lowers to the `{n, :leap}` construct `Calendrical.Chinese.new/3` already accepts.
+
 ### Selection with a time interval (ISO 8601-2 §12.10)
 
 A selection followed by `/[duration]` makes each resolved date the **start of a window** of that duration (a negative duration extends backward), and selectors placed after it pick *within* the window. Nesting is written with `L…N` pairs from the outside in. This is standard ISO 8601-2, not a Tempo extension, and it is how the holidays *derived* from a computed event are expressed:

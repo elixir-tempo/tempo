@@ -527,11 +527,28 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :group}),
       parsec({Tempo.Iso8601.Tokenizer.Set, :selection}),
+      leap_month(),
       qualified_number_or_integer_set("M", :month, min: 1),
       quarter(),
       half()
     ])
   end
+
+  # A lunisolar intercalary month, written `<n>+M` — the leap month following
+  # traditional month `n` (閏n月). This is a non-conformant Tempo extension (ISO
+  # 8601 has no lunisolar/leap-month concept), in the same class as the `E`
+  # computed-event selector. The tokeniser is calendar-blind, so it emits the
+  # `{n, :leap}` construct structurally; `Tempo.Validation` resolves it to the
+  # ordinal month against a lunisolar calendar and rejects it for any other.
+  def leap_month do
+    positive_integer(min: 1)
+    |> ignore(string("+"))
+    |> ignore(string("M"))
+    |> reduce({__MODULE__, :as_leap_month, []})
+    |> unwrap_and_tag(:month)
+  end
+
+  def as_leap_month([month]), do: {month, :leap}
 
   # Weeks
 
