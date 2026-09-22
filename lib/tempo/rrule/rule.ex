@@ -178,7 +178,7 @@ defmodule Tempo.RRule.Rule do
   ### Examples
 
       iex> Tempo.RRule.Rule.to_selection(%Tempo.RRule.Rule{freq: :monthly, byday: [{2, 1}]})
-      ~o"L2I1KN"
+      ~o"L1K2IN"
 
       iex> Tempo.RRule.Rule.to_selection(%Tempo.RRule.Rule{freq: :daily})
       nil
@@ -201,7 +201,7 @@ defmodule Tempo.RRule.Rule do
         |> push_by(rule.byhour, :hour)
         |> push_by(rule.byminute, :minute)
         |> push_by(rule.bysecond, :second)
-        |> push_by(rule.bysetpos, :set_position)
+        |> push_by(rule.bysetpos, :instance)
         |> push_wkst(rule.wkst)
         |> Enum.reverse()
         |> Parser.consolidate_selection()
@@ -224,19 +224,44 @@ defmodule Tempo.RRule.Rule do
     [{:or_day, {List.wrap(monthdays), List.wrap(byday_entries)}} | acc]
   end
 
-  # BYDAY emits `{:day_of_week, …}` when every entry is a bare weekday, or
-  # `{:byday, [{ordinal, weekday}, …]}` when any entry carries an ordinal (so
-  # the resolver keeps "the 4th Thursday" paired rather than as two filters).
+  # BYDAY lowers to ISO 8601-2 §12.9 selection where it can:
+  #
+  #   * every entry a bare weekday → `{:day_of_week, …}`;
+  #   * ordinals all on ONE weekday (`2MO`, `1MO,3MO`) → `{:day_of_week, d}` +
+  #     `{:instance, ords}` (weekday then position, the ISO order — `day_of_week`
+  #     is prepended after `:instance` so it lands first once the list reverses);
+  #   * ordinals across DISTINCT weekdays (`2MO,2WE`, `1MO,-1FR`, mixed) have no
+  #     single-position ISO form, so they stay `{:byday, entries}` (RRULE-only).
   defp push_byday(acc, nil), do: acc
   defp push_byday(acc, []), do: acc
 
   defp push_byday(acc, entries) when is_list(entries) do
-    if Enum.all?(entries, fn {ordinal, _day} -> is_nil(ordinal) end) do
-      push_day_of_week(acc, Enum.map(entries, fn {nil, day} -> day end))
-    else
-      [{:byday, entries} | acc]
+    cond do
+      Enum.all?(entries, fn {ordinal, _day} -> is_nil(ordinal) end) ->
+        push_day_of_week(acc, Enum.map(entries, fn {nil, day} -> day end))
+
+      single_weekday_ordinals(entries) ->
+        {day, ordinals} = single_weekday_ordinals(entries)
+        [{:instance, ordinals}, {:day_of_week, day} | acc]
+
+      true ->
+        [{:byday, entries} | acc]
     end
   end
+
+  # `{day, ordinals}` when every entry carries a non-nil ordinal on a single
+  # distinct weekday; `nil` otherwise. One ordinal collapses to an integer.
+  defp single_weekday_ordinals(entries) do
+    days = entries |> Enum.map(fn {_ordinal, day} -> day end) |> Enum.uniq()
+    ordinals = Enum.map(entries, fn {ordinal, _day} -> ordinal end)
+
+    if match?([_], days) and Enum.all?(ordinals, &(not is_nil(&1))) do
+      {hd(days), collapse_single(ordinals)}
+    end
+  end
+
+  defp collapse_single([one]), do: one
+  defp collapse_single(many), do: many
 
   defp push_day_of_week(acc, [single]), do: [{:day_of_week, single} | acc]
   defp push_day_of_week(acc, days), do: [{:day_of_week, days} | acc]

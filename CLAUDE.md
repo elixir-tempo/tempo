@@ -130,35 +130,13 @@ The single exception is when referring to an **external standard's own terminolo
 
 When reviewing new code or docs, grep for `region` / `:region` / `default_region` and rename them unless they're quoting BCP 47 directly.
 
-## Upstream library bugs — report and pause, don't work around
+## Upstream library bugs — report and pause
 
-**When a bug or gap is found in an upstream library (Calendrical, Localize, Tzdata, Astro, Calendrical.*, Localize.*, any hex dep), the default is to report it back and wait for a fix — not to paper over it inside Tempo.** A workaround in Tempo:
-
-* Duplicates logic that belongs upstream and will drift as the upstream evolves.
-
-* Hides the bug from the owner who can actually fix it properly for every downstream consumer.
-
-* Accumulates as technical debt: the workaround rarely gets removed when the upstream lands the fix, because nobody is tracking it.
-
-* Weakens the contract between Tempo and the library — future Tempo code may assume the library behaves correctly in cases where it doesn't, because the workaround is invisible.
-
-The correct sequence is:
-
-1. **Stop implementation.** Don't continue past the bug with a local workaround baked in.
-
-2. **Report the bug clearly.** Describe the observed behaviour, the expected behaviour, and a minimal reproducer. Point at the specific function or module if possible.
-
-3. **Suggest a fix upstream** if one is obvious. Keep it to the upstream's own idiom — don't try to reshape their API.
-
-4. **Pause and wait.** Let the user coordinate the upstream fix. Don't proceed with a Tempo workaround unless explicitly asked to.
-
-5. **Resume once the upstream fix is available** (a hex release, a path-dep pointing at the fixed branch, etc.). Use the upstream behaviour as-is; don't leave scar tissue behind.
-
-The exception is when the user explicitly says "work around it in Tempo for now" — in which case, implement the workaround **and** add a TODO.md entry flagging the upstream fix and what to remove in Tempo once it lands.
+The global "never work around a library deficiency" rule applies to Tempo's upstreams — Calendrical, Localize, Astro, Tzdata, any hex dep. A bug or gap there is reported back with a minimal reproducer (name the function/module), a fix suggested in the upstream's own idiom, and paused on until the user coordinates the fix (a hex release or a path-dep to the fixed branch); resume against the upstream behaviour, no scar tissue left behind. The only exception is an explicit "work around it in Tempo for now", which also gets a TODO.md entry flagging the upstream fix and what to remove once it lands.
 
 ## Definition of done — Credo
 
-This library adds a sixth gate to the global definition of done: `mix credo --strict` must report **no issues** before a change is complete. Run it alongside the other five gates (`mix format --check-formatted`, `mix compile --warnings-as-errors`, `mix test`, `mix dialyzer`, `MIX_ENV=release mix docs`).
+This library adds a sixth gate to the global definition of done: `mix credo --strict` must report **no issues** before a change is complete, run alongside the global's five gates.
 
 The `.credo.exs` config runs every check at its **default threshold** — there are no elevated `max_complexity` or `max_nesting` overrides, and there are no inline `# credo:disable` suppressions anywhere in the codebase. This is deliberate: when Credo flags new code, the fix is to **refactor the code**, not loosen the config. The two established idioms for the things Credo most often flags here:
 

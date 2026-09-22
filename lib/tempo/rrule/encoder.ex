@@ -179,11 +179,19 @@ defmodule Tempo.RRule.Encoder do
   defp by_parts(nil, _interval), do: {:ok, []}
 
   defp by_parts(%Tempo{time: [selection: selection]}, _interval) do
-    # The new tagged AST (Phase C) makes encoding a simple 1-to-1
-    # map: each selection token corresponds to exactly one RRULE
-    # BY-part. No more disambiguation between BYSETPOS and
-    # BYDAY-ordinal — they're distinct tokens in the AST.
-    {:ok, Enum.flat_map(selection, &encode_by_entry/1)}
+    # Each selection token maps to one RRULE BY-part, with one recombination
+    # first: ISO 8601-2 §12.9 lowers an ordinal `BYDAY` to a weekday followed
+    # by a position (`2MO` → `day_of_week: 1, instance: 2`). Re-fusing that
+    # adjacent pair lets `to_rrule/1` emit the compact, idiomatic `BYDAY=2MO`
+    # rather than the equivalent-but-verbose `BYDAY=MO;BYSETPOS=2`. A genuine
+    # set-position over several weekdays keeps `day_of_week` as a list and is
+    # left untouched, so it still encodes as `BYDAY=…;BYSETPOS=…`.
+    parts =
+      selection
+      |> recombine_ordinal_byday()
+      |> Enum.flat_map(&encode_by_entry/1)
+
+    {:ok, parts}
   end
 
   defp by_parts(%Tempo{} = rule, interval) do
@@ -208,6 +216,23 @@ defmodule Tempo.RRule.Encoder do
      )}
   end
 
+  # Fuse a single-weekday `day_of_week` immediately followed by `instance`
+  # back into an ordinal `:byday` entry (the inverse of the §12.9 lowering in
+  # `Tempo.RRule.Rule.push_byday/2`). Adjacency is guaranteed: the lowering
+  # emits the pair together, ahead of any time element. A list-valued
+  # `day_of_week` is a real multi-weekday set-position and is not fused.
+  defp recombine_ordinal_byday([{:day_of_week, day}, {:instance, ordinals} | rest])
+       when is_integer(day) do
+    [{:byday, ordinal_byday_pairs(day, ordinals)} | recombine_ordinal_byday(rest)]
+  end
+
+  defp recombine_ordinal_byday([entry | rest]), do: [entry | recombine_ordinal_byday(rest)]
+  defp recombine_ordinal_byday([]), do: []
+
+  defp ordinal_byday_pairs(day, ordinals) do
+    ordinals |> List.wrap() |> expand_ranges() |> Enum.map(&{&1, day})
+  end
+
   defp encode_by_entry({:month, v}), do: ["BYMONTH=#{list_csv(v)}"]
   defp encode_by_entry({:day, v}), do: ["BYMONTHDAY=#{list_csv(v)}"]
   defp encode_by_entry({:day_of_year, v}), do: ["BYYEARDAY=#{list_csv(v)}"]
@@ -215,7 +240,7 @@ defmodule Tempo.RRule.Encoder do
   defp encode_by_entry({:hour, v}), do: ["BYHOUR=#{list_csv(v)}"]
   defp encode_by_entry({:minute, v}), do: ["BYMINUTE=#{list_csv(v)}"]
   defp encode_by_entry({:second, v}), do: ["BYSECOND=#{list_csv(v)}"]
-  defp encode_by_entry({:set_position, v}), do: ["BYSETPOS=#{list_csv(v)}"]
+  defp encode_by_entry({:instance, v}), do: ["BYSETPOS=#{list_csv(v)}"]
   defp encode_by_entry({:day_of_week, v}), do: ["BYDAY=#{byday_csv(v)}"]
 
   defp encode_by_entry({:byday, pairs}) when is_list(pairs),

@@ -174,44 +174,39 @@ These syntaxes are Tempo conveniences, not part of any standard:
 * **Step in range** — `{1990..1999//2}Y` or `2023Y{1..-1//2}W` means "every second week in 2023".
 * **Explicit suffixes** — `2022Y11M20D` instead of `2022-11-20`. Used by the `~o` sigil as the canonical output form.
 * **Repeat rule** — `/F` combinator inside a parsed expression.
-* **Selection instance count** — `L…N` with an `I` modifier for the nth instance of a *single* weekday (`2I1K` = "the 2nd Monday"). `I` is ISO 8601-2, not a Tempo invention; it is mentioned here only to contrast it with `V` below, which it is easily confused with.
+* **Selection position** — `L…N` with an `I` modifier for the nth occurrence of the resolved set, written weekday-then-position (`1K2I` = "the 2nd Monday"). `I` is the ISO 8601-2 §12.9 position designator, not a Tempo invention — it is listed here only for completeness and described in full below.
 
 None of these break ISO 8601 compatibility — Tempo accepts the standard forms too.
 
-### Ratified RRULE selection designators — `V` and `Q`
+### The position designator `I` and week start `Q`
 
-A recurrence selection may carry two RFC 5545 (iCalendar RRULE / cron) filters that have **no ISO 8601 representation**: `BYSETPOS` and `WKST`. Tempo gives them project-specific designators — `V` and `Q` — so a rule that uses them round-trips through `inspect/1` and `Tempo.to_iso8601/1` instead of being silently lost. These are **ratified** as permanent extensions: the letters and their meanings are stable and will not change.
+A recurrence selection can carry two RFC 5545 (iCalendar RRULE / cron) concepts. One, `BYSETPOS`, **is** ISO 8601-2 — the §12.9 position designator `I`. The other, `WKST`, has **no ISO representation**, so Tempo gives it the single project-specific designator `Q`. Both round-trip through `inspect/1` and `Tempo.to_iso8601/1`, and `Q` is **ratified**: the letter and its meaning are stable and will not change.
 
-They are kept, rather than dropped for the sake of a spec-pure output, for two reasons:
+#### `I` — set position (RRULE `BYSETPOS`)
 
-1. They express selections that ISO 8601 genuinely cannot. Neither the ISO ordinal designator `I` nor Tempo's set operations (`Tempo.intersection/2`, `Tempo.difference/2`, …) can reproduce them — see the contrasts below.
+`nI` keeps the **Nth occurrence of the resolved candidate set**, after every other `BY`-rule has run and the survivors are sorted. It is written last, lower-order than the weekday it ranks (`1K2I` = "the 2nd Monday"). Negative counts index from the end and a set picks several: `-1I` is the last, `{1,3}I` the 1st and 3rd. This is exactly RFC 5545's `BYSETPOS`.
 
-2. They give Tempo's native string form the same reach as the RRULE it parses, so `RRULE → to_iso8601 → from_iso8601 → to_rrule` is loss-free and symmetric with the recurrence vocabulary.
-
-#### `V` — set position (RRULE `BYSETPOS`)
-
-`nV` keeps the **Nth occurrence of the whole per-period candidate set**, after every other `BY`-rule has run and the survivors are sorted. Negative counts index from the end and a set picks several: `-1V` is the last, `{1,3}V` is the 1st and 3rd.
-
-The subtlety — and the reason it is more than the ordinary ordinal — is that it ranks the *merged* set, not one weekday. "The last **weekday** of the month" is `V`; "the last **Friday**" is the ISO ordinal `I`. They are different selections:
+Because it ranks the *resolved* set, one designator covers what look like two different questions. "The last **Friday** of the month" resolves a single weekday, then takes the last of it; "the last **weekday** of the month" resolves Monday–Friday into one set, then takes the last of *that*. Both use `I` — the difference is only how many weekdays feed the set:
 
 ```elixir
-# Last WEEKDAY of each month — R/../P1M/FL{1..5}K-1VN
-# -1V over the merged Mon–Fri set
-Tempo.RRule.parse!("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1")
-#   from 2022-06 → June 30 (Thu), July 29 (Fri), Aug 31 (Wed)
-
-# Last FRIDAY of each month — the ISO ordinal `I`, a genuinely different result
+# Last FRIDAY of each month — one weekday, then position: R/../P1M/FL5K-1IN
 Tempo.RRule.parse!("FREQ=MONTHLY;BYDAY=-1FR")
 #   from 2022-06 → June 24, July 29, Aug 26
+
+# Last WEEKDAY of each month — Mon–Fri merged, then position: R/../P1M/FL{1..5}K-1IN
+Tempo.RRule.parse!("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1")
+#   from 2022-06 → June 30 (Thu), July 29 (Fri), Aug 31 (Wed)
 ```
 
-They coincide only when the last weekday happens to be a Friday (July, above). RFC 5545's own worked example — "the third instance of Tuesday, Wednesday, or Thursday each month" — is `3V`:
+They coincide only when the last weekday happens to be a Friday (July, above). RFC 5545's own worked example — "the third instance of Tuesday, Wednesday, or Thursday each month" — merges three weekdays, then takes the 3rd:
 
 ```elixir
-# R/../P1M/FL{2..4}K3VN
+# R/../P1M/FL{2..4}K3IN
 Tempo.RRule.parse!("FREQ=MONTHLY;BYDAY=TU,WE,TH;BYSETPOS=3")
 #   from 1997-09 → Sept 4, Oct 7, Nov 6
 ```
+
+The one recurrence shape with **no** ISO 8601 form is an ordinal spread across *distinct* weekdays — "the 2nd Monday **and** the 2nd Wednesday" (`BYDAY=2MO,2WE`). A single `I` ranks one set; it cannot name two independent per-weekday ordinals at once. Tempo holds such a rule as an internal `:byday` selection that round-trips only through `Tempo.to_rrule/1`, never through `to_iso8601/1`.
 
 #### `Q` — week start (RRULE `WKST`)
 
@@ -232,7 +227,42 @@ Moving the week start from Monday to Sunday changes which fortnight each candida
 
 #### Interchange risk
 
-`V` and `Q` are the **only** non-standard letters Tempo emits inside a selection. Because they are not ISO 8601, a *different* system reading Tempo's ISO string would not understand them. We rate this risk **low**: we have not identified any other system that consumes ISO 8601-2 recurrence at all, let alone one a Tempo `V`/`Q` string would reach in practice. Where a standard interchange form is needed — sharing a rule with a calendar server, for instance — use `Tempo.to_rrule/1`, which emits `BYSETPOS`/`WKST` in their portable RFC 5545 spelling. Treat the `V`/`Q` string as Tempo's native, loss-free persistence form and the RRULE string as the wire format.
+`Q` (week start) and `E` (computed event, below) are the **only** non-standard letters Tempo emits inside a selection — `I` is ISO 8601-2 §12.9. Because they are not ISO 8601, a *different* system reading Tempo's ISO string would not understand them. We rate this risk **low**: we have not identified any other system that consumes ISO 8601-2 recurrence at all, let alone one a Tempo `Q`/`E` string would reach in practice. Where a standard interchange form is needed — sharing a rule with a calendar server, for instance — use `Tempo.to_rrule/1`, which emits `WKST` (and `BYSETPOS`, and any multi-weekday ordinal) in its portable RFC 5545 spelling. Treat the Tempo string as the native, loss-free persistence form and the RRULE string as the wire format.
+
+### Computed events — the `E` designator
+
+ISO 8601-2 has no notation for a recurrence whose date is fixed by an **algorithm** rather than the calendar: Easter (the paschal computus), an astronomical event (an equinox or solstice), or one of the 24 East Asian solar terms (jié-qì). This is the one family of holiday rules the standard genuinely cannot express, so Tempo adds a single project-specific selection designator, `E`, whose value is the event name in parentheses:
+
+```text
+R/../P1Y/FL(easter)EN              Easter Sunday, every year
+R/../P1Y/FL(march-equinox)EN       the March (northern spring) equinox
+R/../P1Y/FL(december-solstice)EN   the December solstice
+R/../P1Y/FL(qingming)EN            Qīngmíng (Ching Ming / Tomb-Sweeping Day)
+```
+
+The recognised names are `easter` and `orthodox-easter` (the same computus in the Julian calendar), the astronomical `march-equinox` / `june-solstice` / `september-equinox` / `december-solstice`, and the 24 solar terms (`qingming`, `lichun`, `dongzhi`, …) — see `Tempo.Event.known/0`. Materialising the recurrence into a bound resolves each event per year — Easter via `Calendrical.Ecclesiastical`, the astronomical events via `Astro`, and the solar terms via `Calendrical` (computed for the Chinese meridian):
+
+```elixir
+# "Easter Sunday, every year" — resolved across 2026–2028
+Tempo.to_interval(~o"R/../P1Y/FL(easter)EN", bound: ~o"{2026..2028}Y")
+#   → 2026-04-05, 2027-03-28, 2028-04-16
+```
+
+An unknown event name parses but resolves to no occurrences, so a typo yields an empty result rather than a crash. Like `Q`, an `E` selection round-trips through `inspect/1`/`Tempo.to_iso8601/1`; there is no RFC 5545 equivalent, so `Tempo.to_rrule/1` cannot express it.
+
+### Selection with a time interval (ISO 8601-2 §12.10)
+
+A selection followed by `/[duration]` makes each resolved date the **start of a window** of that duration (a negative duration extends backward), and selectors placed after it pick *within* the window. Nesting is written with `L…N` pairs from the outside in. This is standard ISO 8601-2, not a Tempo extension, and it is how the holidays *derived* from a computed event are expressed:
+
+```elixir
+# Good Friday — the last Friday in the 7 days before Easter
+Tempo.to_interval(~o"R/../P1Y/FLLL(easter)EN/-P7DN5K-1IN", bound: ~o"2026")  # → 2026-04-03
+
+# US Election Day — the 1st Tuesday in the 9 days from November's 1st Monday
+Tempo.to_interval(~o"R/../P1Y/FL11MLL1K1IN/P9DN2K1IN", bound: ~o"2026")       # → 2026-11-03
+```
+
+The spec's worked examples resolve as written: `~o"R/../P1Y/FLLL2K2IN/P10DN4K2IN"` is "the 2nd Thursday within the ten days from the 2nd Tuesday" (§12.11 Example 3), and `~o"R/../P1Y/FLL4M4D/-P20DN7K-2IN"` is "the 2nd Sunday before April 4" (Example 7). A terminal window with no inner selectors — `~o"R/../P1Y/FLL3K4IN/P5DN"`, "the 4th Wednesday for 5 days" — yields one interval per period spanning its whole duration.
 
 ## 6. Ambiguity resolution
 

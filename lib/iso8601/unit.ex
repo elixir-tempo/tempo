@@ -194,13 +194,14 @@ defmodule Tempo.Iso8601.Unit do
     compare(unit1, unit2)
   end
 
-  # Returns a boolean depending on whether the units are in an appropriate
-  # order of increasing resolution. Two selection shapes need normalising
-  # first: the non-scale selector tokens (`:instance`, the "Nth of" selector —
-  # `2I1K` is "the 2nd Monday"; and the RRULE `:set_position`/`:wkst` filters)
-  # are not time-scale units, so they are stripped; and a multi-weekday `BYDAY`
-  # (`2I1K3K` = "the 2nd Monday and every Wednesday") lands as consecutive
-  # `:day_of_week` entries at one resolution, so the run is collapsed first.
+  # Returns a boolean depending on whether the units are in decreasing
+  # time-scale order (coarsest first). One token is stripped first: `:wkst`
+  # (the RRULE week-start filter) is context, not a time-scale unit. The
+  # `:instance` position selector (ISO 8601-2 §12.9 `I`) is NOT stripped — it
+  # carries the finest sort key, so keeping it forces the canonical weekday-
+  # then-position order (`1K2I` = "the 2nd Monday") and rejects the reverse
+  # `2I1K`. A multi-weekday `BYDAY` lands as consecutive `:day_of_week` entries
+  # at one resolution, so that run is collapsed first.
   def ordered?(units) when is_list(units) do
     units
     |> Enum.reject(&non_scale_token?/1)
@@ -208,8 +209,10 @@ defmodule Tempo.Iso8601.Unit do
     |> ordered_units?()
   end
 
-  defp non_scale_token?(:instance), do: true
-  defp non_scale_token?({unit, _value}) when unit in [:instance, :set_position, :wkst], do: true
+  defp non_scale_token?({:wkst, _value}), do: true
+  # A §12.10 window (`[selection]/[duration]`) nests a whole selection; it is
+  # not a flat scale unit, so it is skipped when checking resolution order.
+  defp non_scale_token?({:interval, _value}), do: true
   defp non_scale_token?(_other), do: false
 
   defp collapse_weekday_run([{:day_of_week, _} = weekday, {:day_of_week, _} | rest]),

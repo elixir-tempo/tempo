@@ -86,23 +86,32 @@ defmodule Tempo.RRuleTest do
       assert i.repeat_rule.time == [selection: [day_of_week: [1, 3, 5]]]
     end
 
-    test "BYDAY with positive ordinal becomes a :byday pair token" do
+    test "a single-weekday ordinal BYDAY lowers to day_of_week + instance" do
       # 4th Thursday of November — US Thanksgiving.
       {:ok, i} = RRule.parse("FREQ=YEARLY;BYMONTH=11;BYDAY=4TH")
 
-      # BYDAY-with-ordinal uses the `:byday` token which keeps
-      # the (ordinal, weekday) pair intact. `:day_of_week` is
-      # reserved for the no-ordinal form.
+      # An ordinal on ONE weekday is the ISO 8601-2 §12.9 position form:
+      # resolve the weekday, then take the Nth (`:instance`). `:byday`
+      # survives only for ordinals spread across distinct weekdays.
       assert i.repeat_rule.time ==
-               [selection: [month: 11, byday: [{4, 4}]]]
+               [selection: [month: 11, day_of_week: 4, instance: 4]]
     end
 
-    test "BYDAY with negative ordinal" do
+    test "a negative single-weekday ordinal BYDAY lowers to day_of_week + instance" do
       # Last Friday of every month.
       {:ok, i} = RRule.parse("FREQ=MONTHLY;BYDAY=-1FR")
 
       assert i.repeat_rule.time ==
-               [selection: [byday: [{-1, 5}]]]
+               [selection: [day_of_week: 5, instance: -1]]
+    end
+
+    test "an ordinal BYDAY across distinct weekdays keeps the :byday pair token" do
+      # 2nd Monday and 2nd Wednesday — no single §12.9 position expresses this,
+      # so it stays on the adapter-internal `:byday` token.
+      {:ok, i} = RRule.parse("FREQ=MONTHLY;BYDAY=2MO,2WE")
+
+      assert i.repeat_rule.time ==
+               [selection: [byday: [{2, 1}, {2, 3}]]]
     end
 
     test "BYHOUR, BYMINUTE, BYSECOND for time-of-day filters" do
@@ -112,17 +121,15 @@ defmodule Tempo.RRuleTest do
                [selection: [hour: 9, minute: [0, 30]]]
     end
 
-    test "BYSETPOS maps to a dedicated :set_position token" do
+    test "BYSETPOS maps to the ISO 8601-2 §12.9 position token :instance" do
       {:ok, i} = RRule.parse("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1")
 
-      # `:set_position` is distinct from the `:instance` token
-      # used by Tempo's native ISO 8601-2 selection grammar. The
-      # semantics differ: BYSETPOS operates on the per-period
-      # candidate set AFTER all other BY-rules, so it serialises last —
-      # after the `:day_of_week` filter it selects from. Consecutive
-      # weekdays consolidate to a range (`[1..5]`) for readability.
+      # BYSETPOS is the ISO 8601-2 §12.9 position designator `I` (`:instance`):
+      # applied last, it selects from the per-period candidate set AFTER all
+      # other BY-rules, so it serialises last — after the `:day_of_week` filter
+      # it selects from. Consecutive weekdays consolidate to a range (`[1..5]`).
       assert i.repeat_rule.time ==
-               [selection: [day_of_week: [1..5], set_position: -1]]
+               [selection: [day_of_week: [1..5], instance: -1]]
     end
   end
 
@@ -170,10 +177,10 @@ defmodule Tempo.RRuleTest do
     # expression that mean the same thing should land on the same
     # AST.
 
-    test "MONTHLY;BYDAY=-1FR lands on the :byday pair token" do
+    test "MONTHLY;BYDAY=-1FR lands on the day_of_week + instance position form" do
       {:ok, rrule_ast} = RRule.parse("FREQ=MONTHLY;BYDAY=-1FR")
 
-      assert rrule_ast.repeat_rule.time == [selection: [byday: [{-1, 5}]]]
+      assert rrule_ast.repeat_rule.time == [selection: [day_of_week: 5, instance: -1]]
     end
 
     test "YEARLY;BYMONTH=6 carries a month-only selection" do
@@ -182,24 +189,35 @@ defmodule Tempo.RRuleTest do
     end
 
     test "an ordinal BYDAY round-trips through its native ISO 8601-2 form" do
-      # `inspect/1` renders `byday: [{2, 1}]` as `R/…/FL2I1KN`; the parser
-      # must fold `2I1K` back into the same `:byday` token — not leave it as
-      # raw `instance`/`day_of_week` tokens (which would select *every*
-      # Monday, not the *2nd*).
+      # A single-weekday ordinal is the §12.9 position form: `inspect/1`
+      # renders it weekday-then-position (`FL1K2IN` = the Mondays, take the
+      # 2nd), and the encoder re-fuses that pair to the compact `BYDAY=2MO`.
       rrule = RRule.parse!("FREQ=MONTHLY;BYDAY=2MO", from: ~o"2025-01-01")
 
-      assert inspect(rrule) == ~s(~o"R/2025Y1M1D/P1M/FL2I1KN")
-      assert Tempo.from_iso8601("R/2025Y1M1D/P1M/FL2I1KN") == {:ok, rrule}
-      assert rrule.repeat_rule.time == [selection: [byday: [{2, 1}]]]
+      assert inspect(rrule) == ~s(~o"R/2025Y1M1D/P1M/FL1K2IN")
+      assert Tempo.from_iso8601("R/2025Y1M1D/P1M/FL1K2IN") == {:ok, rrule}
+      assert rrule.repeat_rule.time == [selection: [day_of_week: 1, instance: 2]]
+      assert Tempo.to_rrule(rrule) == {:ok, "FREQ=MONTHLY;BYDAY=2MO"}
     end
 
-    test "multi-weekday and multi-ordinal BYDAY round-trip too" do
-      for rule <- ["FREQ=MONTHLY;BYDAY=1MO,3MO", "FREQ=MONTHLY;BYDAY=2MO,WE"] do
-        rrule = RRule.parse!(rule, from: ~o"2025-01-01")
-        iso = inspect(rrule) |> String.replace(~s(~o"), "") |> String.trim_trailing(~s("))
+    test "a single-weekday multi-ordinal BYDAY round-trips through its ISO form" do
+      # `1MO,3MO` shares one weekday, so it lowers to the §12.9 position form
+      # (`1K{1,3}I`) and round-trips through the ISO 8601 selection string.
+      rrule = RRule.parse!("FREQ=MONTHLY;BYDAY=1MO,3MO", from: ~o"2025-01-01")
+      iso = inspect(rrule) |> String.replace(~s(~o"), "") |> String.trim_trailing(~s("))
 
-        assert Tempo.from_iso8601(iso) == {:ok, rrule}
-      end
+      assert Tempo.from_iso8601(iso) == {:ok, rrule}
+      assert Tempo.to_rrule(rrule) == {:ok, "FREQ=MONTHLY;BYDAY=1MO,3MO"}
+    end
+
+    test "an ordinal BYDAY across distinct weekdays round-trips only via to_rrule/1" do
+      # `2MO,WE` mixes an ordinal weekday with a bare one — no single §12.9
+      # position expresses it, so it has no ISO 8601 form and round-trips
+      # through its RRULE string instead.
+      rrule = RRule.parse!("FREQ=MONTHLY;BYDAY=2MO,WE", from: ~o"2025-01-01")
+
+      assert rrule.repeat_rule.time == [selection: [byday: [{2, 1}, {nil, 3}]]]
+      assert Tempo.to_rrule(rrule) == {:ok, "FREQ=MONTHLY;BYDAY=2MO,WE"}
     end
 
     test "a weekday-plus-time selection serialises the weekday before the time" do
@@ -213,11 +231,12 @@ defmodule Tempo.RRuleTest do
     end
 
     test "BYYEARDAY, BYSETPOS, WKST and consecutive runs round-trip via to_iso8601/1" do
-      # BYYEARDAY uses the ISO `O` designator; BYSETPOS (`V`) and WKST (`Q`) are
-      # Tempo project-specific designators — RFC 5545 features with no ISO form,
-      # which previously crashed `to_iso8601/1`. Consecutive values consolidate
-      # to ranges; a negative sentinel mixed with a positive (`BYMONTHDAY=1,-1`)
-      # keeps its source order rather than sorting. All still round-trip.
+      # BYYEARDAY uses the ISO `O` designator; BYSETPOS is the ISO 8601-2 §12.9
+      # position `I`; WKST (`Q`) is the sole Tempo project-specific designator —
+      # an RFC 5545 feature with no ISO form, which previously crashed
+      # `to_iso8601/1`. Consecutive values consolidate to ranges; a negative
+      # sentinel mixed with a positive (`BYMONTHDAY=1,-1`) keeps its source
+      # order rather than sorting. All still round-trip.
       rules = [
         "FREQ=YEARLY;BYYEARDAY=100",
         "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1",

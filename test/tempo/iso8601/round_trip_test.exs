@@ -7,7 +7,7 @@ defmodule Tempo.Iso8601.RoundTripTest do
   # shows inside `~o"…"` yields the *identical* value — no component silently
   # dropped, mangled, or made unparseable.
   #
-  # This is the gate the ordinal-`BYDAY` (`2I1K`) and IXDTF numeric-offset
+  # This is the gate the ordinal-`BYDAY` (`1K2I`) and IXDTF numeric-offset
   # (`[+08:45]`) round-trip bugs slipped through: inspect-stability on its own
   # never proved that the rendered form re-parses to the same value. Every valid
   # token needs at least one case here.
@@ -69,13 +69,13 @@ defmodule Tempo.Iso8601.RoundTripTest do
     {"group — nested", "2018Y4G60DU6D"},
     {"group — days", "2022Y3G4DU"},
     {"selection — month/weekday", "2018Y3ML1KN"},
-    {"selection — ordinal BYDAY (2nd Monday)", "R/2025-01-01/P1M/FL2I1KN"},
+    {"selection — ordinal BYDAY (2nd Monday)", "R/2025-01-01/P1M/FL1K2IN"},
     {"selection — weekday+instance (postfix)", "R/2018-09-05/P1D/F1YL9M3K1IN"},
     {"selection — day-of-year (BYYEARDAY)", "R/2025-01-01/P1Y/FL100ON"},
     {"selection — consolidated weekday range", "R/2025-01-01/P1W/FL{1..5}KN"},
-    # Tempo project-specific designators (§5) — RFC 5545 BYSETPOS / WKST, which
-    # have no ISO 8601 form: `V` (set position) and `Q` (week start).
-    {"selection — set-position (V, Tempo ext.)", "R/2025-01-01/P1M/FL1K-1VN"},
+    # Set-position is the ISO 8601-2 §12.9 position `I`. WKST has no ISO form, so
+    # it keeps the Tempo project-specific designator `Q` (week start).
+    {"selection — set-position (I, ISO §12.9)", "R/2025-01-01/P1M/FL1K-1IN"},
     {"selection — week-start (Q, Tempo ext.)", "R/2025-01-01/P1W/FL1K7QN"},
     {"season — meteorological", "2022-21"},
     {"season — astronomical", "2022-25"},

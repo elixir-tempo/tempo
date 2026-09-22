@@ -87,8 +87,8 @@ defmodule Tempo.IntervalRegressionTest do
         repeat_rule: %Tempo{time: [selection: [day_of_week: 5, instance: -1]]}
       }
 
-      # Shape is `R/../P1M/FL-1I5KN` — the selection inspects to
-      # `L-1I5KN` per the existing selection grammar.
+      # Shape is `R/../P1M/FL5K-1IN` — the selection inspects weekday-then-
+      # position (`L5K-1IN`) per the ISO 8601-2 §12.9 order.
       rendered = inspect(interval)
       assert rendered =~ "R/../P1M/F"
       assert rendered =~ "L"
@@ -96,19 +96,18 @@ defmodule Tempo.IntervalRegressionTest do
     end
 
     test "recurring interval with an ordinal BYDAY repeat rule inspects without crashing" do
-      # `FREQ=MONTHLY;BYDAY=2MO` ("the 2nd Monday") carries the ordinal as
-      # an RRULE-only `:byday` selection of `{ordinal, day_of_week}` pairs,
-      # which has no native ISO 8601 unit. It must render in the instance
-      # (`I`) + day-of-week (`K`) notation rather than raising.
+      # `FREQ=MONTHLY;BYDAY=2MO` ("the 2nd Monday") lowers to the ISO 8601-2
+      # §12.9 position form — resolve the weekday (`K`), then take the Nth
+      # (`I`) — and renders weekday-then-position rather than raising.
       second_monday = RRule.parse!("FREQ=MONTHLY;BYDAY=2MO", from: ~o"2025-01-01")
-      assert inspect(second_monday) == ~S|~o"R/2025Y1M1D/P1M/FL2I1KN"|
+      assert inspect(second_monday) == ~S|~o"R/2025Y1M1D/P1M/FL1K2IN"|
 
       # Negative and multi-entry ordinals render the same way.
       last_friday = RRule.parse!("FREQ=MONTHLY;BYDAY=-1FR", from: ~o"2025-01-01")
-      assert inspect(last_friday) == ~S|~o"R/2025Y1M1D/P1M/FL-1I5KN"|
+      assert inspect(last_friday) == ~S|~o"R/2025Y1M1D/P1M/FL5K-1IN"|
 
       first_and_third = RRule.parse!("FREQ=MONTHLY;BYDAY=1MO,3MO", from: ~o"2025-01-01")
-      assert inspect(first_and_third) == ~S|~o"R/2025Y1M1D/P1M/FL1I1K3I1KN"|
+      assert inspect(first_and_third) == ~S|~o"R/2025Y1M1D/P1M/FL1K{1,3}IN"|
     end
 
     test "open-ended interval (existing behaviour) still renders as ../.." do

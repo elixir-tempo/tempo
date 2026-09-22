@@ -679,33 +679,36 @@ defmodule Tempo.Inspect do
   defp inspect_value({:second, second}), do: [inspect_list(second), ?S]
   defp inspect_value({:day_of_week, day}), do: [inspect_list(day), ?K]
   defp inspect_value({:week, week}), do: [inspect_list(week), ?W]
-  defp inspect_value({:instance, instance}), do: [inspect_value(instance), ?I]
+  defp inspect_value({:instance, instance}), do: [inspect_list(instance), ?I]
 
-  # RRULE BYDAY carrying an ordinal (`2MO` = the 2nd Monday, `-1FR` = the
-  # last Friday, `1MO,3MO` = the 1st and 3rd) has no native ISO 8601 unit,
-  # so it is held as a `:byday` selection of `{ordinal, day_of_week}`
-  # pairs. Render each pair in the instance (`I`) + day-of-week (`K`)
-  # notation the selection grammar already uses; a `nil` ordinal is a
-  # plain day-of-week. The parser folds that same notation back into a
-  # `:byday` selection, so this inspection form round-trips.
-  defp inspect_value({:byday, entries}) when is_list(entries) do
-    Enum.map(entries, fn
-      {nil, day} -> [inspect_list(day), ?K]
-      {ordinal, day} -> [inspect_value(ordinal), ?I, inspect_list(day), ?K]
-    end)
+  # A computed-event selection renders as `(name)E` — the project-specific
+  # designator for an algorithmically resolved recurrence (Easter, an
+  # astronomical event). The name is a plain lowercase identifier, so it
+  # round-trips through the grammar's `selection_event/0`.
+  defp inspect_value({:event, name}) when is_binary(name), do: [?(, name, ?), ?E]
+
+  # A `:byday` selection survives only for the one shape ISO 8601-2 cannot
+  # express: ordinals spread across *distinct* weekdays (`BYDAY=2MO,2WE`,
+  # `BYDAY=1MO,-1FR`, the mixed `BYDAY=2MO,WE`). A single-weekday ordinal
+  # lowers to `day_of_week` + `instance` (the §12.9 position form) before it
+  # ever reaches here, so the only cases left interleave weekday and position
+  # (`1K2I3K2I`), which the resolution-order rule rejects on re-parse. There
+  # is no round-trippable ISO form, so — like `:nearest_weekday` below — raise
+  # and let the value round-trip through its RRULE string via `to_rrule/1`.
+  defp inspect_value({:byday, _entries}) do
+    raise Iso8601EncodeError.exception(construct: :byday)
   end
 
-  # RRULE BYSETPOS and WKST have no ISO 8601 designator — they are RFC 5545
-  # extensions. Tempo renders them with the project-specific selection
-  # designators `V` (set position) and `Q` (week start) so a recurrence
-  # carrying them round-trips through `inspect/1`/`to_iso8601/1` rather than
-  # crashing; the canonical external form remains the RRULE string.
-  defp inspect_value({:set_position, position}), do: [inspect_list(position), ?V]
+  # WKST has no ISO 8601 designator — it is an RFC 5545 extension. Tempo renders
+  # it with the project-specific selection designator `Q` (week start) so a
+  # recurrence carrying it round-trips through `inspect/1`/`to_iso8601/1` rather
+  # than crashing; the canonical external form remains the RRULE string. (Set
+  # position is the ISO 8601-2 §12.9 `I` — see the `:instance` clause above.)
   defp inspect_value({:wkst, weekday}), do: [inspect_list(weekday), ?Q]
 
   # A nearest-weekday selection (cron `W`, parsed to `:nearest_weekday`) has
-  # no ISO 8601 designator and — unlike `V`/`Q` above — was deliberately not
-  # given a project-specific one (the day-level operation is
+  # no ISO 8601 designator and — unlike the `Q` week-start above — was
+  # deliberately not given a project-specific one (the day-level operation is
   # `Tempo.nearest_working_day/2`). Raise a clear error instead of a
   # `FunctionClauseError`; the Inspect protocol catches it and falls back.
   defp inspect_value({:nearest_weekday, _targets}) do

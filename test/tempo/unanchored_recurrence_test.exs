@@ -68,7 +68,7 @@ defmodule Tempo.UnanchoredRecurrenceTest do
       # Whatever the resolution of the bound that anchors it — the whole
       # year, that November, or Thanksgiving Day itself — it lands on the
       # same day. The bound says where to walk, not at what grain.
-      {:ok, thanksgiving} = Tempo.from_iso8601("R/../P1Y/FL11M4I4KN")
+      {:ok, thanksgiving} = Tempo.from_iso8601("R/../P1Y/FL11M4K4IN")
 
       for bound <- [~o"2026", ~o"2026-11", ~o"2026-11-26"] do
         assert {:ok, %IntervalSet{} = set} = Tempo.to_interval(thanksgiving, bound: bound)

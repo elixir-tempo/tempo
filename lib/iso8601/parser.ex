@@ -267,7 +267,7 @@ defmodule Tempo.Iso8601.Parser do
       raise Tempo.ParseError,
             "selection #{inspect(selection)} is finer than the following group #{inspect(group)}"
     else
-      selection = parse_date(selection) |> reduce_list() |> fold_byday_selection()
+      selection = parse_date(selection) |> reduce_list()
       [{:selection, selection} | parse_date([{:group, group} | rest])]
     end
   end
@@ -330,7 +330,7 @@ defmodule Tempo.Iso8601.Parser do
       raise Tempo.ParseError,
             "#{inspect(unit_2)} is greater than the selection max of #{inspect(max)}"
     else
-      selection = parse_date(selection) |> reduce_list() |> fold_byday_selection()
+      selection = parse_date(selection) |> reduce_list()
       [{:selection, selection} | parse_date([{unit_2, value_2} | rest])]
     end
   end
@@ -341,7 +341,7 @@ defmodule Tempo.Iso8601.Parser do
             "Selection time units must be in decreasing time scale order. Found #{inspect(selection)}."
     end
 
-    selection = parse_date(selection) |> reduce_list() |> fold_byday_selection()
+    selection = parse_date(selection) |> reduce_list()
     [{:selection, selection} | parse_date(rest)]
   end
 
@@ -459,46 +459,6 @@ defmodule Tempo.Iso8601.Parser do
   def selection_min_max(selection) do
     Tempo.unit_min_max(selection)
   end
-
-  # ISO 8601-2 has no native unit for an ordinal weekday ("the 2nd Monday"), so
-  # an RRULE `BYDAY=2MO` is held internally as a single `byday: [{2, 1}]`
-  # selection and rendered in the `<instance>I<weekday>K` form (`2I1K`). Folding
-  # the reverse here — each `instance` selector binding to the weekday that
-  # immediately follows it, a bare weekday taking a `nil` ordinal — is what
-  # makes that inspection form round-trip to the same AST the materialiser (and
-  # `RRule.parse!/2`) build. Only the byday shape (instance *before* its
-  # weekday) folds: the raw selection grammar also allows the postfix
-  # `day_of_week` + `instance` form (`3K1I`) and a bare weekday with no ordinal,
-  # both of which are left as plain tokens.
-  defp fold_byday_selection(selection) when is_list(selection) do
-    if Keyword.has_key?(selection, :instance) do
-      case byday_pairs(selection, [], []) do
-        {:ok, others, pairs} -> Enum.reverse(others) ++ [byday: pairs]
-        :not_byday -> selection
-      end
-    else
-      selection
-    end
-  end
-
-  defp fold_byday_selection(selection), do: selection
-
-  defp byday_pairs([{:instance, ordinal}, {:day_of_week, day} | rest], others, pairs),
-    do: byday_pairs(rest, others, [{ordinal, day} | pairs])
-
-  defp byday_pairs([{:instance, _ordinal} | _rest], _others, _pairs), do: :not_byday
-
-  defp byday_pairs([{:day_of_week, _day}, {:instance, _} | _rest], _others, _pairs),
-    do: :not_byday
-
-  defp byday_pairs([{:day_of_week, day} | rest], others, pairs),
-    do: byday_pairs(rest, others, [{nil, day} | pairs])
-
-  defp byday_pairs([entry | rest], others, pairs),
-    do: byday_pairs(rest, [entry | others], pairs)
-
-  defp byday_pairs([], _others, []), do: :not_byday
-  defp byday_pairs([], others, pairs), do: {:ok, others, Enum.reverse(pairs)}
 
   # Keyword list
   def reduce_list([{key, _value} | _rest] = list) when is_atom(key) do

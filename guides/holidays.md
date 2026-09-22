@@ -66,16 +66,16 @@ Many holidays need no feed at all: the ones with a purely calendrical rule — "
 
 | Holiday | When it occurs (public holiday) | ISO 8601 expression |
 |---|---|---|
-| Martin Luther King Jr. Day | 3rd Monday in January | `R/../P1Y/FL1M3I1KN` |
-| Presidents Day | 3rd Monday in February | `R/../P1Y/FL2M3I1KN` |
-| Memorial Day | last Monday in May | `R/../P1Y/FL5M-1I1KN` |
+| Martin Luther King Jr. Day | 3rd Monday in January | `R/../P1Y/FL1M1K3IN` |
+| Presidents Day | 3rd Monday in February | `R/../P1Y/FL2M1K3IN` |
+| Memorial Day | last Monday in May | `R/../P1Y/FL5M1K-1IN` |
 | Independence Day | July 4 | `R/../P1Y/FL7M4DN` |
-| Columbus Day | 2nd Monday in October | `R/../P1Y/FL10M2I1KN` |
+| Columbus Day | 2nd Monday in October | `R/../P1Y/FL10M1K2IN` |
 | Veterans Day | November 11 | `R/../P1Y/FL11M11DN` |
-| Thanksgiving | 4th Thursday in November | `R/../P1Y/FL11M4I4KN` |
+| Thanksgiving | 4th Thursday in November | `R/../P1Y/FL11M4K4IN` |
 | Christmas Day | December 25 | `R/../P1Y/FL12M25DN` |
 
-**Reading the expression.** `R/../P1Y` is an unbounded yearly recurrence (`../` = no fixed start, `P1Y` = one-year cadence); `FL…N` wraps the per-year selection. Inside it, `nM` is the month (`1M` = January), `nD` is a day of the month (`4D` = the 4th), `nI` is the nth instance (`3I` = 3rd, `-1I` = last), and `nK` is a weekday (`1K` = Monday … `7K` = Sunday). So `FL1M3I1KN` reads "in January, the 3rd Monday" and `FL7M4DN` reads "in July, the 4th day". The full grammar is in the [ISO 8601 conformance guide](./iso8601-conformance.md).
+**Reading the expression.** `R/../P1Y` is an unbounded yearly recurrence (`../` = no fixed start, `P1Y` = one-year cadence); `FL…N` wraps the per-year selection. Inside it, `nM` is the month (`1M` = January), `nD` is a day of the month (`4D` = the 4th), `nK` is a weekday (`1K` = Monday … `7K` = Sunday), and `nI` is the position within the resolved set (`3I` = 3rd, `-1I` = last), written *after* the weekday it ranks. So `FL1M1K3IN` reads "in January, the 3rd Monday" and `FL7M4DN` reads "in July, the 4th day". The full grammar is in the [ISO 8601 conformance guide](./iso8601-conformance.md).
 
 **Observed day vs event day.** MLK Day, Presidents Day, Columbus Day, and Memorial Day are observed on a *weekday of the month*, deliberately different from the underlying event: Dr King's birthday is January 15, Washington's is February 22, the 1492 landing was October 12, and Memorial Day replaced a fixed May 30. The table gives the observed public-holiday rule, as intended.
 

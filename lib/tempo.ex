@@ -4966,7 +4966,7 @@ defmodule Tempo do
   # is the window to materialise into, so the recurrence anchors to the
   # bound's start and yields every occurrence the window contains. The
   # anchor takes the recurrence's own selection resolution — day for
-  # `FL6M2I1KN` ("the 2nd Monday of June"), month for `FL6MN` ("June") —
+  # `FL6M1K2IN` ("the 2nd Monday of June"), month for `FL6MN` ("June") —
   # so each occurrence lands at the grain the selection names rather than
   # being forced to a day. With no `:bound` there is nothing to anchor
   # against, so it stays an error rather than reporting success while
@@ -5228,10 +5228,24 @@ defmodule Tempo do
   # `occurrence_duration`), resize each occurrence to one unit of its
   # own resolution. This keeps native `~o".../FL15DN"`, RRULE, and
   # cron consistent without storing any per-occurrence metadata.
-  defp resize_selected_occurrences(occurrences, false), do: occurrences
+  defp resize_selected_occurrences(occurrences, false) do
+    Enum.map(occurrences, &drop_windowed_marker/1)
+  end
 
   defp resize_selected_occurrences(occurrences, true) do
     Enum.map(occurrences, &resize_to_resolution/1)
+  end
+
+  defp drop_windowed_marker(%Tempo.Interval{metadata: %{windowed: _} = metadata} = occurrence) do
+    %{occurrence | metadata: Map.delete(metadata, :windowed)}
+  end
+
+  defp drop_windowed_marker(occurrence), do: occurrence
+
+  # A §12.10 window occurrence already carries its own span, so it is kept as
+  # is; the internal marker that protected it from resizing is dropped here.
+  defp resize_to_resolution(%Tempo.Interval{metadata: %{windowed: true} = metadata} = occurrence) do
+    %{occurrence | metadata: Map.delete(metadata, :windowed)}
   end
 
   defp resize_to_resolution(%Tempo.Interval{from: %Tempo{} = from} = occurrence) do
@@ -5345,7 +5359,7 @@ defmodule Tempo do
 
   # The anchor for an unanchored recurrence materialised against a
   # `:bound`: the bound's lower endpoint, taken at the resolution the
-  # recurrence's selection names — day for `FL6M2I1KN` ("the 2nd Monday
+  # recurrence's selection names — day for `FL6M1K2IN` ("the 2nd Monday
   # of June"), month for `FL6MN` ("June"), hour for a time-of-day rule.
   # Anchoring at that grain (rather than always a day) is what lets a
   # coarse selection yield a coarse occurrence; the bound already says
@@ -5407,8 +5421,9 @@ defmodule Tempo do
   # whose `DTSTART` day expands the week to its seven days.
   defp calendar_anchor_unit(:week), do: :year
 
-  defp calendar_anchor_unit(unit) when unit in [:byday, :day_of_week, :day_of_year, :instance],
-    do: :day
+  defp calendar_anchor_unit(unit)
+       when unit in [:byday, :day_of_week, :day_of_year, :instance, :event],
+       do: :day
 
   defp calendar_anchor_unit(unit), do: unit
 

@@ -66,6 +66,7 @@ defmodule Tempo.Explain do
 
   """
 
+  alias Tempo.Event
   alias Tempo.Explanation
   alias Tempo.IntervalSet
   alias Tempo.Iso8601.Unit
@@ -537,7 +538,7 @@ defmodule Tempo.Explain do
     |> Enum.reject(&is_nil/1)
   end
 
-  # An unanchored recurrence — `R/../P1Y/FL11M4I4KN`, "every year, the
+  # An unanchored recurrence — `R/../P1Y/FL11M4K4IN`, "every year, the
   # fourth Thursday of November", beginning nowhere. Two sentinels spell
   # "no endpoint": `:undefined` from the ISO 8601 parser and `nil` from
   # the RRULE parser, and the clauses above match only the first. The
@@ -883,10 +884,102 @@ defmodule Tempo.Explain do
   # `[month: 11, day: [2..8], day_of_week: 2]` becomes "in November, on
   # the 2nd–8th, on a Tuesday" (US Election Day).
   defp selection_prose(selection) do
+    case split_at_interval(selection) do
+      {scope, window, within} -> windowed_prose(scope, window, within)
+      :none -> flat_selection_prose(selection)
+    end
+  end
+
+  defp flat_selection_prose(selection) do
     selection
-    |> Enum.reject(fn {key, _value} -> key == :wkst end)
+    |> Enum.reject(fn {key, _value} -> key in [:wkst, :origin_day] end)
+    |> fuse_ordinal_weekday()
     |> Enum.flat_map(fn entry -> List.wrap(selection_clause(entry)) end)
     |> Enum.join(", ")
+  end
+
+  # Split a selection around a §12.10 window into `{scope, window, within}`.
+  defp split_at_interval(selection) do
+    case Enum.split_while(selection, fn {key, _value} -> key != :interval end) do
+      {scope, [{:interval, %Tempo.Interval{} = window} | within]} -> {scope, window, within}
+      _other -> :none
+    end
+  end
+
+  # ISO 8601-2 §12.10: "the last Friday within the 7 days before Easter". The
+  # window is `[duration] before|from [inner]`, and the outer selectors pick
+  # within it; a terminal window (no outer selectors) is described on its own.
+  defp windowed_prose(scope, %Tempo.Interval{from: inner, duration: duration}, within) do
+    window = window_phrase(duration, selection_noun(scope ++ inner_selection_of(inner)))
+
+    case Enum.reject(within, fn {key, _value} -> key in [:origin_day, :wkst] end) do
+      [] -> window
+      selectors -> "#{flat_selection_prose(selectors)} within #{window}"
+    end
+  end
+
+  defp inner_selection_of(%Tempo{time: [selection: selection]}), do: selection
+  defp inner_selection_of(%Tempo{time: time}), do: time
+
+  defp window_phrase(%Tempo.Duration{time: time} = duration, inner_noun) do
+    cond do
+      not only_day_or_week?(time) -> "the #{Tempo.to_iso8601(duration)} window from #{inner_noun}"
+      offset_in_days(time) < 0 -> "the #{day_count(-offset_in_days(time))} before #{inner_noun}"
+      offset_in_days(time) > 0 -> "the #{day_count(offset_in_days(time))} from #{inner_noun}"
+      true -> inner_noun
+    end
+  end
+
+  # A resolved inner selection as a bare noun phrase, for embedding in a window.
+  defp selection_noun([{:event, name}]), do: event_phrase(name)
+  defp selection_noun([{:month, m}]), do: month_name(m)
+  defp selection_noun([{:month, m}, {:day, d}]) when is_integer(d), do: "#{month_name(m)} #{d}"
+
+  defp selection_noun([{:day_of_week, wd}, {:instance, i}]) when is_integer(wd) and is_integer(i),
+    do: "the #{ordinal(i)} #{weekday_name(wd)}"
+
+  defp selection_noun([{:month, m}, {:day_of_week, wd}, {:instance, i}])
+       when is_integer(wd) and is_integer(i),
+       do: "the #{ordinal(i)} #{weekday_name(wd)} of #{month_name(m)}"
+
+  defp selection_noun(other) do
+    case flat_selection_prose(other) do
+      "on " <> rest -> rest
+      "in " <> rest -> rest
+      prose -> prose
+    end
+  end
+
+  defp only_day_or_week?(time),
+    do: Enum.all?(time, fn {unit, _value} -> unit in [:day, :week] end)
+
+  defp offset_in_days(time) do
+    Enum.reduce(time, 0, fn
+      {:day, n}, acc when is_integer(n) -> acc + n
+      {:week, n}, acc when is_integer(n) -> acc + n * 7
+      _entry, acc -> acc
+    end)
+  end
+
+  defp day_count(1), do: "1 day"
+  defp day_count(n), do: "#{n} days"
+
+  # A single-weekday `day_of_week` immediately followed by `instance` is the
+  # ISO 8601-2 §12.9 position form of an ordinal weekday ("the 4th Thursday").
+  # Fuse the pair back into a `:byday` clause so the prose reads "on the 4th
+  # Thursday" rather than "on a Thursday, keeping the 4th occurrence". A
+  # multi-weekday `day_of_week` is a genuine set-position over several weekdays
+  # and is left as separate clauses.
+  defp fuse_ordinal_weekday([{:day_of_week, weekday}, {:instance, positions} | rest])
+       when is_integer(weekday) do
+    [{:byday, ordinal_weekday_pairs(weekday, positions)} | fuse_ordinal_weekday(rest)]
+  end
+
+  defp fuse_ordinal_weekday([entry | rest]), do: [entry | fuse_ordinal_weekday(rest)]
+  defp fuse_ordinal_weekday([]), do: []
+
+  defp ordinal_weekday_pairs(weekday, positions) do
+    positions |> List.wrap() |> Enum.flat_map(&expand_int/1) |> Enum.map(&{&1, weekday})
   end
 
   defp selection_clause({:month, m}), do: "in #{names_phrase(m, &month_name/1)}"
@@ -896,8 +989,29 @@ defmodule Tempo.Explain do
   defp selection_clause({:hour, h}), do: "at #{names_phrase(h, fn n -> "#{two_digit(n)}:00" end)}"
   defp selection_clause({:week, w}), do: "in #{ordinals_phrase(w)} week"
   defp selection_clause({:day_of_year, d}), do: "on #{ordinals_phrase(d)} day of the year"
-  defp selection_clause({:set_position, p}), do: "keeping #{ordinals_phrase(p)} occurrence"
+  defp selection_clause({:instance, p}), do: "keeping #{ordinals_phrase(p)} occurrence"
+  defp selection_clause({:event, name}), do: "on #{event_phrase(name)}"
   defp selection_clause({_other, _value}), do: []
+
+  # Humanise a computed-event name: `"easter"` → "Easter"; a hyphenated
+  # astronomical event → "the March equinox". An unknown name still reads
+  # sensibly ("the winter-fair event") so `explain/1` never fails on one.
+  defp event_phrase("easter"), do: "Easter"
+  defp event_phrase("orthodox-easter"), do: "Orthodox Easter"
+
+  defp event_phrase(name) when is_binary(name) do
+    cond do
+      match?([_month, kind] when kind in ["equinox", "solstice"], String.split(name, "-")) ->
+        [month, kind] = String.split(name, "-")
+        "the #{String.capitalize(month)} #{kind}"
+
+      Event.solar_term?(name) ->
+        "the #{String.capitalize(name)} solar term"
+
+      true ->
+        "the #{String.replace(name, "-", " ")} event"
+    end
+  end
 
   defp byday_phrase(pairs) do
     pairs

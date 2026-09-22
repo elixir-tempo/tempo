@@ -3,6 +3,8 @@ defmodule Tempo.RRule.SelectionTest do
   import Tempo.Sigils
 
   alias Tempo.ICal
+  alias Tempo.Interval
+  alias Tempo.IntervalSet
   alias Tempo.RRule.Expander
   alias Tempo.RRule.Rule
   alias Tempo.RRule.Selection
@@ -567,5 +569,110 @@ defmodule Tempo.RRule.SelectionTest do
 
       assert pairs == [{2022, 6, 30}, {2022, 7, 29}, {2022, 8, 31}]
     end
+  end
+
+  describe "US holiday patterns — ISO 8601 selection materialisation" do
+    # The real US federal-holiday rules, written as converged ISO 8601-2 §12.9
+    # selections (weekday-then-position, `1K2I`) and materialised into 2026 —
+    # the same forms the holidays guide documents. This exercises the ISO
+    # selection surface end-to-end, distinct from the RRULE/`%Rule{}` blocks
+    # above, and locks in the nth-weekday, last-weekday and day-range shapes.
+
+    test "nth weekday of month — MLK, Presidents, Columbus, Thanksgiving" do
+      assert holiday_dates("R/../P1Y/FL1M1K3IN") == ["2026-01-19"]
+      assert holiday_dates("R/../P1Y/FL2M1K3IN") == ["2026-02-16"]
+      assert holiday_dates("R/../P1Y/FL10M1K2IN") == ["2026-10-12"]
+      assert holiday_dates("R/../P1Y/FL11M4K4IN") == ["2026-11-26"]
+    end
+
+    test "last weekday of month — Memorial Day (last Monday in May)" do
+      assert holiday_dates("R/../P1Y/FL5M1K-1IN") == ["2026-05-25"]
+    end
+
+    test "day-range + weekday + position — Election Day (1st Tuesday after the 1st Monday)" do
+      # A Tuesday in days 2..8 of November is the first Tuesday after the
+      # first Monday — the rule resolves the day range, filters to Tuesday,
+      # then takes position 1.
+      assert holiday_dates("R/../P1Y/FL11M{2..8}D2K1IN") == ["2026-11-03"]
+    end
+
+    test "day-range + weekday + position — first Friday on or after the 11th" do
+      assert holiday_dates("R/../P1Y/FL11M{11..17}D5K1IN") == ["2026-11-13"]
+    end
+
+    test "fixed-date holidays — Independence, Veterans, Christmas" do
+      assert holiday_dates("R/../P1Y/FL7M4DN") == ["2026-07-04"]
+      assert holiday_dates("R/../P1Y/FL11M11DN") == ["2026-11-11"]
+      assert holiday_dates("R/../P1Y/FL12M25DN") == ["2026-12-25"]
+    end
+  end
+
+  describe "ISO 8601-2 §12.10 selection with a time interval" do
+    # Each date the inner selection resolves to becomes the start of a window
+    # of the given duration; the outer selectors pick within it. These are the
+    # spec's own worked examples (§12.11) plus the holidays they describe.
+
+    test "Example 3 — 2nd Thursday following the 2nd Tuesday" do
+      # 2nd Tuesday of 2026 is Jan 13; the 2nd Thursday in the 10 days from it
+      # is Jan 22.
+      assert holiday_dates("R/../P1Y/FLLL2K2IN/P10DN4K2IN") == ["2026-01-22"]
+    end
+
+    test "Example 7 — 2nd Sunday before April 4 (Qingming)" do
+      assert holiday_dates("R/../P1Y/FLL4M4D/-P20DN7K-2IN") == ["2026-03-22"]
+    end
+
+    test "Example 8 — US Election Day (1st Tuesday after the 1st Monday of November)" do
+      assert holiday_dates("R/../P1Y/FL11MLL1K1IN/P9DN2K1IN") == ["2026-11-03"]
+    end
+
+    test "Good Friday — the last Friday in the seven days before Easter" do
+      assert holiday_dates("R/../P1Y/FLLL(easter)EN/-P7DN5K-1IN") == ["2026-04-03"]
+    end
+
+    test "a terminal window is one interval spanning its duration" do
+      {:ok, rule} = Tempo.from_iso8601("R/../P1Y/FLL3K4IN/P5DN")
+      {:ok, set} = Tempo.to_interval(rule, bound: ~o"2026Y")
+
+      # "the 4th Wednesday for 5 days": one occurrence, [Jan 28, Feb 2).
+      assert [%Interval{} = occurrence] = IntervalSet.to_list(set)
+      assert Interval.from(occurrence) == ~o"2026Y1M28D"
+      assert Interval.to(occurrence) == ~o"2026Y2M2D"
+    end
+
+    test "a windowed selection round-trips through to_iso8601/1" do
+      for iso <- [
+            "R/../P1Y/FLLL2K2IN/P10DN4K2IN",
+            "R/../P1Y/FL11MLL1K1IN/P9DN2K1IN",
+            "R/../P1Y/FLLL(easter)EN/-P7DN5K-1IN"
+          ] do
+        {:ok, value} = Tempo.from_iso8601(iso)
+        assert Tempo.from_iso8601(Tempo.to_iso8601(value)) == {:ok, value}
+      end
+    end
+
+    test "explain/1 names the window and what is picked within it" do
+      assert Tempo.explain(~o"R/../P1Y/FLLL(easter)EN/-P7DN5K-1IN") =~
+               "on the last Friday within the 7 days before Easter"
+
+      assert Tempo.explain(~o"R/../P1Y/FL11MLL1K1IN/P9DN2K1IN") =~
+               "on the 1st Tuesday within the 9 days from the 1st Monday of November"
+
+      # A terminal window is described on its own.
+      assert Tempo.explain(~o"R/../P1Y/FLL3K4IN/P5DN") =~ "the 5 days from the 4th Wednesday"
+    end
+  end
+
+  # Parse a selection recurrence and list the ISO dates it yields inside 2026.
+  defp holiday_dates(iso) do
+    {:ok, rule} = Tempo.from_iso8601(iso)
+    {:ok, set} = Tempo.to_interval(rule, bound: ~o"2026Y")
+
+    set
+    |> IntervalSet.to_list()
+    |> Enum.map(fn interval ->
+      {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
+      Date.to_iso8601(date)
+    end)
   end
 end

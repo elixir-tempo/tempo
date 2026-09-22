@@ -2,7 +2,15 @@
 
 ## [Unreleased]
 
+### Changed
+
+* Recurrence selections converge on the ISO 8601-2 §12.9 position designator `I` — applied last over the resolved set and written weekday-then-position (`1K2I` = the 2nd Monday) — and the invented `V` set-position designator is retired. An ordinal `BYDAY` across distinct weekdays (`2MO,2WE`) has no ISO form and round-trips only through `Tempo.to_rrule/1`.
+
 ### Added
+
+* `Tempo.Event` and the `(name)E` computed-event selection — a recurrence resolved by algorithm rather than the calendar. `~o"R/../P1Y/FL(easter)EN"` is Western Easter and `(orthodox-easter)E` the Julian-calendar computus (both from `Calendrical.Ecclesiastical`); the equinoxes and solstices come from `Astro`; and the 24 East Asian solar terms (`(qingming)E`, `(dongzhi)E`, …) from `Calendrical`.
+
+* ISO 8601-2 §12.10 selection with a time interval — `[selection]/[duration]` makes each resolved date the start of a window and nested selectors pick within it. `~o"R/../P1Y/FLLL(easter)EN/-P7DN5K-1IN"` is Good Friday; `~o"R/../P1Y/FL11MLL1K1IN/P9DN2K1IN"` is US Election Day.
 
 * `Tempo.Network.Qualitative` — bridges the metric and qualitative networks. `from_network/1` seeds relation sets from what a solved network's bounds already prove, `apply_to_network/2` feeds determined relations back, and `refine/1` runs the round trip.
 
@@ -14,7 +22,7 @@
 
 * `Tempo.Network.Relation.from_allen/1` preserves direction for `:overlapped_by`, which previously mapped to `:overlaps` and silently reversed the operands. Every Allen relation now round-trips through `to_allen/1`.
 
-* An unanchored recurrence materialises against a `:bound` alone: `Tempo.to_interval(~o"R/../P1Y/FL6M2I1KN", bound: ~o"2026")` projects "the second Monday of June" onto 2026 with no separate `:anchor`. Each occurrence takes the resolution its selection names — `FL6MN` a month (`~o"2026Y6M"`), `FL10WN` a week (`~o"2026Y10W"`), `FL12M25DN` a day — with RRULE `BYMONTH`/`BYWEEKNO` semantics unchanged.
+* An unanchored recurrence materialises against a `:bound` alone: `Tempo.to_interval(~o"R/../P1Y/FL6M1K2IN", bound: ~o"2026")` projects "the second Monday of June" onto 2026 with no separate `:anchor`. Each occurrence takes the resolution its selection names — `FL6MN` a month (`~o"2026Y6M"`), `FL10WN` a week (`~o"2026Y10W"`), `FL12M25DN` a day — with RRULE `BYMONTH`/`BYWEEKNO` semantics unchanged.
 
 ## [v1.6.4] — 2026-09-03
 

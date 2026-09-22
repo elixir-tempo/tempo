@@ -130,7 +130,7 @@ defmodule Tempo.Explain.Test do
       # `:undefined` from the ISO 8601 parser and `nil` from the RRULE
       # parser — and only the first was recognised, so a fully described
       # rule reported "an unusual shape" and said nothing useful.
-      thanksgiving = ~o"R/../P1Y/FL11M4I4KN"
+      thanksgiving = ~o"R/../P1Y/FL11M4K4IN"
 
       prose = Tempo.explain(thanksgiving)
 
@@ -227,7 +227,7 @@ defmodule Tempo.Explain.Test do
     end
 
     test "a counted but unanchored recurrence is explained the same way" do
-      prose = Tempo.explain(~o"R5/../P1Y/FL5M-1I1KN")
+      prose = Tempo.explain(~o"R5/../P1Y/FL5M1K-1IN")
 
       assert prose =~ "recurrence of 5 occurrences"
       assert prose =~ "in May, on the last Monday"
@@ -265,7 +265,7 @@ defmodule Tempo.Explain.Test do
       "{1,4,7..9}G2YU3M1D",
       # bare selections — a rule, not a span
       "2018YL1K1IN",
-      "L2I1KN",
+      "L1K2IN",
       # sub-second durations, stored as `{value, precision}`
       "PT1.5S",
       "-PT1.5S",

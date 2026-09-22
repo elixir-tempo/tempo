@@ -90,13 +90,13 @@ RRULE's UNTIL uses the RFC 3339 basic format — four-digit years only. Years ou
 
 Tempo's IXDTF support attaches `[Europe/Paris]`, `[u-ca=hebrew]`, or arbitrary elective tags to a datetime, storing them on the `:extended` field. The current `to_rrule/1` does **not** emit these — iCalendar handles zones and calendars via `TZID` and `CALSCALE` at the calendar-object level, not inside `RRULE`.
 
-## RRULE features ISO 8601 has no standard form for
+## RRULE features and how they map to ISO 8601
 
-Two RRULE filters — `BYSETPOS` and `WKST` — have no representation in the ISO 8601 selection grammar. Rather than drop them on encode (which would make `Tempo.to_iso8601/1`/`inspect/1` lose data, or crash), Tempo assigns each a **project-specific selection designator**, documented in `guides/iso8601-conformance.md` §5. A rule carrying either still round-trips through the ISO form; the canonical *external* form for such a rule remains the RRULE string via `Tempo.to_rrule/1`.
+Most RRULE `BY*` filters map straight onto the ISO 8601-2 selection grammar. Two need comment: `BYSETPOS` **is** ISO 8601-2 (the §12.9 position designator `I`), while `WKST` has no ISO representation and so gets Tempo's single project-specific designator `Q`. Both are documented in `guides/iso8601-conformance.md` §5. A rule carrying either round-trips through the ISO form; the canonical *external* form remains the RRULE string via `Tempo.to_rrule/1`.
 
-### `BYSETPOS` — the `V` designator
+### `BYSETPOS` — the ISO 8601-2 §12.9 position `I`
 
-RRULE `BYSETPOS=-1` ("take the last element of the resolved per-period set") is held as a `:set_position` token — distinct from the `:instance` selector that pairs an ordinal to a weekday (`2MO` = the 2nd Monday), since BYSETPOS applies across the whole candidate set after every other BY-rule. It renders as `-1V`, so `FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1` round-trips as `~o"R/../P1M/FL{1..5}K-1VN"`.
+RRULE `BYSETPOS=-1` ("take the last element of the resolved per-period set") is the ISO 8601-2 position designator: it is held as an `:instance` token, applied last, after every other BY-rule. It renders weekday-then-position, so `FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1` round-trips as `~o"R/../P1M/FL{1..5}K-1IN"`. A single-weekday ordinal is the same token: `BYDAY=2MO` ("the 2nd Monday") lowers to `day_of_week: 1, instance: 2` and renders `1K2I`. The one shape with no ISO form is an ordinal across *distinct* weekdays (`BYDAY=2MO,2WE`), held as an internal `:byday` token that round-trips only via `Tempo.to_rrule/1`.
 
 ### `WKST` — the `Q` designator
 
@@ -156,4 +156,4 @@ assert ast_1 == ast_2           # fixed-point property
 * Source: `lib/tempo/rrule.ex`, `lib/tempo/rrule/encoder.ex`, `lib/inspect.ex`
 * Validation spike: `docs/rrule-ast-validation.md`
 * Round-trip tests: `test/tempo/round_trip_test.exs` (encoder round-trips) and `test/tempo/iso8601/round_trip_test.exs` (per-token `inspect`/`to_iso8601` round-trips)
-* Conformance coverage (ISO 8601 side): `guides/iso8601-conformance.md` (§5 covers the `V`/`Q` project-specific designators)
+* Conformance coverage (ISO 8601 side): `guides/iso8601-conformance.md` (§5 covers the `I` position designator and the `Q` project-specific week-start)

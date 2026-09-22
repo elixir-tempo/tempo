@@ -41,6 +41,7 @@ defmodule Tempo.RRule.Selection do
   """
 
   alias Calendrical.Kday
+  alias Tempo.Event
   alias Tempo.Interval
 
   @doc """
@@ -124,11 +125,131 @@ defmodule Tempo.RRule.Selection do
     selection = expand_index_ranges(selection)
     wkst = Keyword.get(selection, :wkst, 1)
 
-    selection
+    case split_window(selection) do
+      {scope, %Interval{} = window, within} ->
+        apply_windowed_selection(candidate, scope, window, within, freq, wkst)
+
+      :none ->
+        selection
+        |> Enum.sort_by(&application_order_key/1)
+        |> Enum.reduce([candidate], fn entry, candidates ->
+          apply_entry(entry, candidates, freq, selection, wkst)
+        end)
+    end
+  end
+
+  # Split a selection around a §12.10 window: `{scope, window, within}` where
+  # `scope` are the elements before it (coarser context, e.g. a month), and
+  # `within` the elements after (the selectors that pick inside the window).
+  defp split_window(selection) do
+    case Enum.split_while(selection, fn {key, _value} -> key != :interval end) do
+      {scope, [{:interval, %Interval{} = window} | within]} -> {scope, window, within}
+      _other -> :none
+    end
+  end
+
+  # ISO 8601-2 §12.10 "selection with a time interval": each date the inner
+  # selection resolves to becomes the START of a window of the given duration,
+  # and the `within` selectors pick INSIDE each window. `LLL2K2IN/P10DN4K2IN`
+  # is "the 2nd Thursday within the ten days from the 2nd Tuesday". The `scope`
+  # (e.g. `11M` in US Election Day) is folded into the inner resolution so the
+  # anchor is found in the right context. The window's days are enumerated and
+  # the `within` selectors applied at day scope, so a weekday LIMITs to matching
+  # days and a position (`I`) picks the Nth of them.
+  defp apply_windowed_selection(
+         candidate,
+         scope,
+         %Interval{from: inner, duration: duration},
+         within,
+         freq,
+         wkst
+       ) do
+    inner_selection = scope ++ inner_selection(inner)
+    anchors = apply_selection(candidate, inner_selection, freq)
+
+    # `:origin_day`/`:wkst` are passthrough context, not selectors, so they do
+    # not make a window non-terminal.
+    case Enum.reject(within, fn {key, _value} -> key in [:origin_day, :wkst] end) do
+      [] ->
+        # A terminal window (no inner selectors) is itself the occurrence: the
+        # interval from the anchor for the given duration (§12.11.3 Example 1).
+        Enum.map(anchors, fn anchor -> window_interval(anchor, duration) end)
+
+      selectors ->
+        Enum.flat_map(anchors, fn anchor ->
+          anchor
+          |> window_days(duration)
+          |> apply_window_selectors(selectors, wkst)
+        end)
+    end
+  end
+
+  defp inner_selection(%Tempo{time: [selection: selection]}), do: selection
+  defp inner_selection(%Tempo{time: time}), do: time
+
+  # Resolve the outer selectors within a window's enumerated days. Day scope
+  # makes a weekday a LIMIT (keep matching days) and leaves the position (`I`)
+  # to pick the Nth survivor.
+  defp apply_window_selectors(day_candidates, outer, wkst) do
+    outer
     |> Enum.sort_by(&application_order_key/1)
-    |> Enum.reduce([candidate], fn entry, candidates ->
-      apply_entry(entry, candidates, freq, selection, wkst)
+    |> Enum.reduce(day_candidates, fn entry, candidates ->
+      apply_entry(entry, candidates, :day, outer, wkst)
     end)
+  end
+
+  # Each day in the window `[anchor, anchor + duration)` (a negative duration
+  # extends backward), as a day-resolution candidate in the anchor's calendar.
+  defp window_days(
+         %Interval{from: %Tempo{calendar: calendar, time: time} = from} = anchor,
+         %Tempo.Duration{} = duration
+       ) do
+    with {:ok, %Date{} = anchor_date} <- date_of(time, calendar),
+         %Tempo{time: shifted_time} <- Tempo.shift(from, duration),
+         {:ok, %Date{} = shifted_date} <- date_of(shifted_time, calendar) do
+      {lo, hi} = window_bounds(anchor_date, shifted_date)
+
+      Date.range(lo, Date.add(hi, -1))
+      |> Enum.map(fn date -> swap_date(anchor, date.year, date.month, date.day) end)
+    else
+      _ -> []
+    end
+  end
+
+  # Half-open `[lo, hi)`: `lo` is the earlier of anchor / shifted endpoint, `hi`
+  # the later. A forward duration keeps the anchor; a backward one excludes it.
+  defp window_bounds(%Date{} = anchor_date, %Date{} = shifted_date) do
+    if Date.compare(anchor_date, shifted_date) == :gt do
+      {shifted_date, anchor_date}
+    else
+      {anchor_date, shifted_date}
+    end
+  end
+
+  # The window `[anchor, anchor + duration)` as a single interval occurrence.
+  defp window_interval(
+         %Interval{from: %Tempo{calendar: calendar, time: time} = from} = anchor,
+         %Tempo.Duration{} = duration
+       ) do
+    with {:ok, %Date{} = anchor_date} <- date_of(time, calendar),
+         %Tempo{time: shifted_time} <- Tempo.shift(from, duration),
+         {:ok, %Date{} = shifted_date} <- date_of(shifted_time, calendar) do
+      {lo, hi} = window_bounds(anchor_date, shifted_date)
+      # Mark it windowed so the recurrence keeps its multi-day span instead of
+      # resizing the occurrence down to one resolution unit.
+      %{
+        anchor
+        | from: tempo_at_date(from, lo),
+          to: tempo_at_date(from, hi),
+          metadata: Map.put(anchor.metadata, :windowed, true)
+      }
+    else
+      _ -> anchor
+    end
+  end
+
+  defp tempo_at_date(%Tempo{time: time} = tempo, %Date{} = date) do
+    %{tempo | time: replace_unit_values(time, year: date.year, month: date.month, day: date.day)}
   end
 
   # A `{2..8}` set in the ISO 8601-2 sigil grammar parses to a `Range`
@@ -154,6 +275,7 @@ defmodule Tempo.RRule.Selection do
     :month,
     :week,
     :day_of_year,
+    :event,
     :day,
     :nearest_weekday,
     :or_day,
@@ -162,7 +284,7 @@ defmodule Tempo.RRule.Selection do
     :hour,
     :minute,
     :second,
-    :set_position
+    :instance
   ]
 
   defp application_order_key({token, _value}) do
@@ -257,6 +379,20 @@ defmodule Tempo.RRule.Selection do
     end)
   end
 
+  # Computed event (`(easter)E`, `(march-equinox)E`, …) — EXPAND for
+  # FREQ=YEARLY: resolve the event's date in each candidate year via
+  # `Tempo.Event` and emit it as a day-resolution occurrence. An unknown event
+  # or a year the resolver cannot reach (an equinox outside Astro's range) drops
+  # silently, like any other invalid combination. For finer FREQs it is a LIMIT:
+  # keep candidates already sitting on the event's date.
+  defp apply_entry({:event, name}, candidates, :year, _selection, _wkst) do
+    Enum.flat_map(candidates, fn candidate -> expand_event(candidate, name) end)
+  end
+
+  defp apply_entry({:event, name}, candidates, _freq, _selection, _wkst) do
+    Enum.filter(candidates, fn candidate -> on_event_date?(candidate, name) end)
+  end
+
   # BYWEEKNO — EXPAND for YEARLY (only valid FREQ per RFC).
   # Each listed ISO week number expands to 7 occurrences (the
   # days of that week). Signed indexing: `-1` is the last week.
@@ -328,11 +464,11 @@ defmodule Tempo.RRule.Selection do
     expand_or_limit_time(candidates, :second, List.wrap(values), freq)
   end
 
-  # BYSETPOS — applied LAST (per RFC 5545). Treats the
-  # accumulated `candidates` list as the per-period set and
-  # picks the Nth element. Positive ordinals count from the
-  # start (1-based), negative from the end (`-1` = last).
-  defp apply_entry({:set_position, positions}, candidates, _freq, _selection, _wkst) do
+  # Position (ISO 8601-2 §12.9 `I`, = RFC 5545 BYSETPOS) — applied LAST. Treats
+  # the accumulated `candidates` list as the resolved set and picks the Nth
+  # element. Positive ordinals count from the start (1-based), negative from the
+  # end (`-1` = last).
+  defp apply_entry({:instance, positions}, candidates, _freq, _selection, _wkst) do
     pick_set_positions(candidates, List.wrap(positions))
   end
 
@@ -904,6 +1040,32 @@ defmodule Tempo.RRule.Selection do
     end)
     |> Enum.reject(&is_nil/1)
     |> Enum.map(fn {m, day} -> swap_date(candidate, year, m, day) end)
+  end
+
+  # Resolve a computed event in the candidate's year and emit its date as a
+  # single day-resolution occurrence, in the candidate's own calendar. A year
+  # the resolver cannot reach, or an unknown event, yields no occurrence.
+  defp expand_event(%Interval{from: %Tempo{time: time, calendar: calendar}} = candidate, name) do
+    with year when is_integer(year) <- Keyword.get(time, :year),
+         {:ok, %Date{} = iso_date} <- Event.date(name, year),
+         {:ok, %Date{} = date} <- Date.convert(iso_date, calendar) do
+      [swap_date(candidate, date.year, date.month, date.day)]
+    else
+      _ -> []
+    end
+  end
+
+  # LIMIT form (finer FREQs): does the candidate's date fall on the event?
+  defp on_event_date?(%Interval{from: %Tempo{time: time, calendar: calendar}}, name) do
+    with year when is_integer(year) <- Keyword.get(time, :year),
+         month when is_integer(month) <- Keyword.get(time, :month),
+         day when is_integer(day) <- Keyword.get(time, :day),
+         {:ok, %Date{} = iso_date} <- Event.date(name, year),
+         {:ok, %Date{} = date} <- Date.convert(iso_date, calendar) do
+      date.month == month and date.day == day
+    else
+      _ -> false
+    end
   end
 
   # BYWEEKNO with FREQ=YEARLY: one occurrence per listed ISO

@@ -370,14 +370,19 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
       maybe_negative_integer_or_integer_set("O", :day_of_year, min: 1),
       maybe_negative_integer_or_integer_set("D", :day, min: 1),
       maybe_negative_integer_or_integer_set("K", :day_of_week, min: 1),
-      # `V` (BYSETPOS) and `Q` (WKST) are Tempo project-specific designators —
-      # RFC 5545 extensions with no ISO 8601 form. See `Tempo.Inspect`.
-      maybe_negative_integer_or_integer_set("V", :set_position, min: 1),
+      # `Q` (WKST) is a Tempo project-specific designator — an RFC 5545 extension
+      # with no ISO 8601 form. (BYSETPOS is the ISO 8601-2 §12.9 position `I`.)
       maybe_negative_integer_or_integer_set("Q", :wkst, min: 1),
       selection_instance(),
+      selection_event(),
       ignore(string("L"))
       |> parsec({Tempo.Iso8601.Tokenizer.Set, :interval_parser})
-      |> ignore(string("N"))
+      |> ignore(string("N")),
+      # ISO 8601-2 §12.10 bare selection-with-time-interval (`L3K4IN/P5D`): the
+      # window is the terminal element, not wrapped in its own `L…N`. Tried after
+      # the wrapped form above, so a window that IS followed by more selectors
+      # (`LL2K2IN/P10DN4K2I`) still matches the wrapped clause first.
+      parsec({Tempo.Iso8601.Tokenizer.Set, :interval_parser})
     ])
   end
 
@@ -394,6 +399,19 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
 
   def selection_instance do
     maybe_negative_integer_or_integer_set("I", :instance, min: 1)
+  end
+
+  # A computed-event selection — the one ISO 8601-2 §12 construct with no
+  # standard form: an algorithmically resolved recurrence such as Easter or an
+  # astronomical event. The event name is a lowercase identifier delimited by
+  # parentheses and closed by the project-specific `E` designator, e.g.
+  # `(easter)E`, `(march-equinox)E`. It resolves per period via `Tempo.Event`.
+  def selection_event do
+    ignore(string("("))
+    |> ascii_string([?a..?z, ?-], min: 1)
+    |> ignore(string(")"))
+    |> ignore(string("E"))
+    |> unwrap_and_tag(:event)
   end
 
   # Individual date and time components
