@@ -26,9 +26,24 @@ defmodule Tempo.EventTest do
       assert Event.date("chunfen", 2026) == Event.date("march-equinox", 2026)
     end
 
+    test "a solar term can be computed for another lunisolar meridian" do
+      # `date/3` picks the meridian; Chinese is the default. The four resolve
+      # (they coincide for Qingming 2026, differing only when a term falls near
+      # local midnight).
+      assert Event.date("qingming", 2026, Calendrical.Chinese) == Event.date("qingming", 2026)
+      assert {:ok, %Date{}} = Event.date("qingming", 2026, Calendrical.Vietnamese)
+      assert {:ok, %Date{}} = Event.date("qingming", 2026, Calendrical.Korean)
+      assert {:ok, %Date{}} = Event.date("qingming", 2026, Calendrical.LunarJapanese)
+    end
+
+    test "resolves the first new moon of the year via Astro" do
+      assert Event.date("new-moon", 2026) == {:ok, ~D[2026-01-18]}
+    end
+
     test "known/0 lists Easter (Western + Orthodox), the astronomical events, and the 24 solar terms" do
-      assert length(Event.known()) == 30
+      assert length(Event.known()) == 31
       assert "orthodox-easter" in Event.known()
+      assert "new-moon" in Event.known()
       assert Event.solar_term?("qingming")
       refute Event.solar_term?("easter")
     end

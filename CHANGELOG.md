@@ -8,7 +8,7 @@
 
 ### Added
 
-* `Tempo.Event` and the `(name)E` computed-event selection — a recurrence resolved by algorithm rather than the calendar. `~o"R/../P1Y/FL(easter)EN"` is Western Easter and `(orthodox-easter)E` the Julian-calendar computus (both from `Calendrical.Ecclesiastical`); the equinoxes and solstices come from `Astro`; and the 24 East Asian solar terms (`(qingming)E`, `(dongzhi)E`, …) from `Calendrical`.
+* `Tempo.Event` and the `(name)E` computed-event selection — a recurrence resolved by algorithm rather than the calendar. `~o"R/../P1Y/FL(easter)EN"` is Western Easter and `(orthodox-easter)E` the Julian-calendar computus (both from `Calendrical.Ecclesiastical`); the equinoxes, solstices and first `(new-moon)E` of the year come from `Astro`; and the 24 East Asian solar terms (`(qingming)E`, …) from `Calendrical`, for the Chinese meridian by default or another via `Tempo.Event.date/3`.
 
 * ISO 8601-2 §12.10 selection with a time interval — `[selection]/[duration]` makes each resolved date the start of a window and nested selectors pick within it. `~o"R/../P1Y/FLLL(easter)EN/-P7DN5K-1IN"` is Good Friday; `~o"R/../P1Y/FL11MLL1K1IN/P9DN2K1IN"` is US Election Day.
 

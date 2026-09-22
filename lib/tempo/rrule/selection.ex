@@ -1047,7 +1047,7 @@ defmodule Tempo.RRule.Selection do
   # the resolver cannot reach, or an unknown event, yields no occurrence.
   defp expand_event(%Interval{from: %Tempo{time: time, calendar: calendar}} = candidate, name) do
     with year when is_integer(year) <- Keyword.get(time, :year),
-         {:ok, %Date{} = iso_date} <- Event.date(name, year),
+         {:ok, %Date{} = iso_date} <- Event.date(name, year, calendar),
          {:ok, %Date{} = date} <- Date.convert(iso_date, calendar) do
       [swap_date(candidate, date.year, date.month, date.day)]
     else
@@ -1060,7 +1060,7 @@ defmodule Tempo.RRule.Selection do
     with year when is_integer(year) <- Keyword.get(time, :year),
          month when is_integer(month) <- Keyword.get(time, :month),
          day when is_integer(day) <- Keyword.get(time, :day),
-         {:ok, %Date{} = iso_date} <- Event.date(name, year),
+         {:ok, %Date{} = iso_date} <- Event.date(name, year, calendar),
          {:ok, %Date{} = date} <- Date.convert(iso_date, calendar) do
       date.month == month and date.day == day
     else

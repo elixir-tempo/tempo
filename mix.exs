@@ -186,7 +186,10 @@ defmodule Tempo.MixProject do
   defp deps do
     [
       {:nimble_parsec, "~> 1.0"},
-      {:calendrical, "~> 1.0"},
+      # Local checkout while the Vietnamese/Korean/Japanese lunisolar calendars
+      # (used for per-meridian solar terms) are ahead of the published release.
+      # Revert to a hex requirement once Calendrical ships them.
+      {:calendrical, path: "../../localize/calendrical", override: true},
       {:astro, "~> 2.4"},
       {:localize, "~> 1.0"},
       # 3.2 is the first release carrying VAVAILABILITY (RFC 7953), which

@@ -1,8 +1,8 @@
 # Selection extensions for holiday rules
 
-**Status:** in progress, 2026-09-22
+**Status:** implemented, 2026-09-22
 
-The `I`/position convergence landed (see [i-position-convergence.md](i-position-convergence.md)), the day-range materialisation bug turned out to be an artefact of the old fold path and is gone, the computed-event mechanism (`(name)E`) landed for Easter and the four astronomical events, and ISO 8601-2 §12.10 selection-with-a-time-interval (windows + nesting) now resolves the spec's own examples (Election Day, "2nd Sunday before April 4", Good Friday). Remaining: solar terms (needs a public `Astro` API).
+Everything planned here has landed: the `I`/position convergence (see [i-position-convergence.md](i-position-convergence.md)); ISO 8601-2 §12.10 selection-with-a-time-interval (windows + nesting, resolving the spec's own examples — Election Day, "2nd Sunday before April 4", Good Friday); and the computed-event mechanism (`(name)E`) for Easter/orthodox-easter, the equinoxes/solstices, the first new moon of the year, and the 24 solar terms (per-meridian). The one open thread is a dependency: `mix.exs` points at the local Calendrical checkout for the Vietnamese/Korean/Japanese lunisolar calendars (see Blocked), to be reverted to a hex requirement once Calendrical ships them.
 
 Downstream `tempo_holidays` wants to express every date-holidays rule as a Tempo floating-recurrence value (see `tempo_holidays/plans/holiday-grammar.md`). This document is the Tempo-side design for the selection operators that needs. The headline finding, after reading ISO 8601-2:2019 §12 (Selection of date and time), is that **most of what looked like "extensions" is already standard ISO 8601-2** — so the work is largely completing Tempo's §12 support and reconciling one divergence, not inventing symbols. We extend only where ISO genuinely has no form (computed events).
 
@@ -59,8 +59,12 @@ The standard forms parse but do not all materialise. Observed: `FL11M{11..17}D5K
 
 * [x] **Windowed `explain/1` prose** — reads "on the last Friday within the 7 days before Easter"; a terminal window reads "the 5 days from the 4th Wednesday".
 
-### Open
+* [x] **Solar terms for other meridians** — `Tempo.Event.date/3` takes the lunisolar calendar (`Calendrical.Chinese` default, or Vietnamese / Korean / LunarJapanese) whose meridian to compute the term at. Needs the local Calendrical checkout (path dep — see Blocked).
 
-* [ ] **Confirm year digit-sets and `366O` leap matching** materialise correctly.
+* [x] **`new-moon` event** — the first new moon of the year, via `Astro.date_time_new_moon_at_or_after/1`.
 
-* [ ] **Solar terms for other meridians** — Vietnamese (105°E), Korean, Japanese lunisolar calendars have their own `location/1`; `Tempo.Event.date/2` currently hard-codes the Chinese meridian. A calendar/location option would let a Vietnamese Tết-adjacent term resolve on its own meridian.
+* [x] **Year digit-sets and `366O` leap matching confirmed** — `{0,2,4,6,8}Y` parses; `FL366ON` yields Dec 31 only in leap years (2024, 2028); the `2M29D` leap-day selection across a year set yields only leap years (v1.6.4).
+
+### Blocked
+
+* [ ] **Restore the hex Calendrical dependency** — `mix.exs` points at the local Calendrical checkout (`path:` + `override: true`) for the Vietnamese/Korean/Japanese lunisolar calendars, which are ahead of the published release. Revert to `{:calendrical, "~> 1.x"}` once Calendrical ships them; CI cannot resolve a path dep.

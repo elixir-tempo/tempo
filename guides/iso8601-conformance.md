@@ -240,7 +240,7 @@ R/../P1Y/FL(december-solstice)EN   the December solstice
 R/../P1Y/FL(qingming)EN            Qīngmíng (Ching Ming / Tomb-Sweeping Day)
 ```
 
-The recognised names are `easter` and `orthodox-easter` (the same computus in the Julian calendar), the astronomical `march-equinox` / `june-solstice` / `september-equinox` / `december-solstice`, and the 24 solar terms (`qingming`, `lichun`, `dongzhi`, …) — see `Tempo.Event.known/0`. Materialising the recurrence into a bound resolves each event per year — Easter via `Calendrical.Ecclesiastical`, the astronomical events via `Astro`, and the solar terms via `Calendrical` (computed for the Chinese meridian):
+The recognised names are `easter` and `orthodox-easter` (the same computus in the Julian calendar), the astronomical `march-equinox` / `june-solstice` / `september-equinox` / `december-solstice` / `new-moon` (the first new moon of the year), and the 24 solar terms (`qingming`, `lichun`, `dongzhi`, …) — see `Tempo.Event.known/0`. Materialising the recurrence into a bound resolves each event per year — Easter via `Calendrical.Ecclesiastical`, the astronomical events via `Astro`, and the solar terms via `Calendrical` (for the Chinese meridian by default; `Tempo.Event.date/3` takes a Vietnamese, Korean or Japanese lunisolar calendar to use its meridian instead):
 
 ```elixir
 # "Easter Sunday, every year" — resolved across 2026–2028
