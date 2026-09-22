@@ -53,15 +53,19 @@ A weekday plus a position: `nK` picks the weekday, `nI` the occurrence within th
 | Nth weekday | US Thanksgiving — 4th Thursday in November | `~o"R/../P1Y/FL11M4K4IN"` | `FREQ=YEARLY;BYMONTH=11;BYDAY=4TH` |
 | Last weekday of month | Last working day of every month (payroll) — the last Mon–Fri | `~o"R/../P1M/FL{1..5}K-1IN"` | `FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1` |
 
-## A weekday relative to a date
+## A weekday relative to another day
 
-"The first Tuesday after the first Monday", "the Friday on or after the 11th": a **day range** narrows the month, then a weekday and position pick within it. The RRULE is `BYMONTHDAY` (the range) + `BYDAY`.
+"The Monday before June 1", "the Friday after the fourth Thursday", "the first Tuesday after the first Monday". A **day range** narrows the month to the seven days a "before"/"after" anchor spans, then a weekday and position pick within it — and that gives a faithful `BYMONTHDAY` (range) + `BYDAY` RRULE. When the anchor is itself a *computed* selection (an nth-weekday, a date offset, an event), a §12.10 window off it (`FLLL…N/PnDN…`) does the same job but has no RRULE.
 
 | Rule type | Holiday (rule in English) | Tempo | RRULE |
 |---|---|---|---|
+| Weekday after a date | US Labor Day, as "1st Monday on/after September 1" | `~o"R/../P1Y/FL9M{1..7}D1K1IN"` | `FREQ=YEARLY;BYMONTH=9;BYMONTHDAY=1,2,3,4,5,6,7;BYDAY=1MO` |
+| Weekday before a date | Memorial Day, as "Monday before June 1" | `~o"R/../P1Y/FL5M{25..31}D1K1IN"` | `FREQ=YEARLY;BYMONTH=5;BYMONTHDAY=25,26,27,28,29,30,31;BYDAY=1MO` |
 | Weekday in a day range | US Election Day — the 1st Tuesday after the 1st Monday of November (a Tuesday in the 2nd–8th) | `~o"R/../P1Y/FL11M{2..8}D2K1IN"` | `FREQ=YEARLY;BYMONTH=11;BYMONTHDAY=2,3,4,5,6,7,8;BYDAY=1TU` |
+| Weekday after a weekday | Black Friday — the Friday after the 4th Thursday of November (a Friday in the 23rd–29th) | `~o"R/../P1Y/FL11M{23..29}D5K1IN"` | `FREQ=YEARLY;BYMONTH=11;BYMONTHDAY=23,24,25,26,27,28,29;BYDAY=1FR` |
 | Weekday in a day range | First Friday of the month (devotions) | `~o"R/../P1M/FL{1..7}D5K1IN"` | `FREQ=MONTHLY;BYMONTHDAY=1,2,3,4,5,6,7;BYDAY=1FR` |
-| Weekday in a day range | The Friday on or after the 11th | `~o"R/../P1Y/FL11M{11..17}D5K1IN"` | — |
+| Weekday on/after a date | The Friday on or after the 11th | `~o"R/../P1Y/FL11M{11..17}D5K1IN"` | `FREQ=YEARLY;BYMONTH=11;BYMONTHDAY=11,12,13,14,15,16,17;BYDAY=1FR` |
+| Nested off a computed anchor | "The Monday after the 3rd Sunday after September 1" — a window off a windowed selection | `~o"R/../P1Y/FLLL9M{1..21}D7K3IN/P2DN1K1IN"` | — |
 
 ## The Easter cycle (computed)
 
@@ -133,24 +137,43 @@ end)
 
 > *"New Year's Day is January 1, observed on the nearest working day."* `Tempo.next_working_day/2`, `previous_working_day/2` and `add_working_days/3` cover the "next Monday" and "N working days later" variants; all take a territory so the weekend and the holiday set are the right ones.
 
-## Gates and bridges (set algebra)
+## Filters, gates, and bridges (set algebra)
 
-The cross-holiday families — a holiday only active within a window, individual dates disabled or enabled, a "bridge day" between two holidays — are **set operations**, because a materialised holiday *is* an interval set:
+The remaining rule families are not *selections* — they modify or condition a base recurrence — so they are **set operations** rather than a single value. Because a materialised holiday *is* an interval set, every one of them is one call:
 
 ```elixir
-{:ok, feast}   = Tempo.to_interval(~o"R/../P1Y/FL(easter)EN", bound: ~o"{2020..2030}Y")
+{:ok, xmas} = Tempo.to_interval(~o"R/../P1Y/FL12M25DN", bound: ~o"{2020..2030}Y")
 
-# active window — the holiday only within a range of years:
-{:ok, active}  = Tempo.intersection(feast, ~o"2025-01-01/2028-01-01")
+# active window / "since" / "prior to" — the holiday only within a range of years:
+{:ok, active} = Tempo.intersection(xmas, ~o"2025-01-01/2028-01-01")
 
 # disable / enable specific dates:
-{:ok, trimmed} = Tempo.difference(feast, ~o"2026-04-05")     # drop one year
-{:ok, added}   = Tempo.union(feast, ~o"2027-04-10")          # add an ad-hoc date
+{:ok, trimmed} = Tempo.difference(xmas, ~o"2026-12-25")    # drop one year
+{:ok, added}   = Tempo.union(xmas, ~o"2027-12-26")         # add an ad-hoc date
 
-# bridge / "if it is a holiday then…" — test a candidate day against the
-# year's whole holiday set:
+# in even / odd / leap years — intersect with the set of qualifying years
+# (a bare year digit-set is NOT a selection filter, so the parity/leap rule
+# lives here; leap years are just the year set that happens to be leap):
+{:ok, even} = Tempo.intersection(xmas, ~o"{2024,2026,2028,2030}Y")
+{:ok, leap_only} = Tempo.intersection(xmas, ~o"{2024,2028}Y")
+
+# "on"/"not on" a weekday — a filter over the occurrences:
+weekdays = Tempo.IntervalSet.filter(xmas, fn iv ->
+  Tempo.day_of_week(Tempo.Interval.from(iv)) not in [6, 7]
+end)
+
+# bridge / "if it is a holiday then…" — test a candidate day against the set:
 {:ok, holidays} = Tempo.union(~o"2026-05-14", [~o"2026-05-25"])   # Ascension + Whit Monday
 Tempo.subset?(~o"2026-05-14", holidays)                          # => true
 ```
 
-`Tempo.intersection/2`, `difference/2` and `union/2` give the active/disable/enable trio directly; `subset?/2` and `contains?/2` are the predicates the bridge and "if it is a holiday then…" rules test against the year's holiday set. This is the point of modelling holidays as interval sets: they compose with each other, and with anyone's free-time set, through the same algebra.
+And *"every N years"* is a plain cadence — `~o"R/2024-07-04/P4Y"` fires on the 4th of July only in leap-numbered years — so it stays a single value, not a filter.
+
+`intersection/2`, `difference/2` and `union/2` give the active / disable / enable / parity / since-until families; `IntervalSet.filter/2` the weekday gates; and `subset?/2`, `contains?/2` are the predicates the bridge and "if it is a holiday then…" cascades test against the year's holiday set. This is the point of modelling holidays as interval sets: they compose with each other, and with anyone's free-time set, through the same algebra.
+
+## Coverage of the date-holidays grammar
+
+Every **selection**-shaped rule in the corpus — including several the `tempo_holidays` compiler itself still lists as *not handled* — is a single Tempo value: fixed dates and spans; nth/last weekday-in-month; a weekday **before/after a date, a weekday, or another computed anchor** (Black Friday, Election Day, "the Monday after the 3rd Sunday after September 1"); Easter/Orthodox and the whole moveable cycle; the equinoxes, solstices, solar terms and new moon; and dates in the Islamic, Hebrew, Persian, Chinese and Coptic calendars.
+
+The **transforming and conditioning** families — observed-date **substitution** (the `if/then`, `and if`, `substitutes` modes), the year and weekday **filters** (`since`/`prior to`, even/odd, leap/non-leap, `on`/`not on`), and the `disable`/`enable`/bridge/"if-holiday" **cascades** — are operations over a holiday set, shown above, not single sigils. The only genuine gaps are calendar-arithmetic edge cases inside the dependencies (a tabular-vs-computed Umm al-Qura day, an Islamic day-overflow like `30 Safar`), which live in `Calendrical`, not in this grammar.
+
