@@ -116,6 +116,8 @@ A holiday defined in another calendar is that calendar's date under `[u-ca=…]`
 | Chinese lunisolar | Chinese New Year — 1st day of the 1st month | `~o"R/4663Y1M1D[u-ca=chinese]/P1Y"` | — |
 | Persian (Solar Hijri) | Nowruz — 1 Farvardin | `~o"R/1405Y1M1D[u-ca=persian]/P1Y"` | — |
 | Coptic | Coptic / Orthodox Christmas — 29 Koiak | `~o"R/1742Y4M29D[u-ca=coptic]/P1Y"` | — |
+| Julian | Orthodox Christmas (Julian reckoning) — 25 December Julian (Gregorian 7 January) | `~o"R/2025Y12M25D[u-ca=julian]/P1Y"` | — |
+| Julian | Old New Year — 1 January Julian (Gregorian 14 January) | `~o"R/2026Y1M1D[u-ca=julian]/P1Y"` | — |
 
 > **Hebrew month numbers shift in leap years.** A Hebrew leap year inserts Adar I before Adar II, so Nisan is month 7 in a common year but month **8** in a leap year like 5786 — hence Passover's `8M` above. Anchor each Hebrew holiday on a year whose month numbering you have checked; `Tempo.to_date/1` will tell you the Gregorian date.
 
@@ -173,7 +175,7 @@ And *"every N years"* is a plain cadence — `~o"R/2024-07-04/P4Y"` fires on the
 
 ## Coverage of the date-holidays grammar
 
-Every **selection**-shaped rule in the corpus — including several the `tempo_holidays` compiler itself still lists as *not handled* — is a single Tempo value: fixed dates and spans; nth/last weekday-in-month; a weekday **before/after a date, a weekday, or another computed anchor** (Black Friday, Election Day, "the Monday after the 3rd Sunday after September 1"); Easter/Orthodox and the whole moveable cycle; the equinoxes, solstices, solar terms and new moon; and dates in the Islamic, Hebrew, Persian, Chinese and Coptic calendars.
+Every **selection**-shaped rule in the corpus — including several the `tempo_holidays` compiler itself still lists as *not handled* — is a single Tempo value: fixed dates and spans; nth/last weekday-in-month; a weekday **before/after a date, a weekday, or another computed anchor** (Black Friday, Election Day, "the Monday after the 3rd Sunday after September 1"); Easter/Orthodox and the whole moveable cycle; the equinoxes, solstices, solar terms and new moon; and dates in the Islamic, Hebrew, Persian, Chinese, Coptic and Julian calendars.
 
 The **transforming and conditioning** families — observed-date **substitution** (the `if/then`, `and if`, `substitutes` modes), the year and weekday **filters** (`since`/`prior to`, even/odd, leap/non-leap, `on`/`not on`), and the `disable`/`enable`/bridge/"if-holiday" **cascades** — are operations over a holiday set, shown above, not single sigils. The only genuine gaps are calendar-arithmetic edge cases inside the dependencies (a tabular-vs-computed Umm al-Qura day, an Islamic day-overflow like `30 Safar`), which live in `Calendrical`, not in this grammar.
 
