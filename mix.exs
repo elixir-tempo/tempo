@@ -151,7 +151,8 @@ defmodule Tempo.MixProject do
         "guides/cookbook.md",
         "guides/scheduling.md",
         "guides/workdays-and-weekends.md",
-        "guides/holidays.md"
+        "guides/holidays.md",
+        "guides/holiday-cookbook.md"
       ],
       Guides: [
         "guides/when-to-use-tempo.md",
