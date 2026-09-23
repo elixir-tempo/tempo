@@ -462,12 +462,19 @@ defmodule Tempo.Inspect do
     ]
   end
 
-  defp inspect_value(%Tempo.Set{set: set, type: type, except: except}) do
+  # An open, filtered domain (`..e`) has no members and no exclusions — only a
+  # year filter — so it renders as `..` plus the marker, not empty braces `{}e`
+  # (which would not re-parse).
+  defp inspect_value(%Tempo.Set{set: [], except: [], filter: filter}) when not is_nil(filter) do
+    ["..", filter_marker(filter)]
+  end
+
+  defp inspect_value(%Tempo.Set{set: set, type: type, except: except} = value) do
     plain = Enum.map(set, &inspect_value/1)
     excluded = Enum.map(except, fn member -> ["^", inspect_value(member)] end)
     elements = Enum.intersperse(plain ++ excluded, ",")
 
-    [open(type), elements, close(type)]
+    [open(type), elements, close(type), filter_marker(Map.get(value, :filter))]
   end
 
   # Intervals with a nil `from` are produced by callers that build
@@ -903,6 +910,13 @@ defmodule Tempo.Inspect do
   defp open(:one), do: ?[
   defp close(:all), do: ?}
   defp close(:one), do: ?]
+
+  # The `e`/`o`/`l` year filter a recurrence domain may carry after its closing
+  # brace (`{2000Y..2020Y}e`).
+  defp filter_marker(:even), do: ?e
+  defp filter_marker(:odd), do: ?o
+  defp filter_marker(:leap), do: ?l
+  defp filter_marker(_none), do: []
 
   defp recurrence(:infinity), do: <<>>
   defp recurrence(recurrence), do: Integer.to_string(recurrence)

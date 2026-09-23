@@ -4979,7 +4979,24 @@ defmodule Tempo do
     with {:ok, domain_set} <- to_interval(domain) do
       domain_set
       |> IntervalSet.to_list()
+      |> filter_domain_years(domain.filter)
       |> reduce_domain_occurrences(interval, opts)
+    end
+  end
+
+  # An open, filtered domain (`R/..e/P1Y/FL…N`) has no window of its own, so it
+  # needs a `:bound`: materialise the recurrence there, then keep only the years
+  # matching the `:even` / `:odd` / `:leap` filter.
+  def to_interval(
+        %Tempo.Interval{from: %Tempo.Set{set: [], except: [], filter: filter}} = interval,
+        opts
+      )
+      when not is_nil(filter) do
+    with {:ok, occurrences} <- to_interval(%{interval | from: nil}, opts) do
+      occurrences
+      |> IntervalSet.to_list()
+      |> filter_domain_years(filter)
+      |> IntervalSet.new()
     end
   end
 
@@ -5871,6 +5888,23 @@ defmodule Tempo do
       {:error, _} = err -> err
     end
   end
+
+  # Keep only the domain years matching a `:even` / `:odd` / `:leap` filter
+  # (`{2000Y..2020Y}e`). Parity is arithmetic on the year number; leap delegates
+  # to each year's calendar `leap_year?/1` (Calendrical), so the Gregorian
+  # century rule applies — 2100, divisible by 4 but not 400, is not a leap year.
+  defp filter_domain_years(year_intervals, nil), do: year_intervals
+
+  defp filter_domain_years(year_intervals, filter) do
+    Enum.filter(year_intervals, fn year_interval ->
+      tempo = Interval.from(year_interval)
+      year_filter_matches?(filter, year(tempo), tempo.calendar)
+    end)
+  end
+
+  defp year_filter_matches?(:even, year, _calendar), do: Integer.mod(year, 2) == 0
+  defp year_filter_matches?(:odd, year, _calendar), do: Integer.mod(year, 2) == 1
+  defp year_filter_matches?(:leap, year, calendar), do: calendar.leap_year?(year)
 
   defp recurrence_set_occurrences(%Tempo.Interval{} = interval), do: [interval]
   defp recurrence_set_occurrences(%Tempo.IntervalSet{} = set), do: IntervalSet.to_list(set)

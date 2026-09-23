@@ -59,6 +59,7 @@ defmodule Tempo.Iso8601.Tokenizer.Set do
                   ignore(string("{"))
                   |> list_of_time_or_range()
                   |> ignore(string("}"))
+                  |> optional(domain_filter())
                   |> tag(:domain_set)
                   |> ignore(string("/"))
                   |> parsec({Tempo.Iso8601.Tokenizer.Set, :duration_parser}),
@@ -98,6 +99,15 @@ defmodule Tempo.Iso8601.Tokenizer.Set do
                   replace(string(".."), :undefined)
                   |> ignore(string("/"))
                   |> parsec({Tempo.Iso8601.Tokenizer.Date, :qualified_endpoint}),
+
+                  # ..<filter>/duration — an open, filtered domain (all even/odd/
+                  # leap years), e.g. R/..e/P1Y. Like an exclusions-only domain it
+                  # has no window of its own, so it needs a `:bound` to materialise.
+                  ignore(string(".."))
+                  |> domain_filter()
+                  |> tag(:domain_set)
+                  |> ignore(string("/"))
+                  |> parsec({Tempo.Iso8601.Tokenizer.Set, :duration_parser}),
 
                   # ../duration — an unanchored recurrence (no start), e.g. a cron
                   # schedule with no `:from`, which inspects as `R/../P1W/…`

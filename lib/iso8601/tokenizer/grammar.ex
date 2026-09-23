@@ -787,6 +787,20 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     |> label("list of times or ranges")
   end
 
+  # A recurrence domain may end with a year filter — `e` (even), `o` (odd) or
+  # `l` (leap) — that keeps only the matching years, as in `{2000Y..2020Y}e`.
+  # Tokenised as `{:filter, …}`; the parser lifts it onto `%Tempo.Set{}`'s
+  # `:filter`. A non-conformant Tempo extension.
+  def domain_filter(combinator \\ empty()) do
+    combinator
+    |> choice([
+      replace(string("e"), {:filter, :even}),
+      replace(string("o"), {:filter, :odd}),
+      replace(string("l"), {:filter, :leap})
+    ])
+    |> label("domain year filter")
+  end
+
   # A set member may be prefixed with `^` to mark it excluded — subtracted from
   # the set's plain members when the set materialises, as in
   # `{2020Y..2030Y,^2026Y}`. The tokeniser tags it `{:except, …}`; the parser

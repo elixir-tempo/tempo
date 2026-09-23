@@ -15,17 +15,26 @@ defmodule Tempo.Set do
   subtracts them from its plain members, so `{2020..2030, ^2026}`
   is the range 2020–2030 with 2026 removed. `except` is empty for
   an ordinary set.
+
+  When the set is a recurrence **domain**, it may carry a year
+  `filter` — `:even`, `:odd` or `:leap`, written `e`/`o`/`l` after
+  the closing brace — that keeps only the years matching it, so
+  `{2000..2020}e` is the even years and `{2000..2020}l` the leap
+  years of the range. `filter` is `nil` for an ordinary set.
   """
 
   alias Tempo.Iso8601.AST
 
+  @type filter :: :even | :odd | :leap | nil
+
   @type t :: %__MODULE__{
           type: :all | :one,
           set: [Tempo.t()],
-          except: [Tempo.t()]
+          except: [Tempo.t()],
+          filter: filter()
         }
 
-  defstruct [:type, :set, except: []]
+  defstruct [:type, :set, except: [], filter: nil]
 
   # Internal constructor used by the parser; users build sets by
   # parsing (`~o"[…]"` / `~o"{…}"`), so this is not public API.

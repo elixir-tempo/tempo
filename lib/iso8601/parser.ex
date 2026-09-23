@@ -231,6 +231,15 @@ defmodule Tempo.Iso8601.Parser do
     |> parse_date()
   end
 
+  # Split a `{:filter, …}` year-filter token (from `{…}e`/`o`/`l`) off the
+  # domain's members, returning `{filter, plain_members}`.
+  defp extract_domain_filter(members) do
+    case Enum.split_with(members, &match?({:filter, _}, &1)) do
+      {[{:filter, filter}], plain} -> {filter, plain}
+      {[], plain} -> {nil, plain}
+    end
+  end
+
   # Date and time parsing
 
   def parse_date([{:date, date} | rest]) do
@@ -378,8 +387,9 @@ defmodule Tempo.Iso8601.Parser do
   # `:from` as the recurrence's window. Building it in the parser keeps set
   # construction out of `Tempo.Interval`, avoiding a module cycle.
   def parse_date([{:domain_set, members} | rest]) do
-    domain = members |> parse_set() |> Tempo.Set.new(:all)
-    [{:domain, domain} | parse_date(rest)]
+    {filter, plain} = extract_domain_filter(members)
+    domain = plain |> parse_set() |> Tempo.Set.new(:all)
+    [{:domain, %{domain | filter: filter}} | parse_date(rest)]
   end
 
   def parse_date([{component, {:all_of, list}} | rest]) do
