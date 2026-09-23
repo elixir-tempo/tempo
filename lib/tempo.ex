@@ -5119,7 +5119,7 @@ defmodule Tempo do
   # mid-year anchor puts each period boundary mid-year, where it can coincide
   # with the Gregorian bound and drop the very year the selection needed. This
   # makes `R/../P1Y/FL1M1DN[u-ca=persian]` behave like the calendared-anchor
-  # form `R/<persian new year>[u-ca=persian]/P1Y`.
+  # form `R/<persian new year>/P1Y[u-ca=persian]`.
   defp anchor_in_repeat_calendar(
          %Tempo{} = anchor,
          %Tempo.Interval{

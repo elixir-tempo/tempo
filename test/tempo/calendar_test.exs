@@ -78,14 +78,18 @@ defmodule Tempo.CalendarTest do
     end
 
     test "[u-ca=julian] round-trips losslessly through to_iso8601/1" do
-      iso = "R/2025Y12M25D[u-ca=julian]/P1Y"
+      # The calendar qualifies the whole recurrence, so it renders as one
+      # trailing IXDTF suffix, not mid-string on the anchor date. The
+      # mid-string spelling still parses (below), canonicalising to this form.
+      iso = "R/2025Y12M25D/P1Y[u-ca=julian]"
       {:ok, tempo} = Tempo.from_iso8601(iso)
       assert Tempo.to_iso8601(tempo) == iso
+      assert {:ok, ^tempo} = Tempo.from_iso8601("R/2025Y12M25D[u-ca=julian]/P1Y")
     end
 
     test "a Julian recurrence materialises to the Gregorian day it falls on" do
       # Orthodox Christmas: Julian 25 December, projected onto Gregorian 2026.
-      {:ok, recurrence} = Tempo.from_iso8601("R/2025Y12M25D[u-ca=julian]/P1Y")
+      {:ok, recurrence} = Tempo.from_iso8601("R/2025Y12M25D/P1Y[u-ca=julian]")
       {:ok, set} = Tempo.to_interval(recurrence, bound: Tempo.from_iso8601!("2026Y"))
 
       assert gregorian_days(set) == ["2026-01-07"]

@@ -101,23 +101,23 @@ The equinoxes and solstices come from `Astro`; the 24 East Asian solar terms and
 
 ## Other calendars — Islamic, Hebrew, and the lunisolar new years
 
-A holiday defined in another calendar is that calendar's date under `[u-ca=…]`, and it **recurs on that calendar's own year**: anchor the recurrence at a start date and give it a `P1Y` cadence — one *calendar* year, so successive occurrences drift against the Gregorian year exactly as the holiday does. RRULE is Gregorian-only, so every row is a dash.
+A holiday defined in another calendar is anchored at a start date **in that calendar** and given a `P1Y` cadence — one *calendar* year — so successive occurrences **recur on that calendar's own year** and drift against the Gregorian year exactly as the holiday does. The `[u-ca=…]` tag is a single **trailing suffix** on the whole recurrence (`R/5787Y3M25D/P1Y[u-ca=hebrew]`), qualifying the anchor and the cadence together, not embedded mid-string on the date. RRULE is Gregorian-only, so every row is a dash; the **Materialises to** column is the Gregorian date each recurrence resolves to in 2026.
 
-| Rule type | Holiday (rule in English) | Tempo | RRULE |
-|---|---|---|---|
-| Islamic (Umm al-Qura) | Islamic New Year — 1 Muḥarram | `~o"R/1447Y1M1D[u-ca=islamic-umalqura]/P1Y"` | — |
-| Islamic | Mawlid — 12 Rabīʿ al-awwal | `~o"R/1447Y3M12D[u-ca=islamic-umalqura]/P1Y"` | — |
-| Islamic | Eid al-Fitr — 1 Shawwāl | `~o"R/1447Y10M1D[u-ca=islamic-umalqura]/P1Y"` | — |
-| Islamic | Eid al-Adha — 10 Dhū al-Ḥijja | `~o"R/1447Y12M10D[u-ca=islamic-umalqura]/P1Y"` | — |
-| Hebrew | Rosh Hashanah — 1 Tishrei | `~o"R/5787Y1M1D[u-ca=hebrew]/P1Y"` | — |
-| Hebrew | Yom Kippur — 10 Tishrei | `~o"R/5787Y1M10D[u-ca=hebrew]/P1Y"` | — |
-| Hebrew | Hanukkah — 25 Kislev | `~o"R/5787Y3M25D[u-ca=hebrew]/P1Y"` | — |
-| Hebrew (leap-aware) | Passover — 15 Nisan | `~o"R/5786Y8M15D[u-ca=hebrew]/P1Y"` | — |
-| Chinese lunisolar | Chinese New Year — 1st day of the 1st month | `~o"R/4663Y1M1D[u-ca=chinese]/P1Y"` | — |
-| Persian (Solar Hijri) | Nowruz — 1 Farvardin | `~o"R/1405Y1M1D[u-ca=persian]/P1Y"` | — |
-| Coptic | Coptic / Orthodox Christmas — 29 Koiak | `~o"R/1742Y4M29D[u-ca=coptic]/P1Y"` | — |
-| Julian | Orthodox Christmas (Julian reckoning) — 25 December Julian (Gregorian 7 January) | `~o"R/2025Y12M25D[u-ca=julian]/P1Y"` | — |
-| Julian | Old New Year — 1 January Julian (Gregorian 14 January) | `~o"R/2026Y1M1D[u-ca=julian]/P1Y"` | — |
+| Rule type | Holiday (rule in English) | Tempo | Materialises to (2026) | RRULE |
+|---|---|---|---|---|
+| Islamic (Umm al-Qura) | Islamic New Year — 1 Muḥarram | `~o"R/1447Y1M1D/P1Y[u-ca=islamic-umalqura]"` | 2026-06-16 | — |
+| Islamic | Mawlid — 12 Rabīʿ al-awwal | `~o"R/1447Y3M12D/P1Y[u-ca=islamic-umalqura]"` | 2026-08-25 | — |
+| Islamic | Eid al-Fitr — 1 Shawwāl | `~o"R/1447Y10M1D/P1Y[u-ca=islamic-umalqura]"` | 2026-03-20 | — |
+| Islamic | Eid al-Adha — 10 Dhū al-Ḥijja | `~o"R/1447Y12M10D/P1Y[u-ca=islamic-umalqura]"` | 2026-05-27 | — |
+| Hebrew | Rosh Hashanah — 1 Tishrei | `~o"R/5787Y1M1D/P1Y[u-ca=hebrew]"` | 2026-09-12 | — |
+| Hebrew | Yom Kippur — 10 Tishrei | `~o"R/5787Y1M10D/P1Y[u-ca=hebrew]"` | 2026-09-21 | — |
+| Hebrew | Hanukkah — 25 Kislev | `~o"R/5787Y3M25D/P1Y[u-ca=hebrew]"` | 2026-12-05 | — |
+| Hebrew (leap-aware) | Passover — 15 Nisan | `~o"R/5786Y8M15D/P1Y[u-ca=hebrew]"` | 2026-04-02 | — |
+| Chinese lunisolar | Chinese New Year — 1st day of the 1st month | `~o"R/4663Y1M1D/P1Y[u-ca=chinese]"` | 2026-02-17 | — |
+| Persian (Solar Hijri) | Nowruz — 1 Farvardin | `~o"R/1405Y1M1D/P1Y[u-ca=persian]"` | 2026-03-21 | — |
+| Coptic | Coptic / Orthodox Christmas — 29 Koiak | `~o"R/1742Y4M29D/P1Y[u-ca=coptic]"` | 2026-01-07 | — |
+| Julian | Orthodox Christmas (Julian reckoning) — 25 December Julian (Gregorian 7 January) | `~o"R/2025Y12M25D/P1Y[u-ca=julian]"` | 2026-01-07 | — |
+| Julian | Old New Year — 1 January Julian (Gregorian 14 January) | `~o"R/2026Y1M1D/P1Y[u-ca=julian]"` | 2026-01-14 | — |
 
 > **Hebrew month numbers shift in leap years.** A Hebrew leap year inserts Adar I before Adar II, so Nisan is month 7 in a common year but month **8** in a leap year like 5786 — hence Passover's `8M` above. Anchor each Hebrew holiday on a year whose month numbering you have checked; `Tempo.to_date/1` will tell you the Gregorian date.
 

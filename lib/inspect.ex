@@ -196,6 +196,19 @@ defmodule Tempo.Inspect do
     end
   end
 
+  # Render an anchored recurrence's endpoint with its IXDTF `[u-ca=…]` calendar
+  # lifted off into a separate trailing suffix, so a whole-value calendar reads
+  # as `R/5787Y3M25D/P1Y[u-ca=hebrew]` — one trailer on the recurrence — rather
+  # than mid-string on the anchor date. Any zone/tags stay on the endpoint,
+  # where they belong; only the calendar, which qualifies the whole value,
+  # hoists. Returns `{endpoint_iodata, calendar_suffix_iodata}`.
+  defp hoist_calendar_suffix(%Tempo{extended: %{calendar: calendar} = extended} = tempo)
+       when is_atom(calendar) and not is_nil(calendar) do
+    {inspect_value(%{tempo | extended: %{extended | calendar: nil}}), calendar_trailer(extended)}
+  end
+
+  defp hoist_calendar_suffix(endpoint), do: {inspect_value(endpoint), []}
+
   defp tags_trailer(%{tags: tags}) when is_map(tags) and map_size(tags) > 0 do
     Enum.map(tags, fn {k, v} ->
       ["[", k, "=", format_tag_value(v), "]"]
@@ -670,7 +683,8 @@ defmodule Tempo.Inspect do
          to: nil,
          duration: duration
        }) do
-    [?R, recurrence(recurrence), ?/, inspect_value(from), ?/, inspect_value(duration)]
+    {from_body, calendar_suffix} = hoist_calendar_suffix(from)
+    [?R, recurrence(recurrence), ?/, from_body, ?/, inspect_value(duration), calendar_suffix]
   end
 
   # The zero duration has no components to imply the `T`/units, and a
