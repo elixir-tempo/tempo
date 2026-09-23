@@ -6,6 +6,7 @@ decision taken on the way to 1.0, is in
 
 ## Open
 
+* [ ] **Recurrence sets** — a `%Tempo.RecurrenceSet{}` value for a collection of recurrence rules (a territory's holidays, a calendar's events) that materialises as one `IntervalSet` against a window, so it composes with a diary through set algebra (`intersection(diary, Holidays.recurrence_set(:AU))`). Completes the Interval → RecurrenceSet → IntervalSet triad and generalises `ICal.from_ical/2`. Plan in [plans/recurrence-set.md](plans/recurrence-set.md).
 * [ ] **Week-of-month selections, and calendar-aware RRULE `BYWEEKNO`** — parse `2026Y6M2W` ("2nd week of June", a positional `W` after a month) and materialise it via `Calendrical.week_of_month/3`; and replace the hard-coded ISO week walk still used by RRULE `BYWEEKNO` with Calendrical's calendar-aware functions. Month and native week-of-year selections are done. Plan in [plans/recurrence-selection-resolution.md](plans/recurrence-selection-resolution.md).
 * [ ] **`Tempo.Intervallic` protocol** — let user-defined structs such as `%Booking{check_in, check_out}` take part in Allen comparisons and set operations without being copied into `%Tempo.Interval{}`; default implementations for `Tempo.Interval`, `Tempo` and single-member `Tempo.IntervalSet`.
 * [ ] **Lazy backend follow-ups** — splicing a lazy set into a busy list (needs a sorted stream merge), lazy set algebra (union and intersection of generators), and holiday generator sources. The refusal semantics must hold: an answer that needs an unbounded walk without a `:bound` refuses rather than hangs.
