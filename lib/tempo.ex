@@ -5022,12 +5022,40 @@ defmodule Tempo do
   # these, I don't know which") and stays as a set; flattening it
   # to an IntervalSet would assert all members happened, which is
   # the opposite of what the user wrote.
+  #
+  # Exclusion members (`^x`, carried in `:except`) are subtracted
+  # from the plain members — `{2020..2030, ^2026}` is the range
+  # 2020–2030 with 2026 removed.
+  def to_interval(%Tempo.Set{type: :all, set: members, except: [_ | _] = except}, opts) do
+    with {:ok, included} <- members_to_interval_set(members),
+         {:ok, excluded} <- members_to_interval_set(except) do
+      difference(included, excluded, opts)
+    end
+  end
+
   def to_interval(%Tempo.Set{type: :all, set: members}, _opts) do
     members_to_interval_set(members)
   end
 
   def to_interval(%Tempo.Set{type: :one} = value, _opts) do
     {:error, MaterialisationError.exception(value: value, reason: :one_of_set)}
+  end
+
+  # A `%Tempo.Range{}` set member (`{2020Y..2030Y}`) is inclusive of both bounds,
+  # so it materialises to every value from `first` to `last` at the range's own
+  # resolution — a year range yields years, a month range months. An open-ended
+  # range (`:undefined` endpoint) spans no finite set and cannot materialise.
+  def to_interval(%Tempo.Range{first: %Tempo{} = first, last: %Tempo{} = last}, _opts) do
+    {unit, _level} = resolution(first)
+
+    first
+    |> Stream.iterate(&shift(&1, [{unit, 1}]))
+    |> Enum.take_while(fn value -> compare(value, last) != :gt end)
+    |> members_to_interval_set()
+  end
+
+  def to_interval(%Tempo.Range{} = range, _opts) do
+    {:error, MaterialisationError.exception(value: range, reason: :open_range)}
   end
 
   def to_interval(%Tempo.Duration{} = value, _opts) do

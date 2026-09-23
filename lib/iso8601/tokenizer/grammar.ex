@@ -782,9 +782,21 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
 
   def list_of_time_or_range(combinator \\ empty()) do
     combinator
-    |> time_or_range()
-    |> repeat(ignore(string(",")) |> time_or_range())
+    |> time_or_range_member()
+    |> repeat(ignore(string(",")) |> time_or_range_member())
     |> label("list of times or ranges")
+  end
+
+  # A set member may be prefixed with `^` to mark it excluded — subtracted from
+  # the set's plain members when the set materialises, as in
+  # `{2020Y..2030Y,^2026Y}`. The tokeniser tags it `{:except, …}`; the parser
+  # routes it to `%Tempo.Set{}`'s `:except`. A non-conformant Tempo extension.
+  def time_or_range_member(combinator \\ empty()) do
+    combinator
+    |> choice([
+      ignore(string("^")) |> time_or_range() |> tag(:except),
+      time_or_range()
+    ])
   end
 
   def time_or_range(combinator \\ empty()) do

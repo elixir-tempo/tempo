@@ -18,6 +18,7 @@ defmodule Tempo.MaterialisationError do
           | :one_of_set
           | :finest_resolution
           | :unanchored_group
+          | :open_range
           | atom()
           | String.t()
 
@@ -75,6 +76,15 @@ defmodule Tempo.MaterialisationError do
   def message(%__MODULE__{reason: :unanchored_group}) do
     "Cannot materialise an unanchored group into an interval — no coarser " <>
       "calendar context to bound the span."
+  end
+
+  def message(%__MODULE__{reason: :open_range, value: value}) when not is_nil(value) do
+    "Cannot materialise the open-ended range #{inspect(value)} into an interval — " <>
+      "one endpoint is unbounded, so it spans no finite set of occurrences."
+  end
+
+  def message(%__MODULE__{reason: :open_range}) do
+    "Cannot materialise an open-ended range into an interval — one endpoint is unbounded."
   end
 
   def message(%__MODULE__{reason: reason}) when is_binary(reason), do: reason

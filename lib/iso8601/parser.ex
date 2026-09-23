@@ -191,31 +191,44 @@ defmodule Tempo.Iso8601.Parser do
   end
 
   def parse_set(set) do
-    Enum.map(set, fn
-      {:range, [{_, from}, {_, to}]} ->
-        from = parse_date(from)
-        to = parse_date(to)
-        validate_range(from, to)
+    Enum.map(set, &parse_set_member/1)
+  end
 
-      {:range, [from, :undefined]} ->
-        {:range, [parse_date(from), :undefined]}
+  # An excluded member (`^…` in the set syntax) keeps its `:except` tag through
+  # to `Tempo.Set.new/3`, which routes it to the set's `:except`; its inner
+  # member parses exactly as a plain one.
+  defp parse_set_member({:except, [member]}) do
+    {:except, parse_set_member(member)}
+  end
 
-      {:range, [:undefined, to]} ->
-        {:range, [:undefined, parse_date(to)]}
+  defp parse_set_member({:range, [{_, from}, {_, to}]}) do
+    from = parse_date(from)
+    to = parse_date(to)
+    validate_range(from, to)
+  end
 
-      {unit, %Range{first: first, last: last}} ->
-        {:range, [[{unit, first}], [{unit, last}]]}
+  defp parse_set_member({:range, [from, :undefined]}) do
+    {:range, [parse_date(from), :undefined]}
+  end
 
-      # An interval member keeps its tag so `Tempo.Set.new/3` builds it
-      # with `build_interval/1` rather than as a plain `Tempo`.
-      {:interval, tokens} ->
-        {:interval, parse_date(tokens)}
+  defp parse_set_member({:range, [:undefined, to]}) do
+    {:range, [:undefined, parse_date(to)]}
+  end
 
-      tempo ->
-        tempo
-        |> elem(1)
-        |> parse_date()
-    end)
+  defp parse_set_member({unit, %Range{first: first, last: last}}) do
+    {:range, [[{unit, first}], [{unit, last}]]}
+  end
+
+  # An interval member keeps its tag so `Tempo.Set.new/3` builds it with
+  # `build_interval/1` rather than as a plain `Tempo`.
+  defp parse_set_member({:interval, tokens}) do
+    {:interval, parse_date(tokens)}
+  end
+
+  defp parse_set_member(tempo) do
+    tempo
+    |> elem(1)
+    |> parse_date()
   end
 
   # Date and time parsing
