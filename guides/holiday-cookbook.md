@@ -141,17 +141,18 @@ end)
 
 ## Year gates — the recurrence domain (`{…}` and `^`)
 
-Several rule families do not change *which day* a holiday falls on but *which years* it fires: an "active" window, a "since" / "prior to" bound, a year cancelled outright, an even/odd or leap-year rule. Tempo writes these into the recurrence's **domain** — the `{…}` slot between the repeat and the cadence — as an inclusion set of years and year-ranges, with `^` marking a year to carve back out. The holiday stays one self-bounding value: it materialises to its dates with no bound and no post-hoc set operation, and it round-trips through `Tempo.to_iso8601/1`.
+Several rule families do not change *which day* a holiday falls on but *which years* it fires: an "active" window, a "since" / "prior to" bound, a year cancelled outright, an even/odd or leap-year rule. Tempo writes these into the recurrence's **domain** — the `{…}` slot between the repeat and the cadence — as an inclusion set of years and year-ranges, with `^` marking a year to carve back out and a trailing `e` / `o` / `l` keeping only the even, odd or leap years. The holiday stays one self-bounding value: it materialises to its dates with no bound and no post-hoc set operation, and it round-trips through `Tempo.to_iso8601/1`.
 
 | Rule type | Holiday (rule in English) | Tempo | RRULE |
 |---|---|---|---|
 | Active window / since–until | Christmas, only 2025 through 2027 | `~o"R/{2025Y..2027Y}/P1Y/FL12M25DN"` | — |
 | Disable a year | Christmas 2020–2030, cancelled in 2026 | `~o"R/{2020Y..2030Y,^2026Y}/P1Y/FL12M25DN"` | — |
 | Disable several years | … cancelled in 2026 and 2028 | `~o"R/{2020Y..2030Y,^2026Y,^2028Y}/P1Y/FL12M25DN"` | — |
-| In even years | Christmas only in the even years of the decade | `~o"R/{2024Y,2026Y,2028Y,2030Y}/P1Y/FL12M25DN"` | — |
-| In leap years | Christmas only in the decade's leap years | `~o"R/{2024Y,2028Y}/P1Y/FL12M25DN"` | — |
+| In even years | Christmas in the even years of the decade | `~o"R/{2024Y..2030Y}e/P1Y/FL12M25DN"` | — |
+| In odd years | Christmas in the odd years of the decade | `~o"R/{2024Y..2030Y}o/P1Y/FL12M25DN"` | — |
+| In leap years | Christmas in the decade's leap years | `~o"R/{2024Y..2030Y}l/P1Y/FL12M25DN"` | — |
 
-> The domain is **inclusion-first**: `{2020Y..2030Y}` is the span of years the holiday runs, and each `^2026Y` removes one. A domain of *only* exclusions — `~o"R/^2026Y/P1Y/FL12M25DN"` — has nothing to bound it, so it needs a `bound:` naming the years to subtract from: `Tempo.to_interval(value, bound: ~o"{2024..2028}Y")`.
+> The domain is **inclusion-first**: `{2020Y..2030Y}` is the span of years the holiday runs, each `^2026Y` removes one, and a trailing `e`/`o`/`l` filters the rest to the even, odd or leap years — `l` follows the calendar's own leap rule, so `{2096Y..2104Y}l` skips 2100. A domain of *only* exclusions (`~o"R/^2026Y/P1Y/FL12M25DN"`) or an open filter (`~o"R/..e/P1Y/FL12M25DN"`, every even year) carries no window of its own, so it needs a `bound:` naming the years to work over: `Tempo.to_interval(value, bound: ~o"{2024..2028}Y")`.
 
 Every RRULE here is a dash, and for a reason worth stating: RFC 5545 keeps year restrictions *out* of the recurrence rule. It can bound a run (`UNTIL`, `COUNT`) and thin a cadence (`INTERVAL`), but a *disabled* year is an `EXDATE` alongside the rule, not in it, and even/odd or leap-year selection it cannot express at all. `Tempo.to_rrule/1` folds none of these back into the `RRULE`; it emits the base recurrence — `FREQ=YEARLY;BYMONTH=12;BYMONTHDAY=25` for every row above — which, taken alone, would fire in the cancelled and off-parity years. Rather than present that as the equivalent, the column is a dash, exactly as it is for the computed feasts.
 
