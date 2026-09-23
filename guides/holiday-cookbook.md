@@ -19,7 +19,7 @@ R/../P1Y/FL 11M 4K 4I N
 └ R/.. = repeat, no fixed start (materialise against a bound to get dates)
 ```
 
-Other markers: `nD` a day of the month, `nO` a day of the year, `nW` a week; `(name)E` a **computed event** (`Tempo.Event`); `…/±PnD` an ISO 8601-2 §12.10 **window** (the selection becomes the start of a span, and the selectors after it pick within — used for "N days before/after" feasts); and a `[u-ca=…]` suffix puts the whole value in another **calendar**. Materialise any of them with `Tempo.to_interval(value, bound: ~o"2026")`.
+Other markers: `nD` a day of the month, `nO` a day of the year, `nW` a week; `(name)E` a **computed event** (`Tempo.Event`); `…/±PnD` an ISO 8601-2 §12.10 **window** (the selection becomes the start of a span, and the selectors after it pick within — used for "N days before/after" feasts); a `{…}` **domain** in the repeat slot (`R/{…}/P1Y/…`) restricts which years the recurrence fires, with `^` excluding one; and a `[u-ca=…]` suffix puts the whole value in another **calendar**. Materialise any of them with `Tempo.to_interval(value, bound: ~o"2026")`.
 
 ## Fixed dates
 
@@ -139,27 +139,33 @@ end)
 
 > *"New Year's Day is January 1, observed on the nearest working day."* `Tempo.next_working_day/2`, `previous_working_day/2` and `add_working_days/3` cover the "next Monday" and "N working days later" variants; all take a territory so the weekend and the holiday set are the right ones.
 
-## Filters, gates, and bridges (set algebra)
+## Year gates — the recurrence domain (`{…}` and `^`)
 
-The remaining rule families are not *selections* — they modify or condition a base recurrence — so they are **set operations** rather than a single value. Because a materialised holiday *is* an interval set, every one of them is one call:
+Several rule families do not change *which day* a holiday falls on but *which years* it fires: an "active" window, a "since" / "prior to" bound, a year cancelled outright, an even/odd or leap-year rule. Tempo writes these into the recurrence's **domain** — the `{…}` slot between the repeat and the cadence — as an inclusion set of years and year-ranges, with `^` marking a year to carve back out. The holiday stays one self-bounding value: it materialises to its dates with no bound and no post-hoc set operation, and it round-trips through `Tempo.to_iso8601/1`.
+
+| Rule type | Holiday (rule in English) | Tempo | RRULE |
+|---|---|---|---|
+| Active window / since–until | Christmas, only 2025 through 2027 | `~o"R/{2025Y..2027Y}/P1Y/FL12M25DN"` | — |
+| Disable a year | Christmas 2020–2030, cancelled in 2026 | `~o"R/{2020Y..2030Y,^2026Y}/P1Y/FL12M25DN"` | — |
+| Disable several years | … cancelled in 2026 and 2028 | `~o"R/{2020Y..2030Y,^2026Y,^2028Y}/P1Y/FL12M25DN"` | — |
+| In even years | Christmas only in the even years of the decade | `~o"R/{2024Y,2026Y,2028Y,2030Y}/P1Y/FL12M25DN"` | — |
+| In leap years | Christmas only in the decade's leap years | `~o"R/{2024Y,2028Y}/P1Y/FL12M25DN"` | — |
+
+> The domain is **inclusion-first**: `{2020Y..2030Y}` is the span of years the holiday runs, and each `^2026Y` removes one. A domain of *only* exclusions — `~o"R/^2026Y/P1Y/FL12M25DN"` — has nothing to bound it, so it needs a `bound:` naming the years to subtract from: `Tempo.to_interval(value, bound: ~o"{2024..2028}Y")`.
+
+Every RRULE here is a dash, and for a reason worth stating: RFC 5545 keeps year restrictions *out* of the recurrence rule. It can bound a run (`UNTIL`, `COUNT`) and thin a cadence (`INTERVAL`), but a *disabled* year is an `EXDATE` alongside the rule, not in it, and even/odd or leap-year selection it cannot express at all. `Tempo.to_rrule/1` folds none of these back into the `RRULE`; it emits the base recurrence — `FREQ=YEARLY;BYMONTH=12;BYMONTHDAY=25` for every row above — which, taken alone, would fire in the cancelled and off-parity years. Rather than present that as the equivalent, the column is a dash, exactly as it is for the computed feasts.
+
+## Enable, weekday gates, and bridges (set algebra)
+
+The families that remain need *another* set, not just a restriction on the years: adding an ad-hoc date the pattern never produces, filtering by the weekday an occurrence lands on, or testing a day against the year's other holidays. Because a materialised holiday *is* an interval set, each is one call:
 
 ```elixir
-{:ok, xmas} = Tempo.to_interval(~o"R/../P1Y/FL12M25DN", bound: ~o"{2020..2030}Y")
+{:ok, xmas} = Tempo.to_interval(~o"R/{2020Y..2030Y}/P1Y/FL12M25DN")
 
-# active window / "since" / "prior to" — the holiday only within a range of years:
-{:ok, active} = Tempo.intersection(xmas, ~o"2025-01-01/2028-01-01")
+# enable — add a date the recurrence never produces (here, Boxing Day):
+{:ok, added} = Tempo.union(xmas, ~o"2027-12-26")
 
-# disable / enable specific dates:
-{:ok, trimmed} = Tempo.difference(xmas, ~o"2026-12-25")    # drop one year
-{:ok, added}   = Tempo.union(xmas, ~o"2027-12-26")         # add an ad-hoc date
-
-# in even / odd / leap years — intersect with the set of qualifying years
-# (a bare year digit-set is NOT a selection filter, so the parity/leap rule
-# lives here; leap years are just the year set that happens to be leap):
-{:ok, even} = Tempo.intersection(xmas, ~o"{2024,2026,2028,2030}Y")
-{:ok, leap_only} = Tempo.intersection(xmas, ~o"{2024,2028}Y")
-
-# "on"/"not on" a weekday — a filter over the occurrences:
+# "on" / "not on" a weekday — a filter over the occurrences:
 weekdays = Tempo.IntervalSet.filter(xmas, fn iv ->
   Tempo.day_of_week(Tempo.Interval.from(iv)) not in [6, 7]
 end)
@@ -169,13 +175,13 @@ end)
 Tempo.subset?(~o"2026-05-14", holidays)                          # => true
 ```
 
-And *"every N years"* is a plain cadence — `~o"R/2024-07-04/P4Y"` fires on the 4th of July only in leap-numbered years — so it stays a single value, not a filter.
+And *"every N years"* is a plain cadence, not a filter — `~o"R/2024-07-04/P4Y"` fires on the 4th of July only every fourth year (2024, 2028, 2032, …).
 
-`intersection/2`, `difference/2` and `union/2` give the active / disable / enable / parity / since-until families; `IntervalSet.filter/2` the weekday gates; and `subset?/2`, `contains?/2` are the predicates the bridge and "if it is a holiday then…" cascades test against the year's holiday set. This is the point of modelling holidays as interval sets: they compose with each other, and with anyone's free-time set, through the same algebra.
+`union/2` gives the enable family; `IntervalSet.filter/2` the weekday gates; and `subset?/2`, `contains?/2` are the predicates the bridge and "if it is a holiday then…" cascades test against the year's holiday set. This is the point of modelling holidays as interval sets: they compose with each other, and with anyone's free-time set, through the same algebra.
 
 ## Coverage of the date-holidays grammar
 
 Every **selection**-shaped rule in the corpus — including several the `tempo_holidays` compiler itself still lists as *not handled* — is a single Tempo value: fixed dates and spans; nth/last weekday-in-month; a weekday **before/after a date, a weekday, or another computed anchor** (Black Friday, Election Day, "the Monday after the 3rd Sunday after September 1"); Easter/Orthodox and the whole moveable cycle; the equinoxes, solstices, solar terms and new moon; and dates in the Islamic, Hebrew, Persian, Chinese, Coptic and Julian calendars.
 
-The **transforming and conditioning** families — observed-date **substitution** (the `if/then`, `and if`, `substitutes` modes), the year and weekday **filters** (`since`/`prior to`, even/odd, leap/non-leap, `on`/`not on`), and the `disable`/`enable`/bridge/"if-holiday" **cascades** — are operations over a holiday set, shown above, not single sigils. The only genuine gaps are calendar-arithmetic edge cases inside the dependencies (a tabular-vs-computed Umm al-Qura day, an Islamic day-overflow like `30 Safar`), which live in `Calendrical`, not in this grammar.
+The **transforming and conditioning** families split two ways. The **year gates** — an active `since` / `prior to` window, even/odd and leap/non-leap rules, a disabled year — fold into the recurrence's `{…}` **domain**, so they stay single, round-trippable values. What genuinely needs the set algebra is the rest: observed-date **substitution** (the `if/then`, `and if`, `substitutes` modes), the weekday **filters** (`on`/`not on`), `enable`ing an ad-hoc date, and the bridge / "if-holiday" **cascades** — operations over a holiday set, shown above. The only genuine gaps are calendar-arithmetic edge cases inside the dependencies (a tabular-vs-computed Umm al-Qura day, an Islamic day-overflow like `30 Safar`), which live in `Calendrical`, not in this grammar.
 
