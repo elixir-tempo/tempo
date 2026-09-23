@@ -372,6 +372,16 @@ defmodule Tempo.Iso8601.Parser do
     [{:group, parse_date(group)} | parse_date(rest)]
   end
 
+  # A recurrence domain — the `{…}` start of `R/{2020Y..2030Y,^2026Y}/P1Y`,
+  # tokenised as `:domain_set` — is built here into a `%Tempo.Set{}` (with its
+  # `^` exclusions) and tagged `:domain`, so `Tempo.Interval.build/1` lands it in
+  # `:from` as the recurrence's window. Building it in the parser keeps set
+  # construction out of `Tempo.Interval`, avoiding a module cycle.
+  def parse_date([{:domain_set, members} | rest]) do
+    domain = members |> parse_set() |> Tempo.Set.new(:all)
+    [{:domain, domain} | parse_date(rest)]
+  end
+
   def parse_date([{component, {:all_of, list}} | rest]) do
     [{component, reduce_list(list)} | parse_date(rest)]
   end

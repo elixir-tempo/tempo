@@ -52,6 +52,28 @@ defmodule Tempo.Iso8601.Tokenizer.Set do
   defcombinator :interval_parser,
                 optional(recurrence())
                 |> choice([
+                  # domain-set/duration — a recurrence over a domain of values
+                  # (years, with `^` exclusions), e.g. R/{2020Y..2030Y,^2026Y}/P1Y.
+                  # Tagged `:domain_set` (distinct from an `:all_of` group/set) so
+                  # the parser builds it as the recurrence's window in `:from`.
+                  ignore(string("{"))
+                  |> list_of_time_or_range()
+                  |> ignore(string("}"))
+                  |> tag(:domain_set)
+                  |> ignore(string("/"))
+                  |> parsec({Tempo.Iso8601.Tokenizer.Set, :duration_parser}),
+
+                  # ^value/duration — a recurrence excluding a single value, e.g.
+                  # R/^2026Y/P1Y (no braces — the "single value needs no set"
+                  # form). Sugar for a domain with one `^` exclusion and no
+                  # included members.
+                  ignore(string("^"))
+                  |> parsec({Tempo.Iso8601.Tokenizer.Date, :qualified_endpoint})
+                  |> tag(:except)
+                  |> tag(:domain_set)
+                  |> ignore(string("/"))
+                  |> parsec({Tempo.Iso8601.Tokenizer.Set, :duration_parser}),
+
                   # date/date — each endpoint may carry an EDTF qualification
                   parsec({Tempo.Iso8601.Tokenizer.Date, :qualified_endpoint})
                   |> ignore(string("/"))

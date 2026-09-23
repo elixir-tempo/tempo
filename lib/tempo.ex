@@ -4971,6 +4971,28 @@ defmodule Tempo do
   # being forced to a day. With no `:bound` there is nothing to anchor
   # against, so it stays an error rather than reporting success while
   # handing back the unmaterialised rule.
+  # A recurrence over a domain set (`R/{2020Y..2030Y,^2026Y}/P1Y/FL…N`). The
+  # domain's plain members are the window: the selection is materialised for each
+  # and unioned. `^` exclusions are already removed by materialising the domain
+  # set, so an excluded year yields no occurrence — the domain is self-bounding.
+  def to_interval(%Tempo.Interval{from: %Tempo.Set{set: [_ | _]} = domain} = interval, opts) do
+    with {:ok, domain_set} <- to_interval(domain) do
+      domain_set
+      |> IntervalSet.to_list()
+      |> reduce_domain_occurrences(interval, opts)
+    end
+  end
+
+  # An exclusions-only domain (`R/^2026/P1Y/FL…N`) has no window of its own, so
+  # it needs a `:bound`: materialise the recurrence there, then subtract the
+  # excluded values.
+  def to_interval(%Tempo.Interval{from: %Tempo.Set{set: [], except: except}} = interval, opts) do
+    with {:ok, occurrences} <- to_interval(%{interval | from: nil}, opts),
+         {:ok, excluded} <- to_interval(%Tempo.Set{type: :all, set: except}) do
+      difference(occurrences, excluded)
+    end
+  end
+
   def to_interval(%Tempo.Interval{from: from, to: to, recurrence: recurrence} = interval, opts)
       when from in [nil, :undefined] and to in [nil, :undefined] and recurrence != 1 do
     case Keyword.get(opts, :bound) do
@@ -5001,6 +5023,31 @@ defmodule Tempo do
 
   def to_interval(%Tempo.IntervalSet{} = set, _opts) do
     {:ok, set}
+  end
+
+  # A `%Tempo.RecurrenceSet{}` materialises each member against the `:bound`
+  # (recurrences) or as-is (concrete members), tags each occurrence with the
+  # member's own metadata (a holiday name, say), and unions them into one set.
+  def to_interval(%Tempo.RecurrenceSet{members: members}, opts) do
+    members
+    |> Enum.reduce_while({:ok, []}, fn %Tempo.Interval{} = member, {:ok, acc} ->
+      case to_interval(member, opts) do
+        {:ok, materialised} ->
+          occurrences =
+            materialised
+            |> recurrence_set_occurrences()
+            |> Enum.map(&merge_member_metadata(&1, member.metadata))
+
+          {:cont, {:ok, acc ++ occurrences}}
+
+        {:error, _} = error ->
+          {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, intervals} -> IntervalSet.new(intervals)
+      {:error, _} = error -> error
+    end
   end
 
   def to_interval(%Tempo{} = tempo, _opts) do
@@ -5805,6 +5852,37 @@ defmodule Tempo do
     end
   end
 
+  # Materialise a recurrence's selection once per year of its domain (each an
+  # interval from the domain set), unioning the occurrences. The domain year is
+  # passed as the `:bound`, so the existing bound-materialisation projects the
+  # selection onto it.
+  defp reduce_domain_occurrences(domain_intervals, interval, opts) do
+    domain_intervals
+    |> Enum.reduce_while({:ok, []}, fn domain_interval, {:ok, acc} ->
+      bound = Interval.from(domain_interval)
+
+      case to_interval(%{interval | from: nil}, Keyword.put(opts, :bound, bound)) do
+        {:ok, %Tempo.IntervalSet{} = set} -> {:cont, {:ok, acc ++ IntervalSet.to_list(set)}}
+        {:error, _} = err -> {:halt, err}
+      end
+    end)
+    |> case do
+      {:ok, intervals} -> IntervalSet.new(intervals)
+      {:error, _} = err -> err
+    end
+  end
+
+  defp recurrence_set_occurrences(%Tempo.Interval{} = interval), do: [interval]
+  defp recurrence_set_occurrences(%Tempo.IntervalSet{} = set), do: IntervalSet.to_list(set)
+
+  # Carry a recurrence-set member's metadata (e.g. a holiday name) onto each
+  # occurrence it produces; an occurrence's own metadata wins any conflict.
+  defp merge_member_metadata(interval, metadata) when map_size(metadata) == 0, do: interval
+
+  defp merge_member_metadata(%Tempo.Interval{metadata: existing} = interval, metadata) do
+    %{interval | metadata: Map.merge(metadata, existing)}
+  end
+
   @doc """
   Convert any Tempo value to a `t:Tempo.IntervalSet.t/0`.
 
@@ -5817,12 +5895,18 @@ defmodule Tempo do
   ### Arguments
 
   * `value` is a `t:#{__MODULE__}.t/0`, `t:Tempo.Interval.t/0`,
-    `t:Tempo.IntervalSet.t/0`, or `t:Tempo.Set.t/0`.
+    `t:Tempo.IntervalSet.t/0`, `t:Tempo.Set.t/0`, or a
+    `t:Tempo.RecurrenceSet.t/0`.
+
+  ### Options
+
+  * `:bound` is the window an unbounded recurrence (or a
+    `t:Tempo.RecurrenceSet.t/0` of them) materialises across.
 
   ### Returns
 
   * `{:ok, interval_set}` on success, or `{:error, reason}` for
-    the same cases that `to_interval/1` errors on.
+    the same cases that `to_interval/2` errors on.
 
   ### Examples
 
@@ -5838,10 +5922,12 @@ defmodule Tempo do
           | Tempo.IntervalSet.t()
           | Tempo.Set.t()
           | Tempo.Duration.t()
+          | Tempo.RecurrenceSet.t(),
+          keyword()
         ) ::
           {:ok, Tempo.IntervalSet.t()} | {:error, error_reason()}
-  def to_interval_set(value) do
-    case to_interval(value) do
+  def to_interval_set(value, options \\ []) do
+    case to_interval(value, options) do
       {:ok, %Tempo.IntervalSet{} = set} -> {:ok, set}
       {:ok, %Tempo.Interval{} = interval} -> IntervalSet.new([interval])
       {:error, _} = err -> err

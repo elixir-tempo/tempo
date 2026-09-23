@@ -85,6 +85,12 @@ defmodule Tempo.Operations do
                | IntervalSet.t()
                | Tempo.Set.t()
   def align(a, b, opts \\ []) do
+    # A `%Tempo.RecurrenceSet{}` operand is materialised against the other
+    # operand (its window), so `intersection(diary, holidays)` needs no explicit
+    # `:bound` — the diary supplies it. An explicit `:bound` still wins.
+    a = resolve_recurrence_set(a, b, opts)
+    b = resolve_recurrence_set(b, a, opts)
+
     with :ok <- validate_operand(a),
          :ok <- validate_operand(b),
          {:ok, class_a, class_b} <- compatible_classes(a, b, opts),
@@ -385,6 +391,20 @@ defmodule Tempo.Operations do
   defp leading_unit(_other), do: nil
 
   ## Conversion to IntervalSet.
+
+  # A `%Tempo.RecurrenceSet{}` operand materialises against `counterparty` (or an
+  # explicit `:bound`) as its window. If it cannot (no usable window), it is left
+  # as-is for `validate_operand/1` to reject with a clear error.
+  defp resolve_recurrence_set(%Tempo.RecurrenceSet{} = recurrence_set, counterparty, opts) do
+    bound = Keyword.get(opts, :bound, counterparty)
+
+    case Tempo.to_interval_set(recurrence_set, bound: bound) do
+      {:ok, %IntervalSet{} = set} -> set
+      _other -> recurrence_set
+    end
+  end
+
+  defp resolve_recurrence_set(other, _counterparty, _opts), do: other
 
   defp to_aligned_set(%IntervalSet{} = set, _class, _opts), do: {:ok, set}
 

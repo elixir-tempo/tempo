@@ -449,8 +449,10 @@ defmodule Tempo.Inspect do
     ]
   end
 
-  defp inspect_value(%Tempo.Set{set: set, type: type}) do
-    elements = Enum.map_join(set, ",", &inspect_value/1)
+  defp inspect_value(%Tempo.Set{set: set, type: type, except: except}) do
+    plain = Enum.map(set, &inspect_value/1)
+    excluded = Enum.map(except, fn member -> ["^", inspect_value(member)] end)
+    elements = Enum.intersperse(plain ++ excluded, ",")
 
     [open(type), elements, close(type)]
   end

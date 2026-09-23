@@ -518,6 +518,11 @@ defmodule Tempo.Interval do
     %__MODULE__{from: nil, duration: Duration.build(duration)}
   end
 
+  # A recurrence over a domain set with no selection (`R/{2020Y..2030Y}/P1Y`).
+  def build([{:domain, %Tempo.Set{} = domain}, {:duration, duration}]) do
+    %__MODULE__{from: domain, duration: Duration.build(duration)}
+  end
+
   def build([:undefined, {_to_tag, time}]) do
     %__MODULE__{from: :undefined, to: AST.build(time)}
   end
@@ -554,6 +559,21 @@ defmodule Tempo.Interval do
   def build([:undefined, {:duration, duration}, {:repeat_rule, repeat_rule}]) do
     %__MODULE__{
       from: nil,
+      duration: Duration.build(duration),
+      repeat_rule: AST.build(repeat_rule)
+    }
+  end
+
+  # A recurrence over a domain set (`R/{2020Y..2030Y,^2026Y}/P1Y/FL…N`): the
+  # `{…}` start (a `%Tempo.Set{}` with `^` exclusions, built by the parser) is
+  # the recurrence's window, carried in `:from` and applied at materialisation.
+  def build([
+        {:domain, %Tempo.Set{} = domain},
+        {:duration, duration},
+        {:repeat_rule, repeat_rule}
+      ]) do
+    %__MODULE__{
+      from: domain,
       duration: Duration.build(duration),
       repeat_rule: AST.build(repeat_rule)
     }

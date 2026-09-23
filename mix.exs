@@ -120,7 +120,7 @@ defmodule Tempo.MixProject do
 
   def groups_for_modules do
     [
-      Core: ~r/^Tempo(?:\.(Interval|IntervalSet|Duration|Set))?$/,
+      Core: ~r/^Tempo(?:\.(Interval|IntervalSet|Duration|Set|RecurrenceSet))?$/,
       "Clock and current time": ~r/^Tempo\.Clock(\.|$)/,
       "Set algebra and comparison":
         ~r/^Tempo\.(Operations|Compare|Select|Territory)$|^Tempo\.Interval\.(Relations|RelationNetwork)$/,
