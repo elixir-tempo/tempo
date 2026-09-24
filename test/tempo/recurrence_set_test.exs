@@ -54,6 +54,17 @@ defmodule Tempo.RecurrenceSetTest do
       assert Interval.metadata(interval) == %{name: "Christmas break"}
     end
 
+    test "a member with a domain is narrowed to the bound, not materialised whole" do
+      rset =
+        RecurrenceSet.new([
+          named("R/{2020Y..2049Y}/P1Y/FL11M1DN", "One-off"),
+          named("R/../P1Y/FL12M25DN", "Christmas")
+        ])
+
+      {:ok, set} = Tempo.to_interval_set(rset, bound: ~o"2026Y")
+      assert years(set) == [2026, 2026]
+    end
+
     test "a member with a ^ domain drops the excluded year" do
       rset = RecurrenceSet.new([named("R/{2024Y..2027Y,^2026Y}/P1Y/FL12M25DN", "Xmas")])
       {:ok, set} = Tempo.to_interval_set(rset)

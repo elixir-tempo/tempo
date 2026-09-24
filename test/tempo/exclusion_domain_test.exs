@@ -83,6 +83,58 @@ defmodule Tempo.ExclusionDomainTest do
     end
   end
 
+  # A self-bounding domain needs no `:bound`, but one that is supplied still
+  # narrows it: occurrences are kept only when they start within the bound's
+  # window, exactly as for a recurrence without a domain.
+  describe "a supplied :bound narrows a self-bounding domain" do
+    test "a single-year bound keeps only that year" do
+      {:ok, set} = Tempo.to_interval(~o"R/{2020Y..2049Y}/P1Y/FL11M1DN", bound: ~o"2029Y")
+      assert years(set) == [2029]
+    end
+
+    test "a multi-year bound keeps the domain years it spans" do
+      {:ok, set} = Tempo.to_interval(~o"R/{2020Y..2049Y}/P1Y/FL11M1DN", bound: ~o"2028Y/2031Y")
+      assert years(set) == [2028, 2029, 2030]
+    end
+
+    test "a bound outside the domain keeps nothing" do
+      {:ok, set} = Tempo.to_interval(~o"R/{2020Y..2030Y}/P1Y/FL12M25DN", bound: ~o"2060Y")
+      assert years(set) == []
+    end
+
+    test "a bound finer than the domain period keeps only the occurrences inside it" do
+      {:ok, december} = Tempo.to_interval(~o"R/{2020Y..2030Y}/P1Y/FL12M25DN", bound: ~o"2025Y12M")
+      assert years(december) == [2025]
+
+      {:ok, november} = Tempo.to_interval(~o"R/{2020Y..2030Y}/P1Y/FL12M25DN", bound: ~o"2025Y11M")
+      assert years(november) == []
+    end
+
+    test "exclusions still apply inside the bound" do
+      domain = ~o"R/{2020Y..2030Y,^2026Y}/P1Y/FL12M25DN"
+
+      {:ok, excluded} = Tempo.to_interval(domain, bound: ~o"2026Y")
+      assert years(excluded) == []
+
+      {:ok, around} = Tempo.to_interval(domain, bound: ~o"2025Y/2028Y")
+      assert years(around) == [2025, 2027]
+    end
+
+    test "a year filter still applies inside the bound" do
+      {:ok, set} = Tempo.to_interval(~o"R/{2020Y..2030Y}e/P1Y/FL1M1DN", bound: ~o"2021Y/2024Y")
+      assert years(set) == [2022]
+    end
+
+    test "a calendar recurrence's domain narrows to the bound" do
+      {:ok, set} =
+        Tempo.to_interval(~o"R/{2024Y..2027Y}/P1Y/FL1m1DN[u-ca=chinese]", bound: ~o"2026Y")
+
+      assert [interval] = IntervalSet.to_list(set)
+      {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
+      assert Date.convert!(date, Calendar.ISO) == ~D[2026-02-17]
+    end
+  end
+
   describe "round-trip" do
     test "a domain recurrence with ^ round-trips faithfully" do
       value = ~o"R/{2020Y..2030Y,^2026Y}/P1Y/FL12M25DN"

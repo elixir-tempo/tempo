@@ -4975,12 +4975,19 @@ defmodule Tempo do
   # domain's plain members are the window: the selection is materialised for each
   # and unioned. `^` exclusions are already removed by materialising the domain
   # set, so an excluded year yields no occurrence — the domain is self-bounding.
+  # A `:bound`, when given, narrows it further: only the domain periods that meet
+  # the bound's window are materialised, and only the occurrences starting within
+  # that window are kept — the same `[bound_from, bound_to)` start rule a bound
+  # applies to any unanchored recurrence.
   def to_interval(%Tempo.Interval{from: %Tempo.Set{set: [_ | _]} = domain} = interval, opts) do
-    with {:ok, domain_set} <- to_interval(domain) do
+    with {:ok, domain_set} <- to_interval(domain),
+         {:ok, window} <- domain_bound_window(opts) do
       domain_set
       |> IntervalSet.to_list()
       |> filter_domain_years(domain.filter)
+      |> Enum.filter(&domain_period_in_window?(&1, window))
       |> reduce_domain_occurrences(interval, opts)
+      |> keep_occurrences_in_window(window)
     end
   end
 
@@ -5888,6 +5895,49 @@ defmodule Tempo do
       {:error, _} = err -> err
     end
   end
+
+  # A caller's `:bound` as a half-open `{bound_from, bound_to}` start window, or
+  # `:none` when no bound is given and the domain alone bounds the recurrence.
+  defp domain_bound_window(opts) do
+    case Keyword.fetch(opts, :bound) do
+      {:ok, bound} ->
+        with {:ok, bound_to} <- bound_upper(bound) do
+          {:ok, {bound_lower(bound), bound_to}}
+        end
+
+      :error ->
+        {:ok, :none}
+    end
+  end
+
+  # A domain period only yields occurrences that start inside it, so a period
+  # that does not meet the window is skipped rather than materialised.
+  defp domain_period_in_window?(_period, :none), do: true
+
+  defp domain_period_in_window?(
+         %Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to},
+         {bound_from, bound_to}
+       ) do
+    under_bound?(from, bound_to) and (is_nil(bound_from) or under_bound?(bound_from, to))
+  end
+
+  defp domain_period_in_window?(_period, _window), do: true
+
+  defp keep_occurrences_in_window(result, :none), do: result
+
+  defp keep_occurrences_in_window({:ok, %Tempo.IntervalSet{} = set}, {bound_from, bound_to}) do
+    set
+    |> IntervalSet.to_list()
+    |> Enum.filter(&occurrence_in_window?(&1, bound_from, bound_to))
+    |> IntervalSet.new()
+  end
+
+  defp keep_occurrences_in_window({:error, _} = error, _window), do: error
+
+  defp occurrence_in_window?(%Tempo.Interval{from: %Tempo{} = from}, bound_from, bound_to),
+    do: in_bound_window?(from, bound_from, bound_to)
+
+  defp occurrence_in_window?(_occurrence, _bound_from, _bound_to), do: true
 
   # Keep only the domain years matching a `:even` / `:odd` / `:leap` filter
   # (`{2000Y..2020Y}e`). Parity is arithmetic on the year number; leap delegates
