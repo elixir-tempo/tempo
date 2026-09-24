@@ -41,6 +41,19 @@ defmodule Tempo.RecurrenceSetTest do
       assert Interval.metadata(interval)[:name] == "Christmas"
     end
 
+    test "a member's span directive shapes its occurrences but is not copied onto them" do
+      # A three-day holiday: the member carries its span as `:occurrence_duration`.
+      member = %{
+        Tempo.from_iso8601!("R/../P1Y/FL12M24DN")
+        | metadata: %{name: "Christmas break", occurrence_duration: ~o"P3D"}
+      }
+
+      {:ok, set} = Tempo.to_interval_set(RecurrenceSet.new([member]), bound: ~o"2026Y")
+      assert [interval] = IntervalSet.to_list(set)
+      assert Tempo.to_iso8601(interval) == "2026Y12M24D/27D"
+      assert Interval.metadata(interval) == %{name: "Christmas break"}
+    end
+
     test "a member with a ^ domain drops the excluded year" do
       rset = RecurrenceSet.new([named("R/{2024Y..2027Y,^2026Y}/P1Y/FL12M25DN", "Xmas")])
       {:ok, set} = Tempo.to_interval_set(rset)

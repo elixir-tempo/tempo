@@ -5910,11 +5910,13 @@ defmodule Tempo do
   defp recurrence_set_occurrences(%Tempo.IntervalSet{} = set), do: IntervalSet.to_list(set)
 
   # Carry a recurrence-set member's metadata (e.g. a holiday name) onto each
-  # occurrence it produces; an occurrence's own metadata wins any conflict.
+  # occurrence it produces; an occurrence's own metadata wins any conflict. The
+  # member's span directives have already shaped each occurrence's extent, so —
+  # as when a recurrence emits its occurrences — they are not copied onto them.
   defp merge_member_metadata(interval, metadata) when map_size(metadata) == 0, do: interval
 
   defp merge_member_metadata(%Tempo.Interval{metadata: existing} = interval, metadata) do
-    %{interval | metadata: Map.merge(metadata, existing)}
+    %{interval | metadata: Map.merge(strip_span_directives(metadata), existing)}
   end
 
   @doc """
