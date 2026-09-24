@@ -232,7 +232,7 @@ defmodule Tempo.RRuleTest do
 
     test "BYYEARDAY, BYSETPOS, WKST and consecutive runs round-trip via to_iso8601/1" do
       # BYYEARDAY uses the ISO `O` designator; BYSETPOS is the ISO 8601-2 §12.9
-      # position `I`; WKST (`Q`) is the sole Tempo project-specific designator —
+      # position `I`; WKST (`q`) is a Tempo project-specific lowercase designator —
       # an RFC 5545 feature with no ISO form, which previously crashed
       # `to_iso8601/1`. Consecutive values consolidate to ranges; a negative
       # sentinel mixed with a positive (`BYMONTHDAY=1,-1`) keeps its source

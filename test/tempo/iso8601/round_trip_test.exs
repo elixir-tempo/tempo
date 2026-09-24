@@ -74,9 +74,9 @@ defmodule Tempo.Iso8601.RoundTripTest do
     {"selection — day-of-year (BYYEARDAY)", "R/2025-01-01/P1Y/FL100ON"},
     {"selection — consolidated weekday range", "R/2025-01-01/P1W/FL{1..5}KN"},
     # Set-position is the ISO 8601-2 §12.9 position `I`. WKST has no ISO form, so
-    # it keeps the Tempo project-specific designator `Q` (week start).
+    # it takes the Tempo project-specific lowercase designator `q` (week start).
     {"selection — set-position (I, ISO §12.9)", "R/2025-01-01/P1M/FL1K-1IN"},
-    {"selection — week-start (Q, Tempo ext.)", "R/2025-01-01/P1W/FL1K7QN"},
+    {"selection — week-start (q, Tempo ext.)", "R/2025-01-01/P1W/FL1K7qN"},
     {"season — meteorological", "2022-21"},
     {"season — astronomical", "2022-25"},
     {"quarter", "2022-33"},
@@ -105,6 +105,16 @@ defmodule Tempo.Iso8601.RoundTripTest do
         assert reparse_inspected(value) == {:ok, value}
       end
     end
+  end
+
+  test "the legacy uppercase week-start `Q` is accepted and canonicalised to `q`" do
+    # `Q` shipped in 1.6.x before the lowercase-extension convention, so it is
+    # still parsed (liberal in) but re-emitted as `q` (conservative out).
+    {:ok, from_upper} = Tempo.from_iso8601("R/2025-01-01/P1W/FL1K7QN")
+    {:ok, from_lower} = Tempo.from_iso8601("R/2025-01-01/P1W/FL1K7qN")
+
+    assert from_upper == from_lower
+    assert Tempo.to_iso8601(from_upper) == "R/2025Y1M1D/P1W/FL1K7qN"
   end
 
   test "inspect renders the canonical ISO 8601 form as a ~o sigil expression" do

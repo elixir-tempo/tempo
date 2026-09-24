@@ -92,15 +92,15 @@ Tempo's IXDTF support attaches `[Europe/Paris]`, `[u-ca=hebrew]`, or arbitrary e
 
 ## RRULE features and how they map to ISO 8601
 
-Most RRULE `BY*` filters map straight onto the ISO 8601-2 selection grammar. Two need comment: `BYSETPOS` **is** ISO 8601-2 (the §12.9 position designator `I`), while `WKST` has no ISO representation and so gets Tempo's single project-specific designator `Q`. Both are documented in `guides/iso8601-conformance.md` §5. A rule carrying either round-trips through the ISO form; the canonical *external* form remains the RRULE string via `Tempo.to_rrule/1`.
+Most RRULE `BY*` filters map straight onto the ISO 8601-2 selection grammar. Two need comment: `BYSETPOS` **is** ISO 8601-2 (the §12.9 position designator `I`), while `WKST` has no ISO representation and so gets Tempo's project-specific designator `q`. Both are documented in `guides/iso8601-conformance.md` §5. A rule carrying either round-trips through the ISO form; the canonical *external* form remains the RRULE string via `Tempo.to_rrule/1`.
 
 ### `BYSETPOS` — the ISO 8601-2 §12.9 position `I`
 
 RRULE `BYSETPOS=-1` ("take the last element of the resolved per-period set") is the ISO 8601-2 position designator: it is held as an `:instance` token, applied last, after every other BY-rule. It renders weekday-then-position, so `FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1` round-trips as `~o"R/../P1M/FL{1..5}K-1IN"`. A single-weekday ordinal is the same token: `BYDAY=2MO` ("the 2nd Monday") lowers to `day_of_week: 1, instance: 2` and renders `1K2I`. The one shape with no ISO form is an ordinal across *distinct* weekdays (`BYDAY=2MO,2WE`), held as an internal `:byday` token that round-trips only via `Tempo.to_rrule/1`.
 
-### `WKST` — the `Q` designator
+### `WKST` — the `q` designator
 
-RRULE lets a rule override the week start (`WKST=SU`), which shifts `BYWEEKNO`/`BYDAY`-weekly boundaries. Tempo holds it as a `:wkst` token: `Tempo.to_rrule/1` emits `WKST=SU`, and `Tempo.to_iso8601/1` renders it as `7Q` (7 = Sunday), so it round-trips both ways. (A non-default `WKST` alone is enough to produce a `:repeat_rule`, since it changes weekly boundaries.)
+RRULE lets a rule override the week start (`WKST=SU`), which shifts `BYWEEKNO`/`BYDAY`-weekly boundaries. Tempo holds it as a `:wkst` token: `Tempo.to_rrule/1` emits `WKST=SU`, and `Tempo.to_iso8601/1` renders it as `7q` (7 = Sunday), so it round-trips both ways. (A non-default `WKST` alone is enough to produce a `:repeat_rule`, since it changes weekly boundaries.)
 
 ## What is lossy in the encoders
 
@@ -156,4 +156,4 @@ assert ast_1 == ast_2           # fixed-point property
 * Source: `lib/tempo/rrule.ex`, `lib/tempo/rrule/encoder.ex`, `lib/inspect.ex`
 * Validation spike: `docs/rrule-ast-validation.md`
 * Round-trip tests: `test/tempo/round_trip_test.exs` (encoder round-trips) and `test/tempo/iso8601/round_trip_test.exs` (per-token `inspect`/`to_iso8601` round-trips)
-* Conformance coverage (ISO 8601 side): `guides/iso8601-conformance.md` (§5 covers the `I` position designator and the `Q` project-specific week-start)
+* Conformance coverage (ISO 8601 side): `guides/iso8601-conformance.md` (§5 covers the `I` position designator and the `q` project-specific week-start)

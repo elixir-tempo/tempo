@@ -782,14 +782,14 @@ defmodule Tempo.Inspect do
   end
 
   # WKST has no ISO 8601 designator — it is an RFC 5545 extension. Tempo renders
-  # it with the project-specific selection designator `Q` (week start) so a
-  # recurrence carrying it round-trips through `inspect/1`/`to_iso8601/1` rather
-  # than crashing; the canonical external form remains the RRULE string. (Set
-  # position is the ISO 8601-2 §12.9 `I` — see the `:instance` clause above.)
-  defp inspect_value({:wkst, weekday}), do: [inspect_list(weekday), ?Q]
+  # it with the project-specific lowercase selection designator `q` (week start)
+  # so a recurrence carrying it round-trips through `inspect/1`/`to_iso8601/1`
+  # rather than crashing; the canonical external form remains the RRULE string.
+  # (Set position is the ISO 8601-2 §12.9 `I` — see the `:instance` clause above.)
+  defp inspect_value({:wkst, weekday}), do: [inspect_list(weekday), ?q]
 
   # A nearest-weekday selection (cron `W`, parsed to `:nearest_weekday`) has
-  # no ISO 8601 designator and — unlike the `Q` week-start above — was
+  # no ISO 8601 designator and — unlike the `q` week-start above — was
   # deliberately not given a project-specific one (the day-level operation is
   # `Tempo.nearest_working_day/2`). Raise a clear error instead of a
   # `FunctionClauseError`; the Inspect protocol catches it and falls back.

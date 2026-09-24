@@ -371,9 +371,9 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
       maybe_negative_integer_or_integer_set("O", :day_of_year, min: 1),
       maybe_negative_integer_or_integer_set("D", :day, min: 1),
       maybe_negative_integer_or_integer_set("K", :day_of_week, min: 1),
-      # `Q` (WKST) is a Tempo project-specific designator — an RFC 5545 extension
+      # `q` (WKST) is a Tempo project-specific designator — an RFC 5545 extension
       # with no ISO 8601 form. (BYSETPOS is the ISO 8601-2 §12.9 position `I`.)
-      maybe_negative_integer_or_integer_set("Q", :wkst, min: 1),
+      week_start(),
       selection_instance(),
       selection_event(),
       ignore(string("L"))
@@ -400,6 +400,20 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
 
   def selection_instance do
     maybe_negative_integer_or_integer_set("I", :instance, min: 1)
+  end
+
+  # Week start (RFC 5545 WKST), written `<n>q`. A Tempo extension: lowercase `q`
+  # is the canonical, emitted form, following the lowercase-extension convention.
+  # The uppercase `Q` shipped in 1.6.x before the convention, so it is still
+  # accepted on input (liberal in) and re-emitted as `q` (conservative out).
+  def week_start do
+    choice([
+      parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all}),
+      parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_one}),
+      maybe_negative_integer(min: 1)
+    ])
+    |> ignore(ascii_char([?q, ?Q]))
+    |> unwrap_and_tag(:wkst)
   end
 
   # A computed-event selection — the one ISO 8601-2 §12 construct with no
