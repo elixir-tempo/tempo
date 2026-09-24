@@ -640,20 +640,22 @@ defmodule Tempo.Compare do
 
   # Convert calendar-native `{year, month, day}` to the proleptic Gregorian
   # frame the projection assumes. Gregorian passes through untouched (fast
-  # path); any other calendar routes through `Date.convert/2`, which is the
-  # `date_to_iso_days` round-trip. Falls back to the raw components rather
-  # than raising if the date can't be built (a defensive best-effort). The
+  # path); any other calendar is validated and located in one step by
+  # `Calendrical.iso_days/4`. Falls back to the raw components rather
+  # than raising if the date is not valid (a defensive best-effort). The
   # `nil` default is resolved to `Calendrical.Gregorian` at the boundary
   # (`to_utc_seconds/1`), so it never reaches here.
   defp to_gregorian_ymd(ymd, calendar) when calendar in [Calendrical.Gregorian, Calendar.ISO],
     do: ymd
 
   defp to_gregorian_ymd({year, month, day}, calendar) do
-    with {:ok, date} <- Date.new(year, month, day, calendar),
-         {:ok, gregorian} <- Date.convert(date, Calendar.ISO) do
-      {gregorian.year, gregorian.month, gregorian.day}
-    else
-      _error -> {year, month, day}
+    case Calendrical.iso_days(year, month, day, calendar) do
+      {:ok, iso_days} ->
+        %Date{year: year, month: month, day: day} = Date.from_gregorian_days(iso_days)
+        {year, month, day}
+
+      _error ->
+        {year, month, day}
     end
   end
 

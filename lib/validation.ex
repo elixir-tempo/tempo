@@ -424,7 +424,7 @@ defmodule Tempo.Validation do
   # ordinal position for the year against a lunisolar calendar; on any other
   # calendar the traditional and ordinal numberings coincide, so it passes
   # through as `n`. The traditional→ordinal step is Calendrical's — a concrete
-  # year is known, so `calendar.new/3` at day 1 yields the ordinal month.
+  # year is known, so `traditional_month_ordinal/3` yields the ordinal month.
   def resolve([{:year, year}, {:traditional_month, month} | rest], calendar)
       when is_integer(year) and is_integer(month) do
     case traditional_month_ordinal(calendar, year, month) do
@@ -808,20 +808,30 @@ defmodule Tempo.Validation do
   `month` is a traditional month number, or the `{n, :leap}` tuple for the
   intercalary month following traditional `n`. On a lunisolar calendar a leap
   month shifts the numbering, so the traditional→ordinal step is Calendrical's:
-  `new/3` at day 1 (always valid) builds the date and reports its ordinal
-  `month`. On any other calendar the two numberings coincide and an integer
-  `month` is returned unchanged. Returns `{:ok, ordinal}`, or `{:error, _}` when
-  the calendar's year carries no such month (e.g. a leap month it does not
-  have). Shared by concrete-date validation and per-year selection materialisation.
+  the calendar's `ordinal_month/2`, or, for a lunisolar calendar without it,
+  `new/3` at day 1 (always valid), which builds the date and reports its
+  ordinal `month`. On any other calendar the two numberings coincide and an
+  integer `month` is returned unchanged. Returns `{:ok, ordinal}`, or
+  `{:error, :invalid_date}` when the calendar's year carries no such month (e.g.
+  a leap month it does not have). Shared by concrete-date validation and
+  per-year selection materialisation.
   """
   def traditional_month_ordinal(calendar, year, month) do
-    if function_exported?(calendar, :leap_month, 1) and function_exported?(calendar, :new, 3) do
-      case calendar.new(year, month, 1) do
-        {:ok, %{month: ordinal}} -> {:ok, ordinal}
-        {:error, _} = error -> error
-      end
-    else
-      {:ok, month}
+    cond do
+      function_exported?(calendar, :ordinal_month, 2) ->
+        case calendar.ordinal_month(year, month) do
+          {:ok, ordinal} -> {:ok, ordinal}
+          {:error, _reason} -> {:error, :invalid_date}
+        end
+
+      function_exported?(calendar, :leap_month, 1) and function_exported?(calendar, :new, 3) ->
+        case calendar.new(year, month, 1) do
+          {:ok, %{month: ordinal}} -> {:ok, ordinal}
+          {:error, _} = error -> error
+        end
+
+      true ->
+        {:ok, month}
     end
   end
 

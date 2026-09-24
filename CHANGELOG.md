@@ -6,6 +6,8 @@
 
 * A recurrence selection that moves a candidate to several dates (weekday, month-day, week and window expansions) finds the candidate's own day numbers once, and a move onto its own date asks the calendar nothing — about a third fewer calendar calls for a lunisolar calendar.
 
+* Traditional lunisolar months resolve through Calendrical's `ordinal_month/2`, dates validate and convert through `Calendrical.iso_days/4`, and a day that fits every month of a calendar skips the per-year month length. The lunisolar holiday workload runs in 1.3 s instead of 2.1 s, with identical results.
+
 * Recurrence selections converge on the ISO 8601-2 §12.9 position designator `I` — applied last over the resolved set and written weekday-then-position (`1K2I` = the 2nd Monday) — and the invented `V` set-position designator is retired. An ordinal `BYDAY` across distinct weekdays (`2MO,2WE`) has no ISO form and round-trips only through `Tempo.to_rrule/1`.
 
 ### Deprecated

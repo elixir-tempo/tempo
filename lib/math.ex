@@ -1281,18 +1281,24 @@ defmodule Tempo.Math do
 
   defp apply_n_units(time, unit, n, calendar), do: step_n_units(time, unit, n, calendar)
 
+  # `Calendrical.iso_days/4` validates the date and finds its day number in
+  # one pass (one lunar year, for a lunisolar calendar), and the shifted day
+  # converts back as `Date.add/2` would.
   defp fast_add_days(time, n, calendar) do
     with year when is_integer(year) <- Keyword.get(time, :year),
          month when is_integer(month) <- Keyword.get(time, :month),
          day when is_integer(day) <- Keyword.get(time, :day),
-         {:ok, date} <- Date.new(year, month, day, calendar) do
-      shifted = Date.add(date, n)
+         {:ok, iso_days} <- Calendrical.iso_days(year, month, day, calendar) do
+      midnight = calendar.time_to_day_fraction(0, 0, 0, {0, 0})
+
+      {year, month, day, _hour, _minute, _second, _microsecond} =
+        calendar.naive_datetime_from_iso_days({iso_days + n, midnight})
 
       new_time =
         time
-        |> Keyword.replace!(:year, shifted.year)
-        |> Keyword.replace!(:month, shifted.month)
-        |> Keyword.replace!(:day, shifted.day)
+        |> Keyword.replace!(:year, year)
+        |> Keyword.replace!(:month, month)
+        |> Keyword.replace!(:day, day)
 
       {:ok, new_time}
     else
@@ -1377,12 +1383,33 @@ defmodule Tempo.Math do
     end
   end
 
+  # A day no later than the fewest days the month has in any year needs no
+  # year to confirm it, so the calendar is asked for the year's month length
+  # only for a day past that.
   defp clamp_day_to_month_anchored(time, day, calendar) do
-    year = Keyword.fetch!(time, :year)
     month = Keyword.fetch!(time, :month)
-    days = calendar.days_in_month(year, month)
 
-    if day > days, do: Keyword.replace!(time, :day, days), else: time
+    if day <= fewest_days_in_month(calendar, month) do
+      time
+    else
+      days = calendar.days_in_month(Keyword.fetch!(time, :year), month)
+      if day > days, do: Keyword.replace!(time, :day, days), else: time
+    end
+  end
+
+  # The fewest days `month` has in any year, as the calendar's yearless
+  # `days_in_month/1` reports it; 0 when it cannot say.
+  defp fewest_days_in_month(calendar, month) do
+    if function_exported?(calendar, :days_in_month, 1) do
+      case calendar.days_in_month(month) do
+        days when is_integer(days) -> days
+        {:ambiguous, first..last//_step} -> min(first, last)
+        {:ambiguous, [_ | _] = lengths} -> Enum.min(lengths)
+        _unbounded -> 0
+      end
+    else
+      0
+    end
   end
 
   # Clamp without a year: a day that fits every possible length of the

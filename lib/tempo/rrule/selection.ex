@@ -911,14 +911,16 @@ defmodule Tempo.RRule.Selection do
   end
 
   # A valid date's day number in its calendar, paired with the day
-  # fraction the calendar gives midnight.
+  # fraction the calendar gives midnight. `Calendrical.iso_days/4`
+  # validates and locates the date in one pass.
   defp iso_days_of(time, calendar) do
-    case date_of(time, calendar) do
-      {:ok, %Date{year: year, month: month, day: day}} ->
-        {:ok, calendar.naive_datetime_to_iso_days(year, month, day, 0, 0, 0, {0, 0})}
-
-      invalid ->
-        invalid
+    with year when is_integer(year) <- Keyword.get(time, :year),
+         month when is_integer(month) <- Keyword.get(time, :month),
+         day when is_integer(day) <- Keyword.get(time, :day),
+         {:ok, iso_days} <- Calendrical.iso_days(year, month, day, calendar) do
+      {:ok, {iso_days, calendar.time_to_day_fraction(0, 0, 0, {0, 0})}}
+    else
+      _invalid -> :error
     end
   end
 
