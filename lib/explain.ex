@@ -564,6 +564,30 @@ defmodule Tempo.Explain do
     |> Enum.reject(&is_nil/1)
   end
 
+  # A recurrence whose `from` is a `%Tempo.Set{}` domain — `R/{2020Y..2024Y,
+  # ^2022Y}/P1Y/FL12M25DN`. The domain is the set of periods the recurrence may
+  # occur in; a plain-member domain is its own window, an exclusions-only one
+  # subtracts from a supplied bound. Describe the domain, then the selection.
+  defp interval_parts(
+         %Tempo.Interval{
+           recurrence: recurrence,
+           from: %Tempo.Set{} = domain,
+           duration: %Tempo.Duration{time: dt}
+         } = interval
+       )
+       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
+    selection = selection_of(interval.repeat_rule)
+
+    [
+      {:headline, recurrence_headline(recurrence)},
+      {:span, "Domain: #{domain_prose(domain)}."},
+      selection && {:span, "Selects: #{selection_prose(selection)}."},
+      {:span, "Cadence: #{duration_prose(dt)}."},
+      {:hint, domain_hint(domain)}
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
   # `2026-06-15/P1D`, `2026-06-15T09:00/PT8H` — a start and a duration,
   # the ordinary ISO 8601 spelling of "an 8-hour shift from 09:00". It
   # carries no `to`, so every clause above missed it and it reported an
@@ -664,10 +688,11 @@ defmodule Tempo.Explain do
   ## Tempo.Set
   ## ------------------------------------------------------------
 
-  defp set_parts(%Tempo.Set{type: :all, set: members}) do
+  defp set_parts(%Tempo.Set{type: :all, set: members, except: except, filter: filter}) do
     [
       {:headline, "An all-of set: every member happened."},
-      {:member, "#{length(members)} member(s): #{Enum.map_join(members, ", ", &inspect/1)}."},
+      {:member,
+       "#{length(members)} member(s): #{members_phrase(members)}#{set_qualifiers(except, filter)}."},
       {:hint, "Materialise as an IntervalSet with `Tempo.to_interval/1`."}
     ]
   end
@@ -676,10 +701,57 @@ defmodule Tempo.Explain do
     [
       {:headline,
        "A one-of set: exactly one of the members happened — we don't know which (epistemic disjunction)."},
-      {:member, "#{length(members)} candidate(s): #{Enum.map_join(members, ", ", &inspect/1)}."},
+      {:member, "#{length(members)} candidate(s): #{members_phrase(members)}."},
       {:hint, "Cannot be materialised to an IntervalSet; pick a specific member first."}
     ]
   end
+
+  # A trailing "(excluding …; even years only)" qualifier for a set or domain
+  # carrying `^` exclusions or an `e`/`o`/`l` year filter; empty when it has
+  # neither.
+  defp set_qualifiers(except, filter) do
+    case exclusion_phrase(except) ++ filter_phrase(filter) do
+      [] -> ""
+      parts -> " (" <> Enum.join(parts, "; ") <> ")"
+    end
+  end
+
+  defp exclusion_phrase([]), do: []
+  defp exclusion_phrase(except), do: ["excluding #{members_phrase(except)}"]
+
+  defp members_phrase(members), do: Enum.map_join(members, ", ", &member_phrase/1)
+
+  # A set/domain member as prose. A range renders `first..last`; anything else
+  # falls back to `inspect/1` (the `~o"…"` sigil form).
+  defp member_phrase(%Tempo.Range{first: first, last: last}),
+    do: "#{inspect(first)}..#{inspect(last)}"
+
+  defp member_phrase(other), do: inspect(other)
+
+  defp filter_phrase(:even), do: ["even years only"]
+  defp filter_phrase(:odd), do: ["odd years only"]
+  defp filter_phrase(:leap), do: ["leap years only"]
+  defp filter_phrase(_none), do: []
+
+  # A recurrence domain as an English phrase. An exclusions-only domain reads as
+  # a subtraction from "every period"; a plain-member domain lists its members
+  # (a range renders `2020Y..2024Y`), with any exclusions/filter appended.
+  defp domain_prose(%Tempo.Set{set: [], except: except, filter: filter}) do
+    "every period#{set_qualifiers(except, filter)}"
+  end
+
+  defp domain_prose(%Tempo.Set{set: members, except: except, filter: filter}) do
+    "#{members_phrase(members)}#{set_qualifiers(except, filter)}"
+  end
+
+  # A plain-member domain is its own window; an exclusions-only one needs a bound.
+  defp domain_hint(%Tempo.Set{set: []}),
+    do:
+      "Exclusions only — supply a `:bound` for the window; the excluded periods are removed from it."
+
+  defp domain_hint(%Tempo.Set{}),
+    do:
+      "The domain's members are the window, so it materialises with `Tempo.to_interval/1` and no bound."
 
   ## ------------------------------------------------------------
   ## Tempo.Duration
@@ -892,7 +964,7 @@ defmodule Tempo.Explain do
 
   defp flat_selection_prose(selection) do
     selection
-    |> Enum.reject(fn {key, _value} -> key in [:wkst, :origin_day] end)
+    |> Enum.reject(fn {key, _value} -> key == :origin_day end)
     |> fuse_ordinal_weekday()
     |> Enum.flat_map(fn entry -> List.wrap(selection_clause(entry)) end)
     |> Enum.join(", ")
@@ -983,6 +1055,14 @@ defmodule Tempo.Explain do
   end
 
   defp selection_clause({:month, m}), do: "in #{names_phrase(m, &month_name/1)}"
+
+  defp selection_clause({:traditional_month, {n, :leap}}),
+    do: "in the leap month after traditional month #{n}"
+
+  defp selection_clause({:traditional_month, m}) when is_integer(m),
+    do: "in traditional month #{m}"
+
+  defp selection_clause({:wkst, w}), do: "with weeks starting on #{weekday_name(w)}"
   defp selection_clause({:day, d}), do: "on #{ordinals_phrase(d)}"
   defp selection_clause({:day_of_week, wd}), do: "on a #{weekday_name(wd)}"
   defp selection_clause({:byday, pairs}), do: "on #{byday_phrase(pairs)}"

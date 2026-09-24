@@ -410,4 +410,41 @@ defmodule Tempo.Explain.Test do
       assert Tempo.explain(~o"2022Y") == Explain.to_string(Explain.explain(~o"2022Y"))
     end
   end
+
+  describe "Tempo extensions" do
+    test "a traditional-month selection names the traditional month" do
+      prose = Tempo.explain(~o"R/../P1Y/FL8m15DN[u-ca=chinese]")
+      assert prose =~ "in traditional month 8, on the 15th"
+    end
+
+    test "a traditional leap-month selection is described as the leap month" do
+      prose = Tempo.explain(~o"R/../P1Y/FL6+m1DN[u-ca=chinese]")
+      assert prose =~ "in the leap month after traditional month 6"
+    end
+
+    test "a week-start (`q`) is mentioned in the selection prose" do
+      prose = Tempo.explain(~o"R4/../P2W/FL{2,7}K7qN")
+      assert prose =~ "with weeks starting on Sunday"
+    end
+
+    test "a set exclusion is named" do
+      prose = Tempo.explain(~o"{2024Y,2026Y,^2026Y}")
+      assert prose =~ "excluding"
+      assert prose =~ ~s(~o"2026Y")
+    end
+
+    test "a recurrence domain with an exclusion is explained, not an unusual shape" do
+      prose = Tempo.explain(~o"R/{2020Y..2024Y,^2022Y}/P1Y/FL12M25DN")
+      refute prose =~ "unusual shape"
+      assert prose =~ "Domain:"
+      assert prose =~ ~s(~o"2020Y"..~o"2024Y")
+      assert prose =~ "excluding"
+      assert prose =~ "in December, on the 25th"
+    end
+
+    test "an even-year domain filter is named" do
+      prose = Tempo.explain(~o"R/{2020Y..2026Y}e/P1Y/FL1M1DN")
+      assert prose =~ "even years only"
+    end
+  end
 end
