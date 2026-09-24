@@ -12,9 +12,17 @@ decision taken on the way to 1.0, is in
 * [ ] **Lazy backend follow-ups** — splicing a lazy set into a busy list (needs a sorted stream merge), lazy set algebra (union and intersection of generators), and holiday generator sources. The refusal semantics must hold: an answer that needs an unbounded walk without a `:bound` refuses rather than hangs.
 * [ ] **Parser cost by shape** — bare dates still pay the backtracking tax: `tokenize/1` takes ~360 µs for `2026-06-15` and ~430 µs for `20260615`, against ~40 µs for `2026Y6M15D` (measured 2026-09-24). Take a shape histogram of a real consumer's calls; if it is mostly dates, choice ordering in the single `defparsec :iso8601` entry point is the whole story. Any hand-rolled scanner must be conservative and differentially tested against the general parser.
 * [ ] **A composable builder** — an API between `Tempo.new/1` (flat components) and `Tempo.from_iso8601/1` (a string) in complexity, building a value from composable sub-expressions with human names — `selection`, `recur`, windows, domains, exclusions, events — nesting freely, so programs (tempo_holidays among them) construct recurrences structurally instead of interpolating ISO 8601 strings and re-parsing them.
+* [ ] **A non-leap-year domain filter** — a spelling beside `e`/`o`/`l` for "not a leap year" (date-holidays' `09-11 in non-leap years`, 3 rules in tempo_holidays). Awaiting the choice of spelling.
+* [ ] **Explain weekday sets by name** — `explain/1` reads `{6..7}K` as "on a weekday [6..7]"; it should read "on a Saturday or Sunday", now that holiday recurrences carry weekday limits routinely.
 * [ ] **Unify interval and recurrence into one concept** (research, plan, advise) — an `Interval` is a single occurrence, i.e. a count-1 recurrence, which suggests everything is a recurrence and the only value types are intervals / interval-sets, with a `Tempo` as a single expression. Research whether `%Tempo{}`, `%Tempo.Interval{}` and `%Tempo.RecurrenceSet{}` collapse cleanly, what breaks (implicit vs explicit spans, half-open convention, Allen relations, `%Date{}` interop, materialisation with/without `:bound`), and advise before any code. Plan in [plans/interval-recurrence-unification.md](plans/interval-recurrence-unification.md).
 
+## Deferred
+
+* [ ] **A domain gating by a window's anchor** — a domain admits the occurrences that start in its periods; date-holidays gates on the year of a window's anchor instead. They differ only when a window crosses a gated boundary year, which no tempo_holidays rule does; reviving it needs anchor tracking through `Tempo.RRule.Selection`.
+
 ## Done
+
+* [x] **Six recurrence defects from the tempo_holidays gate census** — `(name)e` with a weekday limit, a year-resolution anchor and a plain-`Tempo` recurrence-set member no longer raise; a domain steps a multi-year cadence and closes an open range against the bound; a window crossing the bound's year lands in it. 2026-09-24.
 
 * [x] **Each shared grammar prefix parsed once** — a §12.10 window parses in ~3.5 ms (was ~1.2 s), a nested window in ~60 ms (was minutes), a selection recurrence in ~0.4 ms (was ~15 ms), bare dates ~2.4× faster. 2026-09-24.
 

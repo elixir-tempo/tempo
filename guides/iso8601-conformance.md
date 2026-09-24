@@ -312,6 +312,22 @@ Tempo.to_interval(~o"R/{2020Y..2026Y}e/P1Y/FL1M1DN")
 
 Leap (`l`) asks the recurrence's calendar `leap_year?/1`, so it is calendar-correct rather than a Gregorian `rem/2` guess. All three are Tempo extensions with no ISO or RFC 5545 form, so they round-trip through `inspect/1`/`to_iso8601/1` but not through `Tempo.to_rrule/1`.
 
+**Open-ended ranges.** A domain range may be open at either end, as an ISO 8601-2 set range may: `{2017Y..}` is 2017 on, `{..2016Y}` up to 2016, and `{..2019Y,2021Y..}` every year but 2020. An open domain has no window of its own, so it takes its missing end from a `:bound`:
+
+```elixir
+# The 2nd of January, from 2017 on
+Tempo.to_interval(~o"R/{2017Y..}/P1Y/FL1M2DN", bound: ~o"{2015..2019}Y")
+#   → 2017, 2018, 2019
+```
+
+**A multi-year cadence.** A cadence longer than one period steps through the domain, counted from its first year, so `R/{1848Y..}/P4Y/…` is "every four years since 1848":
+
+```elixir
+# US presidential Election Day, every four years since 1848
+Tempo.to_interval(~o"R/{1848Y..}/P4Y/FLLL11M1K1IN/P7DN2K-1IN", bound: ~o"{2019..2028}Y")
+#   → 2020-11-03, 2024-11-05, 2028-11-07
+```
+
 ### Selection with a time interval (ISO 8601-2 §12.10)
 
 A selection followed by `/[duration]` makes each resolved date the **start of a window** of that duration (a negative duration extends backward), and selectors placed after it pick *within* the window. Nesting is written with `L…N` pairs from the outside in. This is standard ISO 8601-2, not a Tempo extension, and it is how the holidays *derived* from a computed event are expressed:
@@ -325,6 +341,13 @@ Tempo.to_interval(~o"R/../P1Y/FL11MLL1K1IN/P9DN2K1IN", bound: ~o"2026")       # 
 ```
 
 The spec's worked examples resolve as written: `~o"R/../P1Y/FLLL2K2IN/P10DN4K2IN"` is "the 2nd Thursday within the ten days from the 2nd Tuesday" (§12.11 Example 3), and `~o"R/../P1Y/FLL4M4D/-P20DN7K-2IN"` is "the 2nd Sunday before April 4" (Example 7). A terminal window with no inner selectors — `~o"R/../P1Y/FLL3K4IN/P5DN"`, "the 4th Wednesday for 5 days" — yields one interval per period spanning its whole duration.
+
+A window can carry an occurrence out of the period that produced it, and a bound keeps each occurrence in the year it lands in. A holiday observed on the previous Friday when it falls on a Saturday — `FLLL1M1D6KN/-P7DN5K1IN` — lands on 31 December 2021 for New Year's Day 2022:
+
+```elixir
+Tempo.to_interval(~o"R/../P1Y/FLLL1M1D6KN/-P7DN5K1IN", bound: ~o"2021")  # → 2021-12-31
+Tempo.to_interval(~o"R/../P1Y/FLLL1M1D6KN/-P7DN5K1IN", bound: ~o"2022")  # → (none)
+```
 
 ## 6. Ambiguity resolution
 
