@@ -183,19 +183,39 @@ defmodule Tempo.CalendarTest do
     end
   end
 
-  # A lunisolar intercalary month, written `<n>+M` — the leap month following
-  # traditional month `n`. A Tempo extension (ISO 8601 has no such concept), it
-  # is an input convenience only: it resolves to the ordinal month and renders
-  # ordinal, so `%Date{}` and round-trips stay Elixir-compatible.
-  describe "the `<n>+M` lunisolar leap-month input" do
-    test "resolves to the ordinal month and renders ordinal" do
+  # A lunisolar traditional month, written `<n>m` (and `<n>+m` for the
+  # intercalary month following traditional `n`). A Tempo extension (ISO 8601 has
+  # no such concept) marked by the lowercase `m`. In a concrete date it is an
+  # input convenience: it resolves to the ordinal month and renders ordinal, so
+  # `%Date{}` and round-trips stay Elixir-compatible.
+  describe "the `<n>m` / `<n>+m` concrete traditional-month input" do
+    test "the leap month resolves to its ordinal and renders ordinal" do
       # Chinese year 4662 carries a leap month 6 (閏6月) at ordinal position 7.
-      {:ok, tempo} = Tempo.from_iso8601("4662Y6+M1D[u-ca=chinese]")
+      {:ok, tempo} = Tempo.from_iso8601("4662Y6+m1D[u-ca=chinese]")
       assert tempo.time[:month] == 7
       assert Tempo.to_iso8601(tempo) == "4662Y7M1D[u-ca=chinese]"
     end
 
-    test "a regular month is unaffected" do
+    test "a traditional month resolves to its ordinal past a leap month" do
+      # In 4662 the leap month sits at ordinal 7, so traditional 8 is ordinal 9.
+      {:ok, tempo} = Tempo.from_iso8601("4662Y8m1D[u-ca=chinese]")
+      assert tempo.time[:month] == 9
+      assert Tempo.to_iso8601(tempo) == "4662Y9M1D[u-ca=chinese]"
+    end
+
+    test "a traditional month before the leap month equals its ordinal" do
+      {:ok, tempo} = Tempo.from_iso8601("4662Y5m1D[u-ca=chinese]")
+      assert tempo.time[:month] == 5
+      assert Tempo.to_iso8601(tempo) == "4662Y5M1D[u-ca=chinese]"
+    end
+
+    test "on a non-lunisolar calendar `m` is identical to `M`" do
+      {:ok, tempo} = Tempo.from_iso8601("2026Y8m1D")
+      assert tempo.time[:month] == 8
+      assert Tempo.to_iso8601(tempo) == "2026Y8M1D"
+    end
+
+    test "an ordinal month is unaffected" do
       {:ok, tempo} = Tempo.from_iso8601("4662Y6M1D[u-ca=chinese]")
       assert tempo.time[:month] == 6
       assert Tempo.to_iso8601(tempo) == "4662Y6M1D[u-ca=chinese]"
@@ -203,27 +223,70 @@ defmodule Tempo.CalendarTest do
 
     test "a year with no such leap month is rejected" do
       # 4661 is an ordinary year; 4662's leap month follows month 6, not 7.
-      assert {:error, _} = Tempo.from_iso8601("4661Y6+M1D[u-ca=chinese]")
-      assert {:error, _} = Tempo.from_iso8601("4662Y7+M1D[u-ca=chinese]")
+      assert {:error, _} = Tempo.from_iso8601("4661Y6+m1D[u-ca=chinese]")
+      assert {:error, _} = Tempo.from_iso8601("4662Y7+m1D[u-ca=chinese]")
     end
 
-    test "a non-lunisolar calendar is rejected" do
-      assert {:error, message} = Tempo.from_iso8601("2026Y6+M1D")
+    test "a leap month on a non-lunisolar calendar is rejected" do
+      assert {:error, message} = Tempo.from_iso8601("2026Y6+m1D")
       assert Exception.message(message) =~ "no leap months"
     end
 
     test "a leap-year calendar without leap months (Islamic) is rejected" do
       # The Islamic calendars have leap *years* — an extra day in the final
-      # month — not leap *months*, so there is no `<n>+M` to name; every leap
+      # month — not leap *months*, so there is no `<n>+m` to name; every leap
       # month, valid or not, is rejected the same clean way.
       for iso <- [
-            "1447Y6+M1D[u-ca=islamic-umalqura]",
-            "1447Y12+M1D[u-ca=islamic]",
-            "1447Y99+M1D[u-ca=islamic-civil]"
+            "1447Y6+m1D[u-ca=islamic-umalqura]",
+            "1447Y12+m1D[u-ca=islamic]",
+            "1447Y99+m1D[u-ca=islamic-civil]"
           ] do
         assert {:error, message} = Tempo.from_iso8601(iso)
         assert Exception.message(message) =~ "no leap months"
       end
+    end
+  end
+
+  # A traditional-month *selection* is the declarative form: a recurrence has no
+  # year, so `m`/`+m` survive the round-trip and the traditional→ordinal step
+  # happens per year at materialisation. This is what makes a lunisolar holiday
+  # a re-materialisable recurrence.
+  describe "the `<n>m` / `<n>+m` traditional-month selection" do
+    test "round-trips unresolved (a recurrence has no year to resolve against)" do
+      for iso <- [
+            "R/../P1Y/FL8m15DN[u-ca=chinese]",
+            "R/../P1Y/FL6+m1DN[u-ca=chinese]"
+          ] do
+        {:ok, tempo} = Tempo.from_iso8601(iso)
+        assert Tempo.to_iso8601(tempo) == iso
+      end
+    end
+
+    test "resolves to the true traditional month per year, tracking leap shifts" do
+      {:ok, rec} = Tempo.from_iso8601("R/../P1Y/FL8m15DN[u-ca=chinese]")
+      {:ok, bound} = Tempo.from_iso8601("2024Y/2027Y")
+      {:ok, set} = Tempo.to_interval(rec, bound: bound)
+      months = set |> IntervalSet.to_list() |> Enum.map(&Interval.from(&1).time[:month])
+      # 4662 carries a leap month, so traditional 8 is ordinal 9 there; the
+      # common years 4661 and 4663 keep it at ordinal 8.
+      assert months == [8, 9, 8]
+    end
+
+    test "a leap-month selection occurs only in years that carry it" do
+      {:ok, rec} = Tempo.from_iso8601("R/../P1Y/FL6+m1DN[u-ca=chinese]")
+      {:ok, bound} = Tempo.from_iso8601("2023Y/2028Y")
+      {:ok, set} = Tempo.to_interval(rec, bound: bound)
+
+      year_months =
+        set
+        |> IntervalSet.to_list()
+        |> Enum.map(fn interval ->
+          time = Interval.from(interval).time
+          {time[:year], time[:month]}
+        end)
+
+      # Only lunar year 4662 has 閏6月, at ordinal 7.
+      assert year_months == [{4662, 7}]
     end
   end
 

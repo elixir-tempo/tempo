@@ -366,6 +366,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     choice([
       maybe_negative_integer_or_integer_set("Y", :year, min: 1),
       maybe_negative_integer_or_integer_set("M", :month, min: 1),
+      traditional_month(),
       maybe_negative_integer_or_integer_set("W", :week, min: 1),
       maybe_negative_integer_or_integer_set("O", :day_of_year, min: 1),
       maybe_negative_integer_or_integer_set("D", :day, min: 1),
@@ -528,25 +529,32 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :group}),
       parsec({Tempo.Iso8601.Tokenizer.Set, :selection}),
-      leap_month(),
+      traditional_month(),
       qualified_number_or_integer_set("M", :month, min: 1),
       quarter(),
       half()
     ])
   end
 
-  # A lunisolar intercalary month, written `<n>+M` — the leap month following
-  # traditional month `n` (閏n月). This is a non-conformant Tempo extension (ISO
-  # 8601 has no lunisolar/leap-month concept), in the same class as the `e`
-  # computed-event selector. The tokeniser is calendar-blind, so it emits the
-  # `{n, :leap}` construct structurally; `Tempo.Validation` resolves it to the
-  # ordinal month against a lunisolar calendar and rejects it for any other.
-  def leap_month do
-    positive_integer(min: 1)
-    |> ignore(string("+"))
-    |> ignore(string("M"))
-    |> reduce({__MODULE__, :as_leap_month, []})
-    |> unwrap_and_tag(:month)
+  # A lunisolar traditional month, written `<n>m` (and `<n>+m` for the
+  # intercalary month following traditional month `n`, 閏n月). Lowercase `m`
+  # marks it a Tempo extension — the counterpart to the ordinal ISO 8601 `M`.
+  # The tokeniser is calendar-blind, so it tags `:traditional_month`
+  # structurally: `Tempo.Validation` resolves it to the ordinal month against a
+  # lunisolar calendar, and to `n` itself on any other (where the traditional
+  # and ordinal numberings coincide). In a selection frame the tag survives
+  # unresolved — a recurrence has no year — and materialisation resolves it per
+  # year. The same combinator serves both frames.
+  def traditional_month do
+    choice([
+      positive_integer(min: 1)
+      |> ignore(string("+"))
+      |> ignore(string("m"))
+      |> reduce({__MODULE__, :as_leap_month, []}),
+      positive_integer(min: 1)
+      |> ignore(string("m"))
+    ])
+    |> unwrap_and_tag(:traditional_month)
   end
 
   def as_leap_month([month]), do: {month, :leap}

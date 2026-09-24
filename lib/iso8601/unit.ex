@@ -12,6 +12,9 @@ defmodule Tempo.Iso8601.Unit do
     decade: 35,
     year: 30,
     month: 25,
+    # A traditional (lunisolar) month sorts at the same scale as an ordinal
+    # month; a value carries one or the other, never both.
+    traditional_month: 25,
     week: 22,
     day_of_year: 20,
     # Represents day of month
@@ -30,6 +33,7 @@ defmodule Tempo.Iso8601.Unit do
   @unit_after %{
     year: {:month, 1..-1//-1},
     month: {:day, 1..-1//-1},
+    traditional_month: {:day, 1..-1//-1},
     week: {:day_of_week, 1..7},
     day: {:hour, 0..23},
     hour: {:minute, 0..59},

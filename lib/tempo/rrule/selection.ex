@@ -43,6 +43,7 @@ defmodule Tempo.RRule.Selection do
   alias Calendrical.Kday
   alias Tempo.Event
   alias Tempo.Interval
+  alias Tempo.Validation
 
   @doc """
   Apply a `repeat_rule` to one candidate occurrence and return the
@@ -273,6 +274,7 @@ defmodule Tempo.RRule.Selection do
   @application_order [
     :wkst,
     :month,
+    :traditional_month,
     :week,
     :day_of_year,
     :event,
@@ -318,6 +320,18 @@ defmodule Tempo.RRule.Selection do
 
   defp apply_entry({:month, months}, candidates, _freq, _selection, _wkst) do
     limit(candidates, months, &month_of/1)
+  end
+
+  # A traditional (lunisolar) month selector resolves to its ordinal position
+  # per candidate year — a leap month shifts the numbering — then applies as an
+  # ordinary BYMONTH. The traditional→ordinal step is Calendrical's, via
+  # `Tempo.Validation.traditional_month_ordinal/3`. A leap month the candidate's
+  # year does not carry resolves to nothing, so that year yields no occurrence.
+  defp apply_entry({:traditional_month, months}, candidates, freq, selection, wkst) do
+    Enum.flat_map(candidates, fn candidate ->
+      ordinals = traditional_months_to_ordinals(candidate, List.wrap(months))
+      apply_entry({:month, ordinals}, [candidate], freq, selection, wkst)
+    end)
   end
 
   # BYMONTHDAY — EXPAND for FREQ=MONTHLY or YEARLY, LIMIT
@@ -927,6 +941,24 @@ defmodule Tempo.RRule.Selection do
       end
     end)
     |> Enum.reject(&is_nil/1)
+  end
+
+  # Resolve each traditional month spec (an integer, or `{n, :leap}`) to its
+  # ordinal position in the candidate's year, dropping any the year does not
+  # carry. The candidate walks the target calendar, so its year is the lunar
+  # year against which the traditional numbering resolves.
+  defp traditional_months_to_ordinals(
+         %Interval{from: %Tempo{calendar: calendar, time: time}},
+         months
+       ) do
+    year = Keyword.get(time, :year)
+
+    Enum.flat_map(months, fn month ->
+      case Validation.traditional_month_ordinal(calendar, year, month) do
+        {:ok, ordinal} when is_integer(ordinal) -> [ordinal]
+        _other -> []
+      end
+    end)
   end
 
   # BYMONTHDAY with FREQ=MONTHLY or YEARLY: for each candidate,

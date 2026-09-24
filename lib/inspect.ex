@@ -732,6 +732,14 @@ defmodule Tempo.Inspect do
 
   defp inspect_value({:year, year}), do: [inspect_list(year), ?Y]
   defp inspect_value({:month, month}), do: [inspect_list(month), ?M]
+
+  # A traditional (lunisolar) month renders with the lowercase `m` extension
+  # designator — `<n>m`, and `<n>+m` for the intercalary month. It survives only
+  # in a selection frame (a recurrence has no year to resolve against); a
+  # concrete traditional month is lowered to its ordinal `M` during validation.
+  defp inspect_value({:traditional_month, {month, :leap}}), do: [inspect_list(month), ?+, ?m]
+  defp inspect_value({:traditional_month, month}), do: [inspect_list(month), ?m]
+
   defp inspect_value({:day, day}), do: [inspect_list(day), ?D]
   defp inspect_value({:day_of_year, day}), do: [inspect_list(day), ?O]
   defp inspect_value({:hour, hour}), do: [inspect_list(hour), ?H]

@@ -250,17 +250,25 @@ Tempo.to_interval(~o"R/../P1Y/FL(easter)eN", bound: ~o"{2026..2028}Y")
 
 An unknown event name parses but resolves to no occurrences, so a typo yields an empty result rather than a crash. Like `Q`, an `e` selection round-trips through `inspect/1`/`Tempo.to_iso8601/1`; there is no RFC 5545 equivalent, so `Tempo.to_rrule/1` cannot express it.
 
-### Lunisolar leap month — the `+` marker
+### Lunisolar traditional month — the `m` marker
 
-ISO 8601 has no notation for the intercalary ("leap") month a lunisolar calendar inserts in some years — the Chinese 閏6月, say. Tempo writes it `<n>+M`: the leap month following traditional month `n`, in a `[u-ca=chinese]` (or `dangi`, `vietnamese`, japanese-lunisolar) context. It is an **input convenience only**. Elixir's `%Date{}` stores an integer month and cannot hold a leap flag, so `<n>+M` resolves to the leap month's **ordinal** position for that year and is stored and rendered ordinally — `+` never survives a round-trip:
+ISO 8601 numbers months **ordinally** (1..13 in a lunisolar leap year), which is what `M` writes and what `%Date{}` stores. Lunisolar calendars also number months **traditionally** — the Chinese 8月 is always the eighth *named* month, but its ordinal position slips to 9 in a year that inserts a leap month before it. ISO 8601 has no notation for the traditional numbering, so Tempo adds the lowercase `m`: `<n>m` is traditional month `n`, and `<n>+m` is the intercalary ("leap") month following it (閏n月). Both are valid in a `[u-ca=chinese]` (or `dangi`, `vietnamese`, japanese-lunisolar) context; on any other calendar the two numberings coincide, so `m` is identical to `M`.
+
+In a **concrete date** the year is known, so `m`/`+m` resolve to the ordinal month and are stored and rendered ordinally — the lowercase marker never survives a round-trip:
 
 ```elixir
-# 閏6月 (leap month 6) of Chinese year 4662 is ordinal month 7
-Tempo.from_iso8601!("4662Y6+M1D[u-ca=chinese]")
+# 閏6月 (leap month 6) of Chinese year 4662 sits at ordinal position 7
+Tempo.from_iso8601!("4662Y6+m1D[u-ca=chinese]")
 #=> Tempo.from_iso8601!("4662Y7M1D[u-ca=chinese]", Calendrical.Chinese)
+
+# Traditional month 8 is past that leap month, so it is ordinal 9
+Tempo.from_iso8601!("4662Y8m1D[u-ca=chinese]")
+#=> Tempo.from_iso8601!("4662Y9M1D[u-ca=chinese]", Calendrical.Chinese)
 ```
 
-A bare `<n>M` is always the ordinal month, unchanged, so existing values keep their meaning. `<n>+M` on a non-lunisolar calendar, or in a year with no leap month at that position, is a parse error rather than a silent misreading. It lowers to the `{n, :leap}` construct `Calendrical.Chinese.new/3` already accepts.
+In a **selection** — a recurrence, which has no year — there is nothing to resolve against, so `m`/`+m` survive the round-trip and the traditional→ordinal step happens per year at materialisation. This is what makes a lunisolar holiday a re-materialisable recurrence: `R/../P1Y/FL8m15DN[u-ca=chinese]` ("the 15th of traditional month 8, every year") lands on ordinal month 8 in a common year and ordinal 9 in a leap year, tracking the true traditional month rather than a fixed ordinal. A `<n>+m` selection yields an occurrence only in the years that actually carry that leap month.
+
+A bare `<n>M` is always the ordinal month, unchanged, so existing values keep their meaning. `<n>+m` on a non-lunisolar calendar, or in a year with no leap month at that position, is a parse error (concrete) or simply no occurrence (selection) rather than a silent misreading. It lowers to the `{n, :leap}` construct `Calendrical.Chinese.new/3` already accepts.
 
 ### Selection with a time interval (ISO 8601-2 §12.10)
 
