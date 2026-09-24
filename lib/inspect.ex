@@ -755,11 +755,11 @@ defmodule Tempo.Inspect do
   defp inspect_value({:week, week}), do: [inspect_list(week), ?W]
   defp inspect_value({:instance, instance}), do: [inspect_list(instance), ?I]
 
-  # A computed-event selection renders as `(name)E` — the project-specific
+  # A computed-event selection renders as `(name)e` — the project-specific
   # designator for an algorithmically resolved recurrence (Easter, an
   # astronomical event). The name is a plain lowercase identifier, so it
   # round-trips through the grammar's `selection_event/0`.
-  defp inspect_value({:event, name}) when is_binary(name), do: [?(, name, ?), ?E]
+  defp inspect_value({:event, name}) when is_binary(name), do: [?(, name, ?), ?e]
 
   # A `:byday` selection survives only for the one shape ISO 8601-2 cannot
   # express: ordinals spread across *distinct* weekdays (`BYDAY=2MO,2WE`,

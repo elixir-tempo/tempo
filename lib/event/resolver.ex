@@ -1,6 +1,6 @@
 defmodule Tempo.Event.Resolver do
   @moduledoc """
-  A behaviour for registering consumer-defined `(name)E` computed events.
+  A behaviour for registering consumer-defined `(name)e` computed events.
 
   Tempo ships a fixed set of computed events — Easter, the equinoxes and
   solstices, the first new moon of the year, and the 24 solar terms (see
@@ -13,8 +13,8 @@ defmodule Tempo.Event.Resolver do
 
   A resolver names the events it owns with `known/0` and computes each one's
   date with `date/3`. Once registered, the name is usable anywhere a built-in
-  event is: `~o"R/../P1Y/FL(fiscal-year-start)EN"` materialises against a bound
-  exactly as `(easter)E` does, and `Tempo.Event.known/0` lists it. A name no
+  event is: `~o"R/../P1Y/FL(fiscal-year-start)eN"` materialises against a bound
+  exactly as `(easter)e` does, and `Tempo.Event.known/0` lists it. A name no
   resolver claims resolves to nothing, so a recurrence over an unknown event
   yields zero occurrences rather than raising.
 
@@ -45,7 +45,7 @@ defmodule Tempo.Event.Resolver do
   ### Returns
 
   * A list of the lowercase event-name strings the resolver owns, each usable
-    as `(name)E` in a selection.
+    as `(name)e` in a selection.
 
   """
   @callback known() :: [String.t()]

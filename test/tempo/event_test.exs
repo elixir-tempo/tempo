@@ -58,31 +58,31 @@ defmodule Tempo.EventTest do
   end
 
   describe "computed-event selection — parsing and round-trip" do
-    test "the (name)E form parses to an :event selection token" do
-      assert {:ok, value} = Tempo.from_iso8601("R/../P1Y/FL(easter)EN")
+    test "the (name)e form parses to an :event selection token" do
+      assert {:ok, value} = Tempo.from_iso8601("R/../P1Y/FL(easter)eN")
       assert value.repeat_rule.time == [selection: [event: "easter"]]
     end
 
     test "a hyphenated event name round-trips through to_iso8601/1 and inspect/1" do
-      {:ok, value} = Tempo.from_iso8601("R/../P1Y/FL(march-equinox)EN")
+      {:ok, value} = Tempo.from_iso8601("R/../P1Y/FL(march-equinox)eN")
 
-      assert Tempo.to_iso8601(value) == "R/../P1Y/FL(march-equinox)EN"
-      assert inspect(value) == ~s|~o"R/../P1Y/FL(march-equinox)EN"|
+      assert Tempo.to_iso8601(value) == "R/../P1Y/FL(march-equinox)eN"
+      assert inspect(value) == ~s|~o"R/../P1Y/FL(march-equinox)eN"|
       assert Tempo.from_iso8601(Tempo.to_iso8601(value)) == {:ok, value}
     end
   end
 
   describe "computed-event recurrence — materialisation" do
     test "each event resolves to its date within the bound" do
-      assert event_dates("R/../P1Y/FL(easter)EN") == ["2026-04-05"]
-      assert event_dates("R/../P1Y/FL(march-equinox)EN") == ["2026-03-20"]
-      assert event_dates("R/../P1Y/FL(june-solstice)EN") == ["2026-06-21"]
-      assert event_dates("R/../P1Y/FL(september-equinox)EN") == ["2026-09-23"]
-      assert event_dates("R/../P1Y/FL(december-solstice)EN") == ["2026-12-21"]
+      assert event_dates("R/../P1Y/FL(easter)eN") == ["2026-04-05"]
+      assert event_dates("R/../P1Y/FL(march-equinox)eN") == ["2026-03-20"]
+      assert event_dates("R/../P1Y/FL(june-solstice)eN") == ["2026-06-21"]
+      assert event_dates("R/../P1Y/FL(september-equinox)eN") == ["2026-09-23"]
+      assert event_dates("R/../P1Y/FL(december-solstice)eN") == ["2026-12-21"]
     end
 
     test "a multi-year bound yields one occurrence per year" do
-      {:ok, rule} = Tempo.from_iso8601("R/../P1Y/FL(easter)EN")
+      {:ok, rule} = Tempo.from_iso8601("R/../P1Y/FL(easter)eN")
       {:ok, set} = Tempo.to_interval(rule, bound: ~o"{2026..2028}Y")
 
       dates =
@@ -98,15 +98,15 @@ defmodule Tempo.EventTest do
     end
 
     test "an unknown event materialises to no occurrences rather than raising" do
-      assert event_dates("R/../P1Y/FL(brigadoon)EN") == []
+      assert event_dates("R/../P1Y/FL(brigadoon)eN") == []
     end
   end
 
   describe "computed-event recurrence — explain/1" do
     test "reads the event as prose" do
-      assert Tempo.explain(~o"R/../P1Y/FL(easter)EN") =~ "on Easter"
-      assert Tempo.explain(~o"R/../P1Y/FL(march-equinox)EN") =~ "on the March equinox"
-      assert Tempo.explain(~o"R/../P1Y/FL(december-solstice)EN") =~ "on the December solstice"
+      assert Tempo.explain(~o"R/../P1Y/FL(easter)eN") =~ "on Easter"
+      assert Tempo.explain(~o"R/../P1Y/FL(march-equinox)eN") =~ "on the March equinox"
+      assert Tempo.explain(~o"R/../P1Y/FL(december-solstice)eN") =~ "on the December solstice"
     end
   end
 

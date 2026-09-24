@@ -379,7 +379,7 @@ defmodule Tempo.RRule.Selection do
     end)
   end
 
-  # Computed event (`(easter)E`, `(march-equinox)E`, …) — EXPAND for
+  # Computed event (`(easter)e`, `(march-equinox)e`, …) — EXPAND for
   # FREQ=YEARLY: resolve the event's date in each candidate year via
   # `Tempo.Event` and emit it as a day-resolution occurrence. An unknown event
   # or a year the resolver cannot reach (an equinox outside Astro's range) drops

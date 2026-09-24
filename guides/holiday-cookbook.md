@@ -19,7 +19,7 @@ R/../P1Y/FL 11M 4K 4I N
 └ R/.. = repeat, no fixed start (materialise against a bound to get dates)
 ```
 
-Other markers: `nD` a day of the month, `nO` a day of the year, `nW` a week; `(name)E` a **computed event** (`Tempo.Event`); `…/±PnD` an ISO 8601-2 §12.10 **window** (the selection becomes the start of a span, and the selectors after it pick within — used for "N days before/after" feasts); a `{…}` **domain** in the repeat slot (`R/{…}/P1Y/…`) restricts which years the recurrence fires, with `^` excluding one; and a `[u-ca=…]` suffix puts the whole value in another **calendar**. Materialise any of them with `Tempo.to_interval(value, bound: ~o"2026")`.
+Other markers: `nD` a day of the month, `nO` a day of the year, `nW` a week; `(name)e` a **computed event** (`Tempo.Event`); `…/±PnD` an ISO 8601-2 §12.10 **window** (the selection becomes the start of a span, and the selectors after it pick within — used for "N days before/after" feasts); a `{…}` **domain** in the repeat slot (`R/{…}/P1Y/…`) restricts which years the recurrence fires, with `^` excluding one; and a `[u-ca=…]` suffix puts the whole value in another **calendar**. Materialise any of them with `Tempo.to_interval(value, bound: ~o"2026")`.
 
 ## Fixed dates
 
@@ -69,21 +69,21 @@ A weekday plus a position: `nK` picks the weekday, `nI` the occurrence within th
 
 ## The Easter cycle (computed)
 
-Easter is `(easter)E` (the Gregorian paschal computus) or `(orthodox-easter)E` (the same computus in the Julian calendar). Every moveable feast around it is a **§12.10 window** off Easter, resolved to its own weekday — Good Friday is the last Friday in the seven days before Easter, Ascension the last Thursday in the forty-two days after. No RRULE can compute Easter, so the whole cycle is a dash. *(For the Orthodox cycle, swap `(easter)E` for `(orthodox-easter)E`.)*
+Easter is `(easter)e` (the Gregorian paschal computus) or `(orthodox-easter)e` (the same computus in the Julian calendar). Every moveable feast around it is a **§12.10 window** off Easter, resolved to its own weekday — Good Friday is the last Friday in the seven days before Easter, Ascension the last Thursday in the forty-two days after. No RRULE can compute Easter, so the whole cycle is a dash. *(For the Orthodox cycle, swap `(easter)e` for `(orthodox-easter)e`.)*
 
 | Rule type | Holiday (rule in English) | Tempo | RRULE |
 |---|---|---|---|
-| Easter − N (window) | Ash Wednesday — 46 days before Easter (a Wednesday) | `~o"R/../P1Y/FLLL(easter)EN/-P49DN3K1IN"` | — |
-| Easter − N (window) | Carnival / Mardi Gras — the Tuesday before Ash Wednesday | `~o"R/../P1Y/FLLL(easter)EN/-P49DN2K1IN"` | — |
-| Easter − N (window) | Palm Sunday — the Sunday before Easter | `~o"R/../P1Y/FLLL(easter)EN/-P7DN7K1IN"` | — |
-| Easter − N (window) | Good Friday — the Friday before Easter | `~o"R/../P1Y/FLLL(easter)EN/-P7DN5K-1IN"` | — |
-| Computed event | Easter Sunday — the paschal computus | `~o"R/../P1Y/FL(easter)EN"` | — |
-| Computed event | Orthodox Easter — the computus in the Julian calendar | `~o"R/../P1Y/FL(orthodox-easter)EN"` | — |
-| Easter + N (window) | Easter Monday — the Monday after Easter | `~o"R/../P1Y/FLLL(easter)EN/P2DN1K1IN"` | — |
-| Easter + N (window) | Ascension — 39 days after Easter (a Thursday) | `~o"R/../P1Y/FLLL(easter)EN/P42DN4K-1IN"` | — |
-| Easter + N (window) | Pentecost / Whitsun — 49 days after Easter | `~o"R/../P1Y/FLLL(easter)EN/P50DN7K-1IN"` | — |
-| Easter + N (window) | Whit Monday — the day after Pentecost | `~o"R/../P1Y/FLLL(easter)EN/P51DN1K-1IN"` | — |
-| Easter + N (window) | Corpus Christi — 60 days after Easter (a Thursday) | `~o"R/../P1Y/FLLL(easter)EN/P63DN4K-1IN"` | — |
+| Easter − N (window) | Ash Wednesday — 46 days before Easter (a Wednesday) | `~o"R/../P1Y/FLLL(easter)eN/-P49DN3K1IN"` | — |
+| Easter − N (window) | Carnival / Mardi Gras — the Tuesday before Ash Wednesday | `~o"R/../P1Y/FLLL(easter)eN/-P49DN2K1IN"` | — |
+| Easter − N (window) | Palm Sunday — the Sunday before Easter | `~o"R/../P1Y/FLLL(easter)eN/-P7DN7K1IN"` | — |
+| Easter − N (window) | Good Friday — the Friday before Easter | `~o"R/../P1Y/FLLL(easter)eN/-P7DN5K-1IN"` | — |
+| Computed event | Easter Sunday — the paschal computus | `~o"R/../P1Y/FL(easter)eN"` | — |
+| Computed event | Orthodox Easter — the computus in the Julian calendar | `~o"R/../P1Y/FL(orthodox-easter)eN"` | — |
+| Easter + N (window) | Easter Monday — the Monday after Easter | `~o"R/../P1Y/FLLL(easter)eN/P2DN1K1IN"` | — |
+| Easter + N (window) | Ascension — 39 days after Easter (a Thursday) | `~o"R/../P1Y/FLLL(easter)eN/P42DN4K-1IN"` | — |
+| Easter + N (window) | Pentecost / Whitsun — 49 days after Easter | `~o"R/../P1Y/FLLL(easter)eN/P50DN7K-1IN"` | — |
+| Easter + N (window) | Whit Monday — the day after Pentecost | `~o"R/../P1Y/FLLL(easter)eN/P51DN1K-1IN"` | — |
+| Easter + N (window) | Corpus Christi — 60 days after Easter (a Thursday) | `~o"R/../P1Y/FLLL(easter)eN/P63DN4K-1IN"` | — |
 
 ## Astronomical events and solar terms (computed)
 
@@ -91,13 +91,13 @@ The equinoxes and solstices come from `Astro`; the 24 East Asian solar terms and
 
 | Rule type | Holiday (rule in English) | Tempo | RRULE |
 |---|---|---|---|
-| Astronomical | March equinox — Nowruz's astronomical anchor, Ostara | `~o"R/../P1Y/FL(march-equinox)EN"` | — |
-| Astronomical | June solstice — Midsummer | `~o"R/../P1Y/FL(june-solstice)EN"` | — |
-| Astronomical | September equinox — Mabon, Chuseok's anchor | `~o"R/../P1Y/FL(september-equinox)EN"` | — |
-| Astronomical | December solstice — Yule, Dōngzhì | `~o"R/../P1Y/FL(december-solstice)EN"` | — |
-| Solar term | Qīngmíng — Tomb-Sweeping Day (15° solar longitude) | `~o"R/../P1Y/FL(qingming)EN"` | — |
-| Solar term | Lìchūn — start of spring (315°) | `~o"R/../P1Y/FL(lichun)EN"` | — |
-| Lunar | First new moon of the year | `~o"R/../P1Y/FL(new-moon)EN"` | — |
+| Astronomical | March equinox — Nowruz's astronomical anchor, Ostara | `~o"R/../P1Y/FL(march-equinox)eN"` | — |
+| Astronomical | June solstice — Midsummer | `~o"R/../P1Y/FL(june-solstice)eN"` | — |
+| Astronomical | September equinox — Mabon, Chuseok's anchor | `~o"R/../P1Y/FL(september-equinox)eN"` | — |
+| Astronomical | December solstice — Yule, Dōngzhì | `~o"R/../P1Y/FL(december-solstice)eN"` | — |
+| Solar term | Qīngmíng — Tomb-Sweeping Day (15° solar longitude) | `~o"R/../P1Y/FL(qingming)eN"` | — |
+| Solar term | Lìchūn — start of spring (315°) | `~o"R/../P1Y/FL(lichun)eN"` | — |
+| Lunar | First new moon of the year | `~o"R/../P1Y/FL(new-moon)eN"` | — |
 
 ## Other calendars — Islamic, Hebrew, and the lunisolar new years
 

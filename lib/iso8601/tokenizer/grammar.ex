@@ -404,13 +404,14 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # A computed-event selection — the one ISO 8601-2 §12 construct with no
   # standard form: an algorithmically resolved recurrence such as Easter or an
   # astronomical event. The event name is a lowercase identifier delimited by
-  # parentheses and closed by the project-specific `E` designator, e.g.
-  # `(easter)E`, `(march-equinox)E`. It resolves per period via `Tempo.Event`.
+  # parentheses and closed by the lowercase `e` designator, e.g. `(easter)e`,
+  # `(march-equinox)e`. Lowercase marks it a Tempo extension (uppercase `E` is
+  # the EDTF long-year exponent). It resolves per period via `Tempo.Event`.
   def selection_event do
     ignore(string("("))
     |> ascii_string([?a..?z, ?-], min: 1)
     |> ignore(string(")"))
-    |> ignore(string("E"))
+    |> ignore(string("e"))
     |> unwrap_and_tag(:event)
   end
 
@@ -536,7 +537,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
 
   # A lunisolar intercalary month, written `<n>+M` — the leap month following
   # traditional month `n` (閏n月). This is a non-conformant Tempo extension (ISO
-  # 8601 has no lunisolar/leap-month concept), in the same class as the `E`
+  # 8601 has no lunisolar/leap-month concept), in the same class as the `e`
   # computed-event selector. The tokeniser is calendar-blind, so it emits the
   # `{n, :leap}` construct structurally; `Tempo.Validation` resolves it to the
   # ordinal month against a lunisolar calendar and rejects it for any other.

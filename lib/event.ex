@@ -17,12 +17,12 @@ defmodule Tempo.Event do
     use (Chinese by default, or Vietnamese / Korean / Japanese lunisolar).
 
   ISO 8601-2 has no notation for such a recurrence, so Tempo carries it as a
-  selection written `(name)E` (see the `E` designator in the
+  selection written `(name)e` (see the `e` designator in the
   [ISO 8601 conformance guide](iso8601-conformance.html)) and resolves it here,
-  once per period, when a recurrence such as `~o"R/../P1Y/FL(easter)EN"` is
+  once per period, when a recurrence such as `~o"R/../P1Y/FL(easter)eN"` is
   materialised into a bound. The primary public API is `date/2` (or `date/3`).
 
-  A consumer application can add its own `(name)E` events — a fiscal calendar,
+  A consumer application can add its own `(name)e` events — a fiscal calendar,
   a liturgical feast, any algorithm-fixed date — by implementing the
   `Tempo.Event.Resolver` behaviour and registering it with `config :ex_tempo,
   :event_resolvers`. Registered names resolve here alongside the built-ins and

@@ -227,28 +227,28 @@ Moving the week start from Monday to Sunday changes which fortnight each candida
 
 #### Interchange risk
 
-`Q` (week start) and `E` (computed event, below) are the **only** non-standard letters Tempo emits inside a selection — `I` is ISO 8601-2 §12.9. Because they are not ISO 8601, a *different* system reading Tempo's ISO string would not understand them. We rate this risk **low**: we have not identified any other system that consumes ISO 8601-2 recurrence at all, let alone one a Tempo `Q`/`E` string would reach in practice. Where a standard interchange form is needed — sharing a rule with a calendar server, for instance — use `Tempo.to_rrule/1`, which emits `WKST` (and `BYSETPOS`, and any multi-weekday ordinal) in its portable RFC 5545 spelling. Treat the Tempo string as the native, loss-free persistence form and the RRULE string as the wire format.
+`Q` (week start) and `e` (computed event, below) are the **only** non-standard letters Tempo emits inside a selection — `I` is ISO 8601-2 §12.9. Because they are not ISO 8601, a *different* system reading Tempo's ISO string would not understand them. We rate this risk **low**: we have not identified any other system that consumes ISO 8601-2 recurrence at all, let alone one a Tempo `Q`/`e` string would reach in practice. Where a standard interchange form is needed — sharing a rule with a calendar server, for instance — use `Tempo.to_rrule/1`, which emits `WKST` (and `BYSETPOS`, and any multi-weekday ordinal) in its portable RFC 5545 spelling. Treat the Tempo string as the native, loss-free persistence form and the RRULE string as the wire format.
 
-### Computed events — the `E` designator
+### Computed events — the `e` designator
 
-ISO 8601-2 has no notation for a recurrence whose date is fixed by an **algorithm** rather than the calendar: Easter (the paschal computus), an astronomical event (an equinox or solstice), or one of the 24 East Asian solar terms (jié-qì). This is the one family of holiday rules the standard genuinely cannot express, so Tempo adds a single project-specific selection designator, `E`, whose value is the event name in parentheses:
+ISO 8601-2 has no notation for a recurrence whose date is fixed by an **algorithm** rather than the calendar: Easter (the paschal computus), an astronomical event (an equinox or solstice), or one of the 24 East Asian solar terms (jié-qì). This is the one family of holiday rules the standard genuinely cannot express, so Tempo adds a single project-specific selection designator, `e`, whose value is the event name in parentheses:
 
 ```text
-R/../P1Y/FL(easter)EN              Easter Sunday, every year
-R/../P1Y/FL(march-equinox)EN       the March (northern spring) equinox
-R/../P1Y/FL(december-solstice)EN   the December solstice
-R/../P1Y/FL(qingming)EN            Qīngmíng (Ching Ming / Tomb-Sweeping Day)
+R/../P1Y/FL(easter)eN              Easter Sunday, every year
+R/../P1Y/FL(march-equinox)eN       the March (northern spring) equinox
+R/../P1Y/FL(december-solstice)eN   the December solstice
+R/../P1Y/FL(qingming)eN            Qīngmíng (Ching Ming / Tomb-Sweeping Day)
 ```
 
 The recognised names are `easter` and `orthodox-easter` (the same computus in the Julian calendar), the astronomical `march-equinox` / `june-solstice` / `september-equinox` / `december-solstice` / `new-moon` (the first new moon of the year), and the 24 solar terms (`qingming`, `lichun`, `dongzhi`, …) — see `Tempo.Event.known/0`. Materialising the recurrence into a bound resolves each event per year — Easter via `Calendrical.Ecclesiastical`, the astronomical events via `Astro`, and the solar terms via `Calendrical` (for the Chinese meridian by default; `Tempo.Event.date/3` takes a Vietnamese, Korean or Japanese lunisolar calendar to use its meridian instead):
 
 ```elixir
 # "Easter Sunday, every year" — resolved across 2026–2028
-Tempo.to_interval(~o"R/../P1Y/FL(easter)EN", bound: ~o"{2026..2028}Y")
+Tempo.to_interval(~o"R/../P1Y/FL(easter)eN", bound: ~o"{2026..2028}Y")
 #   → 2026-04-05, 2027-03-28, 2028-04-16
 ```
 
-An unknown event name parses but resolves to no occurrences, so a typo yields an empty result rather than a crash. Like `Q`, an `E` selection round-trips through `inspect/1`/`Tempo.to_iso8601/1`; there is no RFC 5545 equivalent, so `Tempo.to_rrule/1` cannot express it.
+An unknown event name parses but resolves to no occurrences, so a typo yields an empty result rather than a crash. Like `Q`, an `e` selection round-trips through `inspect/1`/`Tempo.to_iso8601/1`; there is no RFC 5545 equivalent, so `Tempo.to_rrule/1` cannot express it.
 
 ### Lunisolar leap month — the `+` marker
 
@@ -268,7 +268,7 @@ A selection followed by `/[duration]` makes each resolved date the **start of a 
 
 ```elixir
 # Good Friday — the last Friday in the 7 days before Easter
-Tempo.to_interval(~o"R/../P1Y/FLLL(easter)EN/-P7DN5K-1IN", bound: ~o"2026")  # → 2026-04-03
+Tempo.to_interval(~o"R/../P1Y/FLLL(easter)eN/-P7DN5K-1IN", bound: ~o"2026")  # → 2026-04-03
 
 # US Election Day — the 1st Tuesday in the 9 days from November's 1st Monday
 Tempo.to_interval(~o"R/../P1Y/FL11MLL1K1IN/P9DN2K1IN", bound: ~o"2026")       # → 2026-11-03

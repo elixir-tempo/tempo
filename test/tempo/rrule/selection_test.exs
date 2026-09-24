@@ -627,7 +627,7 @@ defmodule Tempo.RRule.SelectionTest do
     end
 
     test "Good Friday — the last Friday in the seven days before Easter" do
-      assert holiday_dates("R/../P1Y/FLLL(easter)EN/-P7DN5K-1IN") == ["2026-04-03"]
+      assert holiday_dates("R/../P1Y/FLLL(easter)eN/-P7DN5K-1IN") == ["2026-04-03"]
     end
 
     test "a terminal window is one interval spanning its duration" do
@@ -644,7 +644,7 @@ defmodule Tempo.RRule.SelectionTest do
       for iso <- [
             "R/../P1Y/FLLL2K2IN/P10DN4K2IN",
             "R/../P1Y/FL11MLL1K1IN/P9DN2K1IN",
-            "R/../P1Y/FLLL(easter)EN/-P7DN5K-1IN"
+            "R/../P1Y/FLLL(easter)eN/-P7DN5K-1IN"
           ] do
         {:ok, value} = Tempo.from_iso8601(iso)
         assert Tempo.from_iso8601(Tempo.to_iso8601(value)) == {:ok, value}
@@ -652,7 +652,7 @@ defmodule Tempo.RRule.SelectionTest do
     end
 
     test "explain/1 names the window and what is picked within it" do
-      assert Tempo.explain(~o"R/../P1Y/FLLL(easter)EN/-P7DN5K-1IN") =~
+      assert Tempo.explain(~o"R/../P1Y/FLLL(easter)eN/-P7DN5K-1IN") =~
                "on the last Friday within the 7 days before Easter"
 
       assert Tempo.explain(~o"R/../P1Y/FL11MLL1K1IN/P9DN2K1IN") =~
