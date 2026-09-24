@@ -1,57 +1,58 @@
 # Lunisolar traditional-month input
 
-**Status:** implemented, 2026-09-23 — the `+` leap-month input capability shipped in Tempo; the tempo_holidays `:lunisolar` clause stays a Calendrical query, by design (see Findings).
+**Status:** in progress (revised 2026-09-24) — extending the traditional-month designator into the selection frame so lunisolar holidays become declarative recurrences, under a lowercase-extension convention. Supersedes the earlier "the `:lunisolar` clause stays a Calendrical query" finding: the priority changed, `recurrence_set` now wants lunisolar as a re-materialisable recurrence.
 
-## Problem
+## Why this reopens a settled decision
 
-date-holidays writes lunisolar dates (`chinese`, `korean`/`dangi`, `vietnamese`, japanese-lunisolar) in **traditional** month numbering with a leap flag — `<month>-<leap>-<day>`, e.g. `08-0-15` (traditional month 8, not leap) or `06-1-01` (leap month 6, 閏6月). Tempo and Calendrical use **ordinal** months (counting the intercalary month as its own position), so traditional 8 is ordinal 9 in a year whose leap month falls at or before position 6. The mapping is **year-dependent**, so no fixed ordinal recurrence represents "traditional month 8" — it must resolve per year. This blocks a declarative `:lunisolar` clause in `tempo_holidays`.
+The `+` leap-month *input* for concrete dates shipped (see "Prior work"), and the 2026-09-23 Findings then declined a traditional-month *selection* spelling because `materialise/2` already computed lunisolar dates correctly, so a declarative form "served zero real holidays." That calculus changed: `Tempo.Holidays.recurrence_set/2` now wants every holiday as a standalone recurrence, and the 57 lunisolar rules are the largest remaining `:needs_window` bucket. So we add the selection-frame spelling.
 
-## Interop constraint (why the representation stays ordinal)
+## Convention: lowercase designator = Tempo extension
 
-Grounded in the code (`Calendrical.Chinese`, Chinese year 4662 = Gregorian 2025, leap month 6 at ordinal 7):
+Uppercase designators are ISO 8601 (`Y M D H W O K I N`, `E` today); lowercase are Tempo extensions. The `^` exclusion domain and the `e`/`o`/`l` year filters already follow this; making it explicit gives a single learnable rule ("if it's lowercase, it's ours") and names the new designators.
 
-* `%Date{}.month` is an integer, and Elixir `Date.new/4` takes integers only — a leap month has **no home** in the struct. `Calendrical.Chinese.new(4662, {6,:leap}, 1)` accepts the traditional `{n,:leap}` tuple but **stores ordinal** (`~D[4662-07-01]`, `.month = 7`). The `{n,:leap}` construct is a one-directional creation convenience; the leap label is not stored (recover it via `leap_month?/1`).
-* `Calendrical.Chinese.new(4662, 8, 15)` (traditional 8) → `~D[4662-09-15]`, `.month = 9` (ordinal). Tempo's `.time` stores ordinal too (`[month: 9]`).
-* `Date.to_iso8601/1` on a non-ISO calendar converts to **Gregorian** — it never shows Chinese months.
+## Design
 
-So the concrete value — `%Date{}`, `Tempo.to_date`, `.time`, inspect — is irreducibly ordinal. Making the *rendered* representation traditional would force `date.month` (9) to disagree with the string (8), or push a `month :: integer | {integer, :leap}` type through all of Tempo. Rejected.
+* **`m` — traditional month, in both concrete dates and the selection frame.** `<n>mD` is traditional month `n`. Allowed on **every** calendar (per the 2026-09-24 decision): on a non-lunisolar calendar (Gregorian, Hebrew, Persian, Julian, Coptic) there is no ordinal/traditional distinction, so `m` is identical to `M` and resolves to the ordinal month directly — no calendar-specific rejection. On a lunisolar calendar it is the traditional month, resolved to the ordinal per year by Calendrical. `M` (uppercase) stays the ordinal month, unchanged, so every existing string keeps its meaning.
+* **`+` — leap month.** `<n>+m` is 閏n月 (the leap month after traditional `n`), Calendrical's `{n, :leap}` construct. Lunisolar only; an error where the calendar has no leap month or the year has no such one.
+* **`E` → `e`.** The computed-event selector becomes lowercase. Nothing published depends on `E`, so it is a clean rename — no dual-support.
 
-## Decision
+**The selection frame is the new capability.** Today `<n>+M` is parsed by `explicit_month` only, so `R/../P1Y/FL6+M1DN[u-ca=chinese]` is a parse error. The §12 selection sublanguage (`FL…N`) gains `m` and `+m`, so `R/../P1Y/FL8mD15DN[u-ca=chinese]` reads "traditional month 8, day 15" — the declarative lunisolar recurrence.
 
-* **`+` is a leap-month *input* convenience only.** In a lunisolar `[u-ca=…]` context, `6+M` means 閏6月 (the leap month after traditional 6), parsed to the `{6, :leap}` construct Calendrical already resolves. `+` was chosen over CLDR's `L` suffix because `L` collides with the selection frame delimiter (`FL…N`).
-* **Storage and rendering are ordinal**, for Elixir compatibility. A `+` (or traditional) input resolves to its ordinal and renders ordinal — `4662Y6+M1D[u-ca=chinese]` → `4662Y7M1D`. `+` never survives a round-trip; there is nothing to disagree with `%Date{}.month`.
-* **Conformance:** this is a documented deviation from ISO 8601 (which has no lunisolar/leap-month concept), in the same class as the `E` computed-event selector. The syntax guide gets a "non-conformant extension" note.
+**Rendering is context-dependent, because a recurrence must be year-independent.**
 
-## Decisions (settled)
+* In a **concrete date** (year known) `m`/`+m` resolve to the ordinal and render ordinal `M`, exactly as the shipped `+` does — `4662Y6+mD1D` → `4662Y7M1D`. There is a `%Date{}` to agree with, and it is ordinal (see Interop constraint).
+* In a **recurrence selection** (no year) `m` must **stay `m`** — resolving to a fixed ordinal would be wrong in the years whose leap month shifts the numbering. So `R/../P1Y/FL8mD15DN[u-ca=chinese]` round-trips as written, and the traditional→ordinal step happens per year at materialise time.
 
-* **Fork A — parse-time only** (not the selection engine). Chosen 2026-09-23.
-* **Bare lunisolar month = ordinal**, unchanged, for compatibility — an existing `[u-ca=chinese]` string keeps its meaning. Chosen 2026-09-23 over the fully-declarative "bare = traditional", which would silently reinterpret every existing ordinal string (today's `9M` → traditional 9 = ordinal 10).
-* Consequence: the `:lunisolar` clause is **not** a pure recurrence. The non-leap traditional→ordinal step (8→9) stays a Calendrical calendar query inside `tempo_holidays` — a legitimate computation, like Easter's. `+` only adds the ability to *write* a leap month.
+**Year attribution — the hard part — is the problem calendar selections already solve.** Which lunar year's traditional month 8 lands in a given Gregorian bound, and cases like Ông Táo (month 12) belonging to the *following* Gregorian year, is exactly what a bounded `[u-ca=hebrew]`/`[u-ca=islamic]` selection resolves (selection + bound → 0/1/2 occurrences). It falls out the same way **iff** `m` in a selection resolves per lunar year during materialisation (through Calendrical's `gregorian_date_for_lunar/3` + a Gregorian-year filter) rather than to a fixed ordinal.
 
-## `+` leap-month input capability (the deliverable)
+## Interop constraint (unchanged — storage stays ordinal)
 
-`<n>+M` in a lunisolar `[u-ca=…]` **concrete** date is the leap month after traditional month `n` (閏n月) — Calendrical's existing `{n, :leap}` construct in ISO form. It resolves to its ordinal (year known) and stores/renders **ordinal**; `+` never survives a round-trip. `<n>M` (no `+`) stays ordinal. `+` on a non-lunisolar calendar, or where the year has no such leap month, is an error.
-
-* `4662Y6+M1D[u-ca=chinese]` → `~D[4662-07-01]` / renders `4662Y7M1D` (閏6月 = ordinal 7).
-* `4662Y6M1D[u-ca=chinese]` → ordinal 6 (unchanged).
+`%Date{}.month` is an integer; a leap month has no home in the struct. `Calendrical.Chinese.new(4662, {6,:leap}, 1)` accepts the traditional `{n,:leap}` tuple but **stores ordinal** (`~D[4662-07-01]`, `.month = 7`); the leap label is recovered via `leap_month?/1`. `Date.to_iso8601/1` on a non-ISO calendar converts to Gregorian. So a *concrete* value is irreducibly ordinal, which is why `m`/`+m` render ordinal there. Only a *recurrence* (which has no `%Date{}`) keeps the traditional spelling.
 
 ## Tasks
 
-* [x] Tempo tokenizer/grammar: `<n>+M` → `{:month, {n, :leap}}` (`Grammar.leap_month`, in `explicit_month`).
-* [x] Tempo validation: `resolve/2` clause lowers `{n, :leap}` → ordinal via `leap_month/1` guarded by `traditional_leap_month/1 == n`, gated by `function_exported?(calendar, :leap_month, 1)`; a clean `InvalidDateError` otherwise.
-* [x] Render ordinal (unchanged) — `6+M` → `7M`, `6M` unchanged, verified.
-* [x] Conformance note in `guides/iso8601-conformance.md` (§5, after the `E` designator).
-* [x] Tests in `test/tempo/calendar_test.exs`: `6+M`→`7M`, regular unchanged, non-leap year / wrong traditional month / non-lunisolar / Islamic (leap years not months) all error cleanly. All six gates green (4398 tests).
-* [x] `tempo_holidays`: `:lunisolar` clause reviewed and left as a Calendrical-dispatching query — see Findings. 2026-09-23.
+Tempo:
 
-## Findings (2026-09-23) — the clause stays a Calendrical query
+* [ ] Grammar: `<n>m` / `<n>+m` in `explicit_month` (concrete) and in the §12 selection frame; `e` in place of `E` in `selection_event`.
+* [ ] Parser/AST: a traditional-month marker distinct from the ordinal `:month`, carried through the selection AST.
+* [ ] Materialisation: a traditional-month selection resolves per year via Calendrical for a lunisolar calendar, as the ordinal for a non-lunisolar one; year attribution rides the existing bounded-selection machinery.
+* [ ] Rendering: `m` stays `m` in a recurrence, resolves to ordinal `M` in a concrete date; `e` renders lowercase.
+* [ ] `E`→`e` sweep: grammar, `Tempo.Event`, inspect, cookbook, guides, tests.
+* [ ] Tests + round-trip; all six gates.
 
-Investigating the conversion settled it against a declarative recurrence, on three grounds verified against the code and the upstream data:
+Calendrical:
 
-* **No holiday needs `+`.** All 71 lunisolar rules in the entire date-holidays corpus (CN/VN/KR, chinese/korean/vietnamese) are non-leap — every one is `<m>-0-<d>`. There is not a single leap-month lunisolar holiday, so the leap-month *input* form buys `tempo_holidays` nothing.
+* [ ] Confirm the per-year traditional→ordinal resolution the selection needs is exposed (likely already `gregorian_date_for_lunar/3`); add if not.
 
-* **`+` does not reach a selection frame anyway.** `<n>+M` is parsed by `Grammar.explicit_month`, which the §12 selection sublanguage (`FL…N`) does not route through — `R/../P1Y/FL6+M1DN[u-ca=chinese]` is a parse error. `+` is a concrete-date convenience only.
+tempo_holidays:
 
-* **A bare selection month is ordinal, and the traditional→ordinal step is year-dependent *and* year-attributed.** `R/../P1Y/FL8M15DN[u-ca=chinese]` bound to 2025 yields ordinal `4662Y8M15D`, but Mid-Autumn (traditional 8) is `4662Y9M15D` in that leap year — a fixed ordinal cannot stand in for a traditional month, and *which* lunar year's month lands in the Gregorian target is itself data (Ông Táo, month 12, belongs to the following Gregorian year). Both are exactly what the clause's per-year `Calendrical.<cal>.gregorian_date_for_lunar/3` + Gregorian-year filter compute.
+* [ ] `:lunisolar` `base_recurrence` clause → `R/../P1Y/FL<m>mD<d>D[u-ca=<cal>]` (with `+m` for leap); validate against `materialise/2` across a leap and a common year.
+* [ ] `E`→`e` in the easter/orthodox/equinox/solstice/solar-term recurrence forms.
 
-So the clause already dispatches all calendar arithmetic to Calendrical; there is no ISO selection spelling for a traditional lunisolar month (bare = ordinal, by the compatibility decision), and inventing one would serve zero real holidays. It stays a Calendrical query — the same class as Easter's computus.
+## Prior work (shipped): `+` concrete leap-month input
+
+`<n>+M` in a lunisolar `[u-ca=…]` **concrete** date is the leap month after traditional `n`, resolving to its ordinal (year known) and storing/rendering ordinal; `+` never survives a round-trip. Implemented 2026-09-23 in `Grammar.leap_month` (`explicit_month`), lowered in `Validation.resolve/2` via `leap_month/1` guarded by `traditional_leap_month/1`, with tests in `test/tempo/calendar_test.exs` and a conformance note in `guides/iso8601-conformance.md`. The revised design folds this into the `m` designator (`+m`) and extends it to the selection frame.
+
+## Superseded finding (2026-09-23) — "the clause stays a Calendrical query"
+
+The earlier finding kept `tempo_holidays`' `:lunisolar` clause a per-year Calendrical query on three grounds: no corpus holiday uses a leap month (all 71 are `<m>-0-<d>`); `+` did not reach the selection frame; and a bare selection month is ordinal with a year-dependent, year-attributed traditional→ordinal step. The first two are addressed by the `m` selection designator above; the third is real but is the same year-attribution a bounded calendar selection already handles. Superseded because the goal is now a declarative recurrence for `recurrence_set`, not merely a correct materialised date.
