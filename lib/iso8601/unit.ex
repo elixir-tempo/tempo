@@ -209,6 +209,7 @@ defmodule Tempo.Iso8601.Unit do
   def ordered?(units) when is_list(units) do
     units
     |> Enum.reject(&non_scale_token?/1)
+    |> Enum.map(&scale_token/1)
     |> collapse_weekday_run()
     |> ordered_units?()
   end
@@ -218,6 +219,12 @@ defmodule Tempo.Iso8601.Unit do
   # not a flat scale unit, so it is skipped when checking resolution order.
   defp non_scale_token?({:interval, _value}), do: true
   defp non_scale_token?(_other), do: false
+
+  # A computed event (`(easter)e`) names a single day, so it orders at day
+  # scale: a weekday limit (`(qingming)e7K`) may follow it, a day of month may
+  # not. It is not a time unit in its own right, so it has no `@sort_keys` entry.
+  defp scale_token({:event, value}), do: {:day, value}
+  defp scale_token(token), do: token
 
   defp collapse_weekday_run([{:day_of_week, _} = weekday, {:day_of_week, _} | rest]),
     do: collapse_weekday_run([weekday | rest])
@@ -242,17 +249,26 @@ defmodule Tempo.Iso8601.Unit do
   end
 
   defp ordered_units?([unit_1, unit_2 | rest]) when is_atom(unit_1) and is_atom(unit_2) do
-    if compare(unit_1, unit_2) == :gt, do: ordered_units?([unit_2 | rest]), else: false
+    if coarser?(unit_1, unit_2), do: ordered_units?([unit_2 | rest]), else: false
   end
 
   defp ordered_units?([{unit_1, _value_1}, {unit_2, _value_2} | rest]) do
-    if compare(unit_1, unit_2) == :gt, do: ordered_units?([unit_2 | rest]), else: false
+    if coarser?(unit_1, unit_2), do: ordered_units?([unit_2 | rest]), else: false
   end
 
   defp ordered_units?([unit_1, {unit_2, _value_2} | rest]) when is_atom(unit_1) do
-    if compare(unit_1, unit_2) == :gt, do: ordered_units?([unit_2 | rest]), else: false
+    if coarser?(unit_1, unit_2), do: ordered_units?([unit_2 | rest]), else: false
   end
 
   defp ordered_units?([_unit]), do: true
   defp ordered_units?([]), do: true
+
+  # Whether `unit_1` is strictly coarser than `unit_2`. A token with no sort key
+  # is not ordered, so the check reports an ordering error rather than raising.
+  defp coarser?(unit_1, unit_2) do
+    case {fetch_sort_key(unit_1), fetch_sort_key(unit_2)} do
+      {{:ok, key_1}, {:ok, key_2}} -> key_1 > key_2
+      _unknown -> false
+    end
+  end
 end

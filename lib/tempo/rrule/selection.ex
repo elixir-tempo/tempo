@@ -500,13 +500,18 @@ defmodule Tempo.RRule.Selection do
     end)
   end
 
+  # A computed event (`(easter)e`) names one day, as BYMONTHDAY does, so a
+  # BYDAY beside it limits that day rather than expanding the period.
   defp no_ordinal_byday_role(:month, selection) do
-    if Keyword.has_key?(selection, :day), do: :limit, else: {:expand, :month}
+    if Keyword.has_key?(selection, :day) or Keyword.has_key?(selection, :event),
+      do: :limit,
+      else: {:expand, :month}
   end
 
   defp no_ordinal_byday_role(:year, selection) do
     cond do
-      Keyword.has_key?(selection, :day) or Keyword.has_key?(selection, :day_of_year) ->
+      Keyword.has_key?(selection, :day) or Keyword.has_key?(selection, :day_of_year) or
+          Keyword.has_key?(selection, :event) ->
         :limit
 
       # When BYMONTH is also present, BYMONTH's EXPAND has

@@ -102,6 +102,38 @@ defmodule Tempo.EventTest do
     end
   end
 
+  describe "a weekday limit on a computed event" do
+    test "parses and round-trips rather than raising" do
+      assert {:ok, value} = Tempo.from_iso8601("R/../P1Y/FL(qingming)e7KN")
+      assert Tempo.to_iso8601(value) == "R/../P1Y/FL(qingming)e7KN"
+    end
+
+    test "keeps the event only in the years it falls on the weekday" do
+      # Qingming falls on 2021-04-04 and 2026-04-05, both Sundays; 2022–2025 and
+      # 2027 fall on other weekdays.
+      assert event_dates("R/../P1Y/FL(qingming)e7KN", ~o"{2021..2027}Y") ==
+               ["2021-04-04", "2026-04-05"]
+    end
+
+    test "limits the event's day rather than expanding to every such weekday" do
+      # Easter is always a Sunday: a Sunday limit keeps each Easter, a Monday
+      # limit none — neither expands to the year's other Sundays or Mondays.
+      assert event_dates("R/../P1Y/FL(easter)e7KN", ~o"{2026..2028}Y") ==
+               ["2026-04-05", "2027-03-28", "2028-04-16"]
+
+      assert event_dates("R/../P1Y/FL(easter)e1KN", ~o"{2026..2028}Y") == []
+    end
+
+    test "a weekday set limits to any of its weekdays" do
+      assert event_dates("R/../P1Y/FL(qingming)e{6,7}KN", ~o"{2021..2027}Y") ==
+               ["2021-04-04", "2026-04-05"]
+    end
+
+    test "a day of month after an event is an ordering error, not a raise" do
+      assert {:error, _reason} = Tempo.from_iso8601("R/../P1Y/FL(easter)e5DN")
+    end
+  end
+
   describe "computed-event recurrence — explain/1" do
     test "reads the event as prose" do
       assert Tempo.explain(~o"R/../P1Y/FL(easter)eN") =~ "on Easter"
@@ -110,10 +142,11 @@ defmodule Tempo.EventTest do
     end
   end
 
-  # Materialise a computed-event recurrence into 2026 and list the ISO dates.
-  defp event_dates(iso) do
+  # Materialise a computed-event recurrence into a bound (2026 by default) and
+  # list the ISO dates.
+  defp event_dates(iso, bound \\ ~o"2026Y") do
     {:ok, rule} = Tempo.from_iso8601(iso)
-    {:ok, set} = Tempo.to_interval(rule, bound: ~o"2026Y")
+    {:ok, set} = Tempo.to_interval(rule, bound: bound)
 
     set
     |> IntervalSet.to_list()
