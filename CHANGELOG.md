@@ -6,13 +6,23 @@
 
 * Recurrence selections converge on the ISO 8601-2 §12.9 position designator `I` — applied last over the resolved set and written weekday-then-position (`1K2I` = the 2nd Monday) — and the invented `V` set-position designator is retired. An ordinal `BYDAY` across distinct weekdays (`2MO,2WE`) has no ISO form and round-trips only through `Tempo.to_rrule/1`.
 
+### Deprecated
+
+* The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
+
 ### Added
 
-* `Tempo.Event` and the `(name)E` computed-event selection — a recurrence resolved by algorithm rather than the calendar. `~o"R/../P1Y/FL(easter)EN"` is Western Easter and `(orthodox-easter)E` the Julian-calendar computus (both from `Calendrical.Ecclesiastical`); the equinoxes, solstices and first `(new-moon)E` of the year come from `Astro`; and the 24 East Asian solar terms (`(qingming)E`, …) from `Calendrical`, for the Chinese meridian by default or another via `Tempo.Event.date/3`.
+* `Tempo.Event` and the `(name)e` computed-event selection — a recurrence resolved by algorithm rather than the calendar. `~o"R/../P1Y/FL(easter)eN"` is Western Easter and `(orthodox-easter)e` the Julian-calendar computus (both from `Calendrical.Ecclesiastical`); the equinoxes, solstices and first `(new-moon)e` of the year come from `Astro`; and the 24 East Asian solar terms (`(qingming)e`, …) from `Calendrical`, for the Chinese meridian by default or another via `Tempo.Event.date/3`.
 
-* `Tempo.Event.Resolver` — a behaviour that lets a consumer register its own `(name)E` events (a fiscal calendar, a feast day) through `config :ex_tempo, :event_resolvers`. Registered names resolve beside the built-ins and appear in `Tempo.Event.known/0`; a name no resolver claims yields zero occurrences.
+* `Tempo.Event.Resolver` — a behaviour that lets a consumer register its own `(name)e` events (a fiscal calendar, a feast day) through `config :ex_tempo, :event_resolvers`. Registered names resolve beside the built-ins and appear in `Tempo.Event.known/0`; a name no resolver claims yields zero occurrences.
 
-* ISO 8601-2 §12.10 selection with a time interval — `[selection]/[duration]` makes each resolved date the start of a window and nested selectors pick within it. `~o"R/../P1Y/FLLL(easter)EN/-P7DN5K-1IN"` is Good Friday; `~o"R/../P1Y/FL11MLL1K1IN/P9DN2K1IN"` is US Election Day.
+* `Tempo.RecurrenceSet` — a collection of recurrence rules (a territory's holidays, a calendar's events) that materialises as one `IntervalSet` against a window, so `Tempo.intersection(diary, holidays)` composes it with a diary through set algebra.
+
+* The `<n>m` / `<n>+m` traditional-month designator for lunisolar calendars — the traditional (named) month rather than the ordinal `M`, with `+m` for the leap month. In a concrete date it resolves to the ordinal; in a selection it survives and resolves per year, so `~o"R/../P1Y/FL8m15DN[u-ca=chinese]"` tracks the true traditional month across leap years.
+
+* Recurrence-domain exclusions and filters — a `^value` member drops a period from any set, a `{…}` domain in the recurrence slot (`R/{2020Y..2024Y,^2022Y}/P1Y/…`) bounds and punches holes in a recurrence, and lowercase `e`/`o`/`l` after a domain keep even/odd/leap years.
+
+* ISO 8601-2 §12.10 selection with a time interval — `[selection]/[duration]` makes each resolved date the start of a window and nested selectors pick within it. `~o"R/../P1Y/FLLL(easter)eN/-P7DN5K-1IN"` is Good Friday; `~o"R/../P1Y/FL11MLL1K1IN/P9DN2K1IN"` is US Election Day.
 
 * `Tempo.Network.Qualitative` — bridges the metric and qualitative networks. `from_network/1` seeds relation sets from what a solved network's bounds already prove, `apply_to_network/2` feeds determined relations back, and `refine/1` runs the round trip.
 
