@@ -75,60 +75,57 @@ defmodule Tempo.Iso8601.Tokenizer.Set do
                   |> ignore(string("/"))
                   |> parsec({Tempo.Iso8601.Tokenizer.Set, :duration_parser}),
 
-                  # date/date — each endpoint may carry an EDTF qualification
+                  # A lower endpoint — each may carry an EDTF qualification — then
+                  # the upper end after the slash: date/date, date/duration,
+                  # date/.. or date/ (trailing slash, open upper endpoint). The
+                  # lower endpoint is parsed once and the upper end chosen after
+                  # the slash; one alternative per form re-ran the whole date
+                  # grammar for the same endpoint up to four times.
                   parsec({Tempo.Iso8601.Tokenizer.Date, :qualified_endpoint})
                   |> ignore(string("/"))
-                  |> parsec({Tempo.Iso8601.Tokenizer.Date, :qualified_endpoint}),
-
-                  # date/duration
-                  parsec({Tempo.Iso8601.Tokenizer.Date, :qualified_endpoint})
-                  |> ignore(string("/"))
-                  |> parsec({Tempo.Iso8601.Tokenizer.Set, :duration_parser}),
+                  |> choice([
+                    parsec({Tempo.Iso8601.Tokenizer.Date, :qualified_endpoint}),
+                    parsec({Tempo.Iso8601.Tokenizer.Set, :duration_parser}),
+                    replace(string(".."), :undefined),
+                    replace(empty(), :undefined)
+                  ]),
 
                   # duration/date
                   parsec({Tempo.Iso8601.Tokenizer.Set, :duration_parser})
                   |> ignore(string("/"))
                   |> parsec({Tempo.Iso8601.Tokenizer.Date, :qualified_endpoint}),
 
-                  # date/..
-                  parsec({Tempo.Iso8601.Tokenizer.Date, :qualified_endpoint})
-                  |> ignore(string("/"))
-                  |> replace(string(".."), :undefined),
-
-                  # ../date
-                  replace(string(".."), :undefined)
-                  |> ignore(string("/"))
-                  |> parsec({Tempo.Iso8601.Tokenizer.Date, :qualified_endpoint}),
-
-                  # ..<filter>/duration — an open, filtered domain (all even/odd/
-                  # leap years), e.g. R/..e/P1Y. Like an exclusions-only domain it
-                  # has no window of its own, so it needs a `:bound` to materialise.
+                  # An open lower endpoint `..`, then either a year filter — an
+                  # open, filtered domain (all even/odd/leap years, e.g. R/..e/P1Y),
+                  # which like an exclusions-only domain has no window of its own
+                  # and needs a `:bound` — or the upper end after the slash:
+                  # ../date, ../duration (an unanchored recurrence, e.g. a cron
+                  # schedule with no `:from`, inspecting as `R/../P1W/…`), ../..
+                  # or ../ (both endpoints open).
                   ignore(string(".."))
-                  |> domain_filter()
-                  |> tag(:domain_set)
-                  |> ignore(string("/"))
-                  |> parsec({Tempo.Iso8601.Tokenizer.Set, :duration_parser}),
+                  |> choice([
+                    domain_filter()
+                    |> tag(:domain_set)
+                    |> ignore(string("/"))
+                    |> parsec({Tempo.Iso8601.Tokenizer.Set, :duration_parser}),
+                    replace(empty(), :undefined)
+                    |> ignore(string("/"))
+                    |> choice([
+                      parsec({Tempo.Iso8601.Tokenizer.Date, :qualified_endpoint}),
+                      parsec({Tempo.Iso8601.Tokenizer.Set, :duration_parser}),
+                      replace(string(".."), :undefined),
+                      replace(empty(), :undefined)
+                    ])
+                  ]),
 
-                  # ../duration — an unanchored recurrence (no start), e.g. a cron
-                  # schedule with no `:from`, which inspects as `R/../P1W/…`
-                  replace(string(".."), :undefined)
-                  |> ignore(string("/"))
-                  |> parsec({Tempo.Iso8601.Tokenizer.Set, :duration_parser}),
-
-                  # date/ (trailing slash — open upper endpoint)
-                  parsec({Tempo.Iso8601.Tokenizer.Date, :qualified_endpoint})
-                  |> ignore(string("/"))
-                  |> replace(empty(), :undefined),
-
-                  # /date (leading slash — open lower endpoint)
+                  # A leading slash (open lower endpoint): /date, /.. or /
                   replace(empty(), :undefined)
                   |> ignore(string("/"))
-                  |> parsec({Tempo.Iso8601.Tokenizer.Date, :qualified_endpoint}),
-
-                  # ../.. or /.. or ../ or / (both endpoints open)
-                  replace(choice([string(".."), empty()]), :undefined)
-                  |> ignore(string("/"))
-                  |> replace(choice([string(".."), empty()]), :undefined)
+                  |> choice([
+                    parsec({Tempo.Iso8601.Tokenizer.Date, :qualified_endpoint}),
+                    replace(string(".."), :undefined),
+                    replace(empty(), :undefined)
+                  ])
                 ])
                 |> optional(parsec({Tempo.Iso8601.Tokenizer.Set, :repeat_rule}))
                 |> reduce(:adjust_interval)

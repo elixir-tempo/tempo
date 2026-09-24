@@ -344,11 +344,13 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
 
   # Selections
 
+  # Date elements with optional time elements, or time elements alone. The date
+  # elements are parsed once: trying date-plus-time and then date-alone as
+  # separate alternatives re-parsed them whenever the time part was absent.
   def selection_elements(combinator \\ empty()) do
     combinator
     |> choice([
-      concat(selection_date_elements(), selection_time_elements()),
-      selection_date_elements(),
+      selection_date_elements() |> optional(selection_time_elements()),
       selection_time_elements()
     ])
   end
@@ -382,8 +384,12 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
       # ISO 8601-2 §12.10 bare selection-with-time-interval (`L3K4IN/P5D`): the
       # window is the terminal element, not wrapped in its own `L…N`. Tried after
       # the wrapped form above, so a window that IS followed by more selectors
-      # (`LL2K2IN/P10DN4K2I`) still matches the wrapped clause first.
-      parsec({Tempo.Iso8601.Tokenizer.Set, :interval_parser})
+      # (`LL2K2IN/P10DN4K2I`) still matches the wrapped clause first. Its anchor
+      # is always an `L…N` selection, so it is only attempted at an `L`: trying
+      # the whole interval grammar at every other position — every selection's
+      # closing `N` included — is what made nested windows exponential to parse.
+      lookahead(string("L"))
+      |> parsec({Tempo.Iso8601.Tokenizer.Set, :interval_parser})
     ])
   end
 

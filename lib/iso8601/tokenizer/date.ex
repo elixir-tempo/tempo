@@ -68,6 +68,22 @@ defmodule Tempo.Iso8601.Tokenizer.Date do
                 |> label("datetime"),
                 export_combinator: true
 
+  # `datetime_parser` without its explicit date-time alternative, for
+  # `datetime_or_date_or_time`, which has already tried the explicit date once
+  # (with or without a time) before falling through to here — so that
+  # alternative could only re-parse the explicit date and fail again.
+  defcombinator :non_explicit_datetime_parser,
+                choice([
+                  extended_date_time()
+                  |> optional(parsec({Tempo.Iso8601.Tokenizer.Time, :extended_time_shift_p})),
+                  implicit_date_time()
+                  |> optional(parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_time_shift_p})),
+                  explicit_time_shift()
+                ])
+                |> tag(:datetime)
+                |> label("datetime"),
+                export_combinator: true
+
   defcombinator :date_parser,
                 choice([
                   parsec({Tempo.Iso8601.Tokenizer.Date, :explicit_date_p})
