@@ -82,6 +82,20 @@ defmodule Tempo.RecurrenceSetTest do
       assert "2026Y7M4D" in isos(set)
       assert "2026Y12M25D" in isos(set)
     end
+
+    test "a plain Tempo member stands for its own span" do
+      rset = RecurrenceSet.new([~o"2026Y7M4D", named("R/../P1Y/FL12M25DN", "Christmas")])
+
+      {:ok, set} = Tempo.to_interval_set(rset, bound: ~o"2026Y")
+      assert isos(set) == ["2026Y7M4D", "2026Y12M25D"]
+    end
+
+    test "a member that is not a Tempo value is an error, not a raise" do
+      rset = RecurrenceSet.new([named("R/../P1Y/FL12M25DN", "Christmas"), :not_a_member])
+
+      assert {:error, %Tempo.MaterialisationError{reason: :recurrence_set_member}} =
+               Tempo.to_interval_set(rset, bound: ~o"2026Y")
+    end
   end
 
   describe "set algebra — the motivating query" do

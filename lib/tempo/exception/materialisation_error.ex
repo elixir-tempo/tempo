@@ -45,6 +45,11 @@ defmodule Tempo.MaterialisationError do
       "(`Tempo.relation_certainty/3`, `Tempo.possibly_before?/2`, …)."
   end
 
+  def message(%__MODULE__{reason: :recurrence_set_member, value: value}) do
+    "Cannot materialise #{inspect(value)} as a Tempo.RecurrenceSet member — a " <>
+      "member is a Tempo.Interval (a recurrence or a concrete interval) or a Tempo value."
+  end
+
   def message(%__MODULE__{reason: :recurring_interval}) do
     "A recurring interval is a rule generating occurrences, not a single span. " <>
       "Materialise it with `Tempo.to_interval/2` (pass `:bound` for an unbounded " <>

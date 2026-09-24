@@ -640,6 +640,30 @@ defmodule Tempo.RRule.SelectionTest do
       assert Interval.to(occurrence) == ~o"2026Y2M2D"
     end
 
+    test "a window moving an occurrence into the previous year lands there" do
+      # 1 January 2022 is a Saturday: "the previous Friday" is 31 December 2021,
+      # which belongs to 2021's bound, not 2022's.
+      rule = "R/../P1Y/FLLL1M1D6KN/-P7DN5K1IN"
+      assert holiday_dates(rule, ~o"2021Y") == ["2021-12-31"]
+      assert holiday_dates(rule, ~o"2022Y") == []
+    end
+
+    test "a window moving an occurrence into the next year lands there" do
+      # 31 December 2022 is a Saturday: "the following Monday" is 2 January 2023.
+      rule = "R/../P1Y/FLLL12M31D6KN/P8DN1K-1IN"
+      assert holiday_dates(rule, ~o"2022Y") == []
+      assert holiday_dates(rule, ~o"2023Y") == ["2023-01-02"]
+      assert holiday_dates(rule, ~o"{2021..2023}Y") == ["2023-01-02"]
+    end
+
+    test "a calendar window crossing the Gregorian year lands in the following year" do
+      # 10 Dhu al-Hijjah 1427 (Umm al-Qura) is Sunday 31 December 2006; the
+      # following Monday is 1 January 2007.
+      rule = "R/../P1Y/FLLL12M10D7KN/P8DN1K-1IN[u-ca=islamic-umalqura]"
+      assert gregorian_dates(rule, ~o"2006Y") == []
+      assert gregorian_dates(rule, ~o"2007Y") == ["2007-01-01"]
+    end
+
     test "a windowed selection round-trips through to_iso8601/1" do
       for iso <- [
             "R/../P1Y/FLLL2K2IN/P10DN4K2IN",
@@ -663,16 +687,48 @@ defmodule Tempo.RRule.SelectionTest do
     end
   end
 
-  # Parse a selection recurrence and list the ISO dates it yields inside 2026.
-  defp holiday_dates(iso) do
+  describe "an explicit anchor coarser than its selection" do
+    test "a year anchor walks a day selection rather than raising" do
+      {:ok, rule} = Tempo.from_iso8601("R/2020Y/P4Y/FL11M3DN")
+      {:ok, set} = Tempo.to_interval(rule, bound: ~o"{2019..2028}Y")
+
+      assert Enum.map(IntervalSet.to_list(set), &Tempo.to_iso8601(Interval.from(&1))) ==
+               ["2020Y11M3D", "2024Y11M3D", "2028Y11M3D"]
+    end
+
+    test "a counted recurrence from a year anchor" do
+      {:ok, rule} = Tempo.from_iso8601("R3/2020Y/P1Y/FL6M15DN")
+      {:ok, set} = Tempo.to_interval(rule)
+
+      assert Enum.map(IntervalSet.to_list(set), &Tempo.to_iso8601(Interval.from(&1))) ==
+               ["2020Y6M15D", "2021Y6M15D", "2022Y6M15D"]
+    end
+  end
+
+  # Parse a selection recurrence and list the ISO dates it yields inside a bound
+  # (2026 by default).
+  defp holiday_dates(iso, bound \\ ~o"2026Y") do
     {:ok, rule} = Tempo.from_iso8601(iso)
-    {:ok, set} = Tempo.to_interval(rule, bound: ~o"2026Y")
+    {:ok, set} = Tempo.to_interval(rule, bound: bound)
 
     set
     |> IntervalSet.to_list()
     |> Enum.map(fn interval ->
       {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
       Date.to_iso8601(date)
+    end)
+  end
+
+  # As `holiday_dates/2`, converting a calendar recurrence's dates to Gregorian.
+  defp gregorian_dates(iso, bound) do
+    {:ok, rule} = Tempo.from_iso8601(iso)
+    {:ok, set} = Tempo.to_interval(rule, bound: bound)
+
+    set
+    |> IntervalSet.to_list()
+    |> Enum.map(fn interval ->
+      {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
+      date |> Date.convert!(Calendar.ISO) |> Date.to_iso8601()
     end)
   end
 end

@@ -4800,6 +4800,7 @@ defmodule Tempo do
         opts
       )
       when is_integer(n) and n > 1 do
+    {from, interval} = fill_selection_anchor(from, interval)
     step = if direction == -1, do: negate_duration(duration), else: duration
 
     intervals =
@@ -4829,6 +4830,8 @@ defmodule Tempo do
         } = interval,
         opts
       ) do
+    {from, interval} = fill_selection_anchor(from, interval)
+
     intervals =
       iterate_recurrence(
         from,
@@ -4864,6 +4867,8 @@ defmodule Tempo do
       bound ->
         case bound_upper(bound) do
           {:ok, bound_to} ->
+            {from, interval} = fill_selection_anchor(from, interval)
+
             intervals =
               iterate_recurrence(
                 from,
@@ -4900,6 +4905,7 @@ defmodule Tempo do
         _opts
       )
       when to in [nil, :undefined] do
+    {from, interval} = fill_selection_anchor(from, interval)
     step = if direction == -1, do: negate_duration(duration), else: duration
 
     case iterate_recurrence(
@@ -4978,13 +4984,18 @@ defmodule Tempo do
   # A `:bound`, when given, narrows it further: only the domain periods that meet
   # the bound's window are materialised, and only the occurrences starting within
   # that window are kept — the same `[bound_from, bound_to)` start rule a bound
-  # applies to any unanchored recurrence.
+  # applies to any unanchored recurrence. An open-ended range (`{2017Y..}`,
+  # `{..2016Y}`) takes its missing end from the bound, so it needs one. A cadence
+  # longer than one period (`R/{1848Y..}/P4Y/…`) keeps every nth period, phased
+  # from the domain's first stated value.
   def to_interval(%Tempo.Interval{from: %Tempo.Set{set: [_ | _]} = domain} = interval, opts) do
-    with {:ok, domain_set} <- to_interval(domain),
-         {:ok, window} <- domain_bound_window(opts) do
+    with {:ok, window} <- domain_bound_window(opts),
+         {:ok, closed_domain} <- close_domain_ranges(domain, window),
+         {:ok, domain_set} <- to_interval(closed_domain) do
       domain_set
       |> IntervalSet.to_list()
       |> filter_domain_years(domain.filter)
+      |> step_domain_periods(domain, interval.duration)
       |> Enum.filter(&domain_period_in_window?(&1, window))
       |> reduce_domain_occurrences(interval, opts)
       |> keep_occurrences_in_window(window)
@@ -5030,13 +5041,8 @@ defmodule Tempo do
 
       bound ->
         case bound_anchor(bound, interval) do
-          {:ok, anchor} ->
-            %{interval | from: anchor_in_repeat_calendar(anchor, interval)}
-            |> to_interval(opts)
-            |> filter_to_bound_window(interval, bound)
-
-          {:error, _} = error ->
-            error
+          {:ok, anchor} -> materialise_from_bound(interval, anchor, bound, opts)
+          {:error, _} = error -> error
         end
     end
   end
@@ -5054,18 +5060,10 @@ defmodule Tempo do
   # member's own metadata (a holiday name, say), and unions them into one set.
   def to_interval(%Tempo.RecurrenceSet{members: members}, opts) do
     members
-    |> Enum.reduce_while({:ok, []}, fn %Tempo.Interval{} = member, {:ok, acc} ->
-      case to_interval(member, opts) do
-        {:ok, materialised} ->
-          occurrences =
-            materialised
-            |> recurrence_set_occurrences()
-            |> Enum.map(&merge_member_metadata(&1, member.metadata))
-
-          {:cont, {:ok, acc ++ occurrences}}
-
-        {:error, _} = error ->
-          {:halt, error}
+    |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
+      case recurrence_set_member(member, opts) do
+        {:ok, occurrences} -> {:cont, {:ok, acc ++ occurrences}}
+        {:error, _} = error -> {:halt, error}
       end
     end)
     |> case do
@@ -5243,6 +5241,102 @@ defmodule Tempo do
   end
 
   defp filter_to_bound_window(result, _interval, _bound), do: result
+
+  # Materialise an unanchored recurrence from its bound's anchor. A §12.10 window
+  # can move an occurrence off the period whose selection produced it — a Saturday
+  # 1 January observed the previous Friday lands in the year before, a Saturday
+  # 31 December observed the following Monday in the year after — so a windowed
+  # recurrence also walks as many periods either side of the bound as the window
+  # can reach across, and keeps the occurrences that start inside the bound.
+  defp materialise_from_bound(interval, anchor, bound, opts) do
+    case window_periods(interval) do
+      0 ->
+        %{interval | from: anchor_in_repeat_calendar(anchor, interval)}
+        |> to_interval(opts)
+        |> filter_to_bound_window(interval, bound)
+
+      periods ->
+        materialise_windowed(interval, anchor, bound, periods, opts)
+    end
+  end
+
+  defp materialise_windowed(
+         %Tempo.Interval{duration: cadence} = interval,
+         anchor,
+         bound,
+         periods,
+         opts
+       ) do
+    with {:ok, bound_to} <- bound_upper(bound) do
+      widened_from = add_n_durations(anchor, negate_duration(cadence), periods)
+      widened_to = add_n_durations(bound_to, cadence, periods)
+      widened = %Tempo.Interval{from: widened_from, to: widened_to}
+
+      %{interval | from: anchor_in_repeat_calendar(widened_from, interval)}
+      |> to_interval(Keyword.put(opts, :bound, widened))
+      |> keep_occurrences_in_window({bound_lower(bound), bound_to})
+    end
+  end
+
+  # How many cadence periods either side of a bound a §12.10 window can reach
+  # across: its durations summed (a nested window adds its own) over the shortest
+  # the cadence period can be, plus one for the period itself. Zero when the
+  # selection has no window, or the cadence is finer than a day.
+  defp window_periods(%Tempo.Interval{
+         repeat_rule: %Tempo{time: [selection: selection]},
+         duration: %Tempo.Duration{} = cadence
+       }) do
+    reach = selection |> window_durations() |> Enum.map(&duration_days_ceiling/1) |> Enum.sum()
+
+    case {reach, cadence_days_floor(cadence)} do
+      {0, _floor} -> 0
+      {_reach, 0} -> 0
+      {reach, floor} -> 1 + div(reach, floor)
+    end
+  end
+
+  defp window_periods(_interval), do: 0
+
+  defp window_durations(selection) when is_list(selection) do
+    Enum.flat_map(selection, fn
+      {:interval, %Tempo.Interval{duration: %Tempo.Duration{} = duration, from: inner}} ->
+        [duration | window_durations(window_inner_selection(inner))]
+
+      _other ->
+        []
+    end)
+  end
+
+  defp window_inner_selection(%Tempo{time: [selection: selection]}), do: selection
+  defp window_inner_selection(%Tempo{time: time}) when is_list(time), do: time
+  defp window_inner_selection(_inner), do: []
+
+  # The most days a duration can span (a year is at most 366, a month 31); any
+  # time-of-day part counts as a whole day.
+  defp duration_days_ceiling(%Tempo.Duration{time: time}) do
+    Enum.reduce(time, 0, fn {unit, amount}, total ->
+      total + Kernel.ceil(abs(amount) * max_days_per(unit))
+    end)
+  end
+
+  defp max_days_per(:year), do: 366
+  defp max_days_per(:month), do: 31
+  defp max_days_per(:week), do: 7
+  defp max_days_per(_unit), do: 1
+
+  # The fewest days a cadence period spans (a year is at least 365, a month 28);
+  # zero for a cadence finer than a day.
+  defp cadence_days_floor(%Tempo.Duration{time: time}) do
+    Enum.reduce(time, 0, fn {unit, amount}, total ->
+      total + Kernel.trunc(abs(amount) * min_days_per(unit))
+    end)
+  end
+
+  defp min_days_per(:year), do: 365
+  defp min_days_per(:month), do: 28
+  defp min_days_per(:week), do: 7
+  defp min_days_per(:day), do: 1
+  defp min_days_per(_unit), do: 0
 
   # Apply a duration N times as a single scalar-multiplied step:
   # `tempo + (n × duration)` in one call, not `n` successive
@@ -5623,6 +5717,36 @@ defmodule Tempo do
     end
   end
 
+  # An explicit anchor coarser than the grain its selection names —
+  # `R/2020Y/P4Y/FL11M3DN`, a year anchoring a day selection — is filled down to
+  # that grain (2020-01-01) before the recurrence walks from it, as an unanchored
+  # recurrence's bound anchor is; otherwise the selection would expand days within
+  # a year that names no month. An anchor at or finer than the grain is left
+  # exactly as written.
+  defp fill_selection_anchor(
+         %Tempo{} = from,
+         %Tempo.Interval{repeat_rule: %Tempo{time: [selection: [_ | _]]}} = interval
+       ) do
+    unit = anchor_unit(interval)
+
+    with {from_unit, _span} <- resolution(from),
+         true <- coarser_unit?(from_unit, unit),
+         {:ok, %Tempo{} = filled} <- anchor_at_unit(from, unit) do
+      {filled, %{interval | from: filled}}
+    else
+      _other -> {from, interval}
+    end
+  end
+
+  defp fill_selection_anchor(from, interval), do: {from, interval}
+
+  defp coarser_unit?(unit_1, unit_2) do
+    case {Unit.fetch_sort_key(unit_1), Unit.fetch_sort_key(unit_2)} do
+      {{:ok, key_1}, {:ok, key_2}} -> key_1 > key_2
+      _unknown -> false
+    end
+  end
+
   defp bound_anchor_from_set(set, unit) do
     case IntervalSet.first(set) do
       %Tempo.Interval{from: %Tempo{} = from} -> anchor_at_unit(from, unit)
@@ -5939,6 +6063,99 @@ defmodule Tempo do
 
   defp occurrence_in_window?(_occurrence, _bound_from, _bound_to), do: true
 
+  # Close an open-ended domain range against the bound's window: a missing upper
+  # end becomes the bound's end and a missing lower end the bound's start, each
+  # truncated to the range's own resolution (the window filter then drops any
+  # period the bound only touches). With no bound an open range stays open, and
+  # materialising it reports the open range.
+  defp close_domain_ranges(domain, :none), do: {:ok, domain}
+
+  defp close_domain_ranges(%Tempo.Set{set: members} = domain, {bound_from, bound_to}) do
+    members
+    |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
+      case close_domain_range(member, bound_from, bound_to) do
+        {:ok, closed} -> {:cont, {:ok, [closed | acc]}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, closed} -> {:ok, %{domain | set: Enum.reverse(closed)}}
+      {:error, _} = error -> error
+    end
+  end
+
+  defp close_domain_range(
+         %Tempo.Range{first: %Tempo{} = first, last: :undefined} = range,
+         _bound_from,
+         %Tempo{} = bound_to
+       ) do
+    with %Tempo{} = last <- trunc_to_resolution_of(bound_to, first) do
+      {:ok, %{range | last: last}}
+    end
+  end
+
+  defp close_domain_range(
+         %Tempo.Range{first: :undefined, last: %Tempo{} = last} = range,
+         %Tempo{} = bound_from,
+         _bound_to
+       ) do
+    with %Tempo{} = first <- trunc_to_resolution_of(bound_from, last) do
+      {:ok, %{range | first: first}}
+    end
+  end
+
+  defp close_domain_range(member, _bound_from, _bound_to), do: {:ok, member}
+
+  defp trunc_to_resolution_of(value, like) do
+    {unit, _level} = resolution(like)
+    trunc(value, unit)
+  end
+
+  # A cadence longer than one period — `R/{1848Y..}/P4Y/…`, "every four years
+  # since 1848" — keeps every nth domain period, counted from the domain's first
+  # stated value, as RRULE's INTERVAL steps from DTSTART. The cadence unit must be
+  # the periods' own (years stepping years, months stepping months); a
+  # one-period cadence keeps every period.
+  defp step_domain_periods([], _domain, _duration), do: []
+
+  defp step_domain_periods(
+         [first_period | _rest] = periods,
+         domain,
+         %Tempo.Duration{time: [{unit, step}]}
+       )
+       when unit in [:year, :month] and is_integer(step) and step > 1 do
+    with {^unit, _level} <- resolution(Interval.from(first_period)),
+         %Tempo{} = phase <- domain_phase(domain) do
+      origin = cadence_index(phase, unit)
+
+      Enum.filter(periods, fn period ->
+        Integer.mod(cadence_index(Interval.from(period), unit) - origin, step) == 0
+      end)
+    else
+      _other -> periods
+    end
+  end
+
+  defp step_domain_periods(periods, _domain, _duration), do: periods
+
+  # The domain's earliest stated value — the origin its cadence counts from.
+  defp domain_phase(%Tempo.Set{set: members}) do
+    members
+    |> Enum.flat_map(&stated_domain_values/1)
+    |> Enum.reduce(nil, fn
+      value, nil -> value
+      value, earliest -> earlier_endpoint(value, earliest)
+    end)
+  end
+
+  defp stated_domain_values(%Tempo{} = value), do: [value]
+  defp stated_domain_values(%Tempo.Range{first: %Tempo{} = first}), do: [first]
+  defp stated_domain_values(%Tempo.Range{last: %Tempo{} = last}), do: [last]
+  defp stated_domain_values(_member), do: []
+
+  defp cadence_index(%Tempo{} = value, :year), do: year(value)
+  defp cadence_index(%Tempo{} = value, :month), do: year(value) * 12 + month(value)
+
   # Keep only the domain years matching a `:even` / `:odd` / `:leap` filter
   # (`{2000Y..2020Y}e`). Parity is arithmetic on the year number; leap delegates
   # to each year's calendar `leap_year?/1` (Calendrical), so the Gregorian
@@ -5955,6 +6172,31 @@ defmodule Tempo do
   defp year_filter_matches?(:even, year, _calendar), do: Integer.mod(year, 2) == 0
   defp year_filter_matches?(:odd, year, _calendar), do: Integer.mod(year, 2) == 1
   defp year_filter_matches?(:leap, year, calendar), do: calendar.leap_year?(year)
+
+  # One recurrence-set member's occurrences: an interval member (a recurrence, or
+  # a concrete interval) carries its metadata onto each occurrence; a plain
+  # `%Tempo{}` member is a concrete value, materialised to its span. Anything
+  # else is not a member, so it is an error rather than a raise.
+  defp recurrence_set_member(%Tempo.Interval{metadata: metadata} = member, opts) do
+    with {:ok, materialised} <- to_interval(member, opts) do
+      occurrences =
+        materialised
+        |> recurrence_set_occurrences()
+        |> Enum.map(&merge_member_metadata(&1, metadata))
+
+      {:ok, occurrences}
+    end
+  end
+
+  defp recurrence_set_member(%Tempo{} = member, opts) do
+    with {:ok, materialised} <- to_interval(member, opts) do
+      {:ok, recurrence_set_occurrences(materialised)}
+    end
+  end
+
+  defp recurrence_set_member(member, _opts) do
+    {:error, MaterialisationError.exception(value: member, reason: :recurrence_set_member)}
+  end
 
   defp recurrence_set_occurrences(%Tempo.Interval{} = interval), do: [interval]
   defp recurrence_set_occurrences(%Tempo.IntervalSet{} = set), do: IntervalSet.to_list(set)

@@ -7,7 +7,8 @@ defmodule Tempo.RecurrenceSet do
   through set algebra. Its members are ordinary `%Tempo.Interval{}` values, each
   either a recurrence (`~o"R/../P1Y/FL12M25DN"`) or an already-concrete interval,
   and each may carry `:metadata` (a holiday name, say) that materialisation
-  preserves on every occurrence it produces.
+  preserves on every occurrence it produces. A plain `%Tempo{}` member is a
+  concrete value too, standing for its own span (`~o"2026-06-15"` is that day).
 
   It completes the triad `%Tempo.Interval{}` (one rule) →
   `%Tempo.RecurrenceSet{}` (many rules) → `%Tempo.IntervalSet{}` (materialised).
@@ -18,7 +19,7 @@ defmodule Tempo.RecurrenceSet do
   """
 
   @type t :: %__MODULE__{
-          members: [Tempo.Interval.t()],
+          members: [Tempo.Interval.t() | Tempo.t()],
           metadata: map()
         }
 
@@ -30,7 +31,8 @@ defmodule Tempo.RecurrenceSet do
   ### Arguments
 
   * `members` is a list of `t:Tempo.Interval.t/0` values — each a recurrence or
-    a concrete interval, optionally carrying its own `:metadata`.
+    a concrete interval, optionally carrying its own `:metadata` — or plain
+    `t:Tempo.t/0` values, each standing for its own span.
 
   ### Options
 
@@ -50,7 +52,7 @@ defmodule Tempo.RecurrenceSet do
       {2, %{territory: :AU}}
 
   """
-  @spec new([Tempo.Interval.t()], keyword()) :: t()
+  @spec new([Tempo.Interval.t() | Tempo.t()], keyword()) :: t()
   def new(members, options \\ []) when is_list(members) do
     %__MODULE__{members: members, metadata: Keyword.get(options, :metadata, %{})}
   end

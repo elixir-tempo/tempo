@@ -135,6 +135,81 @@ defmodule Tempo.ExclusionDomainTest do
     end
   end
 
+  describe "an open-ended domain takes its missing end from the bound" do
+    test "an open upper end runs to the bound" do
+      {:ok, set} = Tempo.to_interval(~o"R/{2023Y..}/P1Y/FL1M2DN", bound: ~o"{2021..2027}Y")
+      assert years(set) == [2023, 2024, 2025, 2026, 2027]
+    end
+
+    test "an open lower end runs from the bound" do
+      {:ok, set} = Tempo.to_interval(~o"R/{..2023Y}/P1Y/FL1M2DN", bound: ~o"{2021..2027}Y")
+      assert years(set) == [2021, 2022, 2023]
+    end
+
+    test "two open ranges leave out the years between them" do
+      {:ok, set} =
+        Tempo.to_interval(~o"R/{..2019Y,2021Y..}/P1Y/FL1M2DN", bound: ~o"{2019..2022}Y")
+
+      assert years(set) == [2019, 2021, 2022]
+    end
+
+    test "an exclusion and a year filter still apply" do
+      {:ok, excluded} =
+        Tempo.to_interval(~o"R/{2017Y..,^2020Y}/P1Y/FL1M2DN", bound: ~o"{2019..2022}Y")
+
+      assert years(excluded) == [2019, 2021, 2022]
+
+      {:ok, even} = Tempo.to_interval(~o"R/{2024Y..}e/P1Y/FL1M2DN", bound: ~o"{2021..2027}Y")
+      assert years(even) == [2024, 2026]
+    end
+
+    test "a bound before the range yields nothing" do
+      {:ok, set} = Tempo.to_interval(~o"R/{2030Y..}/P1Y/FL1M2DN", bound: ~o"2026Y")
+      assert years(set) == []
+    end
+
+    test "without a bound an open range is an error, not a raise" do
+      assert {:error, %Tempo.MaterialisationError{reason: :open_range}} =
+               Tempo.to_interval(~o"R/{2023Y..}/P1Y/FL1M2DN")
+    end
+  end
+
+  describe "a multi-period cadence steps through the domain" do
+    test "every fourth year, counted from the domain's first year" do
+      {:ok, set} =
+        Tempo.to_interval(~o"R/{2020Y..2040Y}/P4Y/FL11M3DN", bound: ~o"{2019..2028}Y")
+
+      assert years(set) == [2020, 2024, 2028]
+    end
+
+    test "the domain, not the bound, sets the phase" do
+      {:ok, set} = Tempo.to_interval(~o"R/{2021Y..}/P4Y/FL7M1DN", bound: ~o"{2020..2030}Y")
+      assert years(set) == [2021, 2025, 2029]
+    end
+
+    test "US presidential Election Day, every four years since 1848" do
+      {:ok, set} =
+        Tempo.to_interval(~o"R/{1848Y..}/P4Y/FLLL11M1K1IN/P7DN2K-1IN", bound: ~o"{2019..2028}Y")
+
+      dates =
+        set
+        |> IntervalSet.to_list()
+        |> Enum.map(fn interval ->
+          {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
+          date
+        end)
+
+      assert dates == [~D[2020-11-03], ~D[2024-11-05], ~D[2028-11-07]]
+    end
+
+    test "an excluded year keeps the phase of the others" do
+      {:ok, set} =
+        Tempo.to_interval(~o"R/{2000Y..2040Y,^2024Y}/P4Y/FL11M3DN", bound: ~o"{2019..2030}Y")
+
+      assert years(set) == [2020, 2028]
+    end
+  end
+
   describe "round-trip" do
     test "a domain recurrence with ^ round-trips faithfully" do
       value = ~o"R/{2020Y..2030Y,^2026Y}/P1Y/FL12M25DN"
