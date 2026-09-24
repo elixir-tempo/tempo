@@ -201,17 +201,30 @@ defmodule Tempo.RRule.Selection do
 
   # Each day in the window `[anchor, anchor + duration)` (a negative duration
   # extends backward), as a day-resolution candidate in the anchor's calendar.
+  # Half-open over day numbers — `lo` the earlier of anchor and shifted
+  # endpoint, `hi` the later — so a forward duration keeps the anchor and a
+  # backward one excludes it. A window within one day (`lo == hi`) steps down
+  # from `lo`, as `Date.range/2` infers for a reversed range: see TODO.md.
   defp window_days(
          %Interval{from: %Tempo{calendar: calendar, time: time} = from} = anchor,
          %Tempo.Duration{} = duration
        ) do
-    with {:ok, %Date{} = anchor_date} <- date_of(time, calendar),
+    with {:ok, {anchor_days, fraction}} <- iso_days_of(time, calendar),
          %Tempo{time: shifted_time} <- Tempo.shift(from, duration),
-         {:ok, %Date{} = shifted_date} <- date_of(shifted_time, calendar) do
-      {lo, hi} = window_bounds(anchor_date, shifted_date)
+         {:ok, {shifted_days, _fraction}} <- iso_days_of(shifted_time, calendar) do
+      lo = min(anchor_days, shifted_days)
+      hi = max(anchor_days, shifted_days)
+      step = if lo < hi, do: 1, else: -1
 
-      Date.range(lo, Date.add(hi, -1))
-      |> Enum.map(fn date -> swap_date(anchor, date.year, date.month, date.day) end)
+      days =
+        for iso_days <- lo..(hi - 1)//step do
+          {year, month, day, _hour, _minute, _second, _microsecond} =
+            calendar.naive_datetime_from_iso_days({iso_days, fraction})
+
+          {year, month, day, iso_days}
+        end
+
+      swap_dates(anchor, days)
     else
       _ -> []
     end
@@ -740,11 +753,10 @@ defmodule Tempo.RRule.Selection do
         [candidate]
 
       dates ->
-        dates
-        |> Enum.filter(fn {_year, _month, _day, dow} -> dow in weekdays end)
-        |> Enum.map(fn {year, month, day, _dow} ->
-          swap_date(candidate, year, month, day)
-        end)
+        matching =
+          for {year, month, day, dow} <- dates, dow in weekdays, do: {year, month, day}
+
+        swap_dates(candidate, matching)
     end
   end
 
@@ -771,12 +783,12 @@ defmodule Tempo.RRule.Selection do
          days,
          weekdays
        ) do
-    days
-    |> Enum.filter(fn day ->
-      dow = calendar.day_of_week(year, month, day, :monday) |> normalise_day_of_week()
-      dow in weekdays
-    end)
-    |> Enum.map(fn day -> swap_date(candidate, year, month, day) end)
+    matching =
+      for day <- days,
+          normalise_day_of_week(calendar.day_of_week(year, month, day, :monday)) in weekdays,
+          do: {year, month, day}
+
+    swap_dates(candidate, matching)
   end
 
   # Build the week around the candidate's date as seven
@@ -818,16 +830,96 @@ defmodule Tempo.RRule.Selection do
   # the time list and breaks `Tempo.IntervalSet`'s positional
   # sort. We use `replace_unit_values/2` to preserve the original
   # [year, month, day, hour, …] ordering.
-  defp swap_date(
-         %Interval{from: %Tempo{time: time, calendar: calendar} = tempo, to: to} = candidate,
-         year,
-         month,
-         day
+  #
+  # `to` moves by the same number of days as `from`, keeping its
+  # hour/minute/second so a 10:00–11:00 event stays 10:00–11:00 on
+  # its new date. A swap onto the candidate's own date moves nothing.
+  defp swap_date(%Interval{} = candidate, year, month, day) do
+    {swapped, _shift} = swap_into(candidate, :pending, {year, month, day})
+    swapped
+  end
+
+  # Swap each date — `{year, month, day}`, or `{year, month, day,
+  # iso_days}` for a date the calendar itself produced — into the same
+  # candidate, in order. The candidate's own day numbers, which every
+  # moved `to` needs, are found when a date first moves and shared by
+  # the rest.
+  defp swap_dates(%Interval{} = candidate, dates) do
+    {swapped, _shift} = Enum.map_reduce(dates, :pending, &swap_into(candidate, &2, &1))
+    swapped
+  end
+
+  defp swap_into(%Interval{from: %Tempo{time: time} = tempo, to: to} = candidate, shift, date) do
+    case replace_unit_values(time, year: elem(date, 0), month: elem(date, 1), day: elem(date, 2)) do
+      ^time ->
+        {candidate, shift}
+
+      new_from_time ->
+        shift = known_shift(shift, candidate)
+        new_to = shift_endpoint(to, shift, date, new_from_time, tempo.calendar)
+        {%{candidate | from: %{tempo | time: new_from_time}, to: new_to}, shift}
+    end
+  end
+
+  defp known_shift(:pending, candidate), do: endpoint_shift(candidate)
+  defp known_shift(shift, _candidate), do: shift
+
+  # The day numbers a moved `to` needs — `from`'s and `to`'s, with the
+  # day fraction `to` converts back with — as `Date.diff/2` and
+  # `Date.add/2` would find them. `nil` when `to` is absent or either
+  # date is not a valid date in the calendar, and `to` then stays put.
+  defp endpoint_shift(%Interval{
+         from: %Tempo{time: from_time, calendar: calendar},
+         to: %Tempo{time: to_time}
+       }) do
+    with {:ok, {from_days, _from_fraction}} <- iso_days_of(from_time, calendar),
+         {:ok, {to_days, to_fraction}} <- iso_days_of(to_time, calendar) do
+      {from_days, to_days, to_fraction}
+    else
+      _invalid -> nil
+    end
+  end
+
+  defp endpoint_shift(%Interval{}), do: nil
+
+  defp shift_endpoint(
+         %Tempo{time: to_time} = to,
+         {from_days, to_days, fraction},
+         date,
+         new_from_time,
+         calendar
        ) do
-    new_from_time = replace_unit_values(time, year: year, month: month, day: day)
-    new_from = %{tempo | time: new_from_time}
-    new_to = shift_to_endpoint(to, time, new_from_time, calendar)
-    %{candidate | from: new_from, to: new_to}
+    case new_day_number(date, new_from_time, calendar) do
+      {:ok, new_from_days} ->
+        {year, month, day, _hour, _minute, _second, _microsecond} =
+          calendar.naive_datetime_from_iso_days({to_days + new_from_days - from_days, fraction})
+
+        %{to | time: replace_unit_values(to_time, year: year, month: month, day: day)}
+
+      _invalid ->
+        to
+    end
+  end
+
+  defp shift_endpoint(to, _shift, _date, _new_from_time, _calendar), do: to
+
+  defp new_day_number({_year, _month, _day, iso_days}, _new_from_time, _calendar),
+    do: {:ok, iso_days}
+
+  defp new_day_number({_year, _month, _day}, new_from_time, calendar) do
+    with {:ok, {iso_days, _fraction}} <- iso_days_of(new_from_time, calendar), do: {:ok, iso_days}
+  end
+
+  # A valid date's day number in its calendar, paired with the day
+  # fraction the calendar gives midnight.
+  defp iso_days_of(time, calendar) do
+    case date_of(time, calendar) do
+      {:ok, %Date{year: year, month: month, day: day}} ->
+        {:ok, calendar.naive_datetime_to_iso_days(year, month, day, 0, 0, 0, {0, 0})}
+
+      invalid ->
+        invalid
+    end
   end
 
   # Order-preserving replacement for keyword-list `time` values.
@@ -842,46 +934,6 @@ defmodule Tempo.RRule.Selection do
         :error -> {key, value}
       end
     end)
-  end
-
-  defp shift_to_endpoint(nil, _old, _new, _calendar), do: nil
-  defp shift_to_endpoint(:undefined, _old, _new, _calendar), do: :undefined
-
-  defp shift_to_endpoint(%Tempo{time: to_time} = to_tempo, old_from_time, new_from_time, calendar) do
-    # Shift `to`'s date component by the same calendar-aware
-    # day-delta that took `from` to its new position. Preserves
-    # hour/minute/second on `to` so a 10:00–11:00 event stays
-    # 10:00–11:00 on its new date.
-    case delta_days(old_from_time, new_from_time, calendar) do
-      nil ->
-        to_tempo
-
-      delta ->
-        case shift_date_fields(to_time, delta, calendar) do
-          nil -> to_tempo
-          shifted_time -> %{to_tempo | time: shifted_time}
-        end
-    end
-  end
-
-  defp delta_days(from_time, to_time, calendar) do
-    with {:ok, a} <- date_of(from_time, calendar),
-         {:ok, b} <- date_of(to_time, calendar) do
-      Date.diff(b, a)
-    else
-      _ -> nil
-    end
-  end
-
-  defp shift_date_fields(time, delta, calendar) do
-    case date_of(time, calendar) do
-      {:ok, date} ->
-        new_date = Date.add(date, delta)
-        replace_unit_values(time, year: new_date.year, month: new_date.month, day: new_date.day)
-
-      _ ->
-        nil
-    end
   end
 
   defp date_of(time, calendar) do
@@ -920,33 +972,30 @@ defmodule Tempo.RRule.Selection do
     year = candidate.from.time[:year]
     months_in_year = calendar.months_in_year(year)
 
-    months
-    |> Enum.map(fn month ->
-      day =
-        cond do
-          provisional_day? -> 1
-          is_integer(origin_day) -> origin_day
-          true -> candidate.from.time[:day]
-        end
-
+    day =
       cond do
-        not (is_integer(month) and month >= 1 and month <= months_in_year) ->
-          nil
-
-        is_integer(day) ->
-          swap_date(candidate, year, month, min(day, calendar.days_in_month(year, month)))
-
-        true ->
-          # A pure month selection (`L6M`) on a month-resolution
-          # candidate: no day is named or carried, so the occurrence is
-          # the month itself. `swap_date` rewrites only the units the
-          # candidate already has, so a dayless candidate stays at month
-          # resolution.
-          swap_date(candidate, year, month, day)
+        provisional_day? -> 1
+        is_integer(origin_day) -> origin_day
+        true -> candidate.from.time[:day]
       end
-    end)
-    |> Enum.reject(&is_nil/1)
+
+    dates =
+      for month <- months, is_integer(month) and month >= 1 and month <= months_in_year do
+        {year, month, clamp_to_month(calendar, year, month, day)}
+      end
+
+    swap_dates(candidate, dates)
   end
+
+  # A day clamps to the month's last day. A pure month selection (`L6M`)
+  # on a month-resolution candidate names no day and carries none, so
+  # the occurrence is the month itself: `swap_date` rewrites only the
+  # units the candidate already has, so a dayless candidate stays at
+  # month resolution.
+  defp clamp_to_month(calendar, year, month, day) when is_integer(day),
+    do: min(day, calendar.days_in_month(year, month))
+
+  defp clamp_to_month(_calendar, _year, _month, day), do: day
 
   # Resolve each traditional month spec (an integer, or `{n, :leap}`) to its
   # ordinal position in the candidate's year, dropping any the year does not
@@ -974,15 +1023,13 @@ defmodule Tempo.RRule.Selection do
     month = candidate.from.time[:month]
     dim = calendar.days_in_month(year, month)
 
-    days
-    |> Enum.map(fn d ->
-      resolved = signed_index_to_value(d, dim)
+    dates =
+      for d <- days,
+          resolved <- [signed_index_to_value(d, dim)],
+          is_integer(resolved) and resolved >= 1 and resolved <= dim,
+          do: {year, month, resolved}
 
-      if is_integer(resolved) and resolved >= 1 and resolved <= dim do
-        swap_date(candidate, year, month, resolved)
-      end
-    end)
-    |> Enum.reject(&is_nil/1)
+    swap_dates(candidate, dates)
   end
 
   ## ------------------------------------------------------------
@@ -992,12 +1039,12 @@ defmodule Tempo.RRule.Selection do
   # Project each target (`15`, `1`, `:last`) onto the nearest
   # weekday within the candidate's own month, then emit one new
   # candidate per resolved date.
-  defp expand_nearest_weekdays(%Interval{} = candidate, targets) do
-    candidate
-    |> nearest_weekday_days(targets)
-    |> Enum.map(fn day ->
-      swap_date(candidate, candidate.from.time[:year], candidate.from.time[:month], day)
-    end)
+  defp expand_nearest_weekdays(%Interval{from: %Tempo{time: time}} = candidate, targets) do
+    dates =
+      for day <- nearest_weekday_days(candidate, targets),
+          do: {time[:year], time[:month], day}
+
+    swap_dates(candidate, dates)
   end
 
   # The concrete day-of-month each target resolves to in the
@@ -1067,16 +1114,14 @@ defmodule Tempo.RRule.Selection do
     year = candidate.from.time[:year]
     diy = calendar.days_in_year(year)
 
-    year_days
-    |> Enum.map(fn d ->
-      resolved = signed_index_to_value(d, diy)
+    dates =
+      for d <- year_days,
+          resolved <- [signed_index_to_value(d, diy)],
+          is_integer(resolved) and resolved >= 1 and resolved <= diy,
+          {m, day} <- [year_day_to_month_day(calendar, year, resolved)],
+          do: {year, m, day}
 
-      if is_integer(resolved) and resolved >= 1 and resolved <= diy do
-        year_day_to_month_day(calendar, year, resolved)
-      end
-    end)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.map(fn {m, day} -> swap_date(candidate, year, m, day) end)
+    swap_dates(candidate, dates)
   end
 
   # Resolve a computed event in the candidate's year and emit its date as a
@@ -1132,8 +1177,8 @@ defmodule Tempo.RRule.Selection do
     resolved = signed_index_to_value(wk, wiy)
 
     if is_integer(resolved) and resolved >= 1 and resolved <= wiy do
-      week_dates_in_year(calendar, year, resolved)
-      |> Enum.map(fn {m, day} -> swap_date(candidate, year, m, day) end)
+      dates = for {m, day} <- week_dates_in_year(calendar, year, resolved), do: {year, m, day}
+      swap_dates(candidate, dates)
     else
       []
     end

@@ -4,6 +4,8 @@
 
 ### Changed
 
+* A recurrence selection that moves a candidate to several dates (weekday, month-day, week and window expansions) finds the candidate's own day numbers once, and a move onto its own date asks the calendar nothing — about a third fewer calendar calls for a lunisolar calendar.
+
 * Recurrence selections converge on the ISO 8601-2 §12.9 position designator `I` — applied last over the resolved set and written weekday-then-position (`1K2I` = the 2nd Monday) — and the invented `V` set-position designator is retired. An ordinal `BYDAY` across distinct weekdays (`2MO,2WE`) has no ISO form and round-trips only through `Tempo.to_rrule/1`.
 
 ### Deprecated
