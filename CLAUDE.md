@@ -158,7 +158,7 @@ The only standing config deviations are disables with concrete, documented reaso
 
 The following documents are **critical** when working on this project. Consult them whenever behaviour, syntax, or semantics need to be verified — do not guess.
 
-* **ISO 8601 standards** — the canonical PDFs live in `~/Documents/Development/iso_standards/`. These are the source of truth for ISO 8601 Part 1 (date/time representations) and Part 2 (extensions), which Tempo implements.
+* **ISO 8601 standards** — the canonical PDFs live in this repository at `papers/iso8601_specs/` (`ISO_8601-1_2019(en).PDF` and `ISO_8601-2_2019(en).PDF`; read them with `pdftotext`). These are the source of truth for ISO 8601 Part 1 (date/time representations) and Part 2 (extensions), which Tempo implements.
 
 * **IETF draft-ietf-sedate-datetime-extended-09 (IXDTF)** — <https://www.ietf.org/archive/id/draft-ietf-sedate-datetime-extended-09.html#name-format-of-extended-informat>. Defines the extended information suffix syntax (`[zone]`, `[u-ca=calendar]`, `[key=value]`, critical `!` flag) parsed by `Tempo.Iso8601.Tokenizer.Extended`.
 
