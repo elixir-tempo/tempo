@@ -93,9 +93,9 @@ defmodule Tempo.Iso8601.RoundTripTest do
     {"IXDTF — IANA zone", "2026-06-15T10:00[Europe/Paris]"},
     {"IXDTF — numeric offset", "2026-06-15T10:00[+08:45]"},
     {"IXDTF — numeric offset, negative", "2026-06-15T10:00[-03:30]"},
-    {"IXDTF — calendar", "5786-10-30[u-ca=hebrew]"},
+    {"IXDTF — calendar", "5786-09-30[u-ca=hebrew]"},
     {"IXDTF — generic tag", "2026-06-15[_foo=bar-baz]"},
-    {"IXDTF — critical calendar", "5786-10-30[!u-ca=hebrew]"}
+    {"IXDTF — critical calendar", "5786-09-30[!u-ca=hebrew]"}
   ]
 
   describe "every ISO 8601 token round-trips through inspect/1" do

@@ -286,7 +286,7 @@ defmodule Tempo.FromElixir.Test do
       {:ok, hebrew_date} = Tempo.to_elixir(hebrew_tempo)
 
       assert hebrew_date.calendar == Calendrical.Hebrew
-      assert {hebrew_date.year, hebrew_date.month, hebrew_date.day} == {5786, 10, 30}
+      assert {hebrew_date.year, hebrew_date.month, hebrew_date.day} == {5786, 9, 30}
     end
 
     test "to_elixir errors on a Tempo-only duration component" do
@@ -300,7 +300,7 @@ defmodule Tempo.FromElixir.Test do
       {:ok, converted} =
         Tempo.to_calendar(~o"2026-06-15/2026-06-16", Calendrical.Hebrew)
 
-      assert Tempo.to_iso8601(converted) == "5786Y10M30D/11M1D"
+      assert Tempo.to_iso8601(converted) == "5786Y9M30D/10M1D"
     end
 
     test "a fiscal quarter reads back as the Gregorian dates it covers" do
@@ -333,7 +333,7 @@ defmodule Tempo.FromElixir.Test do
     test "an unbounded end stays unbounded" do
       {:ok, converted} = Tempo.to_calendar(~o"2026-06-15/..", Calendrical.Hebrew)
 
-      assert Tempo.to_iso8601(Interval.from(converted)) == "5786Y10M30D"
+      assert Tempo.to_iso8601(Interval.from(converted)) == "5786Y9M30D"
       assert Interval.to(converted) in [nil, :undefined]
     end
 
@@ -353,7 +353,7 @@ defmodule Tempo.FromElixir.Test do
 
       assert IntervalSet.count(converted) == 2
       assert [first, _second] = IntervalSet.members(converted)
-      assert Tempo.to_iso8601(first) == "5786Y10M30D/11M1D"
+      assert Tempo.to_iso8601(first) == "5786Y9M30D/10M1D"
     end
 
     test "one unconvertible member fails the whole set" do
@@ -384,7 +384,7 @@ defmodule Tempo.FromElixir.Test do
       {:ok, hebrew} = Tempo.to_calendar(~o"2026-06-15", Calendrical.Hebrew)
 
       assert hebrew.calendar == Calendrical.Hebrew
-      assert {Tempo.year(hebrew), Tempo.month(hebrew), Tempo.day(hebrew)} == {5786, 10, 30}
+      assert {Tempo.year(hebrew), Tempo.month(hebrew), Tempo.day(hebrew)} == {5786, 9, 30}
     end
 
     test "round-trips back to the Gregorian day" do

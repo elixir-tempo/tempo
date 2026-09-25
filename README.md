@@ -65,9 +65,9 @@ iex> Tempo.overlaps?(paris, utc_window)
 true   # Paris 10:00 CEST == UTC 08:00 — inside the window
 
 # Cross-calendar comparison, no manual conversion
-iex> hebrew = Tempo.new!(year: 5786, month: 10, day: 30, calendar: Calendrical.Hebrew)
+iex> hebrew = Tempo.new!(year: 5786, month: 9, day: 30, calendar: Calendrical.Hebrew)
 iex> Tempo.overlaps?(hebrew, ~o"2026-06-15")
-true   # Hebrew 5786-10-30 is Gregorian 2026-06-15
+true   # Hebrew 5786-09-30 is Gregorian 2026-06-15
 ```
 
 ### Three ways to construct a Tempo

@@ -312,7 +312,7 @@ defmodule Tempo.Interval.PredicatesTest do
     # explicitly rather than silently compute garbage.
 
     test "raises when from and to are in different calendars" do
-      {:ok, hebrew} = Tempo.from_iso8601("5786-10-30[u-ca=hebrew]")
+      {:ok, hebrew} = Tempo.from_iso8601("5786-09-30[u-ca=hebrew]")
       gregorian = ~o"2026-06-15"
       iv = %Interval{from: hebrew, to: gregorian}
 
@@ -322,7 +322,7 @@ defmodule Tempo.Interval.PredicatesTest do
     end
 
     test "error message points at set operations as the cross-calendar path" do
-      {:ok, hebrew} = Tempo.from_iso8601("5786-10-30[u-ca=hebrew]")
+      {:ok, hebrew} = Tempo.from_iso8601("5786-09-30[u-ca=hebrew]")
       iv = %Interval{from: hebrew, to: ~o"2026-06-15"}
 
       try do

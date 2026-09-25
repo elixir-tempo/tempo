@@ -619,7 +619,7 @@ defmodule Tempo do
 
       iex> {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("invalid")
 
-      iex> {:ok, tempo} = Tempo.from_iso8601("5786-10-30[u-ca=hebrew]")
+      iex> {:ok, tempo} = Tempo.from_iso8601("5786-09-30[u-ca=hebrew]")
       iex> tempo.calendar
       Calendrical.Hebrew
 
@@ -3397,7 +3397,7 @@ defmodule Tempo do
 
       iex> {:ok, hebrew} = Tempo.to_calendar(~o"2026-06-15", Calendrical.Hebrew)
       iex> {Tempo.year(hebrew), Tempo.month(hebrew), Tempo.day(hebrew)}
-      {5786, 10, 30}
+      {5786, 9, 30}
 
   A whole span converts as one value. This is a fiscal quarter read back
   as the Gregorian dates it covers:
@@ -3413,7 +3413,7 @@ defmodule Tempo do
       iex> {:ok, set} = Tempo.IntervalSet.new([~o"2026-06-15/2026-06-16"])
       iex> {:ok, hebrew} = Tempo.to_calendar(set, Calendrical.Hebrew)
       iex> hebrew |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.to_iso8601/1)
-      ["5786Y10M30D/11M1D"]
+      ["5786Y9M30D/10M1D"]
 
   """
   @spec to_calendar(t() | Interval.t() | IntervalSet.t(), module()) ::
@@ -3480,7 +3480,7 @@ defmodule Tempo do
   ### Examples
 
       iex> Tempo.to_calendar!(~o"2026-06-15", Calendrical.Hebrew)
-      Tempo.from_iso8601!("5786Y10M30D", Calendrical.Hebrew)
+      Tempo.from_iso8601!("5786Y9M30D", Calendrical.Hebrew)
 
   """
   @spec to_calendar!(t() | Tempo.Interval.t() | Tempo.IntervalSet.t(), module()) ::

@@ -87,7 +87,7 @@ defmodule Tempo.NewTest do
     end
 
     test "non-Gregorian calendar" do
-      {:ok, t} = Tempo.new(year: 5786, month: 10, day: 30, calendar: Calendrical.Hebrew)
+      {:ok, t} = Tempo.new(year: 5786, month: 9, day: 30, calendar: Calendrical.Hebrew)
       assert t.calendar == Calendrical.Hebrew
     end
 

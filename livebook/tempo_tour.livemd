@@ -314,7 +314,7 @@ BYSETPOS applies last, picking the Nth element of each month's candidate set.
 Tempo values are calendar-aware. The IXDTF `[u-ca=NAME]` suffix attaches a calendar to any value at parse time — Hebrew, Islamic, Persian, Buddhist, and the rest resolve to their `Calendrical.*` modules automatically:
 
 ```elixir
-{:ok, hebrew} = Tempo.from_iso8601("5786-10-30[u-ca=hebrew]")
+{:ok, hebrew} = Tempo.from_iso8601("5786-09-30[u-ca=hebrew]")
 Tempo.overlaps?(hebrew, ~o"2026-06-15")
 ```
 

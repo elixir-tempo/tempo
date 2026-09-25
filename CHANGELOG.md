@@ -22,7 +22,7 @@
 
 * `Tempo.RecurrenceSet` — a collection of recurrence rules (a territory's holidays, a calendar's events) that materialises as one `IntervalSet` against a window, so `Tempo.intersection(diary, holidays)` composes it with a diary through set algebra.
 
-* The `<n>m` / `<n>+m` traditional-month designator for lunisolar calendars — the traditional (named) month rather than the ordinal `M`, with `+m` for the leap month. In a concrete date it resolves to the ordinal; in a selection it survives and resolves per year, so `~o"R/../P1Y/FL8m15DN[u-ca=chinese]"` tracks the true traditional month across leap years.
+* The `<n>m` / `<n>+m` traditional-month designator for the lunisolar and Hebrew calendars (RFC 7529's Hebrew numbering: Nisan is `7m`, Adar I `5+m`) — the named month rather than the ordinal `M`. In a concrete date it resolves to the ordinal; in a selection it resolves per year, so `~o"R/../P1Y/FL8m15DN[u-ca=chinese]"` tracks the true traditional month across leap years.
 
 * Recurrence-domain exclusions and filters — a `^value` member drops a period from any set, a `{…}` domain in the recurrence slot (`R/{2020Y..2024Y,^2022Y}/P1Y/…`) bounds and punches holes in a recurrence, and lowercase `e`/`o`/`l` after a domain keep even/odd/leap years.
 
@@ -35,6 +35,10 @@
 * `Tempo.Interval.Relations` — converse, narrowing and composition over *sets* of Allen relations, for reasoning when the relation between two intervals is constrained but not known. `narrow/2` combines two sources of knowledge; it is not `Tempo.intersection/2`, which operates on time values.
 
 ### Fixed
+
+* Adding years to a Hebrew or lunisolar date keeps its traditional month, as the calendar's own arithmetic does: `Tempo.shift(~o"5786Y7M15D[u-ca=hebrew]", ~o"P1Y")` is 15 Nisan 5787, `5787Y8M15D`, where it kept month 7 (Adar II).
+
+* Hebrew years validate, enumerate and step through their months as `1..12` or `1..13`, now that Calendrical numbers a Hebrew month by its position: `5785Y12M` is Elul and `5785Y13M` an error, where Elul was rejected and a missing month 6 appeared.
 
 * `Tempo.Network.Relation.from_allen/1` preserves direction for `:overlapped_by`, which previously mapped to `:overlaps` and silently reversed the operands. Every Allen relation now round-trips through `to_allen/1`.
 

@@ -65,7 +65,7 @@ defmodule Tempo.CalendarIndependenceTest do
 
     test "sigil-built cross-calendar values compare through the shared frame" do
       assert Tempo.relation(~o"2025-09-23", ~o"5786-01-01[u-ca=hebrew]") == :equals
-      assert Tempo.relation(~o"5786-10-30[u-ca=hebrew]", ~o"2026-06-15") == :equals
+      assert Tempo.relation(~o"5786-09-30[u-ca=hebrew]", ~o"2026-06-15") == :equals
     end
 
     test "a sigil with no u-ca suffix is still Gregorian" do
@@ -125,17 +125,23 @@ defmodule Tempo.CalendarIndependenceTest do
   end
 
   describe "a month that does not exist in a calendar year" do
-    test "Hebrew Adar I in an ordinary year is a clear error, not a crash" do
-      # Month 6 (Adar I) exists only in leap years; 2026 AM is ordinary.
+    test "a Hebrew 13th month in an ordinary year is a clear error, not a crash" do
+      # A 13th month exists only in leap years; 2026 AM is ordinary.
       assert {:error, %Tempo.InvalidDateError{reason: reason}} =
-               Tempo.from_iso8601("2026-06-15[u-ca=hebrew]")
+               Tempo.from_iso8601("2026-13-15[u-ca=hebrew]")
 
-      assert reason =~ "does not exist"
+      assert reason =~ "valid values are 1..12"
     end
 
-    test "the corresponding real month still resolves" do
-      # In an ordinary year Adar is month 7, not 6.
-      assert {:ok, _} = Tempo.from_iso8601("2026-07-15[u-ca=hebrew]")
+    test "Adar I in an ordinary year is a clear error, not a crash" do
+      # Adar I is the leap month following traditional month 5.
+      assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("2026Y5+m15D[u-ca=hebrew]")
+    end
+
+    test "the months of an ordinary year resolve" do
+      # In an ordinary year Adar is month 6 and Elul month 12.
+      assert {:ok, _} = Tempo.from_iso8601("2026-06-15[u-ca=hebrew]")
+      assert {:ok, _} = Tempo.from_iso8601("2026-12-15[u-ca=hebrew]")
     end
   end
 

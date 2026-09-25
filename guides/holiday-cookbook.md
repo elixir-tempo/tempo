@@ -112,14 +112,14 @@ A holiday defined in another calendar is anchored at a start date **in that cale
 | Hebrew | Rosh Hashanah — 1 Tishrei | `~o"R/5787Y1M1D/P1Y[u-ca=hebrew]"` | 2026-09-12 | — |
 | Hebrew | Yom Kippur — 10 Tishrei | `~o"R/5787Y1M10D/P1Y[u-ca=hebrew]"` | 2026-09-21 | — |
 | Hebrew | Hanukkah — 25 Kislev | `~o"R/5787Y3M25D/P1Y[u-ca=hebrew]"` | 2026-12-05 | — |
-| Hebrew (leap-aware) | Passover — 15 Nisan | `~o"R/5786Y8M15D/P1Y[u-ca=hebrew]"` | 2026-04-02 | — |
+| Hebrew (leap-aware) | Passover — 15 Nisan | `~o"R/5786Y7m15D/P1Y[u-ca=hebrew]"` | 2026-04-02 | — |
 | Chinese lunisolar | Chinese New Year — 1st day of the 1st month | `~o"R/4663Y1M1D/P1Y[u-ca=chinese]"` | 2026-02-17 | — |
 | Persian (Solar Hijri) | Nowruz — 1 Farvardin | `~o"R/1405Y1M1D/P1Y[u-ca=persian]"` | 2026-03-21 | — |
 | Coptic | Coptic / Orthodox Christmas — 29 Koiak | `~o"R/1742Y4M29D/P1Y[u-ca=coptic]"` | 2026-01-07 | — |
 | Julian | Orthodox Christmas (Julian reckoning) — 25 December Julian (Gregorian 7 January) | `~o"R/2025Y12M25D/P1Y[u-ca=julian]"` | 2026-01-07 | — |
 | Julian | Old New Year — 1 January Julian (Gregorian 14 January) | `~o"R/2026Y1M1D/P1Y[u-ca=julian]"` | 2026-01-14 | — |
 
-> **Hebrew month numbers shift in leap years.** A Hebrew leap year inserts Adar I before Adar II, so Nisan is month 7 in a common year but month **8** in a leap year like 5786 — hence Passover's `8M` above. Anchor each Hebrew holiday on a year whose month numbering you have checked; `Tempo.to_date/1` will tell you the Gregorian date.
+> **Hebrew month numbers shift in leap years.** A Hebrew leap year inserts Adar I before Adar II, so Nisan is month 7 of an ordinary year like 5786 but month **8** of a leap year like 5787. Write a month after Adar with the traditional `m` marker — Passover's `7m` above is 15 Nisan in any year — and a `P1Y` cadence keeps it on Nisan in every later year.
 
 ## Observed-date substitution (a transform over a holiday)
 

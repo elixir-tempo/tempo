@@ -556,12 +556,12 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     ])
   end
 
-  # A lunisolar traditional month, written `<n>m` (and `<n>+m` for the
+  # A traditional month, written `<n>m` (and `<n>+m` for the
   # intercalary month following traditional month `n`, 閏n月). Lowercase `m`
   # marks it a Tempo extension — the counterpart to the ordinal ISO 8601 `M`.
   # The tokeniser is calendar-blind, so it tags `:traditional_month`
   # structurally: `Tempo.Validation` resolves it to the ordinal month against a
-  # lunisolar calendar, and to `n` itself on any other (where the traditional
+  # calendar with leap months (Hebrew, lunisolar), and to `n` itself on any other (where the traditional
   # and ordinal numberings coincide). In a selection frame the tag survives
   # unresolved — a recurrence has no year — and materialisation resolves it per
   # year. The same combinator serves both frames.

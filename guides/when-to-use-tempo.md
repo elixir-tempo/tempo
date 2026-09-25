@@ -30,7 +30,7 @@ The thirteen named relations — `:precedes`, `:meets`, `:overlaps`, `:during`, 
 
 ### You need calendar awareness beyond Gregorian
 
-Hebrew, Islamic, Julian, Coptic, Ethiopic, Persian, Chinese, Japanese, and more. `~o"5786-10-30[u-ca=hebrew]"` and `~o"2026-06-15"` can be compared, enumerated, and combined directly — Tempo performs the calendar conversion automatically. Historical / archaeological dates (the switch from Julian to Gregorian is a real thing that happens inside date comparisons before 1582) are first-class.
+Hebrew, Islamic, Julian, Coptic, Ethiopic, Persian, Chinese, Japanese, and more. `~o"5786-09-30[u-ca=hebrew]"` and `~o"2026-06-15"` can be compared, enumerated, and combined directly — Tempo performs the calendar conversion automatically. Historical / archaeological dates (the switch from Julian to Gregorian is a real thing that happens inside date comparisons before 1582) are first-class.
 
 ### You need RRULE or iCalendar integration
 

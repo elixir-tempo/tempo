@@ -335,7 +335,7 @@ defmodule Tempo.RRule.Selection do
     limit(candidates, months, &month_of/1)
   end
 
-  # A traditional (lunisolar) month selector resolves to its ordinal position
+  # A traditional month selector resolves to its ordinal position
   # per candidate year — a leap month shifts the numbering — then applies as an
   # ordinary BYMONTH. The traditional→ordinal step is Calendrical's, via
   # `Tempo.Validation.traditional_month_ordinal/3`. A leap month the candidate's

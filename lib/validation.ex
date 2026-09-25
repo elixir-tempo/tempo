@@ -408,8 +408,8 @@ defmodule Tempo.Validation do
     end
   end
 
-  # A lunisolar intercalary month `{n, :leap}` (parsed from `<n>+m`) resolves to
-  # its ordinal position for the year against a lunisolar calendar; the rest of
+  # An intercalary month `{n, :leap}` (parsed from `<n>+m`) resolves to its
+  # ordinal position for the year against a calendar with leap months; the rest of
   # the pipeline then sees an ordinary integer month. Any calendar without a
   # leap month at that traditional position is rejected.
   def resolve([{:year, year}, {:traditional_month, {month, :leap}} | rest], calendar)
@@ -420,8 +420,8 @@ defmodule Tempo.Validation do
     end
   end
 
-  # A lunisolar traditional month `n` (parsed from `<n>m`) resolves to its
-  # ordinal position for the year against a lunisolar calendar; on any other
+  # A traditional month `n` (parsed from `<n>m`) resolves to its ordinal
+  # position for the year against a calendar with leap months; on any other
   # calendar the traditional and ordinal numberings coincide, so it passes
   # through as `n`. The traditional→ordinal step is Calendrical's — a concrete
   # year is known, so `traditional_month_ordinal/3` yields the ordinal month.
@@ -769,9 +769,10 @@ defmodule Tempo.Validation do
   end
 
   # The ordinal position of the intercalary month following traditional month
-  # `month` in `year`. Only a lunisolar calendar has one — it exposes
-  # `leap_month/1` (the ordinal of the leap month, or a non-integer when the
-  # year has none) and `traditional_leap_month/1` (its traditional number).
+  # `month` in `year`. Only a calendar with leap months (Hebrew, lunisolar) has
+  # one — it exposes `leap_month/1` (the ordinal of the leap month, or a
+  # non-integer when the year has none) and `traditional_leap_month/1` (its
+  # traditional number).
   defp leap_month_ordinal(calendar, year, month) do
     if function_exported?(calendar, :leap_month, 1) and
          function_exported?(calendar, :traditional_leap_month, 1) do
@@ -803,11 +804,11 @@ defmodule Tempo.Validation do
   end
 
   @doc """
-  Resolves a traditional (lunisolar) month to its ordinal position in a year.
+  Resolves a traditional month to its ordinal position in a year.
 
   `month` is a traditional month number, or the `{n, :leap}` tuple for the
-  intercalary month following traditional `n`. On a lunisolar calendar a leap
-  month shifts the numbering, so the traditional→ordinal step is Calendrical's:
+  intercalary month following traditional `n`. On a calendar with leap months
+  (Hebrew, lunisolar) a leap month shifts the numbering, so the traditional→ordinal step is Calendrical's:
   the calendar's `ordinal_month/2`, or, for a lunisolar calendar without it,
   `new/3` at day 1 (always valid), which builds the date and reports its
   ordinal `month`. On any other calendar the two numberings coincide and an

@@ -459,7 +459,7 @@ defmodule Tempo.ZoneValidationTest do
       # `:calendar` swaps the calendar; `strict: true` has nothing to
       # check here (an offset with no zone), so both apply cleanly.
       assert {:ok, %Tempo{calendar: Calendrical.Hebrew}} =
-               Tempo.from_iso8601("5786-10-30T10:37:00+02:00",
+               Tempo.from_iso8601("5786-09-30T10:37:00+02:00",
                  calendar: Calendrical.Hebrew,
                  strict: true
                )

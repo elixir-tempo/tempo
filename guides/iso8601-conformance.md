@@ -180,7 +180,7 @@ None of these break ISO 8601 compatibility — Tempo accepts the standard forms 
 
 #### The lowercase-designator convention
 
-ISO 8601 designators are uppercase (`Y M D H W O K I N`). Tempo marks its own **selection** extensions with a **lowercase** letter, so they are easy to spot as non-standard at a glance: `q` (week start), `e` (a computed event), `m` (a traditional lunisolar month, with `+m` for its leap month), the `^` exclusion prefix (a recurrence domain member to drop), and the `e`/`o`/`l` domain filters (even / odd / leap years). Each is described below. `I` (BYSETPOS position) is uppercase because it *is* ISO 8601-2 §12.9, not a Tempo extension.
+ISO 8601 designators are uppercase (`Y M D H W O K I N`). Tempo marks its own **selection** extensions with a **lowercase** letter, so they are easy to spot as non-standard at a glance: `q` (week start), `e` (a computed event), `m` (a traditional month, with `+m` for its leap month), the `^` exclusion prefix (a recurrence domain member to drop), and the `e`/`o`/`l` domain filters (even / odd / leap years). Each is described below. `I` (BYSETPOS position) is uppercase because it *is* ISO 8601-2 §12.9, not a Tempo extension.
 
 ### The position designator `I` and week start `q`
 
@@ -254,9 +254,11 @@ Tempo.to_interval(~o"R/../P1Y/FL(easter)eN", bound: ~o"{2026..2028}Y")
 
 An unknown event name parses but resolves to no occurrences, so a typo yields an empty result rather than a crash. Like `q`, an `e` selection round-trips through `inspect/1`/`Tempo.to_iso8601/1`; there is no RFC 5545 equivalent, so `Tempo.to_rrule/1` cannot express it.
 
-### Lunisolar traditional month — the `m` marker
+### Traditional month — the `m` marker
 
-ISO 8601 numbers months **ordinally** (1..13 in a lunisolar leap year), which is what `M` writes and what `%Date{}` stores. Lunisolar calendars also number months **traditionally** — the Chinese 8月 is always the eighth *named* month, but its ordinal position slips to 9 in a year that inserts a leap month before it. ISO 8601 has no notation for the traditional numbering, so Tempo adds the lowercase `m`: `<n>m` is traditional month `n`, and `<n>+m` is the intercalary ("leap") month following it (閏n月). Both are valid in a `[u-ca=chinese]` (or `dangi`, `vietnamese`, japanese-lunisolar) context; on any other calendar the two numberings coincide, so `m` is identical to `M`.
+ISO 8601 numbers months **ordinally** (1..13 in a leap year with a leap month), which is what `M` writes and what `%Date{}` stores. Calendars with leap months also number months **traditionally** — the Chinese 8月 is always the eighth *named* month, but its ordinal position slips to 9 in a year that inserts a leap month before it. ISO 8601 has no notation for the traditional numbering, so Tempo adds the lowercase `m`: `<n>m` is traditional month `n`, and `<n>+m` is the intercalary ("leap") month following it (閏n月). Both are valid in a `[u-ca=chinese]` (or `dangi`, `vietnamese`, japanese-lunisolar) context, and in a `[u-ca=hebrew]` one; on any other calendar the two numberings coincide, so `m` is identical to `M`.
+
+The Hebrew traditional numbering is [RFC 7529](https://www.rfc-editor.org/rfc/rfc7529)'s (the `monthCode` of JavaScript's Temporal): Tishri is `1m` and Elul `12m`, Nisan is `7m`, Adar — Adar II in a leap year, the month of Purim — is `6m`, and Adar I, the leap month, is `5+m`. So Passover is `7m15D` in every year, the 7th month of an ordinary year and the 8th of a leap year.
 
 In a **concrete date** the year is known, so `m`/`+m` resolve to the ordinal month and are stored and rendered ordinally — the lowercase marker never survives a round-trip:
 
@@ -268,11 +270,17 @@ Tempo.from_iso8601!("4662Y6+m1D[u-ca=chinese]")
 # Traditional month 8 is past that leap month, so it is ordinal 9
 Tempo.from_iso8601!("4662Y8m1D[u-ca=chinese]")
 #=> Tempo.from_iso8601!("4662Y9M1D[u-ca=chinese]", Calendrical.Chinese)
+
+# 15 Nisan is the 7th month of the ordinary Hebrew year 5786
+Tempo.from_iso8601!("5786Y7m15D[u-ca=hebrew]")
+#=> Tempo.from_iso8601!("5786Y7M15D[u-ca=hebrew]", Calendrical.Hebrew)
 ```
+
+Adding years to such a date keeps its traditional month, as the calendar's own arithmetic does, so a yearly recurrence anchored on it recurs on the same named month: `R/5786Y7m15D/P1Y[u-ca=hebrew]` is Passover every year, `5787Y8M15D` in the leap year 5787.
 
 In a **selection** — a recurrence, which has no year — there is nothing to resolve against, so `m`/`+m` survive the round-trip and the traditional→ordinal step happens per year at materialisation. This is what makes a lunisolar holiday a re-materialisable recurrence: `R/../P1Y/FL8m15DN[u-ca=chinese]` ("the 15th of traditional month 8, every year") lands on ordinal month 8 in a common year and ordinal 9 in a leap year, tracking the true traditional month rather than a fixed ordinal. A `<n>+m` selection yields an occurrence only in the years that actually carry that leap month.
 
-A bare `<n>M` is always the ordinal month, unchanged, so existing values keep their meaning. `<n>+m` on a non-lunisolar calendar, or in a year with no leap month at that position, is a parse error (concrete) or simply no occurrence (selection) rather than a silent misreading. It lowers to the `{n, :leap}` construct `Calendrical.Chinese.new/3` already accepts.
+A bare `<n>M` is always the ordinal month, unchanged, so existing values keep their meaning. `<n>+m` on a calendar without leap months, or in a year with no leap month at that position, is a parse error (concrete) or simply no occurrence (selection) rather than a silent misreading. It lowers to the `{n, :leap}` construct `Calendrical.Chinese.new/3` already accepts.
 
 ### Exclusions and the recurrence domain — the `^` marker and `e`/`o`/`l` filters
 

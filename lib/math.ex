@@ -1279,7 +1279,37 @@ defmodule Tempo.Math do
     end
   end
 
+  # A calendar with a traditional month numbering (Hebrew, the lunisolar
+  # calendars) places a month one later after a leap month, so a month's
+  # number changes from year to year. A year shift keeps the traditional
+  # month, as the calendar's own `plus/6` does it: Nisan stays Nisan, and a
+  # leap month the new year lacks becomes the month it follows or precedes.
+  defp apply_n_units(time, :year, n, calendar) do
+    case shift_years_by_calendar(time, n, calendar) do
+      {:ok, new_time} -> {:ok, new_time}
+      :fallback -> step_n_units(time, :year, n, calendar)
+    end
+  end
+
   defp apply_n_units(time, unit, n, calendar), do: step_n_units(time, unit, n, calendar)
+
+  # Only the year and month change; the day is clamped to the new month
+  # once every unit has been applied (`maybe_clamp/3`).
+  defp shift_years_by_calendar(time, n, calendar) do
+    with true <- traditional_months?(calendar),
+         year when is_integer(year) <- Keyword.get(time, :year),
+         month when is_integer(month) <- Keyword.get(time, :month),
+         {new_year, new_month, _day} <- calendar.plus(year, month, 1, :years, n, []) do
+      {:ok, time |> Keyword.replace!(:year, new_year) |> Keyword.replace!(:month, new_month)}
+    else
+      _other -> :fallback
+    end
+  end
+
+  defp traditional_months?(calendar) do
+    Code.ensure_loaded?(calendar) and function_exported?(calendar, :ordinal_month, 2) and
+      function_exported?(calendar, :plus, 6)
+  end
 
   # `Calendrical.iso_days/4` validates the date and finds its day number in
   # one pass (one lunar year, for a lunisolar calendar), and the shifted day

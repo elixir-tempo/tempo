@@ -24,7 +24,7 @@ defmodule Tempo.CalendarTest do
 
   describe "Tempo.from_iso8601/1 with [u-ca=NAME] suffix" do
     test "[u-ca=hebrew] swaps the struct's calendar to Calendrical.Hebrew" do
-      {:ok, tempo} = Tempo.from_iso8601("5786-10-30[u-ca=hebrew]")
+      {:ok, tempo} = Tempo.from_iso8601("5786-09-30[u-ca=hebrew]")
       assert tempo.calendar == Calendrical.Hebrew
       # The extended metadata still captures the raw tag value.
       assert tempo.extended.calendar == :hebrew
@@ -290,6 +290,114 @@ defmodule Tempo.CalendarTest do
     end
   end
 
+  # The Hebrew traditional numbering is RFC 7529's: Tishri is 1m and Elul 12m,
+  # Adar (Adar II in a leap year) is 6m, and Adar I, the leap month, is 5+m.
+  # 5786 is an ordinary year and 5787 a leap year.
+  describe "the `<n>m` / `<n>+m` Hebrew traditional month" do
+    test "Nisan is traditional month 7, the 7th month of an ordinary year and the 8th of a leap year" do
+      assert Tempo.to_iso8601(Tempo.from_iso8601!("5786Y7m15D[u-ca=hebrew]")) ==
+               "5786Y7M15D[u-ca=hebrew]"
+
+      assert Tempo.to_iso8601(Tempo.from_iso8601!("5787Y7m15D[u-ca=hebrew]")) ==
+               "5787Y8M15D[u-ca=hebrew]"
+    end
+
+    test "Adar I is the leap month following traditional month 5" do
+      assert Tempo.to_iso8601(Tempo.from_iso8601!("5787Y5+m1D[u-ca=hebrew]")) ==
+               "5787Y6M1D[u-ca=hebrew]"
+
+      assert {:error, _} = Tempo.from_iso8601("5786Y5+m1D[u-ca=hebrew]")
+      assert {:error, _} = Tempo.from_iso8601("5787Y6+m1D[u-ca=hebrew]")
+    end
+
+    test "traditional month 6 is the Adar of Purim, Adar II in a leap year" do
+      assert Tempo.to_iso8601(Tempo.from_iso8601!("5786Y6m14D[u-ca=hebrew]")) ==
+               "5786Y6M14D[u-ca=hebrew]"
+
+      assert Tempo.to_iso8601(Tempo.from_iso8601!("5787Y6m14D[u-ca=hebrew]")) ==
+               "5787Y7M14D[u-ca=hebrew]"
+    end
+
+    test "a selection is Passover every year" do
+      {:ok, rec} = Tempo.from_iso8601("R/../P1Y/FL7m15DN[u-ca=hebrew]")
+      {:ok, bound} = Tempo.from_iso8601("2026Y/2030Y")
+      {:ok, set} = Tempo.to_interval(rec, bound: bound)
+
+      assert gregorian_days(set) == ["2026-04-02", "2027-04-22", "2028-04-11", "2029-03-31"]
+    end
+
+    test "an Adar I selection occurs only in leap years" do
+      {:ok, rec} = Tempo.from_iso8601("R/../P1Y/FL5+m1DN[u-ca=hebrew]")
+      {:ok, bound} = Tempo.from_iso8601("2026Y/2030Y")
+      {:ok, set} = Tempo.to_interval(rec, bound: bound)
+
+      assert [%Interval{} = adar_i] = IntervalSet.to_list(set)
+      assert Interval.from(adar_i).time[:year] == 5787
+      assert Interval.from(adar_i).time[:month] == 6
+    end
+
+    test "the months of an ordinary and a leap year" do
+      assert Tempo.to_iso8601(Tempo.from_iso8601!("5786Y{1..-1}M[u-ca=hebrew]")) ==
+               "5786Y{1..12}M[u-ca=hebrew]"
+
+      assert Tempo.to_iso8601(Tempo.from_iso8601!("5787Y{1..-1}M[u-ca=hebrew]")) ==
+               "5787Y{1..13}M[u-ca=hebrew]"
+    end
+  end
+
+  # Adding years keeps a date's traditional month, as the calendar's own
+  # arithmetic does, so a month past a leap month changes its ordinal.
+  describe "adding years to a calendar with leap months" do
+    test "keeps the Hebrew traditional month" do
+      nisan = Tempo.from_iso8601!("5786Y7M15D[u-ca=hebrew]")
+      next_nisan = Tempo.from_iso8601!("5787Y8M15D[u-ca=hebrew]")
+
+      assert Tempo.shift(nisan, Tempo.from_iso8601!("P1Y")) == next_nisan
+      assert Tempo.shift(next_nisan, Tempo.from_iso8601!("-P1Y")) == nisan
+    end
+
+    test "keeps Adar I only in a leap year, and its day within the month" do
+      adar_i = Tempo.from_iso8601!("5784Y6M30D[u-ca=hebrew]")
+
+      assert Tempo.shift(adar_i, Tempo.from_iso8601!("P1Y")) ==
+               Tempo.from_iso8601!("5785Y6M29D[u-ca=hebrew]")
+
+      assert Tempo.shift(adar_i, Tempo.from_iso8601!("P3Y")) ==
+               Tempo.from_iso8601!("5787Y6M30D[u-ca=hebrew]")
+    end
+
+    test "keeps the Chinese traditional month" do
+      # Traditional month 8 is ordinal 9 in 4660, after its leap month, and
+      # ordinal 8 in the ordinary year 4661
+      assert Tempo.shift(
+               Tempo.from_iso8601!("4660Y9M15D[u-ca=chinese]"),
+               Tempo.from_iso8601!("P1Y")
+             ) == Tempo.from_iso8601!("4661Y8M15D[u-ca=chinese]")
+    end
+
+    test "a yearly recurrence anchored on a Hebrew date recurs on its month" do
+      {:ok, recurrence} = Tempo.from_iso8601("R4/5786Y7m15D/P1Y[u-ca=hebrew]")
+      {:ok, set} = Tempo.to_interval(recurrence)
+
+      starts =
+        set
+        |> IntervalSet.to_list()
+        |> Enum.map(&Tempo.to_iso8601(Interval.from(&1)))
+
+      assert starts == [
+               "5786Y7M15D[u-ca=hebrew]",
+               "5787Y8M15D[u-ca=hebrew]",
+               "5788Y7M15D[u-ca=hebrew]",
+               "5789Y7M15D[u-ca=hebrew]"
+             ]
+    end
+
+    test "leaves a Gregorian month unchanged" do
+      assert Tempo.shift(Tempo.from_iso8601!("2024Y2M29D"), Tempo.from_iso8601!("P1Y")) ==
+               Tempo.from_iso8601!("2025Y2M28D")
+    end
+  end
+
   # Tempo borrowed the `[…]` suffix from IXDTF (which uses `[u-ca=value]`),
   # but the value is a BCP 47 Unicode Calendar Identifier, whose native form
   # is hyphenated (`u-ca-hebrew`). So Tempo reads BOTH separators (liberal in)
@@ -343,14 +451,14 @@ defmodule Tempo.CalendarTest do
     end
 
     test "explicit Hebrew stays Hebrew without any IXDTF suffix" do
-      {:ok, tempo} = Tempo.from_iso8601("5786-10-30", Calendrical.Hebrew)
+      {:ok, tempo} = Tempo.from_iso8601("5786-09-30", Calendrical.Hebrew)
       assert tempo.calendar == Calendrical.Hebrew
     end
   end
 
   describe "cross-calendar comparisons via IXDTF" do
     test "overlaps?/2 works between an IXDTF-Hebrew date and a Gregorian one" do
-      {:ok, hebrew_date} = Tempo.from_iso8601("5786-10-30[u-ca=hebrew]")
+      {:ok, hebrew_date} = Tempo.from_iso8601("5786-09-30[u-ca=hebrew]")
       {:ok, gregorian_date} = Tempo.from_iso8601("2026-06-15")
 
       # Whether they overlap depends on the calendar conversion;

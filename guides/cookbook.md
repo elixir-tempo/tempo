@@ -275,7 +275,7 @@ Tempo.shorter_than?(iv, ~o"PT2H")  # true — strict <
 ### How do I compare two values across different calendars?
 
 ```elixir
-iex> {:ok, hebrew} = Tempo.from_iso8601("5786-10-30[u-ca=hebrew]")
+iex> {:ok, hebrew} = Tempo.from_iso8601("5786-09-30[u-ca=hebrew]")
 iex> hebrew.calendar
 Calendrical.Hebrew
 
@@ -610,14 +610,14 @@ Metadata rides through any downstream set operation — after `intersection/diff
 ### How do I compare a Hebrew date to a Gregorian one?
 
 ```elixir
-hebrew    = Tempo.new!(year: 5786, month: 10, day: 30, calendar: Calendrical.Hebrew)
+hebrew    = Tempo.new!(year: 5786, month: 9, day: 30, calendar: Calendrical.Hebrew)
 gregorian = ~o"2026-06-15"
 
 Tempo.overlaps?(hebrew, gregorian)
 #=> true
 ```
 
-> The **Hebrew date** 5786-10-30 **overlaps** the **Gregorian date** 2026-06-15 — they're the same day.
+> The **Hebrew date** 5786-09-30 **overlaps** the **Gregorian date** 2026-06-15 — they're the same day.
 
 ### How do I compare across timezones?
 
@@ -638,7 +638,7 @@ Tempo projects to UTC via the configured time zone database for cross-zone compa
 ```elixir
 iex> {:ok, hebrew} = Tempo.to_calendar(~o"2026-06-15", Calendrical.Hebrew)
 iex> {Tempo.year(hebrew), Tempo.month(hebrew), Tempo.day(hebrew)}
-{5786, 10, 30}
+{5786, 9, 30}
 ```
 
 ### How do I get a fiscal quarter from the calendar that defines it?

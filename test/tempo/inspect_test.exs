@@ -150,22 +150,22 @@ defmodule Tempo.Iso8601.InspectTest do
     end
 
     test "Interval with one shared calendar writes [u-ca=…] once, at the end" do
-      {:ok, from} = Tempo.from_iso8601("5786-10-30[u-ca=hebrew]")
-      {:ok, to} = Tempo.from_iso8601("5786-11-01[u-ca=hebrew]")
+      {:ok, from} = Tempo.from_iso8601("5786-09-30[u-ca=hebrew]")
+      {:ok, to} = Tempo.from_iso8601("5786-10-01[u-ca=hebrew]")
       iv = %Tempo.Interval{from: from, to: to}
 
-      assert inspect(iv) == "~o\"5786Y10M30D/11M1D[u-ca=hebrew]\""
+      assert inspect(iv) == "~o\"5786Y9M30D/10M1D[u-ca=hebrew]\""
     end
 
     test "a calendar written once grounds both endpoints on re-parse" do
       # Before the calendar propagated, this parsed as a *mixed*
       # Gregorian/Hebrew pair — which the abbreviated `11M1D` cannot mean,
       # since it is only readable against `from`'s own year.
-      iv = Tempo.from_iso8601!("5786Y10M30D/11M1D[u-ca=hebrew]")
+      iv = Tempo.from_iso8601!("5786Y9M30D/10M1D[u-ca=hebrew]")
 
       assert iv.from.calendar == Calendrical.Hebrew
       assert iv.to.calendar == Calendrical.Hebrew
-      assert iv == Tempo.from_iso8601!("5786Y10M30D[u-ca=hebrew]/11M1D[u-ca=hebrew]")
+      assert iv == Tempo.from_iso8601!("5786Y9M30D[u-ca=hebrew]/10M1D[u-ca=hebrew]")
     end
 
     test "a deliberately mixed pair keeps both calendars" do
