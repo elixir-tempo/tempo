@@ -34,7 +34,9 @@ The analyses, options and decisions that used to live inline in `TODO.md`, kept 
 ## Workdays, weekends and astronomical events
 
 * Find a way to express:
+
   * Astro events (Easter, New Moon, ....)
+
   * Workdays versus Weekends (different per locale) **Done.**
     `Tempo.weekend?/2` and `Tempo.workday?/2` classify a day against a
     territory's CLDR weekend (via `Localize.Calendar.weekend/1`), using
@@ -122,11 +124,11 @@ The analyses, options and decisions that used to live inline in `TODO.md`, kept 
   treat as an error (the standard intentionally leaves the strictness
   choice to the consumer). We should offer an opt-in strict mode:
 
-  - Either a parse-time option (e.g. `from_iso8601(str, strict: true)`)
+  * Either a parse-time option (e.g. `from_iso8601(str, strict: true)`)
     that errors when the offset and the zone disagree at the given wall
     instant.
 
-  - Or a post-parse validator (e.g. `Tempo.validate_zone_consistency/1`)
+  * Or a post-parse validator (e.g. `Tempo.validate_zone_consistency/1`)
     that returns `:ok | {:error, reason}` so callers can choose to enforce
     at schema-validation time without coupling it to parsing.
 
@@ -308,7 +310,7 @@ The analyses, options and decisions that used to live inline in `TODO.md`, kept 
   * The carry is only well-defined when the group doesn't hit the unit
     max (minute 1..15 is fine; minute 45..59 must carry into an `:hour`
     that may be absent), so "sometimes materialises, sometimes errors"
-    is murkier than a clean "anchor it first."
+    is murkier than a clean "anchor it first".
 
   * Date groups (`:day`/`:month`) genuinely *can't* be materialised
     without anchoring (variable month length); keeping one rule —
