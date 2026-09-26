@@ -27,6 +27,11 @@ defmodule Tempo.Iso8601.ParserTest do
       assert reason =~ "nesting exceeds"
     end
 
+    test "a day out of range in the explicit form is a parse error" do
+      assert {:error, %Tempo.ParseError{reason: reason}} = Tempo.from_iso8601("2026Y1M40D")
+      assert reason =~ "Invalid day"
+    end
+
     test "legitimate shallow set/group nesting still tokenizes" do
       assert {:ok, _} = Tokenizer.tokenize("{1,2,3}M")
       assert {:ok, _} = Tokenizer.tokenize("[2020Y/2021Y,2022Y/2023Y]")

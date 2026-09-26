@@ -2,13 +2,19 @@
 
 ## [v1.7.0] — Unreleased
 
+### Breaking changes
+
+* Week dates come from the calendar's own weeks: `Calendrical.Gregorian`, the default and `Calendar.ISO`'s, counts from the week holding January 1, so `2022-W01-1` is 2021-12-27 and `2026-W53` is invalid. ISO 8601 weeks are `Calendrical.ISOWeek`'s (`~o"2026-W53"W`).
+
 ### Changed
+
+* Date arithmetic in validation, selection, recurrence week expansion and interval conversion goes through Calendrical rather than `Date.add/2` and month-length walks.
 
 * `Tempo.parse/2`'s `:calendar` option is a calendar module, `Calendar.ISO` by default, as Calendrical 1.4's is: a CLDR calendar name such as `:hebrew` returns an error.
 
 * A recurrence selection that moves a candidate to several dates (weekday, month-day, week and window expansions) finds the candidate's own day numbers once, and a move onto its own date asks the calendar nothing — about a third fewer calendar calls for a lunisolar calendar.
 
-* Traditional lunisolar months resolve through Calendrical's `ordinal_month/2`, dates validate and convert through `Calendrical.iso_days/4`, and a day that fits every month of a calendar skips the per-year month length. The lunisolar holiday workload runs in 1.3 s instead of 2.1 s, with identical results.
+* Traditional lunisolar months resolve through Calendrical's `ordinal_month_from_traditional/2`, dates validate and convert through `Calendrical.iso_days/4`, and a day that fits every month of a calendar skips the per-year month length. The lunisolar holiday workload runs in 1.3 s instead of 2.1 s, with identical results.
 
 * Recurrence selections converge on the ISO 8601-2 §12.9 position designator `I` — applied last over the resolved set and written weekday-then-position (`1K2I` = the 2nd Monday) — and the invented `V` set-position designator is retired. An ordinal `BYDAY` across distinct weekdays (`2MO,2WE`) has no ISO form and round-trips only through `Tempo.to_rrule/1`.
 
@@ -17,6 +23,12 @@
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Added
+
+* `Tempo.new/1` takes `:quarter`, the span the calendar's `quarter/2` gives it, held as the months (in a week-based calendar, the weeks) `2026-34` parses to; `Tempo.parse/2` reads `"Q2 2026"` through it.
+
+* A value after a group of its own unit counts within the group (ISO 8601-2 §5.4.2): `2018Y9M2DT3GT8HU0H30M` is 16:30, `2018Y2G3MU2M` is May and `2026Y2G13WU3W` is week 16.
+
+* `Tempo.to_calendar/2` and `Tempo.to_date/1` convert a week-based calendar's date: `Tempo.to_calendar(~o"2020-W01-1"W, Calendrical.Gregorian)` is `2019-12-30`.
 
 * `Tempo.Event` and the `(name)e` computed-event selection — a recurrence resolved by algorithm rather than the calendar. `~o"R/../P1Y/FL(easter)eN"` is Western Easter and `(orthodox-easter)e` the Julian-calendar computus (both from `Calendrical.Ecclesiastical`); the equinoxes, solstices and first `(new-moon)e` of the year come from `Astro`; and the 24 East Asian solar terms (`(qingming)e`, …) from `Calendrical`, for the Chinese meridian by default or another via `Tempo.Event.date/3`.
 
@@ -37,6 +49,28 @@
 * `Tempo.Interval.Relations` — converse, narrowing and composition over *sets* of Allen relations, for reasoning when the relation between two intervals is constrained but not known. `narrow/2` combines two sources of knowledge; it is not `Tempo.intersection/2`, which operates on time values.
 
 ### Fixed
+
+* The ISO 8601-2 quarters, quadrimesters and semesters (codes 33–41) are the value's calendar's own periods, from Calendrical: a Hebrew leap year's Q2 holds Adar I and II and its Q4 runs to Elul, and a week-based calendar's are groups of weeks.
+
+* A group of hours, minutes or seconds holds clock values from 0: `T16H1GT15MU` is 16:00–16:15 and `6GT2HU` 10:00–12:00, where both started an hour or minute late.
+
+* A group counted from a year alone materialises — weeks (`2026Y2G13WU`), days (`1933Y1G80DU`) or hours (`2018Y20GT12HU`) — and a trailing group ends with its year or month, while one that starts beyond it (`2026Y5G3MU`, month 13) is an error.
+
+* A group renders as it was declared, `3GT8HU` with its `T`, where the last group of a month re-rendered as another (`2018Y2M3G11DU` as `2018Y2M4G6DU`).
+
+* A group whose size is not a duration (`2026Y1G2KU`) returns a `Tempo.ParseError`, where it raised `KeyError`.
+
+* `Tempo.new(year: 2026, day_of_year: 166)` is the date it names, as `2026-166` parses to, so conversion, comparison and enumeration read it; a day the year lacks is an error.
+
+* A fractional year or month lands on the day its elapsed fraction reaches: `1985.5Y` is noon on 2 July and `1985Y2.5M` is 15 February, a day later than before.
+
+* `Tempo.new/1` and `Tempo.from_iso8601/2` take `Calendar.ISO` as `Calendrical.Gregorian`, as the other entry points do.
+
+* A negative UTC offset with minutes carries its sign on its first non-zero component throughout: a `DateTime` in America/St_Johns becomes −03:30, where its shift read as −02:30, and `-00:30` keeps its sign.
+
+* A day after a season is the season's nth day, as a day after a quarter is: `2026-25-10` is March 29, where it produced a value with two day components.
+
+* `Tempo.from_iso8601/1` returns a `Tempo.ParseError` for an out-of-range day in the explicit form (`2026Y1M40D`), where it raised `FunctionClauseError`.
 
 * An astronomical season whose equinox or solstice falls outside the years Astro computes returns a `Tempo.ParseError`, where it raised `MatchError`: `0999-25`, and `3000-28`, whose winter ends at the March equinox of 3001.
 

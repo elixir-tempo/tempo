@@ -6,6 +6,7 @@ defmodule Tempo.Inspect do
   alias Localize.Validity.U
   alias Tempo.IntervalSet
   alias Tempo.Iso8601EncodeError
+  alias Tempo.Math
   alias Tempo.Microsecond
 
   @from_iso8601 "Tempo.from_iso8601!(\""
@@ -432,12 +433,16 @@ defmodule Tempo.Inspect do
     Kernel.inspect(value)
   end
 
+  # A group renders as the `nGsizeU` it was declared as. Its values count
+  # from the unit's first (month 1, hour 0), so the nth group of `size`
+  # starts `(n - 1) * size` past it. A time unit's size is written as a
+  # duration writes it, after `T`: `3GT8HU` is the third eight hours.
   defp inspect_value({unit, {:group, %Range{first: first, last: last}}}) do
     group_size = last - first + 1
-    nth = div(last, group_size)
+    nth = div(first - Math.unit_minimum(unit), group_size) + 1
 
     [_, unit_key] = inspect_value({unit, 1})
-    [inspect_value(nth), ?G, inspect_value(group_size), unit_key, ?U]
+    [inspect_value(nth), ?G, group_time_designator(unit), inspect_value(group_size), unit_key, ?U]
   end
 
   defp inspect_value({unit, {:group, {set_type, set_values}}, value}) do
@@ -801,6 +806,9 @@ defmodule Tempo.Inspect do
   defp inspect_value({:duration, duration}), do: inspect_value(duration)
   defp inspect_value(:undefined), do: ".."
 
+  defp group_time_designator(unit) when unit in [:hour, :minute, :second], do: ?T
+  defp group_time_designator(_unit), do: []
+
   @qualifiable_units [
     :year,
     :month,
@@ -874,6 +882,10 @@ defmodule Tempo.Inspect do
 
   defp inspect_shift(hour: hour, minute: minute) when hour > 0,
     do: [?Z, ?+, inspect_value(hour), ?H, inspect_value(minute), ?M]
+
+  # A negative offset under an hour carries its sign on the minute.
+  defp inspect_shift(hour: 0, minute: minute) when minute < 0,
+    do: [?Z, ?-, inspect_value(0), ?H, inspect_value(-minute), ?M]
 
   defp inspect_shift(hour: hour, minute: minute),
     do: [?Z, inspect_value(hour), ?H, inspect_value(minute), ?M]

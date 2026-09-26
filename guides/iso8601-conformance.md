@@ -50,7 +50,7 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 | Year-month | `2022-06`, `202206` |
 | Year-month-day | `2022-06-15`, `20220615` |
 | Ordinal date | `2022-166`, `2022166` |
-| Week date | `2022-W24`, `2022-W24-3`, `2022W243` |
+| Week date | `2022-W24`, `2022-W24-3`, `2022W243` (ISO 8601 week numbering in `Calendrical.ISOWeek`; other calendars number their own weeks) |
 | Month-day | `06-15` (the truncated `--06-15` / `--0615` forms are deprecated — see below) |
 | Time of day | `T10`, `T10:30`, `T10:30:00`, `T103000` |
 | Fractional seconds | `T10:30:00.5`, `T10:30:00,5` |
@@ -90,11 +90,12 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 | **Set of dates — all of** | `{1960,1961,1962}`, `{1960..1970}` |
 | **Set of dates — one of** | `[1984,1986,1988]`, `[1667..1672]` |
 | **Range in set** | `[1900..2000]`, `{-1640-06..-1200-01}` |
-| **Groups** | `5G10DU` (5th group of 10 days), `2018Y4G60DU6D` (2018, day 6 of the 4th group of 60 days) |
+| **Groups** | `5G10DU` (5th group of 10 days), `2018Y4G60DU6D` (2018, day 6 of the 4th group of 60 days), `1933Y1G80DU` (the first 80 days of 1933), `2026Y2G13WU` (weeks 14–26), `T16H1GT15MU` (16:00–16:15) |
+| **A value within a group** | `2018Y9M2DT3GT8HU0H30M` (30 minutes into the third eight hours: 16:30), `2018Y2G3MU2M` (May) |
 | **Selections** | `L1MN`, `L2MI3N` (1st month, 3rd instance of the 2nd month) |
 | **Meteorological seasons** (codes 21–24) | `2022-21` (spring), `2022-22` (summer), `2022-23` (autumn), `2022-24` (winter) |
 | **Astronomical seasons** (codes 25–32) | `2022-25` (N spring), `2022-26` (N summer), `2022-27` (N autumn), `2022-28` (N winter), `2022-29..32` (Southern hemisphere). Boundaries computed via the `Astro` library using March/September equinoxes and June/December solstices (accurate to ≈2 minutes for years 1000–3000 CE). |
-| **Quarters** (codes 33–36) | `2022-33` (Q1), `2022-36` (Q4) |
+| **Quarters** (codes 33–36) | `2022-33` (Q1), `2022-36` (Q4). The calendar's own quarters, from Calendrical: a Hebrew leap year's Q2 holds Adar I and II, and a week-based calendar's are groups of weeks. |
 | **Quadrimesters** (codes 37–39) | `2022-37`, `2022-38`, `2022-39` |
 | **Semestrals / halves** (codes 40–41) | `2022-40` (H1), `2022-41` (H2) |
 | **Negative calendar qualification** | `-2004?`, `-2004-06?`, `-2001-34` (Q1 BCE) |

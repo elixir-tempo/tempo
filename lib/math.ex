@@ -1251,8 +1251,8 @@ defmodule Tempo.Math do
   # arithmetic if profiling demands it.
   defp apply_n_units(time, _unit, 0, _calendar), do: {:ok, time}
 
-  # Fast path: adding N days to a concrete date is O(1) via
-  # absolute-day arithmetic (`Date.add/2`), versus O(N) single-day
+  # Fast path: adding N days to a concrete date is O(1) via its
+  # Calendrical day number (`Calendrical.iso_days/4`), versus O(N) single-day
   # stepping. This is what keeps a large recurrence (`R10000/…/P1D`)
   # from being quadratic to materialise. Falls back to stepping for
   # anything that isn't a plain integer `[year, month, day]` prefix
@@ -1266,7 +1266,7 @@ defmodule Tempo.Math do
 
   # Fast path: adding N of a fixed-length sub-day unit (hour, minute,
   # second) to a concrete datetime is O(1) via seconds-of-day
-  # arithmetic with a whole-day carry through `Date.add/2`, versus the
+  # arithmetic with a whole-day carry through Calendrical's `plus/5`, versus the
   # O(N) single-unit stepping below. Without it a high-frequency
   # recurrence (`FREQ=MINUTELY;COUNT=1440`) is quadratic to
   # materialise — occurrence i adds an i-unit duration. Falls back to
@@ -1307,7 +1307,8 @@ defmodule Tempo.Math do
   end
 
   defp traditional_months?(calendar) do
-    Code.ensure_loaded?(calendar) and function_exported?(calendar, :ordinal_month, 2) and
+    Code.ensure_loaded?(calendar) and
+      function_exported?(calendar, :ordinal_month_from_traditional, 2) and
       function_exported?(calendar, :plus, 6)
   end
 
@@ -1344,10 +1345,11 @@ defmodule Tempo.Math do
   # Add `n` sub-day units by seconds-of-day arithmetic. The time-of-day
   # is a resolution prefix (`hour` present, `minute`/`second` optional
   # and already extended by `ensure_resolution_for_duration/2`), so its
-  # seconds are exact; whole days overflow through `Date.add/2` (which
-  # rolls month/year in-calendar) and only the components that were
-  # present are written back, preserving the value's resolution. Wall
-  # clock, like the stepper — the zone rides on `shift`, untouched.
+  # seconds are exact; whole days overflow through Calendrical's
+  # `plus/5` (which rolls month/year in-calendar) and only the components
+  # that were present are written back, preserving the value's
+  # resolution. Wall clock, like the stepper — the zone rides on `shift`,
+  # untouched.
   defp fast_add_time_of_day(time, unit, n, calendar) do
     with year when is_integer(year) <- Keyword.get(time, :year),
          month when is_integer(month) <- Keyword.get(time, :month),
@@ -1355,17 +1357,19 @@ defmodule Tempo.Math do
          hour when is_integer(hour) <- Keyword.get(time, :hour),
          minute when is_integer(minute) <- Keyword.get(time, :minute, 0),
          second when is_integer(second) <- Keyword.get(time, :second, 0),
-         {:ok, date} <- Date.new(year, month, day, calendar) do
+         {:ok, _date} <- Date.new(year, month, day, calendar) do
       total = hour * 3600 + minute * 60 + second + n * unit_seconds(unit)
       day_carry = Integer.floor_div(total, @seconds_in_day)
       rem_tod = Integer.mod(total, @seconds_in_day)
-      shifted = Date.add(date, day_carry)
+
+      {year, month, day} =
+        calendar.plus(year, month, day, :days, day_carry)
 
       new_time =
         time
-        |> Keyword.replace!(:year, shifted.year)
-        |> Keyword.replace!(:month, shifted.month)
-        |> Keyword.replace!(:day, shifted.day)
+        |> Keyword.replace!(:year, year)
+        |> Keyword.replace!(:month, month)
+        |> Keyword.replace!(:day, day)
         |> Keyword.replace!(:hour, div(rem_tod, 3600))
         |> replace_if_present(:minute, div(rem(rem_tod, 3600), 60))
         |> replace_if_present(:second, rem(rem_tod, 60))

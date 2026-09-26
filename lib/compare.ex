@@ -30,6 +30,7 @@ defmodule Tempo.Compare do
   alias Calendar.ISO
   alias Tempo.Duration
   alias Tempo.TimeZoneDatabase
+  alias Tempo.Validation
   alias Tempo.ZoneOffsetMismatchError
 
   @doc """
@@ -390,12 +391,10 @@ defmodule Tempo.Compare do
   defp zone_id(%{zone_id: zone_id}), do: zone_id
 
   defp same_offset?(%Tempo{shift: a}, %Tempo{shift: b}),
-    do: offset_minutes(a) == offset_minutes(b)
+    do: shift_seconds(a) == shift_seconds(b)
 
-  defp offset_minutes(nil), do: nil
-
-  defp offset_minutes(shift),
-    do: Keyword.get(shift, :hour, 0) * 60 + Keyword.get(shift, :minute, 0)
+  defp shift_seconds(nil), do: nil
+  defp shift_seconds(shift), do: shift_to_seconds(shift)
 
   defp compare_via_utc(a, b) do
     a_secs = to_utc_seconds(a)
@@ -589,11 +588,12 @@ defmodule Tempo.Compare do
     |> IO.iodata_to_binary()
   end
 
-  # Resolve the calendar `{year, month, day}` from the time list,
-  # handling the three date representations Tempo stores:
+  # Resolve the proleptic Gregorian `{year, month, day}` from the time
+  # list, handling the three date representations Tempo stores:
   #
-  #   * ISO week date — `[year, week, day_of_week]`. Week 01 is the
-  #     week containing Jan 4 (ISO 8601-1 §5.2.3).
+  #   * Week date — `[year, week, day_of_week]`, or a week-based
+  #     calendar's `[year, week, day]`, in the calendar's own weeks
+  #     (`Tempo.Validation.week_date/4`).
   #   * Ordinal date — `[year, day]` with `:day` holding the
   #     day-of-year and no `:month` (the absence of `:month` is the
   #     disambiguator, matching `Tempo.to_date/1`).
@@ -601,22 +601,23 @@ defmodule Tempo.Compare do
   #
   # Without this, week and ordinal dates projected via the
   # month/day defaults (1, 1) and collapsed to Jan 1 — making every
-  # week interval report a zero-second duration.
+  # week interval report a zero-second duration. The dates come from
+  # Calendrical, never from arithmetic here.
   defp resolve_ymd(time, year, calendar) do
+    calendar = calendar || Calendrical.Gregorian
+
     cond do
       Keyword.has_key?(time, :week) ->
-        week = Keyword.get(time, :week)
-        dow = Keyword.get(time, :day_of_week, 1)
-        {:ok, jan_4} = Date.new(year, 1, 4)
-        jan_4_dow = Date.day_of_week(jan_4)
-        week_1_monday = Date.add(jan_4, -(jan_4_dow - 1))
-        date = Date.add(week_1_monday, (week - 1) * 7 + (dow - 1))
-        {date.year, date.month, date.day}
+        day = Keyword.get(time, :day_of_week, Keyword.get(time, :day, 1))
+
+        year
+        |> Validation.week_date(Keyword.get(time, :week), day, calendar)
+        |> gregorian_ymd(year)
 
       not Keyword.has_key?(time, :month) and Keyword.has_key?(time, :day) ->
-        {:ok, jan_1} = Date.new(year, 1, 1)
-        date = Date.add(jan_1, Keyword.get(time, :day) - 1)
-        {date.year, date.month, date.day}
+        year
+        |> Calendrical.date_from_day_of_year(Keyword.get(time, :day), calendar)
+        |> gregorian_ymd(year)
 
       true ->
         to_gregorian_ymd(
@@ -625,6 +626,20 @@ defmodule Tempo.Compare do
         )
     end
   end
+
+  # A date Calendrical computed, in the proleptic Gregorian frame, or the
+  # year's start when it could compute none — the start-of-unit default
+  # the standard-date branch uses.
+  defp gregorian_ymd({:ok, %Date{} = date}, year), do: gregorian_ymd(date, year)
+
+  defp gregorian_ymd(%Date{} = date, _year) do
+    case Date.convert(date, Calendrical.Gregorian) do
+      {:ok, iso} -> {iso.year, iso.month, iso.day}
+      _error -> {date.year, date.month, date.day}
+    end
+  end
+
+  defp gregorian_ymd(_error, year), do: {year, 1, 1}
 
   @doc false
   # A hand-built `%Tempo{}` may carry `calendar: nil` (the struct default)
@@ -645,8 +660,7 @@ defmodule Tempo.Compare do
   # than raising if the date is not valid (a defensive best-effort). The
   # `nil` default is resolved to `Calendrical.Gregorian` at the boundary
   # (`to_utc_seconds/1`), so it never reaches here.
-  defp to_gregorian_ymd(ymd, calendar) when calendar in [Calendrical.Gregorian, Calendar.ISO],
-    do: ymd
+  defp to_gregorian_ymd(ymd, Calendrical.Gregorian), do: ymd
 
   defp to_gregorian_ymd({year, month, day}, calendar) do
     case Calendrical.iso_days(year, month, day, calendar) do
@@ -741,17 +755,22 @@ defmodule Tempo.Compare do
   # conversion.
   def offset_seconds(shift) when is_list(shift), do: shift_to_seconds(shift)
 
-  # The parsed shift carries its sign on the hour alone
-  # (`-05:30` is `[hour: -5, minute: 30]`), so the finer components
-  # inherit it: −05:30 is −(5 h 30 m), not −5 h + 30 m — the
-  # difference is real for half-hour zones (Newfoundland −03:30).
+  # A shift carries its sign on its first non-zero component (`-05:30`
+  # is `[hour: -5, minute: 30]`, `-00:30` is `[hour: 0, minute: -30]`),
+  # so the finer components inherit it: −05:30 is −(5 h 30 m), not
+  # −5 h + 30 m — the difference is real for half-hour zones
+  # (Newfoundland −03:30).
   defp shift_to_seconds(shift) do
     hour = shift_component(shift, :hour)
     minute = shift_component(shift, :minute)
     second = shift_component(shift, :second)
-    sign = if hour < 0, do: -1, else: 1
-    sign * (abs(hour) * 3600 + minute * 60 + second)
+    shift_sign(hour, minute, second) * (abs(hour) * 3600 + abs(minute) * 60 + abs(second))
   end
+
+  defp shift_sign(hour, _minute, _second) when hour < 0, do: -1
+  defp shift_sign(0, minute, _second) when minute < 0, do: -1
+  defp shift_sign(0, 0, second) when second < 0, do: -1
+  defp shift_sign(_hour, _minute, _second), do: 1
 
   # `Keyword.get/3` returns `any()`, so any arithmetic on its result
   # widens to `number()` and propagates a stray `float()` into the

@@ -243,12 +243,12 @@ defmodule Tempo.Iso8601.Tokenizer.Helpers do
         _offset
       )
       when is_number(month) and month > 13 and month not in 21..41 do
-    {:error, :invalid_month}
+    {:error, "invalid month"}
   end
 
   def check_valid_date(_rest, [[{:month, month}, _remaining]], _context, _line, _offset)
       when is_number(month) and month > 13 and month not in 21..41 do
-    {:error, :invalid_month}
+    {:error, "invalid month"}
   end
 
   # No supported calendars have more than 31 days in a month
@@ -260,7 +260,7 @@ defmodule Tempo.Iso8601.Tokenizer.Helpers do
         _offset
       )
       when is_number(day) and day > 31 do
-    {:error, :invalid_day}
+    {:error, "invalid day"}
   end
 
   def check_valid_date(
@@ -271,12 +271,12 @@ defmodule Tempo.Iso8601.Tokenizer.Helpers do
         _offset
       )
       when is_number(day) and day > 31 do
-    {:error, :invalid_day}
+    {:error, "invalid day"}
   end
 
   def check_valid_date(_rest, [[{:day, day}, _remaining]], _context, _line, _offset)
       when is_number(day) and day > 31 do
-    {:error, :invalid_day}
+    {:error, "invalid day"}
   end
 
   def check_valid_date(rest, args, context, _line, _offset) do

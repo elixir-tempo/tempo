@@ -249,7 +249,7 @@ defmodule Tempo.Network.Normalize do
     gregorian_ymd(time, Compare.effective_calendar(calendar))
   end
 
-  defp gregorian_ymd(time, calendar) when calendar in [Calendrical.Gregorian, Calendar.ISO] do
+  defp gregorian_ymd(time, Calendrical.Gregorian) do
     {Keyword.fetch!(time, :year), Keyword.get(time, :month, 1), Keyword.get(time, :day, 1)}
   end
 
@@ -259,7 +259,7 @@ defmodule Tempo.Network.Normalize do
     day = Keyword.get(time, :day, 1)
 
     with {:ok, date} <- Date.new(year, month, day, calendar),
-         {:ok, gregorian} <- Date.convert(date, Calendar.ISO) do
+         {:ok, gregorian} <- Date.convert(date, Calendrical.Gregorian) do
       {gregorian.year, gregorian.month, gregorian.day}
     else
       _error -> {year, month, day}

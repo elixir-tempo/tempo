@@ -239,11 +239,46 @@ defmodule Tempo.ToInterval.Test do
                Tempo.to_interval(tempo)
     end
 
-    test "ordinal day group (year but no month) returns a clean error" do
+    test "a group of a year's days is the dates it covers" do
       tempo = %Tempo{calendar: Calendrical.Gregorian, time: [year: 2022, day: {:group, 41..50}]}
 
-      assert {:error, %Tempo.MaterialisationError{reason: :unanchored_group}} =
-               Tempo.to_interval(tempo)
+      assert {:ok, interval} = Tempo.to_interval(tempo)
+      assert interval.from.time == [year: 2022, month: 2, day: 10]
+      assert interval.to.time == [year: 2022, month: 2, day: 20]
+    end
+
+    test "a group of a year's weeks or hours is the span it covers" do
+      {:ok, weeks} = Tempo.from_iso8601("2026Y2G13WU")
+      assert {:ok, interval} = Tempo.to_interval(weeks)
+
+      assert {interval.from.time, interval.to.time} ==
+               {[year: 2026, week: 14], [year: 2026, week: 27]}
+
+      {:ok, hours} = Tempo.from_iso8601("2018Y20GT12HU")
+      assert {:ok, interval} = Tempo.to_interval(hours)
+      assert interval.from.time == [year: 2018, month: 1, day: 10, hour: 12]
+      assert interval.to.time == [year: 2018, month: 1, day: 11, hour: 0]
+    end
+
+    test "the last group of a unit ends with its container" do
+      {:ok, days} = Tempo.from_iso8601("2018Y2M3G11DU")
+      assert days.time == [year: 2018, month: 2, day: {:group, 23..33}]
+      assert {:ok, interval} = Tempo.to_interval(days)
+      assert interval.to.time == [year: 2018, month: 3, day: 1]
+
+      {:ok, weeks} = Tempo.from_iso8601("2028Y5G13WU")
+      assert {:ok, interval} = Tempo.to_interval(weeks)
+
+      assert {interval.from.time, interval.to.time} ==
+               {[year: 2028, week: 53], [year: 2029, week: 1]}
+    end
+
+    test "a group that starts beyond its container is an error" do
+      assert {:error, %Tempo.InvalidDateError{unit: :month, value: 13}} =
+               Tempo.from_iso8601("2026Y5G3MU")
+
+      assert {:error, %Tempo.InvalidDateError{unit: :week, value: 53}} =
+               Tempo.from_iso8601("2026Y5G13WU")
     end
   end
 

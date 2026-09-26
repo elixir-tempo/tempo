@@ -58,6 +58,7 @@ defmodule Tempo.Interval do
   alias Tempo.IntervalSet
   alias Tempo.InvalidUnitError
   alias Tempo.Iso8601.AST
+  alias Tempo.Iso8601.Group
   alias Tempo.Iso8601.Unit
   alias Tempo.LeapSeconds
   alias Tempo.Mask
@@ -117,6 +118,8 @@ defmodule Tempo.Interval do
   # iteration units; `:week`/`:day_of_week` are reachable only from
   # week-calendar values, where materialisation sets them itself.
   @iteration_units [:year, :month, :day, :hour, :minute, :second]
+
+  @hours_per_day 24
 
   @doc """
   Construct a `t:Tempo.Interval.t/0` from a keyword list of options.
@@ -717,18 +720,44 @@ defmodule Tempo.Interval do
 
   # Materialise a group (`{:group, first..last}` at the finest unit)
   # to the enclosing half-open span `[unit=first, unit=last+1)`. The
-  # upper bound is `add_unit(unit=last)` so it carries correctly.
+  # upper bound is `add_unit(unit=last)` so it carries correctly, and a
+  # group that runs past its container ends with it: the last group of
+  # eleven days in February 2018 (`2018Y2M3G11DU`) ends on 1 March.
   #
   # `add_unit` at a date unit needs the coarser units present to
   # carry (days-in-month needs year+month; months-in-year needs
   # year), and the carry can cascade up to year. A group materialises
   # only when its value carries that contiguous anchored prefix; a
-  # non-anchored fragment (`5G10DU` — days 41..50, no year) or an
-  # ordinal-day group does not, and has no concrete span. Checking
-  # the prefix up front keeps the path total without a `rescue`.
+  # non-anchored fragment (`5G10DU` — days 41..50, no year) does not,
+  # and has no concrete span. A year alone anchors a group of its weeks,
+  # its days (`1933Y1G80DU`, the first eighty) or its hours
+  # (`2018Y20GT12HU`, noon to midnight on 10 January), which
+  # materialise as the dates and times they cover. Checking the prefix
+  # up front keeps the path total without a `rescue`.
   defp group_boundary(tempo, time, unit, first, last, calendar) do
     prefix = List.delete_at(time, -1)
 
+    case Group.container_maximum(prefix, unit, calendar) do
+      maximum when is_integer(maximum) and first > maximum ->
+        group_error(tempo)
+
+      maximum ->
+        last = if is_integer(maximum), do: min(last, maximum), else: last
+        bounded_group_boundary(tempo, prefix, unit, first, last, calendar)
+    end
+  end
+
+  defp bounded_group_boundary(tempo, [year: year], unit, first, last, calendar)
+       when unit in [:day, :hour] do
+    lower_time = year_counted_time(year, unit, first, calendar)
+
+    with {:ok, upper_time} <-
+           Math.add_unit(year_counted_time(year, unit, last, calendar), unit, calendar) do
+      {:ok, build_bounds(tempo, lower_time, upper_time), nil}
+    end
+  end
+
+  defp bounded_group_boundary(tempo, prefix, unit, first, last, calendar) do
     cond do
       group_required_units(unit) == :not_a_group_unit ->
         group_error(tempo)
@@ -739,7 +768,7 @@ defmodule Tempo.Interval do
 
       # A *pure* time-of-day group (no date components) materialises to
       # a **non-anchored** interval — the relative span it denotes on
-      # the time-of-day axis (`16:01..16:16`) — provided the upper
+      # the time-of-day axis (`T16H1GT15MU` is `16:00..16:15`) — provided the upper
       # bound's carry stays within the present time units and cannot
       # overflow into an absent day. The result lives on the
       # time-of-day axis until anchored (see `guides/interop.md`); it
@@ -761,6 +790,19 @@ defmodule Tempo.Interval do
     with {:ok, upper_time} <- Math.add_unit(prefix ++ [{unit, last}], unit, calendar) do
       {:ok, build_bounds(tempo, lower_time, upper_time), nil}
     end
+  end
+
+  # The date of a day of the year, or the date and hour of an hour of the
+  # year (counted from 0), as the calendar numbers them.
+  defp year_counted_time(year, :day, day_of_year, calendar) do
+    date = Calendrical.date_from_day_of_year(year, day_of_year, calendar)
+    [year: date.year, month: date.month, day: date.day]
+  end
+
+  defp year_counted_time(year, :hour, hour_of_year, calendar) do
+    year
+    |> year_counted_time(:day, div(hour_of_year, @hours_per_day) + 1, calendar)
+    |> Kernel.++(hour: rem(hour_of_year, @hours_per_day))
   end
 
   defp anchored_prefix?(prefix, unit) do
@@ -806,6 +848,7 @@ defmodule Tempo.Interval do
   # year→second chain aren't materialisable as a span.
   defp group_required_units(:year), do: []
   defp group_required_units(:month), do: [:year]
+  defp group_required_units(:week), do: [:year]
   defp group_required_units(:day), do: [:year, :month]
   defp group_required_units(:hour), do: [:year, :month, :day]
   defp group_required_units(:minute), do: [:year, :month, :day, :hour]

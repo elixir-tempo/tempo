@@ -76,20 +76,22 @@ defmodule Tempo.Iso8601.Parser.Test do
 
     # 5.3 Example 2
     assert Tempo.from_iso8601("20GT30MU") ==
-             {:ok, %Tempo{calendar: Calendrical.Gregorian, time: [minute: {:group, 571..600}]}}
+             {:ok, %Tempo{calendar: Calendrical.Gregorian, time: [minute: {:group, 570..599}]}}
 
     # 5.4.1 Example 1
     assert Tempo.from_iso8601("2018Y4G60DU6D") ==
              {:ok, %Tempo{calendar: Calendrical.Gregorian, time: [year: 2018, month: 7, day: 5]}}
 
-    # 5.4.1 Example 3
-    assert Tempo.from_iso8601("2018Y9M2DT3GT8HU30M")
+    # 5.4.1 Example 2: 30 minutes into the third eight hours
+    assert Tempo.from_iso8601("2018Y9M2DT3GT8HU0H30M") ==
+             {:ok,
+              %Tempo{
+                calendar: Calendrical.Gregorian,
+                time: [year: 2018, month: 9, day: 2, hour: 16, minute: 30]
+              }}
 
-    {:ok,
-     %Tempo{
-       calendar: Calendrical.Gregorian,
-       time: [year: 2018, month: 9, day: 2, hour: 16, minute: 30]
-     }}
+    assert Tempo.from_iso8601("2018Y9M2DT3GT8HU30M") ==
+             Tempo.from_iso8601("2018Y9M2DT3GT8HU0H30M")
 
     # 5.4.1 Example 4
     assert Tempo.from_iso8601("2018Y2M2G14DU") ==
@@ -102,7 +104,7 @@ defmodule Tempo.Iso8601.Parser.Test do
     # 5.4.1 Example 5
     assert Tempo.from_iso8601("T16H1GT15MU") ==
              {:ok,
-              %Tempo{calendar: Calendrical.Gregorian, time: [hour: 16, minute: {:group, 1..15}]}}
+              %Tempo{calendar: Calendrical.Gregorian, time: [hour: 16, minute: {:group, 0..14}]}}
 
     # 5.4.1 Example 6
     assert Tempo.from_iso8601("2018Y1G6MU") ==
@@ -133,7 +135,7 @@ defmodule Tempo.Iso8601.Parser.Test do
 
     # 5.4.2 Example 6
     assert Tempo.from_iso8601("6GT2HU") ==
-             {:ok, %Tempo{calendar: Calendrical.Gregorian, time: [hour: {:group, 11..12}]}}
+             {:ok, %Tempo{calendar: Calendrical.Gregorian, time: [hour: {:group, 10..11}]}}
 
     # 5.4.2 Example 7
     assert Tempo.from_iso8601("2018Y2G3MU50D") ==
@@ -190,7 +192,7 @@ defmodule Tempo.Iso8601.Parser.Test do
              {:ok,
               %Tempo{
                 calendar: Calendrical.Gregorian,
-                time: [year: 2018, month: 9, day: {:group, 25..30}]
+                time: [year: 2018, month: 9, day: {:group, 25..32}]
               }}
   end
 
@@ -499,7 +501,7 @@ defmodule Tempo.Iso8601.Parser.Test do
     assert Tempo.from_iso8601("1985.5Y") ==
              {:ok,
               %Tempo{
-                time: [year: 1985, month: 7, day: 1, hour: 12],
+                time: [year: 1985, month: 7, day: 2, hour: 12],
                 shift: nil,
                 calendar: Calendrical.Gregorian
               }}
@@ -507,7 +509,7 @@ defmodule Tempo.Iso8601.Parser.Test do
     assert Tempo.from_iso8601("1985Y2.5M") ==
              {:ok,
               %Tempo{
-                time: [year: 1985, month: 2, day: 14],
+                time: [year: 1985, month: 2, day: 15],
                 shift: nil,
                 calendar: Calendrical.Gregorian
               }}
@@ -560,14 +562,14 @@ defmodule Tempo.Iso8601.Parser.Test do
   end
 
   test "Day of week adheres to calendar limit" do
-    # ISO 8601: week 01 of 2022 contains the first Thursday of 2022
-    # (Jan 6), so it starts Monday Jan 3. Day-of-week -7 is the
-    # first day of the week (Monday) = Jan 3. Day-of-week 7 is the
-    # last day (Sunday) = Jan 9.
+    # Weeks are the calendar's own. Calendrical.Gregorian's week 1 of
+    # 2022 is the week holding January 1, Monday December 27 to Sunday
+    # January 2: day-of-week -7 is its first day and 7 its last. ISO
+    # 8601's week 1, January 3 to 9, is Calendrical.ISOWeek's.
     assert Tempo.from_iso8601("2022Y1W-7K") ==
              {:ok,
               %Tempo{
-                time: [year: 2022, month: 1, day: 3],
+                time: [year: 2021, month: 12, day: 27],
                 shift: nil,
                 calendar: Calendrical.Gregorian
               }}
@@ -575,7 +577,7 @@ defmodule Tempo.Iso8601.Parser.Test do
     assert Tempo.from_iso8601("2022Y1W7K") ==
              {:ok,
               %Tempo{
-                time: [year: 2022, month: 1, day: 9],
+                time: [year: 2022, month: 1, day: 2],
                 shift: nil,
                 calendar: Calendrical.Gregorian
               }}

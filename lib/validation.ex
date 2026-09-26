@@ -1,13 +1,13 @@
 defmodule Tempo.Validation do
   @moduledoc false
 
-  alias Calendrical.ISOWeek
   alias Localize.Utils.Math
   alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalEndpointsError
   alias Tempo.InvalidDateError
   alias Tempo.InvalidTimeError
+  alias Tempo.Iso8601.Group
   alias Tempo.Iso8601.Unit
   alias Tempo.Microsecond
   alias Tempo.ParseError
@@ -34,7 +34,7 @@ defmodule Tempo.Validation do
          :ok <- validate_time_shift(tempo.shift) do
       case units |> resolve_fixed_extent_negatives(calendar) |> resolve(calendar) do
         {:error, reason} -> {:error, reason}
-        other -> {:ok, %{tempo | time: collapse_single_member_sets(other)}}
+        other -> validated_groups(tempo, collapse_single_member_sets(other), calendar)
       end
     end
   end
@@ -204,16 +204,17 @@ defmodule Tempo.Validation do
     end
   end
 
-  # When a group of years succeeds a century or decade
+  # A group within a group of the same unit, such as a group of years
+  # after a century or decade, counts from the outer group's first value.
   # Here we merge into a set.
 
   def resolve(
         [{unit, {:group, %Range{} = range1}}, {unit, {:group, %Range{} = range2}} | rest],
         calendar
       ) do
-    first = range1.first + range2.first - 1
+    first = range1.first + range2.first - Tempo.Math.unit_minimum(unit)
 
-    if first in 1..range1.last//1 do
+    if first in range1 do
       last = min(range1.last, first + range2.last - range2.first)
       resolve([{unit, [first..last//1]} | rest], calendar)
     else
@@ -227,6 +228,33 @@ defmodule Tempo.Validation do
     end
   end
 
+  # A value after a group of its own unit counts within the group
+  # (ISO 8601-2 §5.4.2): from 1 for a month or a day, so the second month
+  # of the second quarter is May, and from 0 for an hour, minute or
+  # second, so hour 0 of the third eight hours is 16:00. A negative value
+  # counts from the group's end.
+  def resolve([{unit, {:group, %Range{} = range}}, {unit, value} | rest], calendar)
+      when is_integer(value) do
+    within =
+      if value < 0,
+        do: range.last + value + 1,
+        else: range.first + value - Tempo.Math.unit_minimum(unit)
+
+    if within in range do
+      resolve([{unit, within} | rest], calendar)
+    else
+      first = Tempo.Math.unit_minimum(unit)
+
+      {:error,
+       InvalidDateError.exception(
+         unit: unit,
+         value: value,
+         valid_range: first..(first + range.last - range.first)//1,
+         calendar: calendar
+       )}
+    end
+  end
+
   def resolve([{:year, {:group, %Range{} = years}}, {:month, month} | rest], calendar)
       when is_integer(month) do
     months_in_group =
@@ -234,55 +262,50 @@ defmodule Tempo.Validation do
       |> Enum.map(&calendar.months_in_year/1)
       |> Enum.sum()
 
-    with {:ok, month} <- conform(month, 1..months_in_group) do
-      {:ok, year, month} = year_and_month(years, month, calendar)
+    with {:ok, month} <- conform(month, 1..months_in_group),
+         {:ok, year, month} <- year_and_month(years, month, calendar) do
       resolve([{:year, year}, {:month, month} | rest], calendar)
     end
   end
 
+  # The nth day of a group of months. A group that runs past the year's
+  # last month ends with it.
   def resolve(
         [{:year, year}, {:month, {:group, %Range{} = months}}, {:day, day} | rest],
         calendar
       )
       when is_integer(year) and is_integer(day) do
-    days_in_group =
-      months
-      |> Enum.map(&calendar.days_in_month(year, &1))
-      |> Enum.sum()
+    months_in_year = calendar.months_in_year(year)
 
-    with {:ok, day} <- conform(day, 1..days_in_group) do
-      {:ok, month, day} = month_and_day(year, months, day, calendar)
+    with {:ok, _first_month} <- conform(months.first, 1..months_in_year),
+         months = months.first..min(months.last, months_in_year)//1,
+         days_in_group = months |> Enum.map(&calendar.days_in_month(year, &1)) |> Enum.sum(),
+         {:ok, day} <- conform(day, 1..days_in_group),
+         {:ok, month, day} <- month_and_day(year, months, day, calendar) do
       resolve([{:year, year}, {:month, month}, {:day, day} | rest], calendar)
     end
   end
 
-  # Week numbering is inherently ISO-week semantics regardless of
-  # the caller's declared calendar. `Calendrical.Gregorian.weeks_in_year/1`
-  # always reports 52 weeks because Gregorian doesn't define week
-  # numbering — that's ISO-8601's job. Validating via
-  # `Calendrical.ISOWeek.weeks_in_year/1` gives the correct answer
-  # for every year (including 53-week years like 2004, 2009, 2015,
-  # 2020, 2026).
+  # Week dates come from the calendar's own weeks: a Gregorian week
+  # follows `Calendrical.Gregorian`'s rules (weeks from Monday, week 1
+  # the one holding January 1), and ISO 8601 weeks are
+  # `Calendrical.ISOWeek`'s.
   #
   # Resolution of (year, week, day) to a concrete calendar date
-  # depends on the caller's calendar base:
+  # depends on the calendar's base:
   #
-  #   * `:month`-based (Gregorian and the other civil calendars) —
-  #     resolve the week-date under ISOWeek, then `Date.convert/2`
-  #     into the caller's calendar, yielding a Gregorian-shaped
-  #     `[year, month, day]` value. This is the common path and the
-  #     one that picks up the W01-after-a-53-week-year rollover
-  #     correctly.
+  #   * `:month`-based (Gregorian and the other civil calendars) — the
+  #     day of the week `calendar.week/2` spans, as a
+  #     `[year, month, day]` value.
   #
-  #   * `:week`-based (`Calendrical.ISOWeek` itself) — keep the
-  #     native `[year, week, day]` shape; the caller asked for ISO
-  #     week calendar so preserve it.
+  #   * `:week`-based (`Calendrical.ISOWeek` and the week-based fiscal
+  #     calendars) — keep the native `[year, week, day]` shape.
   def resolve([{:year, year}, {:week, week}, {:day_of_week, day} | rest], calendar)
       when is_integer(year) and is_integer(week) and is_integer(day) do
-    {weeks_in_year, _days_in_last_week} = ISOWeek.weeks_in_year(year)
+    {weeks_in_year, _days_in_last_week} = calendar.weeks_in_year(year)
 
     with {:ok, week} <- conform(week, 1..weeks_in_year),
-         [day_of_week: day] <- resolve([day_of_week: day], Calendrical.ISOWeek) do
+         [day_of_week: day] <- resolve([day_of_week: day], calendar) do
       year_week_day(year, week, day, rest, calendar.calendar_base(), calendar)
     end
   end
@@ -326,24 +349,34 @@ defmodule Tempo.Validation do
     end
   end
 
+  # The hours of a year count from 0 at its start, as the hours of a day
+  # do, so the twentieth group of twelve hours is hours 228..239 (noon to
+  # midnight on the tenth day) and an hour within it counts from the
+  # group's first.
   def resolve(
         [{:year, year}, {:hour, {:group, %Range{} = hours_of_year}}, {:hour, hour} | rest],
         calendar
       )
       when is_integer(year) and is_integer(hour) do
     %{first: first, last: last} = hours_of_year
-    hours_in_year = calendar.days_in_year(year) * @hours_per_day
-    last = min(last, hours_in_year)
-    hour = if hour < 0, do: last + hour + 1, else: first + hour - 1
+    last = min(last, calendar.days_in_year(year) * @hours_per_day - 1)
+    hour_of_year = if hour < 0, do: last + hour + 1, else: first + hour
 
-    with {:ok, _first} <- conform(first, 1..hours_in_year) do
-      day = div(hour, @hours_per_day) + 1
-      hour = rem(hour, @hours_per_day)
+    with {:ok, hour_of_year} <- conform(hour_of_year, first..last//1) do
+      day_of_year = div(hour_of_year, @hours_per_day) + 1
 
       %{year: year, month: month, day: day} =
-        Calendrical.date_from_day_of_year(year, day, calendar)
+        Calendrical.date_from_day_of_year(year, day_of_year, calendar)
 
-      resolve([{:year, year}, {:month, month}, {:day, day}, {:hour, hour} | rest], calendar)
+      resolve(
+        [
+          {:year, year},
+          {:month, month},
+          {:day, day},
+          {:hour, rem(hour_of_year, @hours_per_day)} | rest
+        ],
+        calendar
+      )
     end
   end
 
@@ -357,7 +390,7 @@ defmodule Tempo.Validation do
     with {:ok, month} <- conform(month, 1..months_in_year) do
       max_days = calendar.days_in_month(year, month)
 
-      case resolve([{:day, {:group, %{days | last: min(max_days, days.last)}}} | rest], calendar) do
+      case resolve_day_group(days, max_days, rest, calendar) do
         {:error, reason} -> {:error, reason}
         resolved -> [{:year, year}, {:month, month} | resolved]
       end
@@ -378,11 +411,12 @@ defmodule Tempo.Validation do
     end
   end
 
-  # hours start at 0
+  # A group of hours holds clock hours, from 0, so its minutes start at
+  # its first hour's first minute.
   def resolve([{:hour, {:group, %Range{} = range}}, {:minute, minutes} | rest], calendar)
       when is_integer(minutes) do
-    first = (range.first - 1) * @minutes_per_hour
-    last = range.last * @minutes_per_hour - 1
+    first = range.first * @minutes_per_hour
+    last = (range.last + 1) * @minutes_per_hour - 1
     minutes = minutes + first
 
     with {:ok, minutes} <- conform(minutes, first..last) do
@@ -393,11 +427,12 @@ defmodule Tempo.Validation do
     end
   end
 
-  # minutes start at 0
+  # A group of minutes holds clock minutes, from 0, so its seconds start
+  # at its first minute's first second.
   def resolve([{:minute, {:group, %Range{} = range}}, {:second, seconds} | rest], calendar)
       when is_integer(seconds) do
-    first = (range.first - 1) * @minutes_per_hour
-    last = range.last * @minutes_per_hour - 1
+    first = range.first * @minutes_per_hour
+    last = (range.last + 1) * @minutes_per_hour - 1
     seconds = seconds + first
 
     with {:ok, seconds} <- conform(seconds, first..last) do
@@ -424,10 +459,10 @@ defmodule Tempo.Validation do
   # position for the year against a calendar with leap months; on any other
   # calendar the traditional and ordinal numberings coincide, so it passes
   # through as `n`. The traditional→ordinal step is Calendrical's — a concrete
-  # year is known, so `traditional_month_ordinal/3` yields the ordinal month.
+  # year is known, so `ordinal_month_from_traditional/3` yields the ordinal month.
   def resolve([{:year, year}, {:traditional_month, month} | rest], calendar)
       when is_integer(year) and is_integer(month) do
-    case traditional_month_ordinal(calendar, year, month) do
+    case ordinal_month_from_traditional(calendar, year, month) do
       {:ok, ordinal} -> resolve([{:year, year}, {:month, ordinal} | rest], calendar)
       {:error, _} = error -> error
     end
@@ -528,7 +563,10 @@ defmodule Tempo.Validation do
     end
   end
 
-  # Calculating the result of fractional time units
+  # Calculating the result of fractional time units. A fraction is the
+  # part of the unit that has elapsed, as it is for a day (`5.5D` is noon
+  # on the 5th), so half of 1985 is 182.5 days after its start, noon on
+  # 2 July, and the day it lands on is one more than the days elapsed.
   # TODO Support negative time fractions
 
   def resolve([{:year, year}], calendar) when is_float(year) and year > 0 do
@@ -541,7 +579,7 @@ defmodule Tempo.Validation do
     else
       days = Math.round(days_in_year * fraction_of_year, @rounding_precision)
       days = if trunc(days) == days, do: trunc(days), else: days
-      resolve([{:year, int_year}, {:day, days}], calendar)
+      resolve([{:year, int_year}, {:day, days + 1}], calendar)
     end
   end
 
@@ -556,7 +594,7 @@ defmodule Tempo.Validation do
     else
       days = Math.round(days_in_month * fraction_of_month, @rounding_precision)
       days = if trunc(days) == days, do: trunc(days), else: days
-      resolve([{:year, year}, {:month, int_month}, {:day, days}], calendar)
+      resolve([{:year, year}, {:month, int_month}, {:day, days + 1}], calendar)
     end
   end
 
@@ -745,6 +783,24 @@ defmodule Tempo.Validation do
 
   ### Helpers
 
+  # A group is kept as declared, so it renders as written; one that
+  # starts beyond its container (months 13..15 of a twelve-month year)
+  # names no time and is an error.
+  defp validated_groups(tempo, time, calendar) do
+    case Group.bound_groups(time, calendar) do
+      {:ok, _bounded} -> {:ok, %{tempo | time: time}}
+      {:error, _exception} = error -> error
+    end
+  end
+
+  # A group of days is kept as declared (the last group of eleven days
+  # in February is days 23..33); a component within it resolves against
+  # the days the month has.
+  defp resolve_day_group(days, _max_days, [], _calendar), do: [{:day, {:group, days}}]
+
+  defp resolve_day_group(days, max_days, rest, calendar),
+    do: resolve([{:day, {:group, %{days | last: min(max_days, days.last)}}} | rest], calendar)
+
   defp prepend_year_month(_year, _month, {:error, reason}), do: {:error, reason}
 
   defp prepend_year_month(year, month, resolved),
@@ -809,7 +865,7 @@ defmodule Tempo.Validation do
   `month` is a traditional month number, or the `{n, :leap}` tuple for the
   intercalary month following traditional `n`. On a calendar with leap months
   (Hebrew, lunisolar) a leap month shifts the numbering, so the traditional→ordinal step is Calendrical's:
-  the calendar's `ordinal_month/2`, or, for a lunisolar calendar without it,
+  the calendar's `ordinal_month_from_traditional/2`, or, for a lunisolar calendar without it,
   `new/3` at day 1 (always valid), which builds the date and reports its
   ordinal `month`. On any other calendar the two numberings coincide and an
   integer `month` is returned unchanged. Returns `{:ok, ordinal}`, or
@@ -817,10 +873,10 @@ defmodule Tempo.Validation do
   a leap month it does not have). Shared by concrete-date validation and
   per-year selection materialisation.
   """
-  def traditional_month_ordinal(calendar, year, month) do
+  def ordinal_month_from_traditional(calendar, year, month) do
     cond do
-      function_exported?(calendar, :ordinal_month, 2) ->
-        case calendar.ordinal_month(year, month) do
+      function_exported?(calendar, :ordinal_month_from_traditional, 2) ->
+        case calendar.ordinal_month_from_traditional(year, month) do
           {:ok, ordinal} -> {:ok, ordinal}
           {:error, _reason} -> {:error, :invalid_date}
         end
@@ -851,31 +907,20 @@ defmodule Tempo.Validation do
   end
 
   def year_week_day(year, week, day, rest, :month, calendar) do
-    # The week → date lookup must happen under ISOWeek semantics
-    # regardless of the caller's month-based calendar. Under
-    # `Calendrical.Gregorian.week/2`, `week(2020, 53)` returns
-    # `{:error, :invalid_date}` (Gregorian doesn't model week 53);
-    # and the `(week - 1) * 7` arithmetic fails across the W01-
-    # starts-Jan-4 rollover after a 53-week year (2016, 2021, …).
-    # `Calendrical.ISOWeek` handles both correctly, and
-    # `Date.convert/2` brings the result into the caller's calendar.
-    {weeks_in_year, days_in_last_week} = ISOWeek.weeks_in_year(year)
-
-    if day <= days_in_last_week do
-      with {:ok, isoweek_date} <- Date.new(year, week, day, Calendrical.ISOWeek),
-           {:ok, out_date} <- Date.convert(isoweek_date, calendar) do
+    case week_date(year, week, day, calendar) do
+      {:ok, date} ->
         prepend_year(
-          out_date.year,
-          resolve([{:month, out_date.month}, {:day, out_date.day} | rest], calendar)
+          date.year,
+          resolve([{:month, date.month}, {:day, date.day} | rest], calendar)
         )
-      end
-    else
-      {:error,
-       InvalidDateError.exception(
-         reason:
-           "Day of week #{inspect(day)} is not valid. " <>
-             "There are #{inspect(days_in_last_week)} days in #{inspect(year)}-W#{inspect(weeks_in_year)}."
-       )}
+
+      {:error, _reason} ->
+        {:error,
+         InvalidDateError.exception(
+           reason:
+             "Day #{inspect(day)} of week #{inspect(week)} of #{inspect(year)} " <>
+               "is not a date in #{inspect(calendar)}."
+         )}
     end
   end
 
@@ -886,41 +931,63 @@ defmodule Tempo.Validation do
   defp prepend_year(_year, {:error, reason}), do: {:error, reason}
   defp prepend_year(year, resolved), do: [{:year, year} | resolved]
 
-  def year_and_month(years, month, calendar) do
-    return =
-      Enum.reduce_while(years, {calendar.months_in_year(years.first), month}, fn year,
-                                                                                 {acc, to_go} ->
-        months_in_year = calendar.months_in_year(year)
-
-        if to_go <= months_in_year do
-          {:halt, {:ok, year, to_go}}
-        else
-          {:cont, {acc + months_in_year, to_go - months_in_year}}
-        end
-      end)
-
-    case return do
-      {:ok, year, month} -> {:ok, year, month}
-      _other -> {:error, :invalid_date}
+  @doc false
+  # The date of day `day` of week `week` of `year` in the calendar's own
+  # weeks: a week-based calendar's native date or, in a month-based one,
+  # the day the calendar's `plus/6` reaches from the first day of the
+  # week `Calendrical.Interval.week/3` spans.
+  def week_date(year, week, day, calendar) do
+    case calendar.calendar_base() do
+      :week -> Date.new(year, week, day, calendar)
+      :month -> day_of_week_span(Calendrical.Interval.week(year, week, calendar), day, calendar)
     end
   end
 
-  def month_and_day(year, months, day, calendar) do
-    return =
-      Enum.reduce_while(months, {calendar.days_in_month(year, months.first), day}, fn month,
-                                                                                      {acc, to_go} ->
-        days_in_month = calendar.days_in_month(year, month)
+  defp day_of_week_span(%Date.Range{first: first, last: last}, day, calendar)
+       when is_integer(day) and day >= 1 do
+    case calendar.plus(first.year, first.month, first.day, :days, day - 1) do
+      {year, month, day_of_month} ->
+        within_week(Date.new(year, month, day_of_month, calendar), last)
 
-        if to_go <= days_in_month do
-          {:halt, {:ok, month, to_go}}
-        else
-          {:cont, {acc + days_in_month, to_go - days_in_month}}
-        end
-      end)
+      _error ->
+        {:error, :invalid_date}
+    end
+  end
 
-    case return do
-      {:ok, month, day} -> {:ok, month, day}
-      _other -> {:error, :invalid_date}
+  defp day_of_week_span(%Date.Range{}, _day, _calendar), do: {:error, :invalid_date}
+  defp day_of_week_span({:error, _reason} = error, _day, _calendar), do: error
+
+  defp within_week({:ok, date}, last) do
+    case Date.compare(date, last) do
+      :gt -> {:error, :invalid_date}
+      _within -> {:ok, date}
+    end
+  end
+
+  defp within_week({:error, _reason} = error, _last), do: error
+
+  # The `month`th month of a group of years, counted on from the group's
+  # first month by Calendrical, so a thirteen-month year counts as the
+  # calendar numbers it.
+  def year_and_month(%Range{first: first_year, last: last_year}, month, calendar) do
+    case calendar.plus(first_year, 1, 1, :months, month - 1) do
+      {year, month_of_year, _day} when year >= first_year and year <= last_year ->
+        {:ok, year, month_of_year}
+
+      _beyond_the_group ->
+        {:error, InvalidDateError.exception(unit: :month, value: month, calendar: calendar)}
+    end
+  end
+
+  # The `day`th day of a group of months, counted on from the group's
+  # first day by Calendrical.
+  def month_and_day(year, %Range{first: first_month, last: last_month}, day, calendar) do
+    case calendar.plus(year, first_month, 1, :days, day - 1) do
+      {^year, month, day_of_month} when month >= first_month and month <= last_month ->
+        {:ok, month, day_of_month}
+
+      _beyond_the_group ->
+        {:error, InvalidDateError.exception(unit: :day, value: day, calendar: calendar)}
     end
   end
 

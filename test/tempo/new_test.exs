@@ -45,9 +45,47 @@ defmodule Tempo.NewTest do
       assert t.time == [year: 2026, week: 24, day_of_week: 3]
     end
 
-    test "ordinal (day-of-year) date" do
+    test "ordinal (day-of-year) date is the date it names" do
       {:ok, t} = Tempo.new(year: 2026, day_of_year: 166)
-      assert t.time == [year: 2026, day_of_year: 166]
+      assert t.time == [year: 2026, month: 6, day: 15]
+      assert {:ok, t} == Tempo.from_iso8601("2026-166")
+      assert {:ok, ~D[2026-06-15]} == Tempo.to_date(t)
+    end
+
+    test "a day the year does not have, or no year, is rejected" do
+      assert {:error, %Tempo.InvalidDateError{unit: :day_of_year, value: 366}} =
+               Tempo.new(year: 2026, day_of_year: 366)
+
+      assert {:error, %ArgumentError{}} = Tempo.new(day_of_year: 166)
+    end
+  end
+
+  describe "Tempo.new/1 — quarters" do
+    test "a quarter is the calendar's quarter, the value 2026-34 parses to" do
+      assert Tempo.new(year: 2026, quarter: 2) == Tempo.from_iso8601("2026-34")
+      assert Tempo.parse("Q2 2026", locale: :en) == Tempo.from_iso8601("2026-34")
+    end
+
+    test "a quarter outside the year, or without one, is rejected" do
+      assert {:error, %Tempo.InvalidDateError{}} = Tempo.new(year: 2026, quarter: 5)
+      assert {:error, %ArgumentError{}} = Tempo.new(quarter: 2)
+      assert {:error, %ArgumentError{}} = Tempo.new(year: 2026, quarter: 2, month: 5)
+    end
+
+    test "a Hebrew leap year's second quarter holds Adar I and Adar II" do
+      {:ok, second_quarter} = Tempo.new(year: 5787, quarter: 2, calendar: Calendrical.Hebrew)
+
+      assert second_quarter.time == [year: 5787, month: {:group, 4..7}]
+      assert {:ok, second_quarter} == Tempo.from_iso8601("5787-34", Calendrical.Hebrew)
+    end
+
+    test "a week-based calendar's quarter is a group of its weeks" do
+      {:ok, fourth_quarter} = Tempo.new(year: 2026, quarter: 4, calendar: Calendrical.ISOWeek)
+
+      assert fourth_quarter.time == [year: 2026, week: {:group, 40..53}]
+
+      assert {:ok, %Tempo.Interval{to: %Tempo{time: [year: 2027, week: 1]}}} =
+               Tempo.to_interval(fourth_quarter)
     end
   end
 

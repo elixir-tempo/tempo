@@ -46,6 +46,24 @@ defmodule Tempo.GroundedConversionTest do
     end
   end
 
+  describe "negative offsets keep one sign convention" do
+    test "a DateTime in a negative half-hour zone carries the sign on the hour" do
+      {:ok, date_time} = DateTime.new(~D[2026-01-15], ~T[10:00:00], "America/St_Johns")
+      tempo = Tempo.from_date_time(date_time)
+
+      assert tempo.shift == [hour: -3, minute: 30]
+      assert {:ok, round_trip} = tempo |> Tempo.to_iso8601() |> Tempo.from_iso8601()
+      assert Tempo.equal?(round_trip, ~o"2026-01-15T13:30:00Z")
+    end
+
+    test "an offset under an hour keeps its sign" do
+      assert Tempo.to_elixir(~o"2026-06-15T09:00:00-00:30") ==
+               {:ok, ~U[2026-06-15 09:30:00.000000Z]}
+
+      refute Tempo.equal?(~o"2026-06-15T09:00:00-00:30", ~o"2026-06-15T09:00:00+00:30")
+    end
+  end
+
   describe "shift/2 with a duration string" do
     test "an ISO 8601 duration string parses and shifts" do
       assert Tempo.shift(~o"2026Y6M15DT9H0M0SZ", "-PT30M") == ~o"2026Y6M15DT8H30M0SZ"

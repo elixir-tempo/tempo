@@ -296,10 +296,21 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   def duration_elements(combinator \\ empty()) do
     combinator
     |> choice([
+      duration_elements_with_designators(),
+      parsec({Tempo.Iso8601.Tokenizer, :datetime_or_date_or_time})
+    ])
+  end
+
+  # A duration written with unit designators (`1Y2M`, `T30M`), without the
+  # alternative format that writes one as a date (`0002-10-15`). A group's
+  # unit (ISO 8601-2 §5.2) is only ever this form: read as a date, `2K`
+  # would reach the group as a day of the week rather than a size.
+  def duration_elements_with_designators(combinator \\ empty()) do
+    combinator
+    |> choice([
       concat(duration_date_elements(), duration_time_elements()),
       duration_date_elements(),
-      duration_time_elements(),
-      parsec({Tempo.Iso8601.Tokenizer, :datetime_or_date_or_time})
+      duration_time_elements()
     ])
   end
 
@@ -438,7 +449,10 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
 
   # Individual date and time components
   # Note that any component can be alternatively a group
-  # or set
+  # or set. In the explicit form a group may be followed by a value of
+  # its own unit, counted within the group (ISO 8601-2 §5.4.2): in
+  # `2018Y9M2DT3GT8HU0H30M` the `0H30M` is 30 minutes into the third
+  # eight hours.
 
   def implicit_year do
     choice([
@@ -547,7 +561,15 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
 
   def explicit_month do
     choice([
-      parsec({Tempo.Iso8601.Tokenizer.Set, :group}),
+      # A group after the year takes this slot whatever its unit, so a
+      # value after it may be a month (`2G3MU2M`) or a week (`2G13WU3W`).
+      parsec({Tempo.Iso8601.Tokenizer.Set, :group})
+      |> optional(
+        choice([
+          qualified_number_or_integer_set("M", :month, min: 1),
+          maybe_negative_number_or_integer_set("W", :week, min: 1)
+        ])
+      ),
       parsec({Tempo.Iso8601.Tokenizer.Set, :selection}),
       traditional_month(),
       qualified_number_or_integer_set("M", :month, min: 1),
@@ -595,7 +617,8 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
 
   def explicit_week do
     choice([
-      parsec({Tempo.Iso8601.Tokenizer.Set, :group}),
+      parsec({Tempo.Iso8601.Tokenizer.Set, :group})
+      |> optional(maybe_negative_number_or_integer_set("W", :week, min: 1)),
       parsec({Tempo.Iso8601.Tokenizer.Set, :selection}),
       maybe_negative_number_or_integer_set("W", :week, min: 1)
     ])
@@ -612,7 +635,8 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
 
   def explicit_day_of_month do
     choice([
-      parsec({Tempo.Iso8601.Tokenizer.Set, :group}),
+      parsec({Tempo.Iso8601.Tokenizer.Set, :group})
+      |> optional(qualified_number_or_integer_set("D", :day, min: 1)),
       parsec({Tempo.Iso8601.Tokenizer.Set, :selection}),
       qualified_number_or_integer_set("D", :day, min: 1)
     ])
@@ -693,7 +717,8 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
 
   def explicit_hour do
     choice([
-      parsec({Tempo.Iso8601.Tokenizer.Set, :time_group}),
+      parsec({Tempo.Iso8601.Tokenizer.Set, :time_group})
+      |> optional(maybe_negative_number_or_integer_set("H", :hour, min: 1)),
       parsec({Tempo.Iso8601.Tokenizer.Set, :selection}),
       maybe_negative_number_or_integer_set("H", :hour, min: 1)
     ])
@@ -708,7 +733,8 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
 
   def explicit_minute do
     choice([
-      parsec({Tempo.Iso8601.Tokenizer.Set, :time_group}),
+      parsec({Tempo.Iso8601.Tokenizer.Set, :time_group})
+      |> optional(maybe_negative_number_or_integer_set("M", :minute, min: 1)),
       parsec({Tempo.Iso8601.Tokenizer.Set, :selection}),
       maybe_negative_number_or_integer_set("M", :minute, min: 1)
     ])
@@ -723,7 +749,8 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
 
   def explicit_second do
     choice([
-      parsec({Tempo.Iso8601.Tokenizer.Set, :time_group}),
+      parsec({Tempo.Iso8601.Tokenizer.Set, :time_group})
+      |> optional(explicit_second_or_integer_set("S", min: 1)),
       parsec({Tempo.Iso8601.Tokenizer.Set, :selection}),
       explicit_second_or_integer_set("S", min: 1)
     ])
@@ -936,8 +963,10 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     |> label("integer or range")
   end
 
-  def resolve_shift([{:sign, ?-}, {component, value} | rest]) do
-    [{component, -value} | rest]
+  # A negative shift carries its sign on its first non-zero component,
+  # so `-00:30` stays negative as `[hour: 0, minute: -30]`.
+  def resolve_shift([{:sign, ?-} | components]) do
+    negate_leading(components)
   end
 
   def resolve_shift([{:sign, ?+} | rest]) do
@@ -955,6 +984,12 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   def resolve_shift(other) do
     other
   end
+
+  defp negate_leading([{component, 0} | [_ | _] = rest]),
+    do: [{component, 0} | negate_leading(rest)]
+
+  defp negate_leading([{component, value} | rest]), do: [{component, -value} | rest]
+  defp negate_leading([]), do: []
 
   def adjust_interval(date: [year: year, month: month], date: [century: century]) do
     [date: [year: year, month: month], date: [month: century]]

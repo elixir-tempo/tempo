@@ -46,6 +46,10 @@ defmodule Tempo.Enumeration.Zone do
   Convert a total UTC offset in seconds to a `%Tempo{}` `:shift`
   keyword list, dropping the `:minute` element for a whole-hour
   offset (matching the IXDTF `+HH` vs `+HH:MM` shapes).
+
+  The sign is carried on the first non-zero component, as the ISO 8601
+  parser writes it: −03:30 is `[hour: -3, minute: 30]` and −00:30 is
+  `[hour: 0, minute: -30]`.
   """
   @spec offset_to_shift(integer()) :: keyword()
   def offset_to_shift(total_seconds) do
@@ -54,9 +58,10 @@ defmodule Tempo.Enumeration.Zone do
     hours = div(abs_total, 3600)
     minutes = div(rem(abs_total, 3600), 60)
 
-    case minutes do
-      0 -> [hour: sign * hours]
-      m -> [hour: sign * hours, minute: sign * m]
+    case {hours, minutes} do
+      {hours, 0} -> [hour: sign * hours]
+      {0, minutes} -> [hour: 0, minute: sign * minutes]
+      {hours, minutes} -> [hour: sign * hours, minute: minutes]
     end
   end
 

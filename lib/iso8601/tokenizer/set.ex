@@ -136,7 +136,7 @@ defmodule Tempo.Iso8601.Tokenizer.Set do
   defcombinator :group,
                 parsec({Tempo.Iso8601.Tokenizer.Set, :integer_or_integer_set})
                 |> ignore(string("G"))
-                |> parsec({Tempo.Iso8601.Tokenizer.Set, :duration_elements_p})
+                |> parsec({Tempo.Iso8601.Tokenizer.Set, :duration_elements_with_designators_p})
                 |> ignore(string("U"))
                 |> tag(:group)
                 |> label("group"),
@@ -179,4 +179,8 @@ defmodule Tempo.Iso8601.Tokenizer.Set do
   # Duration element combinators
   defcombinator :duration_elements_p, duration_elements(), export_combinator: true
   defcombinator :duration_time_elements_p, duration_time_elements(), export_combinator: true
+
+  defcombinator :duration_elements_with_designators_p,
+                duration_elements_with_designators(),
+                export_combinator: true
 end

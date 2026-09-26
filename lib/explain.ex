@@ -445,7 +445,6 @@ defmodule Tempo.Explain do
   end
 
   defp calendar_text(%Tempo{calendar: Calendrical.Gregorian}), do: nil
-  defp calendar_text(%Tempo{calendar: Calendar.ISO}), do: nil
   defp calendar_text(%Tempo{calendar: cal}), do: "Calendar: #{inspect(cal)}."
 
   # A value with no components has no resolution to report — `resolution/1`

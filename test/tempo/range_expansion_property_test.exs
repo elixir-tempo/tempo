@@ -199,15 +199,14 @@ defmodule Tempo.RangeExpansionPropertyTest do
       last_week = first_week + week_count - 1
       iso = "#{year}Y{#{first_week}..#{last_week}}W{1..-1}K"
 
-      # ISO 8601 week 1 is the week containing 4 January; weeks run
-      # Monday to Sunday.
-      jan_4 = Date.new!(year, 1, 4)
-      week_1_monday = Date.add(jan_4, -(Date.day_of_week(jan_4) - 1))
-
+      # Each week is the one the calendar numbers, here
+      # Calendrical.Gregorian's.
       expected =
-        for week <- first_week..last_week//1, weekday <- 1..7//1 do
-          Date.add(week_1_monday, (week - 1) * 7 + (weekday - 1))
-        end
+        Enum.flat_map(first_week..last_week//1, fn week ->
+          year
+          |> Calendrical.Interval.week(week, Calendrical.Gregorian)
+          |> Enum.map(&Date.convert!(&1, Calendar.ISO))
+        end)
 
       assert dates_of(iso) == expected, "week-axis expansion disagreed for #{iso}"
     end

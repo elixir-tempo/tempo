@@ -3,6 +3,7 @@ defimpl Enumerable, for: Tempo do
 
   alias Tempo.Enumeration
   alias Tempo.Enumeration.Zone
+  alias Tempo.Iso8601.Group
   alias Tempo.Validation
 
   # Implicit enumeration of a resolved `%Tempo{}` walks the same
@@ -201,6 +202,16 @@ defimpl Enumerable, for: Tempo do
       |> Enumeration.maybe_add_implicit_enumeration()
       |> Validation.validate(calendar)
 
-    tempo
+    bound_groups(tempo, calendar)
+  end
+
+  # A group walks the values its container holds: the last group of
+  # eleven days in February stops at the 28th, and the last group of
+  # five months at December.
+  defp bound_groups(%Tempo{time: time} = tempo, calendar) do
+    case Group.bound_groups(time, Tempo.Compare.effective_calendar(calendar)) do
+      {:ok, bounded} -> %{tempo | time: bounded}
+      {:error, _exception} -> tempo
+    end
   end
 end

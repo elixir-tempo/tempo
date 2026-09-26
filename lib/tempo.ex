@@ -109,6 +109,7 @@ defmodule Tempo do
   alias Tempo.ConversionError
   alias Tempo.Duration
   alias Tempo.Enumeration
+  alias Tempo.Enumeration.Zone
   alias Tempo.Explain
   alias Tempo.FloatingTempoError
   alias Tempo.GroundedTempoError
@@ -232,6 +233,7 @@ defmodule Tempo do
   # pass them in any convenient order.
   @canonical_unit_order [
     :year,
+    :quarter,
     :month,
     :week,
     :day,
@@ -268,8 +270,8 @@ defmodule Tempo do
   before building the struct.
 
   Axis coherence is enforced: the Gregorian axis (`:month`, `:day`),
-  the ISO-week axis (`:week`, `:day_of_week`), and the ordinal axis
-  (`:day_of_year`) are mutually exclusive.
+  the week axis (`:week`, `:day_of_week`), the ordinal axis
+  (`:day_of_year`) and `:quarter` are mutually exclusive.
 
   ### Arguments
 
@@ -290,15 +292,24 @@ defmodule Tempo do
 
   * `:year` is the calendar year.
 
+  * `:quarter` is the quarter of the year, spanning the months the
+    calendar's `quarter/2` gives it (the weeks, in a week-based calendar
+    such as `Calendrical.ISOWeek`) — the value `2026-34` parses to. It
+    requires `:year`.
+
   * `:month` is the calendar month (Gregorian axis).
 
-  * `:week` is the ISO week number (ISO-week axis).
+  * `:week` is the week of the year in the calendar's own week
+    numbering (week axis). ISO 8601 weeks are `Calendrical.ISOWeek`'s;
+    `Calendrical.Gregorian` counts from the week holding January 1.
 
   * `:day` is the day of month (Gregorian axis).
 
   * `:day_of_year` is the ordinal day within the year (ordinal axis).
+    The value is the calendar date it names, as the ordinal date
+    `2026-166` parses to.
 
-  * `:day_of_week` is the ISO day-of-week number (ISO-week axis).
+  * `:day_of_week` is the day of the week, `1..7` (week axis).
 
   * `:hour` is the clock hour `0..23`.
 
@@ -351,6 +362,10 @@ defmodule Tempo do
       iex> ww.time
       [year: 2026, week: 24, day_of_week: 3]
 
+      iex> {:ok, second_quarter} = Tempo.new(year: 2026, quarter: 2)
+      iex> Tempo.to_interval(second_quarter)
+      {:ok, ~o"2026Y4M/7M"}
+
       iex> {:error, _} = Tempo.new(year: 2026, month: 13)
 
       iex> {:error, _} = Tempo.new(year: 2026, month: 6, week: 24)
@@ -367,11 +382,14 @@ defmodule Tempo do
   @spec new(keyword() | map()) :: {:ok, t()} | {:error, error_reason()}
   def new(components) when is_list(components) do
     with :ok <- ensure_keyword(components),
+         components = Enum.map(components, &calendar_option_as_gregorian/1),
          {components, options} <- split_components_and_options(components),
          :ok <- validate_options(options),
          :ok <- validate_components(components),
          :ok <- validate_axis_coherence(components),
          :ok <- validate_zone_requires_time(components, options),
+         {:ok, components} <- quarter_to_group(components, options),
+         {:ok, components} <- day_of_year_to_date(components, options),
          {:ok, tempo} <- build_tempo(components, options) do
       validate_against_calendar(tempo)
     end
@@ -380,17 +398,19 @@ defmodule Tempo do
   def new(components) when is_map(components) do
     components
     |> Map.to_list()
-    |> Enum.map(&normalize_map_entry/1)
     |> new()
   end
 
-  # Translate keys that appear in Elixir's standard date/time
-  # structs and `Calendrical.parse/2`'s `:map` results into the
-  # shape `new/1`'s keyword clause expects. `Calendar.ISO` is
-  # Elixir's default calendar module; Tempo's validation requires
-  # the equivalent Calendrical module.
-  defp normalize_map_entry({:calendar, Calendar.ISO}), do: {:calendar, Calendrical.Gregorian}
-  defp normalize_map_entry(other), do: other
+  defp calendar_option_as_gregorian({:calendar, calendar}),
+    do: {:calendar, calendar_iso_as_gregorian(calendar)}
+
+  defp calendar_option_as_gregorian(entry), do: entry
+
+  # `Calendar.ISO`, Elixir's default calendar, enters Tempo as its
+  # Calendrical equivalent, `Calendrical.Gregorian`, at the public API, so
+  # nothing inside Tempo sees it; `to_date/1` and its kin give it back.
+  defp calendar_iso_as_gregorian(Calendar.ISO), do: Calendrical.Gregorian
+  defp calendar_iso_as_gregorian(calendar), do: calendar
 
   @doc """
   Bang variant of `new/1` — raises on invalid input.
@@ -485,15 +505,16 @@ defmodule Tempo do
     week_axis? = Enum.any?(keys, &(&1 in @week_axis_units))
     gregorian_axis? = Enum.any?(keys, &(&1 in @gregorian_axis_units))
     ordinal_axis? = :day_of_year in keys
+    quarter_axis? = :quarter in keys
 
-    mixed = Enum.count([week_axis?, gregorian_axis?, ordinal_axis?], & &1)
+    mixed = Enum.count([week_axis?, gregorian_axis?, ordinal_axis?, quarter_axis?], & &1)
 
     if mixed > 1 do
       {:error,
        ArgumentError.exception(
          "Tempo.new/1 cannot mix calendar axes — choose one of: " <>
-           ":month/:day (Gregorian), :week/:day_of_week (ISO week), or " <>
-           ":day_of_year (ordinal). Got: #{inspect(keys)}"
+           ":month/:day (Gregorian), :week/:day_of_week (week), " <>
+           ":day_of_year (ordinal), or :quarter. Got: #{inspect(keys)}"
        )}
     else
       :ok
@@ -512,6 +533,78 @@ defmodule Tempo do
        )}
     else
       :ok
+    end
+  end
+
+  # A quarter is the span the calendar's `quarter/2` returns, held as the
+  # group of months it covers (of weeks, in a week-based calendar), as the
+  # ISO 8601-2 quarter `2026-34` is.
+  defp quarter_to_group(components, options) do
+    case Keyword.pop(components, :quarter) do
+      {nil, components} ->
+        {:ok, components}
+
+      {quarter, components} ->
+        quarter_group(
+          components,
+          quarter,
+          Keyword.get(options, :calendar) || Calendrical.Gregorian
+        )
+    end
+  end
+
+  defp quarter_group(components, quarter, calendar) do
+    case Keyword.fetch(components, :year) do
+      {:ok, year} ->
+        put_quarter_group(components, year, quarter, calendar)
+
+      :error ->
+        {:error,
+         ArgumentError.exception("Tempo.new/1 needs a :year to place quarter #{quarter} in.")}
+    end
+  end
+
+  # An ordinal day is the calendar date it names, as the ISO 8601 ordinal
+  # date `2026-166` parses to, from Calendrical.
+  defp day_of_year_to_date(components, options) do
+    case Keyword.pop(components, :day_of_year) do
+      {nil, components} ->
+        {:ok, components}
+
+      {day_of_year, components} ->
+        calendar = Keyword.get(options, :calendar) || Calendrical.Gregorian
+        ordinal_date(components, day_of_year, calendar)
+    end
+  end
+
+  defp ordinal_date(components, day_of_year, calendar) do
+    with {:ok, year} <- Keyword.fetch(components, :year),
+         %{month: month, day: day} <-
+           Calendrical.date_from_day_of_year(year, day_of_year, calendar) do
+      {:ok, components ++ [month: month, day: day]}
+    else
+      :error ->
+        {:error,
+         ArgumentError.exception("Tempo.new/1 needs a :year to place day #{day_of_year} in.")}
+
+      {:error, _reason} ->
+        {:error,
+         InvalidDateError.exception(
+           unit: :day_of_year,
+           value: day_of_year,
+           year: Keyword.get(components, :year),
+           calendar: calendar
+         )}
+    end
+  end
+
+  defp put_quarter_group(components, year, quarter, calendar) do
+    case Group.year_division_group(calendar, year, :quarter, quarter) do
+      {:ok, {unit, group}} ->
+        {:ok, Keyword.put(components, unit, group)}
+
+      {:error, reason} ->
+        {:error, Group.year_division_error(reason, year, :quarter, quarter, calendar)}
     end
   end
 
@@ -706,8 +799,10 @@ defmodule Tempo do
   defp from_tokens(tokens, extended, requested_calendar) do
     with {:ok, effective_calendar} <- resolve_calendar(requested_calendar, extended),
          {:ok, parsed} <- Parser.parse(tokens, effective_calendar),
-         {:ok, expanded} <- Group.expand_groups(parsed),
-         expanded = maybe_resolve_endpoint_calendars(expanded, requested_calendar),
+         # Endpoint calendars first: a group is expanded in its value's own
+         # calendar, so a Hebrew endpoint's quarter holds Hebrew months.
+         parsed = maybe_resolve_endpoint_calendars(parsed, requested_calendar),
+         {:ok, expanded} <- Group.expand_groups(parsed, effective_calendar),
          # Propagate before validating. `2026-09-02T18:00/2026-09-02T20:00[Australia/Melbourne]`
          # binds the suffix to the `to` endpoint, so an unpropagated pair reaches
          # `validate_endpoint_order/2` as a floating `from` against a grounded `to` and
@@ -790,7 +885,7 @@ defmodule Tempo do
   # clean error, not crash deep in validation with `UndefinedFunctionError`.
   defp resolve_calendar(calendar, _extended) when is_atom(calendar) do
     if Code.ensure_loaded?(calendar) and function_exported?(calendar, :months_in_year, 1) do
-      {:ok, calendar}
+      {:ok, calendar_iso_as_gregorian(calendar)}
     else
       {:error, InvalidCalendarError.exception(calendar: calendar)}
     end
@@ -1466,10 +1561,13 @@ defmodule Tempo do
 
   defp put_zone_or_shift(map, _offset), do: rename_key(map, :time_zone, :zone)
 
-  # The shift `from_iso8601/1` gives an offset carries its sign on the
-  # hour alone: "-03:30" is `[hour: -3, minute: 30]`.
+  # The shift `from_iso8601/1` gives an offset written with minutes:
+  # "+05:00" is `[hour: 5, minute: 0]`, "-03:30" `[hour: -3, minute: 30]`.
   defp iso_shift(offset) do
-    [hour: div(offset, 3600), minute: offset |> abs() |> rem(3600) |> div(60)]
+    case Zone.offset_to_shift(offset) do
+      [hour: hour] -> [hour: hour, minute: 0]
+      shift -> shift
+    end
   end
 
   defp put_iso_week(%{week_of_year: week} = map) do
@@ -1735,7 +1833,7 @@ defmodule Tempo do
       resolution = Keyword.get(options, :resolution, :day)
 
       with %Tempo{} = from <- at_resolution(from_date(first), resolution),
-           %Tempo{} = to <- at_resolution(from_date(Date.add(last, 1)), resolution) do
+           %Tempo{} = to <- at_resolution(from_date(Calendrical.next(last, :day)), resolution) do
         Interval.new(from: from, to: to)
       end
     end
@@ -1923,11 +2021,7 @@ defmodule Tempo do
           calendar: calendar
         } = dt
       ) do
-    tempo_calendar =
-      case calendar do
-        Calendar.ISO -> Calendrical.Gregorian
-        other -> other
-      end
+    tempo_calendar = calendar_iso_as_gregorian(calendar)
 
     time =
       [year: year, month: month, day: day, hour: hour, minute: minute, second: second] ++
@@ -1937,7 +2031,7 @@ defmodule Tempo do
 
     %__MODULE__{
       time: time,
-      shift: offset_to_shift(total_offset),
+      shift: Zone.offset_to_shift(total_offset),
       calendar: tempo_calendar,
       extended: %{
         zone_id: time_zone,
@@ -1949,10 +2043,6 @@ defmodule Tempo do
     }
   end
 
-  # Convert a UTC offset in seconds to the `[hour: h, minute: m]`
-  # keyword list used by `%Tempo{}.shift`. Sign is carried on the
-  # hour component (matching the `resolve_shift/1` tokenizer output
-  # for negative offsets).
   # Elixir's `Time`/`NaiveDateTime`/`DateTime` carry sub-second data in
   # a `microsecond: {value, precision}` field with the same shape as
   # Tempo's `:microsecond` component. Thread it through verbatim when
@@ -1964,20 +2054,6 @@ defmodule Tempo do
     do: [microsecond: {value, precision}]
 
   defp microsecond_component(_), do: []
-
-  defp offset_to_shift(0), do: [hour: 0]
-
-  defp offset_to_shift(seconds) do
-    sign = if seconds < 0, do: -1, else: 1
-    magnitude = abs(seconds)
-    hours = div(magnitude, 3600)
-    minutes = div(rem(magnitude, 3600), 60)
-
-    case {hours, minutes} do
-      {h, 0} -> [hour: sign * h]
-      {h, m} -> [hour: sign * h, minute: sign * m]
-    end
-  end
 
   @doc """
   Returns the resolution of a `t:Tempo.t/0` struct.
@@ -3107,7 +3183,8 @@ defmodule Tempo do
     the same `:day` key, so `~o"2020-166"`, `~o"2020Y166O"`, and
     `~o"2020Y166D"` all convert correctly.
 
-  * ISO week date — `[year: Y, week: W, day_of_week: K]`.
+  * Week date — `[year: Y, week: W, day_of_week: K]`, in the calendar's
+    own weeks, and a week-based calendar's `[year: Y, week: W, day: K]`.
 
   ### Returns
 
@@ -3142,12 +3219,11 @@ defmodule Tempo do
   # `:month` is the disambiguator.
   def to_date(%Tempo{time: [year: year, day: day_of_year]} = tempo)
       when is_integer(year) and is_integer(day_of_year) do
-    with {:ok, jan_1} <- Date.new(year, 1, 1, native_calendar(tempo)) do
-      result = Date.add(jan_1, day_of_year - 1)
+    case Calendrical.date_from_day_of_year(year, day_of_year, calendar_of(tempo)) do
+      %Date{} = date ->
+        Date.convert(date, native_calendar(tempo))
 
-      if result.year == year and day_of_year >= 1 do
-        {:ok, result}
-      else
+      {:error, _reason} ->
         {:error,
          InvalidDateError.exception(
            unit: :day_of_year,
@@ -3155,22 +3231,23 @@ defmodule Tempo do
            year: year,
            reason: "out of range for year #{year}"
          )}
-      end
     end
   end
 
-  # ISO week date: year plus week-of-year plus day-of-week.
-  def to_date(%Tempo{time: [year: year, week: week, day_of_week: dow]} = tempo)
-      when is_integer(year) and is_integer(week) and is_integer(dow) do
-    # ISO 8601-1 §5.2.3: week 01 is the week containing the year's
-    # first Thursday, equivalently the week containing Jan 4. Take
-    # the Monday of that week and add (week − 1) × 7 + (dow − 1).
-    with {:ok, jan_4} <- Date.new(year, 1, 4, native_calendar(tempo)) do
-      jan_4_dow = Date.day_of_week(jan_4)
-      week_1_monday = Date.add(jan_4, -(jan_4_dow - 1))
-      target = Date.add(week_1_monday, (week - 1) * 7 + (dow - 1))
-      {:ok, target}
+  # Week date: year plus week-of-year plus day-of-week, in the
+  # calendar's own weeks — ISO 8601 weeks are `Calendrical.ISOWeek`'s.
+  def to_date(%Tempo{time: [year: year, week: week, day_of_week: day]} = tempo)
+      when is_integer(year) and is_integer(week) and is_integer(day) do
+    with {:ok, date} <- Validation.week_date(year, week, day, calendar_of(tempo)) do
+      Date.convert(date, native_calendar(tempo))
     end
+  end
+
+  # A week-based calendar's own date: year, week and day of the week.
+  def to_date(%Tempo{time: [year: year, week: week, day: day], calendar: calendar})
+      when is_integer(year) and is_integer(week) and is_integer(day) and is_atom(calendar) and
+             not is_nil(calendar) do
+    Date.new(year, week, day, calendar)
   end
 
   def to_date(%Tempo{} = value) do
@@ -3495,13 +3572,16 @@ defmodule Tempo do
         calendar
       )
       when is_atom(calendar) do
-    with {:ok, in_source} <- Date.new(year, month, day, source || Calendar.ISO),
-         {:ok, converted} <- Date.convert(in_source, calendar) do
-      {:ok, from_elixir(converted)}
-    else
-      {:error, reason} ->
-        {:error, ConversionError.exception(value: value, target: calendar, reason: reason)}
-    end
+    convert_date(value, Date.new(year, month, day, source || Calendrical.Gregorian), calendar)
+  end
+
+  # A week-based calendar's date is its year, week and day of the week.
+  def to_calendar(
+        %Tempo{time: [year: year, week: week, day: day], shift: nil, calendar: source} = value,
+        calendar
+      )
+      when is_atom(calendar) and is_atom(source) and not is_nil(source) do
+    convert_date(value, Date.new(year, week, day, source), calendar)
   end
 
   def to_calendar(%Tempo{} = value, calendar) when is_atom(calendar) do
@@ -3511,6 +3591,16 @@ defmodule Tempo do
        target: calendar,
        reason: "only day-resolution, unzoned values convert between calendars"
      )}
+  end
+
+  defp convert_date(value, date_in_source, calendar) do
+    with {:ok, in_source} <- date_in_source,
+         {:ok, converted} <- Date.convert(in_source, calendar) do
+      {:ok, from_elixir(converted)}
+    else
+      {:error, reason} ->
+        {:error, ConversionError.exception(value: value, target: calendar, reason: reason)}
+    end
   end
 
   @doc """
@@ -4023,7 +4113,7 @@ defmodule Tempo do
              minute: minute,
              second: second
            ],
-           shift: offset_to_shift(offset_seconds),
+           shift: Zone.offset_to_shift(offset_seconds),
            calendar: calendar || Calendrical.Gregorian,
            extended: %{
              zone_id: target_zone,
@@ -4131,8 +4221,9 @@ defmodule Tempo do
   end
 
   @doc """
-  Return the 1-based quarter of the year (`1..4`) for Gregorian-like
-  calendars.
+  Return the 1-based quarter of the year (`1..4`) that the value's
+  calendar puts its month in — a Hebrew leap year's Adar I is in the
+  second quarter, a Coptic epagomenal month in the fourth.
 
   ### Arguments
 
@@ -4154,6 +4245,9 @@ defmodule Tempo do
 
       iex> Tempo.quarter_of_year(~o"2026-11-30")
       4
+
+      iex> Tempo.quarter_of_year(Tempo.from_iso8601!("5787-06-15", Calendrical.Hebrew))
+      2
 
   """
   @spec quarter_of_year(t()) :: 1..4
@@ -7400,7 +7494,7 @@ defmodule Tempo do
   ### Arguments
 
   * `tempo` is a `t:t/0` that denotes a single day — a date or
-    datetime, including the day-of-year and ISO week-date forms.
+    datetime, including the day-of-year and week-date forms.
 
   * `territory` is an atom, string, locale, or `%Localize.LanguageTag{}`
     resolved through `Tempo.Territory.resolve/1`. Defaults to `nil`,

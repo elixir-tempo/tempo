@@ -1,25 +1,28 @@
 defmodule Tempo.Iso8601.Group do
   @moduledoc false
 
+  alias Calendrical.Gregorian
+  alias Tempo.InvalidDateError
   alias Tempo.Iso8601.Group
   alias Tempo.Iso8601.Parser
+  alias Tempo.Math
   alias Tempo.ParseError
 
-  # This module expands groups into base time units.
-  # For example, it exapands:
-  #  * quarters
-  #  * quadrimester
-  #  * semestrals
-  #  * seasons (meterological, not astronomical)
+  @hours_per_day 24
 
-  @quarters_in_year 4
-  @quadrimesters_in_year 3
-  @semestrals_in_year 2
+  # This module expands groups into base time units. For example, it
+  # expands:
+  #  * quarters, quadrimesters and semesters, into the months (or, in a
+  #    week-based calendar, the weeks) the calendar's periods span
+  #  * groups of a unit (`2G3MU`), into the range of values they cover
+  #  * seasons, astronomical and meteorological
 
   def expand_groups(tempo, calendar \\ Calendrical.Gregorian)
 
+  # A value is grouped in its own calendar, so a Hebrew quarter holds the
+  # Hebrew months Calendrical puts in it.
   def expand_groups(%Tempo{time: time} = tempo, calendar) do
-    case expand_groups(time, calendar) do
+    case expand_groups(time, tempo.calendar || calendar) do
       {:error, reason} -> {:error, reason}
       %Tempo.Interval{} = interval -> {:ok, interval}
       time -> {:ok, %{tempo | time: time}}
@@ -123,6 +126,14 @@ defmodule Tempo.Iso8601.Group do
     meteorological_season(year, rest, calendar, 9, 11)
   end
 
+  def expand_groups([{:year, year}, {:month, 24}, {:day, day} | rest], _calendar) do
+    # Winter runs from December 1 of the previous year to March 1.
+    with {:ok, start_date} <- season_date(year - 1, 12),
+         {:ok, end_date} <- season_date(year, 3) do
+      season_day(start_date, end_date, day, rest)
+    end
+  end
+
   def expand_groups([{:year, year}, {:month, 24} | rest], calendar) do
     # Winter: December of previous year through February of this year.
     season_interval(
@@ -132,58 +143,33 @@ defmodule Tempo.Iso8601.Group do
     )
   end
 
-  # Reformat quarters as groups of months
+  # The ISO 8601-2 sub-year divisions (codes 33–41): quarters,
+  # quadrimesters and semesters are the calendar's own periods, as
+  # Calendrical spans them. A leap month is in the period of the month it
+  # repeats and a thirteenth month in the last period; a week-based
+  # calendar's periods are runs of weeks.
   def expand_groups([{:year, year}, {:month, month} | rest], calendar)
       when is_integer(year) and month in 33..36 do
-    months_in_year = calendar.months_in_year(year)
-    months_in_quarter = div(months_in_year, @quarters_in_year)
-
-    quarter = month - 32
-    start = (quarter - 1) * months_in_quarter + 1
-
-    finish =
-      if quarter == @quarters_in_year, do: months_in_year, else: start + months_in_quarter - 1
-
-    expand_groups([{:year, year}, {:month, {:group, start..finish}} | rest], calendar)
+    expand_year_division([{:year, year} | rest], :quarter, month - 32, calendar)
   end
 
-  # Reformat quadrimester (third of a year) as groups of months
   def expand_groups([{:year, year}, {:month, month} | rest], calendar)
       when is_integer(year) and month in 37..39 do
-    months_in_year = calendar.months_in_year(year)
-    months_in_quadrimester = div(months_in_year, @quadrimesters_in_year)
-
-    quadrimester = month - 36
-    start = (quadrimester - 1) * months_in_quadrimester + 1
-
-    finish =
-      if quadrimester == @quadrimesters_in_year,
-        do: months_in_year,
-        else: start + months_in_quadrimester - 1
-
-    expand_groups([{:year, year}, {:month, {:group, start..finish}} | rest], calendar)
+    expand_year_division([{:year, year} | rest], :quadrimester, month - 36, calendar)
   end
 
-  # Reformat semestrals (half a year) as groups of months
   def expand_groups([{:year, year}, {:month, month} | rest], calendar)
       when is_integer(year) and month in 40..41 do
-    months_in_year = calendar.months_in_year(year)
-    months_in_semestral = div(months_in_year, @semestrals_in_year)
-
-    semestral = month - 39
-    start = (semestral - 1) * months_in_semestral + 1
-
-    finish =
-      if semestral == @semestrals_in_year,
-        do: months_in_year,
-        else: start + months_in_semestral - 1
-
-    expand_groups([{:year, year}, {:month, {:group, start..finish}} | rest], calendar)
+    expand_year_division([{:year, year} | rest], :semester, month - 39, calendar)
   end
 
-  def expand_groups([{:group, [{:nth, nth}, {unit, value}]} | rest], calendar) do
-    first = (nth - 1) * value + 1
-    last = nth * value
+  # The `nth` group of `size` units covers the values from the unit's
+  # first, so the second group of three months is months 4..6 and the
+  # third group of eight hours is hours 16..23.
+  def expand_groups([{:group, [{:nth, nth}, {unit, size}]} | rest], calendar)
+      when is_integer(nth) and is_integer(size) do
+    first = (nth - 1) * size + Math.unit_minimum(unit)
+    last = first + size - 1
 
     expand_groups([{unit, {:group, first..last//1}} | rest], calendar)
   end
@@ -214,6 +200,182 @@ defmodule Tempo.Iso8601.Group do
   defp prepend(_first, {:error, _reason} = error), do: error
   defp prepend(first, time), do: [first | time]
 
+  ## Sub-year divisions
+
+  defp expand_year_division([{:year, year} | rest], division, number, calendar) do
+    case year_division_group(calendar, year, division, number) do
+      {:ok, group} ->
+        expand_groups([{:year, year}, group | rest], calendar)
+
+      {:error, reason} ->
+        {:error, year_division_error(reason, year, division, number, calendar)}
+    end
+  end
+
+  @doc false
+  # The `number`th `division` (`:quarter`, `:quadrimester` or `:semester`)
+  # of `year` as the group of months the calendar's period spans, or of
+  # weeks in a week-based calendar.
+  @spec year_division_group(module(), integer(), :quarter | :quadrimester | :semester, integer()) ::
+          {:ok, {:month | :week, {:group, Range.t()}}} | {:error, :not_defined | :invalid_date}
+  def year_division_group(calendar, year, division, number) do
+    with {:ok, %Date.Range{first: first, last: last}} <-
+           year_division_date_range(calendar, year, division, number) do
+      {:ok, {year_division_unit(calendar), {:group, first.month..last.month//1}}}
+    end
+  end
+
+  @doc false
+  # The exception for a division `year_division_group/4` could not place.
+  @spec year_division_error(atom(), integer(), atom(), integer(), module()) :: Exception.t()
+  def year_division_error(:not_defined, _year, division, _number, calendar) do
+    InvalidDateError.exception(
+      reason: "#{inspect(calendar)} does not divide its year into #{division}s"
+    )
+  end
+
+  def year_division_error(_reason, year, division, number, calendar) do
+    InvalidDateError.exception(
+      reason: "#{number} is not a #{division} of #{year} in #{inspect(calendar)}"
+    )
+  end
+
+  defp year_division_date_range(calendar, year, division, number) do
+    if Code.ensure_loaded?(calendar) and function_exported?(calendar, division, 2) do
+      calendar
+      |> apply(division, [year, number])
+      |> year_division_date_range_result()
+    else
+      {:error, :not_defined}
+    end
+  end
+
+  defp year_division_date_range_result(%Date.Range{} = range), do: {:ok, range}
+  defp year_division_date_range_result({:error, reason}), do: {:error, reason}
+
+  # A week-based calendar numbers its weeks in the date's `month` field.
+  defp year_division_unit(calendar) do
+    if function_exported?(calendar, :calendar_base, 0) and calendar.calendar_base() == :week,
+      do: :week,
+      else: :month
+  end
+
+  ## The container of a group
+
+  @doc false
+  # A group keeps the values its `nGsizeU` declares, so it renders as it
+  # was written, and is bounded by its container where it is used: the
+  # last group of eleven days in February (`2018Y2M3G11DU`, days 23..33)
+  # runs to the 28th. A group that starts beyond its container, such as
+  # months 13..15 of a twelve-month year, is an error.
+  @spec bound_groups(list(), module()) :: {:ok, list()} | {:error, Exception.t()}
+  def bound_groups(time, calendar) when is_list(time) do
+    time
+    |> Enum.reduce_while({:ok, []}, fn component, {:ok, prefix} ->
+      case bound_group(component, Enum.reverse(prefix), calendar) do
+        {:ok, bounded} -> {:cont, {:ok, [bounded | prefix]}}
+        {:error, _exception} = error -> {:halt, error}
+      end
+    end)
+    |> bound_groups_result()
+  end
+
+  def bound_groups(other, _calendar), do: {:ok, other}
+
+  defp bound_groups_result({:ok, reversed}), do: {:ok, Enum.reverse(reversed)}
+  defp bound_groups_result({:error, _exception} = error), do: error
+
+  defp bound_group(
+         {unit, {:group, %Range{first: first, last: last}}} = component,
+         prefix,
+         calendar
+       ) do
+    case container_maximum(prefix, unit, calendar) do
+      nil ->
+        {:ok, component}
+
+      maximum when first <= maximum ->
+        {:ok, {unit, {:group, first..min(last, maximum)//1}}}
+
+      maximum ->
+        {:error,
+         InvalidDateError.exception(
+           unit: unit,
+           value: first,
+           valid_range: Math.unit_minimum(unit)..maximum//1,
+           calendar: calendar
+         )}
+    end
+  end
+
+  defp bound_group(component, _prefix, _calendar), do: {:ok, component}
+
+  @doc false
+  # The largest value `unit` takes within `prefix`, the components before
+  # it, or `nil` when they do not bound it (a group of years, or a
+  # container that is itself a set or a mask).
+  @spec container_maximum(list(), atom(), module()) :: integer() | nil
+  def container_maximum(prefix, unit, calendar) do
+    if Enum.all?(prefix, &integer_component?/1) do
+      prefix
+      |> Keyword.keys()
+      |> container_unit(unit)
+      |> maximum_within(unit, Map.new(prefix), calendar)
+    end
+  end
+
+  defp integer_component?({_unit, value}), do: is_integer(value)
+  defp integer_component?(_component), do: false
+
+  # The unit a group's unit counts within, when the components before it
+  # name one: days count within a month, a week, or (alone with a year)
+  # the year, and hours within a day or (alone with a year) the year.
+  defp container_unit(units, unit) when unit in [:month, :week] do
+    if :year in units, do: :year
+  end
+
+  defp container_unit(units, :day) do
+    cond do
+      :month in units -> :month
+      :week in units -> :week
+      units == [:year] -> :year
+      true -> nil
+    end
+  end
+
+  defp container_unit(units, :day_of_week), do: if(:week in units, do: :week)
+
+  defp container_unit(units, :hour) do
+    cond do
+      :day in units -> :day
+      units == [:year] -> :year
+      true -> nil
+    end
+  end
+
+  defp container_unit(units, :minute), do: if(:hour in units, do: :hour)
+  defp container_unit(units, :second), do: if(:minute in units, do: :minute)
+  defp container_unit(_units, _unit), do: nil
+
+  defp maximum_within(:year, :month, %{year: year}, calendar), do: calendar.months_in_year(year)
+
+  defp maximum_within(:year, :week, %{year: year}, calendar),
+    do: year |> calendar.weeks_in_year() |> elem(0)
+
+  defp maximum_within(:year, :day, %{year: year}, calendar), do: calendar.days_in_year(year)
+
+  defp maximum_within(:year, :hour, %{year: year}, calendar),
+    do: calendar.days_in_year(year) * @hours_per_day - 1
+
+  defp maximum_within(:month, :day, %{year: year, month: month}, calendar),
+    do: calendar.days_in_month(year, month)
+
+  defp maximum_within(:week, _unit, _prefix, calendar), do: calendar.days_in_week()
+  defp maximum_within(:day, :hour, _prefix, _calendar), do: @hours_per_day - 1
+  defp maximum_within(:hour, :minute, _prefix, _calendar), do: 59
+  defp maximum_within(:minute, :second, _prefix, _calendar), do: 59
+  defp maximum_within(_container_unit, _unit, _prefix, _calendar), do: nil
+
   ## Season helpers
 
   # Expand an astronomical season into an interval whose boundaries
@@ -223,15 +385,72 @@ defmodule Tempo.Iso8601.Group do
   defp astronomical_season(year, rest, calendar, start_event, :march_next) do
     with {:ok, start_date} <- season_boundary_date(year, start_event),
          {:ok, end_date} <- season_boundary_date(year + 1, :march) do
-      build_season_interval(start_date, end_date, rest, calendar)
+      astronomical_span(start_date, end_date, rest, calendar)
     end
   end
 
   defp astronomical_season(year, rest, calendar, start_event, end_event) do
     with {:ok, start_date} <- season_boundary_date(year, start_event),
          {:ok, end_date} <- season_boundary_date(year, end_event) do
-      build_season_interval(start_date, end_date, rest, calendar)
+      astronomical_span(start_date, end_date, rest, calendar)
     end
+  end
+
+  # ISO 8601-2 writes a season only as a year and month; a day after one
+  # is its nth day, as a day after a quarter or a semester is.
+  defp astronomical_span(start_date, end_date, [{:day, day} | rest], _calendar) do
+    season_day(start_date, end_date, day, rest)
+  end
+
+  defp astronomical_span(start_date, end_date, rest, calendar) do
+    build_season_interval(start_date, end_date, rest, calendar)
+  end
+
+  # The day Calendrical's arithmetic reaches `day - 1` days after the
+  # season's first day, provided it falls before the season ends. Season
+  # boundaries are Gregorian dates.
+  defp season_day(%Date{} = start_date, %Date{} = end_date, day, rest)
+       when is_integer(day) and day >= 1 do
+    {year, month, day_of_month} =
+      Gregorian.plus(start_date.year, start_date.month, start_date.day, :days, day - 1)
+
+    season_date_before(Date.new(year, month, day_of_month), end_date, day, rest)
+  end
+
+  defp season_day(_start_date, end_date, day, _rest), do: season_day_error(day, end_date)
+
+  defp season_date_before({:ok, date}, end_date, day, rest) do
+    case Date.compare(date, end_date) do
+      :lt -> [{:year, date.year}, {:month, date.month}, {:day, date.day} | rest]
+      _on_or_after -> season_day_error(day, end_date)
+    end
+  end
+
+  defp season_date_before({:error, _reason}, end_date, day, _rest),
+    do: season_day_error(day, end_date)
+
+  defp season_day_error(day, end_date) do
+    {:error,
+     InvalidDateError.exception(
+       reason: "Day #{inspect(day)} of the season is not before its end, #{end_date}"
+     )}
+  end
+
+  # The first day of a month of a meteorological season, or of the month
+  # after one.
+  defp season_date(year, month) do
+    case Date.new(year, month, 1) do
+      {:ok, date} ->
+        {:ok, date}
+
+      {:error, _reason} ->
+        {:error, InvalidDateError.exception(reason: "#{year}-#{month} has no season date")}
+    end
+  end
+
+  defp month_after(year, month) do
+    {next_year, next_month, _day} = Gregorian.plus(year, month, 1, :months, 1)
+    season_date(next_year, next_month)
   end
 
   defp season_boundary_date(year, event) when event in [:march, :september] do
@@ -268,6 +487,15 @@ defmodule Tempo.Iso8601.Group do
       [{:year, end_date.year}, {:month, end_date.month}, {:day, end_date.day} | rest],
       calendar
     )
+  end
+
+  # A day of the season is its nth day, reached as after an astronomical
+  # season.
+  defp meteorological_season(year, [{:day, day} | rest], _calendar, start_month, end_month) do
+    with {:ok, start_date} <- season_date(year, start_month),
+         {:ok, end_date} <- month_after(year, end_month) do
+      season_day(start_date, end_date, day, rest)
+    end
   end
 
   defp meteorological_season(year, rest, calendar, start_month, end_month) do

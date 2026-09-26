@@ -353,21 +353,22 @@ defmodule Tempo.Select do
      )}
   end
 
+  # The days from `from` up to, not including, `to`, each the day
+  # Calendrical gives after the one before.
   defp stream_days(from, to, calendar) do
     with {:ok, start_date} <- tempo_to_date(from, calendar),
          {:ok, end_date} <- tempo_to_date(to, calendar) do
-      total = Date.diff(end_date, start_date)
-      Stream.unfold(0, fn i -> next_day(i, total, start_date) end)
+      Stream.unfold(start_date, &next_day(&1, end_date))
     else
       _ -> []
     end
   end
 
-  defp next_day(i, total, _start_date) when i >= total, do: nil
-
-  defp next_day(i, _total, start_date) do
-    d = Date.add(start_date, i)
-    {{d.year, d.month, d.day}, i + 1}
+  defp next_day(date, end_date) do
+    case Date.compare(date, end_date) do
+      :lt -> {{date.year, date.month, date.day}, Calendrical.next(date, :day)}
+      _on_or_after_the_end -> nil
+    end
   end
 
   defp tempo_to_date(%Tempo{time: time, calendar: calendar}, calendar) do
@@ -388,17 +389,16 @@ defmodule Tempo.Select do
     end
   end
 
-  # Week-axis endpoint — `[year, week, day_of_week]`. Week
-  # numbering is ISO-week semantics regardless of the base
-  # calendar (see `Tempo.Validation`), so resolve the week date
-  # under `Calendrical.ISOWeek` and convert into the base
-  # calendar. A week-resolution endpoint denotes the start of its
-  # week, so a missing `:day_of_week` defaults to 1.
+  # Week-axis endpoint — `[year, week, day_of_week]`, a date of the
+  # calendar's own weeks (see `Tempo.Validation.week_date/4`),
+  # converted into the base calendar. A week-resolution endpoint
+  # denotes the start of its week, so a missing `:day_of_week`
+  # defaults to 1.
   defp week_time_to_date(time, calendar) do
     with year when is_integer(year) <- Keyword.get(time, :year),
          week when is_integer(week) <- Keyword.get(time, :week),
          day when is_integer(day) <- Keyword.get(time, :day_of_week, 1),
-         {:ok, week_date} <- Date.new(year, week, day, Calendrical.ISOWeek) do
+         {:ok, week_date} <- Validation.week_date(year, week, day, calendar) do
       Date.convert(week_date, calendar)
     else
       _ -> :error
@@ -424,7 +424,7 @@ defmodule Tempo.Select do
 
   defp day_after(y, m, d, calendar) do
     {:ok, date} = Date.new(y, m, d, calendar)
-    Date.add(date, 1)
+    Calendrical.next(date, :day)
   end
 
   defp build_day_tempo(%Tempo{} = source, y, m, d, calendar) do

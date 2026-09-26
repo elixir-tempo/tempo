@@ -43,6 +43,15 @@ defmodule Tempo.CompareTest do
     end
   end
 
+  describe "week dates" do
+    test "compare in the calendar's own weeks" do
+      # Calendrical.Gregorian's week 1 of 2022 starts December 27; ISO
+      # 8601's, Calendrical.ISOWeek's, starts January 3.
+      assert Tempo.compare(Tempo.new!(year: 2022, week: 1, day_of_week: 1), ~o"2021-12-27") == :eq
+      assert Tempo.compare(~o"2022-W01-3"W, ~o"2022-01-05") == :eq
+    end
+  end
+
   describe "as a sorter module" do
     test "Enum.sort/2 takes Tempo directly" do
       sorted = Enum.sort([~o"2026-06-16", ~o"2026-06-15", ~o"2026-06-17"], Tempo)

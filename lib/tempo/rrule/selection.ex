@@ -338,7 +338,7 @@ defmodule Tempo.RRule.Selection do
   # A traditional month selector resolves to its ordinal position
   # per candidate year — a leap month shifts the numbering — then applies as an
   # ordinary BYMONTH. The traditional→ordinal step is Calendrical's, via
-  # `Tempo.Validation.traditional_month_ordinal/3`. A leap month the candidate's
+  # `Tempo.Validation.ordinal_month_from_traditional/3`. A leap month the candidate's
   # year does not carry resolves to nothing, so that year yields no occurrence.
   defp apply_entry({:traditional_month, months}, candidates, freq, selection, wkst) do
     Enum.flat_map(candidates, fn candidate ->
@@ -793,23 +793,16 @@ defmodule Tempo.RRule.Selection do
 
   # Build the week around the candidate's date as seven
   # `{year, month, day, weekday}` tuples in chronological order,
-  # with the week anchored on `wkst` (1..7, Monday=1, default 1).
-  # For `wkst = k` the week starts on the `k`-th weekday
-  # preceding-or-equal-to the candidate, computed via
-  # `Integer.mod(candidate_dow - wkst, 7)`.
+  # with the week anchored on `wkst` (1..7, Monday=1, default 1): the
+  # `wkst` day on or before the candidate, from `Calendrical.Kday`, and
+  # the six days Calendrical gives after it.
   defp week_date_range(%Interval{from: %Tempo{time: time, calendar: calendar}}, wkst) do
     with year when is_integer(year) <- Keyword.get(time, :year),
          month when is_integer(month) <- Keyword.get(time, :month),
          day when is_integer(day) <- Keyword.get(time, :day),
-         dow when is_integer(dow) <-
-           calendar.day_of_week(year, month, day, :monday) |> normalise_day_of_week(),
-         {:ok, date} <- Date.new(year, month, day, calendar) do
-      offset_back = Integer.mod(dow - wkst, 7)
-      week_start = Date.add(date, -offset_back)
-
-      for i <- 0..6 do
-        d = Date.add(week_start, i)
-
+         {:ok, date} <- Date.new(year, month, day, calendar),
+         %Date{} = week_start <- Kday.kday_on_or_before(date, wkst) do
+      for d <- seven_days_from(week_start) do
         d_dow =
           calendar.day_of_week(d.year, d.month, d.day, :monday) |> normalise_day_of_week()
 
@@ -818,6 +811,12 @@ defmodule Tempo.RRule.Selection do
     else
       _ -> nil
     end
+  end
+
+  defp seven_days_from(date) do
+    date
+    |> Stream.iterate(&Calendrical.next(&1, :day))
+    |> Enum.take(7)
   end
 
   # Rebuild a candidate with a new date, preserving the existing
@@ -1010,7 +1009,7 @@ defmodule Tempo.RRule.Selection do
     year = Keyword.get(time, :year)
 
     Enum.flat_map(months, fn month ->
-      case Validation.traditional_month_ordinal(calendar, year, month) do
+      case Validation.ordinal_month_from_traditional(calendar, year, month) do
         {:ok, ordinal} when is_integer(ordinal) -> [ordinal]
         _other -> []
       end
@@ -1198,44 +1197,33 @@ defmodule Tempo.RRule.Selection do
     end
   end
 
-  # Map a {month, day} pair back from a day-of-year ordinal by
-  # walking the calendar's month lengths. Returns `nil` if out
-  # of range.
+  # The {month, day} of a day of the year, from Calendrical. Returns
+  # `nil` if the year has no such day.
   defp year_day_to_month_day(calendar, year, doy) when is_integer(doy) and doy >= 1 do
-    months = 1..calendar.months_in_year(year)
-
-    Enum.reduce_while(months, doy, fn month, remaining ->
-      days_in_this_month = calendar.days_in_month(year, month)
-
-      if remaining <= days_in_this_month do
-        {:halt, {month, remaining}}
-      else
-        {:cont, remaining - days_in_this_month}
-      end
-    end)
-    |> case do
-      {m, d} when is_integer(m) and is_integer(d) -> {m, d}
-      _ -> nil
+    if doy <= calendar.days_in_year(year) do
+      %{month: month, day: day} = Calendrical.date_from_day_of_year(year, doy, calendar)
+      {month, day}
     end
   end
 
   # Emit the (up to 7) {month, day} pairs that fall inside `year`
-  # for the given ISO week number. Monday-first by construction.
+  # for the given ISO week number. Monday-first by construction: week 1
+  # starts on the Monday on or before the year's fourth day (from
+  # `Calendrical.Kday`), and week `week` is `week - 1` weeks on by
+  # Calendrical's arithmetic.
   defp week_dates_in_year(calendar, year, week) do
-    # Find the Monday of the requested ISO week. Walk from Jan 4
-    # back to the Monday of its ISO week (week 1), then add
-    # (week - 1) * 7 days.
-    with {:ok, anchor} <- Date.new(year, 1, 4, calendar),
-         anchor_dow when is_integer(anchor_dow) <-
-           calendar.day_of_week(year, 1, 4, :monday) |> normalise_day_of_week() do
-      week_1_monday = Date.add(anchor, -(anchor_dow - 1))
-      week_start = Date.add(week_1_monday, (week - 1) * 7)
-
-      for i <- 0..6,
-          d = Date.add(week_start, i),
-          d.year == year do
-        {d.month, d.day}
-      end
+    with {:ok, fourth_day} <- Date.new(year, 1, 4, calendar),
+         %Date{} = week_1_monday <- Kday.kday_on_or_before(fourth_day, 1),
+         {start_year, start_month, start_day} <-
+           calendar.plus(
+             week_1_monday.year,
+             week_1_monday.month,
+             week_1_monday.day,
+             :weeks,
+             week - 1
+           ),
+         {:ok, week_start} <- Date.new(start_year, start_month, start_day, calendar) do
+      for d <- seven_days_from(week_start), d.year == year, do: {d.month, d.day}
     else
       _ -> []
     end
