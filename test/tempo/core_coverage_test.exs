@@ -88,6 +88,23 @@ defmodule Tempo.CoreCoverageTest do
     end
   end
 
+  describe "parse/2 maps the parsed fields onto Tempo's" do
+    test "a UTC offset becomes the shift from_iso8601/1 gives it" do
+      for input <- ["2026-05-23T14:30:00+05:00", "2026-05-23T14:30:00-03:30"] do
+        assert Tempo.parse(input) == Tempo.from_iso8601(input)
+      end
+    end
+
+    test "a week of the year is the week from_iso8601/1 reads" do
+      assert {:ok, week} = Tempo.parse("week 1 of 2026", locale: :en)
+      assert {:ok, week} == Tempo.from_iso8601("2026-W01")
+    end
+
+    test "a weekday beside a full date is implied by the date" do
+      assert Tempo.parse("Monday, May 25, 2026", locale: :en) == Tempo.from_iso8601("2026-05-25")
+    end
+  end
+
   describe "bang functions raise on invalid input" do
     test "new!/1 raises on an out-of-range component" do
       assert_raise InvalidDateError, fn -> Tempo.new!(year: 2020, month: 13) end

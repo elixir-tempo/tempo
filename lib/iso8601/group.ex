@@ -34,11 +34,11 @@ defmodule Tempo.Iso8601.Group do
   end
 
   def expand_groups(%Tempo.Interval{} = tempo, calendar) do
-    {:ok, from} = expand_groups(tempo.from, calendar)
-    {:ok, to} = expand_groups(tempo.to, calendar)
-    {:ok, duration} = expand_groups(tempo.duration, calendar)
-
-    {:ok, %{tempo | from: from, to: to, duration: duration}}
+    with {:ok, from} <- expand_groups(tempo.from, calendar),
+         {:ok, to} <- expand_groups(tempo.to, calendar),
+         {:ok, duration} <- expand_groups(tempo.duration, calendar) do
+      {:ok, %{tempo | from: from, to: to, duration: duration}}
+    end
   end
 
   def expand_groups(%Tempo.Set{set: set} = tempo, calendar) do
@@ -125,17 +125,11 @@ defmodule Tempo.Iso8601.Group do
 
   def expand_groups([{:year, year}, {:month, 24} | rest], calendar) do
     # Winter: December of previous year through February of this year.
-    {:ok, interval} =
-      [
-        interval: [
-          datetime: [{:year, year - 1}, {:month, 12} | rest],
-          datetime: [{:year, year}, {:month, 2} | rest]
-        ]
-      ]
-      |> Parser.parse()
-      |> Group.expand_groups(calendar)
-
-    interval
+    season_interval(
+      [{:year, year - 1}, {:month, 12} | rest],
+      [{:year, year}, {:month, 2} | rest],
+      calendar
+    )
   end
 
   # Reformat quarters as groups of months
@@ -195,11 +189,11 @@ defmodule Tempo.Iso8601.Group do
   end
 
   def expand_groups([{:group, [{:all_of, set}, {unit, value}]} | rest], calendar) do
-    [{unit, {:group, {:all, set}}, value} | expand_groups(rest, calendar)]
+    prepend({unit, {:group, {:all, set}}, value}, expand_groups(rest, calendar))
   end
 
   def expand_groups([{:group, [{:one_of, set}, {unit, value}]} | rest], calendar) do
-    [{unit, {:group, {:one, set}}, value} | expand_groups(rest, calendar)]
+    prepend({unit, {:group, {:one, set}}, value}, expand_groups(rest, calendar))
   end
 
   # TODO implement complex groups
@@ -209,15 +203,16 @@ defmodule Tempo.Iso8601.Group do
   end
 
   def expand_groups([first | rest], calendar) do
-    case expand_groups(rest, calendar) do
-      {:error, reason} -> {:error, reason}
-      time -> [first | time]
-    end
+    prepend(first, expand_groups(rest, calendar))
   end
 
   def expand_groups(other, _calendar) do
     other
   end
+
+  # An error expanding the rest of the list is the list's error.
+  defp prepend(_first, {:error, _reason} = error), do: error
+  defp prepend(first, time), do: [first | time]
 
   ## Season helpers
 
@@ -226,62 +221,72 @@ defmodule Tempo.Iso8601.Group do
   # inclusive on the lower end and exclusive on the upper end
   # (matching the half-open `[first, last)` convention).
   defp astronomical_season(year, rest, calendar, start_event, :march_next) do
-    start_date = season_boundary_date(year, start_event)
-    end_date = season_boundary_date(year + 1, :march)
-
-    build_season_interval(start_date, end_date, rest, calendar)
+    with {:ok, start_date} <- season_boundary_date(year, start_event),
+         {:ok, end_date} <- season_boundary_date(year + 1, :march) do
+      build_season_interval(start_date, end_date, rest, calendar)
+    end
   end
 
   defp astronomical_season(year, rest, calendar, start_event, end_event) do
-    start_date = season_boundary_date(year, start_event)
-    end_date = season_boundary_date(year, end_event)
-
-    build_season_interval(start_date, end_date, rest, calendar)
+    with {:ok, start_date} <- season_boundary_date(year, start_event),
+         {:ok, end_date} <- season_boundary_date(year, end_event) do
+      build_season_interval(start_date, end_date, rest, calendar)
+    end
   end
 
   defp season_boundary_date(year, event) when event in [:march, :september] do
-    {:ok, datetime} = Astro.equinox(year, event)
-    DateTime.to_date(datetime)
+    year |> Astro.equinox(event) |> season_boundary(year, event)
   end
 
   defp season_boundary_date(year, event) when event in [:june, :december] do
-    {:ok, datetime} = Astro.solstice(year, event)
-    DateTime.to_date(datetime)
+    year |> Astro.solstice(event) |> season_boundary(year, event)
   end
 
-  defp build_season_interval(%Date{} = start_date, %Date{} = end_date, rest, calendar) do
-    {:ok, interval} =
-      [
-        interval: [
-          datetime: [
-            {:year, start_date.year},
-            {:month, start_date.month},
-            {:day, start_date.day} | rest
-          ],
-          datetime: [
-            {:year, end_date.year},
-            {:month, end_date.month},
-            {:day, end_date.day} | rest
-          ]
-        ]
-      ]
-      |> Parser.parse()
-      |> Group.expand_groups(calendar)
+  defp season_boundary({:ok, %DateTime{} = datetime}, _year, _event) do
+    {:ok, DateTime.to_date(datetime)}
+  end
 
-    interval
+  # Astro computes equinoxes and solstices for a bounded span of years
+  # and returns `{:error, :year_out_of_range}` beyond it.
+  defp season_boundary({:error, reason}, year, event) do
+    {:error,
+     ParseError.exception(
+       reason:
+         "The #{boundary_name(event)} of #{year}, which bounds this season, " <>
+           "cannot be computed (#{inspect(reason)})"
+     )}
+  end
+
+  defp boundary_name(:march), do: "March equinox"
+  defp boundary_name(:june), do: "June solstice"
+  defp boundary_name(:september), do: "September equinox"
+  defp boundary_name(:december), do: "December solstice"
+
+  defp build_season_interval(%Date{} = start_date, %Date{} = end_date, rest, calendar) do
+    season_interval(
+      [{:year, start_date.year}, {:month, start_date.month}, {:day, start_date.day} | rest],
+      [{:year, end_date.year}, {:month, end_date.month}, {:day, end_date.day} | rest],
+      calendar
+    )
   end
 
   defp meteorological_season(year, rest, calendar, start_month, end_month) do
-    {:ok, interval} =
-      [
-        interval: [
-          datetime: [{:year, year}, {:month, start_month} | rest],
-          datetime: [{:year, year}, {:month, end_month} | rest]
-        ]
-      ]
-      |> Parser.parse()
-      |> Group.expand_groups(calendar)
-
-    interval
+    season_interval(
+      [{:year, year}, {:month, start_month} | rest],
+      [{:year, year}, {:month, end_month} | rest],
+      calendar
+    )
   end
+
+  # The interval between a season's boundaries, or the error building
+  # it returns.
+  defp season_interval(from, to, calendar) do
+    [interval: [datetime: from, datetime: to]]
+    |> Parser.parse()
+    |> Group.expand_groups(calendar)
+    |> season_interval_result()
+  end
+
+  defp season_interval_result({:ok, interval}), do: interval
+  defp season_interval_result({:error, _reason} = error), do: error
 end

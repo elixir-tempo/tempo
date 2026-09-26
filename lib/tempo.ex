@@ -1356,15 +1356,19 @@ defmodule Tempo do
     markers, and similar locale-dependent tokens. Defaults to
     `Localize.get_locale/0`.
 
-  * `:calendar` is the CLDR calendar key or calendar module to
-    parse against. Defaults to `:gregorian`.
+  * `:calendar` is the calendar module the input is read in, such as
+    `Calendrical.Hebrew`. Defaults to `Calendar.ISO`. A CLDR calendar
+    name such as `:hebrew` is not a calendar and returns an error.
 
   * `:reference_date` is the "today" anchor used for two-digit-year
     pivoting and partial-date inheritance.
 
   The `:as` option is set to `:map` regardless of any caller-supplied
   value — Tempo always asks Calendrical for the field-map form so it
-  can rebuild a Tempo value from the parsed fields.
+  can rebuild a Tempo value from the parsed fields. A UTC offset such
+  as `"+05:00"` becomes the value's shift, as `from_iso8601/1` reads
+  it, and a week of the year (`"week 1 of 2026"`) is the week
+  `from_iso8601/1` reads in `2026-W01`.
 
   ### Returns
 
@@ -1430,16 +1434,62 @@ defmodule Tempo do
     end
   end
 
-  # Strip Calendrical-specific extras that don't fit `Tempo.new/1`'s
-  # component/option schema. `:microsecond` is dropped because Tempo
-  # is second-resolution; `:utc_offset`, `:std_offset`, and
-  # `:zone_abbr` are derivable from the IANA zone. `:time_zone` is
-  # renamed to Tempo's `:zone` option.
+  # Map Calendrical's parsed fields onto `Tempo.new/1`'s components and
+  # options. `:microsecond` is dropped because Tempo is second-resolution.
+  # An IANA zone becomes the `:zone` option, its offsets derivable from
+  # it; a fixed offset, which Calendrical labels `Etc/UTC` beside a
+  # non-zero offset, becomes the `:shift` `from_iso8601/1` gives it. A
+  # week of a week-based year becomes Tempo's `:week` of that year, and
+  # a weekday beside a full date is dropped, the date fixing it
+  # (Calendrical drops one that disagrees with the date).
   defp sanitise_parsed_map(map) do
+    {offset, map} = pop_offset(map)
+
     map
-    |> Map.drop([:microsecond, :utc_offset, :std_offset, :zone_abbr])
-    |> rename_key(:time_zone, :zone)
+    |> Map.drop([:microsecond, :zone_abbr])
+    |> put_zone_or_shift(offset)
+    |> put_iso_week()
+    |> drop_implied_weekday()
   end
+
+  defp pop_offset(map) do
+    {utc_offset, map} = Map.pop(map, :utc_offset, 0)
+    {std_offset, map} = Map.pop(map, :std_offset, 0)
+    {utc_offset + std_offset, map}
+  end
+
+  defp put_zone_or_shift(%{time_zone: "Etc/UTC"} = map, offset) when offset != 0 do
+    map
+    |> Map.delete(:time_zone)
+    |> Map.put(:shift, iso_shift(offset))
+  end
+
+  defp put_zone_or_shift(map, _offset), do: rename_key(map, :time_zone, :zone)
+
+  # The shift `from_iso8601/1` gives an offset carries its sign on the
+  # hour alone: "-03:30" is `[hour: -3, minute: 30]`.
+  defp iso_shift(offset) do
+    [hour: div(offset, 3600), minute: offset |> abs() |> rem(3600) |> div(60)]
+  end
+
+  defp put_iso_week(%{week_of_year: week} = map) do
+    {week_based_year, map} = Map.pop(map, :week_based_year)
+
+    map
+    |> Map.delete(:week_of_year)
+    |> Map.put(:week, week)
+    |> put_week_based_year(week_based_year)
+  end
+
+  defp put_iso_week(map), do: map
+
+  defp put_week_based_year(map, nil), do: map
+  defp put_week_based_year(map, year), do: Map.put(map, :year, year)
+
+  defp drop_implied_weekday(%{year: _, month: _, day: _, day_of_week: _} = map),
+    do: Map.delete(map, :day_of_week)
+
+  defp drop_implied_weekday(map), do: map
 
   defp rename_key(map, from, to) do
     case Map.pop(map, from) do

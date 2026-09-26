@@ -42,6 +42,16 @@ defmodule Tempo.GroupResolution.Test do
     assert ~o"2022Y28M" == ~o"2022Y12M21D/2023Y3M20D"
   end
 
+  test "an astronomical season beyond the years Astro computes is an error" do
+    # Astro computes equinoxes and solstices for 1000-3000, and a winter
+    # ends at the next year's March equinox.
+    assert {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("0999-25")
+    assert {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("0999-25/2026-27")
+    assert {:error, error} = Tempo.from_iso8601("3000-28")
+    assert Exception.message(error) =~ "March equinox of 3001"
+    assert {:ok, _winter} = Tempo.from_iso8601("2999-28")
+  end
+
   test "Meteorological seasons (21-24) expand to calendar months" do
     # Codes 21-24 are hemisphere-unspecified; we default to Northern
     # meteorological boundaries as a conventional interpretation.

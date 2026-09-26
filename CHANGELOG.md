@@ -4,6 +4,8 @@
 
 ### Changed
 
+* `Tempo.parse/2`'s `:calendar` option is a calendar module, `Calendar.ISO` by default, as Calendrical 1.4's is: a CLDR calendar name such as `:hebrew` returns an error.
+
 * A recurrence selection that moves a candidate to several dates (weekday, month-day, week and window expansions) finds the candidate's own day numbers once, and a move onto its own date asks the calendar nothing — about a third fewer calendar calls for a lunisolar calendar.
 
 * Traditional lunisolar months resolve through Calendrical's `ordinal_month/2`, dates validate and convert through `Calendrical.iso_days/4`, and a day that fits every month of a calendar skips the per-year month length. The lunisolar holiday workload runs in 1.3 s instead of 2.1 s, with identical results.
@@ -35,6 +37,12 @@
 * `Tempo.Interval.Relations` — converse, narrowing and composition over *sets* of Allen relations, for reasoning when the relation between two intervals is constrained but not known. `narrow/2` combines two sources of knowledge; it is not `Tempo.intersection/2`, which operates on time values.
 
 ### Fixed
+
+* An astronomical season whose equinox or solstice falls outside the years Astro computes returns a `Tempo.ParseError`, where it raised `MatchError`: `0999-25`, and `3000-28`, whose winter ends at the March equinox of 3001.
+
+* `Tempo.parse/2` keeps a UTC offset as the value's shift, as `from_iso8601/1` does, so `"2026-05-23T14:30:00+05:00"` is 14:30 at +05:00; since Calendrical 1.4 keeps the offset's wall time, it had become 14:30 UTC.
+
+* `Tempo.parse/2` reads a week of the year (`"week 1 of 2026"`) as the week `from_iso8601/1` reads in `2026-W01`, and a weekday beside a full date (`"Monday, May 25, 2026"`) as implied by the date, where both were rejected.
 
 * Adding years to a Hebrew or lunisolar date keeps its traditional month, as the calendar's own arithmetic does: `Tempo.shift(~o"5786Y7M15D[u-ca=hebrew]", ~o"P1Y")` is 15 Nisan 5787, `5787Y8M15D`, where it kept month 7 (Adar II).
 
