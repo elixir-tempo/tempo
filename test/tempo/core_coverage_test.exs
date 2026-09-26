@@ -93,8 +93,12 @@ defmodule Tempo.CoreCoverageTest do
       assert_raise InvalidDateError, fn -> Tempo.new!(year: 2020, month: 13) end
     end
 
+    # The exception is the parser's: `Calendrical.ParseError` from
+    # Calendrical 1.4, `Localize.DateTimeParseError` from 1.5, which
+    # parses through Localize.
     test "parse!/2 raises on an unparseable string" do
-      assert_raise Calendrical.ParseError, fn -> Tempo.parse!("@@@") end
+      {:error, exception} = Tempo.parse("@@@")
+      assert_raise exception.__struct__, fn -> Tempo.parse!("@@@") end
     end
   end
 end

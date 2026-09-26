@@ -188,16 +188,9 @@ defmodule Tempo.MixProject do
   defp deps do
     [
       {:nimble_parsec, "~> 1.0"},
-      # Local checkout while the Vietnamese/Korean/Japanese lunisolar calendars
-      # (used for per-meridian solar terms) are ahead of the published release.
-      # Revert to a hex requirement once Calendrical ships them.
-      {:calendrical, path: "../../localize/calendrical", override: true},
-      # The local Astro checkout during co-development (its crescent-visibility
-      # fixes are unreleased). Revert to a hex requirement once they ship.
-      {:astro, path: "../../astro", override: true},
-      {:localize, "~> 1.0"},
-      # 3.2 is the first release carrying VAVAILABILITY (RFC 7953), which
-      # `Tempo.ICal.available/2` needs, so the floor cannot go lower.
+      {:localize, github: "elixir-localize/localize", branch: "main", override: true},
+      {:calendrical, github: "elixir-localize/calendrical", branch: "main", override: true},
+      {:astro, "~> 2.7"},
       {:ical, "~> 3.2", optional: true},
       {:jscalendar, "~> 0.1", optional: true},
       {:ex_doc, "~> 0.38", only: [:dev, :test, :release], optional: true, runtime: false},
@@ -205,11 +198,6 @@ defmodule Tempo.MixProject do
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:stream_data, "~> 1.0", only: [:dev, :test], runtime: false},
-      # Tempo is time zone database agnostic: it works against the
-      # `Calendar.TimeZoneDatabase` behaviour and consumers configure
-      # their own implementation (`:tz`, `:tzdata`, `:time_zone_info`,
-      # `:zoneinfo`) — see `Tempo.TimeZoneDatabase`. `tz` is used
-      # locally for dev and test.
       {:tz, "~> 0.28", only: [:dev, :test]}
     ] ++ maybe_json_polyfill()
   end
