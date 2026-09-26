@@ -108,13 +108,15 @@ defmodule Tempo.Format do
   end
 
   # Convert a Tempo.Duration (keyword-list time) into a
-  # Localize.Duration struct. Weeks are normalised to days (7× per
-  # week, added onto any existing :day count) because
-  # Localize.Duration has no :week field. Missing units default to
-  # 0; microseconds to `{0, 6}` since Tempo is second-resolution.
+  # Localize.Duration struct. Weeks are normalised to days (as
+  # `Calendrical.weeks_to_days/1` counts them, added onto any existing
+  # :day count) because Localize.Duration has no :week field. Missing
+  # units default to 0; microseconds to `{0, 6}` since Tempo is
+  # second-resolution.
   defp to_localize_duration(%Tempo.Duration{time: time}) do
     {weeks, rest} = Keyword.pop(time, :week, 0)
-    rest = if weeks == 0, do: rest, else: Keyword.update(rest, :day, weeks * 7, &(&1 + weeks * 7))
+    days = Calendrical.weeks_to_days(weeks)
+    rest = if weeks == 0, do: rest, else: Keyword.update(rest, :day, days, &(&1 + days))
 
     %Localize.Duration{
       year: Keyword.get(rest, :year, 0),

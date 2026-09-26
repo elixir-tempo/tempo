@@ -8,6 +8,8 @@
 
 ### Changed
 
+* A fractional week in a duration counts whole days, truncated as `Calendrical.weeks_to_days/1` counts them: `P1.5W` is 10 days, where a shift by it raised `ArithmeticError`.
+
 * Date arithmetic in validation, selection, recurrence week expansion and interval conversion goes through Calendrical rather than `Date.add/2` and month-length walks.
 
 * `Tempo.parse/2`'s `:calendar` option is a calendar module, `Calendar.ISO` by default, as Calendrical 1.4's is: a CLDR calendar name such as `:hebrew` returns an error.

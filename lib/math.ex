@@ -1101,8 +1101,9 @@ defmodule Tempo.Math do
     add(tempo, %Tempo.Duration{time: negated})
   end
 
-  # Weeks in a duration are unambiguously 7 days. Normalise to
-  # days so the apply-duration loop doesn't need a `:week` clause.
+  # Weeks in a duration are whole days, as `Calendrical.weeks_to_days/1`
+  # counts them (a fractional week truncates). Normalise to days so the
+  # apply-duration loop doesn't need a `:week` clause.
   defp normalise_duration(duration_time) do
     {weeks, rest} = Keyword.pop(duration_time, :week, 0)
 
@@ -1111,7 +1112,8 @@ defmodule Tempo.Math do
         rest
 
       _ ->
-        Keyword.update(rest, :day, weeks * 7, &(&1 + weeks * 7))
+        days = Calendrical.weeks_to_days(weeks)
+        Keyword.update(rest, :day, days, &(&1 + days))
     end
   end
 

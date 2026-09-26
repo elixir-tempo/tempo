@@ -95,6 +95,14 @@ defmodule Tempo.CoreCoverageTest do
       end
     end
 
+    test "a localized GMT offset is the shift its ISO 8601 spelling gives" do
+      assert Tempo.parse("May 23, 2026, 2:30 PM GMT+5", locale: :en) ==
+               Tempo.from_iso8601("2026-05-23T14:30+05:00")
+
+      assert Tempo.parse("May 23, 2026, 2:30 PM GMT-3:30", locale: :en) ==
+               Tempo.from_iso8601("2026-05-23T14:30-03:30")
+    end
+
     test "a week of the year is the week from_iso8601/1 reads" do
       assert {:ok, week} = Tempo.parse("week 1 of 2026", locale: :en)
       assert {:ok, week} == Tempo.from_iso8601("2026-W01")

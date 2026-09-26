@@ -4,6 +4,11 @@ defmodule Tempo.Duration do
   pairs such as `[year: 1, month: 6]`. Produced by the ISO 8601
   parser (`P1Y6M`), the RRULE encoder (as the `FREQ + INTERVAL`
   cadence), and the arithmetic behind `Tempo.shift/2`.
+
+  A week is seven days. A fractional number of weeks counts whole
+  days, truncated toward zero as `Calendrical.weeks_to_days/1` counts
+  them, so `P1.5W` is 10 days.
+
   """
 
   alias Tempo.Compare

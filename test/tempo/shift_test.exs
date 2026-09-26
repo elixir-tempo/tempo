@@ -106,6 +106,10 @@ defmodule Tempo.ShiftTest do
       assert Tempo.shift(~o"2M29D", ~o"PT1H") == ~o"2M29DT1H"
     end
 
+    test "a fractional week counts whole days, truncated" do
+      assert Tempo.shift(~o"2026-01-01", ~o"P1.5W") == ~o"2026-01-11"
+    end
+
     test "a month-only value carries a month/year step and extends for finer steps" do
       assert Tempo.shift(~o"3M", ~o"P1M") == ~o"4M"
       assert Tempo.shift(~o"3M", ~o"P1Y") == ~o"3M"

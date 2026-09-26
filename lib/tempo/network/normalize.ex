@@ -280,7 +280,7 @@ defmodule Tempo.Network.Normalize do
     Enum.reduce(time, 0.0, fn
       {:year, years}, acc -> acc + years * @days_per_year
       {:month, months}, acc -> acc + months * @days_per_month
-      {:week, weeks}, acc -> acc + weeks * 7
+      {:week, weeks}, acc -> acc + Calendrical.weeks_to_days(weeks)
       {:day, days}, acc -> acc + days
       _other, acc -> acc
     end)

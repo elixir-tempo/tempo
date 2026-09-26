@@ -58,6 +58,7 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 | Combined datetime | `2022-06-15T10:30:00Z` |
 | Durations `PnYnMnDTnHnMnS` | `P1Y`, `PT30M`, `P3Y6M4DT12H30M5S` |
 | Negative duration | `-P100D` |
+| Fractional weeks | `P1.5W` counts whole days, truncated as `Calendrical.weeks_to_days/1` counts them: 10 days |
 | Fixed-endpoint interval | `2022-01/2022-06`, `20220101/20220630` |
 | Interval with an abbreviated end (§5.5.1) | `2018-01-15/02-20`, `2025-08-28T09:00/T10:15` |
 | Duration-relative interval | `2022-01-01/P1Y`, `P1Y/2022-12-31` |
