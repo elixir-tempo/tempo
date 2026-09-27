@@ -195,13 +195,13 @@ Every RFC 5545 BY-rule flows through one interpreter — there is no "simple cor
 | `BYMONTH`    | LIMIT generally; EXPAND for `FREQ=YEARLY`                   |
 | `BYMONTHDAY` | LIMIT generally; EXPAND for `FREQ=MONTHLY` / `YEARLY`. Signed indexing (`-1` = last day of the month) |
 | `BYYEARDAY`  | LIMIT generally; EXPAND for `FREQ=YEARLY`. Signed           |
-| `BYWEEKNO`   | EXPAND for `FREQ=YEARLY` (ISO week, Monday-first). Signed   |
-| `BYDAY`      | LIMIT for `DAILY` and finer. EXPAND within the enclosing week / month / year for `WEEKLY` / `MONTHLY` / `YEARLY`. Ordinal prefixes (`1MO`, `-1FR`, `4TH`) select the Nth weekday of the enclosing period via `Calendrical.Kday.nth_kday/3`. RFC Notes 1/2 downgrade to LIMIT when BYMONTHDAY / BYYEARDAY is co-present |
+| `BYWEEKNO`   | EXPAND for `FREQ=YEARLY`: weeks start on `WKST`, week 1 holds the year's fourth day, and a week keeps its days in the adjacent years. Signed. Without `BYDAY`, `BYMONTHDAY` or `BYYEARDAY`, DTSTART's weekday (ISO 8601-2 Annex C.3) |
+| `BYDAY`      | LIMIT for `DAILY` and finer. EXPAND within the enclosing week / month / year for `WEEKLY` / `MONTHLY` / `YEARLY`. Ordinal prefixes (`1MO`, `-1FR`, `4TH`) select the Nth weekday of the enclosing period via `Calendrical.Kday.nth_kday/3`. RFC Notes 1/2 downgrade to LIMIT when BYMONTHDAY / BYYEARDAY is co-present, and pick within each week when BYWEEKNO is |
 | `BYHOUR`     | EXPAND when `FREQ` is coarser than hour; LIMIT otherwise    |
 | `BYMINUTE`   | Same pattern at the minute unit                             |
 | `BYSECOND`   | Same pattern at the second unit                             |
 | `BYSETPOS`   | Applied last, across the per-period candidate set. Signed   |
-| `WKST`       | Week-start day (default Monday). Affects `FREQ=WEEKLY + BYDAY` week boundaries |
+| `WKST`       | Week-start day (default Monday). Affects `FREQ=WEEKLY + BYDAY` week boundaries and `BYWEEKNO` week numbers |
 | `RDATE`      | Extra occurrences; carry the event's span                   |
 | `EXDATE`     | Subtracted from the combined set by start-moment match      |
 

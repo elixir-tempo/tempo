@@ -110,6 +110,25 @@ defmodule Tempo.ShiftTest do
       assert Tempo.shift(~o"2026-01-01", ~o"P1.5W") == ~o"2026-01-11"
     end
 
+    test "a fractional amount is whole units of the next smaller unit, truncated" do
+      assert Tempo.shift(~o"2026-01-01", ~o"P1.3D") == ~o"2026-01-02T07"
+      assert Tempo.shift(~o"2026-01-01T10", ~o"PT1.5H") == ~o"2026-01-01T11:30"
+      assert Tempo.shift(~o"2026-01-01T10:00", ~o"PT1.7M") == ~o"2026-01-01T10:01:42"
+      assert Tempo.shift(~o"2026-03-10", ~o"P1.5Y") == ~o"2027-09-10"
+      assert Tempo.shift(~o"2026-01-01", ~o"-P1.5D") == ~o"2025-12-30T12"
+    end
+
+    test "a fractional month is its fraction of the days to one month later" do
+      # ISO 8601-2 D.4.4: half of the 31 days from 23 January, truncated.
+      assert Tempo.shift(~o"2018-01-23", ~o"P0.5M") == ~o"2018-02-07"
+      assert Tempo.shift(~o"2018-01-31", ~o"P0.5M") == ~o"2018-02-14"
+      assert Tempo.shift(~o"2018-01-23", ~o"P1.5M") == ~o"2018-03-10"
+    end
+
+    test "a fractional month needs a year to measure the month in" do
+      assert {:error, %Tempo.RequiresAnchorError{}} = Tempo.shift(~o"3M", ~o"P0.5M")
+    end
+
     test "a month-only value carries a month/year step and extends for finer steps" do
       assert Tempo.shift(~o"3M", ~o"P1M") == ~o"4M"
       assert Tempo.shift(~o"3M", ~o"P1Y") == ~o"3M"

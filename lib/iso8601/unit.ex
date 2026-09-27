@@ -15,7 +15,9 @@ defmodule Tempo.Iso8601.Unit do
     # A traditional (lunisolar) month sorts at the same scale as an ordinal
     # month; a value carries one or the other, never both.
     traditional_month: 25,
+    # A calendar week (`w`) sorts at the same scale as an ISO 8601 week (`W`).
     week: 22,
+    calendar_week: 22,
     day_of_year: 20,
     # Represents day of month
     day: 19,
@@ -35,6 +37,7 @@ defmodule Tempo.Iso8601.Unit do
     month: {:day, 1..-1//-1},
     traditional_month: {:day, 1..-1//-1},
     week: {:day_of_week, 1..7},
+    calendar_week: {:day_of_week, 1..7},
     day: {:hour, 0..23},
     hour: {:minute, 0..59},
     minute: {:second, 0..59}

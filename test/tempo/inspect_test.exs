@@ -81,8 +81,9 @@ defmodule Tempo.Iso8601.InspectTest do
   end
 
   test "Dates with stepped ranges" do
+    # 2023 has 52 ISO 8601 weeks.
     assert inspect(~o"2023Y{1..-1//2}W") ==
-             "~o\"2023Y{1..53//2}W\""
+             "~o\"2023Y{1..52//2}W\""
 
     assert inspect(~o"R/2018-08-01T10:20:00/PT10M/F1ML{1..10//2}DT10H20M0SN") ==
              "~o\"R/2018Y8M1DT10H20M0S/PT10M/F1ML{1..10//2}DT10H20M0SN\""

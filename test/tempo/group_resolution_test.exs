@@ -64,10 +64,52 @@ defmodule Tempo.GroupResolution.Test do
   test "Meteorological seasons (21-24) expand to calendar months" do
     # Codes 21-24 are hemisphere-unspecified; we default to Northern
     # meteorological boundaries as a conventional interpretation.
-    assert ~o"2022Y21M" == ~o"2022Y3M/5M"
-    assert ~o"2022Y22M" == ~o"2022Y6M/8M"
-    assert ~o"2022Y23M" == ~o"2022Y9M/11M"
-    assert ~o"2022Y24M" == ~o"2021Y12M/2022Y2M"
+    assert ~o"2022Y21M" == ~o"2022Y3M/6M"
+    assert ~o"2022Y22M" == ~o"2022Y6M/9M"
+    assert ~o"2022Y23M" == ~o"2022Y9M/12M"
+    assert ~o"2022Y24M" == ~o"2021Y12M/2022Y3M"
+  end
+
+  test "a meteorological season holds all three of its months" do
+    assert Tempo.contains?(~o"2022-21", ~o"2022-05-31")
+    refute Tempo.contains?(~o"2022-21", ~o"2022-06-01")
+    assert Tempo.contains?(~o"2022-24", ~o"2022-02-28")
+  end
+
+  describe "a season in another calendar" do
+    test "is the Gregorian season that starts within its year" do
+      # Hebrew 5787 runs from September 2026 to October 2027.
+      assert Tempo.relation(~o"5787-25[u-ca=hebrew]", ~o"2027-25") == :equals
+      assert Tempo.relation(~o"5787-24[u-ca=hebrew]", ~o"2027-24") == :equals
+      assert Tempo.relation(~o"2026-25[u-ca=julian]", ~o"2026-25") == :equals
+      assert Tempo.relation(~o"2569-21[u-ca=buddhist]", ~o"2026-21") == :equals
+    end
+
+    test "has its endpoints in that calendar" do
+      assert ~o"5787-25[u-ca=hebrew]" == ~o"5787Y7M11D/10M16D[u-ca=hebrew]"
+      assert Tempo.relation(~o"5787-25-10[u-ca=hebrew]", ~o"2027-03-29") == :equals
+    end
+
+    test "is the first of two that start within a long year" do
+      # Hebrew 5774 runs from 5 September 2013 to 24 September 2014.
+      assert Tempo.relation(~o"5774-27[u-ca=hebrew]", ~o"2013-27") == :equals
+    end
+
+    test "is an error in a year no season of that kind starts in" do
+      # Islamic 1422 runs from 26 March 2001 to 14 March 2002.
+      assert {:error, %Tempo.InvalidDateError{} = error} =
+               Tempo.from_iso8601("1422-25[u-ca=islamic-umalqura]")
+
+      assert Exception.message(error) =~ "No season 25 starts in 1422"
+    end
+  end
+
+  test "a season in a year with unspecified digits" do
+    assert ~o"20XX-21" == ~o"20XXY3M/20XXY6M"
+
+    for iso <- ["20XX-24", "20XX-25", "20XX-21-10", "20XX-21[u-ca=hebrew]"] do
+      assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601(iso)
+    end
   end
 
   describe "a value after a group of its own unit" do

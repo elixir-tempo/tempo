@@ -174,7 +174,7 @@ defmodule Tempo.RRule.Expander do
        to: rule.until,
        duration: cadence,
        recurrence: recurrence,
-       repeat_rule: repeat_rule(rule),
+       repeat_rule: repeat_rule(rule, dtstart),
        metadata: metadata
      }}
   end
@@ -184,7 +184,7 @@ defmodule Tempo.RRule.Expander do
   # `Tempo.RRule.Rule.to_selection/1` — the single source of truth for the
   # RRULE/cron → selection mapping — so this path and `Tempo.RRule.parse/2`
   # cannot diverge. Returns nil for the simple recurrence with no BY-rules.
-  defp repeat_rule(%Rule{} = rule), do: Rule.to_selection(rule)
+  defp repeat_rule(%Rule{} = rule, dtstart), do: Rule.to_selection(rule, dtstart)
 
   defp put_if_given(map, _key, nil, _pred), do: map
 

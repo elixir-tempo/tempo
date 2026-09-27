@@ -5,9 +5,13 @@ defmodule Tempo.Duration do
   parser (`P1Y6M`), the RRULE encoder (as the `FREQ + INTERVAL`
   cadence), and the arithmetic behind `Tempo.shift/2`.
 
-  A week is seven days. A fractional number of weeks counts whole
-  days, truncated toward zero as `Calendrical.weeks_to_days/1` counts
-  them, so `P1.5W` is 10 days.
+  A fractional amount (ISO 8601-2 §11.4) becomes whole units of the next
+  smaller unit, truncated toward zero: `P1.5W` is 10 days (as
+  `Calendrical.weeks_to_days/1` counts them), `P1.3D` is one day and
+  seven hours, `PT1.5H` an hour and thirty minutes and `P1.5Y` a year
+  and six months. A fraction of a month depends on the date it is
+  applied to: it is that fraction of the days from the date to one month
+  later (ISO 8601-2 D.4.4), so `2018-01-23` plus `P0.5M` is `2018-02-07`.
 
   """
 
@@ -27,7 +31,7 @@ defmodule Tempo.Duration do
           | :day_of_week
 
   @type t :: %__MODULE__{
-          time: [{unit(), integer() | Tempo.Microsecond.t()}]
+          time: [{unit(), number() | Tempo.Microsecond.t()}]
         }
 
   defstruct [:time]

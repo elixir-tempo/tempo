@@ -120,7 +120,7 @@ defmodule Tempo.Interval.Steps do
   end
 
   def count_steps(%Tempo{time: from_time}, %Tempo{time: to_time}, :day, calendar) do
-    to_days_since_epoch(to_time, calendar) - to_days_since_epoch(from_time, calendar)
+    Date.diff(date_of!(to_time, calendar), date_of!(from_time, calendar))
   end
 
   def count_steps(%Tempo{} = from, %Tempo{} = to, :hour, calendar) do
@@ -183,7 +183,7 @@ defmodule Tempo.Interval.Steps do
   def nth_step(%Tempo{time: time} = tempo, n, :month, calendar) do
     year = Keyword.fetch!(time, :year)
     month = Keyword.fetch!(time, :month)
-    {new_year, new_month} = add_months(year, month, n, calendar)
+    {new_year, new_month, _day} = calendar.plus(year, month, 1, :months, n)
 
     %{
       tempo
@@ -195,8 +195,8 @@ defmodule Tempo.Interval.Steps do
   end
 
   def nth_step(%Tempo{time: time, calendar: calendar} = tempo, n, :day, calendar) do
-    days = to_days_since_epoch(time, calendar) + n
-    {y, m, d} = from_days_since_epoch(days, calendar)
+    date = date_of!(time, calendar)
+    {y, m, d} = calendar.plus(date.year, date.month, date.day, :days, n)
 
     %{
       tempo
@@ -333,38 +333,18 @@ defmodule Tempo.Interval.Steps do
     end)
   end
 
-  # Month addition in calendar-month-modular space. For 12-month
-  # calendars, this is the closed-form formula. For Hebrew, we walk
-  # across the 19-year cycle (bounded).
-  defp add_months(year, month, n, calendar) do
-    if calendar.months_in_year(year) == 12 and
-         calendar.months_in_year(year + div(n, 12) + 1) == 12 do
-      total = year * 12 + (month - 1) + n
-      {Integer.floor_div(total, 12), Integer.mod(total, 12) + 1}
-    else
-      walk_months(year, month, n, calendar)
-    end
-  end
+  # The date a stepped value's year, month and day name, which count and
+  # step through Calendrical.
+  defp date_of!(time, calendar) do
+    {:ok, date} =
+      Date.new(
+        fetch_integer!(time, :year),
+        fetch_integer!(time, :month),
+        fetch_integer!(time, :day),
+        calendar
+      )
 
-  defp walk_months(year, month, 0, _calendar), do: {year, month}
-
-  defp walk_months(year, month, n, calendar) when n > 0 do
-    months_this_year = calendar.months_in_year(year)
-
-    if month + 1 > months_this_year do
-      walk_months(year + 1, 1, n - 1, calendar)
-    else
-      walk_months(year, month + 1, n - 1, calendar)
-    end
-  end
-
-  defp walk_months(year, month, n, calendar) when n < 0 do
-    if month - 1 < 1 do
-      months_prev_year = calendar.months_in_year(year - 1)
-      walk_months(year - 1, months_prev_year, n + 1, calendar)
-    else
-      walk_months(year, month - 1, n + 1, calendar)
-    end
+    date
   end
 
   @spec to_days_since_epoch(keyword(), module()) :: integer()

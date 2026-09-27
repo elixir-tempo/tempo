@@ -199,12 +199,12 @@ defmodule Tempo.RangeExpansionPropertyTest do
       last_week = first_week + week_count - 1
       iso = "#{year}Y{#{first_week}..#{last_week}}W{1..-1}K"
 
-      # Each week is the one the calendar numbers, here
-      # Calendrical.Gregorian's.
+      # Each week is an ISO 8601 week, as `Calendrical.ISO` — the Gregorian
+      # calendar with ISO 8601's week rules — numbers them.
       expected =
         Enum.flat_map(first_week..last_week//1, fn week ->
           year
-          |> Calendrical.Interval.week(week, Calendrical.Gregorian)
+          |> Calendrical.Interval.week(week, Calendrical.ISO)
           |> Enum.map(&Date.convert!(&1, Calendar.ISO))
         end)
 

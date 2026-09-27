@@ -165,9 +165,17 @@ defmodule Tempo.RRule.Rule do
   re-parseable ISO 8601 form. `byday` precedes the time elements because a
   weekday after `T…H…M` is out of resolution order and will not round-trip.
 
+  A YEARLY rule with `BYWEEKNO` and no `BYYEARDAY`, `BYMONTHDAY` or `BYDAY`
+  selects the weekday of its start: RFC 5545 evaluates it that way, and
+  ISO 8601-2 (Annex C.3 and C.4) has a conversion state the weekday
+  explicitly. Without a start the rule keeps every day of its weeks.
+
   ### Arguments
 
   * `rule` is a `t:t/0`.
+
+  * `dtstart` is the rule's start as a `t:Tempo.t/0`, or `nil` when it has
+    none. The default is `nil`.
 
   ### Returns
 
@@ -177,17 +185,23 @@ defmodule Tempo.RRule.Rule do
 
   ### Examples
 
-      iex> Tempo.RRule.Rule.to_selection(%Tempo.RRule.Rule{freq: :monthly, byday: [{2, 1}]})
+      iex> Tempo.RRule.Rule.to_selection(%Tempo.RRule.Rule{freq: :month, byday: [{2, 1}]})
       ~o"L1K2IN"
 
-      iex> Tempo.RRule.Rule.to_selection(%Tempo.RRule.Rule{freq: :daily})
+      iex> Tempo.RRule.Rule.to_selection(%Tempo.RRule.Rule{freq: :day})
       nil
+
+      iex> rule = %Tempo.RRule.Rule{freq: :year, byweekno: [20]}
+      iex> Tempo.RRule.Rule.to_selection(rule, ~o"1997-05-12")
+      ~o"L20W1KN"
 
   """
   # No `@spec`: the result is a `%Tempo{}` carrying a `{:selection, …}` token,
   # which the `Tempo.t()` type's `token_list()` does not yet enumerate, so a
   # `Tempo.t()` spec would read as an incomplete return type to Dialyzer.
-  def to_selection(%__MODULE__{} = rule) do
+  def to_selection(%__MODULE__{} = rule, dtstart \\ nil) do
+    rule = with_weekday_of_start(rule, dtstart)
+
     if has_by_rules?(rule) or non_default_wkst?(rule) do
       selection =
         []
@@ -212,6 +226,38 @@ defmodule Tempo.RRule.Rule do
 
   defp non_default_wkst?(%__MODULE__{wkst: wkst}) when is_integer(wkst) and wkst != 1, do: true
   defp non_default_wkst?(_rule), do: false
+
+  # ISO 8601-2 Annex C.3: "if there is a 'BYWEEKNO' parameter set but no
+  # 'BYMONTHDAY' or 'BYDAY', the 'BYDAY' selection is inherited from the
+  # calendar day of week of the initial start date" (for a YEARLY rule with
+  # no BYYEARDAY). The weekday is Monday 1 to Sunday 7, as BYDAY numbers it.
+  defp with_weekday_of_start(
+         %__MODULE__{freq: :year, byweekno: [_ | _]} = rule,
+         %Tempo{time: time} = dtstart
+       ) do
+    date_parts = Enum.map([:year, :month, :day], &Keyword.get(time, &1))
+
+    if Enum.all?(date_parts, &is_integer/1) and not day_selected?(rule) do
+      %{rule | byday: [{nil, Tempo.day_of_week(dtstart, :monday)}]}
+    else
+      rule
+    end
+  end
+
+  defp with_weekday_of_start(rule, _dtstart), do: rule
+
+  defp day_selected?(%__MODULE__{} = rule) do
+    Enum.any?(
+      [
+        rule.byyearday,
+        rule.bymonthday,
+        rule.byday,
+        rule.bymonthday_nearest,
+        rule.bymonthday_or_byday
+      ],
+      &(&1 not in [nil, []])
+    )
+  end
 
   defp push_by(acc, nil, _unit), do: acc
   defp push_by(acc, [], _unit), do: acc

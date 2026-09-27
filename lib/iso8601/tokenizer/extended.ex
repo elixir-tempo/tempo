@@ -420,9 +420,13 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
     end
   end
 
+  # The suffix writes an identifier with hyphens for its underscores
+  # (`julian-march25` is `:julian_march25`), as CLDR's `islamic-civil` is
+  # `:islamic_civil`.
   defp additional_calendar_identifier(raw) do
     Enum.find_value(Calendrical.additional_calendars(), :error, fn {identifier, _module} ->
-      if Atom.to_string(identifier) == raw, do: {:ok, identifier}
+      if identifier |> Atom.to_string() |> String.replace("_", "-") == raw,
+        do: {:ok, identifier}
     end)
   end
 

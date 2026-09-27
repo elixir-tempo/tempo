@@ -381,6 +381,9 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
       maybe_negative_integer_or_integer_set("M", :month, min: 1),
       traditional_month(),
       maybe_negative_integer_or_integer_set("W", :week, min: 1),
+      # `w` is Tempo's extension: a week in the calendar's own numbering, where
+      # `W` is an ISO 8601 week.
+      maybe_negative_integer_or_integer_set("w", :calendar_week, min: 1),
       maybe_negative_integer_or_integer_set("O", :day_of_year, min: 1),
       maybe_negative_integer_or_integer_set("D", :day, min: 1),
       maybe_negative_integer_or_integer_set("K", :day_of_week, min: 1),
@@ -615,12 +618,15 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # if there is one so this doesn't attempt
   # the impossible - no group can be here
 
+  # `W` is an ISO 8601 week and `w`, Tempo's extension, a week in the
+  # calendar's own numbering.
   def explicit_week do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :group})
       |> optional(maybe_negative_number_or_integer_set("W", :week, min: 1)),
       parsec({Tempo.Iso8601.Tokenizer.Set, :selection}),
-      maybe_negative_number_or_integer_set("W", :week, min: 1)
+      maybe_negative_number_or_integer_set("W", :week, min: 1),
+      maybe_negative_number_or_integer_set("w", :calendar_week, min: 1)
     ])
   end
 

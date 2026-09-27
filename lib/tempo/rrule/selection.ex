@@ -13,27 +13,25 @@ defmodule Tempo.RRule.Selection do
 
   Per RFC 5545 §3.3.10's EXPAND/LIMIT table:
 
-  | Part         | Role and when                                     |
-  | ------------ | ------------------------------------------------- |
-  | `BYMONTH`    | LIMIT — always.                                   |
-  | `BYMONTHDAY` | LIMIT — any FREQ except WEEKLY (forbidden).       |
-  | `BYYEARDAY`  | LIMIT — any FREQ coarser than DAILY.              |
-  | `BYWEEKNO`   | LIMIT — `YEARLY` only.                            |
-  | `BYDAY` (no ordinal) | LIMIT for DAILY/HOURLY/MINUTELY/SECONDLY; |
-  |              | EXPAND within the enclosing week/month/year for   |
-  |              | WEEKLY, MONTHLY, YEARLY.                          |
-  | `BYDAY` (with ordinal) | EXPAND — pairs `(ordinal, weekday)` like  |
-  |              | `1MO` and `-1FR` pick the Nth / Nth-from-last     |
-  |              | matching weekday within the enclosing period      |
-  |              | (month for MONTHLY, year for YEARLY). Backed by   |
-  |              | `Calendrical.Kday.nth_kday/3`.                    |
-  | `BYHOUR`     | EXPAND when FREQ is coarser than hour; LIMIT      |
-  |              | when FREQ is hour-or-finer.                       |
-  | `BYMINUTE`   | Same pattern at the minute unit.                  |
-  | `BYSECOND`   | Same pattern at the second unit.                  |
-  | `BYSETPOS`   | LIMIT — applied last, across the post-filter      |
-  |              | per-period candidate set. Negative values count   |
-  |              | from the end (`-1` = last).                       |
+  | Part | Role |
+  |---|---|
+  | `BYMONTH` | EXPAND for `YEARLY`, LIMIT otherwise. |
+  | `BYWEEKNO` | EXPAND for `YEARLY`, LIMIT otherwise. |
+  | `BYYEARDAY` | EXPAND for `YEARLY`, LIMIT otherwise. |
+  | `BYMONTHDAY` | EXPAND for `MONTHLY` and `YEARLY`, LIMIT otherwise. |
+  | `BYDAY` (no ordinal) | EXPAND within the week, month or year; LIMIT for finer FREQs. |
+  | `BYDAY` (with ordinal) | EXPAND to the nth weekday of the month or year. |
+  | `BYHOUR`, `BYMINUTE`, `BYSECOND` | EXPAND when FREQ is coarser, LIMIT otherwise. |
+  | `BYSETPOS` | LIMIT, applied last to each period's occurrences. |
+
+  `BYWEEKNO` numbers weeks as RFC 5545 defines them: each starts on
+  `WKST`, and week 1 is the first with at least four days in the year.
+  A week keeps all seven of its days, including any in the year before
+  or after. Once `BYWEEKNO` has expanded a `YEARLY` rule into those
+  days, the parts after it apply to them as they would to a `DAILY`
+  rule, so `BYDAY` picks weekdays within each week. A calendar-week
+  selection (`w`, Tempo's extension) expands and limits as `BYWEEKNO`
+  does, in the weeks the calendar numbers itself.
 
   Tokens this module doesn't interpret pass through unchanged
   so partial support is correct for the partial inputs.
@@ -44,6 +42,9 @@ defmodule Tempo.RRule.Selection do
   alias Tempo.Event
   alias Tempo.Interval
   alias Tempo.Validation
+
+  # ISO 8601's weeks, and RFC 5545's by default, start on a Monday, weekday 1.
+  @monday 1
 
   @doc """
   Apply a `repeat_rule` to one candidate occurrence and return the
@@ -133,11 +134,21 @@ defmodule Tempo.RRule.Selection do
       :none ->
         selection
         |> Enum.sort_by(&application_order_key/1)
-        |> Enum.reduce([candidate], fn entry, candidates ->
-          apply_entry(entry, candidates, freq, selection, wkst)
+        |> Enum.reduce({[candidate], freq}, fn entry, {candidates, scope} ->
+          {apply_entry(entry, candidates, scope, selection, wkst), scope_after(entry, scope)}
         end)
+        |> elem(0)
     end
   end
+
+  # Once BYWEEKNO has expanded a YEARLY candidate into the days of its
+  # weeks, the parts after it select among those days as they would for a
+  # DAILY rule: BYDAY limits them (RFC 5545's special expand within the
+  # week), BYYEARDAY and BYMONTHDAY intersect with them, and BYHOUR,
+  # BYMINUTE and BYSECOND still expand each day.
+  defp scope_after({:week, _weeks}, :year), do: :day
+  defp scope_after({:calendar_week, _weeks}, :year), do: :day
+  defp scope_after(_entry, scope), do: scope
 
   # Split a selection around a §12.10 window: `{scope, window, within}` where
   # `scope` are the elements before it (coarser context, e.g. a month), and
@@ -201,32 +212,39 @@ defmodule Tempo.RRule.Selection do
 
   # Each day in the window `[anchor, anchor + duration)` (a negative duration
   # extends backward), as a day-resolution candidate in the anchor's calendar.
-  # Half-open over day numbers — `lo` the earlier of anchor and shifted
-  # endpoint, `hi` the later — so a forward duration keeps the anchor and a
-  # backward one excludes it. A window within one day (`lo == hi`) steps down
-  # from `lo`, as `Date.range/2` infers for a reversed range: see TODO.md.
+  # Half-open — `lo` the earlier of anchor and shifted endpoint, `hi` the
+  # later — so a forward duration keeps the anchor and a backward one
+  # excludes it. A window within one day (`lo == hi`) is `lo` and the day
+  # before, as `Date.range/2` infers for a reversed range: see TODO.md.
   defp window_days(
          %Interval{from: %Tempo{calendar: calendar, time: time} = from} = anchor,
          %Tempo.Duration{} = duration
        ) do
-    with {:ok, {anchor_days, fraction}} <- iso_days_of(time, calendar),
+    with {:ok, anchor_date} <- date_of(time, calendar),
          %Tempo{time: shifted_time} <- Tempo.shift(from, duration),
-         {:ok, {shifted_days, _fraction}} <- iso_days_of(shifted_time, calendar) do
-      lo = min(anchor_days, shifted_days)
-      hi = max(anchor_days, shifted_days)
-      step = if lo < hi, do: 1, else: -1
+         {:ok, shifted_date} <- date_of(shifted_time, calendar) do
+      {lo, hi} = window_bounds(anchor_date, shifted_date)
 
       days =
-        for iso_days <- lo..(hi - 1)//step do
-          {year, month, day, _hour, _minute, _second, _microsecond} =
-            calendar.naive_datetime_from_iso_days({iso_days, fraction})
-
-          {year, month, day, iso_days}
+        for date <- window_dates(lo, hi) do
+          {date.year, date.month, date.day, date}
         end
 
       swap_dates(anchor, days)
     else
       _ -> []
+    end
+  end
+
+  # The dates from `lo` up to, not including, `hi`, each the day
+  # Calendrical gives after the one before.
+  defp window_dates(lo, hi) do
+    if Date.compare(lo, hi) == :eq do
+      [lo, Calendrical.previous(lo, :day)]
+    else
+      lo
+      |> Stream.iterate(&Calendrical.next(&1, :day))
+      |> Enum.take_while(&(Date.compare(&1, hi) == :lt))
     end
   end
 
@@ -289,6 +307,7 @@ defmodule Tempo.RRule.Selection do
     :month,
     :traditional_month,
     :week,
+    :calendar_week,
     :day_of_year,
     :event,
     :day,
@@ -421,17 +440,38 @@ defmodule Tempo.RRule.Selection do
   end
 
   # BYWEEKNO — EXPAND for YEARLY (only valid FREQ per RFC).
-  # Each listed ISO week number expands to 7 occurrences (the
+  # Each listed week number expands to 7 occurrences (the
   # days of that week). Signed indexing: `-1` is the last week.
-  defp apply_entry({:week, weeks}, candidates, :year, _selection, _wkst) do
+  # After a BYMONTH expansion only the days in the candidate's
+  # month are kept.
+  defp apply_entry({:week, weeks}, candidates, :year, selection, wkst) do
+    within_month? = month_selected?(selection)
+
     Enum.flat_map(candidates, fn candidate ->
-      expand_candidate_week_numbers(candidate, List.wrap(weeks))
+      expand_candidate_week_numbers(candidate, List.wrap(weeks), wkst, within_month?)
     end)
   end
 
-  defp apply_entry({:week, weeks}, candidates, _freq, _selection, _wkst) do
+  defp apply_entry({:week, weeks}, candidates, _freq, _selection, wkst) do
     Enum.filter(candidates, fn candidate ->
-      in_week_no_list?(candidate, List.wrap(weeks))
+      in_week_no_list?(candidate, List.wrap(weeks), wkst)
+    end)
+  end
+
+  # A calendar-week selection (`w`, Tempo's extension) — EXPAND for YEARLY
+  # as BYWEEKNO is, LIMIT otherwise — in the weeks the calendar numbers
+  # itself rather than ISO 8601's.
+  defp apply_entry({:calendar_week, weeks}, candidates, :year, selection, _wkst) do
+    within_month? = month_selected?(selection)
+
+    Enum.flat_map(candidates, fn candidate ->
+      expand_candidate_calendar_weeks(candidate, List.wrap(weeks), within_month?)
+    end)
+  end
+
+  defp apply_entry({:calendar_week, weeks}, candidates, _freq, _selection, _wkst) do
+    Enum.filter(candidates, fn candidate ->
+      in_calendar_week_list?(candidate, List.wrap(weeks))
     end)
   end
 
@@ -506,11 +546,25 @@ defmodule Tempo.RRule.Selection do
   defp day_determined_by_later_part?(selection) do
     Enum.any?(selection, fn
       {token, _value} ->
-        token in [:day, :byday, :day_of_week, :day_of_year, :nearest_weekday, :or_day]
+        token in [
+          :week,
+          :calendar_week,
+          :day,
+          :byday,
+          :day_of_week,
+          :day_of_year,
+          :nearest_weekday,
+          :or_day
+        ]
 
       _other ->
         false
     end)
+  end
+
+  # After a BYMONTH expansion a week keeps only its days in the month.
+  defp month_selected?(selection) do
+    Keyword.has_key?(selection, :month) or Keyword.has_key?(selection, :traditional_month)
   end
 
   # A computed event (`(easter)e`) names one day, as BYMONTHDAY does, so a
@@ -634,44 +688,46 @@ defmodule Tempo.RRule.Selection do
   ## BYWEEKNO
   ## ------------------------------------------------------------
 
-  defp in_week_no_list?(%Interval{} = candidate, weeks) do
-    case {iso_week_of(candidate), weeks_in_enclosing_year(candidate)} do
-      {nil, _} -> false
-      {_, nil} -> false
-      {wk, wiy} -> Enum.any?(weeks, &matches_signed_index?(&1, wk, wiy))
-    end
-  end
-
-  # Dispatch to the candidate's calendar for its ISO-week number.
-  # ISO weeks are Monday-first by definition and are what RFC
-  # 5545 §3.3.10 specifies for BYWEEKNO ("Week numbers refer to
-  # ISO week"). WKST does not shift ISO week numbering — the
-  # two are orthogonal.
-  defp iso_week_of(%Interval{from: %Tempo{time: time, calendar: calendar}}) do
-    with year when is_integer(year) <- Keyword.get(time, :year),
-         month when is_integer(month) <- Keyword.get(time, :month),
-         day when is_integer(day) <- Keyword.get(time, :day) do
-      {_year, week} = calendar.iso_week_of_year(year, month, day)
-      week
+  defp in_week_no_list?(%Interval{from: %Tempo{time: time, calendar: calendar}}, weeks, wkst) do
+    with {:ok, date} <- date_of(time, calendar),
+         {:ok, week, weeks_in_week_year} <- week_number_from_wkst(date, calendar, wkst) do
+      Enum.any?(weeks, &matches_signed_index?(&1, week, weeks_in_week_year))
     else
-      _ -> nil
+      _ -> false
     end
   end
 
-  defp weeks_in_enclosing_year(%Interval{from: %Tempo{time: time, calendar: calendar}}) do
-    case Keyword.get(time, :year) do
-      year when is_integer(year) ->
-        # Some Calendar implementations (e.g. `Calendrical.Gregorian`)
-        # return `{weeks, days_in_last_week}` from `weeks_in_year/1`;
-        # others return just the integer. Accept either.
-        case calendar.weeks_in_year(year) do
-          {weeks, _days_in_last_week} when is_integer(weeks) -> weeks
-          weeks when is_integer(weeks) -> weeks
-          _ -> nil
-        end
+  # RFC 5545 §3.3.10 numbers the weeks of a year from WKST: "A week is
+  # defined as a seven day period, starting on the day of the week defined
+  # to be the week start (see WKST). Week number one of the calendar year
+  # is the first week that contains at least four (4) days in that
+  # calendar year" — the week holding its fourth day, ISO 8601's week 1
+  # when WKST is Monday. So a week belongs to the year that holds its own
+  # fourth day: the first days of a year can be in the last week of the
+  # year before, and its last days in week 1 of the next.
+  defp week_number_from_wkst(date, calendar, wkst) do
+    week_start = Kday.kday_on_or_before(date, wkst)
+    %Date{year: week_year} = week_start |> seven_days_from() |> Enum.at(3)
+    week_starts = Validation.week_starts(calendar, week_year, wkst)
 
-      _ ->
-        nil
+    case Enum.find_index(week_starts, &(Date.compare(&1, week_start) == :eq)) do
+      nil -> :error
+      index -> {:ok, index + 1, length(week_starts)}
+    end
+  end
+
+  # A calendar week (`w`) is one of the calendar's own weeks, numbered as
+  # the calendar numbers them: the week `calendar.week_of_year/3` puts the
+  # date in, counted among that week's year's weeks.
+  defp in_calendar_week_list?(%Interval{from: %Tempo{time: time, calendar: calendar}}, weeks) do
+    with {:ok, %Date{year: year, month: month, day: day}} <- date_of(time, calendar),
+         true <- Code.ensure_loaded?(calendar) and function_exported?(calendar, :week_of_year, 3),
+         {week_year, week} when is_integer(week_year) and is_integer(week) <-
+           calendar.week_of_year(year, month, day) do
+      weeks_in_week_year = Validation.calendar_weeks_in_year(week_year, calendar)
+      Enum.any?(weeks, &matches_signed_index?(&1, week, weeks_in_week_year))
+    else
+      _ -> false
     end
   end
 
@@ -838,10 +894,10 @@ defmodule Tempo.RRule.Selection do
     swapped
   end
 
-  # Swap each date — `{year, month, day}`, or `{year, month, day,
-  # iso_days}` for a date the calendar itself produced — into the same
-  # candidate, in order. The candidate's own day numbers, which every
-  # moved `to` needs, are found when a date first moves and shared by
+  # Swap each date — `{year, month, day}`, or `{year, month, day, date}`
+  # for a date the calendar itself produced — into the same candidate, in
+  # order. The days from the candidate's start to its end, which every
+  # moved `to` keeps, are counted when a date first moves and shared by
   # the rest.
   defp swap_dates(%Interval{} = candidate, dates) do
     {swapped, _shift} = Enum.map_reduce(dates, :pending, &swap_into(candidate, &2, &1))
@@ -863,17 +919,16 @@ defmodule Tempo.RRule.Selection do
   defp known_shift(:pending, candidate), do: endpoint_shift(candidate)
   defp known_shift(shift, _candidate), do: shift
 
-  # The day numbers a moved `to` needs — `from`'s and `to`'s, with the
-  # day fraction `to` converts back with — as `Date.diff/2` and
-  # `Date.add/2` would find them. `nil` when `to` is absent or either
-  # date is not a valid date in the calendar, and `to` then stays put.
+  # The number of days from `from`'s date to `to`'s, which a moved `to`
+  # keeps. `nil` when `to` is absent or either date is not a valid date in
+  # the calendar, and `to` then stays put.
   defp endpoint_shift(%Interval{
          from: %Tempo{time: from_time, calendar: calendar},
          to: %Tempo{time: to_time}
        }) do
-    with {:ok, {from_days, _from_fraction}} <- iso_days_of(from_time, calendar),
-         {:ok, {to_days, to_fraction}} <- iso_days_of(to_time, calendar) do
-      {from_days, to_days, to_fraction}
+    with {:ok, from_date} <- date_of(from_time, calendar),
+         {:ok, to_date} <- date_of(to_time, calendar) do
+      Date.diff(to_date, from_date)
     else
       _invalid -> nil
     end
@@ -881,17 +936,12 @@ defmodule Tempo.RRule.Selection do
 
   defp endpoint_shift(%Interval{}), do: nil
 
-  defp shift_endpoint(
-         %Tempo{time: to_time} = to,
-         {from_days, to_days, fraction},
-         date,
-         new_from_time,
-         calendar
-       ) do
-    case new_day_number(date, new_from_time, calendar) do
-      {:ok, new_from_days} ->
-        {year, month, day, _hour, _minute, _second, _microsecond} =
-          calendar.naive_datetime_from_iso_days({to_days + new_from_days - from_days, fraction})
+  defp shift_endpoint(%Tempo{time: to_time} = to, days_to_end, date, _new_from_time, calendar)
+       when is_integer(days_to_end) do
+    case new_from_date(date, calendar) do
+      {:ok, new_from} ->
+        {year, month, day} =
+          calendar.plus(new_from.year, new_from.month, new_from.day, :days, days_to_end)
 
         %{to | time: replace_unit_values(to_time, year: year, month: month, day: day)}
 
@@ -902,26 +952,9 @@ defmodule Tempo.RRule.Selection do
 
   defp shift_endpoint(to, _shift, _date, _new_from_time, _calendar), do: to
 
-  defp new_day_number({_year, _month, _day, iso_days}, _new_from_time, _calendar),
-    do: {:ok, iso_days}
-
-  defp new_day_number({_year, _month, _day}, new_from_time, calendar) do
-    with {:ok, {iso_days, _fraction}} <- iso_days_of(new_from_time, calendar), do: {:ok, iso_days}
-  end
-
-  # A valid date's day number in its calendar, paired with the day
-  # fraction the calendar gives midnight. `Calendrical.iso_days/4`
-  # validates and locates the date in one pass.
-  defp iso_days_of(time, calendar) do
-    with year when is_integer(year) <- Keyword.get(time, :year),
-         month when is_integer(month) <- Keyword.get(time, :month),
-         day when is_integer(day) <- Keyword.get(time, :day),
-         {:ok, iso_days} <- Calendrical.iso_days(year, month, day, calendar) do
-      {:ok, {iso_days, calendar.time_to_day_fraction(0, 0, 0, {0, 0})}}
-    else
-      _invalid -> :error
-    end
-  end
+  # A date the calendar produced is carried with it; any other is checked.
+  defp new_from_date({_year, _month, _day, %Date{} = date}, _calendar), do: {:ok, date}
+  defp new_from_date({year, month, day}, calendar), do: Date.new(year, month, day, calendar)
 
   # Order-preserving replacement for keyword-list `time` values.
   # For each `{unit, value}` in `replacements`, if `unit` is
@@ -1151,37 +1184,78 @@ defmodule Tempo.RRule.Selection do
     end
   end
 
-  # BYWEEKNO with FREQ=YEARLY: one occurrence per listed ISO
-  # week number (signed). A single-week expansion yields 7
-  # occurrences (each day of the week). Days outside the year
-  # are dropped.
+  # BYWEEKNO with FREQ=YEARLY: one occurrence per listed week number
+  # (signed), weeks numbered from WKST as RFC 5545 §3.3.10 defines them —
+  # ISO 8601's weeks (`W`) for the default Monday. A single-week expansion
+  # yields 7 occurrences (each day of the week). A week keeps all seven of
+  # its days, even those in the calendar year before or after: with
+  # WKST=MO, week 1 of 2026 starts on Monday 29 December 2025.
   defp expand_candidate_week_numbers(
          %Interval{from: %Tempo{calendar: calendar, time: time}} = candidate,
-         weeks
+         weeks,
+         wkst,
+         within_month?
        ) do
     year = time[:year]
-    wiy = weeks_in_year(calendar, year)
 
     if Keyword.has_key?(time, :day) do
       # RRULE `BYWEEKNO` carries `DTSTART`'s day, so it expands each week
       # to its seven days per RFC 5545 §3.3.10.
-      Enum.flat_map(weeks, fn wk -> week_candidate_dates(wk, candidate, calendar, year, wiy) end)
+      week_starts = Validation.week_starts(calendar, year, wkst)
+      month = if within_month?, do: month_of(candidate)
+
+      Enum.flat_map(weeks, fn wk -> week_candidate_dates(wk, candidate, week_starts, month) end)
     else
       # A native week selection (`FL10WN`) names the week itself. The
       # occurrence is the `[year, week]` value; its span is resolved by
-      # the calendar, so there is no ISO week walk here.
+      # the calendar, so there is no week walk here.
+      wiy = Validation.iso_weeks_in_year(year, calendar)
       Enum.flat_map(weeks, fn wk -> week_candidate_span(wk, candidate, year, wiy) end)
     end
   end
 
-  defp week_candidate_dates(wk, candidate, calendar, year, wiy) do
-    resolved = signed_index_to_value(wk, wiy)
+  # A calendar-week selection (`w`) with FREQ=YEARLY, in the weeks the
+  # calendar numbers itself: each listed week's seven days for a candidate
+  # that carries a day, or the week itself — the span of its seven days —
+  # for a native selection (`FL10wN`). A week-based calendar's own weeks
+  # are its ISO 8601 weeks (`W`).
+  defp expand_candidate_calendar_weeks(
+         %Interval{from: %Tempo{calendar: calendar, time: time}} = candidate,
+         weeks,
+         within_month?
+       ) do
+    year = time[:year]
 
-    if is_integer(resolved) and resolved >= 1 and resolved <= wiy do
-      dates = for {m, day} <- week_dates_in_year(calendar, year, resolved), do: {year, m, day}
-      swap_dates(candidate, dates)
-    else
-      []
+    cond do
+      calendar.calendar_base() == :week ->
+        expand_candidate_week_numbers(candidate, weeks, @monday, within_month?)
+
+      Keyword.has_key?(time, :day) ->
+        week_starts = Validation.calendar_week_starts(calendar, year)
+        month = if within_month?, do: month_of(candidate)
+
+        Enum.flat_map(weeks, fn wk -> week_candidate_dates(wk, candidate, week_starts, month) end)
+
+      true ->
+        week_starts = Validation.calendar_week_starts(calendar, year)
+        Enum.flat_map(weeks, fn wk -> calendar_week_span(wk, candidate, week_starts) end)
+    end
+  end
+
+  # `month` is the candidate's month after a BYMONTH expansion, and `nil`
+  # when every day of the week is kept.
+  defp week_candidate_dates(wk, candidate, week_starts, month) do
+    case signed_index_to_value(wk, length(week_starts)) do
+      week when is_integer(week) ->
+        dates =
+          for d <- seven_days_from(Enum.at(week_starts, week - 1)),
+              is_nil(month) or d.month == month,
+              do: {d.year, d.month, d.day, d}
+
+        swap_dates(candidate, dates)
+
+      nil ->
+        []
     end
   end
 
@@ -1206,34 +1280,30 @@ defmodule Tempo.RRule.Selection do
     end
   end
 
-  # Emit the (up to 7) {month, day} pairs that fall inside `year`
-  # for the given ISO week number. Monday-first by construction: week 1
-  # starts on the Monday on or before the year's fourth day (from
-  # `Calendrical.Kday`), and week `week` is `week - 1` weeks on by
-  # Calendrical's arithmetic.
-  defp week_dates_in_year(calendar, year, week) do
-    with {:ok, fourth_day} <- Date.new(year, 1, 4, calendar),
-         %Date{} = week_1_monday <- Kday.kday_on_or_before(fourth_day, 1),
-         {start_year, start_month, start_day} <-
-           calendar.plus(
-             week_1_monday.year,
-             week_1_monday.month,
-             week_1_monday.day,
-             :weeks,
-             week - 1
-           ),
-         {:ok, week_start} <- Date.new(start_year, start_month, start_day, calendar) do
-      for d <- seven_days_from(week_start), d.year == year, do: {d.month, d.day}
-    else
-      _ -> []
-    end
-  end
+  # A calendar week as one occurrence, from its first day to the first day
+  # of the week after, marked to keep that span through the recurrence
+  # loop's resizing.
+  defp calendar_week_span(
+         wk,
+         %Interval{from: %Tempo{} = from, metadata: metadata} = candidate,
+         week_starts
+       ) do
+    case signed_index_to_value(wk, length(week_starts)) do
+      week when is_integer(week) ->
+        first = Enum.at(week_starts, week - 1)
+        next = Calendrical.next(first, :week)
 
-  defp weeks_in_year(calendar, year) do
-    case calendar.weeks_in_year(year) do
-      {weeks, _} when is_integer(weeks) -> weeks
-      weeks when is_integer(weeks) -> weeks
-      _ -> 52
+        [
+          %{
+            candidate
+            | from: %{from | time: [year: first.year, month: first.month, day: first.day]},
+              to: %{from | time: [year: next.year, month: next.month, day: next.day]},
+              metadata: Map.put(metadata, :windowed, true)
+          }
+        ]
+
+      nil ->
+        []
     end
   end
 

@@ -292,7 +292,7 @@ defmodule Tempo.RRule do
 
     recurrence = if is_integer(count), do: count, else: :infinity
 
-    repeat_rule = build_repeat_rule(parts)
+    repeat_rule = build_repeat_rule(parts, from)
 
     %Tempo.Interval{
       from: from,
@@ -343,5 +343,5 @@ defmodule Tempo.RRule do
   # build that selection through `Tempo.RRule.Rule.to_selection/1` — the single
   # source of truth for the RRULE → selection token vocabulary (documented there)
   # — so the two paths cannot drift.
-  defp build_repeat_rule(parts), do: Rule.to_selection(struct(Rule, parts))
+  defp build_repeat_rule(parts, from), do: Rule.to_selection(struct(Rule, parts), from)
 end

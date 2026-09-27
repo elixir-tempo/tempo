@@ -178,20 +178,21 @@ defmodule Tempo.RRule.Encoder do
 
   defp by_parts(nil, _interval), do: {:ok, []}
 
-  defp by_parts(%Tempo{time: [selection: selection]}, _interval) do
-    # Each selection token maps to one RRULE BY-part, with one recombination
-    # first: ISO 8601-2 §12.9 lowers an ordinal `BYDAY` to a weekday followed
-    # by a position (`2MO` → `day_of_week: 1, instance: 2`). Re-fusing that
-    # adjacent pair lets `to_rrule/1` emit the compact, idiomatic `BYDAY=2MO`
-    # rather than the equivalent-but-verbose `BYDAY=MO;BYSETPOS=2`. A genuine
-    # set-position over several weekdays keeps `day_of_week` as a list and is
-    # left untouched, so it still encodes as `BYDAY=…;BYSETPOS=…`.
-    parts =
-      selection
-      |> recombine_ordinal_byday()
-      |> Enum.flat_map(&encode_by_entry/1)
-
-    {:ok, parts}
+  defp by_parts(%Tempo{time: [selection: selection]}, interval) do
+    if Keyword.has_key?(selection, :calendar_week) do
+      # A calendar week (`w`) has no RRULE form: BYWEEKNO counts ISO 8601's
+      # weeks, or RFC 5545's from WKST, never the calendar's own.
+      {:error,
+       ConversionError.exception(
+         reason:
+           "A calendar week (w) has no RRULE form; BYWEEKNO counts ISO 8601 weeks: " <>
+             "#{inspect(selection)}",
+         value: interval,
+         target: :rrule
+       )}
+    else
+      {:ok, encode_selection(selection)}
+    end
   end
 
   defp by_parts(%Tempo{} = rule, interval) do
@@ -214,6 +215,19 @@ defmodule Tempo.RRule.Encoder do
        value: interval,
        target: :rrule
      )}
+  end
+
+  # Each selection token maps to one RRULE BY-part, with one recombination
+  # first: ISO 8601-2 §12.9 lowers an ordinal `BYDAY` to a weekday followed
+  # by a position (`2MO` → `day_of_week: 1, instance: 2`). Re-fusing that
+  # adjacent pair lets `to_rrule/1` emit the compact, idiomatic `BYDAY=2MO`
+  # rather than the equivalent-but-verbose `BYDAY=MO;BYSETPOS=2`. A genuine
+  # set-position over several weekdays keeps `day_of_week` as a list and is
+  # left untouched, so it still encodes as `BYDAY=…;BYSETPOS=…`.
+  defp encode_selection(selection) do
+    selection
+    |> recombine_ordinal_byday()
+    |> Enum.flat_map(&encode_by_entry/1)
   end
 
   # Fuse a single-weekday `day_of_week` immediately followed by `instance`

@@ -27,7 +27,7 @@ defmodule Tempo.Compare do
 
   """
 
-  alias Calendar.ISO
+  alias Calendrical.Gregorian
   alias Tempo.Duration
   alias Tempo.TimeZoneDatabase
   alias Tempo.Validation
@@ -482,12 +482,12 @@ defmodule Tempo.Compare do
     minute = Keyword.get(time, :minute, 0)
     second = Keyword.get(time, :second, 0)
 
-    # `Calendar.ISO.date_to_iso_days/3` shares Erlang's gregorian-days
-    # epoch (0000-01-01 = day 0) but, unlike OTP ≤ 28's
+    # `Calendrical.Gregorian.date_to_iso_days/3` counts from 0000-01-01
+    # (day 0) and, unlike OTP ≤ 28's
     # `:calendar.datetime_to_gregorian_seconds/1`, accepts negative
     # (pre-common-era) years on every OTP — e.g. a value whose units
     # read as Hebrew year 2022 resolves to proleptic Gregorian −1738.
-    ISO.date_to_iso_days(year, month, day) * 86_400 +
+    Gregorian.date_to_iso_days(year, month, day) * 86_400 +
       hour * 3_600 + minute * 60 + second
   end
 
@@ -592,8 +592,8 @@ defmodule Tempo.Compare do
   # list, handling the three date representations Tempo stores:
   #
   #   * Week date — `[year, week, day_of_week]`, or a week-based
-  #     calendar's `[year, week, day]`, in the calendar's own weeks
-  #     (`Tempo.Validation.week_date/4`).
+  #     calendar's `[year, week, day]`, in ISO 8601 weeks
+  #     (`Tempo.Validation.date_from_iso_week/4`).
   #   * Ordinal date — `[year, day]` with `:day` holding the
   #     day-of-year and no `:month` (the absence of `:month` is the
   #     disambiguator, matching `Tempo.to_date/1`).
@@ -611,7 +611,7 @@ defmodule Tempo.Compare do
         day = Keyword.get(time, :day_of_week, Keyword.get(time, :day, 1))
 
         year
-        |> Validation.week_date(Keyword.get(time, :week), day, calendar)
+        |> Validation.date_from_iso_week(Keyword.get(time, :week), day, calendar)
         |> gregorian_ymd(year)
 
       not Keyword.has_key?(time, :month) and Keyword.has_key?(time, :day) ->

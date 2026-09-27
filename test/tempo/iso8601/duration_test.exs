@@ -46,4 +46,26 @@ defmodule Tempo.Parser.Duration.Test do
     assert Tokenizer.tokenize("-P1Y3D") ==
              {:ok, {[duration: [direction: :negative, year: 1, day: 3]], nil}}
   end
+
+  describe "the alternative format (ISO 8601-1 §5.5.2.4)" do
+    test "is the duration its designator form writes" do
+      assert Tempo.from_iso8601("P0002-01-10T22:33:55") ==
+               Tempo.from_iso8601("P2Y1M10DT22H33M55S")
+
+      assert Tempo.from_iso8601("P00020110T223355") == Tempo.from_iso8601("P2Y1M10DT22H33M55S")
+      assert Tempo.from_iso8601("P0002-178T22:33:55") == Tempo.from_iso8601("P2Y178DT22H33M55S")
+
+      assert Tempo.from_iso8601("P0002-01-10T22:33:55.5") ==
+               Tempo.from_iso8601("P2Y1M10DT22H33M55.5S")
+
+      assert Tempo.from_iso8601("-P0002-01-10T22:33:55") ==
+               Tempo.from_iso8601("-P2Y1M10DT22H33M55S")
+    end
+
+    test "a week date, a day of the week or an unspecified digit is not a duration" do
+      for input <- ["P2026-W10", "P2K", "P2026-XX-15"] do
+        assert {:error, %Tempo.ParseError{}} = Tempo.from_iso8601(input)
+      end
+    end
+  end
 end

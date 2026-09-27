@@ -2,15 +2,11 @@
 
 ## [v1.7.0] — Unreleased
 
-### Breaking changes
-
-* Week dates come from the calendar's own weeks: `Calendrical.Gregorian`, the default and `Calendar.ISO`'s, counts from the week holding January 1, so `2022-W01-1` is 2021-12-27 and `2026-W53` is invalid. ISO 8601 weeks are `Calendrical.ISOWeek`'s (`~o"2026-W53"W`).
-
 ### Changed
 
-* A fractional week in a duration counts whole days, truncated as `Calendrical.weeks_to_days/1` counts them: `P1.5W` is 10 days, where a shift by it raised `ArithmeticError`.
+* A fractional duration becomes whole units of the next smaller unit, truncated: `P1.5W` is 10 days, `P1.3D` 1 day 7 hours, and `P0.5M` half the days to one month later (ISO 8601-2 D.4.4). A shift by one raised `ArithmeticError` or returned `nil`.
 
-* Date arithmetic in validation, selection, recurrence week expansion and interval conversion goes through Calendrical rather than `Date.add/2` and month-length walks.
+* Date arithmetic in validation, selection, recurrence week expansion, recurrence windows, interval stepping and conversion goes through Calendrical rather than `Date.add/2`, day numbers and month walks.
 
 * `Tempo.parse/2`'s `:calendar` option is a calendar module, `Calendar.ISO` by default, as Calendrical 1.4's is: a CLDR calendar name such as `:hebrew` returns an error.
 
@@ -25,6 +21,8 @@
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Added
+
+* The `w` designator names a week in the calendar's own numbering, where `W` is ISO 8601's: `~o"2027Y1w1K"` is 28 December 2026 in `Calendrical.Gregorian`, which counts from the week holding January 1, and `R/../P1Y/FL10wN` is the calendar's week 10 of each year.
 
 * `Tempo.new/1` takes `:quarter`, the span the calendar's `quarter/2` gives it, held as the months (in a week-based calendar, the weeks) `2026-34` parses to; `Tempo.parse/2` reads `"Q2 2026"` through it.
 
@@ -52,6 +50,14 @@
 
 ### Fixed
 
+* A duration in the ISO 8601 alternative format (`P0002-01-10T22:33:55`) is the duration its designator form writes, where it was held as a nested date that nothing read; a week date or a day of the week there (`P2K`) is a `Tempo.ParseError`.
+
+* RRULE `BYWEEKNO` numbers weeks from `WKST` as RFC 5545 does, so 2026 has a week 53, and a week keeps its days in the year before or after. `BYDAY` picks within each week, `FREQ=YEARLY;BYWEEKNO=20;BYDAY=MO` from 1997-05-12 being the RFC's May 12, May 11 and May 17 where it gave every Monday of 1997, and a rule without one takes DTSTART's weekday (ISO 8601-2 Annex C.3).
+
+* Every calendar Calendrical implements has a `[u-ca=…]` identifier, from Calendrical's additional calendars where no CLDR type reaches it: `[u-ca=iso8601]` is `Calendrical.ISO`, where it was an unknown calendar, and `[u-ca=vietnamese]`, `[u-ca=lunar-japanese]`, `[u-ca=julian-march25]` or `[u-ca=reform-england]` its own calendar, where the suffix was silently dropped.
+
+* A week (`W`) is an ISO 8601 week throughout — dates, week counts, arithmetic, rounding, groups and selections — counted over the calendar's own year in a non-Gregorian calendar. `2026Y53W` is valid, `Tempo.shift(~o"2026Y52W", week: 2)` is `2027Y1W` and Hebrew `5787Y10W1K` is 6 Kislev, where week counts were the Gregorian calendar's and Hebrew week dates came from the Gregorian year 5787.
+
 * The ISO 8601-2 quarters, quadrimesters and semesters (codes 33–41) are the value's calendar's own periods, from Calendrical: a Hebrew leap year's Q2 holds Adar I and II and its Q4 runs to Elul, and a week-based calendar's are groups of weeks.
 
 * A group of hours, minutes or seconds holds clock values from 0: `T16H1GT15MU` is 16:00–16:15 and `6GT2HU` 10:00–12:00, where both started an hour or minute late.
@@ -75,6 +81,10 @@
 * `Tempo.from_iso8601/1` returns a `Tempo.ParseError` for an out-of-range day in the explicit form (`2026Y1M40D`), where it raised `FunctionClauseError`.
 
 * An astronomical season whose equinox or solstice falls outside the years Astro computes returns a `Tempo.ParseError`, where it raised `MatchError`: `0999-25`, and `3000-28`, whose winter ends at the March equinox of 3001.
+
+* A season in a non-Gregorian year is the Gregorian season that starts within it, with endpoints in that calendar: `5787-25[u-ca=hebrew]` is 11 Adar II to 16 Sivan, where it asked Astro for the equinox of the year 5787. A year that holds none, such as Islamic 1422, returns a `Tempo.InvalidDateError`.
+
+* A meteorological season holds all three of its months, `2026-21` being `2026Y3M/6M` where it ended on 1 May. A season a year with unspecified digits cannot place (`20XX-24`, `20XX-21-10`) returns a `Tempo.InvalidDateError`, where it raised.
 
 * `Tempo.parse/2` keeps a UTC offset as the value's shift, as `from_iso8601/1` does, so `"2026-05-23T14:30:00+05:00"` is 14:30 at +05:00; since Calendrical 1.4 keeps the offset's wall time, it had become 14:30 UTC.
 

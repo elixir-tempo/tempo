@@ -266,11 +266,12 @@ defmodule Tempo.ToInterval.Test do
       assert {:ok, interval} = Tempo.to_interval(days)
       assert interval.to.time == [year: 2018, month: 3, day: 1]
 
-      {:ok, weeks} = Tempo.from_iso8601("2028Y5G13WU")
+      # 2026 has 53 ISO 8601 weeks, so its fifth group of thirteen is week 53.
+      {:ok, weeks} = Tempo.from_iso8601("2026Y5G13WU")
       assert {:ok, interval} = Tempo.to_interval(weeks)
 
       assert {interval.from.time, interval.to.time} ==
-               {[year: 2028, week: 53], [year: 2029, week: 1]}
+               {[year: 2026, week: 53], [year: 2027, week: 1]}
     end
 
     test "a group that starts beyond its container is an error" do
@@ -278,7 +279,7 @@ defmodule Tempo.ToInterval.Test do
                Tempo.from_iso8601("2026Y5G3MU")
 
       assert {:error, %Tempo.InvalidDateError{unit: :week, value: 53}} =
-               Tempo.from_iso8601("2026Y5G13WU")
+               Tempo.from_iso8601("2028Y5G13WU")
     end
   end
 

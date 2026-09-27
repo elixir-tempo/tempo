@@ -50,7 +50,7 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 | Year-month | `2022-06`, `202206` |
 | Year-month-day | `2022-06-15`, `20220615` |
 | Ordinal date | `2022-166`, `2022166` |
-| Week date | `2022-W24`, `2022-W24-3`, `2022W243` (ISO 8601 week numbering in `Calendrical.ISOWeek`; other calendars number their own weeks) |
+| Week date | `2022-W24`, `2022-W24-3`, `2022W243` (ISO 8601 week numbering: weeks start on Monday and week 1 holds the year's fourth day, counted in the value's calendar's own year) |
 | Month-day | `06-15` (the truncated `--06-15` / `--0615` forms are deprecated — see below) |
 | Time of day | `T10`, `T10:30`, `T10:30:00`, `T103000` |
 | Fractional seconds | `T10:30:00.5`, `T10:30:00,5` |
@@ -58,7 +58,8 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 | Combined datetime | `2022-06-15T10:30:00Z` |
 | Durations `PnYnMnDTnHnMnS` | `P1Y`, `PT30M`, `P3Y6M4DT12H30M5S` |
 | Negative duration | `-P100D` |
-| Fractional weeks | `P1.5W` counts whole days, truncated as `Calendrical.weeks_to_days/1` counts them: 10 days |
+| Durations in the alternative format | `P0002-01-10T22:33:55`, `P0002-178T22:33:55` — a calendar or ordinal date and a time of day |
+| Fractional durations | Whole units of the next smaller unit, truncated: `P1.5W` is 10 days, `P1.3D` 1 day 7 hours, `P1.5Y` 1 year 6 months; `P0.5M` is half the days to one month later (D.4.4) |
 | Fixed-endpoint interval | `2022-01/2022-06`, `20220101/20220630` |
 | Interval with an abbreviated end (§5.5.1) | `2018-01-15/02-20`, `2025-08-28T09:00/T10:15` |
 | Duration-relative interval | `2022-01-01/P1Y`, `P1Y/2022-12-31` |
@@ -167,13 +168,14 @@ Each bracket may be prefixed with `!` to mark it **critical**. Unrecognised crit
 
 A critical flag on a *time zone* also triggers RFC 9557 §4.2 offset consistency: `2022-01-01T00:00:00+05:00[!America/New_York]` is rejected with a `Tempo.ZoneOffsetMismatchError` because `+05:00` is not New York's offset on that date. Marking the zone critical is retained on `extended.zone_critical` and round-trips back out through `to_iso8601/1`. An *elective* zone leaves the numeric offset authoritative and the zone advisory, so a disagreement parses cleanly. To reject disagreement even for elective zones, pass `strict: true` to `from_iso8601/2` — a superset of the mandatory critical check.
 
-Time zones are validated against the configured time zone database (`Tempo.TimeZoneDatabase.zone_exists?/1`); with no database configured, syntactically valid zone names are accepted without registry validation. Calendars are validated against `Localize.validate_calendar/1`, which also handles the `"gregory"` → `:gregorian` alias per BCP 47.
+Time zones are validated against the configured time zone database (`Tempo.TimeZoneDatabase.zone_exists?/1`); with no database configured, syntactically valid zone names are accepted without registry validation. Calendars are validated against `Localize.validate_calendar/1`, which also handles the `"gregory"` → `:gregorian` alias per BCP 47. Every other calendar Calendrical implements resolves through the identifiers `Calendrical.additional_calendars/0` registers, written with hyphens: `[u-ca=iso8601]` (the Gregorian calendar with ISO 8601's week rules, `Calendrical.ISO`), `[u-ca=iso-week]`, `[u-ca=julian]` and its year-start variants (`[u-ca=julian-march25]`), `[u-ca=vietnamese]`, `[u-ca=lunar-japanese]`, `[u-ca=nrf]`, and the reform calendars (`[u-ca=reform-england]`).
 
 ## 5. Project-specific extensions (not in ISO 8601)
 
 These syntaxes are Tempo conveniences, not part of any standard:
 
 * **Step in range** — `{1990..1999//2}Y` or `2023Y{1..-1//2}W` means "every second week in 2023".
+* **Calendar week** — `2027Y1w` is the calendar's own week 1, where `2027Y1W` is ISO 8601's; described below.
 * **Explicit suffixes** — `2022Y11M20D` instead of `2022-11-20`. Used by the `~o` sigil as the canonical output form.
 * **Repeat rule** — `/F` combinator inside a parsed expression.
 * **Selection position** — `L…N` with an `I` modifier for the nth occurrence of the resolved set, written weekday-then-position (`1K2I` = "the 2nd Monday"). `I` is the ISO 8601-2 §12.9 position designator, not a Tempo invention — it is listed here only for completeness and described in full below.
@@ -182,7 +184,7 @@ None of these break ISO 8601 compatibility — Tempo accepts the standard forms 
 
 #### The lowercase-designator convention
 
-ISO 8601 designators are uppercase (`Y M D H W O K I N`). Tempo marks its own **selection** extensions with a **lowercase** letter, so they are easy to spot as non-standard at a glance: `q` (week start), `e` (a computed event), `m` (a traditional month, with `+m` for its leap month), the `^` exclusion prefix (a recurrence domain member to drop), and the `e`/`o`/`l` domain filters (even / odd / leap years). Each is described below. `I` (BYSETPOS position) is uppercase because it *is* ISO 8601-2 §12.9, not a Tempo extension.
+ISO 8601 designators are uppercase (`Y M D H W O K I N`). Tempo marks its own **selection** extensions with a **lowercase** letter, so they are easy to spot as non-standard at a glance: `q` (week start), `e` (a computed event), `m` (a traditional month, with `+m` for its leap month), `w` (a week in the calendar's own numbering), the `^` exclusion prefix (a recurrence domain member to drop), and the `e`/`o`/`l` domain filters (even / odd / leap years). Each is described below. `I` (BYSETPOS position) is uppercase because it *is* ISO 8601-2 §12.9, not a Tempo extension.
 
 ### The position designator `I` and week start `q`
 
@@ -233,7 +235,7 @@ Moving the week start from Monday to Sunday changes which fortnight each candida
 
 #### Interchange risk
 
-The lowercase family — `q` (week start), `e` (computed event), `m`/`+m` (traditional month), `^` (exclusion), and the `e`/`o`/`l` domain filters — are the non-standard letters Tempo emits inside a selection or recurrence; `I` is ISO 8601-2 §12.9. Because they are not ISO 8601, a *different* system reading Tempo's ISO string would not understand them. We rate this risk **low**: we have not identified any other system that consumes ISO 8601-2 recurrence at all, let alone one a Tempo `q`/`e` string would reach in practice. Where a standard interchange form is needed — sharing a rule with a calendar server, for instance — use `Tempo.to_rrule/1`, which emits `WKST` (and `BYSETPOS`, and any multi-weekday ordinal) in its portable RFC 5545 spelling. Treat the Tempo string as the native, loss-free persistence form and the RRULE string as the wire format.
+The lowercase family — `q` (week start), `e` (computed event), `m`/`+m` (traditional month), `w` (calendar week), `^` (exclusion), and the `e`/`o`/`l` domain filters — are the non-standard letters Tempo emits inside a selection or recurrence; `I` is ISO 8601-2 §12.9. Because they are not ISO 8601, a *different* system reading Tempo's ISO string would not understand them. We rate this risk **low**: we have not identified any other system that consumes ISO 8601-2 recurrence at all, let alone one a Tempo `q`/`e` string would reach in practice. Where a standard interchange form is needed — sharing a rule with a calendar server, for instance — use `Tempo.to_rrule/1`, which emits `WKST` (and `BYSETPOS`, and any multi-weekday ordinal) in its portable RFC 5545 spelling. Treat the Tempo string as the native, loss-free persistence form and the RRULE string as the wire format.
 
 ### Computed events — the `e` designator
 
@@ -283,6 +285,20 @@ Adding years to such a date keeps its traditional month, as the calendar's own a
 In a **selection** — a recurrence, which has no year — there is nothing to resolve against, so `m`/`+m` survive the round-trip and the traditional→ordinal step happens per year at materialisation. This is what makes a lunisolar holiday a re-materialisable recurrence: `R/../P1Y/FL8m15DN[u-ca=chinese]` ("the 15th of traditional month 8, every year") lands on ordinal month 8 in a common year and ordinal 9 in a leap year, tracking the true traditional month rather than a fixed ordinal. A `<n>+m` selection yields an occurrence only in the years that actually carry that leap month.
 
 A bare `<n>M` is always the ordinal month, unchanged, so existing values keep their meaning. `<n>+m` on a calendar without leap months, or in a year with no leap month at that position, is a parse error (concrete) or simply no occurrence (selection) rather than a silent misreading. It lowers to the `{n, :leap}` construct `Calendrical.Chinese.new/3` already accepts.
+
+### Calendar week — the `w` designator
+
+ISO 8601 numbers weeks one way: each starts on a Monday, and week 1 is the one holding the year's fourth day. That is what `W` writes in every calendar, counted over the calendar's own year in a non-Gregorian one, as RFC 7529 counts RRULE weeks. Calendars also number weeks their own way — `Calendrical.Gregorian` counts from the week holding January 1 — and Tempo adds the lowercase `w` for those.
+
+```elixir
+# 2027 starts on a Friday: ISO 8601's week 1 starts on 4 January,
+# the Gregorian calendar's own on 28 December 2026
+~o"2027Y1W1K"   # 2027-01-04
+~o"2027Y1w1K"   # 2026-12-28
+~o"2027Y1w"     # 2026-12-28/2027-01-04, the week's seven days
+```
+
+In a **concrete date** a `w` week resolves to its dates, so the lowercase marker never survives a round-trip, as `m` does not. In a **selection** it survives and resolves per year: `R/../P1Y/FL10wN` is the calendar's week 10 of each year and `FL10w3KN` its Wednesday. A week-based calendar's own weeks are its `W` weeks, and a calendar has `w` weeks only when Calendrical numbers them (`Calendrical.Interval.week/3`). RFC 5545's `BYWEEKNO` counts ISO 8601 weeks (from `WKST`), so `Tempo.to_rrule/1` cannot express `w`.
 
 ### Exclusions and the recurrence domain — the `^` marker and `e`/`o`/`l` filters
 
@@ -366,6 +382,7 @@ A few ISO 8601 constructs are genuinely ambiguous; Tempo resolves them as follow
 | Construct | Standard says | Tempo does |
 |---|---|---|
 | Seasons `21-24` | Hemisphere unspecified | Treated as **Northern meteorological** (`21` = spring = March-May). |
+| A season in a non-Gregorian year (`5787-25[u-ca=hebrew]`) | Seasons are defined on the Gregorian year | The Gregorian season of that kind that **starts within the year**, the first if two do, with endpoints in the value's calendar. A year that holds none, as a 354-day Islamic year can, is an error. |
 | `Z` without offset | "UTC is known, local offset unknown" (per RFC 5322 / IXDTF) | Stored as `shift: [hour: 0]`. No distinction from `+00:00`. |
 | `-00:00` | ISO 8601:2000 forbade; ISO 8601:2019 permits | Permitted; equivalent to `Z`. |
 | Leading qualifier on a date (`?2022-06-15`) | §8.2.3: left of a component qualifies that component | Individual qualification of the leftmost (coarsest) component — `?2022-06-15` stamps `%{year: :uncertain}` on `:qualifications`, not the whole value. See §3 "Component qualification". |

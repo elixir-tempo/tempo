@@ -2,6 +2,7 @@ defmodule Tempo.Rounding do
   @moduledoc false
 
   alias Tempo.RoundingError
+  alias Tempo.Validation
 
   @hours_in_day 24
   @seconds_in_minute 60
@@ -39,7 +40,7 @@ defmodule Tempo.Rounding do
   end
 
   defp round([{:year, year}, {:week, week}], calendar, :week, :year) do
-    if week <= div(calendar.weeks_in_year(year), 2) do
+    if week <= div(Validation.iso_weeks_in_year(year, calendar), 2) do
       [{:year, year}]
     else
       [{:year, year + 1}]

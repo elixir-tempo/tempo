@@ -103,7 +103,7 @@ defmodule Tempo do
 
   """
 
-  alias Calendar.ISO
+  alias Calendrical.Gregorian
   alias Tempo.Clock
   alias Tempo.Compare
   alias Tempo.ConversionError
@@ -299,9 +299,10 @@ defmodule Tempo do
 
   * `:month` is the calendar month (Gregorian axis).
 
-  * `:week` is the week of the year in the calendar's own week
-    numbering (week axis). ISO 8601 weeks are `Calendrical.ISOWeek`'s;
-    `Calendrical.Gregorian` counts from the week holding January 1.
+  * `:week` is the ISO 8601 week of the year (week axis): weeks start
+    on a Monday and week 1 is the one holding the year's fourth day,
+    counted in the calendar's own year. A calendar's own weeks are
+    written `w` in an ISO 8601 string (`~o"2026Y10w"`).
 
   * `:day` is the day of month (Gregorian axis).
 
@@ -3183,8 +3184,9 @@ defmodule Tempo do
     the same `:day` key, so `~o"2020-166"`, `~o"2020Y166O"`, and
     `~o"2020Y166D"` all convert correctly.
 
-  * Week date — `[year: Y, week: W, day_of_week: K]`, in the calendar's
-    own weeks, and a week-based calendar's `[year: Y, week: W, day: K]`.
+  * Week date — `[year: Y, week: W, day_of_week: K]`, an ISO 8601 week
+    counted in the calendar's own year, and a week-based calendar's
+    `[year: Y, week: W, day: K]`.
 
   ### Returns
 
@@ -3234,11 +3236,11 @@ defmodule Tempo do
     end
   end
 
-  # Week date: year plus week-of-year plus day-of-week, in the
-  # calendar's own weeks — ISO 8601 weeks are `Calendrical.ISOWeek`'s.
+  # Week date: year plus ISO 8601 week plus day of the week, the week
+  # counted by ISO 8601's rule over the calendar's own year.
   def to_date(%Tempo{time: [year: year, week: week, day_of_week: day]} = tempo)
       when is_integer(year) and is_integer(week) and is_integer(day) do
-    with {:ok, date} <- Validation.week_date(year, week, day, calendar_of(tempo)) do
+    with {:ok, date} <- Validation.date_from_iso_week(year, week, day, calendar_of(tempo)) do
       Date.convert(date, native_calendar(tempo))
     end
   end
@@ -4130,14 +4132,14 @@ defmodule Tempo do
   end
 
   # Seconds-on-the-gregorian-line back to `{{y, m, d}, {h, mi, s}}`.
-  # `Calendar.ISO.date_from_iso_days/1` shares Erlang's epoch
-  # (0000-01-01 = day 0) but, unlike OTP ≤ 28's
+  # `Calendrical.Gregorian.date_from_iso_days/1` counts from 0000-01-01
+  # (day 0) and, unlike OTP ≤ 28's
   # `:calendar.gregorian_seconds_to_datetime/1`, handles negative
   # (pre-common-era) values on every OTP.
   defp seconds_to_datetime(seconds) do
     days = Integer.floor_div(seconds, 86_400)
     time_of_day = Integer.mod(seconds, 86_400)
-    {year, month, day} = ISO.date_from_iso_days(days)
+    {year, month, day} = Gregorian.date_from_iso_days(days)
 
     {{year, month, day},
      {div(time_of_day, 3_600), time_of_day |> rem(3_600) |> div(60), rem(time_of_day, 60)}}
@@ -4575,6 +4577,13 @@ defmodule Tempo do
   month-end clamping rule (e.g. `~o"2024-01-31" + 1 month` is
   `2024-02-29`, not `2024-03-02`).
 
+  A fractional amount (ISO 8601-2 §11.4) becomes whole units of the
+  next smaller unit, truncated toward zero: `P1.3D` is one day and
+  seven hours, `P1.5W` ten days and `P1.5Y` a year and six months. A
+  fraction of a month is that fraction of the days from the value to
+  one month later (ISO 8601-2 D.4.4), so `2018-01-23` plus `P0.5M` is
+  `2018-02-07`.
+
   ### Arguments
 
   * `tempo` is any `t:t/0`.
@@ -4622,6 +4631,9 @@ defmodule Tempo do
 
       iex> Tempo.shift(~o"2026-01-31", month: 1)
       ~o"2026Y2M28D"
+
+      iex> Tempo.shift(~o"2018-01-23", ~o"P0.5M")
+      ~o"2018Y2M7D"
 
       iex> Tempo.shift(~o"2026-06-15T10:00:00", hour: -3)
       ~o"2026Y6M15DT7H0M0S"
@@ -5939,7 +5951,7 @@ defmodule Tempo do
   # the candidate's year. The dayless anchor is also what marks the
   # selection as native (a whole week), distinct from RRULE `BYWEEKNO`,
   # whose `DTSTART` day expands the week to its seven days.
-  defp calendar_anchor_unit(:week), do: :year
+  defp calendar_anchor_unit(week) when week in [:week, :calendar_week], do: :year
 
   defp calendar_anchor_unit(unit)
        when unit in [:byday, :day_of_week, :day_of_year, :instance, :event],

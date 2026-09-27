@@ -152,7 +152,7 @@ defmodule Tempo.Inspect do
 
   defp additional_calendar_identifier(cal) do
     if Map.has_key?(Calendrical.additional_calendars(), cal) do
-      {:ok, Atom.to_string(cal)}
+      {:ok, ixdtf_identifier(cal)}
     else
       :error
     end
@@ -178,9 +178,16 @@ defmodule Tempo.Inspect do
 
   defp calendar_module_identifier(calendar) do
     case additional_calendar_module_name(calendar) do
-      {:ok, name} -> {:ok, Atom.to_string(name)}
+      {:ok, name} -> {:ok, ixdtf_identifier(name)}
       :error -> cldr_calendar_identifier(calendar)
     end
+  end
+
+  # A Calendrical additional-calendar identifier as the IXDTF suffix writes
+  # it, with hyphens for its underscores (`julian_march25` is
+  # `julian-march25`), as CLDR's `islamic_civil` is `islamic-civil`.
+  defp ixdtf_identifier(identifier) do
+    identifier |> Atom.to_string() |> String.replace("_", "-")
   end
 
   defp additional_calendar_module_name(calendar) do
@@ -766,6 +773,7 @@ defmodule Tempo.Inspect do
   defp inspect_value({:second, second}), do: [inspect_list(second), ?S]
   defp inspect_value({:day_of_week, day}), do: [inspect_list(day), ?K]
   defp inspect_value({:week, week}), do: [inspect_list(week), ?W]
+  defp inspect_value({:calendar_week, week}), do: [inspect_list(week), ?w]
   defp inspect_value({:instance, instance}), do: [inspect_list(instance), ?I]
 
   # A computed-event selection renders as `(name)e` — the project-specific

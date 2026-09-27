@@ -1,8 +1,9 @@
 defmodule Tempo.WeekDateRolloverTest do
   @moduledoc """
   Edge cases for ISO 8601 week-date (`YYYY-Www-D`) to calendar-date
-  conversion. Weeks are the calendar's own, so ISO 8601 weeks are
-  `Calendrical.ISOWeek`'s (the sigil's `W` modifier), while the default
+  conversion. A `W` week is an ISO 8601 week in every calendar, and
+  `Calendrical.ISOWeek` (the sigil's `W` modifier) holds its dates as
+  weeks. A `w` week, Tempo's extension, is the calendar's own:
   `Calendrical.Gregorian` numbers its weeks from the one holding
   January 1.
 
@@ -97,17 +98,32 @@ defmodule Tempo.WeekDateRolloverTest do
     end
   end
 
-  describe "the default calendar's weeks are Calendrical.Gregorian's" do
+  describe "the default calendar's W weeks are ISO 8601's" do
+    test "week 1 is the week holding January 4" do
+      assert Tempo.to_date(~o"2023-W01-1") == {:ok, ~D[2023-01-02]}
+    end
+
+    test "2026 has a week 53 and 2023 does not" do
+      assert {:ok, _week} = Tempo.from_iso8601("2026-W53")
+      assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("2023-W53")
+    end
+  end
+
+  describe "a calendar week (w) is Calendrical.Gregorian's own" do
     # Week 1 holds January 1 and weeks run Monday to Sunday, so 2023 has
     # 53 weeks where ISO 8601 gives it 52, and 2026 52 where ISO gives
     # it 53.
     test "week 1 is the week holding January 1" do
-      assert Tempo.to_date(~o"2023-W01-1") == {:ok, ~D[2022-12-26]}
+      assert ~o"2023Y1w1K" == ~o"2022-12-26"
     end
 
     test "2023 has a week 53 and 2026 does not" do
-      assert {:ok, _week} = Tempo.from_iso8601("2023-W53")
-      assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("2026-W53")
+      assert {:ok, _week} = Tempo.from_iso8601("2023Y53w")
+      assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("2026Y53w")
+    end
+
+    test "a week alone is the span of its seven days" do
+      assert ~o"2027Y1w" == ~o"2026-12-28/2027-01-04"
     end
   end
 end

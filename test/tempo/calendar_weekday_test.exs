@@ -94,7 +94,8 @@ defmodule Tempo.CalendarWeekdayTest do
       # month/day keys the week axis lacks, raising KeyError.
       assert Tempo.shift(~o"2026Y32W", week: 1) == ~o"2026Y33W"
       assert Tempo.shift(~o"2026Y32W", week: -1) == ~o"2026Y31W"
-      assert Tempo.shift(~o"2026Y52W", week: 2) == ~o"2027Y2W"
+      # 2026 has 53 ISO 8601 weeks.
+      assert Tempo.shift(~o"2026Y52W", week: 2) == ~o"2027Y1W"
     end
 
     test "a month-axis value still takes weeks as seven days" do

@@ -92,7 +92,7 @@ Tempo's IXDTF support attaches `[Europe/Paris]`, `[u-ca=hebrew]`, or arbitrary e
 
 ## RRULE features and how they map to ISO 8601
 
-Most RRULE `BY*` filters map straight onto the ISO 8601-2 selection grammar. Two need comment: `BYSETPOS` **is** ISO 8601-2 (the §12.9 position designator `I`), while `WKST` has no ISO representation and so gets Tempo's project-specific designator `q`. Both are documented in `guides/iso8601-conformance.md` §5. A rule carrying either round-trips through the ISO form; the canonical *external* form remains the RRULE string via `Tempo.to_rrule/1`.
+Most RRULE `BY*` filters map straight onto the ISO 8601-2 selection grammar — `BYWEEKNO` onto the ISO 8601 week `W`, which a rule without `BYDAY` gives DTSTART's weekday, as ISO 8601-2 Annex C.4 has a conversion state it. Tempo's calendar week `w` has no RRULE form, since `BYWEEKNO` counts ISO 8601 weeks. Two need comment: `BYSETPOS` **is** ISO 8601-2 (the §12.9 position designator `I`), while `WKST` has no ISO representation and so gets Tempo's project-specific designator `q`. Both are documented in `guides/iso8601-conformance.md` §5. A rule carrying either round-trips through the ISO form; the canonical *external* form remains the RRULE string via `Tempo.to_rrule/1`.
 
 ### `BYSETPOS` — the ISO 8601-2 §12.9 position `I`
 

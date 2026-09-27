@@ -103,6 +103,12 @@ defmodule Tempo.CoreCoverageTest do
                Tempo.from_iso8601("2026-05-23T14:30-03:30")
     end
 
+    test "a standard-time name keeps its own offset when the zone keeps daylight time" do
+      # New York keeps daylight time in May, and EST still names -05:00.
+      assert Tempo.parse("May 23, 2026, 2:30 PM EST", locale: :en) ==
+               Tempo.from_iso8601("2026-05-23T14:30-05:00")
+    end
+
     test "a week of the year is the week from_iso8601/1 reads" do
       assert {:ok, week} = Tempo.parse("week 1 of 2026", locale: :en)
       assert {:ok, week} == Tempo.from_iso8601("2026-W01")

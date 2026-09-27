@@ -87,6 +87,34 @@ defmodule Tempo.CalendarTest do
       assert {:ok, ^tempo} = Tempo.from_iso8601("R/2025Y12M25D[u-ca=julian]/P1Y")
     end
 
+    test "[u-ca=iso8601] is the Gregorian calendar with ISO 8601's weeks" do
+      {:ok, tempo} = Tempo.from_iso8601("2026-05-15[u-ca=iso8601]")
+      assert tempo.calendar == Calendrical.ISO
+      assert Tempo.to_iso8601(tempo) == "2026Y5M15D[u-ca=iso8601]"
+
+      # Its own weeks are ISO 8601's, so a calendar week (w) is an ISO week (W).
+      assert Tempo.from_iso8601!("2027Y1w1K[u-ca=iso8601]") ==
+               Tempo.from_iso8601!("2027Y1W1K[u-ca=iso8601]")
+    end
+
+    test "[u-ca=vietnamese] resolves the Vietnamese lunisolar calendar via Calendrical" do
+      # CLDR/BCP 47 has no `vietnamese` identifier; Vietnamese dates are CLDR's
+      # `chinese` observed from Hanoi, which Calendrical registers apart.
+      {:ok, tempo} = Tempo.from_iso8601("4663-01-01[u-ca=vietnamese]")
+      assert tempo.calendar == Calendrical.Vietnamese
+      assert Tempo.to_iso8601(tempo) == "4663Y1M1D[u-ca=vietnamese]"
+    end
+
+    test "every calendar Calendrical registers apart round-trips through its [u-ca=…] identifier" do
+      for {identifier, calendar} <- Calendrical.additional_calendars() do
+        suffix = "[u-ca=#{identifier |> Atom.to_string() |> String.replace("_", "-")}]"
+        {:ok, tempo} = Tempo.from_iso8601("2026" <> suffix)
+
+        assert tempo.calendar == calendar
+        assert Tempo.to_iso8601(tempo) == "2026Y" <> suffix
+      end
+    end
+
     test "a Julian recurrence materialises to the Gregorian day it falls on" do
       # Orthodox Christmas: Julian 25 December, projected onto Gregorian 2026.
       {:ok, recurrence} = Tempo.from_iso8601("R/2025Y12M25D/P1Y[u-ca=julian]")

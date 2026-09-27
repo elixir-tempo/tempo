@@ -10,6 +10,7 @@ defmodule Tempo.Math do
   alias Tempo.Mask
   alias Tempo.NonAnchoredError
   alias Tempo.RequiresAnchorError
+  alias Tempo.Validation
 
   @doc """
   Advance a `%Tempo{}` or a keyword-list time representation by
@@ -203,9 +204,8 @@ defmodule Tempo.Math do
   defp add_week_anchored(time, calendar) do
     year = Keyword.fetch!(time, :year)
     week = Keyword.fetch!(time, :week)
-    {weeks_in_year, _days_in_last_week} = calendar.weeks_in_year(year)
 
-    if week < weeks_in_year do
+    if week < Validation.iso_weeks_in_year(year, calendar) do
       {:ok, Keyword.replace!(time, :week, week + 1)}
     else
       {:ok,
@@ -664,7 +664,7 @@ defmodule Tempo.Math do
       {:ok, Keyword.replace!(time, :week, week - 1)}
     else
       prev_year = year - 1
-      {weeks, _} = calendar.weeks_in_year(prev_year)
+      weeks = Validation.iso_weeks_in_year(prev_year, calendar)
 
       {:ok,
        time
@@ -867,6 +867,7 @@ defmodule Tempo.Math do
       else
         normalise_duration(duration_time)
       end
+      |> exact_fractions_to_next_unit()
 
     case ensure_resolution_for_duration(%{tempo | time: crisp_time}, duration_time) do
       {:error, _} = error ->
@@ -885,11 +886,95 @@ defmodule Tempo.Math do
   # requires. `2026Y32W + P2D` is `2026Y32W3K`, and seven days later is
   # the next week's Monday.
   defp translate_week_axis_duration(duration_time) do
-    case Keyword.pop(duration_time, :day, 0) do
+    duration_time
+    |> week_fraction_to_days()
+    |> Keyword.pop(:day, 0)
+    |> case do
       {0, rest} -> rest
       {days, rest} -> rest ++ [day_of_week: days]
     end
   end
+
+  # A fractional week keeps its whole weeks on the week axis and adds the
+  # days `Calendrical.weeks_to_days/1` makes of its fraction.
+  defp week_fraction_to_days(duration_time) do
+    case Keyword.get(duration_time, :week) do
+      weeks when is_float(weeks) ->
+        whole = trunc(weeks)
+
+        duration_time
+        |> Keyword.replace!(:week, whole)
+        |> add_duration_amount(:day, Calendrical.weeks_to_days(weeks - whole))
+
+      _integer_or_absent ->
+        duration_time
+    end
+  end
+
+  @hours_per_day 24
+  @minutes_per_hour 60
+  @seconds_per_minute 60
+  @duration_units_coarse_to_fine [
+    :year,
+    :month,
+    :week,
+    :day,
+    :day_of_week,
+    :hour,
+    :minute,
+    :second,
+    :microsecond
+  ]
+
+  # A fractional amount (ISO 8601-2 §11.4) becomes whole units of the next
+  # smaller unit, truncated toward zero: `P1.3D` is one day and seven hours.
+  # Days, hours and minutes have fixed lengths, so they expand before the
+  # duration is applied; a fractional year or month depends on the date and
+  # resolves as it is applied (`apply_duration_component/4`).
+  defp exact_fractions_to_next_unit(duration_time) do
+    duration_time
+    |> fraction_to_next_unit(:day, :hour, @hours_per_day)
+    |> fraction_to_next_unit(:day_of_week, :hour, @hours_per_day)
+    |> fraction_to_next_unit(:hour, :minute, @minutes_per_hour)
+    |> fraction_to_next_unit(:minute, :second, @seconds_per_minute)
+  end
+
+  defp fraction_to_next_unit(duration_time, unit, next_unit, next_units_per_unit) do
+    case Keyword.get(duration_time, unit) do
+      amount when is_float(amount) ->
+        whole = trunc(amount)
+        next_amount = whole_units(amount - whole, next_units_per_unit)
+
+        duration_time
+        |> Keyword.replace!(unit, whole)
+        |> add_duration_amount(next_unit, next_amount)
+
+      _integer_or_absent ->
+        duration_time
+    end
+  end
+
+  # Adds to a unit's amount, or places the unit in its coarse-to-fine
+  # position when the duration has none.
+  defp add_duration_amount(duration_time, _unit, 0), do: duration_time
+
+  defp add_duration_amount(duration_time, unit, amount) do
+    if Keyword.has_key?(duration_time, unit) do
+      Keyword.update!(duration_time, unit, &(&1 + amount))
+    else
+      Enum.sort_by([{unit, amount} | duration_time], &duration_unit_rank/1)
+    end
+  end
+
+  defp duration_unit_rank({unit, _amount}),
+    do: Enum.find_index(@duration_units_coarse_to_fine, &(&1 == unit))
+
+  # A fraction of `units_per_unit` whole units, truncated toward zero. The
+  # product is rounded to ten places first, so a decimal fraction that
+  # binary floating point cannot hold exactly (0.7 × 60 = 41.999…) gives
+  # the whole number it means.
+  defp whole_units(fraction, units_per_unit),
+    do: fraction |> Kernel.*(units_per_unit) |> Float.round(10) |> trunc()
 
   # ------------------------------------------------------------------
   # Unspecified-digit mask arithmetic
@@ -1155,12 +1240,21 @@ defmodule Tempo.Math do
   @unit_order_coarse_to_fine [:year, :month, :week, :day, :day_of_week, :hour, :minute, :second]
 
   defp finest_duration_unit(duration_time) do
-    duration_units = Keyword.keys(duration_time)
+    duration_units = Enum.flat_map(duration_time, &units_reached/1)
 
     @unit_order_coarse_to_fine
     |> Enum.reverse()
     |> Enum.find(&(&1 in duration_units))
   end
+
+  # A fractional year also reaches months, and a fractional month days.
+  defp units_reached({:year, amount}) when is_float(amount) and amount != trunc(amount),
+    do: [:year, :month]
+
+  defp units_reached({:month, amount}) when is_float(amount) and amount != trunc(amount),
+    do: [:month, :day]
+
+  defp units_reached({unit, _amount}), do: [unit]
 
   # Apply duration components largest-to-smallest, then clamp day
   # to the valid range for the resulting month. `:week` appears only
@@ -1174,7 +1268,7 @@ defmodule Tempo.Math do
       |> Enum.reduce_while({:ok, time}, fn unit, {:ok, acc} ->
         case Keyword.get(duration_time, unit, 0) do
           0 -> {:cont, {:ok, acc}}
-          n -> step_or_halt(apply_n_units(acc, unit, n, calendar))
+          n -> step_or_halt(apply_duration_component(acc, unit, n, calendar))
         end
       end)
       |> thread_microsecond(Keyword.get(duration_time, :microsecond), calendar)
@@ -1191,6 +1285,47 @@ defmodule Tempo.Math do
 
   defp step_or_halt({:ok, _time} = ok), do: {:cont, ok}
   defp step_or_halt({:error, _reason} = error), do: {:halt, error}
+
+  # A fractional year or month resolves against the date it is applied to
+  # (ISO 8601-2 D.4.4): its whole units step as usual, and its fraction
+  # becomes whole units of the next smaller unit, truncated — a fraction of
+  # the year's months, or of the days from the date to one month later.
+  defp apply_duration_component(time, unit, amount, calendar)
+       when unit in [:year, :month] and is_float(amount) do
+    whole = trunc(amount)
+
+    with {:ok, next_unit, next_amount} <-
+           fraction_in_next_unit(time, unit, amount - whole, calendar),
+         {:ok, time} <- apply_n_units(time, unit, whole, calendar) do
+      apply_n_units(time, next_unit, next_amount, calendar)
+    end
+  end
+
+  defp apply_duration_component(time, unit, amount, calendar),
+    do: apply_n_units(time, unit, amount, calendar)
+
+  defp fraction_in_next_unit(time, :year, fraction, calendar) do
+    case Keyword.get(time, :year) do
+      year when is_integer(year) ->
+        {:ok, :month, whole_units(fraction, calendar.months_in_year(year))}
+
+      _no_year ->
+        {:error, :requires_anchor}
+    end
+  end
+
+  defp fraction_in_next_unit(time, :month, fraction, calendar) do
+    with year when is_integer(year) <- Keyword.get(time, :year),
+         month when is_integer(month) <- Keyword.get(time, :month),
+         day when is_integer(day) <- Keyword.get(time, :day),
+         {:ok, date} <- Date.new(year, month, day, calendar),
+         {next_year, next_month, next_day} <- calendar.plus(year, month, day, :months, 1),
+         {:ok, month_later} <- Date.new(next_year, next_month, next_day, calendar) do
+      {:ok, :day, whole_units(fraction, Date.diff(month_later, date))}
+    else
+      _no_full_date -> {:error, :requires_anchor}
+    end
+  end
 
   defp maybe_clamp({:error, _reason} = error, _duration_time, _calendar), do: error
 
@@ -1314,18 +1449,14 @@ defmodule Tempo.Math do
       function_exported?(calendar, :plus, 6)
   end
 
-  # `Calendrical.iso_days/4` validates the date and finds its day number in
-  # one pass (one lunar year, for a lunisolar calendar), and the shifted day
-  # converts back as `Date.add/2` would.
+  # A valid date moves by the calendar's own `plus/5`; one that is not a
+  # date (a day a month step has not yet clamped) steps instead.
   defp fast_add_days(time, n, calendar) do
     with year when is_integer(year) <- Keyword.get(time, :year),
          month when is_integer(month) <- Keyword.get(time, :month),
          day when is_integer(day) <- Keyword.get(time, :day),
-         {:ok, iso_days} <- Calendrical.iso_days(year, month, day, calendar) do
-      midnight = calendar.time_to_day_fraction(0, 0, 0, {0, 0})
-
-      {year, month, day, _hour, _minute, _second, _microsecond} =
-        calendar.naive_datetime_from_iso_days({iso_days + n, midnight})
+         true <- calendar.valid_date?(year, month, day) do
+      {year, month, day} = calendar.plus(year, month, day, :days, n)
 
       new_time =
         time

@@ -7,6 +7,7 @@ defmodule Tempo.Iso8601.Group do
   alias Tempo.Iso8601.Parser
   alias Tempo.Math
   alias Tempo.ParseError
+  alias Tempo.Validation
 
   @hours_per_day 24
 
@@ -89,58 +90,38 @@ defmodule Tempo.Iso8601.Group do
   # Codes 21-24 are generic (hemisphere-unspecified) seasons and are
   # handled separately as meteorological approximations; see the
   # clauses below.
+  #
+  # The seasons are Gregorian. A year in another calendar takes the
+  # season of that kind that starts within it (the first, should the year
+  # hold two), with its endpoints in that calendar; a year that holds
+  # none, as a 354-day Islamic year can, is an error.
 
   def expand_groups([{:year, year}, {:month, month} | rest], calendar)
-      when is_integer(year) and month in [25, 31] do
-    astronomical_season(year, rest, calendar, :march, :june)
+      when is_integer(year) and month in 21..32 and calendar != Gregorian do
+    calendar_season(year, month, rest, calendar)
   end
 
   def expand_groups([{:year, year}, {:month, month} | rest], calendar)
-      when is_integer(year) and month in [26, 32] do
-    astronomical_season(year, rest, calendar, :june, :september)
-  end
-
-  def expand_groups([{:year, year}, {:month, month} | rest], calendar)
-      when is_integer(year) and month in [27, 29] do
-    astronomical_season(year, rest, calendar, :september, :december)
-  end
-
-  def expand_groups([{:year, year}, {:month, month} | rest], calendar)
-      when is_integer(year) and month in [28, 30] do
-    astronomical_season(year, rest, calendar, :december, :march_next)
+      when is_integer(year) and month in 25..32 do
+    with {:ok, start_date, end_date} <- gregorian_season(month, year) do
+      astronomical_span(start_date, end_date, rest, calendar)
+    end
   end
 
   # Meteorological seasons 21-24 (hemisphere-unspecified — we default to
   # Northern hemisphere meteorological boundaries as a conventional
-  # interpretation).
+  # interpretation): whole months, spring from March to the start of
+  # June, and winter from the December before.
 
-  def expand_groups([{:year, year}, {:month, 21} | rest], calendar) do
-    meteorological_season(year, rest, calendar, 3, 5)
-  end
-
-  def expand_groups([{:year, year}, {:month, 22} | rest], calendar) do
-    meteorological_season(year, rest, calendar, 6, 8)
-  end
-
-  def expand_groups([{:year, year}, {:month, 23} | rest], calendar) do
-    meteorological_season(year, rest, calendar, 9, 11)
-  end
-
-  def expand_groups([{:year, year}, {:month, 24}, {:day, day} | rest], _calendar) do
-    # Winter runs from December 1 of the previous year to March 1.
-    with {:ok, start_date} <- season_date(year - 1, 12),
-         {:ok, end_date} <- season_date(year, 3) do
-      season_day(start_date, end_date, day, rest)
+  def expand_groups([{:year, year}, {:month, month} | rest], calendar)
+      when is_integer(year) and month in 21..24 do
+    with {:ok, start_date, end_date} <- gregorian_season(month, year) do
+      meteorological_span(start_date, end_date, rest, calendar)
     end
   end
 
-  def expand_groups([{:year, year}, {:month, 24} | rest], calendar) do
-    # Winter: December of previous year through February of this year.
-    season_interval(
-      [{:year, year - 1}, {:month, 12} | rest],
-      [{:year, year}, {:month, 2} | rest],
-      calendar
-    )
+  def expand_groups([{:year, year}, {:month, month} | rest], calendar) when month in 21..32 do
+    unspecified_year_season(year, month, rest, calendar)
   end
 
   # The ISO 8601-2 sub-year divisions (codes 33–41): quarters,
@@ -161,6 +142,36 @@ defmodule Tempo.Iso8601.Group do
   def expand_groups([{:year, year}, {:month, month} | rest], calendar)
       when is_integer(year) and month in 40..41 do
     expand_year_division([{:year, year} | rest], :semester, month - 39, calendar)
+  end
+
+  # A calendar week (`w`, Tempo's extension) is a week of the calendar's own
+  # numbering, as `W` is an ISO 8601 week. With a day of the week it is that
+  # day's date; alone it is the span of its seven days. A week-based
+  # calendar's own weeks are its ISO 8601 weeks.
+  def expand_groups([{:year, year}, {:calendar_week, week} | rest], calendar)
+      when is_integer(year) and is_integer(week) do
+    calendar_week(year, week, rest, calendar)
+  end
+
+  def expand_groups([{:year, year}, {:calendar_week, week} | _rest], _calendar)
+      when is_integer(year) do
+    {:error,
+     InvalidDateError.exception(reason: "A calendar week is a single week, not #{inspect(week)}")}
+  end
+
+  def expand_groups([{:year, _year}, {:calendar_week, week} | _rest], _calendar) do
+    {:error,
+     InvalidDateError.exception(
+       reason: "Calendar week #{inspect(week)} needs a year with no unspecified digits"
+     )}
+  end
+
+  def expand_groups([{:calendar_week, week} | _rest], _calendar) do
+    {:error,
+     InvalidDateError.exception(
+       reason:
+         "Calendar week #{inspect(week)} needs a year: the calendar numbers each year's weeks"
+     )}
   end
 
   # The `nth` group of `size` units covers the values from the unit's
@@ -360,7 +371,7 @@ defmodule Tempo.Iso8601.Group do
   defp maximum_within(:year, :month, %{year: year}, calendar), do: calendar.months_in_year(year)
 
   defp maximum_within(:year, :week, %{year: year}, calendar),
-    do: year |> calendar.weeks_in_year() |> elem(0)
+    do: Validation.iso_weeks_in_year(year, calendar)
 
   defp maximum_within(:year, :day, %{year: year}, calendar), do: calendar.days_in_year(year)
 
@@ -378,21 +389,41 @@ defmodule Tempo.Iso8601.Group do
 
   ## Season helpers
 
-  # Expand an astronomical season into an interval whose boundaries
-  # are the relevant equinox or solstice dates. The boundaries are
-  # inclusive on the lower end and exclusive on the upper end
-  # (matching the half-open `[first, last)` convention).
-  defp astronomical_season(year, rest, calendar, start_event, :march_next) do
-    with {:ok, start_date} <- season_boundary_date(year, start_event),
-         {:ok, end_date} <- season_boundary_date(year + 1, :march) do
-      astronomical_span(start_date, end_date, rest, calendar)
+  # A Gregorian season's first day and the day after its last, as the
+  # Gregorian `year` labels it: the equinox and solstice dates of an
+  # astronomical season (the half-open `[first, last)` convention), the
+  # first days of the months of a meteorological one. A winter runs into
+  # the next year, the meteorological one (24) from the year before.
+  defp gregorian_season(code, year) when code in 21..23 do
+    {start_month, end_month} = meteorological_months(code)
+    meteorological_bounds(year, start_month, year, end_month)
+  end
+
+  defp gregorian_season(24, year), do: meteorological_bounds(year - 1, 12, year, 3)
+
+  defp gregorian_season(code, year) when code in [25, 31],
+    do: astronomical_bounds(year, :march, year, :june)
+
+  defp gregorian_season(code, year) when code in [26, 32],
+    do: astronomical_bounds(year, :june, year, :september)
+
+  defp gregorian_season(code, year) when code in [27, 29],
+    do: astronomical_bounds(year, :september, year, :december)
+
+  defp gregorian_season(code, year) when code in [28, 30],
+    do: astronomical_bounds(year, :december, year + 1, :march)
+
+  defp meteorological_bounds(start_year, start_month, end_year, end_month) do
+    with {:ok, start_date} <- season_date(start_year, start_month),
+         {:ok, end_date} <- season_date(end_year, end_month) do
+      {:ok, start_date, end_date}
     end
   end
 
-  defp astronomical_season(year, rest, calendar, start_event, end_event) do
-    with {:ok, start_date} <- season_boundary_date(year, start_event),
-         {:ok, end_date} <- season_boundary_date(year, end_event) do
-      astronomical_span(start_date, end_date, rest, calendar)
+  defp astronomical_bounds(start_year, start_event, end_year, end_event) do
+    with {:ok, start_date} <- season_boundary_date(start_year, start_event),
+         {:ok, end_date} <- season_boundary_date(end_year, end_event) do
+      {:ok, start_date, end_date}
     end
   end
 
@@ -406,27 +437,33 @@ defmodule Tempo.Iso8601.Group do
     build_season_interval(start_date, end_date, rest, calendar)
   end
 
+  defp season_day(start_date, end_date, day, rest) do
+    with {:ok, date} <- nth_day_of_season(start_date, end_date, day) do
+      [{:year, date.year}, {:month, date.month}, {:day, date.day} | rest]
+    end
+  end
+
   # The day Calendrical's arithmetic reaches `day - 1` days after the
   # season's first day, provided it falls before the season ends. Season
   # boundaries are Gregorian dates.
-  defp season_day(%Date{} = start_date, %Date{} = end_date, day, rest)
+  defp nth_day_of_season(%Date{} = start_date, %Date{} = end_date, day)
        when is_integer(day) and day >= 1 do
     {year, month, day_of_month} =
       Gregorian.plus(start_date.year, start_date.month, start_date.day, :days, day - 1)
 
-    season_date_before(Date.new(year, month, day_of_month), end_date, day, rest)
+    season_date_before(Date.new(year, month, day_of_month), end_date, day)
   end
 
-  defp season_day(_start_date, end_date, day, _rest), do: season_day_error(day, end_date)
+  defp nth_day_of_season(_start_date, end_date, day), do: season_day_error(day, end_date)
 
-  defp season_date_before({:ok, date}, end_date, day, rest) do
+  defp season_date_before({:ok, date}, end_date, day) do
     case Date.compare(date, end_date) do
-      :lt -> [{:year, date.year}, {:month, date.month}, {:day, date.day} | rest]
+      :lt -> {:ok, date}
       _on_or_after -> season_day_error(day, end_date)
     end
   end
 
-  defp season_date_before({:error, _reason}, end_date, day, _rest),
+  defp season_date_before({:error, _reason}, end_date, day),
     do: season_day_error(day, end_date)
 
   defp season_day_error(day, end_date) do
@@ -446,11 +483,6 @@ defmodule Tempo.Iso8601.Group do
       {:error, _reason} ->
         {:error, InvalidDateError.exception(reason: "#{year}-#{month} has no season date")}
     end
-  end
-
-  defp month_after(year, month) do
-    {next_year, next_month, _day} = Gregorian.plus(year, month, 1, :months, 1)
-    season_date(next_year, next_month)
   end
 
   defp season_boundary_date(year, event) when event in [:march, :september] do
@@ -489,21 +521,55 @@ defmodule Tempo.Iso8601.Group do
     )
   end
 
-  # A day of the season is its nth day, reached as after an astronomical
-  # season.
-  defp meteorological_season(year, [{:day, day} | rest], _calendar, start_month, end_month) do
-    with {:ok, start_date} <- season_date(year, start_month),
-         {:ok, end_date} <- month_after(year, end_month) do
-      season_day(start_date, end_date, day, rest)
-    end
+  # The first month of a meteorological season and the month after its
+  # last.
+  defp meteorological_months(21), do: {3, 6}
+  defp meteorological_months(22), do: {6, 9}
+  defp meteorological_months(23), do: {9, 12}
+
+  # A meteorological season runs over whole months; a day of the season is
+  # its nth day, reached as after an astronomical season.
+  defp meteorological_span(start_date, end_date, [{:day, day} | rest], _calendar) do
+    season_day(start_date, end_date, day, rest)
   end
 
-  defp meteorological_season(year, rest, calendar, start_month, end_month) do
+  defp meteorological_span(start_date, end_date, rest, calendar) do
+    season_interval(
+      [{:year, start_date.year}, {:month, start_date.month} | rest],
+      [{:year, end_date.year}, {:month, end_date.month} | rest],
+      calendar
+    )
+  end
+
+  # A year with unspecified digits (`20XX-21`) keeps them in both bounds of
+  # a spring, summer or autumn. A winter starts in the year before and an
+  # astronomical season on the day its year's equinox or solstice falls,
+  # so those, a day of any season, and a season in another calendar need
+  # the year itself.
+  defp unspecified_year_season(_year, code, [{:day, day} | _rest], _calendar) do
+    {:error,
+     InvalidDateError.exception(
+       reason:
+         "Day #{inspect(day)} of season #{code} cannot be placed in a year with unspecified digits"
+     )}
+  end
+
+  defp unspecified_year_season(year, code, rest, Gregorian) when code in 21..23 do
+    {start_month, end_month} = meteorological_months(code)
+
     season_interval(
       [{:year, year}, {:month, start_month} | rest],
       [{:year, year}, {:month, end_month} | rest],
-      calendar
+      Gregorian
     )
+  end
+
+  defp unspecified_year_season(_year, code, _rest, calendar) do
+    {:error,
+     InvalidDateError.exception(
+       reason:
+         "Season #{code} cannot be placed in a year with unspecified digits in #{inspect(calendar)}"
+     )}
   end
 
   # The interval between a season's boundaries, or the error building
@@ -517,4 +583,168 @@ defmodule Tempo.Iso8601.Group do
 
   defp season_interval_result({:ok, interval}), do: interval
   defp season_interval_result({:error, _reason} = error), do: error
+
+  # The season `code` that starts within `year` of a calendar other than
+  # the Gregorian, found among the Gregorian seasons of the years it
+  # overlaps: its span, or its nth day, in that calendar.
+  defp calendar_season(year, code, rest, calendar) do
+    with {:ok, first, last} <- gregorian_year_bounds(year, calendar),
+         {:ok, start_date, end_date} <- season_starting_within(code, first, last, year, calendar) do
+      calendar_season_span(start_date, end_date, rest, calendar)
+    end
+  end
+
+  # The first and last days of `year` of `calendar`, as Gregorian dates.
+  defp gregorian_year_bounds(year, calendar) do
+    with true <- Code.ensure_loaded?(calendar) and function_exported?(calendar, :year, 1),
+         %Date.Range{first: first, last: last} <- Calendrical.Interval.year(year, calendar),
+         {:ok, first} <- Date.convert(first, Gregorian),
+         {:ok, last} <- Date.convert(last, Gregorian) do
+      {:ok, first, last}
+    else
+      _other ->
+        {:error,
+         InvalidDateError.exception(
+           reason: "#{inspect(calendar)} has no year #{year} to place a season in"
+         )}
+    end
+  end
+
+  # The seasons of one kind start in successive Gregorian years, so the
+  # first to start on or after the year's first day starts within it if
+  # any does. A winter (24) is labelled with the year it ends in, so the
+  # labels run to the year after the last.
+  defp season_starting_within(code, first, last, year, calendar) do
+    first.year..(last.year + 1)//1
+    |> Enum.reduce_while(:none, fn label, :none ->
+      code |> gregorian_season(label) |> starting_within(first, last)
+    end)
+    |> season_found(code, year, calendar)
+  end
+
+  defp starting_within({:ok, start_date, _end_date} = season, first, last) do
+    cond do
+      Date.compare(start_date, first) == :lt -> {:cont, :none}
+      Date.compare(start_date, last) == :gt -> {:halt, :none}
+      true -> {:halt, season}
+    end
+  end
+
+  defp starting_within({:error, _reason} = error, _first, _last), do: {:halt, error}
+
+  defp season_found(:none, code, year, calendar) do
+    {:error,
+     InvalidDateError.exception(
+       reason: "No season #{code} starts in #{year} of #{inspect(calendar)}"
+     )}
+  end
+
+  defp season_found(found, _code, _year, _calendar), do: found
+
+  defp calendar_season_span(start_date, end_date, [{:day, day} | rest], calendar) do
+    with {:ok, date} <- nth_day_of_season(start_date, end_date, day) do
+      calendar_date_components(date, rest, calendar)
+    end
+  end
+
+  defp calendar_season_span(start_date, end_date, rest, calendar) do
+    with from when is_list(from) <- calendar_date_components(start_date, rest, calendar),
+         to when is_list(to) <- calendar_date_components(end_date, rest, calendar) do
+      [interval: [datetime: from, datetime: to]]
+      |> Parser.parse(calendar)
+      |> season_interval_result()
+    end
+  end
+
+  # A Gregorian date's components in `calendar`, followed by `rest`. A
+  # week-based calendar numbers its weeks in the date's `month` field and
+  # the day of the week in its `day`.
+  defp calendar_date_components(date, rest, calendar) do
+    case Date.convert(date, calendar) do
+      {:ok, %Date{year: year, month: month, day: day}} ->
+        date_components(year_division_unit(calendar), year, month, day) ++ rest
+
+      {:error, _reason} ->
+        {:error,
+         InvalidDateError.exception(reason: "#{date} has no date in #{inspect(calendar)}")}
+    end
+  end
+
+  defp date_components(:month, year, month, day), do: [year: year, month: month, day: day]
+  defp date_components(:week, year, week, day), do: [year: year, week: week, day_of_week: day]
+
+  ## Calendar weeks
+
+  defp calendar_week(year, week, rest, calendar) do
+    case calendar.calendar_base() do
+      :week -> [{:year, year}, {:week, week} | rest]
+      :month -> month_calendar_week(year, week, rest, calendar)
+    end
+  end
+
+  # A negative week counts back from the year's last, as `-1W` does.
+  defp month_calendar_week(year, week, rest, calendar) do
+    case Validation.conform(week, 1..Validation.calendar_weeks_in_year(year, calendar)//1) do
+      {:ok, week} ->
+        calendar_week_days(year, week, rest, calendar)
+
+      {:error, _reason} ->
+        {:error,
+         InvalidDateError.exception(
+           reason: "#{inspect(calendar)} numbers no week #{week} in #{year}"
+         )}
+    end
+  end
+
+  # A negative day of the week counts back from the week's last, as `-7K`
+  # does in an ISO 8601 week.
+  defp calendar_week_days(year, week, [{:day_of_week, day} | rest], calendar)
+       when is_integer(day) do
+    with {:ok, day} <- Validation.conform(day, 1..7//1),
+         {:ok, date} <- Validation.date_from_calendar_week(year, week, day, calendar) do
+      [{:year, date.year}, {:month, date.month}, {:day, date.day} | rest]
+    else
+      _not_a_day -> calendar_week_day_error(year, week, day, calendar)
+    end
+  end
+
+  defp calendar_week_days(year, week, [{:day_of_week, day} | _rest], _calendar) do
+    {:error,
+     InvalidDateError.exception(
+       reason:
+         "Calendar week #{week} of #{year} takes a single day of the week, not #{inspect(day)}"
+     )}
+  end
+
+  # The week's seven days, from its first to the first day of the week after.
+  defp calendar_week_days(year, week, rest, calendar) do
+    case Validation.date_from_calendar_week(year, week, 1, calendar) do
+      {:ok, first} ->
+        next = Calendrical.next(first, :week)
+
+        [
+          interval: [
+            datetime: [{:year, first.year}, {:month, first.month}, {:day, first.day} | rest],
+            datetime: [{:year, next.year}, {:month, next.month}, {:day, next.day} | rest]
+          ]
+        ]
+        |> Parser.parse(calendar)
+        |> season_interval_result()
+
+      {:error, _reason} ->
+        {:error,
+         InvalidDateError.exception(
+           reason: "Calendar week #{week} of #{year} is not a week of #{inspect(calendar)}"
+         )}
+    end
+  end
+
+  defp calendar_week_day_error(year, week, day, calendar) do
+    {:error,
+     InvalidDateError.exception(
+       reason:
+         "Day #{inspect(day)} of calendar week #{week} of #{year} " <>
+           "is not a date in #{inspect(calendar)}"
+     )}
+  end
 end

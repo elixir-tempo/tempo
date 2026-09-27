@@ -48,7 +48,7 @@ RFC 5545 defines each BY-rule as either **EXPAND** (generates additional candida
 * `BYMONTH` expands when `FREQ=YEARLY`; limits under finer FREQs.
 * `BYMONTHDAY` expands when `FREQ=MONTHLY`/`YEARLY`; limits under finer FREQs.
 * `BYYEARDAY` expands when `FREQ=YEARLY`; limits otherwise.
-* `BYWEEKNO` expands when `FREQ=YEARLY`; limits otherwise.
+* `BYWEEKNO` expands when `FREQ=YEARLY`; limits otherwise. Its weeks start on `WKST`, and week 1 holds the year's fourth day, so with the default Monday they are ISO 8601's weeks, the `W` of the ISO form. A YEARLY rule with `BYWEEKNO` and no `BYYEARDAY`, `BYMONTHDAY` or `BYDAY` takes DTSTART's weekday, as ISO 8601-2 Annex C.3 reads RFC 5545: `FREQ=YEARLY;BYWEEKNO=20` from Monday 1997-05-12 is the Monday of week 20 each year.
 * `BYDAY`'s role depends on `FREQ` and whether `BYWEEKNO` or `BYMONTH` is also present — Tempo follows the RFC's §3.3.10 decision table.
 * `BYHOUR`/`BYMINUTE`/`BYSECOND` expand when `FREQ` is coarser than the unit; limit when finer.
 * `BYSETPOS` is always applied last as a LIMIT across the candidate set.
@@ -67,7 +67,7 @@ The end-to-end formula: **`occurrences = (expand(rrule) ∪ rdates) − exdates`
 
 RFC 5545 is implicitly Gregorian. RFC 7529 defines a separate `RSCALE` property for alternative calendars; Tempo does not implement `RSCALE` as a parsed property. Instead, **Tempo's RRULE expansion is calendar-aware through the rule's DTSTART**. Parse a DTSTART in the Hebrew calendar (`5786-09-30[u-ca=hebrew]`) and expand an RRULE against it, and the expansion iterates in Hebrew months. The same rule string yields different occurrences depending on which calendar the anchor is in — which is closer to what most applications want than the RSCALE annotation dance.
 
-Occurrence selection helpers (`days_in_month/2`, `day_of_year/3`, `iso_week_of_year/3`, `weeks_in_year/1`, `day_of_week/4`) dispatch to the calendar module, so BYMONTH/BYMONTHDAY/BYYEARDAY/BYWEEKNO all respect calendar-specific month lengths, year lengths, and week structures.
+Occurrence selection dispatches to the calendar module (`days_in_month/2`, `day_of_year/3`, `day_of_week/4`) and steps through Calendrical, so BYMONTH/BYMONTHDAY/BYYEARDAY respect calendar-specific month and year lengths, and BYWEEKNO numbers the weeks of the calendar's own year from `WKST`.
 
 ## Unbounded rules require a bound
 

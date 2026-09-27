@@ -562,14 +562,14 @@ defmodule Tempo.Iso8601.Parser.Test do
   end
 
   test "Day of week adheres to calendar limit" do
-    # Weeks are the calendar's own. Calendrical.Gregorian's week 1 of
-    # 2022 is the week holding January 1, Monday December 27 to Sunday
-    # January 2: day-of-week -7 is its first day and 7 its last. ISO
-    # 8601's week 1, January 3 to 9, is Calendrical.ISOWeek's.
+    # ISO 8601: week 01 of 2022 contains the first Thursday of 2022
+    # (Jan 6), so it starts Monday Jan 3. Day-of-week -7 is the
+    # first day of the week (Monday) = Jan 3. Day-of-week 7 is the
+    # last day (Sunday) = Jan 9.
     assert Tempo.from_iso8601("2022Y1W-7K") ==
              {:ok,
               %Tempo{
-                time: [year: 2021, month: 12, day: 27],
+                time: [year: 2022, month: 1, day: 3],
                 shift: nil,
                 calendar: Calendrical.Gregorian
               }}
@@ -577,10 +577,15 @@ defmodule Tempo.Iso8601.Parser.Test do
     assert Tempo.from_iso8601("2022Y1W7K") ==
              {:ok,
               %Tempo{
-                time: [year: 2022, month: 1, day: 2],
+                time: [year: 2022, month: 1, day: 9],
                 shift: nil,
                 calendar: Calendrical.Gregorian
               }}
+
+    # A calendar week (`w`) is Calendrical.Gregorian's own: week 1 of 2022
+    # holds January 1, Monday December 27 to Sunday January 2.
+    assert Tempo.from_iso8601("2022Y1w-7K") == Tempo.from_iso8601("2021-12-27")
+    assert Tempo.from_iso8601("2022Y1w7K") == Tempo.from_iso8601("2022-01-02")
 
     assert Tempo.from_iso8601("2022Y1W7K", Calendrical.ISOWeek) ==
              {:ok,

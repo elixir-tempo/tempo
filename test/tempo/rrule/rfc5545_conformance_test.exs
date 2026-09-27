@@ -521,6 +521,19 @@ defmodule Tempo.RRule.Rfc5545ConformanceTest do
 
       assert ymd(occ) == [{1996, 11, 5}, {2000, 11, 7}, {2004, 11, 2}]
     end
+
+    test "Monday of week number 20, 3 years" do
+      # RRULE:FREQ=YEARLY;BYWEEKNO=20;BYDAY=MO
+      # DTSTART = 1997-05-12
+      # ==> (1997 9:00 AM EDT) May 12
+      #     (1998 9:00 AM EDT) May 11
+      #     (1999 9:00 AM EDT) May 17
+      rule = %Rule{freq: :year, interval: 1, byweekno: [20], byday: [{nil, 1}], count: 3}
+
+      {:ok, occ} = Expander.expand(rule, ~o"1997-05-12")
+
+      assert ymd(occ) == [{1997, 5, 12}, {1998, 5, 11}, {1999, 5, 17}]
+    end
   end
 
   ## =============================================================

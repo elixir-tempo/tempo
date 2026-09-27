@@ -5,6 +5,7 @@ defmodule Tempo.RRule.SelectionTest do
   alias Tempo.ICal
   alias Tempo.Interval
   alias Tempo.IntervalSet
+  alias Tempo.RRule
   alias Tempo.RRule.Expander
   alias Tempo.RRule.Rule
   alias Tempo.RRule.Selection
@@ -188,26 +189,81 @@ defmodule Tempo.RRule.SelectionTest do
       assert days == [3, 4, 5, 6, 7, 8, 9]
     end
 
-    test "end-to-end: FREQ=YEARLY;BYWEEKNO=1 — 2 years of week-1 days (filtered by DTSTART floor)" do
+    test "end-to-end: FREQ=YEARLY;BYWEEKNO=1 takes DTSTART's weekday" do
+      # ISO 8601-2 Annex C.3: with no BYDAY, BYMONTHDAY or BYYEARDAY the
+      # weekday is DTSTART's, a Monday, so each year gives week 1's Monday.
       rule = %Rule{freq: :year, interval: 1, byweekno: [1], count: 5}
-      {:ok, occ} = Expander.expand(rule, ~o"2022-01-03")
 
-      # Year 1: Jan 3-9 (7 days), all ≥ DTSTART.
-      # Year 2 starts Jan 2 2023 (Mon) — expansion yields Jan
-      # 2-8 (7 more), all ≥ DTSTART.
-      # COUNT=5 takes the first 5.
-      pairs =
-        Enum.map(occ, fn iv ->
-          {iv.from.time[:year], iv.from.time[:month], iv.from.time[:day]}
-        end)
+      assert rule_dates(rule, ~o"2022-01-03") ==
+               ["2022-01-03", "2023-01-02", "2024-01-01", "2024-12-30", "2025-12-29"]
+    end
 
-      assert pairs == [
-               {2022, 1, 3},
-               {2022, 1, 4},
-               {2022, 1, 5},
-               {2022, 1, 6},
-               {2022, 1, 7}
-             ]
+    test "BYWEEKNO without BYDAY is the RFC's Monday of week 20 from a Monday DTSTART" do
+      rule = %Rule{freq: :year, interval: 1, byweekno: [20], count: 3}
+
+      assert rule_dates(rule, ~o"1997-05-12") == ["1997-05-12", "1998-05-11", "1999-05-17"]
+    end
+
+    test "an RRULE without a DTSTART keeps the whole week" do
+      {:ok, rule} = RRule.parse("FREQ=YEARLY;BYWEEKNO=20")
+      {:ok, weeks} = Tempo.to_interval(rule, bound: ~o"2026")
+
+      assert Tempo.relation(weeks, ~o"2026-05-11/2026-05-18") == :equals
+    end
+
+    test "WKST decides which week is week 1" do
+      # 2026 starts on a Thursday. Monday-first, week 1 (Dec 29 – Jan 4)
+      # holds four days of 2026; Sunday-first, Dec 28 – Jan 3 holds only
+      # three, so week 1 is Jan 4 – 10.
+      monday_first = %Rule{freq: :year, interval: 1, byweekno: [1], byday: [{nil, 6}], count: 2}
+      sunday_first = %{monday_first | wkst: 7}
+
+      assert rule_dates(monday_first, ~o"2026-01-01") == ["2026-01-03", "2027-01-09"]
+      assert rule_dates(sunday_first, ~o"2026-01-01") == ["2026-01-10", "2027-01-09"]
+    end
+
+    test "a week keeps its days in the calendar year before" do
+      rule = %Rule{freq: :year, interval: 1, byweekno: [1], byday: [{nil, 1}], count: 3}
+
+      assert rule_dates(rule, ~o"2025-01-01") == ["2025-12-29", "2027-01-04", "2028-01-03"]
+    end
+
+    test "week -1 of a 53-week year runs into the next calendar year" do
+      # Week 53 of 2026 is Dec 28 – Jan 3, and week 52 of 2027 Dec 27 – Jan 2.
+      rule = %Rule{freq: :year, interval: 1, byweekno: [-1], byday: [{nil, 6}], count: 2}
+
+      assert rule_dates(rule, ~o"2026-01-01") == ["2027-01-02", "2028-01-01"]
+    end
+
+    test "BYMONTH keeps the days of the week in the month" do
+      # Week 5 of 2026 is Jan 26 – Feb 1. A DTSTART on the 31st does not
+      # drop February, since BYWEEKNO decides the day.
+      rule = %Rule{
+        freq: :year,
+        interval: 1,
+        bymonth: [2],
+        byweekno: [5],
+        byday: [{nil, 7}],
+        count: 3
+      }
+
+      assert rule_dates(rule, ~o"2026-01-31") == ["2026-02-01", "2027-02-07", "2028-02-06"]
+    end
+
+    test "BYMONTHDAY keeps the days of the week with that day of the month" do
+      rule = %Rule{freq: :year, interval: 1, byweekno: [1], bymonthday: [1], count: 3}
+
+      assert rule_dates(rule, ~o"2026-01-01") == ["2026-01-01", "2029-01-01", "2030-01-01"]
+    end
+
+    test "WKST numbers the weeks a finer FREQ limits to" do
+      daily = %Rule{freq: :day, interval: 1, byweekno: [1], count: 4}
+
+      assert rule_dates(daily, ~o"2026-01-01") ==
+               ["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04"]
+
+      assert rule_dates(%{daily | wkst: 7}, ~o"2026-01-01") ==
+               ["2026-01-04", "2026-01-05", "2026-01-06", "2026-01-07"]
     end
   end
 
@@ -729,6 +785,33 @@ defmodule Tempo.RRule.SelectionTest do
     |> Enum.map(fn interval ->
       {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
       date |> Date.convert!(Calendar.ISO) |> Date.to_iso8601()
+    end)
+  end
+
+  describe "week selections (ISO 8601-2 §12.2.2)" do
+    # 2027 starts on a Friday, so ISO 8601's week 1 starts on Monday 4
+    # January and Calendrical.Gregorian's own week 1 on Monday 28 December.
+    test "W selects an ISO 8601 week and w the calendar's own" do
+      {:ok, iso} = Tempo.to_interval(~o"R/../P1Y/FL10WN", bound: ~o"2027")
+      {:ok, calendar} = Tempo.to_interval(~o"R/../P1Y/FL10wN", bound: ~o"2027")
+
+      assert Tempo.relation(iso, ~o"2027-03-08/2027-03-15") == :equals
+      assert Tempo.relation(calendar, ~o"2027-03-01/2027-03-08") == :equals
+    end
+
+    test "a weekday within a week selection is in that week" do
+      assert holiday_dates("R/../P1Y/FL10W3KN", ~o"2027Y") == ["2027-03-10"]
+      assert holiday_dates("R/../P1Y/FL10w3KN", ~o"2027Y") == ["2027-03-03"]
+    end
+  end
+
+  # Expand an RRULE from `dtstart` and list the ISO dates of its occurrences.
+  defp rule_dates(rule, dtstart) do
+    {:ok, occurrences} = Expander.expand(rule, dtstart)
+
+    Enum.map(occurrences, fn interval ->
+      {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
+      Date.to_iso8601(date)
     end)
   end
 end

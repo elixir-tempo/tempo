@@ -128,6 +128,7 @@ defmodule Tempo.Iso8601.Parser do
 
   def parse(duration: tokens) do
     tokens
+    |> alternative_format_components()
     |> parse_date()
     |> adjust_for_direction()
     |> Duration.build()
@@ -458,20 +459,52 @@ defmodule Tempo.Iso8601.Parser do
 
   # Duration
 
-  def parse_duration(datetime: tokens) do
-    parse_duration(tokens)
+  # ISO 8601-1 §5.5.2.4 lets a duration be written in the alternative
+  # format, as a calendar or ordinal date and a time of day
+  # (`P0002-01-10T22:33:55` is `P2Y1M10DT22H33M55S`); its components are
+  # the duration's. A week date, a day of the week or an unspecified digit
+  # is no duration.
+  defp alternative_format_components(tokens) do
+    Enum.flat_map(tokens, fn
+      {form, components} when form in [:datetime, :date, :time_of_day] ->
+        alternative_format_duration(components)
+
+      token ->
+        [token]
+    end)
   end
 
-  def parse_duration(date: tokens) do
-    parse_duration(tokens)
+  defp alternative_format_duration(components) do
+    if Enum.all?(components, &alternative_format_component?/1) do
+      second_with_fraction(components)
+    else
+      raise Tempo.ParseError,
+            "#{inspect(components)} is not a duration in the alternative format, " <>
+              "which is a calendar or ordinal date and a time of day"
+    end
   end
 
-  def parse_duration([h | t]) do
-    [h | parse_duration(t)]
-  end
+  defp alternative_format_component?({unit, value})
+       when unit in [:year, :month, :day, :hour, :minute, :second] and is_integer(value),
+       do: true
 
-  def parse_duration([]) do
-    []
+  defp alternative_format_component?({:fraction, {digits, precision}})
+       when is_integer(digits) and is_integer(precision),
+       do: true
+
+  defp alternative_format_component?(_component), do: false
+
+  # A fractional second is the second the designator form writes
+  # (`PT55.5S`), so both forms build the same duration.
+  defp second_with_fraction(components) do
+    case Keyword.pop(components, :fraction) do
+      {nil, components} ->
+        components
+
+      {fraction, components} ->
+        second = Keyword.fetch!(components, :second)
+        Keyword.replace!(components, :second, {:signed_fraction, 1, second, fraction})
+    end
   end
 
   # Helpers

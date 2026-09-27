@@ -44,11 +44,16 @@ defmodule Tempo.CompareTest do
   end
 
   describe "week dates" do
-    test "compare in the calendar's own weeks" do
-      # Calendrical.Gregorian's week 1 of 2022 starts December 27; ISO
-      # 8601's, Calendrical.ISOWeek's, starts January 3.
-      assert Tempo.compare(Tempo.new!(year: 2022, week: 1, day_of_week: 1), ~o"2021-12-27") == :eq
+    test "compare as ISO 8601 weeks" do
+      # ISO 8601's week 1 of 2022 starts January 3, in the default calendar
+      # as in Calendrical.ISOWeek.
+      assert Tempo.compare(Tempo.new!(year: 2022, week: 1, day_of_week: 1), ~o"2022-01-03") == :eq
       assert Tempo.compare(~o"2022-W01-3"W, ~o"2022-01-05") == :eq
+    end
+
+    test "compare a calendar week (w) as the calendar's own" do
+      # Calendrical.Gregorian's week 1 of 2022 starts December 27.
+      assert Tempo.compare(~o"2022Y1w1K", ~o"2021-12-27") == :eq
     end
   end
 

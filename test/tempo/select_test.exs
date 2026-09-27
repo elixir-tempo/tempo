@@ -379,15 +379,15 @@ defmodule Tempo.Select.Test do
     test "`-1W` on a year base selects the last ISO week of the year" do
       {:ok, set_2026} = Tempo.select(~o"2026", ~o"-1W")
       [iv_2026] = IntervalSet.to_list(set_2026)
+      # 2026 is a 53-week year in ISO 8601.
       assert iv_2026.from.time[:year] == 2026
-      assert iv_2026.from.time[:week] == 52
+      assert iv_2026.from.time[:week] == 53
       # No spurious `:month` — week-of-year is on its own axis.
       refute Keyword.has_key?(iv_2026.from.time, :month)
 
-      # 2028 is a 53-week year per the Gregorian calendar.
       {:ok, set_2028} = Tempo.select(~o"2028", ~o"-1W")
       [iv_2028] = IntervalSet.to_list(set_2028)
-      assert iv_2028.from.time[:week] == 53
+      assert iv_2028.from.time[:week] == 52
     end
 
     test "`1W` on a month base resolves as week-of-month" do
