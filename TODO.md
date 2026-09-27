@@ -6,6 +6,10 @@ decision taken on the way to 1.0, is in
 
 ## Open
 
+* [ ] **Conditional recurrence-set members** — a member a recurrence set keeps or moves by its other members (a bridge day between two holidays, an "if it is a holiday then the next Monday" move), resolved in a second pass; the last 4 tempo_holidays rules. Plan in [plans/recurrence-set-conditions.md](plans/recurrence-set-conditions.md).
+
+* [ ] **A zone on a recurrence is dropped** — `R/../P1Y/FL3M20DN[+09:00]` and a domain recurrence's `[zone]` suffix parse and vanish (the start value's suffix, `R/2026-03-20[+09:00]/P1Y`, is kept). Carry it as zoned occurrences, as the suffix means elsewhere, or refuse it.
+
 * [ ] **§12.10 window shorter than a day** — `FL11MLL1K1IN/PT12HN1K1IN` (and `/P0DN…`) walks `[lo, lo - 1]`, the anchor and the day before, as `Date.range/2` infers for a reversed range (with a runtime deprecation warning before the day-number walk replaced it). Decide the semantics — no day, or the anchor day whose start the window contains — and test it.
 
 * [ ] **Recurrence sets** — a `%Tempo.RecurrenceSet{}` value for a collection of recurrence rules (a territory's holidays, a calendar's events) that materialises as one `IntervalSet` against a window, so it composes with a diary through set algebra (`intersection(diary, Holidays.recurrence_set(:AU))`). Completes the Interval → RecurrenceSet → IntervalSet triad and generalises `ICal.from_ical/2`. Plan in [plans/recurrence-set.md](plans/recurrence-set.md).

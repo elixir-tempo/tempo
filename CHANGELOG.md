@@ -24,6 +24,10 @@
 
 ### Added
 
+* An equinox or solstice takes its date in a named zone: `(march-equinox@+09:00)e` or `(june-solstice@America/Santiago)e` is the event's date there, a floating date like any holiday's, where the UTC date can be a day off.
+
+* A `c` filter after a recurrence domain keeps its common (non-leap) years, beside `e`/`o`/`l`: `R/{2000Y..}c/P1Y/FL9M11DN` is 11 September in every common year from 2000, with the century rule the calendar's own.
+
 * The `w` designator names a week in the calendar's own numbering, where `W` is ISO 8601's: `~o"2027Y1w1K"` is 28 December 2026 in `Calendrical.Gregorian`, which counts from the week holding January 1, and `R/../P1Y/FL10wN` is the calendar's week 10 of each year.
 
 * `Tempo.new/1` takes `:quarter`, the span the calendar's `quarter/2` gives it, held as the months (in a week-based calendar, the weeks) `2026-34` parses to; `Tempo.parse/2` reads `"Q2 2026"` through it.

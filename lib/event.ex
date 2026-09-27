@@ -36,6 +36,7 @@ defmodule Tempo.Event do
   alias Calendrical.LunarJapanese
   alias Calendrical.Lunisolar
   alias Calendrical.Vietnamese
+  alias Tempo.TimeZoneDatabase
 
   # The 24 solar terms (jié-qì) keyed by name, each at its solar ecliptic
   # longitude in degrees. The four cardinal terms coincide with the equinoxes
@@ -129,6 +130,11 @@ defmodule Tempo.Event do
     `"new-moon"`, or one of the 24 solar terms (`"qingming"`, `"lichun"`,
     `"dongzhi"`, …).
 
+    An equinox or solstice may name the zone whose date it takes after an
+    `@` — an IANA zone or a `±HH:MM` offset, `"march-equinox@+09:00"` or
+    `"june-solstice@America/Santiago"` — since the instant can fall on a
+    different date there than in UTC. Without one, the date is the UTC date.
+
   * `year` is the Gregorian year the event falls in.
 
   * `calendar` (optional, `date/3`) is the calendar whose meridian a solar term
@@ -143,6 +149,12 @@ defmodule Tempo.Event do
 
   * `{:error, {:unknown_event, name}}` when no built-in and no registered
     `Tempo.Event.Resolver` claims the name.
+
+  * `{:error, {:unzoned_event, name}}` when a zone is named for an event with
+    no instant of its own, `{:error, {:invalid_zone, zone}}` for a zone that is
+    neither a known IANA zone nor a `±HH:MM` offset, or
+    `{:error, {:time_zone_database_required, zone}}` for an IANA zone when no
+    time zone database is configured (see `Tempo.TimeZoneDatabase`).
 
   * `{:error, :year_out_of_range}` when an astronomical event is requested
     outside the range `Astro` supports (1000–3000 CE); a registered resolver
@@ -162,6 +174,12 @@ defmodule Tempo.Event do
       iex> Tempo.Event.date("december-solstice", 2026)
       {:ok, ~D[2026-12-21]}
 
+      iex> Tempo.Event.date("march-equinox", 2002)
+      {:ok, ~D[2002-03-20]}
+
+      iex> Tempo.Event.date("march-equinox@+09:00", 2002)
+      {:ok, ~D[2002-03-21]}
+
       iex> Tempo.Event.date("brigadoon", 2026)
       {:error, {:unknown_event, "brigadoon"}}
 
@@ -169,9 +187,61 @@ defmodule Tempo.Event do
   @spec date(String.t(), integer(), module()) :: {:ok, Date.t()} | {:error, term()}
   def date(name, year, calendar \\ Calendrical.Gregorian)
       when is_binary(name) and is_integer(year) do
+    case String.split(name, "@", parts: 2) do
+      [event, zone] -> zoned_date(event, zone, year)
+      [event] -> event_date(event, year, calendar)
+    end
+  end
+
+  defp event_date(name, year, calendar) do
     case Map.fetch(@events, name) do
       {:ok, spec} -> resolve(spec, year, calendar)
       :error -> resolve_via_resolvers(name, year, calendar)
+    end
+  end
+
+  # The date an event that happens at an instant — an equinox or a solstice —
+  # falls on in `zone`, an IANA zone or a `±HH:MM` offset: the instant's
+  # wall-clock date there. The March equinox of 2002 was on the 20th in UTC and
+  # the 21st in Tokyo. An event with no instant of its own (Easter, a solar
+  # term, the first new moon of a year, a registered event) takes no zone.
+  defp zoned_date(name, zone, year) do
+    with {:ok, spec} <- instant_event(name),
+         {:ok, %DateTime{} = instant} <- instant(spec, year),
+         {:ok, %DateTime{} = local} <- in_zone(instant, zone) do
+      {:ok, DateTime.to_date(local)}
+    end
+  end
+
+  defp instant_event(name) do
+    case Map.fetch(@events, name) do
+      {:ok, {kind, _event} = spec} when kind in [:equinox, :solstice] -> {:ok, spec}
+      _no_instant -> {:error, {:unzoned_event, name}}
+    end
+  end
+
+  defp instant({:equinox, event}, year), do: Astro.equinox(year, event)
+  defp instant({:solstice, event}, year), do: Astro.solstice(year, event)
+
+  defp in_zone(
+         %DateTime{} = instant,
+         <<sign, hours::binary-size(2), ?:, minutes::binary-size(2)>>
+       )
+       when sign in [?+, ?-] do
+    with {hours, ""} when hours <= 23 <- Integer.parse(hours),
+         {minutes, ""} when minutes <= 59 <- Integer.parse(minutes) do
+      offset = (hours * 3600 + minutes * 60) * if(sign == ?-, do: -1, else: 1)
+      {:ok, DateTime.add(instant, offset, :second)}
+    else
+      _not_an_offset -> {:error, {:invalid_zone, <<sign, hours::binary, ?:, minutes::binary>>}}
+    end
+  end
+
+  defp in_zone(%DateTime{} = instant, zone) do
+    case DateTime.shift_zone(instant, zone, TimeZoneDatabase.database()) do
+      {:ok, %DateTime{} = local} -> {:ok, local}
+      {:error, :utc_only_time_zone_database} -> {:error, {:time_zone_database_required, zone}}
+      {:error, _reason} -> {:error, {:invalid_zone, zone}}
     end
   end
 

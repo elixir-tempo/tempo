@@ -939,11 +939,12 @@ defmodule Tempo.Inspect do
   defp close(:all), do: ?}
   defp close(:one), do: ?]
 
-  # The `e`/`o`/`l` year filter a recurrence domain may carry after its closing
-  # brace (`{2000Y..2020Y}e`).
+  # The `e`/`o`/`l`/`c` year filter a recurrence domain may carry after its
+  # closing brace (`{2000Y..2020Y}e`).
   defp filter_marker(:even), do: ?e
   defp filter_marker(:odd), do: ?o
   defp filter_marker(:leap), do: ?l
+  defp filter_marker(:common), do: ?c
   defp filter_marker(_none), do: []
 
   defp recurrence(:infinity), do: <<>>

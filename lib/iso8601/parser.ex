@@ -232,7 +232,7 @@ defmodule Tempo.Iso8601.Parser do
     |> parse_date()
   end
 
-  # Split a `{:filter, …}` year-filter token (from `{…}e`/`o`/`l`) off the
+  # Split a `{:filter, …}` year-filter token (from `{…}e`/`o`/`l`/`c`) off the
   # domain's members, returning `{filter, plain_members}`.
   defp extract_domain_filter(members) do
     case Enum.split_with(members, &match?({:filter, _}, &1)) do

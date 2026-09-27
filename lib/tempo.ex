@@ -6369,10 +6369,10 @@ defmodule Tempo do
   defp cadence_index(%Tempo{} = value, :year), do: year(value)
   defp cadence_index(%Tempo{} = value, :month), do: year(value) * 12 + month(value)
 
-  # Keep only the domain years matching a `:even` / `:odd` / `:leap` filter
-  # (`{2000Y..2020Y}e`). Parity is arithmetic on the year number; leap delegates
-  # to each year's calendar `leap_year?/1` (Calendrical), so the Gregorian
-  # century rule applies — 2100, divisible by 4 but not 400, is not a leap year.
+  # Keep only the domain years matching a `:even` / `:odd` / `:leap` / `:common`
+  # filter (`{2000Y..2020Y}e`). Parity is arithmetic on the year number; leap and
+  # common delegate to each year's calendar `leap_year?/1` (Calendrical), so the
+  # Gregorian century rule applies — 2100, divisible by 4 but not 400, is common.
   defp filter_domain_years(year_intervals, nil), do: year_intervals
 
   defp filter_domain_years(year_intervals, filter) do
@@ -6385,6 +6385,7 @@ defmodule Tempo do
   defp year_filter_matches?(:even, year, _calendar), do: Integer.mod(year, 2) == 0
   defp year_filter_matches?(:odd, year, _calendar), do: Integer.mod(year, 2) == 1
   defp year_filter_matches?(:leap, year, calendar), do: calendar.leap_year?(year)
+  defp year_filter_matches?(:common, year, calendar), do: not calendar.leap_year?(year)
 
   # One recurrence-set member's occurrences: an interval member (a recurrence, or
   # a concrete interval) carries its metadata onto each occurrence; a plain

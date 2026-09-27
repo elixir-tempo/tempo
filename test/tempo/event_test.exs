@@ -55,12 +55,40 @@ defmodule Tempo.EventTest do
     test "an astronomical event outside Astro's range is an error" do
       assert Event.date("march-equinox", 500) == {:error, :year_out_of_range}
     end
+
+    test "an equinox or solstice takes its date in a named zone" do
+      # The 2002 March equinox was at 19:16 UTC on the 20th, 04:16 on the 21st
+      # in Tokyo; the 2021 June solstice at 03:32 UTC on the 21st, 23:32 on the
+      # 20th in Santiago.
+      assert Event.date("march-equinox@+09:00", 2002) == {:ok, ~D[2002-03-21]}
+      assert Event.date("march-equinox", 2002) == {:ok, ~D[2002-03-20]}
+      assert Event.date("june-solstice@America/Santiago", 2021) == {:ok, ~D[2021-06-20]}
+      assert Event.date("june-solstice", 2021) == {:ok, ~D[2021-06-21]}
+    end
+
+    test "a zone on an event with no instant, or a zone that is not one, is an error" do
+      assert Event.date("easter@+09:00", 2026) == {:error, {:unzoned_event, "easter"}}
+      assert Event.date("march-equinox@+9:00", 2026) == {:error, {:invalid_zone, "+9:00"}}
+
+      assert Event.date("march-equinox@Nowhere/City", 2026) ==
+               {:error, {:invalid_zone, "Nowhere/City"}}
+    end
   end
 
   describe "computed-event selection — parsing and round-trip" do
     test "the (name)e form parses to an :event selection token" do
       assert {:ok, value} = Tempo.from_iso8601("R/../P1Y/FL(easter)eN")
       assert value.repeat_rule.time == [selection: [event: "easter"]]
+    end
+
+    test "an event in a zone parses and round-trips" do
+      for iso <- [
+            "R/../P1Y/FL(march-equinox@+09:00)eN",
+            "R/../P1Y/FL(june-solstice@America/Santiago)eN"
+          ] do
+        {:ok, value} = Tempo.from_iso8601(iso)
+        assert Tempo.to_iso8601(value) == iso
+      end
     end
 
     test "a hyphenated event name round-trips through to_iso8601/1 and inspect/1" do
@@ -99,6 +127,15 @@ defmodule Tempo.EventTest do
 
     test "an unknown event materialises to no occurrences rather than raising" do
       assert event_dates("R/../P1Y/FL(brigadoon)eN") == []
+    end
+
+    test "an event in a zone lands on its date there" do
+      assert event_dates("R/../P1Y/FL(march-equinox@+09:00)eN", ~o"2002Y") == ["2002-03-21"]
+
+      assert event_dates("R/../P1Y/FL(june-solstice@America/Santiago)eN", ~o"2021Y") ==
+               ["2021-06-20"]
+
+      assert event_dates("R/../P1Y/FL(easter@+09:00)eN") == []
     end
   end
 
@@ -139,6 +176,9 @@ defmodule Tempo.EventTest do
       assert Tempo.explain(~o"R/../P1Y/FL(easter)eN") =~ "on Easter"
       assert Tempo.explain(~o"R/../P1Y/FL(march-equinox)eN") =~ "on the March equinox"
       assert Tempo.explain(~o"R/../P1Y/FL(december-solstice)eN") =~ "on the December solstice"
+
+      assert Tempo.explain(~o"R/../P1Y/FL(march-equinox@+09:00)eN") =~
+               "on the March equinox in +09:00"
     end
   end
 

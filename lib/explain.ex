@@ -706,7 +706,7 @@ defmodule Tempo.Explain do
   end
 
   # A trailing "(excluding …; even years only)" qualifier for a set or domain
-  # carrying `^` exclusions or an `e`/`o`/`l` year filter; empty when it has
+  # carrying `^` exclusions or an `e`/`o`/`l`/`c` year filter; empty when it has
   # neither.
   defp set_qualifiers(except, filter) do
     case exclusion_phrase(except) ++ filter_phrase(filter) do
@@ -730,6 +730,7 @@ defmodule Tempo.Explain do
   defp filter_phrase(:even), do: ["even years only"]
   defp filter_phrase(:odd), do: ["odd years only"]
   defp filter_phrase(:leap), do: ["leap years only"]
+  defp filter_phrase(:common), do: ["common (non-leap) years only"]
   defp filter_phrase(_none), do: []
 
   # A recurrence domain as an English phrase. An exclusions-only domain reads as
@@ -1074,12 +1075,20 @@ defmodule Tempo.Explain do
   defp selection_clause({_other, _value}), do: []
 
   # Humanise a computed-event name: `"easter"` → "Easter"; a hyphenated
-  # astronomical event → "the March equinox". An unknown name still reads
-  # sensibly ("the winter-fair event") so `explain/1` never fails on one.
+  # astronomical event → "the March equinox", and one taking its date in a zone
+  # → "the March equinox in +09:00". An unknown name still reads sensibly ("the
+  # winter-fair event") so `explain/1` never fails on one.
   defp event_phrase("easter"), do: "Easter"
   defp event_phrase("orthodox-easter"), do: "Orthodox Easter"
 
   defp event_phrase(name) when is_binary(name) do
+    case String.split(name, "@", parts: 2) do
+      [event, zone] -> "#{event_phrase(event)} in #{zone}"
+      [event] -> unzoned_event_phrase(event)
+    end
+  end
+
+  defp unzoned_event_phrase(name) do
     cond do
       match?([_month, kind] when kind in ["equinox", "solstice"], String.split(name, "-")) ->
         [month, kind] = String.split(name, "-")

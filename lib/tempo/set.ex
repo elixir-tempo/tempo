@@ -17,15 +17,16 @@ defmodule Tempo.Set do
   an ordinary set.
 
   When the set is a recurrence **domain**, it may carry a year
-  `filter` — `:even`, `:odd` or `:leap`, written `e`/`o`/`l` after
-  the closing brace — that keeps only the years matching it, so
-  `{2000..2020}e` is the even years and `{2000..2020}l` the leap
-  years of the range. `filter` is `nil` for an ordinary set.
+  `filter` — `:even`, `:odd`, `:leap` or `:common`, written
+  `e`/`o`/`l`/`c` after the closing brace — that keeps only the years
+  matching it, so `{2000..2020}e` is the even years, `{2000..2020}l`
+  the leap years and `{2000..2020}c` the common (non-leap) years of
+  the range. `filter` is `nil` for an ordinary set.
   """
 
   alias Tempo.Iso8601.AST
 
-  @type filter :: :even | :odd | :leap | nil
+  @type filter :: :even | :odd | :leap | :common | nil
 
   @type t :: %__MODULE__{
           type: :all | :one,

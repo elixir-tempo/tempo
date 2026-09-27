@@ -441,12 +441,20 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # astronomical event. The event name is a lowercase identifier delimited by
   # parentheses and closed by the lowercase `e` designator, e.g. `(easter)e`,
   # `(march-equinox)e`. Lowercase marks it a Tempo extension (uppercase `E` is
-  # the EDTF long-year exponent). It resolves per period via `Tempo.Event`.
+  # the EDTF long-year exponent). An event that happens at an instant may name
+  # the zone whose date it takes after an `@` — an IANA zone or a `±HH:MM`
+  # offset, `(march-equinox@+09:00)e` — kept as part of the name. It resolves
+  # per period via `Tempo.Event`.
   def selection_event do
     ignore(string("("))
     |> ascii_string([?a..?z, ?-], min: 1)
+    |> optional(
+      string("@")
+      |> ascii_string([?a..?z, ?A..?Z, ?0..?9, ?_, ?/, ?+, ?-, ?:], min: 1)
+    )
     |> ignore(string(")"))
     |> ignore(string("e"))
+    |> reduce({Enum, :join, []})
     |> unwrap_and_tag(:event)
   end
 
@@ -849,8 +857,9 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     |> label("list of times or ranges")
   end
 
-  # A recurrence domain may end with a year filter — `e` (even), `o` (odd) or
-  # `l` (leap) — that keeps only the matching years, as in `{2000Y..2020Y}e`.
+  # A recurrence domain may end with a year filter — `e` (even), `o` (odd), `l`
+  # (leap) or `c` (common, a year that is not a leap year) — that keeps only the
+  # matching years, as in `{2000Y..2020Y}e`.
   # Tokenised as `{:filter, …}`; the parser lifts it onto `%Tempo.Set{}`'s
   # `:filter`. A non-conformant Tempo extension.
   def domain_filter(combinator \\ empty()) do
@@ -858,7 +867,8 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     |> choice([
       replace(string("e"), {:filter, :even}),
       replace(string("o"), {:filter, :odd}),
-      replace(string("l"), {:filter, :leap})
+      replace(string("l"), {:filter, :leap}),
+      replace(string("c"), {:filter, :common})
     ])
     |> label("domain year filter")
   end
