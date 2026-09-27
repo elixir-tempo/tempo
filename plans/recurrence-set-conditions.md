@@ -1,6 +1,8 @@
 # Conditional recurrence-set members
 
-**Status:** draft, 2026-09-27
+**Status:** in progress, 2026-09-27
+
+**Decision (user, 2026-09-27):** Option 1, before tempo_holidays returns its holidays as a `RecurrenceSet` ([plans/interval-recurrence-unification.md](interval-recurrence-unification.md)), so the set is complete. The open questions are settled as recommended: the filter is an equality map on member metadata (serialisable, and enough for `type`), and a moved occurrence is not seen by other conditionals — the tally is the first pass's, as in date-holidays.
 
 A few holidays are kept or moved by the *other* holidays of their year, so no member of a `%Tempo.RecurrenceSet{}` can say them alone. tempo_holidays resolves them concretely today, in a second pass over the year's holidays; this plan proposes a declarative form, so a territory's whole holiday set is re-materialisable. [plans/recurrence-set.md](recurrence-set.md) (Open question 2) left these to be pre-materialised or resolved "in a set-level second pass at materialise time"; this document chooses between those.
 
@@ -43,6 +45,36 @@ The four rules stay `:needs_window`, resolved by tempo_holidays' second pass; a 
 
 Option 1. It states date-holidays' semantics directly — a second pass over the other members' base occurrences, self excluded — keeps Tempo generic through an equality filter on member metadata, and reuses the selection engine for every move. Option 2's primitives may still appear inside it.
 
+## Design (2026-09-27)
+
+A conditional member is a `%Tempo.RecurrenceSet.Conditional{}` wrapping an ordinary member, built by two constructors that read as the rule does:
+
+```elixir
+citizens_holiday =
+  Tempo.RecurrenceSet.keep_when(~o"R/../P1Y/FL9M22DN",
+    at: [~o"-P1D", ~o"P1D"],
+    falls_on: %{type: :public}
+  )
+
+naefelser_fahrt =
+  Tempo.RecurrenceSet.move_when(~o"R/../P1Y/FLL4M2DN/P7DN4K-1IN",
+    falls_on: %{type: :observance},
+    to_next: ~o"4K"
+  )
+```
+
+> *"Citizens' Holiday is 22 September, **kept** only when the day before and the day after both **fall on** public holidays. Näfelser Fahrt is the Thursday after 2 April, **moved to the next** Thursday when it falls on an observance."*
+
+* **Falls on** — a day falls on an occurrence of another member of the set whose metadata includes every key and value of `:falls_on`; the day and the occurrence overlap.
+
+* **Keep** — an occurrence is kept when every day `:at` away from its start falls on such an occurrence, and dropped otherwise.
+
+* **Move** — an occurrence that falls on such an occurrence moves to the first span `Tempo.select/2` gives for `:to_next` after it (searching a week for a weekday, a year otherwise); one that does not stays. A selector says "the next Thursday" directly (`~o"4K"`), where a weekly recurrence (`R/../P1W/FL4KN`) would need a window built around the occurrence.
+
+* **The tally** is every member's first-pass occurrences, a conditional's base occurrences included and its own never, so a moved occurrence is not seen by another conditional.
+
+* **The window** — the first pass runs over the bound widened by the conditions' reach (the `:at` offsets both ways, the move's search span backward), so a bridge on the bound's first day sees the day before and an occurrence moved into the bound from before it is found; conditional results are then kept by start within the bound, and the other members materialise over the bound itself, exactly as without conditionals.
+
 ## Open questions
 
 * Whether the filter is an equality map on metadata (serialisable, and enough for `type`) or a predicate function (more general, not serialisable).
@@ -51,8 +83,10 @@ Option 1. It states date-holidays' semantics directly — a second pass over the
 
 ## Tasks
 
-* [ ] Choose an option (user).
+* [x] Choose an option (user, 2026-09-27: Option 1).
 
-* [ ] Tempo: the conditional member and the second pass in `RecurrenceSet` materialisation, with tests and a guide section.
+* [x] Tempo: the conditional member (`keep_when/2`, `move_when/2`) and the second pass in `RecurrenceSet` materialisation, with tests. 2026-09-27.
+
+* [x] Tempo: a guide section for conditional members — "Bridge days and moved holidays" in the holiday cookbook. 2026-09-27.
 
 * [ ] tempo_holidays: emit the four rules as conditional members, validated against the concrete second pass over 2000–2035 and the conformance corpus.

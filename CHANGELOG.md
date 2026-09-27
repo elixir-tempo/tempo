@@ -2,27 +2,17 @@
 
 ## [v1.7.0] — Unreleased
 
-### Changed
+### Breaking changes
 
-* A fractional duration becomes whole units of the next smaller unit, truncated: `P1.5W` is 10 days, `P1.3D` 1 day 7 hours, and `P0.5M` half the days to one month later (ISO 8601-2 D.4.4). A shift by one raised `ArithmeticError` or returned `nil`.
-
-* Date arithmetic in validation, selection, recurrence week expansion, recurrence windows, interval stepping and conversion goes through Calendrical rather than `Date.add/2`, day numbers and month walks.
-
-* `Tempo.parse/2`'s `:calendar` option is a calendar module, `Calendar.ISO` by default, as Calendrical 1.4's is: a CLDR calendar name such as `:hebrew` returns an error.
-
-* A recurrence whose selection has a §12.10 window looks into the period before its bound only for a forward window, and the period after only for a backward one, and a domain runs its adjacent periods as one recurrence. Results are unchanged.
-
-* A recurrence selection that moves a candidate to several dates (weekday, month-day, week and window expansions) finds the candidate's own day numbers once, and a move onto its own date asks the calendar nothing — about a third fewer calendar calls for a lunisolar calendar.
-
-* Traditional lunisolar months resolve through Calendrical's `ordinal_month_from_traditional/2`, dates validate and convert through `Calendrical.iso_days/4`, and a day that fits every month of a calendar skips the per-year month length. The lunisolar holiday workload runs in 1.3 s instead of 2.1 s, with identical results.
-
-* Recurrence selections converge on the ISO 8601-2 §12.9 position designator `I` — applied last over the resolved set and written weekday-then-position (`1K2I` = the 2nd Monday) — and the invented `V` set-position designator is retired. An ordinal `BYDAY` across distinct weekdays (`2MO,2WE`) has no ISO form and round-trips only through `Tempo.to_rrule/1`.
-
-### Deprecated
-
-* The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
+* `Tempo.new/1`'s `:metadata` is the value's own metadata, read with `Tempo.metadata/1` and never written to its ISO 8601 form, where it was written as IXDTF suffix tags; tags take the new `:tags` option, validated so `to_iso8601/1` cannot fail on one.
 
 ### Added
+
+* `Tempo.RecurrenceSet.keep_when/2` and `move_when/2` — a member kept only when days around it fall on the other members' occurrences (a bridge day), or moved `:to_next` a selected day when it falls on one, resolved in a second pass as date-holidays does.
+
+* A `%Tempo{}` carries its own `:metadata`, as an interval and both sets do: `Tempo.metadata/1` and `Tempo.put_metadata/2` read and set it on any value, and materialising a value moves it to the interval or intervals the value becomes.
+
+* A `Tempo.RecurrenceSet` member can be a `Tempo.RecurrenceSet` — a holiday and its observed days as one member — whose metadata tags every occurrence it produces, and a set's own metadata carries to the `Tempo.IntervalSet` it materialises to; `RecurrenceSet.members/1`, `metadata/1` and `IntervalSet.metadata/1` read them.
 
 * An equinox or solstice takes its date in a named zone: `(march-equinox@+09:00)e` or `(june-solstice@America/Santiago)e` is the event's date there, a floating date like any holiday's, where the UTC date can be a day off.
 
@@ -54,7 +44,31 @@
 
 * `Tempo.Interval.Relations` — converse, narrowing and composition over *sets* of Allen relations, for reasoning when the relation between two intervals is constrained but not known. `narrow/2` combines two sources of knowledge; it is not `Tempo.intersection/2`, which operates on time values.
 
+### Changed
+
+* A fractional duration becomes whole units of the next smaller unit, truncated: `P1.5W` is 10 days, `P1.3D` 1 day 7 hours, and `P0.5M` half the days to one month later (ISO 8601-2 D.4.4). A shift by one raised `ArithmeticError` or returned `nil`.
+
+* Date arithmetic in validation, selection, recurrence week expansion, recurrence windows, interval stepping and conversion goes through Calendrical rather than `Date.add/2`, day numbers and month walks.
+
+* `Tempo.parse/2`'s `:calendar` option is a calendar module, `Calendar.ISO` by default, as Calendrical 1.4's is: a CLDR calendar name such as `:hebrew` returns an error.
+
+* A recurrence whose selection has a §12.10 window looks into the period before its bound only for a forward window, and the period after only for a backward one, and a domain runs its adjacent periods as one recurrence. Results are unchanged.
+
+* A recurrence selection that moves a candidate to several dates (weekday, month-day, week and window expansions) finds the candidate's own day numbers once, and a move onto its own date asks the calendar nothing — about a third fewer calendar calls for a lunisolar calendar.
+
+* Traditional lunisolar months resolve through Calendrical's `ordinal_month_from_traditional/2`, dates validate and convert through `Calendrical.iso_days/4`, and a day that fits every month of a calendar skips the per-year month length. The lunisolar holiday workload runs in 1.3 s instead of 2.1 s, with identical results.
+
+* Recurrence selections converge on the ISO 8601-2 §12.9 position designator `I` — applied last over the resolved set and written weekday-then-position (`1K2I` = the 2nd Monday) — and the invented `V` set-position designator is retired. An ordinal `BYDAY` across distinct weekdays (`2MO,2WE`) has no ISO form and round-trips only through `Tempo.to_rrule/1`.
+
+### Deprecated
+
+* The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
+
 ### Fixed
+
+* A recurrence over a bound that starts mid-period reaches every period the bound overlaps, and keeps only occurrences starting in the bound or by its UNTIL: `R/../P1Y/FL1M15DN` over September 2026 to March 2027 is 15 January 2027, where it was nothing.
+
+* An interval written as a start and a duration (`2026-01-01/P1D`) or a duration and an end (`P1D/2026-01-02`) answers `relation/2`, the relation, certainty and duration predicates, `duration/1`, `bounded?/1`, the endpoint accessors and `IntervalSet.new/2` as its two-endpoint form does, where they raised, crashed or read it as open-ended.
 
 * A duration in the ISO 8601 alternative format (`P0002-01-10T22:33:55`) is the duration its designator form writes, where it was held as a nested date that nothing read; a week date or a day of the week there (`P2K`) is a `Tempo.ParseError`.
 

@@ -47,7 +47,15 @@ defmodule Tempo.MaterialisationError do
 
   def message(%__MODULE__{reason: :recurrence_set_member, value: value}) do
     "Cannot materialise #{inspect(value)} as a Tempo.RecurrenceSet member — a " <>
-      "member is a Tempo.Interval (a recurrence or a concrete interval) or a Tempo value."
+      "member is a Tempo.Interval (a recurrence or a concrete interval), a Tempo value, " <>
+      "or a nested Tempo.RecurrenceSet."
+  end
+
+  def message(%__MODULE__{reason: :conditional_member, value: value}) do
+    "Cannot resolve #{inspect(value)} as a conditional Tempo.RecurrenceSet member — it " <>
+      "needs a :falls_on map and either :at, a list of durations " <>
+      "(Tempo.RecurrenceSet.keep_when/2), or :to_next, a selector " <>
+      "(Tempo.RecurrenceSet.move_when/2)."
   end
 
   def message(%__MODULE__{reason: :recurring_interval}) do

@@ -6,8 +6,6 @@ decision taken on the way to 1.0, is in
 
 ## Open
 
-* [ ] **Conditional recurrence-set members** — a member a recurrence set keeps or moves by its other members (a bridge day between two holidays, an "if it is a holiday then the next Monday" move), resolved in a second pass; the last 4 tempo_holidays rules. Plan in [plans/recurrence-set-conditions.md](plans/recurrence-set-conditions.md).
-
 * [ ] **A zone on a recurrence is dropped** — `R/../P1Y/FL3M20DN[+09:00]` and a domain recurrence's `[zone]` suffix parse and vanish (the start value's suffix, `R/2026-03-20[+09:00]/P1Y`, is kept). Carry it as zoned occurrences, as the suffix means elsewhere, or refuse it.
 
 * [ ] **§12.10 window shorter than a day** — `FL11MLL1K1IN/PT12HN1K1IN` (and `/P0DN…`) walks `[lo, lo - 1]`, the anchor and the day before, as `Date.range/2` infers for a reversed range (with a runtime deprecation warning before the day-number walk replaced it). Decide the semantics — no day, or the anchor day whose start the window contains — and test it.
@@ -26,15 +24,21 @@ decision taken on the way to 1.0, is in
 
 * [ ] **Explain weekday sets by name** — `explain/1` reads `{6..7}K` as "on a weekday [6..7]"; it should read "on a Saturday or Sunday", now that holiday recurrences carry weekday limits routinely.
 
-* [ ] **Unify interval and recurrence into one concept** (research, plan, advise) — an `Interval` is a single occurrence, i.e. a count-1 recurrence, which suggests everything is a recurrence and the only value types are intervals / interval-sets, with a `Tempo` as a single expression. Research whether `%Tempo{}`, `%Tempo.Interval{}` and `%Tempo.RecurrenceSet{}` collapse cleanly, what breaks (implicit vs explicit spans, half-open convention, Allen relations, `%Date{}` interop, materialisation with/without `:bound`), and advise before any code. Plan in [plans/interval-recurrence-unification.md](plans/interval-recurrence-unification.md).
-
 * [ ] **Coverage to 90%** — the CI lint row runs plain `mix test` until coverage reaches the default 90% threshold, then takes the reference workflow's `mix test --cover`. 85.5% today (2026-09-27) with the existing `ignore_modules`; `mix test --cover` lists the modules below it.
+
+* [ ] **Predicates that raise** — `Tempo.anchored?/1`, `floating?/1` and `grounded?/1` raise `FunctionClauseError` on any interval; the relation and certainty predicates raise, by tested design, for an operand that is not one bounded interval; `Interval.duration/1` raises for a multi-occurrence recurrence. Decide `false` or `{:error, _}` per the no-raise rule.
 
 ## Deferred
 
 * [ ] **A domain gating by a window's anchor** — a domain admits the occurrences that start in its periods; date-holidays gates on the year of a window's anchor instead. They differ only when a window crosses a gated boundary year, which no tempo_holidays rule does; reviving it needs anchor tracking through `Tempo.RRule.Selection`.
 
 ## Done
+
+* [x] **Interval/recurrence unification** — `RecurrenceSet` (the definition) and `IntervalSet` (its occurrences) stay two types, the gaps closed: opaque metadata on `%Tempo{}` (`:metadata` repurposed, `:tags` for IXDTF), nested members, a set's metadata through materialisation, the duration forms in every single-interval function. 2026-09-27.
+
+* [x] **Conditional recurrence-set members** — `RecurrenceSet.keep_when/2` and `move_when/2`, resolved in a second pass over the widened bound; a cookbook section. 2026-09-27.
+
+* [x] **Recurrence bounds are half-open** — a bound starting mid-period reaches every period it overlaps, and anchored, unanchored and UNTIL recurrences keep only occurrences starting in the bound. 2026-09-27.
 
 * [x] **A non-leap-year domain filter** — `c` (common year) beside `e`/`o`/`l`, for date-holidays' `09-11 in non-leap years`: `R/..c/P1Y/FL9M11DN`. 2026-09-27.
 

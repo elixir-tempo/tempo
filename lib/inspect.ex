@@ -35,6 +35,13 @@ defmodule Tempo.Inspect do
   # and through the equivalent `Tempo.from_iso8601!/2` call for
   # non-default calendars.
 
+  # Metadata is not part of the ISO 8601 form, so — as for an interval — it
+  # shows as a decoration outside the sigil body, which still re-parses.
+  def inspect(%Tempo{metadata: metadata} = tempo) when map_size(metadata) > 0 do
+    "#Tempo<" <>
+      inspect(%{tempo | metadata: %{}}) <> " " <> interval_metadata_tag(metadata) <> ">"
+  end
+
   def inspect(%Tempo{calendar: Calendrical.Gregorian} = tempo) do
     # `to_iso8601/1` (via `inspect_value/1`) already appends the
     # IXDTF extended trailer; don't add it again here.

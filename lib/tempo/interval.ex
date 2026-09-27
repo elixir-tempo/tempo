@@ -1266,13 +1266,16 @@ defmodule Tempo.Interval do
     end
   end
 
-  defp to_single_interval(%__MODULE__{}, label) do
-    {:error,
-     ArgumentError.exception(
-       "Tempo.Interval.relation/2 needs bounded intervals on both sides. " <>
-         "Operand #{inspect(label)} has an open-ended endpoint (`:undefined`)."
-     )}
+  # A start and a duration, or a duration and an end, is as bounded as two
+  # stated endpoints.
+  defp to_single_interval(%__MODULE__{duration: %Duration{}} = interval, label) do
+    case resolve_duration_form(interval) do
+      %__MODULE__{from: %Tempo{}, to: %Tempo{}} = resolved -> {:ok, resolved}
+      _unresolved -> open_ended_error(label)
+    end
   end
+
+  defp to_single_interval(%__MODULE__{}, label), do: open_ended_error(label)
 
   # A one-of set is an epistemic disjunction — it has no single crisp
   # relation, only a set of possible ones. The crisp API refuses with the
@@ -1287,6 +1290,14 @@ defmodule Tempo.Interval do
      ArgumentError.exception(
        "Tempo.Interval.relation/2 cannot classify operand #{inspect(label)}: " <>
          "#{inspect(other)}"
+     )}
+  end
+
+  defp open_ended_error(label) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.Interval.relation/2 needs bounded intervals on both sides. " <>
+         "Operand #{inspect(label)} has an open-ended endpoint (`:undefined`)."
      )}
   end
 
@@ -1306,12 +1317,16 @@ defmodule Tempo.Interval do
 
   @doc """
   `true` when both endpoints are concrete `%Tempo{}` values —
-  neither `:undefined` nor `nil`. Useful as a guard before set
-  operations or duration checks.
+  stated, or fixed by a start or an end and a duration
+  (`2026-06-01/P9D`) — rather than `:undefined` or `nil`. Useful
+  as a guard before set operations or duration checks.
 
   ### Examples
 
       iex> Tempo.Interval.bounded?(%Tempo.Interval{from: ~o"2026-06-01", to: ~o"2026-06-10"})
+      true
+
+      iex> Tempo.Interval.bounded?(~o"2026-06-01/P9D")
       true
 
       iex> Tempo.Interval.bounded?(%Tempo.Interval{from: ~o"2026-06-01", to: :undefined})
@@ -1319,8 +1334,45 @@ defmodule Tempo.Interval do
 
   """
   @spec bounded?(t()) :: boolean()
-  def bounded?(%__MODULE__{from: %Tempo{}, to: %Tempo{}}), do: true
-  def bounded?(%__MODULE__{}), do: false
+  def bounded?(%__MODULE__{} = interval) do
+    match?(%__MODULE__{from: %Tempo{}, to: %Tempo{}}, resolve_duration_form(interval))
+  end
+
+  @doc false
+  # A bounded interval is written three ways: both endpoints, a start and a
+  # duration (`2026-06-01/P9D`, `to: nil`), or a duration and an end
+  # (`P9D/2026-06-10`, `from: :undefined` beside the duration). Everything
+  # that reads one interval's endpoints works on the first form, so the other
+  # two resolve to it here — as `Tempo.to_interval/1` resolves them for the set
+  # operations — keeping the metadata, unit and direction. Anything else (a
+  # recurrence, an open or unanchored interval, an endpoint holding a selection,
+  # which stands for several spans) is returned unchanged.
+  @spec resolve_duration_form(term()) :: term()
+  def resolve_duration_form(
+        %__MODULE__{recurrence: 1, from: %Tempo{}, to: to, duration: %Duration{}} = interval
+      )
+      when to in [nil, :undefined] do
+    resolve_endpoints(interval)
+  end
+
+  def resolve_duration_form(
+        %__MODULE__{recurrence: 1, from: :undefined, to: %Tempo{}, duration: %Duration{}} =
+          interval
+      ) do
+    resolve_endpoints(interval)
+  end
+
+  def resolve_duration_form(value), do: value
+
+  defp resolve_endpoints(interval) do
+    case Tempo.to_interval(interval) do
+      {:ok, %__MODULE__{from: %Tempo{} = from, to: %Tempo{} = to}} ->
+        %{interval | from: from, to: to, duration: nil}
+
+      _several_spans_or_error ->
+        interval
+    end
+  end
 
   @doc """
   `true` when the interval has zero or negative length —
@@ -1439,7 +1491,7 @@ defmodule Tempo.Interval do
 
   """
   @spec from(t()) :: Tempo.t() | :undefined
-  def from(%__MODULE__{from: from}), do: from
+  def from(%__MODULE__{} = interval), do: resolve_duration_form(interval).from
 
   @doc """
   Return the interval's `to` endpoint.
@@ -1464,7 +1516,7 @@ defmodule Tempo.Interval do
 
   """
   @spec to(t()) :: Tempo.t() | :undefined
-  def to(%__MODULE__{to: to}), do: to
+  def to(%__MODULE__{} = interval), do: resolve_duration_form(interval).to
 
   @doc """
   Return the interval's endpoints as a `{from, to}` tuple.
@@ -1490,7 +1542,10 @@ defmodule Tempo.Interval do
 
   """
   @spec endpoints(t()) :: {Tempo.t() | :undefined, Tempo.t() | :undefined}
-  def endpoints(%__MODULE__{from: from, to: to}), do: {from, to}
+  def endpoints(%__MODULE__{} = interval) do
+    %__MODULE__{from: from, to: to} = resolve_duration_form(interval)
+    {from, to}
+  end
 
   @doc """
   Return the metadata map attached to the interval.
@@ -1631,24 +1686,24 @@ defmodule Tempo.Interval do
 
   """
   @spec duration(t(), keyword()) :: Duration.t() | :infinity
-  def duration(interval, opts \\ [])
+  def duration(interval, opts \\ []), do: resolved_duration(resolve_duration_form(interval), opts)
 
   # A finite recurring interval's duration is the total across its
   # occurrences, which only the materialised set can report — reading
   # the base span (or the open `to` as infinity) would be wrong on
   # both counts. Unbounded recurrences fall through to `:infinity`,
   # which is their true total extent.
-  def duration(%__MODULE__{recurrence: recurrence} = interval, _opts)
-      when is_integer(recurrence) and recurrence > 1 do
+  defp resolved_duration(%__MODULE__{recurrence: recurrence} = interval, _opts)
+       when is_integer(recurrence) and recurrence > 1 do
     raise MaterialisationError.exception(value: interval, reason: :recurring_duration)
   end
 
-  def duration(%__MODULE__{from: :undefined}, _opts), do: :infinity
-  def duration(%__MODULE__{to: :undefined}, _opts), do: :infinity
-  def duration(%__MODULE__{from: nil}, _opts), do: :infinity
-  def duration(%__MODULE__{to: nil}, _opts), do: :infinity
+  defp resolved_duration(%__MODULE__{from: :undefined}, _opts), do: :infinity
+  defp resolved_duration(%__MODULE__{to: :undefined}, _opts), do: :infinity
+  defp resolved_duration(%__MODULE__{from: nil}, _opts), do: :infinity
+  defp resolved_duration(%__MODULE__{to: nil}, _opts), do: :infinity
 
-  def duration(%__MODULE__{from: %Tempo{} = from, to: %Tempo{} = to} = iv, opts) do
+  defp resolved_duration(%__MODULE__{from: %Tempo{} = from, to: %Tempo{} = to} = iv, opts) do
     :ok = require_same_calendar(from, to, "Tempo.Interval.duration/1")
 
     if empty?(iv) do
@@ -1830,10 +1885,13 @@ defmodule Tempo.Interval do
 
   """
   @spec at_least?(t(), Duration.t()) :: boolean()
-  def at_least?(%__MODULE__{from: :undefined}, _), do: true
-  def at_least?(%__MODULE__{to: :undefined}, _), do: true
+  def at_least?(interval, duration),
+    do: resolved_at_least?(resolve_duration_form(interval), duration)
 
-  def at_least?(%__MODULE__{from: %Tempo{} = from, to: %Tempo{} = to}, %Duration{} = d) do
+  defp resolved_at_least?(%__MODULE__{from: :undefined}, _), do: true
+  defp resolved_at_least?(%__MODULE__{to: :undefined}, _), do: true
+
+  defp resolved_at_least?(%__MODULE__{from: %Tempo{} = from, to: %Tempo{} = to}, %Duration{} = d) do
     Compare.compare_endpoints(Math.add(from, d), to) in [:earlier, :same]
   end
 
@@ -1854,10 +1912,13 @@ defmodule Tempo.Interval do
 
   """
   @spec at_most?(t(), Duration.t()) :: boolean()
-  def at_most?(%__MODULE__{from: :undefined}, _), do: false
-  def at_most?(%__MODULE__{to: :undefined}, _), do: false
+  def at_most?(interval, duration),
+    do: resolved_at_most?(resolve_duration_form(interval), duration)
 
-  def at_most?(%__MODULE__{from: %Tempo{} = from, to: %Tempo{} = to}, %Duration{} = d) do
+  defp resolved_at_most?(%__MODULE__{from: :undefined}, _), do: false
+  defp resolved_at_most?(%__MODULE__{to: :undefined}, _), do: false
+
+  defp resolved_at_most?(%__MODULE__{from: %Tempo{} = from, to: %Tempo{} = to}, %Duration{} = d) do
     Compare.compare_endpoints(Math.add(from, d), to) in [:later, :same]
   end
 
@@ -1877,10 +1938,13 @@ defmodule Tempo.Interval do
 
   """
   @spec exactly?(t(), Duration.t()) :: boolean()
-  def exactly?(%__MODULE__{from: :undefined}, _), do: false
-  def exactly?(%__MODULE__{to: :undefined}, _), do: false
+  def exactly?(interval, duration),
+    do: resolved_exactly?(resolve_duration_form(interval), duration)
 
-  def exactly?(%__MODULE__{from: %Tempo{} = from, to: %Tempo{} = to}, %Duration{} = d) do
+  defp resolved_exactly?(%__MODULE__{from: :undefined}, _), do: false
+  defp resolved_exactly?(%__MODULE__{to: :undefined}, _), do: false
+
+  defp resolved_exactly?(%__MODULE__{from: %Tempo{} = from, to: %Tempo{} = to}, %Duration{} = d) do
     Compare.compare_endpoints(Math.add(from, d), to) == :same
   end
 
@@ -1898,10 +1962,16 @@ defmodule Tempo.Interval do
 
   """
   @spec longer_than?(t(), Duration.t()) :: boolean()
-  def longer_than?(%__MODULE__{from: :undefined}, _), do: true
-  def longer_than?(%__MODULE__{to: :undefined}, _), do: true
+  def longer_than?(interval, duration),
+    do: resolved_longer_than?(resolve_duration_form(interval), duration)
 
-  def longer_than?(%__MODULE__{from: %Tempo{} = from, to: %Tempo{} = to}, %Duration{} = d) do
+  defp resolved_longer_than?(%__MODULE__{from: :undefined}, _), do: true
+  defp resolved_longer_than?(%__MODULE__{to: :undefined}, _), do: true
+
+  defp resolved_longer_than?(
+         %__MODULE__{from: %Tempo{} = from, to: %Tempo{} = to},
+         %Duration{} = d
+       ) do
     Compare.compare_endpoints(Math.add(from, d), to) == :earlier
   end
 
@@ -1919,10 +1989,16 @@ defmodule Tempo.Interval do
 
   """
   @spec shorter_than?(t(), Duration.t()) :: boolean()
-  def shorter_than?(%__MODULE__{from: :undefined}, _), do: false
-  def shorter_than?(%__MODULE__{to: :undefined}, _), do: false
+  def shorter_than?(interval, duration),
+    do: resolved_shorter_than?(resolve_duration_form(interval), duration)
 
-  def shorter_than?(%__MODULE__{from: %Tempo{} = from, to: %Tempo{} = to}, %Duration{} = d) do
+  defp resolved_shorter_than?(%__MODULE__{from: :undefined}, _), do: false
+  defp resolved_shorter_than?(%__MODULE__{to: :undefined}, _), do: false
+
+  defp resolved_shorter_than?(
+         %__MODULE__{from: %Tempo{} = from, to: %Tempo{} = to},
+         %Duration{} = d
+       ) do
     Compare.compare_endpoints(Math.add(from, d), to) == :later
   end
 
@@ -1935,7 +2011,10 @@ defmodule Tempo.Interval do
   (Allen's `:precedes`). Use `adjacent?/2` to include the
   no-gap case.
 
-  Returns `false` on any error or non-matching relation.
+  Returns `false` for any other relation, and raises when an
+  operand is not a single bounded interval (a multi-member set, an
+  open or recurring interval, a one-of set), as `relation/2`
+  returns an error there.
   """
   @spec before?(interval_like(), interval_like()) :: boolean()
   def before?(a, b), do: match_relation(a, b, [:precedes])
@@ -2378,6 +2457,8 @@ defmodule Tempo.Interval do
   # Each operand is classified once, and the pair dispatches on whichever
   # class dominates (earliest in the priority order below).
   defp possible_relations(a, b) do
+    a = resolve_duration_form(a)
+    b = resolve_duration_form(b)
     relations_for(dominant_class(operand_class(a), operand_class(b)), a, b)
   end
 

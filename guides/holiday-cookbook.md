@@ -180,9 +180,52 @@ And *"every N years"* is a plain cadence, not a filter — `~o"R/2024-07-04/P4Y"
 
 `union/2` gives the enable family; `IntervalSet.filter/2` the weekday gates; and `subset?/2`, `contains?/2` are the predicates the bridge and "if it is a holiday then…" cascades test against the year's holiday set. This is the point of modelling holidays as interval sets: they compose with each other, and with anyone's free-time set, through the same algebra.
 
+## Bridge days and moved holidays (conditional members)
+
+A bridge day and a holiday moved off another depend on the *other* holidays of the set, so neither is a property of one recurrence. A `Tempo.RecurrenceSet` holds them as conditional members, resolved after its other members: `Tempo.RecurrenceSet.keep_when/2` keeps an occurrence only when the days `:at` offsets from it fall on the others' occurrences, and `Tempo.RecurrenceSet.move_when/2` moves one that falls on them to the next day its `:to_next` selector gives. `:falls_on` names the others by their metadata.
+
+```elixir
+respect_for_the_aged = Tempo.put_metadata(~o"R/../P1Y/FL9M1K3IN", %{type: :public})
+autumnal_equinox = Tempo.put_metadata(~o"R/../P1Y/FL(september-equinox@+09:00)eN", %{type: :public})
+
+citizens_holiday =
+  Tempo.RecurrenceSet.keep_when(~o"R/../P1Y/FL9M22DN",
+    at: [~o"-P1D", ~o"P1D"],
+    falls_on: %{type: :public}
+  )
+
+september = Tempo.RecurrenceSet.new([respect_for_the_aged, autumnal_equinox, citizens_holiday])
+
+{:ok, silver_week} = Tempo.to_interval_set(september, bound: ~o"2026Y")
+# 21, 22 and 23 September 2026
+{:ok, no_bridge} = Tempo.to_interval_set(september, bound: ~o"2025Y")
+# 15 and 23 September 2025
+```
+
+> *"Japan's Citizens' Holiday is 22 September, **kept** only when the day before and the day after both **fall on** public holidays. In 2026 Respect for the Aged Day and the equinox meet around it; in 2025 they do not."*
+
+```elixir
+maundy_thursday = Tempo.put_metadata(~o"R/../P1Y/FLLL(easter)eN/-P7DN4K-1IN", %{type: :observance})
+
+naefelser_fahrt =
+  Tempo.RecurrenceSet.move_when(~o"R/../P1Y/FLLL4M2DN/P7DN4K-1IN",
+    falls_on: %{type: :observance},
+    to_next: ~o"4K"
+  )
+
+glarus = Tempo.RecurrenceSet.new([maundy_thursday, naefelser_fahrt])
+
+{:ok, spring} = Tempo.to_interval_set(glarus, bound: ~o"2026Y")
+# Maundy Thursday on 2 April, and Näfelser Fahrt moved to 9 April
+```
+
+> *"Näfelser Fahrt is the first Thursday from 2 April, **moved to the next** Thursday when it falls on an observance — as it does in 2026, when 2 April is Maundy Thursday."*
+
+A condition reads the other members' occurrences as they first fall, a conditional's own among them but never the member's own, so a holiday one conditional moves is not seen by another. Near a bound's edge the set looks past it — the day before a bridge on the bound's first day, a holiday moved in from the week before — and keeps what starts inside.
+
 ## Coverage of the date-holidays grammar
 
 Every **selection**-shaped rule in the corpus — including several the `tempo_holidays` compiler itself still lists as *not handled* — is a single Tempo value: fixed dates and spans; nth/last weekday-in-month; a weekday **before/after a date, a weekday, or another computed anchor** (Black Friday, Election Day, "the Monday after the 3rd Sunday after September 1"); Easter/Orthodox and the whole moveable cycle; the equinoxes, solstices, solar terms and new moon; and dates in the Islamic, Hebrew, Persian, Chinese, Coptic and Julian calendars.
 
-The **transforming and conditioning** families split two ways. The **year gates** — an active `since` / `prior to` window, even/odd and leap/non-leap rules, a disabled year — fold into the recurrence's `{…}` **domain**, so they stay single, round-trippable values. What genuinely needs the set algebra is the rest: observed-date **substitution** (the `if/then`, `and if`, `substitutes` modes), the weekday **filters** (`on`/`not on`), `enable`ing an ad-hoc date, and the bridge / "if-holiday" **cascades** — operations over a holiday set, shown above. The only genuine gaps are calendar-arithmetic edge cases inside the dependencies (a tabular-vs-computed Umm al-Qura day, an Islamic day-overflow like `30 Safar`), which live in `Calendrical`, not in this grammar.
+The **transforming and conditioning** families split two ways. The **year gates** — an active `since` / `prior to` window, even/odd and leap/non-leap rules, a disabled year — fold into the recurrence's `{…}` **domain**, so they stay single, round-trippable values. What genuinely needs the set algebra is the rest: observed-date **substitution** (the `if/then`, `and if`, `substitutes` modes), the weekday **filters** (`on`/`not on`), and `enable`ing an ad-hoc date — operations over a holiday set, shown above — while the bridge / "if-holiday" **cascades** are conditional members of the holiday `Tempo.RecurrenceSet`. The only genuine gaps are calendar-arithmetic edge cases inside the dependencies (a tabular-vs-computed Umm al-Qura day, an Islamic day-overflow like `30 Safar`), which live in `Calendrical`, not in this grammar.
 

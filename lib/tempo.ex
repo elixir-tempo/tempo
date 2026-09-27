@@ -128,6 +128,7 @@ defmodule Tempo do
   alias Tempo.MaterialisationError
   alias Tempo.Math
   alias Tempo.NonAnchoredError
+  alias Tempo.RecurrenceSet.Conditional
   alias Tempo.RequiresAnchorError
   alias Tempo.ResolutionError
   alias Tempo.Rounding
@@ -140,7 +141,7 @@ defmodule Tempo do
   alias Tempo.UnknownZoneError
   alias Tempo.Validation
 
-  defstruct [:time, :shift, :calendar, :extended, :qualification, :qualifications]
+  defstruct [:time, :shift, :calendar, :extended, :qualification, :qualifications, metadata: %{}]
 
   # TODO refine this to be more specific
   @type token :: integer() | list() | tuple()
@@ -214,7 +215,8 @@ defmodule Tempo do
           calendar: Calendar.calendar() | nil,
           extended: extended_info() | nil,
           qualification: qualification(),
-          qualifications: qualifications()
+          qualifications: qualifications(),
+          metadata: map()
         }
   @typedoc """
   The error payload returned inside `{:error, reason}` tuples.
@@ -248,7 +250,7 @@ defmodule Tempo do
   @week_axis_units [:week, :day_of_week]
   @gregorian_axis_units [:month, :day]
 
-  @known_options [:calendar, :zone, :shift, :qualification, :metadata]
+  @known_options [:calendar, :zone, :shift, :qualification, :metadata, :tags]
   @qualification_values [
     :uncertain,
     :approximate,
@@ -336,7 +338,18 @@ defmodule Tempo do
     One of `:uncertain`, `:approximate`, or
     `:uncertain_and_approximate`.
 
-  * `:metadata` is a free-form map attached to `extended.tags`.
+  * `:metadata` is a map of the caller's own data carried with the
+    value (a holiday name, a source), read with `metadata/1`. It is
+    not part of the value's ISO 8601 form: `to_iso8601/1` leaves it
+    out, and materialising the value (`to_interval/2`) moves it to
+    the interval or intervals it becomes.
+
+  * `:tags` is a map of IXDTF (RFC 9557) elective suffix tags,
+    written after the value as `[key=value]`. A key is a string of
+    lowercase letters, digits, `_` and `-` starting with a letter or
+    `_`; a value is letters and digits, several joined by `-` (or
+    given as a list). The calendar is the `:calendar` option, not a
+    `u-ca` tag.
 
   ### Returns
 
@@ -451,19 +464,65 @@ defmodule Tempo do
   end
 
   defp validate_options(options) do
-    case Keyword.get(options, :qualification) do
-      nil ->
-        :ok
-
-      value when value in @qualification_values ->
-        :ok
-
-      other ->
-        {:error,
-         ArgumentError.exception(
-           ":qualification must be one of #{inspect(@qualification_values)}, got #{inspect(other)}"
-         )}
+    with :ok <- validate_qualification(Keyword.get(options, :qualification)),
+         :ok <- validate_metadata(Keyword.get(options, :metadata, %{})) do
+      validate_tags(Keyword.get(options, :tags, %{}))
     end
+  end
+
+  defp validate_qualification(nil), do: :ok
+  defp validate_qualification(value) when value in @qualification_values, do: :ok
+
+  defp validate_qualification(other) do
+    {:error,
+     ArgumentError.exception(
+       ":qualification must be one of #{inspect(@qualification_values)}, got #{inspect(other)}"
+     )}
+  end
+
+  defp validate_metadata(metadata) when is_map(metadata), do: :ok
+
+  defp validate_metadata(other) do
+    {:error, ArgumentError.exception(":metadata must be a map, got #{inspect(other)}")}
+  end
+
+  # IXDTF (RFC 9557) elective suffix tags, written `[key=value]`: a key of
+  # lowercase letters, digits, `_` and `-` that starts with a letter or `_`, and
+  # a value of letters and digits, several joined by `-`. The calendar has its
+  # own option, so `u-ca` is not a tag here.
+  defp validate_tags(tags) when is_map(tags) do
+    Enum.find_value(tags, :ok, fn {key, value} ->
+      if valid_tag?(key, value), do: nil, else: invalid_tag(key, value)
+    end)
+  end
+
+  defp validate_tags(other) do
+    {:error, ArgumentError.exception(":tags must be a map, got #{inspect(other)}")}
+  end
+
+  defp valid_tag?(key, value) when is_binary(key) and key != "u-ca" do
+    Regex.match?(~r/\A[a-z_][a-z0-9_-]*\z/, key) and valid_tag_value?(tag_segments(value))
+  end
+
+  defp valid_tag?(_key, _value), do: false
+
+  defp valid_tag_value?([_ | _] = segments) do
+    Enum.all?(segments, &(is_binary(&1) and Regex.match?(~r/\A[A-Za-z0-9]+\z/, &1)))
+  end
+
+  defp valid_tag_value?(_segments), do: false
+
+  defp tag_segments(value) when is_binary(value), do: String.split(value, "-")
+  defp tag_segments(value), do: value
+
+  defp invalid_tag(key, value) do
+    {:error,
+     ArgumentError.exception(
+       "Invalid IXDTF tag #{inspect(key)} => #{inspect(value)}: a tag key is a string of " <>
+         "lowercase letters, digits, `_` and `-` starting with a letter or `_` (and not " <>
+         "`u-ca`, which is the :calendar option), and its value letters and digits, " <>
+         "several joined by `-`"
+     )}
   end
 
   defp validate_components([]) do
@@ -616,7 +675,9 @@ defmodule Tempo do
     zone = Keyword.get(options, :zone)
     shift = Keyword.get(options, :shift)
     qualification = Keyword.get(options, :qualification)
-    metadata = Keyword.get(options, :metadata)
+
+    tags =
+      Map.new(Keyword.get(options, :tags, %{}), fn {key, value} -> {key, tag_segments(value)} end)
 
     ordered_time =
       components
@@ -624,30 +685,23 @@ defmodule Tempo do
         Enum.find_index(@canonical_unit_order, &(&1 == unit))
       end)
 
-    extended =
-      cond do
-        zone && metadata ->
-          %{calendar: nil, zone_id: zone, zone_offset: nil, zone_critical: false, tags: metadata}
-
-        zone ->
-          %{calendar: nil, zone_id: zone, zone_offset: nil, zone_critical: false, tags: %{}}
-
-        metadata ->
-          %{calendar: nil, zone_id: nil, zone_offset: nil, zone_critical: false, tags: metadata}
-
-        true ->
-          nil
-      end
-
     {:ok,
      %__MODULE__{
        time: ordered_time,
        shift: shift,
        calendar: calendar,
-       extended: extended,
+       extended: new_extended(zone, tags),
        qualification: qualification,
-       qualifications: nil
+       qualifications: nil,
+       metadata: Keyword.get(options, :metadata, %{})
      }}
+  end
+
+  # A value with neither a zone nor a tag carries no extended information.
+  defp new_extended(nil, tags) when map_size(tags) == 0, do: nil
+
+  defp new_extended(zone, tags) do
+    %{calendar: nil, zone_id: zone, zone_offset: nil, zone_critical: false, tags: tags}
   end
 
   # Defer to `Tempo.Validation.validate/2` for calendar-aware range
@@ -4146,6 +4200,102 @@ defmodule Tempo do
   end
 
   ## ---------------------------------------------------------
+  ## Metadata — the caller's own data on any value
+  ## ---------------------------------------------------------
+
+  @doc """
+  Returns a value's metadata: the caller's own data carried with it (a holiday
+  name, an event's summary).
+
+  Every Tempo value carries a metadata map. It is not part of the value's
+  ISO 8601 form, and materialisation carries it along: a recurrence's metadata
+  reaches every occurrence, and a recurrence set's tags each occurrence its
+  members produce.
+
+  ### Arguments
+
+  * `value` is a `t:t/0`, `t:Tempo.Interval.t/0`, `t:Tempo.IntervalSet.t/0`,
+    `t:Tempo.RecurrenceSet.t/0` or `t:Tempo.RecurrenceSet.Conditional.t/0`.
+
+  ### Returns
+
+  * The metadata map, `%{}` when none was given, or
+
+  * `{:error, reason}` when `value` is not a Tempo value.
+
+  ### Examples
+
+      iex> Tempo.new!(year: 2026, month: 12, day: 25, metadata: %{name: "Christmas Day"})
+      ...> |> Tempo.metadata()
+      %{name: "Christmas Day"}
+
+      iex> Tempo.metadata(~o"2026-12-25")
+      %{}
+
+  """
+  @spec metadata(
+          t()
+          | Tempo.Interval.t()
+          | IntervalSet.t()
+          | Tempo.RecurrenceSet.t()
+          | Conditional.t()
+        ) ::
+          map() | {:error, Exception.t()}
+  def metadata(%module{metadata: metadata})
+      when module in [__MODULE__, Tempo.Interval, IntervalSet, Tempo.RecurrenceSet, Conditional],
+      do: metadata
+
+  def metadata(value) do
+    {:error,
+     ArgumentError.exception("Tempo.metadata/1 takes a Tempo value, got #{inspect(value)}")}
+  end
+
+  @doc """
+  Returns a value with its metadata replaced.
+
+  ### Arguments
+
+  * `value` is a `t:t/0`, `t:Tempo.Interval.t/0`, `t:Tempo.IntervalSet.t/0`,
+    `t:Tempo.RecurrenceSet.t/0` or `t:Tempo.RecurrenceSet.Conditional.t/0`.
+
+  * `metadata` is a map.
+
+  ### Returns
+
+  * The value carrying `metadata`, or
+
+  * `{:error, reason}` when `metadata` is not a map or `value` is not a Tempo
+    value.
+
+  ### Examples
+
+      iex> ~o"R/../P1Y/FL12M25DN"
+      ...> |> Tempo.put_metadata(%{name: "Christmas Day"})
+      ...> |> Tempo.metadata()
+      %{name: "Christmas Day"}
+
+  """
+  @spec put_metadata(value, map()) :: value | {:error, Exception.t()}
+        when value:
+               t()
+               | Tempo.Interval.t()
+               | IntervalSet.t()
+               | Tempo.RecurrenceSet.t()
+               | Conditional.t()
+  def put_metadata(%module{} = value, metadata)
+      when module in [__MODULE__, Tempo.Interval, IntervalSet, Tempo.RecurrenceSet, Conditional] and
+             is_map(metadata),
+      do: %{value | metadata: metadata}
+
+  def put_metadata(value, metadata) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.put_metadata/2 takes a Tempo value and a map, got " <>
+         "#{inspect(value)} and #{inspect(metadata)}"
+     )}
+  end
+
+  ## ---------------------------------------------------------
   ## Calendar accessors — day_of_week, day_of_year, …
   ## ---------------------------------------------------------
 
@@ -4988,7 +5138,10 @@ defmodule Tempo do
   # An unbounded recurrence with UNTIL: `recurrence: :infinity`
   # plus `to: %Tempo{}`. Iterate by one cadence at a time and stop
   # the step before the first occurrence whose start is at or past
-  # the UNTIL endpoint. `from + i*duration` while `from(i) ≤ to`.
+  # the UNTIL endpoint. `from + i*duration` while `from(i) ≤ to`, and
+  # every occurrence a period's selection gives is held to the same
+  # inclusive UNTIL (RFC 5545), so a week expanded to its days stops
+  # at the UNTIL day.
   def to_interval(
         %Tempo.Interval{
           recurrence: :infinity,
@@ -5001,14 +5154,15 @@ defmodule Tempo do
     {from, interval} = fill_selection_anchor(from, interval)
 
     intervals =
-      iterate_recurrence(
-        from,
+      from
+      |> iterate_recurrence(
         duration,
         occurrence_end_fn(from, duration, interval),
         &under_until?(&1, until),
         selection_fn(interval, duration),
         interval.metadata
       )
+      |> Enum.filter(&starts_under_until?(&1, until))
 
     IntervalSet.new(intervals, coalesce: coalesce_opt(opts))
   end
@@ -5017,7 +5171,8 @@ defmodule Tempo do
   # :infinity`, `to` is nil/:undefined, and the caller has
   # supplied a `:bound` Tempo value. Iterate while every new
   # occurrence's start falls strictly before the bound's upper
-  # endpoint.
+  # endpoint — a period that starts before it can select days at
+  # or past it (a week expanded to its days), so those are dropped.
   def to_interval(
         %Tempo.Interval{
           recurrence: :infinity,
@@ -5038,14 +5193,15 @@ defmodule Tempo do
             {from, interval} = fill_selection_anchor(from, interval)
 
             intervals =
-              iterate_recurrence(
-                from,
+              from
+              |> iterate_recurrence(
                 duration,
                 occurrence_end_fn(from, duration, interval),
                 &under_bound?(&1, bound_to),
                 selection_fn(interval, duration),
                 interval.metadata
               )
+              |> Enum.filter(&starts_under_bound?(&1, bound_to))
 
             IntervalSet.new(intervals, coalesce: coalesce_opt(opts))
 
@@ -5232,19 +5388,22 @@ defmodule Tempo do
   end
 
   # A `%Tempo.RecurrenceSet{}` materialises each member against the `:bound`
-  # (recurrences) or as-is (concrete members), tags each occurrence with the
-  # member's own metadata (a holiday name, say), and unions them into one set.
-  def to_interval(%Tempo.RecurrenceSet{members: members}, opts) do
-    members
-    |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
-      case recurrence_set_member(member, opts) do
-        {:ok, occurrences} -> {:cont, {:ok, acc ++ occurrences}}
-        {:error, _} = error -> {:halt, error}
-      end
-    end)
-    |> case do
-      {:ok, intervals} -> IntervalSet.new(intervals)
-      {:error, _} = error -> error
+  # (recurrences and nested sets) or as-is (concrete members), tags each
+  # occurrence with the member's own metadata (a holiday name, say), and unions
+  # them into one set carrying the recurrence set's own metadata. Conditional
+  # members resolve in a second pass over the others' occurrences.
+  def to_interval(%Tempo.RecurrenceSet{members: members, metadata: metadata}, opts) do
+    with {:ok, occurrences} <- set_member_occurrences(members, opts) do
+      IntervalSet.new(occurrences, metadata: metadata)
+    end
+  end
+
+  # A value's metadata (`new/1`'s `:metadata`) moves to the interval or
+  # intervals it materialises to, so each endpoint is the value alone and
+  # compares equal to it written plainly.
+  def to_interval(%Tempo{metadata: metadata} = tempo, opts) when map_size(metadata) > 0 do
+    with {:ok, materialised} <- to_interval(%{tempo | metadata: %{}}, opts) do
+      {:ok, with_value_metadata(materialised, metadata)}
     end
   end
 
@@ -5305,17 +5464,19 @@ defmodule Tempo do
     {:error, MaterialisationError.exception(value: value, reason: :bare_duration)}
   end
 
-  # The `:bound` supplies the anchor in its own (typically Gregorian) calendar.
-  # When the recurrence's selection resolves in another calendar — an IXDTF
+  # The `:bound` supplies the anchor, at its start. The anchor is aligned to the
+  # start of the cadence period it sits in, so the recurrence walks whole
+  # calendar periods — a `P1Y` cadence whole calendar years, `P1M` whole months,
+  # `P1W` whole weeks from their Monday — and every period the bound overlaps is
+  # walked; the occurrences are then kept by start within the bound. Unaligned, a
+  # period boundary falls mid-period, and the last period the bound reaches into
+  # is never walked (`R/../P1Y/FL1M15DN` over September 2026 to March 2027 lost
+  # 15 January 2027). When the selection resolves in another calendar — an IXDTF
   # `[u-ca=…]` suffix on the whole expression, carried on the `repeat_rule` —
-  # the anchor is converted into that calendar and aligned to the cadence
-  # period it sits in, so the recurrence walks whole calendar periods (a `P1Y`
-  # cadence walks whole calendar years) and the selection resolves in-calendar,
-  # with the bound intersection converting back. Aligning matters because a
-  # mid-year anchor puts each period boundary mid-year, where it can coincide
-  # with the Gregorian bound and drop the very year the selection needed. This
-  # makes `R/../P1Y/FL1M1DN[u-ca=persian]` behave like the calendared-anchor
-  # form `R/<persian new year>/P1Y[u-ca=persian]`.
+  # the anchor is converted into that calendar first, so the periods are that
+  # calendar's and the selection resolves in-calendar, with the bound
+  # intersection converting back. This makes `R/../P1Y/FL1M1DN[u-ca=persian]`
+  # behave like the calendared-anchor form `R/<persian new year>/P1Y[u-ca=persian]`.
   defp anchor_in_repeat_calendar(
          %Tempo{} = anchor,
          %Tempo.Interval{
@@ -5325,16 +5486,33 @@ defmodule Tempo do
        )
        when calendar not in [nil, Calendrical.Gregorian, Calendrical.ISOWeek] do
     with {:ok, %Tempo{} = converted} <- to_calendar(anchor, calendar),
-         {unit, _span} <- resolution(converted),
-         %Tempo{} = period <- at_resolution(converted, freq_of(cadence)),
-         %Tempo{} = aligned <- at_resolution(period, unit) do
+         %Tempo{} = aligned <- aligned_to_cadence(converted, cadence) do
       tag_anchor_calendar(aligned, calendar)
     else
       _other -> anchor
     end
   end
 
+  defp anchor_in_repeat_calendar(%Tempo{} = anchor, %Tempo.Interval{
+         duration: %Tempo.Duration{} = cadence
+       }) do
+    case aligned_to_cadence(anchor, cadence) do
+      %Tempo{} = aligned -> aligned
+      _other -> anchor
+    end
+  end
+
   defp anchor_in_repeat_calendar(%Tempo{} = anchor, _interval), do: anchor
+
+  # The start of the cadence period an anchor sits in, at the anchor's own
+  # resolution: 1 April 2026 for a month, 30 March 2026 (its week's Monday) for
+  # a week holding 3 April.
+  defp aligned_to_cadence(%Tempo{} = anchor, cadence) do
+    with {unit, _span} <- resolution(anchor),
+         %Tempo{} = period <- at_resolution(anchor, freq_of(cadence)) do
+      at_resolution(period, unit)
+    end
+  end
 
   # Attach the calendar's IXDTF `u-ca` identifier to the synthesised anchor's
   # extended metadata, so each materialised occurrence round-trips as
@@ -5385,20 +5563,18 @@ defmodule Tempo do
     end
   end
 
-  # A calendar-aligned unanchored recurrence walks whole calendar years, so the
-  # year it anchors on can place occurrences just outside the Gregorian bound
-  # window — before `bound_from` (a year-start anchor's first year) or past
-  # `bound_to` (a calendar year straddling the window's end). Trim the
-  # materialised set to `[bound_from, bound_to)`. Only the calendar case shifts
-  # its anchor off the bound's start, so a Gregorian recurrence — whose anchor
-  # is the bound's start and whose `before_dtstart`/termination already bound
-  # it — is passed through untouched, preserving its exact behaviour.
+  # An unanchored recurrence keeps the occurrences that start in its bound,
+  # `[bound_from, bound_to)`. The periods it walks can place one outside: a
+  # calendar-aligned recurrence walks whole calendar years, so the year it
+  # anchors on can start before `bound_from` or straddle `bound_to`, and in any
+  # calendar a period that starts inside the bound can select a day at or after
+  # its end (`R/../P1Y/FL9M23DN` over `[1 Sep, 23 Sep)` selects 23 September).
+  # Trim the materialised set to the window.
   defp filter_to_bound_window(
          {:ok, %Tempo.IntervalSet{} = set},
-         %Tempo.Interval{repeat_rule: %Tempo{calendar: calendar}},
+         %Tempo.Interval{repeat_rule: %Tempo{}},
          bound
-       )
-       when calendar not in [nil, Calendrical.Gregorian, Calendrical.ISOWeek] do
+       ) do
     with {:ok, bound_to} <- bound_upper(bound),
          bound_from = bound_lower(bound),
          trimmed =
@@ -5821,6 +5997,16 @@ defmodule Tempo do
   defp under_bound?(%Tempo{} = from, %Tempo{} = bound_to) do
     Compare.compare_endpoints(from, bound_to) == :earlier
   end
+
+  defp starts_under_bound?(%Tempo.Interval{from: %Tempo{} = from}, bound_to),
+    do: under_bound?(from, bound_to)
+
+  defp starts_under_bound?(_occurrence, _bound_to), do: true
+
+  defp starts_under_until?(%Tempo.Interval{from: %Tempo{} = from}, until),
+    do: under_until?(from, until)
+
+  defp starts_under_until?(_occurrence, _until), do: true
 
   defp at_or_after_bound?(%Tempo{} = from, %Tempo{} = bound_from) do
     Compare.compare_endpoints(from, bound_from) in [:same, :later]
@@ -6387,11 +6573,236 @@ defmodule Tempo do
   defp year_filter_matches?(:leap, year, calendar), do: calendar.leap_year?(year)
   defp year_filter_matches?(:common, year, calendar), do: not calendar.leap_year?(year)
 
+  # A recurrence set's occurrences, member by member. A set holding a conditional
+  # member (`Tempo.RecurrenceSet.keep_when/2`, `move_when/2`) resolves in two
+  # passes, since a conditional depends on the other members' occurrences.
+  defp set_member_occurrences(members, opts) do
+    if Enum.any?(members, &match?(%Conditional{}, &1)) do
+      conditional_set_occurrences(members, opts)
+    else
+      members_occurrences(members, opts)
+    end
+  end
+
+  defp members_occurrences(members, opts) do
+    members
+    |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
+      case recurrence_set_member(member, opts) do
+        {:ok, occurrences} -> {:cont, {:ok, [occurrences | acc]}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, occurrences} -> {:ok, occurrences |> Enum.reverse() |> Enum.concat()}
+      {:error, _} = error -> error
+    end
+  end
+
+  # The second pass — date-holidays' `PostRule`, generalised. Every member's
+  # occurrences over the bound widened by the conditions' reach are the tally a
+  # condition reads; each conditional resolves its own occurrences against the
+  # others' and keeps those starting in the bound. The other members materialise
+  # over the bound itself, exactly as in a set without conditionals.
+  defp conditional_set_occurrences(members, opts) do
+    {conditionals, others} = Enum.split_with(members, &match?(%Conditional{}, &1))
+
+    with :ok <- validate_conditionals(conditionals),
+         {:ok, window} <- conditional_window(conditionals, opts),
+         {:ok, first_pass} <- first_pass_occurrences(members, widened_opts(opts, window)),
+         {:ok, others_occurrences} <- members_occurrences(others, opts) do
+      tally = occurrence_tally(first_pass)
+
+      resolved =
+        for {index, %Conditional{} = conditional, occurrences} <- first_pass,
+            occurrence <- occurrences,
+            outcome <- resolve_conditional_occurrence(occurrence, conditional, index, tally),
+            in_conditional_window?(outcome, window),
+            do: outcome
+
+      {:ok, others_occurrences ++ resolved}
+    end
+  end
+
+  # A conditional names what it falls on and either the offsets it keeps `:at`
+  # or the selector it moves `:to_next`, never both.
+  defp validate_conditionals(conditionals) do
+    case Enum.reject(conditionals, &valid_conditional?/1) do
+      [] ->
+        :ok
+
+      [invalid | _] ->
+        {:error, MaterialisationError.exception(value: invalid, reason: :conditional_member)}
+    end
+  end
+
+  defp valid_conditional?(%Conditional{falls_on: falls_on, at: [_ | _] = offsets, to_next: nil})
+       when is_map(falls_on),
+       do: Enum.all?(offsets, &match?(%Tempo.Duration{}, &1))
+
+  defp valid_conditional?(%Conditional{falls_on: falls_on, at: nil, to_next: %Tempo{}})
+       when is_map(falls_on),
+       do: true
+
+  defp valid_conditional?(_conditional), do: false
+
+  # The bound, and the bound widened by the conditions' reach — each `:at` offset
+  # from either edge, and a move's search span back from the lower edge — so a
+  # condition near an edge reads the occurrences just outside it. Without a bound
+  # (or with an empty one) the members bound themselves and nothing widens.
+  defp conditional_window(conditionals, opts) do
+    case Keyword.fetch(opts, :bound) do
+      {:ok, bound} -> widened_bound_window(bound, conditionals)
+      :error -> {:ok, :none}
+    end
+  end
+
+  defp widened_bound_window(bound, conditionals) do
+    with {:ok, bound_to} <- bound_upper(bound) do
+      widened_bound_window(bound_lower(bound), bound_to, conditional_reach(conditionals))
+    end
+  end
+
+  defp widened_bound_window(nil, _bound_to, _reach), do: {:ok, :none}
+
+  defp widened_bound_window(%Tempo{} = bound_from, bound_to, {lower_reach, upper_reach}) do
+    widened_from =
+      Enum.reduce(lower_reach, bound_from, &earlier_endpoint(Math.add(bound_from, &1), &2))
+
+    widened_to = Enum.reduce(upper_reach, bound_to, &later_endpoint(Math.add(bound_to, &1), &2))
+
+    {:ok, {bound_from, bound_to, %Tempo.Interval{from: widened_from, to: widened_to}}}
+  end
+
+  defp conditional_reach(conditionals) do
+    Enum.reduce(conditionals, {[], []}, fn
+      %Conditional{to_next: nil, at: offsets}, {lower, upper} ->
+        {offsets ++ lower, offsets ++ upper}
+
+      %Conditional{to_next: selector}, {lower, upper} ->
+        {[negate_duration(selection_search_span(selector)) | lower], upper}
+    end)
+  end
+
+  defp widened_opts(opts, :none), do: opts
+
+  defp widened_opts(opts, {_bound_from, _bound_to, widened}),
+    do: Keyword.put(opts, :bound, widened)
+
+  defp in_conditional_window?(_occurrence, :none), do: true
+
+  defp in_conditional_window?(%Tempo.Interval{from: from}, {bound_from, bound_to, _widened}),
+    do: in_bound_window?(from, bound_from, bound_to)
+
+  # Every member's occurrences, a conditional's being its member's, tagged with
+  # the conditional's metadata as a nested set's are.
+  defp first_pass_occurrences(members, opts) do
+    members
+    |> Enum.with_index()
+    |> Enum.reduce_while({:ok, []}, fn {member, index}, {:ok, acc} ->
+      case recurrence_set_member(first_pass_member(member), opts) do
+        {:ok, occurrences} -> {:cont, {:ok, [{index, member, occurrences} | acc]}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, entries} -> {:ok, Enum.reverse(entries)}
+      {:error, _} = error -> error
+    end
+  end
+
+  defp first_pass_member(%Conditional{member: member, metadata: metadata}),
+    do: %Tempo.RecurrenceSet{members: [member], metadata: metadata}
+
+  defp first_pass_member(member), do: member
+
+  # Each first-pass occurrence as `{member_index, from, to, metadata}`, its extent
+  # in UTC seconds so a condition compares spans without materialising again.
+  defp occurrence_tally(first_pass) do
+    for {index, _member, occurrences} <- first_pass,
+        %Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to, metadata: metadata} <-
+          occurrences,
+        do: {index, Compare.to_utc_seconds(from), Compare.to_utc_seconds(to), metadata}
+  end
+
+  # Keep an occurrence when every day `:at` from its start falls on another
+  # member's occurrence; move one that falls on such an occurrence to the next
+  # span its selector gives. An occurrence never falls on its own member's.
+  defp resolve_conditional_occurrence(
+         occurrence,
+         %Conditional{to_next: nil} = conditional,
+         index,
+         tally
+       ) do
+    %Conditional{at: offsets, falls_on: falls_on} = conditional
+
+    if Enum.all?(offsets, &falls_on?(offset_span(occurrence, &1), falls_on, index, tally)),
+      do: [occurrence],
+      else: []
+  end
+
+  defp resolve_conditional_occurrence(occurrence, %Conditional{} = conditional, index, tally) do
+    %Conditional{falls_on: falls_on, to_next: selector} = conditional
+
+    if falls_on?(occurrence_span(occurrence), falls_on, index, tally),
+      do: [next_selected(occurrence, selector)],
+      else: [occurrence]
+  end
+
+  defp occurrence_span(%Tempo.Interval{from: from, to: to}),
+    do: {Compare.to_utc_seconds(from), Compare.to_utc_seconds(to)}
+
+  # The span of the value `offset` from an occurrence's start, at the start's
+  # resolution (a day for a day's occurrence).
+  defp offset_span(%Tempo.Interval{from: from}, offset) do
+    case to_interval(Math.add(from, offset)) do
+      {:ok, %Tempo.Interval{} = span} -> occurrence_span(span)
+      _no_single_span -> :none
+    end
+  end
+
+  defp falls_on?({from_seconds, to_seconds}, falls_on, index, tally) do
+    Enum.any?(tally, fn {other, other_from, other_to, metadata} ->
+      other != index and other_from < to_seconds and from_seconds < other_to and
+        metadata_includes?(metadata, falls_on)
+    end)
+  end
+
+  defp falls_on?(:none, _falls_on, _index, _tally), do: false
+
+  defp metadata_includes?(metadata, pattern) do
+    Enum.all?(pattern, fn {key, value} -> Map.fetch(metadata, key) == {:ok, value} end)
+  end
+
+  # The first span `selector` gives after the occurrence, searched over a week
+  # for a weekday and a year otherwise; with none, the occurrence stays.
+  defp next_selected(
+         %Tempo.Interval{to: after_occurrence, metadata: metadata} = occurrence,
+         selector
+       ) do
+    search = %Tempo.Interval{
+      from: after_occurrence,
+      to: Math.add(after_occurrence, selection_search_span(selector))
+    }
+
+    with {:ok, %IntervalSet{} = selected} <- select(search, selector),
+         %Tempo.Interval{} = next <- IntervalSet.first(selected) do
+      %{next | metadata: metadata}
+    else
+      _nothing_selected -> occurrence
+    end
+  end
+
+  defp selection_search_span(%Tempo{time: [day_of_week: _]}), do: %Tempo.Duration{time: [day: 7]}
+  defp selection_search_span(_selector), do: %Tempo.Duration{time: [year: 1]}
+
   # One recurrence-set member's occurrences: an interval member (a recurrence, or
   # a concrete interval) carries its metadata onto each occurrence; a plain
-  # `%Tempo{}` member is a concrete value, materialised to its span. Anything
-  # else is not a member, so it is an error rather than a raise.
-  defp recurrence_set_member(%Tempo.Interval{metadata: metadata} = member, opts) do
+  # `%Tempo{}` member is a concrete value, materialised to its span. A nested
+  # recurrence set is one member (a holiday and its observed days): its own
+  # metadata tags every occurrence its members produce. Anything else is not a
+  # member, so it is an error rather than a raise.
+  defp recurrence_set_member(%module{metadata: metadata} = member, opts)
+       when module in [Tempo.Interval, Tempo.RecurrenceSet] do
     with {:ok, materialised} <- to_interval(member, opts) do
       occurrences =
         materialised
@@ -6414,6 +6825,19 @@ defmodule Tempo do
 
   defp recurrence_set_occurrences(%Tempo.Interval{} = interval), do: [interval]
   defp recurrence_set_occurrences(%Tempo.IntervalSet{} = set), do: IntervalSet.to_list(set)
+
+  # A value's metadata onto the interval, or each interval, it materialised to.
+  defp with_value_metadata(%Tempo.Interval{} = interval, metadata),
+    do: merge_member_metadata(interval, metadata)
+
+  defp with_value_metadata(%IntervalSet{} = set, metadata) do
+    labelled = IntervalSet.map(set, &merge_member_metadata(&1, metadata))
+
+    case IntervalSet.new(labelled, metadata: IntervalSet.metadata(set)) do
+      {:ok, labelled_set} -> labelled_set
+      {:error, _} -> set
+    end
+  end
 
   # Carry a recurrence-set member's metadata (e.g. a holiday name) onto each
   # occurrence it produces; an occurrence's own metadata wins any conflict. The

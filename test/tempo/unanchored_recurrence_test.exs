@@ -7,6 +7,7 @@ defmodule Tempo.UnanchoredRecurrenceTest do
   alias Tempo.IntervalEndpointsError
   alias Tempo.IntervalSet
   alias Tempo.Operations
+  alias Tempo.RecurrenceSet
   alias Tempo.RRule
   alias Tempo.UnboundedRecurrenceError
 
@@ -110,6 +111,66 @@ defmodule Tempo.UnanchoredRecurrenceTest do
 
     test "an ordinary interval is unaffected" do
       assert {:ok, ~o"2026Y6M1D/7M1D"} = Tempo.to_interval(~o"2026Y6M1D/7M1D")
+    end
+  end
+
+  describe "the bound is half-open, [bound_from, bound_to)" do
+    defp starts(set),
+      do: set |> IntervalSet.to_list() |> Enum.map(&Tempo.to_iso8601(Interval.from(&1)))
+
+    test "an occurrence starting at the bound's end is outside it" do
+      assert {:ok, set} =
+               Tempo.to_interval(~o"R/../P1Y/FL9M23DN", bound: ~o"2026-09-01/2026-09-23")
+
+      assert starts(set) == []
+    end
+
+    test "a bound starting mid-period still reaches the last period it overlaps" do
+      assert {:ok, monthly} =
+               Tempo.to_interval(~o"R/../P1M/FL15DN", bound: ~o"2026-01-20/2026-03-20")
+
+      assert starts(monthly) == ["2026Y2M15D", "2026Y3M15D"]
+
+      assert {:ok, yearly} =
+               Tempo.to_interval(~o"R/../P1Y/FL1M15DN", bound: ~o"2026-09-01/2027-03-01")
+
+      assert starts(yearly) == ["2027Y1M15D"]
+
+      assert {:ok, weekly} =
+               Tempo.to_interval(~o"R/../P1W/FL4KN", bound: ~o"2026-04-03/2026-04-17")
+
+      assert starts(weekly) == ["2026Y4M9D", "2026Y4M16D"]
+    end
+
+    test "a bound aligned to the cadence is unchanged" do
+      assert {:ok, set} = Tempo.to_interval(~o"R/../P1Y/FL12M25DN", bound: ~o"2026Y")
+      assert starts(set) == ["2026Y12M25D"]
+    end
+
+    test "an anchored recurrence's expanded days stop at the bound's end" do
+      assert {:ok, set} =
+               Tempo.to_interval(~o"R/2026-12-28/P1W/FL{1..7}KN",
+                 bound: ~o"2026-12-20/2027-01-09"
+               )
+
+      assert List.last(starts(set)) == "2027Y1M8D"
+      assert length(starts(set)) == 12
+    end
+
+    test "an UNTIL bounds the expanded days inclusively" do
+      {:ok, rule} =
+        RRule.parse("FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU;UNTIL=20270108", from: ~o"2026-12-28")
+
+      assert {:ok, set} = Tempo.to_interval(rule)
+      assert List.last(starts(set)) == "2027Y1M8D"
+    end
+
+    test "a diary running September to March meets New Year's Day" do
+      {:ok, diary} = IntervalSet.new([Tempo.to_interval!(~o"2026-09-01/2027-03-01")])
+      holidays = RecurrenceSet.new([~o"R/../P1Y/FL1M1DN"])
+
+      assert {:ok, clashes} = Tempo.intersection(diary, holidays)
+      assert starts(clashes) == ["2027Y1M1D"]
     end
   end
 

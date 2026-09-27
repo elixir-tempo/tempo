@@ -105,15 +105,17 @@ defmodule Tempo.IntervalSet do
   @doc """
   Construct a `t:t/0` from a list of intervals.
 
-  The input list is sorted ascending by `from` endpoint and
-  coalesced — adjacent or overlapping intervals are merged under
-  the half-open `[from, to)` convention.
+  The input list is sorted ascending by `from` endpoint; with
+  `coalesce: true`, adjacent or overlapping intervals are merged
+  under the half-open `[from, to)` convention.
 
   ### Arguments
 
-  * `intervals` is a list of `t:Tempo.Interval.t/0` values. Intervals
-    missing an endpoint are rejected, whether it is `:undefined` (an
-    ISO 8601 open interval) or `nil` (an unanchored recurrence).
+  * `intervals` is a list of `t:Tempo.Interval.t/0` values. One
+    written as a start and a duration, or a duration and an end, is
+    resolved to its endpoints. Intervals missing an endpoint are
+    rejected, whether it is `:undefined` (an ISO 8601 open interval)
+    or `nil` (an unanchored recurrence).
 
   ### Options
 
@@ -148,6 +150,8 @@ defmodule Tempo.IntervalSet do
   """
   @spec new([Interval.t()], keyword()) :: {:ok, t()} | {:error, term()}
   def new(intervals, opts \\ []) when is_list(intervals) do
+    intervals = Enum.map(intervals, &Interval.resolve_duration_form/1)
+
     with :ok <- validate_all_bounded(intervals) do
       # `coalesce: false` is the default: IntervalSet preserves
       # member identity by design. Callers who want canonical
@@ -504,6 +508,31 @@ defmodule Tempo.IntervalSet do
   """
   @spec bounded?(t()) :: boolean()
   def bounded?(%__MODULE__{backend: backend, intervals: state}), do: backend.bounded?(state)
+
+  @doc """
+  Returns the set's own metadata.
+
+  A set materialised from a `t:Tempo.RecurrenceSet.t/0` carries the recurrence
+  set's metadata (the territory a holiday set covers, say). Each member keeps
+  its own, read with `Tempo.Interval.metadata/1`.
+
+  ### Arguments
+
+  * `set` is a `t:t/0`.
+
+  ### Returns
+
+  * The metadata map, `%{}` when none was given.
+
+  ### Examples
+
+      iex> set = Tempo.IntervalSet.new!([], metadata: %{source: "diary"})
+      iex> Tempo.IntervalSet.metadata(set)
+      %{source: "diary"}
+
+  """
+  @spec metadata(t()) :: map()
+  def metadata(%__MODULE__{metadata: metadata}), do: metadata
 
   # The refusal gate for aggregate operations: raising (not an error
   # tuple) because these functions have no error shape and a silent

@@ -6,6 +6,7 @@ defmodule Tempo.NewTest do
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.Math
+  alias Tempo.RecurrenceSet
 
   # `Tempo.new/1` is the developer-facing constructor for
   # `%Tempo{}`. Unlike the `~o` sigil (compile-time literal) and
@@ -134,9 +135,74 @@ defmodule Tempo.NewTest do
       assert t.qualification == :approximate
     end
 
-    test "metadata attaches to :extended.tags" do
-      {:ok, t} = Tempo.new(year: 2026, metadata: %{"source" => "form"})
-      assert t.extended.tags == %{"source" => "form"}
+    test "metadata is the value's own, not part of its ISO 8601 form" do
+      {:ok, t} = Tempo.new(year: 2026, metadata: %{source: "form", name: "Christmas Day"})
+
+      assert Tempo.metadata(t) == %{source: "form", name: "Christmas Day"}
+      assert t.extended == nil
+      assert Tempo.to_iso8601(t) == "2026Y"
+    end
+
+    test "a value with metadata inspects as its sigil plus a decoration" do
+      {:ok, t} = Tempo.new(year: 2026, metadata: %{source: "form"})
+      assert inspect(t) == ~s|#Tempo<~o"2026Y" · 1 metadata key(s)>|
+    end
+
+    test "metadata that is not a map is an error" do
+      assert {:error, %ArgumentError{}} = Tempo.new(year: 2026, metadata: [source: "form"])
+    end
+
+    test "tags are IXDTF suffix tags, and round-trip" do
+      {:ok, t} = Tempo.new(year: 2026, tags: %{"source" => "form", "x-kind" => ["a1", "b2"]})
+
+      assert t.extended.tags == %{"source" => ["form"], "x-kind" => ["a1", "b2"]}
+      assert Tempo.metadata(t) == %{}
+      assert {:ok, ^t} = t |> Tempo.to_iso8601() |> Tempo.from_iso8601()
+    end
+
+    test "a tag IXDTF cannot write is an error, never a crash in to_iso8601/1" do
+      for tags <- [
+            %{source: "form"},
+            %{"Source" => "form"},
+            %{"source" => "Christmas Day"},
+            %{"source" => ""},
+            %{"u-ca" => "hebrew"},
+            [source: "form"]
+          ] do
+        assert {:error, %ArgumentError{}} = Tempo.new(year: 2026, tags: tags)
+      end
+    end
+  end
+
+  describe "metadata through materialisation" do
+    test "a value's metadata moves to the interval it materialises to" do
+      {:ok, christmas} = Tempo.new(year: 2026, month: 12, day: 25, metadata: %{name: "Christmas"})
+      {:ok, interval} = Tempo.to_interval(christmas)
+
+      assert Interval.metadata(interval) == %{name: "Christmas"}
+      assert Interval.from(interval) == ~o"2026-12-25"
+    end
+
+    test "a selection's metadata tags every span it materialises to" do
+      value = Tempo.put_metadata(~o"2026Y{6,12}M", %{kind: :solstice_month})
+      {:ok, set} = Tempo.to_interval(value)
+
+      assert set |> IntervalSet.to_list() |> Enum.map(&Interval.metadata/1) ==
+               [%{kind: :solstice_month}, %{kind: :solstice_month}]
+    end
+
+    test "a labelled value is a labelled recurrence-set member" do
+      {:ok, independence} = Tempo.new(year: 2026, month: 7, day: 4, metadata: %{name: "July 4"})
+      {:ok, set} = Tempo.to_interval_set(RecurrenceSet.new([independence]))
+
+      assert [occurrence] = IntervalSet.to_list(set)
+      assert Interval.metadata(occurrence) == %{name: "July 4"}
+    end
+
+    test "metadata and put_metadata refuse what is not a Tempo value" do
+      assert {:error, %ArgumentError{}} = Tempo.metadata(:not_a_value)
+      assert {:error, %ArgumentError{}} = Tempo.put_metadata(~o"2026Y", name: "x")
+      assert {:error, %ArgumentError{}} = Tempo.put_metadata(:not_a_value, %{})
     end
   end
 
