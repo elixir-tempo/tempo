@@ -5424,7 +5424,7 @@ defmodule Tempo do
   # can reach across, and keeps the occurrences that start inside the bound.
   defp materialise_from_bound(interval, anchor, bound, opts) do
     case window_periods(interval) do
-      0 ->
+      {0, 0} ->
         %{interval | from: anchor_in_repeat_calendar(anchor, interval)}
         |> to_interval(opts)
         |> filter_to_bound_window(interval, bound)
@@ -5438,12 +5438,12 @@ defmodule Tempo do
          %Tempo.Interval{duration: cadence} = interval,
          anchor,
          bound,
-         periods,
+         {periods_before, periods_after},
          opts
        ) do
     with {:ok, bound_to} <- bound_upper(bound) do
-      widened_from = add_n_durations(anchor, negate_duration(cadence), periods)
-      widened_to = add_n_durations(bound_to, cadence, periods)
+      widened_from = add_n_durations(anchor, negate_duration(cadence), periods_before)
+      widened_to = add_n_durations(bound_to, cadence, periods_after)
       widened = %Tempo.Interval{from: widened_from, to: widened_to}
 
       %{interval | from: anchor_in_repeat_calendar(widened_from, interval)}
@@ -5452,24 +5452,28 @@ defmodule Tempo do
     end
   end
 
-  # How many cadence periods either side of a bound a §12.10 window can reach
-  # across: its durations summed (a nested window adds its own) over the shortest
-  # the cadence period can be, plus one for the period itself. Zero when the
-  # selection has no window, or the cadence is finer than a day.
+  # How many cadence periods before and after a bound a §12.10 window can reach
+  # into it from: a window running forward from an earlier period, or back from
+  # a later one. Each direction's durations are summed (a nested window adds its
+  # own) over the shortest the cadence period can be, plus one for the period
+  # itself; none when the selection has no window that way, or the cadence is
+  # finer than a day.
   defp window_periods(%Tempo.Interval{
          repeat_rule: %Tempo{time: [selection: selection]},
          duration: %Tempo.Duration{} = cadence
        }) do
-    reach = selection |> window_durations() |> Enum.map(&duration_days_ceiling/1) |> Enum.sum()
+    durations = window_durations(selection)
+    floor = cadence_days_floor(cadence)
 
-    case {reach, cadence_days_floor(cadence)} do
-      {0, _floor} -> 0
-      {_reach, 0} -> 0
-      {reach, floor} -> 1 + div(reach, floor)
-    end
+    {periods_reaching(reach_days(durations, :forward), floor),
+     periods_reaching(reach_days(durations, :backward), floor)}
   end
 
-  defp window_periods(_interval), do: 0
+  defp window_periods(_interval), do: {0, 0}
+
+  defp periods_reaching(0, _floor), do: 0
+  defp periods_reaching(_reach, 0), do: 0
+  defp periods_reaching(reach, floor), do: 1 + div(reach, floor)
 
   defp window_durations(selection) when is_list(selection) do
     Enum.flat_map(selection, fn
@@ -5485,13 +5489,19 @@ defmodule Tempo do
   defp window_inner_selection(%Tempo{time: time}) when is_list(time), do: time
   defp window_inner_selection(_inner), do: []
 
-  # The most days a duration can span (a year is at most 366, a month 31); any
-  # time-of-day part counts as a whole day.
-  defp duration_days_ceiling(%Tempo.Duration{time: time}) do
-    Enum.reduce(time, 0, fn {unit, amount}, total ->
-      total + Kernel.ceil(abs(amount) * max_days_per(unit))
-    end)
+  # The most days the windows' durations can span one way (a year is at most
+  # 366 days, a month 31); any time-of-day part counts as a whole day.
+  defp reach_days(durations, direction) do
+    for %Tempo.Duration{time: time} <- durations,
+        {unit, amount} <- time,
+        reaches?(amount, direction),
+        reduce: 0 do
+      total -> total + Kernel.ceil(abs(amount) * max_days_per(unit))
+    end
   end
+
+  defp reaches?(amount, :forward), do: amount > 0
+  defp reaches?(amount, :backward), do: amount < 0
 
   defp max_days_per(:year), do: 366
   defp max_days_per(:month), do: 31
@@ -6178,10 +6188,16 @@ defmodule Tempo do
   # interval from the domain set), unioning the occurrences. The domain year is
   # passed as the `:bound`, so the existing bound-materialisation projects the
   # selection onto it.
-  defp reduce_domain_occurrences(domain_intervals, interval, opts) do
+  # Adjacent domain periods — each starting where the one before ends, as the
+  # years of `{2020Y..2024Y}` do — run as one recurrence across them, so the
+  # periods a window must look into beyond its bound are looked into once per
+  # run rather than once per period. A run spans only domain periods, so it
+  # keeps exactly the occurrences the periods would each keep.
+  defp reduce_domain_occurrences(domain_intervals, %Tempo.Interval{} = interval, opts) do
     domain_intervals
-    |> Enum.reduce_while({:ok, []}, fn domain_interval, {:ok, acc} ->
-      bound = Interval.from(domain_interval)
+    |> adjacent_periods()
+    |> Enum.reduce_while({:ok, []}, fn {first, last}, {:ok, acc} ->
+      bound = %Tempo.Interval{from: Interval.from(first), to: Interval.to(last)}
 
       case to_interval(%{interval | from: nil}, Keyword.put(opts, :bound, bound)) do
         {:ok, %Tempo.IntervalSet{} = set} -> {:cont, {:ok, acc ++ IntervalSet.to_list(set)}}
@@ -6193,6 +6209,29 @@ defmodule Tempo do
       {:error, _} = err -> err
     end
   end
+
+  # The runs of periods each starting where the one before ends, as
+  # `{first_period, last_period}` pairs in order.
+  defp adjacent_periods([]), do: []
+
+  defp adjacent_periods([first | rest]) do
+    {runs, run} =
+      Enum.reduce(rest, {[], {first, first}}, fn period, {runs, {run_first, run_last}} ->
+        if adjacent_period?(run_last, period),
+          do: {runs, {run_first, period}},
+          else: {[{run_first, run_last} | runs], {period, period}}
+      end)
+
+    Enum.reverse([run | runs])
+  end
+
+  defp adjacent_period?(%Tempo.Interval{to: %Tempo{} = previous_to}, %Tempo.Interval{
+         from: %Tempo{} = next_from
+       }) do
+    Compare.compare_endpoints(previous_to, next_from) == :same
+  end
+
+  defp adjacent_period?(_previous, _next), do: false
 
   # A caller's `:bound` as a half-open `{bound_from, bound_to}` start window, or
   # `:none` when no bound is given and the domain alone bounds the recurrence.
@@ -6584,81 +6623,64 @@ defmodule Tempo do
   # A concrete value with a selection (ISO 8601-2 §12.11): the units before the
   # selection are its context — `2018Y9M` in `2018Y9ML1K1IN`, "the first Monday
   # of September 2018" — and the units after it apply to every date it selects
-  # (§12.11.2). It materialises as the recurrence over the context's periods,
-  # one period at a time, so a set or mask of years
+  # (§12.11.2). Each period of the context (a year, or a month of a year)
+  # resolves the selection once, so a set or mask of years
   # (`XXX{0,2,4,6,8}Y11MLLL1K1IN/P9DN2K1IN`, US Election Day) costs one
-  # selection per period rather than a walk through the years' days.
+  # selection per year it names. A `:bound` keeps the dates that start in it
+  # and narrows the years before any is resolved; a context without a year
+  # takes its years from the bound, so it needs one.
   defp materialise_selection(%Tempo{} = tempo, context, selection, trailing, opts) do
-    case selection_recurrence(tempo, context, selection, opts) do
-      {:ok, %Tempo.Interval{} = recurrence} ->
-        recurrence
-        |> to_interval(opts)
-        |> with_trailing_units(trailing)
-
-      {:ok, :no_periods} ->
-        IntervalSet.new([])
-
-      {:error, _reason} = error ->
-        error
-    end
-  end
-
-  # A context that states its years is the recurrence's domain, each period one
-  # member of it (a year, or a month of a year), so a position (`I`) counts
-  # within the member. A context without a year recurs in every period of its
-  # finest unit, limited by the rest of the context, and so needs a `:bound`.
-  defp selection_recurrence(%Tempo{} = tempo, context, selection, opts) do
+    rule = %{tempo | time: [selection: selection]}
     cadence = %Tempo.Duration{time: [{selection_cadence_unit(context), 1}]}
-
-    case {Keyword.get(context, :year), Keyword.has_key?(opts, :bound)} do
-      {year, false} when year in [nil, :any] ->
-        {:error,
-         UnboundedRecurrenceError.exception(
-           reason:
-             "#{inspect(tempo)} selects in every year, so it needs a :bound — " <>
-               "any Tempo value that limits the years."
-         )}
-
-      {year, true} when year in [nil, :any] ->
-        context_rule = Enum.reject(context, &match?({:year, :any}, &1))
-
-        {:ok,
-         %Tempo.Interval{
-           recurrence: :infinity,
-           duration: cadence,
-           repeat_rule: %{tempo | time: [selection: context_rule ++ selection]}
-         }}
-
-      {years, _bound?} ->
-        selection_domain(tempo, context, years, selection, cadence)
-    end
-  end
-
-  defp selection_domain(%Tempo{calendar: calendar} = tempo, context, years, selection, cadence) do
     finer_context = Keyword.delete(context, :year)
 
-    members =
-      for year <- context_years(years, calendar),
+    with {:ok, window} <- domain_bound_window(opts),
+         {:ok, years} <- selection_years(tempo, Keyword.get(context, :year), window) do
+      for year <- years,
           member <- context_members(%{tempo | time: [{:year, year} | finer_context]}),
-          do: member
-
-    case members do
-      [] ->
-        {:ok, :no_periods}
-
-      members ->
-        {:ok,
-         %Tempo.Interval{
-           from: %Tempo.Set{type: :all, set: members},
-           recurrence: :infinity,
-           duration: cadence,
-           repeat_rule: %{tempo | time: [selection: selection]}
-         }}
+          occurrence <- member_selection(member, rule, cadence) do
+        occurrence
+      end
+      |> IntervalSet.new()
+      |> keep_occurrences_in_window(window)
+      |> with_trailing_units(trailing)
     end
   end
 
-  # The years a context states: a year, a list of years and ranges, or a mask
-  # (`202XY`, `XXX{0,2,4,6,8}Y`) standing for the years it matches.
+  # The dates the selection picks in one period of the context: the period,
+  # filled down to the grain the selection names, as the one candidate the
+  # selection resolves in.
+  defp member_selection(%Tempo{} = member, rule, cadence) do
+    {anchor, recurrence} =
+      fill_selection_anchor(member, %Tempo.Interval{from: member, repeat_rule: rule})
+
+    %Tempo.Interval{from: anchor, to: Math.add(anchor, cadence)}
+    |> Selection.apply(rule, freq_of(cadence), origin_day: origin_day_of(recurrence))
+    |> resize_selected_occurrences(true)
+  end
+
+  # The years a context names — a year, a list of years and ranges, a mask
+  # (`202XY`, `XXX{0,2,4,6,8}Y`) standing for the years it matches — narrowed
+  # to a bound's years, which are also the years of a context that names none.
+  defp selection_years(tempo, year, :none) when year in [nil, :any] do
+    {:error,
+     UnboundedRecurrenceError.exception(
+       reason:
+         "#{inspect(tempo)} selects in every year, so it needs a :bound — " <>
+           "any Tempo value that limits the years."
+     )}
+  end
+
+  defp selection_years(%Tempo{calendar: calendar}, year, :none) do
+    {:ok, context_years(year, calendar)}
+  end
+
+  defp selection_years(%Tempo{calendar: calendar}, year, window) do
+    with {:ok, window_years} <- window_years(window, calendar) do
+      {:ok, Enum.filter(window_years, &year_named?(&1, year))}
+    end
+  end
+
   defp context_years(year, _calendar) when is_integer(year), do: [year]
 
   defp context_years({:mask, mask}, calendar) do
@@ -6671,6 +6693,34 @@ defmodule Tempo do
       %Range{} = range -> Enum.to_list(range)
       year -> context_years(year, calendar)
     end)
+  end
+
+  defp year_named?(_year, year) when year in [nil, :any], do: true
+  defp year_named?(year, named), do: Selection.year_selected?(year, named)
+
+  # The years of `calendar` a bound's window meets: from the year its start
+  # falls in to the year its end does.
+  defp window_years({%Tempo{} = bound_from, %Tempo{} = bound_to}, calendar) do
+    with {:ok, first} <- year_in_calendar(bound_from, calendar),
+         {:ok, last} <- year_in_calendar(bound_to, calendar) do
+      {:ok, Enum.to_list(first..last//1)}
+    end
+  end
+
+  defp window_years(_window, _calendar), do: {:error, empty_bound_error()}
+
+  defp year_in_calendar(%Tempo{calendar: calendar, time: time}, calendar) do
+    case Keyword.get(time, :year) do
+      year when is_integer(year) -> {:ok, year}
+      _no_year -> {:error, empty_bound_error()}
+    end
+  end
+
+  defp year_in_calendar(%Tempo{} = endpoint, calendar) do
+    with %Tempo{} = day <- at_resolution(endpoint, :day),
+         {:ok, %Tempo{} = converted} <- to_calendar(day, calendar) do
+      year_in_calendar(converted, calendar)
+    end
   end
 
   # Each member of a context with a set of finer values (`2018Y{3,9}M`) is its

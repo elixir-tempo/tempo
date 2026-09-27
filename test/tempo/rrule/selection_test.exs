@@ -686,6 +686,25 @@ defmodule Tempo.RRule.SelectionTest do
       assert holiday_dates("R/../P1Y/FLLL(easter)eN/-P7DN5K-1IN") == ["2026-04-03"]
     end
 
+    test "a window reaches into the bound from the year either side" do
+      # The first Friday in the five days from 30 December 2025 is 2 January
+      # 2026, and the last Tuesday in the five days before 3 January 2027 is
+      # 29 December 2026.
+      assert holiday_dates("R/../P1Y/FLLL12M30DN/P5DN5K1IN") == ["2026-01-02"]
+      assert holiday_dates("R/../P1Y/FLLL1M3DN/-P5DN2K-1IN") == ["2026-12-29"]
+    end
+
+    test "a window keeps what starts in its domain's years, across and between them" do
+      window = "/P1Y/FLLL12M30DN/P5DN5K1IN"
+
+      assert holiday_dates("R/{2025Y..2027Y}" <> window, ~o"2020Y/2030Y") ==
+               ["2025-01-03", "2026-01-02", "2027-01-01", "2027-12-31"]
+
+      # 2026 is outside the domain, so 2 January 2026 is not kept
+      assert holiday_dates("R/{2025Y,2027Y}" <> window, ~o"2020Y/2030Y") ==
+               ["2025-01-03", "2027-01-01", "2027-12-31"]
+    end
+
     test "a terminal window is one interval spanning its duration" do
       {:ok, rule} = Tempo.from_iso8601("R/../P1Y/FLL3K4IN/P5DN")
       {:ok, set} = Tempo.to_interval(rule, bound: ~o"2026Y")

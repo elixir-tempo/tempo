@@ -10,6 +10,8 @@
 
 * `Tempo.parse/2`'s `:calendar` option is a calendar module, `Calendar.ISO` by default, as Calendrical 1.4's is: a CLDR calendar name such as `:hebrew` returns an error.
 
+* A recurrence whose selection has a §12.10 window looks into the period before its bound only for a forward window, and the period after only for a backward one, and a domain runs its adjacent periods as one recurrence. Results are unchanged.
+
 * A recurrence selection that moves a candidate to several dates (weekday, month-day, week and window expansions) finds the candidate's own day numbers once, and a move onto its own date asks the calendar nothing — about a third fewer calendar calls for a lunisolar calendar.
 
 * Traditional lunisolar months resolve through Calendrical's `ordinal_month_from_traditional/2`, dates validate and convert through `Calendrical.iso_days/4`, and a day that fits every month of a calendar skips the per-year month length. The lunisolar holiday workload runs in 1.3 s instead of 2.1 s, with identical results.
@@ -58,7 +60,7 @@
 
 * A calendar week (`w`) holds the days Calendrical gives it, so a Hebrew, Islamic, Julian or other week cut short at the start or end of its year spans only its own days (`5787Y1w` is 1 Tishri alone), and its day of the week (`K`) is ISO 8601's. Every Calendrical calendar now numbers `w` weeks.
 
-* A value holding a selection materialises one period of its context at a time (ISO 8601-2 §12.11): `2018Y3ML1K1IN` is 5 March 2018 and `2018Y9ML1K1IN/P5D` the five days from it, where both raised, and US Election Day in any even year takes milliseconds against a bound, where it ran for minutes.
+* A value holding a selection materialises one period of its context at a time (ISO 8601-2 §12.11): `2018Y3ML1K1IN` is 5 March 2018 and `2018Y9ML1K1IN/P5D` the five days from it, where both raised, and US Election Day in any even year takes under a millisecond against a few years' bound, where it ran for minutes.
 
 * A year mask with a digit set (`XXX{0,2,4,6,8}Y`) no longer raises `FunctionClauseError`: `Tempo.Mask` bounds and matches a digit set.
 

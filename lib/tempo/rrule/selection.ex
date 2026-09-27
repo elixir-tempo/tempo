@@ -649,17 +649,18 @@ defmodule Tempo.RRule.Selection do
 
   defp year_of(%Interval{from: %Tempo{time: time}}), do: Keyword.get(time, :year)
 
-  # Whether `year` is one a year selection lists: a year number, a mask
-  # matched digit by digit, any year (`X*Y`), or a list of them (ranges
-  # already expanded).
-  defp year_selected?(year, _years) when not is_integer(year), do: false
-  defp year_selected?(_year, :any), do: true
-  defp year_selected?(year, {:mask, mask}), do: Mask.matches_mask?(year, mask)
+  @doc false
+  # Whether `year` is one a year selection lists: a year number, a range, a
+  # mask matched digit by digit, any year (`X*Y`), or a list of them.
+  def year_selected?(year, _years) when not is_integer(year), do: false
+  def year_selected?(_year, :any), do: true
+  def year_selected?(year, {:mask, mask}), do: Mask.matches_mask?(year, mask)
+  def year_selected?(year, %Range{} = range), do: year in range
 
-  defp year_selected?(year, years) when is_list(years),
+  def year_selected?(year, years) when is_list(years),
     do: Enum.any?(years, &year_selected?(year, &1))
 
-  defp year_selected?(year, selected), do: year == selected
+  def year_selected?(year, selected), do: year == selected
 
   ## ------------------------------------------------------------
   ## BYMONTHDAY
