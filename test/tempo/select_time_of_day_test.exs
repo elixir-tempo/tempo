@@ -110,7 +110,7 @@ defmodule Tempo.SelectTimeOfDayTest do
       {:ok, open} = Tempo.select(workdays, [~o"T09/T12", ~o"T13/T17"])
 
       assert IntervalSet.count(open) == 46
-      assert Duration.to_unit(IntervalSet.total_duration(open), :hour) == {:ok, 23 * 7.0}
+      assert Duration.to_unit(IntervalSet.duration(open), :hour) == {:ok, 23 * 7.0}
     end
   end
 end

@@ -2141,11 +2141,11 @@ defmodule Tempo.Interval do
   @doc """
   The certainty that `a` and `b` intersect, given their `±` margins.
 
-  The three-valued counterpart of `overlaps?/2`. Each margin-bearing
+  The three-valued counterpart of `Tempo.overlaps?/3`. Each margin-bearing
   endpoint is widened into a range, and the result reports whether
   intersection holds for every consistent placement (`:certain`), some
   (`:possible`), or none (`:impossible`). Crisp operands degrade exactly
-  to `overlaps?/2` (only `:certain`/`:impossible` occur).
+  to `Tempo.overlaps?/3` (only `:certain`/`:impossible` occur).
 
   ### Arguments
 
@@ -2261,7 +2261,7 @@ defmodule Tempo.Interval do
   @doc """
   `true` when `a` and `b` intersect for *every* placement of their `±`
   margins — `overlap_certainty(a, b) == :certain`. Crisp counterpart:
-  `overlaps?/2`.
+  `Tempo.overlaps?/3`.
 
   ### Examples
 

@@ -5,7 +5,7 @@ This tutorial builds the availability core of a real service, one concept at a t
 No scaffolding is needed. Everything below runs in `iex` after:
 
 ```elixir
-Mix.install([{:ex_tempo, "~> 1.0"}, {:ical, "~> 3.0"}, {:tz, "~> 0.28"}])
+Mix.install([{:ex_tempo, "~> 2.0"}, {:ical, "~> 3.0"}, {:tz, "~> 0.28"}])
 Calendar.put_time_zone_database(Tz.TimeZoneDatabase)
 import Tempo.Sigils
 ```

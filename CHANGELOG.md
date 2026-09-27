@@ -1,8 +1,16 @@
 # Changelog
 
-## [v1.7.0] — Unreleased
+## [v2.0.0] — Unreleased
 
 ### Breaking changes
+
+Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name that changed to its 2.0 form.
+
+| 1.x | 2.0 |
+|---|---|
+| `Tempo.IntervalSet.total_duration/1` | `Tempo.IntervalSet.duration/1` |
+
+* `Tempo.duration/1` and `Tempo.IntervalSet.duration/1` measure the time a set covers, counting time its members share once; `IntervalSet.total_duration/1`, which did, is removed.
 
 * `Tempo.new/1`'s `:metadata` is the value's own metadata, read with `Tempo.metadata/1` and never written to its ISO 8601 form, where it was written as IXDTF suffix tags; tags take the new `:tags` option, validated so `to_iso8601/1` cannot fail on one.
 

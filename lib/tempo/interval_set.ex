@@ -556,19 +556,20 @@ defmodule Tempo.IntervalSet do
   end
 
   @doc """
-  Total covered duration of the set — the sum of every member's
-  length.
+  The time the set covers — the length of the union of its members,
+  so time that two members share is counted once.
 
   Each member's length is measured on the UTC time line (the same
   measurement as `Tempo.Interval.duration/1`), so DST transitions
-  inside a member are accounted for. Members are disjoint by
-  construction when produced by the set operations; if the set was
-  built with overlapping members deliberately preserved, the overlap
-  is counted once per member.
+  inside a member are accounted for. The set operations produce
+  disjoint members; a set built with overlapping members still
+  covers each instant once: 09:00–11:00 and 10:00–12:00 cover three
+  hours, not four.
 
   ### Arguments
 
-  * `set` is a `t:t/0`.
+  * `set` is a `t:t/0` on a finite backend. A lazy, unbounded set
+    raises `Tempo.UnboundedSetError`, as every aggregate does.
 
   ### Returns
 
@@ -581,13 +582,18 @@ defmodule Tempo.IntervalSet do
       iex> Tempo.IntervalSet.duration(free)
       ~o"PT21600S"
 
+      iex> bookings = Tempo.IntervalSet.new!([~o"2026-06-15T09/2026-06-15T11", ~o"2026-06-15T10/2026-06-15T12"])
+      iex> Tempo.IntervalSet.duration(bookings)
+      ~o"PT10800S"
+
   """
   @spec duration(t()) :: Duration.t()
   def duration(%__MODULE__{} = set) do
-    intervals = to_list(set)
-
     total =
-      Enum.reduce(intervals, 0, fn interval, acc ->
+      set
+      |> coalesce()
+      |> to_list()
+      |> Enum.reduce(0, fn interval, acc ->
         %Duration{time: [second: seconds]} = Interval.duration(interval)
         acc + seconds
       end)
@@ -1098,52 +1104,6 @@ defmodule Tempo.IntervalSet do
       :earlier -> [%Interval{from: from, to: to} | acc]
       _not_a_span -> acc
     end
-  end
-
-  @doc """
-  Total duration covered by the set's members, as a
-  `t:Tempo.Duration.t/0`.
-
-  Coalesces internally so overlapping members are not
-  double-counted — the returned duration is the length of the
-  union of covered instants, not the sum of individual member
-  durations. For the "sum of member durations" semantics, use
-  `map(set, &Tempo.Interval.duration/1) |> Enum.sum()` with
-  explicit arithmetic.
-
-  ### Arguments
-
-  * `set` is a `t:t/0`.
-
-  ### Returns
-
-  * A `t:Tempo.Duration.t/0`.
-
-  ### Examples
-
-      iex> set = Tempo.IntervalSet.new!([
-      ...>   %Tempo.Interval{from: ~o"2026-06-15T09:00:00", to: ~o"2026-06-15T10:00:00"},
-      ...>   %Tempo.Interval{from: ~o"2026-06-15T11:00:00", to: ~o"2026-06-15T12:00:00"}
-      ...> ])
-      iex> Tempo.IntervalSet.total_duration(set)
-      ~o"PT7200S"
-
-  """
-  @spec total_duration(t()) :: Tempo.Duration.t()
-  def total_duration(%__MODULE__{} = set) do
-    set
-    |> coalesce()
-    |> to_list()
-    |> Enum.reduce(Duration.build([]), fn interval, acc ->
-      add_durations(acc, Interval.duration(interval))
-    end)
-  end
-
-  defp add_durations(%Tempo.Duration{time: a}, %Tempo.Duration{time: b}) do
-    merged =
-      Keyword.merge(a, b, fn _key, v1, v2 -> v1 + v2 end)
-
-    Duration.build(merged)
   end
 
   # Single forward pass. At each step, decide whether the next

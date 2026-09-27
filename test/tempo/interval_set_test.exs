@@ -190,6 +190,16 @@ defmodule Tempo.IntervalSet.Test do
     end
   end
 
+  describe "duration/1 — the time the set covers" do
+    test "time two members share is counted once" do
+      bookings =
+        Tempo.IntervalSet.new!([~o"2026-06-15T09/2026-06-15T11", ~o"2026-06-15T10/2026-06-15T12"])
+
+      assert Tempo.IntervalSet.duration(bookings) == ~o"PT10800S"
+      assert Tempo.duration(bookings) == ~o"PT10800S"
+    end
+  end
+
   describe "first/1 and last/1" do
     test "first/1 is the earliest member and last/1 the latest, in time order not input order" do
       {:ok, set} =
@@ -405,7 +415,7 @@ defmodule Tempo.IntervalSet.Test do
         for depth <- 1..4 do
           set
           |> Tempo.IntervalSet.overlapping(at_least: depth)
-          |> Tempo.IntervalSet.total_duration()
+          |> Tempo.IntervalSet.duration()
           |> Map.get(:time)
           |> Keyword.get(:second)
         end

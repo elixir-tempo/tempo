@@ -2601,9 +2601,11 @@ defmodule Tempo do
   end
 
   @doc """
-  Truncates a tempo struct to the specified resolution.
+  Rounds a tempo struct to the specified resolution.
 
-  Rounding rounds to the specified time unit resolution.
+  The value rounds to the nearest `round_to`: 21 November 2022 rounds
+  to December at month resolution and to 2023 at year resolution,
+  where `trunc/2` would keep November and 2022.
 
   ### Arguments
 
@@ -2758,7 +2760,7 @@ defmodule Tempo do
   cleanly rather than merging — `~o"2026-06-15T09:30" |> at(~o"T17")`
   is `17:00`, not `17:30`.
 
-  It is the mirror of `anchor/2`: `anchor` left-fills a floating
+  It is the mirror of `anchor/2`: `anchor` left-fills an unanchored
   value with coarser components; `at` right-fills a placed value
   with finer ones.
 
@@ -7621,19 +7623,33 @@ defmodule Tempo do
   defdelegate compose(relation1, relation2), to: Tempo.Interval
 
   @doc """
-  Return the length of an interval — or the total covered length of
-  an interval set — as a `%Tempo.Duration{}`.
+  Return the length of an interval, or the time an interval set
+  covers, as a `%Tempo.Duration{}`.
 
-  Unbounded intervals return `:infinity`. See
-  `Tempo.Interval.duration/1` and `Tempo.IntervalSet.duration/1`.
+  A set's duration counts time that two members share once — see
+  `Tempo.IntervalSet.duration/1`; an interval's is its length on the
+  UTC time line — see `Tempo.Interval.duration/1`.
+
+  ### Arguments
+
+  * `value` is a `t:Tempo.Interval.t/0` or a `t:Tempo.IntervalSet.t/0`.
+
+  ### Returns
+
+  * A `t:Tempo.Duration.t/0` in seconds, or `:infinity` for an
+    interval with an open end.
+
   ### Examples
-
 
       iex> Tempo.duration(Tempo.to_interval!(~o"2026-06-15T09:00/2026-06-15T10:30"))
       ~o"PT5400S"
 
       iex> Tempo.duration(Tempo.to_interval!(~o"2026-06"))
       ~o"PT2592000S"
+
+      iex> bookings = Tempo.IntervalSet.new!([~o"2026-06-15T09/2026-06-15T11", ~o"2026-06-15T10/2026-06-15T12"])
+      iex> Tempo.duration(bookings)
+      ~o"PT10800S"
 
   """
   def duration(%IntervalSet{} = set), do: IntervalSet.duration(set)

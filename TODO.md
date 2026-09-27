@@ -30,6 +30,10 @@ decision taken on the way to 1.0, is in
 
 * [ ] **`Interval.duration/1` raises** — a multi-occurrence recurrence raises `MaterialisationError` and differing endpoint calendars fail an `:ok =` match; return `{:error, _}` instead. Predicates (`anchored?/1`, the relation and certainty predicates) may raise on invalid input, as Elixir's naming conventions expect (user, 2026-09-27).
 
+## In progress
+
+* [ ] **Vocabulary for 2.0** — one meaning per word and one word per meaning across Tempo and tempo_holidays: `:within` for `:bound`, "anchor" in one sense, no public "materialise", `Tempo.Allen` beside everyday predicates, `datetime`, "workday". Every decision is taken; the work is eleven commits, listed in [plans/vocabulary.md](plans/vocabulary.md).
+
 ## Deferred
 
 * [ ] **A domain gating by a window's anchor** — a domain admits the occurrences that start in its periods; date-holidays gates on the year of a window's anchor instead. They differ only when a window crosses a gated boundary year, which no tempo_holidays rule does; reviving it needs anchor tracking through `Tempo.RRule.Selection`.

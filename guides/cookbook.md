@@ -469,7 +469,7 @@ iex> {:ok, workdays} = Tempo.select(~o"2026-07/2026-10", Tempo.workdays(:AU))
 iex> {:ok, open} = Tempo.select(workdays, [~o"T09/T12", ~o"T13/T17"])
 iex> Tempo.IntervalSet.count(open)
 132
-iex> Tempo.Duration.to_unit(Tempo.IntervalSet.total_duration(open), :hour)
+iex> Tempo.Duration.to_unit(Tempo.IntervalSet.duration(open), :hour)
 {:ok, 462.0}
 ```
 
