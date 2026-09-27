@@ -24,17 +24,19 @@ decision taken on the way to 1.0, is in
 
 * [ ] **A composable builder** — an API between `Tempo.new/1` (flat components) and `Tempo.from_iso8601/1` (a string) in complexity, building a value from composable sub-expressions with human names — `selection`, `recur`, windows, domains, exclusions, events — nesting freely, so programs (tempo_holidays among them) construct recurrences structurally instead of interpolating ISO 8601 strings and re-parsing them.
 
-* [ ] **A non-leap-year domain filter** — a spelling beside `e`/`o`/`l` for "not a leap year" (date-holidays' `09-11 in non-leap years`, 3 rules in tempo_holidays). Awaiting the choice of spelling.
-
 * [ ] **Explain weekday sets by name** — `explain/1` reads `{6..7}K` as "on a weekday [6..7]"; it should read "on a Saturday or Sunday", now that holiday recurrences carry weekday limits routinely.
 
 * [ ] **Unify interval and recurrence into one concept** (research, plan, advise) — an `Interval` is a single occurrence, i.e. a count-1 recurrence, which suggests everything is a recurrence and the only value types are intervals / interval-sets, with a `Tempo` as a single expression. Research whether `%Tempo{}`, `%Tempo.Interval{}` and `%Tempo.RecurrenceSet{}` collapse cleanly, what breaks (implicit vs explicit spans, half-open convention, Allen relations, `%Date{}` interop, materialisation with/without `:bound`), and advise before any code. Plan in [plans/interval-recurrence-unification.md](plans/interval-recurrence-unification.md).
+
+* [ ] **Coverage to 90%** — the CI lint row runs plain `mix test` until coverage reaches the default 90% threshold, then takes the reference workflow's `mix test --cover`. 85.5% today (2026-09-27) with the existing `ignore_modules`; `mix test --cover` lists the modules below it.
 
 ## Deferred
 
 * [ ] **A domain gating by a window's anchor** — a domain admits the occurrences that start in its periods; date-holidays gates on the year of a window's anchor instead. They differ only when a window crosses a gated boundary year, which no tempo_holidays rule does; reviving it needs anchor tracking through `Tempo.RRule.Selection`.
 
 ## Done
+
+* [x] **A non-leap-year domain filter** — `c` (common year) beside `e`/`o`/`l`, for date-holidays' `09-11 in non-leap years`: `R/..c/P1Y/FL9M11DN`. 2026-09-27.
 
 * [x] **Six recurrence defects from the tempo_holidays gate census** — `(name)e` with a weekday limit, a year-resolution anchor and a plain-`Tempo` recurrence-set member no longer raise; a domain steps a multi-year cadence and closes an open range against the bound; a window crossing the bound's year lands in it. 2026-09-24.
 

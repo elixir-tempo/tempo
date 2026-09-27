@@ -26,32 +26,36 @@ jobs:
         # matching path (a bogus multi-terabyte allocation at runtime). OTP 27
         # is the minimum. See the README.
         include:
+          # Every row pins the latest patch of its Elixir minor and its OTP
+          # major, verified against the release tags. Bump every row that
+          # uses a version in the same change, never one at a time.
+
           # Elixir 1.17 — on OTP 27
-          - elixir: "1.17-otp-27"
-            otp: "27"
+          - elixir: "1.17.3-otp-27"
+            otp: "27.3.4.18"
 
           # Elixir 1.18 — on OTP 27
-          - elixir: "1.18-otp-27"
-            otp: "27"
+          - elixir: "1.18.5-otp-27"
+            otp: "27.3.4.18"
 
           # Elixir 1.19 — on OTP 27–28
-          - elixir: "1.19-otp-27"
-            otp: "27"
-          - elixir: "1.19-otp-28"
-            otp: "28"
+          - elixir: "1.19.6-otp-27"
+            otp: "27.3.4.18"
+          - elixir: "1.19.6-otp-28"
+            otp: "28.5.0.7"
 
           # Elixir 1.20 — on OTP 27–29
-          - elixir: "1.20.2-otp-27"
-            otp: "27"
-          - elixir: "1.20.2-otp-28"
-            otp: "28"
-          - elixir: "1.20.2-otp-29"
-            otp: "29"
+          - elixir: "1.20.4-otp-27"
+            otp: "27.3.4.18"
+          - elixir: "1.20.4-otp-28"
+            otp: "28.5.0.7"
+          - elixir: "1.20.4-otp-29"
+            otp: "29.1.1"
             lint: true
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
@@ -60,7 +64,7 @@ jobs:
           otp-version: ${{ matrix.otp }}
 
       - name: Restore dependency cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           # `_build/dev/dialyxir_*` is excluded because the PLT has its own
           # cache step later in the job. Without the exclusion it is stored
@@ -81,7 +85,7 @@ jobs:
       # whole test suite. Cache it and pre-fetch with retries so a flaky
       # NASA connection can't fail CI.
       - name: Cache Astro ephemeris
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/astro
           key: astro-ephemeris-de440s
@@ -120,7 +124,7 @@ jobs:
 
       - name: Restore PLT cache
         if: matrix.lint
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: _build/dev/dialyxir_*
           key: plt-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
