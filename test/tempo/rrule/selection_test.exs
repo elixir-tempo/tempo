@@ -803,6 +803,140 @@ defmodule Tempo.RRule.SelectionTest do
       assert holiday_dates("R/../P1Y/FL10W3KN", ~o"2027Y") == ["2027-03-10"]
       assert holiday_dates("R/../P1Y/FL10w3KN", ~o"2027Y") == ["2027-03-03"]
     end
+
+    test "a calendar week cut short at the start of its year holds only its own days" do
+      # The Saturday of each Hebrew year's week 1, which runs from 1 Tishri
+      # to the first Shabbat: 5 Tishri 5786, 1 Tishri 5787 and 5788 (both
+      # Saturdays, so week 1 is that day alone) and 3 Tishri 5789.
+      assert holiday_dates(
+               "R/5786Y1M1D[u-ca=hebrew]/P1Y/FL1w6KN",
+               Tempo.from_iso8601!("5786Y/5790Y[u-ca=hebrew]")
+             ) == ["2025-09-27", "2026-09-12", "2027-10-02", "2028-09-23"]
+
+      # 1 Tishri 5787 is week 1's only day, so it has no Monday
+      assert holiday_dates(
+               "R/5787Y1M1D[u-ca=hebrew]/P1Y/FL1w1KN",
+               Tempo.from_iso8601!("5787Y[u-ca=hebrew]")
+             ) == []
+    end
+  end
+
+  describe "a year in a recurrence selection" do
+    # ISO 8601-2 §12.2 has no year selection rule. A year in a recurrence's
+    # selection limits it to the occurrences that start in a listed year, as
+    # a recurrence domain does.
+    test "a year limits a yearly recurrence to its occurrence in that year" do
+      assert holiday_dates("R/2026-01-01/P1Y/FL2027Y1M1DN", ~o"2026Y/2030Y") == ["2027-01-01"]
+      assert holiday_dates("R/2026-01-01/P1Y/FL2027YN", ~o"2026Y/2030Y") == ["2027-01-01"]
+    end
+
+    test "a set, a range or a mask of years limits to each year it holds" do
+      bound = ~o"2026Y/2030Y"
+      even_years = ["2026-01-01", "2028-01-01"]
+
+      assert holiday_dates("R/2026-01-01/P1Y/FL{2026,2028}Y1M1DN", bound) == even_years
+
+      assert holiday_dates("R/2026-01-01/P1Y/FL{2027..2028}Y1M1DN", bound) ==
+               ["2027-01-01", "2028-01-01"]
+
+      # Any four-digit even year, as ISO 8601-2 §12.11 writes US Election Day's
+      assert holiday_dates("R/2026-01-01/P1Y/FLXXX{0,2,4,6,8}Y1M1DN", bound) == even_years
+
+      assert holiday_dates("R/2026-01-01/P1Y/FLX*Y1M1DN", bound) ==
+               ["2026-01-01", "2027-01-01", "2028-01-01", "2029-01-01"]
+    end
+
+    test "a year limits a finer recurrence to that year's occurrences" do
+      dates = holiday_dates("R/2026-01-01/P1M/FL2027Y15DN", ~o"2026Y/2029Y")
+
+      assert length(dates) == 12
+      assert hd(dates) == "2027-01-15"
+      assert List.last(dates) == "2027-12-15"
+    end
+
+    test "an occurrence counts in the year it starts in, as a domain's does" do
+      # ISO 8601 week 1 of 2026 starts on Monday 29 December 2025
+      bound = ~o"2025Y/2028Y"
+
+      assert holiday_dates("R/2025-01-01/P1Y/FL2026Y1W1KN", bound) ==
+               holiday_dates("R/{2026Y}/P1Y/FL1W1KN", bound)
+
+      assert holiday_dates("R/2025-01-01/P1Y/FL2027Y1W1KN", bound) == ["2027-01-04"]
+    end
+
+    test "a year in a window's selection limits the window's start" do
+      assert holiday_dates("R/2026-01-01/P1Y/FLL2027Y12M31DN/P3DN", ~o"2026Y/2030Y") ==
+               ["2027-12-31"]
+    end
+  end
+
+  describe "a selection within a value (ISO 8601-2 §12.11)" do
+    # The units before a selection are its context; each period of the
+    # context resolves the selection once.
+    test "a selection in a stated year and month is that month's date" do
+      # §12.11.1 Example 1: the first Monday of March 2018
+      assert selection_dates("2018Y3ML1K1IN") == ["2018-03-05"]
+      assert selection_dates("2018Y{3,9}ML1K1IN") == ["2018-03-05", "2018-09-03"]
+    end
+
+    test "a set of years resolves the selection in each" do
+      # §12.11.1 Example 3: the February 29 of 2018 to 2022
+      assert selection_dates("{2018,2019,2020,2021,2022}YL2M29D1IN") == ["2020-02-29"]
+    end
+
+    test "US Election Day in any four-digit even year resolves one year at a time" do
+      # §12.11.1 Example 8: the Tuesday after the first Monday of November
+      election_day = "XXX{0,2,4,6,8}Y11MLLL1K1IN/P9DN2K1IN"
+
+      assert selection_dates(election_day, bound: ~o"2024Y/2029Y") ==
+               ["2024-11-05", "2026-11-03", "2028-11-07"]
+
+      assert selection_dates("2024Y11MLLL1K1IN/P9DN2K1IN") == ["2024-11-05"]
+    end
+
+    test "a selection in an unspecified year needs a bound" do
+      # §12.11.1 Example 4: Mother's Day, the second Sunday of May
+      assert selection_dates("X*YL5M7K2IN", bound: ~o"2024Y/2027Y") ==
+               ["2024-05-12", "2025-05-11", "2026-05-10"]
+
+      assert {:error, %Tempo.UnboundedRecurrenceError{}} =
+               Tempo.to_interval(Tempo.from_iso8601!("X*YL5M7K2IN"))
+    end
+
+    test "a window before a date selects within it" do
+      # §12.11.1 Example 7: the second Sunday before 4 April
+      assert selection_dates("2026YLL4M4D/-P20DN7K-2IN") == ["2026-03-22"]
+    end
+
+    test "the units after a selection apply to every date it selects" do
+      # §12.11.2 Example 2: every Monday, Tuesday and Friday of 2018 at 10:00
+      {:ok, set} = Tempo.to_interval(Tempo.from_iso8601!("2018YL{1,2,5}KNT10H0M0S"))
+      [first | _rest] = occurrences = IntervalSet.to_list(set)
+
+      assert length(occurrences) == 157
+      assert Tempo.relation(first, ~o"2018-01-01T10:00:00/2018-01-01T10:00:01") == :equals
+    end
+
+    test "an interval from or to a selection spans from or to each date it selects" do
+      # §12.11.3 Example 1: five days from the first Monday of September 2018
+      {:ok, from_monday} = Tempo.to_interval(Tempo.from_iso8601!("2018Y9ML1K1IN/P5D"))
+      {:ok, to_monday} = Tempo.to_interval(Tempo.from_iso8601!("P5D/2018Y9ML1K1IN"))
+
+      assert Tempo.relation(from_monday, ~o"2018-09-03/2018-09-08") == :equals
+      assert Tempo.relation(to_monday, ~o"2018-08-29/2018-09-03") == :equals
+    end
+  end
+
+  # Materialise a value holding a selection and list the ISO dates it yields.
+  defp selection_dates(iso, options \\ []) do
+    {:ok, set} = iso |> Tempo.from_iso8601!() |> Tempo.to_interval(options)
+
+    set
+    |> IntervalSet.to_list()
+    |> Enum.map(fn interval ->
+      {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
+      Date.to_iso8601(date)
+    end)
   end
 
   # Expand an RRULE from `dtstart` and list the ISO dates of its occurrences.

@@ -33,6 +33,12 @@ defmodule Tempo.RRule.Selection do
   selection (`w`, Tempo's extension) expands and limits as `BYWEEKNO`
   does, in the weeks the calendar numbers itself.
 
+  A year (`Y`), which RFC 5545 has no part for and ISO 8601-2 §12.2 no
+  selection rule, LIMITs at every frequency: an occurrence is kept when
+  it starts in a listed year, as a recurrence domain (`R/{2027Y}/…`)
+  admits it. It applies after the expansions and before the position
+  (`I`), so a position picks among the occurrences in those years.
+
   Tokens this module doesn't interpret pass through unchanged
   so partial support is correct for the partial inputs.
 
@@ -41,6 +47,7 @@ defmodule Tempo.RRule.Selection do
   alias Calendrical.Kday
   alias Tempo.Event
   alias Tempo.Interval
+  alias Tempo.Mask
   alias Tempo.Validation
 
   # ISO 8601's weeks, and RFC 5545's by default, start on a Monday, weekday 1.
@@ -318,6 +325,7 @@ defmodule Tempo.RRule.Selection do
     :hour,
     :minute,
     :second,
+    :year,
     :instance
   ]
 
@@ -531,6 +539,13 @@ defmodule Tempo.RRule.Selection do
     expand_or_limit_time(candidates, :second, List.wrap(values), freq)
   end
 
+  # A year (`Y`) — LIMIT at every frequency: keep the occurrences that start
+  # in a listed year (a year number, a mask such as `202XY`, or `X*Y` for
+  # any year).
+  defp apply_entry({:year, years}, candidates, _freq, _selection, _wkst) do
+    Enum.filter(candidates, &year_selected?(year_of(&1), years))
+  end
+
   # Position (ISO 8601-2 §12.9 `I`, = RFC 5545 BYSETPOS) — applied LAST. Treats
   # the accumulated `candidates` list as the resolved set and picks the Nth
   # element. Positive ordinals count from the start (1-based), negative from the
@@ -631,6 +646,20 @@ defmodule Tempo.RRule.Selection do
   end
 
   defp month_of(%Interval{from: %Tempo{time: time}}), do: Keyword.get(time, :month)
+
+  defp year_of(%Interval{from: %Tempo{time: time}}), do: Keyword.get(time, :year)
+
+  # Whether `year` is one a year selection lists: a year number, a mask
+  # matched digit by digit, any year (`X*Y`), or a list of them (ranges
+  # already expanded).
+  defp year_selected?(year, _years) when not is_integer(year), do: false
+  defp year_selected?(_year, :any), do: true
+  defp year_selected?(year, {:mask, mask}), do: Mask.matches_mask?(year, mask)
+
+  defp year_selected?(year, years) when is_list(years),
+    do: Enum.any?(years, &year_selected?(year, &1))
+
+  defp year_selected?(year, selected), do: year == selected
 
   ## ------------------------------------------------------------
   ## BYMONTHDAY
@@ -1215,10 +1244,11 @@ defmodule Tempo.RRule.Selection do
   end
 
   # A calendar-week selection (`w`) with FREQ=YEARLY, in the weeks the
-  # calendar numbers itself: each listed week's seven days for a candidate
-  # that carries a day, or the week itself — the span of its seven days —
-  # for a native selection (`FL10wN`). A week-based calendar's own weeks
-  # are its ISO 8601 weeks (`W`).
+  # calendar numbers itself: each listed week's days for a candidate that
+  # carries a day, or the week itself — the span of its days — for a native
+  # selection (`FL10wN`). A week the calendar cuts short at the start or end
+  # of its year holds fewer than seven days. A week-based calendar's own
+  # weeks are its ISO 8601 weeks (`W`).
   defp expand_candidate_calendar_weeks(
          %Interval{from: %Tempo{calendar: calendar, time: time}} = candidate,
          weeks,
@@ -1231,14 +1261,23 @@ defmodule Tempo.RRule.Selection do
         expand_candidate_week_numbers(candidate, weeks, @monday, within_month?)
 
       Keyword.has_key?(time, :day) ->
-        week_starts = Validation.calendar_week_starts(calendar, year)
+        weeks_in_year = Validation.calendar_weeks_in_year(year, calendar)
         month = if within_month?, do: month_of(candidate)
 
-        Enum.flat_map(weeks, fn wk -> week_candidate_dates(wk, candidate, week_starts, month) end)
+        Enum.flat_map(weeks, fn wk ->
+          wk
+          |> signed_index_to_value(weeks_in_year)
+          |> calendar_week_dates(candidate, year, calendar, month)
+        end)
 
       true ->
-        week_starts = Validation.calendar_week_starts(calendar, year)
-        Enum.flat_map(weeks, fn wk -> calendar_week_span(wk, candidate, week_starts) end)
+        weeks_in_year = Validation.calendar_weeks_in_year(year, calendar)
+
+        Enum.flat_map(weeks, fn wk ->
+          wk
+          |> signed_index_to_value(weeks_in_year)
+          |> calendar_week_span(candidate, year, calendar)
+        end)
     end
   end
 
@@ -1258,6 +1297,22 @@ defmodule Tempo.RRule.Selection do
         []
     end
   end
+
+  # The days Calendrical gives calendar week `week` of `year`, fewer than
+  # seven for a week the calendar cuts short at the start or end of its
+  # year. `month` is as for `week_candidate_dates/4`.
+  defp calendar_week_dates(week, candidate, year, calendar, month) when is_integer(week) do
+    case Validation.calendar_week_range(year, week, calendar) do
+      %Date.Range{} = days ->
+        dates = for d <- days, is_nil(month) or d.month == month, do: {d.year, d.month, d.day, d}
+        swap_dates(candidate, dates)
+
+      {:error, _reason} ->
+        []
+    end
+  end
+
+  defp calendar_week_dates(nil, _candidate, _year, _calendar, _month), do: []
 
   defp week_candidate_span(wk, %Interval{from: %Tempo{} = from} = candidate, year, wiy) do
     resolved = signed_index_to_value(wk, wiy)
@@ -1280,18 +1335,20 @@ defmodule Tempo.RRule.Selection do
     end
   end
 
-  # A calendar week as one occurrence, from its first day to the first day
-  # of the week after, marked to keep that span through the recurrence
-  # loop's resizing.
+  # A calendar week as one occurrence, from its first day to the day after
+  # its last — a week the calendar cuts short at the start or end of its
+  # year spans only its own days — marked to keep that span through the
+  # recurrence loop's resizing.
   defp calendar_week_span(
-         wk,
+         week,
          %Interval{from: %Tempo{} = from, metadata: metadata} = candidate,
-         week_starts
-       ) do
-    case signed_index_to_value(wk, length(week_starts)) do
-      week when is_integer(week) ->
-        first = Enum.at(week_starts, week - 1)
-        next = Calendrical.next(first, :week)
+         year,
+         calendar
+       )
+       when is_integer(week) do
+    case Validation.calendar_week_range(year, week, calendar) do
+      %Date.Range{first: first, last: last} ->
+        next = Calendrical.next(last, :day)
 
         [
           %{
@@ -1302,10 +1359,12 @@ defmodule Tempo.RRule.Selection do
           }
         ]
 
-      nil ->
+      {:error, _reason} ->
         []
     end
   end
+
+  defp calendar_week_span(nil, _candidate, _year, _calendar), do: []
 
   # Utility — resolve a signed index against an upper bound.
   # `3` in a range of 31 → 3. `-1` in 31 → 31. `-3` in 31 → 29.

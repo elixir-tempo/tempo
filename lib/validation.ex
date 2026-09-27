@@ -953,12 +953,27 @@ defmodule Tempo.Validation do
   @doc false
   # The date of day `day` of week `week` of `year` in the calendar's own
   # weeks (`w`): a week-based calendar's native date or, in a month-based
-  # one, the day the calendar's `plus/6` reaches from the first day of the
-  # week `Calendrical.Interval.week/3` spans.
+  # one, the day of the week with ISO 8601's number `day` (`1`, Monday, to
+  # `7`, Sunday) among the days `Calendrical.Interval.week/3` gives the week,
+  # so a week cut short at the start or end of its year has fewer.
   def date_from_calendar_week(year, week, day, calendar) do
     case calendar.calendar_base() do
       :week -> Date.new(year, week, day, calendar)
-      :month -> day_of_week_span(Calendrical.Interval.week(year, week, calendar), day, calendar)
+      :month -> weekday_in_week(calendar_week_range(year, week, calendar), day)
+    end
+  end
+
+  @doc false
+  # The days of week `week` of `year` in the calendar's own weeks (`w`), as
+  # `Calendrical.Interval.week/3` gives them: a `Date.Range`, which is cut
+  # short at the start or end of the year in a calendar whose weeks number
+  # within their own year, or an error for a week the calendar does not
+  # number.
+  def calendar_week_range(year, week, calendar) do
+    if Code.ensure_loaded?(calendar) and function_exported?(calendar, :week, 2) do
+      Calendrical.Interval.week(year, week, calendar)
+    else
+      {:error, :not_defined}
     end
   end
 
@@ -995,16 +1010,6 @@ defmodule Tempo.Validation do
     )
   end
 
-  @doc false
-  # The first day of each of the calendar's own weeks of `year` (`w`), week
-  # 1 first; none for a calendar that numbers no weeks.
-  def calendar_week_starts(calendar, year) do
-    consecutive_week_starts(
-      first_calendar_week_start(calendar, year),
-      first_calendar_week_start(calendar, year + 1)
-    )
-  end
-
   # Each week's first day, from week 1's up to the first day of the next
   # year's week 1, each the day Calendrical gives a week after the last.
   defp consecutive_week_starts({:ok, first}, {:ok, next_first}) do
@@ -1019,15 +1024,6 @@ defmodule Tempo.Validation do
     case Calendrical.date_from_day_of_year(year, 4, calendar) do
       %Date{} = fourth_day -> {:ok, Kday.kday_on_or_before(fourth_day, first_day)}
       {:error, _reason} -> :error
-    end
-  end
-
-  defp first_calendar_week_start(calendar, year) do
-    with true <- Code.ensure_loaded?(calendar) and function_exported?(calendar, :week, 2),
-         %Date.Range{first: first} <- Calendrical.Interval.week(year, 1, calendar) do
-      {:ok, first}
-    else
-      _no_weeks -> :error
     end
   end
 
@@ -1047,28 +1043,18 @@ defmodule Tempo.Validation do
 
   defp date_in_week(_week_start, _day, _calendar), do: {:error, :invalid_date}
 
-  defp day_of_week_span(%Date.Range{first: first, last: last}, day, calendar)
-       when is_integer(day) and day >= 1 do
-    case calendar.plus(first.year, first.month, first.day, :days, day - 1) do
-      {year, month, day_of_month} ->
-        within_week(Date.new(year, month, day_of_month, calendar), last)
-
-      _error ->
-        {:error, :invalid_date}
+  # The day of `week_days` with ISO 8601's weekday number `weekday`, from
+  # the calendar's own day of the week.
+  defp weekday_in_week(%Date.Range{} = week_days, weekday)
+       when is_integer(weekday) and weekday in 1..7 do
+    case Enum.find(week_days, &(Date.day_of_week(&1, :monday) == weekday)) do
+      %Date{} = date -> {:ok, date}
+      nil -> {:error, :invalid_date}
     end
   end
 
-  defp day_of_week_span(%Date.Range{}, _day, _calendar), do: {:error, :invalid_date}
-  defp day_of_week_span({:error, _reason} = error, _day, _calendar), do: error
-
-  defp within_week({:ok, date}, last) do
-    case Date.compare(date, last) do
-      :gt -> {:error, :invalid_date}
-      _within -> {:ok, date}
-    end
-  end
-
-  defp within_week({:error, _reason} = error, _last), do: error
+  defp weekday_in_week(%Date.Range{}, _weekday), do: {:error, :invalid_date}
+  defp weekday_in_week({:error, _reason} = error, _weekday), do: error
 
   # The `month`th month of a group of years, counted on from the group's
   # first month by Calendrical, so a thirteen-month year counts as the

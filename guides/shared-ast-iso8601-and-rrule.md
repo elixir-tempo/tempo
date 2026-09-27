@@ -120,6 +120,8 @@ This is documented as a known limitation; the test suite at `test/tempo/round_tr
 * A duration with a unit RRULE doesn't support (`P1C` century, group unit, etc.)
 * A `:repeat_rule` whose shape isn't a flat `:selection` keyword list
 
+* A selection with no RRULE `BY*` part: a calendar week (`w`), a traditional month (`m`), a computed event (`e`), a year, a selection window (ISO 8601-2 §12.10), or a cron nearest weekday or day-of-month-or-weekday. The error names each one rather than dropping it.
+
 Every error carries a human-readable `:message` field and the source `:value`. Errors can be re-raised as exceptions — `Tempo.to_rrule!/1` does this.
 
 ## Why one AST for two formats

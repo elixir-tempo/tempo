@@ -4866,6 +4866,12 @@ defmodule Tempo do
   and coalesced. The conversion is idempotent on values that are
   already explicit.
 
+  A value holding a selection (ISO 8601-2 §12.11) is the dates the
+  selection picks in each period of the units before it:
+  `~o"2018Y3ML1K1IN"` is the first Monday of March 2018, and a set or
+  mask of years resolves one year at a time. A selection in an
+  unspecified year (`~o"X*YL5M7K2IN"`) needs a `:bound`.
+
   ### Arguments
 
   * `value` is a `t:#{__MODULE__}.t/0`, `t:Tempo.Interval.t/0`,
@@ -4875,7 +4881,8 @@ defmodule Tempo do
 
   * `:bound` is a Tempo value whose upper endpoint limits
     expansion of an unbounded recurrence (`recurrence: :infinity`
-    with no `UNTIL`). Required to materialise such rules;
+    with no `UNTIL`), or the years a selection in an unspecified
+    year is resolved in. Required to materialise such values;
     ignored otherwise.
 
   * `:coalesce` controls whether the resulting IntervalSet
@@ -4926,6 +4933,11 @@ defmodule Tempo do
 
       iex> {:ok, duration} = Tempo.from_iso8601("P3M")
       iex> {:error, %Tempo.MaterialisationError{reason: :bare_duration}} = Tempo.to_interval(duration)
+
+      iex> {:ok, election_day} = Tempo.from_iso8601("2024Y11MLLL1K1IN/P9DN2K1IN")
+      iex> {:ok, dates} = Tempo.to_interval(election_day)
+      iex> Tempo.relation(dates, ~o"2024-11-05")
+      :equals
 
   """
   @spec to_interval(
@@ -5093,17 +5105,21 @@ defmodule Tempo do
   # onto every materialised occurrence.
   def to_interval(
         %Tempo.Interval{
-          from: %Tempo{} = from,
+          from: %Tempo{time: time} = from,
           duration: %Tempo.Duration{} = duration,
           to: to,
           recurrence: 1,
           metadata: metadata
         },
-        _opts
+        opts
       )
       when to in [nil, :undefined] do
-    to_tempo = Math.add(from, duration)
-    {:ok, %Tempo.Interval{from: from, to: to_tempo, metadata: metadata}}
+    if Keyword.has_key?(time, :selection) do
+      selected_spans(from, &{&1, Math.add(&1, duration)}, metadata, opts)
+    else
+      to_tempo = Math.add(from, duration)
+      {:ok, %Tempo.Interval{from: from, to: to_tempo, metadata: metadata}}
+    end
   end
 
   # A `duration + to` interval (`P1M/1985-06`). Materialise to a
@@ -5112,14 +5128,18 @@ defmodule Tempo do
         %Tempo.Interval{
           from: :undefined,
           duration: %Tempo.Duration{} = duration,
-          to: %Tempo{} = to,
+          to: %Tempo{time: time} = to,
           recurrence: 1,
           metadata: metadata
         },
-        _opts
+        opts
       ) do
-    from_tempo = Math.subtract(to, duration)
-    {:ok, %Tempo.Interval{from: from_tempo, to: to, metadata: metadata}}
+    if Keyword.has_key?(time, :selection) do
+      selected_spans(to, &{Math.subtract(&1, duration), &1}, metadata, opts)
+    else
+      from_tempo = Math.subtract(to, duration)
+      {:ok, %Tempo.Interval{from: from_tempo, to: to, metadata: metadata}}
+    end
   end
 
   # An unanchored recurrence — `Tempo.RRule.parse("FREQ=WEEKLY;BYDAY=MO")`
@@ -5228,15 +5248,13 @@ defmodule Tempo do
     end
   end
 
-  def to_interval(%Tempo{} = tempo, _opts) do
-    # `X*Y2M28D` is "28 February of an unspecified year", and whether the
-    # next day is the 29th or 1 March depends on which year. The stepper
-    # reports that as `{:error, :requires_anchor}`; name the value here,
-    # where it is still in scope.
-    case do_to_interval(tempo) do
-      {:error, :requires_anchor} -> {:error, RequiresAnchorError.exception(value: tempo)}
-      {:error, :grouped_component} -> {:error, materialisation_error(tempo, :grouped_component)}
-      other -> other
+  def to_interval(%Tempo{time: time} = tempo, opts) do
+    case Enum.split_while(time, &(not match?({:selection, _}, &1))) do
+      {context, [{:selection, selection} | trailing]} ->
+        materialise_selection(tempo, context, selection, trailing, opts)
+
+      {_time, []} ->
+        materialise_value(tempo)
     end
   end
 
@@ -6550,6 +6568,170 @@ defmodule Tempo do
   defp materialisation_error(tempo, reason) do
     MaterialisationError.exception(value: tempo, reason: reason)
   end
+
+  defp materialise_value(%Tempo{} = tempo) do
+    # `X*Y2M28D` is "28 February of an unspecified year", and whether the
+    # next day is the 29th or 1 March depends on which year. The stepper
+    # reports that as `{:error, :requires_anchor}`; name the value here,
+    # where it is still in scope.
+    case do_to_interval(tempo) do
+      {:error, :requires_anchor} -> {:error, RequiresAnchorError.exception(value: tempo)}
+      {:error, :grouped_component} -> {:error, materialisation_error(tempo, :grouped_component)}
+      other -> other
+    end
+  end
+
+  # A concrete value with a selection (ISO 8601-2 §12.11): the units before the
+  # selection are its context — `2018Y9M` in `2018Y9ML1K1IN`, "the first Monday
+  # of September 2018" — and the units after it apply to every date it selects
+  # (§12.11.2). It materialises as the recurrence over the context's periods,
+  # one period at a time, so a set or mask of years
+  # (`XXX{0,2,4,6,8}Y11MLLL1K1IN/P9DN2K1IN`, US Election Day) costs one
+  # selection per period rather than a walk through the years' days.
+  defp materialise_selection(%Tempo{} = tempo, context, selection, trailing, opts) do
+    case selection_recurrence(tempo, context, selection, opts) do
+      {:ok, %Tempo.Interval{} = recurrence} ->
+        recurrence
+        |> to_interval(opts)
+        |> with_trailing_units(trailing)
+
+      {:ok, :no_periods} ->
+        IntervalSet.new([])
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  # A context that states its years is the recurrence's domain, each period one
+  # member of it (a year, or a month of a year), so a position (`I`) counts
+  # within the member. A context without a year recurs in every period of its
+  # finest unit, limited by the rest of the context, and so needs a `:bound`.
+  defp selection_recurrence(%Tempo{} = tempo, context, selection, opts) do
+    cadence = %Tempo.Duration{time: [{selection_cadence_unit(context), 1}]}
+
+    case {Keyword.get(context, :year), Keyword.has_key?(opts, :bound)} do
+      {year, false} when year in [nil, :any] ->
+        {:error,
+         UnboundedRecurrenceError.exception(
+           reason:
+             "#{inspect(tempo)} selects in every year, so it needs a :bound — " <>
+               "any Tempo value that limits the years."
+         )}
+
+      {year, true} when year in [nil, :any] ->
+        context_rule = Enum.reject(context, &match?({:year, :any}, &1))
+
+        {:ok,
+         %Tempo.Interval{
+           recurrence: :infinity,
+           duration: cadence,
+           repeat_rule: %{tempo | time: [selection: context_rule ++ selection]}
+         }}
+
+      {years, _bound?} ->
+        selection_domain(tempo, context, years, selection, cadence)
+    end
+  end
+
+  defp selection_domain(%Tempo{calendar: calendar} = tempo, context, years, selection, cadence) do
+    finer_context = Keyword.delete(context, :year)
+
+    members =
+      for year <- context_years(years, calendar),
+          member <- context_members(%{tempo | time: [{:year, year} | finer_context]}),
+          do: member
+
+    case members do
+      [] ->
+        {:ok, :no_periods}
+
+      members ->
+        {:ok,
+         %Tempo.Interval{
+           from: %Tempo.Set{type: :all, set: members},
+           recurrence: :infinity,
+           duration: cadence,
+           repeat_rule: %{tempo | time: [selection: selection]}
+         }}
+    end
+  end
+
+  # The years a context states: a year, a list of years and ranges, or a mask
+  # (`202XY`, `XXX{0,2,4,6,8}Y`) standing for the years it matches.
+  defp context_years(year, _calendar) when is_integer(year), do: [year]
+
+  defp context_years({:mask, mask}, calendar) do
+    {:ok, years} = Mask.valid_values(:year, mask, [], calendar)
+    years
+  end
+
+  defp context_years(years, calendar) when is_list(years) do
+    Enum.flat_map(years, fn
+      %Range{} = range -> Enum.to_list(range)
+      year -> context_years(year, calendar)
+    end)
+  end
+
+  # Each member of a context with a set of finer values (`2018Y{3,9}M`) is its
+  # own period.
+  defp context_members(%Tempo{} = member) do
+    if multi_tempo?(member), do: Enum.to_list(expand_members(member)), else: [member]
+  end
+
+  # The recurrence steps by the context's finest unit, so each period is one
+  # member of the context.
+  defp selection_cadence_unit([]), do: :year
+
+  defp selection_cadence_unit(context) do
+    case List.last(context) do
+      {:day_of_year, _value} -> :day
+      {unit, _value} when unit in [:year, :month, :week, :day, :hour, :minute] -> unit
+      _other -> :year
+    end
+  end
+
+  # An interval that starts or ends on a selection (ISO 8601-2 §12.11.3):
+  # `2018Y9ML1K1IN/P5D` is the five days from the first Monday of September
+  # 2018, one span for each date the selection gives.
+  defp selected_spans(%Tempo{} = endpoint, span_of, metadata, opts) do
+    with {:ok, %IntervalSet{} = selected} <- to_interval(endpoint, opts) do
+      selected
+      |> IntervalSet.to_list()
+      |> Enum.map(fn %Tempo.Interval{from: date} ->
+        {from, to} = span_of.(date)
+        %Tempo.Interval{from: from, to: to, metadata: metadata}
+      end)
+      |> IntervalSet.new()
+    end
+  end
+
+  # The units after a selection apply to every date it selects (ISO 8601-2
+  # §12.11.2): `2018YL{1,2,5}KNT10H0M0S` is each of those days at 10:00:00.
+  defp with_trailing_units(result, []), do: result
+
+  defp with_trailing_units({:ok, %IntervalSet{} = set}, trailing) do
+    set
+    |> IntervalSet.to_list()
+    |> Enum.reduce_while({:ok, []}, fn %Tempo.Interval{from: %Tempo{} = from}, {:ok, acc} ->
+      case to_interval(%{from | time: Keyword.merge(from.time, trailing)}) do
+        {:ok, %Tempo.Interval{} = interval} ->
+          {:cont, {:ok, [interval | acc]}}
+
+        {:ok, %IntervalSet{} = expanded} ->
+          {:cont, {:ok, Enum.reverse(IntervalSet.to_list(expanded)) ++ acc}}
+
+        {:error, _reason} = error ->
+          {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, intervals} -> IntervalSet.new(Enum.reverse(intervals))
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp with_trailing_units({:error, _reason} = error, _trailing), do: error
 
   defp do_to_interval(%Tempo{} = tempo) do
     # Step 1: if the Tempo has a non-contiguous mask (a mask

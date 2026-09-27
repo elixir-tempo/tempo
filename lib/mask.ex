@@ -199,8 +199,9 @@ defmodule Tempo.Mask do
   defp unanchored_range(_ambiguous_or_undefined), do: {:error, :requires_anchor}
 
   # Pad candidate to the mask's width with leading zeros, then
-  # compare digit-by-digit: `:X` matches any digit; any other
-  # element must match exactly.
+  # compare digit-by-digit: `:X` matches any digit, a digit set
+  # (`{0,2,4,6,8}`) any of its digits; any other element must match
+  # exactly.
   defp padded_matches_mask?(candidate, mask, width) do
     padded =
       candidate
@@ -225,15 +226,20 @@ defmodule Tempo.Mask do
     digits_match?(rest_d, rest_m)
   end
 
+  defp digits_match?([digit | rest_d], [digit_set | rest_m]) when is_list(digit_set) do
+    digit in set_digits(digit_set) and digits_match?(rest_d, rest_m)
+  end
+
   defp digits_match?(_, _), do: false
 
   @doc """
   Return the `{min, max}` numeric range spanned by a digit mask.
 
-  Each `:X` position contributes `0..9` at its digit weight; each
-  concrete digit contributes itself. Used by `fill_unspecified/4`
-  to bound the candidate enumeration, and by `Tempo.to_interval/1`
-  to compute the enclosing span of a masked value.
+  Each `:X` position contributes `0..9` at its digit weight, a digit
+  set (`{0,2,4,6,8}`) its smallest to largest digit, and each concrete
+  digit itself. Used by `fill_unspecified/4` to bound the candidate
+  enumeration, and by `Tempo.to_interval/1` to compute the enclosing
+  span of a masked value.
 
   ### Examples
 
@@ -243,12 +249,16 @@ defmodule Tempo.Mask do
       iex> Tempo.Mask.mask_bounds([:X, :X, :X, :X])
       {0, 9999}
 
+      iex> Tempo.Mask.mask_bounds([:X, :X, :X, [0, 2, 4, 6, 8]])
+      {0, 9998}
+
   """
   def mask_bounds(mask) when is_list(mask) do
     {min_digits, max_digits} =
       Enum.reduce(mask, {[], []}, fn
         :X, {lo, hi} -> {[0 | lo], [9 | hi]}
         d, {lo, hi} when is_integer(d) -> {[d | lo], [d | hi]}
+        digit_set, {lo, hi} when is_list(digit_set) -> set_bounds(digit_set, lo, hi)
       end)
 
     {Integer.undigits(Enum.reverse(min_digits)), Integer.undigits(Enum.reverse(max_digits))}
@@ -270,9 +280,10 @@ defmodule Tempo.Mask do
   end
 
   # Per-position match between candidate digits and mask elements.
-  # `:X` is a wildcard; any other element (an integer digit) must
-  # match the candidate's digit exactly. Mirrors the `digits_match?/2`
-  # helper used by `padded_matches_mask?/3` above.
+  # `:X` is a wildcard, a digit set matches any of its digits, and any
+  # other element (an integer digit) must match the candidate's digit
+  # exactly. Mirrors the `digits_match?/2` helper used by
+  # `padded_matches_mask?/3` above.
   defp digits_equal_or_wildcard?([], []), do: true
 
   defp digits_equal_or_wildcard?([_digit | rest_d], [:X | rest_m]) do
@@ -283,7 +294,26 @@ defmodule Tempo.Mask do
     digits_equal_or_wildcard?(rest_d, rest_m)
   end
 
+  defp digits_equal_or_wildcard?([digit | rest_d], [digit_set | rest_m])
+       when is_list(digit_set) do
+    digit in set_digits(digit_set) and digits_equal_or_wildcard?(rest_d, rest_m)
+  end
+
   defp digits_equal_or_wildcard?(_, _), do: false
+
+  # The digits a digit set allows: `{0,2,4,6,8}` parses to `[0, 2, 4, 6, 8]`
+  # and `{2..3}` to `[2..3]`.
+  defp set_digits(digit_set) do
+    Enum.flat_map(digit_set, fn
+      %Range{} = range -> Enum.to_list(range)
+      digit -> [digit]
+    end)
+  end
+
+  defp set_bounds(digit_set, lo, hi) do
+    {min, max} = digit_set |> set_digits() |> Enum.min_max()
+    {[min | lo], [max | hi]}
+  end
 
   defp integer_pow10(0), do: 1
   defp integer_pow10(n) when n > 0, do: 10 * integer_pow10(n - 1)

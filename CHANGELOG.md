@@ -56,6 +56,16 @@
 
 * Every calendar Calendrical implements has a `[u-ca=…]` identifier, from Calendrical's additional calendars where no CLDR type reaches it: `[u-ca=iso8601]` is `Calendrical.ISO`, where it was an unknown calendar, and `[u-ca=vietnamese]`, `[u-ca=lunar-japanese]`, `[u-ca=julian-march25]` or `[u-ca=reform-england]` its own calendar, where the suffix was silently dropped.
 
+* A calendar week (`w`) holds the days Calendrical gives it, so a Hebrew, Islamic, Julian or other week cut short at the start or end of its year spans only its own days (`5787Y1w` is 1 Tishri alone), and its day of the week (`K`) is ISO 8601's. Every Calendrical calendar now numbers `w` weeks.
+
+* A value holding a selection materialises one period of its context at a time (ISO 8601-2 §12.11): `2018Y3ML1K1IN` is 5 March 2018 and `2018Y9ML1K1IN/P5D` the five days from it, where both raised, and US Election Day in any even year takes milliseconds against a bound, where it ran for minutes.
+
+* A year mask with a digit set (`XXX{0,2,4,6,8}Y`) no longer raises `FunctionClauseError`: `Tempo.Mask` bounds and matches a digit set.
+
+* A year in a recurrence's selection limits it to the occurrences that start in the listed years, as a domain does: `R/2026-01-01/P1Y/FL2027Y1M1DN` is 1 January 2027 alone, where the year was ignored. A set, range or mask of years, or `X*Y`, works too.
+
+* `Tempo.to_rrule/1` returns a `Tempo.ConversionError` naming any selection RRULE cannot express — a traditional month (`m`), a computed event (`e`), a year, a selection window, and cron's nearest weekday and day-of-month-or-weekday — where it silently dropped them.
+
 * A week (`W`) is an ISO 8601 week throughout — dates, week counts, arithmetic, rounding, groups and selections — counted over the calendar's own year in a non-Gregorian calendar. `2026Y53W` is valid, `Tempo.shift(~o"2026Y52W", week: 2)` is `2027Y1W` and Hebrew `5787Y10W1K` is 6 Kislev, where week counts were the Gregorian calendar's and Hebrew week dates came from the Gregorian year 5787.
 
 * The ISO 8601-2 quarters, quadrimesters and semesters (codes 33–41) are the value's calendar's own periods, from Calendrical: a Hebrew leap year's Q2 holds Adar I and II and its Q4 runs to Elul, and a week-based calendar's are groups of weeks.

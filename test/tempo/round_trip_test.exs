@@ -1,6 +1,7 @@
 defmodule Tempo.RoundTripTest do
   use ExUnit.Case, async: true
 
+  alias Tempo.Cron
   alias Tempo.RRule
 
   # Round-trip tests validate that the Tempo AST can be encoded
@@ -213,6 +214,35 @@ defmodule Tempo.RoundTripTest do
                Tempo.to_rrule(interval)
 
       assert message =~ "century"
+    end
+
+    test "a selection RRULE cannot express is an error naming it, never dropped" do
+      for {iso, named} <- [
+            {"R/2026-01-05/P1Y/FL10wN", "a calendar week (w)"},
+            {"R/4662Y1M1D[u-ca=chinese]/P1Y/FL6m15DN", "a traditional month (m)"},
+            {"R/2026-01-01/P1Y/FL(easter)eN", "a computed event (e)"},
+            {"R/2026-01-01/P1Y/FL2027Y1M1DN", "a year (Y)"},
+            {"R/2026-01-01/P1Y/FLLL2K2IN/P10DN4K2IN", "a selection window"}
+          ] do
+        assert {:error, %Tempo.ConversionError{target: :rrule, reason: reason}} =
+                 iso |> Tempo.from_iso8601!() |> Tempo.to_rrule()
+
+        assert reason =~ named
+      end
+    end
+
+    test "a cron rule RRULE cannot express is an error naming it, never dropped" do
+      for {expression, named} <- [
+            {"0 0 9 15W * *", "a nearest weekday (cron W)"},
+            {"0 0 9 1 * MON", "a day of the month or of the week"}
+          ] do
+        {:ok, rule} = Cron.parse(expression)
+
+        assert {:error, %Tempo.ConversionError{target: :rrule, reason: reason}} =
+                 Tempo.to_rrule(rule)
+
+        assert reason =~ named
+      end
     end
 
     test "to_rrule! raises on conversion failure" do

@@ -24,6 +24,13 @@ defmodule Tempo.MaskTest do
       assert Mask.valid_values(:year, [1, 9, :X, :X], [], @cal) == {:ok, Enum.to_list(1900..1999)}
     end
 
+    test "a digit set admits each of its digits" do
+      assert Mask.valid_values(:year, [2, 0, [2..3], [0, 5]], [], @cal) ==
+               {:ok, [2020, 2025, 2030, 2035]}
+
+      assert Mask.valid_values(:month, [[0, 1], 2], [year: 2026], @cal) == {:ok, [2, 12]}
+    end
+
     test "minute and second span 0..59" do
       assert Mask.valid_values(:minute, [:X, 5], [], @cal) == {:ok, [5, 15, 25, 35, 45, 55]}
       assert Mask.valid_values(:second, [3, :X], [], @cal) == {:ok, Enum.to_list(30..39)}
@@ -41,12 +48,24 @@ defmodule Tempo.MaskTest do
       assert Mask.matches_mask?(-5, [:negative, 5])
       refute Mask.matches_mask?(5, [:negative, 5])
     end
+
+    test "a digit set matches any of its digits" do
+      assert Mask.matches_mask?(2028, [:X, :X, :X, [0, 2, 4, 6, 8]])
+      refute Mask.matches_mask?(2027, [:X, :X, :X, [0, 2, 4, 6, 8]])
+      assert Mask.matches_mask?(2035, [2, 0, [2..3], :X])
+      refute Mask.matches_mask?(2045, [2, 0, [2..3], :X])
+    end
   end
 
   describe "mask_bounds/1" do
     test "each :X spans 0..9 at its position" do
       assert Mask.mask_bounds([1, 5, 6, :X]) == {1560, 1569}
       assert Mask.mask_bounds([:X, :X, :X, :X]) == {0, 9999}
+    end
+
+    test "a digit set spans its smallest to its largest digit" do
+      assert Mask.mask_bounds([:X, :X, :X, [0, 2, 4, 6, 8]]) == {0, 9998}
+      assert Mask.mask_bounds([2, 0, [2..3], :X]) == {2020, 2039}
     end
   end
 

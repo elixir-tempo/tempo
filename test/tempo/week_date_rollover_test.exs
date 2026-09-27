@@ -126,4 +126,44 @@ defmodule Tempo.WeekDateRolloverTest do
       assert ~o"2027Y1w" == ~o"2026-12-28/2027-01-04"
     end
   end
+
+  describe "a calendar week (w) in a calendar that numbers weeks within its year" do
+    # Hebrew weeks run from Sunday to Shabbat. 1 Tishri 5787 is a Saturday,
+    # so 5787's week 1 is that one day and week 2 runs from Sunday 2 Tishri
+    # to Shabbat 8 Tishri; the year ends on a Friday, six days into its
+    # week 56.
+    test "a week cut short at the start or end of its year spans only its own days" do
+      assert Tempo.from_iso8601!("5787Y1w[u-ca=hebrew]") ==
+               Tempo.from_iso8601!("5787Y1M1D/2D[u-ca=hebrew]")
+
+      assert Tempo.from_iso8601!("5787Y2w[u-ca=hebrew]") ==
+               Tempo.from_iso8601!("5787Y1M2D/9D[u-ca=hebrew]")
+
+      assert Tempo.from_iso8601!("5787Y56w[u-ca=hebrew]") ==
+               Tempo.from_iso8601!("5787Y13M24D/5788Y1M1D[u-ca=hebrew]")
+
+      assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("5787Y57w[u-ca=hebrew]")
+    end
+
+    test "a day of the week is ISO 8601's, and a short week has only its own" do
+      # Saturday (6K) is 1 Tishri; there is no Monday (1K) in week 1
+      assert Tempo.from_iso8601!("5787Y1w6K[u-ca=hebrew]") ==
+               Tempo.from_iso8601!("5787Y1M1D[u-ca=hebrew]")
+
+      assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("5787Y1w1K[u-ca=hebrew]")
+
+      # Sunday (7K) opens the Hebrew week 2
+      assert Tempo.from_iso8601!("5787Y2w7K[u-ca=hebrew]") ==
+               Tempo.from_iso8601!("5787Y1M2D[u-ca=hebrew]")
+    end
+
+    test "Julian weeks run from Monday within the Julian year" do
+      # 1 January 2026 (Julian) is a Wednesday
+      assert Tempo.from_iso8601!("2026Y1w[u-ca=julian]") ==
+               Tempo.from_iso8601!("2026Y1M1D/6D[u-ca=julian]")
+
+      assert Tempo.from_iso8601!("2026Y1w3K[u-ca=julian]") ==
+               Tempo.from_iso8601!("2026Y1M1D[u-ca=julian]")
+    end
+  end
 end

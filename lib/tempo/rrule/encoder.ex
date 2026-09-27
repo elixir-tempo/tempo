@@ -17,6 +17,21 @@ defmodule Tempo.RRule.Encoder do
     year: "YEARLY"
   }
 
+  # The selection tokens with an RRULE BY-part (and WKST).
+  @rrule_tokens [
+    :month,
+    :day,
+    :day_of_year,
+    :week,
+    :day_of_week,
+    :byday,
+    :hour,
+    :minute,
+    :second,
+    :instance,
+    :wkst
+  ]
+
   @weekday_code %{
     1 => "MO",
     2 => "TU",
@@ -178,20 +193,22 @@ defmodule Tempo.RRule.Encoder do
 
   defp by_parts(nil, _interval), do: {:ok, []}
 
+  # A selection encodes only when every token has an RRULE BY-part; one
+  # that has none is an error naming it, never a part silently dropped.
   defp by_parts(%Tempo{time: [selection: selection]}, interval) do
-    if Keyword.has_key?(selection, :calendar_week) do
-      # A calendar week (`w`) has no RRULE form: BYWEEKNO counts ISO 8601's
-      # weeks, or RFC 5545's from WKST, never the calendar's own.
-      {:error,
-       ConversionError.exception(
-         reason:
-           "A calendar week (w) has no RRULE form; BYWEEKNO counts ISO 8601 weeks: " <>
-             "#{inspect(selection)}",
-         value: interval,
-         target: :rrule
-       )}
-    else
-      {:ok, encode_selection(selection)}
+    case selection |> Keyword.keys() |> Enum.reject(&(&1 in @rrule_tokens)) |> Enum.uniq() do
+      [] ->
+        {:ok, encode_selection(selection)}
+
+      tokens ->
+        {:error,
+         ConversionError.exception(
+           reason:
+             "RRULE has no form for #{Enum.map_join(tokens, ", ", &token_description/1)}: " <>
+               inspect(selection),
+           value: interval,
+           target: :rrule
+         )}
     end
   end
 
@@ -263,7 +280,23 @@ defmodule Tempo.RRule.Encoder do
   defp encode_by_entry({:wkst, w}) when is_integer(w),
     do: ["WKST=#{Map.fetch!(@weekday_code, w)}"]
 
-  defp encode_by_entry(_unsupported), do: []
+  # What a selection token with no RRULE BY-part selects, and why RFC 5545
+  # cannot say it.
+  defp token_description(:calendar_week),
+    do: "a calendar week (w), since BYWEEKNO counts ISO 8601 weeks"
+
+  defp token_description(:traditional_month),
+    do: "a traditional month (m), since BYMONTH numbers a month by its position"
+
+  defp token_description(:event), do: "a computed event (e)"
+  defp token_description(:year), do: "a year (Y)"
+  defp token_description(:interval), do: "a selection window (ISO 8601-2 §12.10)"
+  defp token_description(:nearest_weekday), do: "a nearest weekday (cron W)"
+
+  defp token_description(:or_day),
+    do: "a day of the month or of the week (cron), since RRULE BY-parts all hold at once"
+
+  defp token_description(token), do: inspect(token)
 
   ## BYDAY helpers
 

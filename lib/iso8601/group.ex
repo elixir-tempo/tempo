@@ -716,11 +716,12 @@ defmodule Tempo.Iso8601.Group do
      )}
   end
 
-  # The week's seven days, from its first to the first day of the week after.
+  # The week's days, from its first to the day after its last: a week the
+  # calendar cuts short at the start or end of its year spans only its own.
   defp calendar_week_days(year, week, rest, calendar) do
-    case Validation.date_from_calendar_week(year, week, 1, calendar) do
-      {:ok, first} ->
-        next = Calendrical.next(first, :week)
+    case Validation.calendar_week_range(year, week, calendar) do
+      %Date.Range{first: first, last: last} ->
+        next = Calendrical.next(last, :day)
 
         [
           interval: [

@@ -94,7 +94,7 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 | **Range in set** | `[1900..2000]`, `{-1640-06..-1200-01}` |
 | **Groups** | `5G10DU` (5th group of 10 days), `2018Y4G60DU6D` (2018, day 6 of the 4th group of 60 days), `1933Y1G80DU` (the first 80 days of 1933), `2026Y2G13WU` (weeks 14–26), `T16H1GT15MU` (16:00–16:15) |
 | **A value within a group** | `2018Y9M2DT3GT8HU0H30M` (30 minutes into the third eight hours: 16:30), `2018Y2G3MU2M` (May) |
-| **Selections** | `L1MN`, `L2MI3N` (1st month, 3rd instance of the 2nd month) |
+| **Selections** | `L1MN`, `L2MI3N` (1st month, 3rd instance of the 2nd month). A value holding one materialises the dates it picks in each period of its context (§12.11): `2018Y3ML1K1IN` is 5 March 2018, and `XXX{0,2,4,6,8}Y11MLLL1K1IN/P9DN2K1IN` (US Election Day) resolves one year at a time. |
 | **Meteorological seasons** (codes 21–24) | `2022-21` (spring), `2022-22` (summer), `2022-23` (autumn), `2022-24` (winter) |
 | **Astronomical seasons** (codes 25–32) | `2022-25` (N spring), `2022-26` (N summer), `2022-27` (N autumn), `2022-28` (N winter), `2022-29..32` (Southern hemisphere). Boundaries computed via the `Astro` library using March/September equinoxes and June/December solstices (accurate to ≈2 minutes for years 1000–3000 CE). |
 | **Quarters** (codes 33–36) | `2022-33` (Q1), `2022-36` (Q4). The calendar's own quarters, from Calendrical: a Hebrew leap year's Q2 holds Adar I and II, and a week-based calendar's are groups of weeks. |
@@ -176,6 +176,7 @@ These syntaxes are Tempo conveniences, not part of any standard:
 
 * **Step in range** — `{1990..1999//2}Y` or `2023Y{1..-1//2}W` means "every second week in 2023".
 * **Calendar week** — `2027Y1w` is the calendar's own week 1, where `2027Y1W` is ISO 8601's; described below.
+* **A year in a recurrence selection** — `FL{2026,2028}Y1M1DN` keeps the occurrences in those years, where ISO 8601-2 §12.2 has no year rule; described with the recurrence domain below.
 * **Explicit suffixes** — `2022Y11M20D` instead of `2022-11-20`. Used by the `~o` sigil as the canonical output form.
 * **Repeat rule** — `/F` combinator inside a parsed expression.
 * **Selection position** — `L…N` with an `I` modifier for the nth occurrence of the resolved set, written weekday-then-position (`1K2I` = "the 2nd Monday"). `I` is the ISO 8601-2 §12.9 position designator, not a Tempo invention — it is listed here only for completeness and described in full below.
@@ -298,7 +299,7 @@ ISO 8601 numbers weeks one way: each starts on a Monday, and week 1 is the one h
 ~o"2027Y1w"     # 2026-12-28/2027-01-04, the week's seven days
 ```
 
-In a **concrete date** a `w` week resolves to its dates, so the lowercase marker never survives a round-trip, as `m` does not. In a **selection** it survives and resolves per year: `R/../P1Y/FL10wN` is the calendar's week 10 of each year and `FL10w3KN` its Wednesday. A week-based calendar's own weeks are its `W` weeks, and a calendar has `w` weeks only when Calendrical numbers them (`Calendrical.Interval.week/3`). RFC 5545's `BYWEEKNO` counts ISO 8601 weeks (from `WKST`), so `Tempo.to_rrule/1` cannot express `w`.
+In a **concrete date** a `w` week resolves to its dates, so the lowercase marker never survives a round-trip, as `m` does not. In a **selection** it survives and resolves per year: `R/../P1Y/FL10wN` is the calendar's week 10 of each year and `FL10w3KN` its Wednesday. A week-based calendar's own weeks are its `W` weeks, and every other calendar's are the weeks Calendrical numbers (`Calendrical.Interval.week/3`). A calendar that numbers its weeks within its own year (Hebrew, Islamic, Julian, …) cuts week 1 and the last week short, so `5787Y1w[u-ca=hebrew]` is 1 Tishri alone, a Saturday; the day of the week `K` is ISO 8601's, and a short week holds only its own days (`5787Y1w1K` is not a date). RFC 5545's `BYWEEKNO` counts ISO 8601 weeks (from `WKST`), so `Tempo.to_rrule/1` cannot express `w`.
 
 ### Exclusions and the recurrence domain — the `^` marker and `e`/`o`/`l` filters
 
@@ -353,6 +354,16 @@ Tempo.to_interval(~o"R/{2017Y..}/P1Y/FL1M2DN", bound: ~o"{2015..2019}Y")
 Tempo.to_interval(~o"R/{1848Y..}/P4Y/FLLL11M1K1IN/P7DN2K-1IN", bound: ~o"{2019..2028}Y")
 #   → 2020-11-03, 2024-11-05, 2028-11-07
 ```
+
+**A year in the selection.** ISO 8601-2 has no year selection rule (§12.2), but Tempo accepts a year inside a recurrence's selection and reads it as a domain: an occurrence is kept when it starts in a listed year. A year, a set or range of years, a mask (`202XY`, `XXX{0,2,4,6,8}Y`) or `X*Y` for any year can be written there:
+
+```elixir
+# New Year's Day in 2026 and 2028 only
+Tempo.to_interval(~o"R/2026-01-01/P1Y/FL{2026,2028}Y1M1DN", bound: ~o"2026Y/2030Y")
+#   → 2026, 2028
+```
+
+As with a domain, an occurrence belongs to the year it starts in, so `R/2025-01-01/P1Y/FL2026Y1W1KN` has none: ISO 8601 week 1 of 2026 starts on 29 December 2025. RFC 5545 has no `BYYEAR`, so `Tempo.to_rrule/1` cannot express it.
 
 ### Selection with a time interval (ISO 8601-2 §12.10)
 
