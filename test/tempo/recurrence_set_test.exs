@@ -359,6 +359,24 @@ defmodule Tempo.RecurrenceSetTest do
       assert isos(clashes) == ["2026Y1M1D", "2026Y12M25D"]
     end
 
+    test "a meeting during a holiday clashes with it, the holiday starting before the meeting" do
+      {:ok, diary} = IntervalSet.new([Tempo.to_interval!(~o"2026-12-25T10/2026-12-25T11")])
+
+      # A three-day break from the 24th reaches the meeting on the 25th too.
+      break = %{
+        Tempo.from_iso8601!("R/../P1Y/FL12M24DN")
+        | metadata: %{name: "Christmas break", occurrence_duration: ~o"P3D"}
+      }
+
+      for holidays <- [
+            RecurrenceSet.new([named("R/../P1Y/FL12M25DN", "Christmas")]),
+            RecurrenceSet.new([break])
+          ] do
+        assert {:ok, clashes} = Tempo.intersection(diary, holidays)
+        assert isos(clashes) == ["2026Y12M25DT10H"]
+      end
+    end
+
     test "with the recurrence set first, occurrences keep their names" do
       {:ok, diary} = IntervalSet.new([Tempo.to_interval!(~o"2026Y12M25D")])
       holidays = RecurrenceSet.new([named("R/../P1Y/FL12M25DN", "Christmas")])

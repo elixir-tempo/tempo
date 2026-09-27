@@ -66,7 +66,7 @@
 
 ### Fixed
 
-* A recurrence over a bound that starts mid-period reaches every period the bound overlaps, and keeps only occurrences starting in the bound or by its UNTIL: `R/../P1Y/FL1M15DN` over September 2026 to March 2027 is 15 January 2027, where it was nothing.
+* A recurrence over a bound that starts mid-period reaches every period the bound overlaps, and keeps only occurrences starting in the bound or by its UNTIL: `R/../P1Y/FL1M15DN` over September 2026 to March 2027 is 15 January 2027, where it was nothing. `overlapping: true` keeps those overlapping the bound, as set operations do against a recurrence set's other operand.
 
 * An interval written as a start and a duration (`2026-01-01/P1D`) or a duration and an end (`P1D/2026-01-02`) answers `relation/2`, the relation, certainty and duration predicates, `duration/1`, `bounded?/1`, the endpoint accessors and `IntervalSet.new/2` as its two-endpoint form does, where they raised, crashed or read it as open-ended.
 

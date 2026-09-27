@@ -142,6 +142,18 @@ defmodule Tempo.UnanchoredRecurrenceTest do
       assert starts(weekly) == ["2026Y4M9D", "2026Y4M16D"]
     end
 
+    test "overlapping: true keeps an occurrence that starts before the bound and reaches into it" do
+      bound = ~o"2026-12-25T10/2026-12-25T11"
+
+      assert {:ok, starting} = Tempo.to_interval(~o"R/../P1Y/FL12M25DN", bound: bound)
+      assert starts(starting) == []
+
+      assert {:ok, overlapping} =
+               Tempo.to_interval(~o"R/../P1Y/FL12M25DN", bound: bound, overlapping: true)
+
+      assert starts(overlapping) == ["2026Y12M25D"]
+    end
+
     test "a bound aligned to the cadence is unchanged" do
       assert {:ok, set} = Tempo.to_interval(~o"R/../P1Y/FL12M25DN", bound: ~o"2026Y")
       assert starts(set) == ["2026Y12M25D"]

@@ -393,12 +393,14 @@ defmodule Tempo.Operations do
   ## Conversion to IntervalSet.
 
   # A `%Tempo.RecurrenceSet{}` operand materialises against `counterparty` (or an
-  # explicit `:bound`) as its window. If it cannot (no usable window), it is left
-  # as-is for `validate_operand/1` to reject with a clear error.
+  # explicit `:bound`) as its window, keeping every occurrence that overlaps it —
+  # a day's holiday meets a meeting at 10:00 that day. If it cannot (no usable
+  # window), it is left as-is for `validate_operand/1` to reject with a clear
+  # error.
   defp resolve_recurrence_set(%Tempo.RecurrenceSet{} = recurrence_set, counterparty, opts) do
     bound = Keyword.get(opts, :bound, counterparty)
 
-    case Tempo.to_interval_set(recurrence_set, bound: bound) do
+    case Tempo.to_interval_set(recurrence_set, bound: bound, overlapping: true) do
       {:ok, %IntervalSet{} = set} -> set
       _other -> recurrence_set
     end

@@ -26,7 +26,9 @@ decision taken on the way to 1.0, is in
 
 * [ ] **Coverage to 90%** — the CI lint row runs plain `mix test` until coverage reaches the default 90% threshold, then takes the reference workflow's `mix test --cover`. 85.5% today (2026-09-27) with the existing `ignore_modules`; `mix test --cover` lists the modules below it.
 
-* [ ] **Predicates that raise** — `Tempo.anchored?/1`, `floating?/1` and `grounded?/1` raise `FunctionClauseError` on any interval; the relation and certainty predicates raise, by tested design, for an operand that is not one bounded interval; `Interval.duration/1` raises for a multi-occurrence recurrence. Decide `false` or `{:error, _}` per the no-raise rule.
+* [ ] **Conditional first pass walks whole periods** — it widens the bound by the conditions' reach, and the walk covers every period the widened bound touches, so a ±1-day bridge crossing both year ends materialises three years: Japan's holiday set takes 55 ms a year with its bridge, 25 ms without. Widen only where a condition reaches past the bound (the bridge's days, a move's search back from the bound's start).
+
+* [ ] **`Interval.duration/1` raises** — a multi-occurrence recurrence raises `MaterialisationError` and differing endpoint calendars fail an `:ok =` match; return `{:error, _}` instead. Predicates (`anchored?/1`, the relation and certainty predicates) may raise on invalid input, as Elixir's naming conventions expect (user, 2026-09-27).
 
 ## Deferred
 

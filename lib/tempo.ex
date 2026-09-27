@@ -5033,7 +5033,14 @@ defmodule Tempo do
     expansion of an unbounded recurrence (`recurrence: :infinity`
     with no `UNTIL`), or the years a selection in an unspecified
     year is resolved in. Required to materialise such values;
-    ignored otherwise.
+    ignored otherwise. An unanchored or domain recurrence keeps the
+    occurrences that start in the bound, `[from, to)`.
+
+  * `:overlapping` keeps, with `true`, the occurrences that overlap
+    the bound rather than only those that start in it — a day's
+    holiday for a bound from 10:00 that day. The set operations use
+    it when they materialise a recurrence set against their other
+    operand. The default is `false`.
 
   * `:coalesce` controls whether the resulting IntervalSet
     merges adjacent or overlapping intervals (`true`, the
@@ -5330,7 +5337,7 @@ defmodule Tempo do
       |> step_domain_periods(domain, interval.duration)
       |> Enum.filter(&domain_period_in_window?(&1, window))
       |> reduce_domain_occurrences(interval, opts)
-      |> keep_occurrences_in_window(window)
+      |> keep_occurrences_in_window(window, bound_keep_mode(opts))
     end
   end
 
@@ -5571,26 +5578,18 @@ defmodule Tempo do
   # its end (`R/../P1Y/FL9M23DN` over `[1 Sep, 23 Sep)` selects 23 September).
   # Trim the materialised set to the window.
   defp filter_to_bound_window(
-         {:ok, %Tempo.IntervalSet{} = set},
+         {:ok, %Tempo.IntervalSet{}} = result,
          %Tempo.Interval{repeat_rule: %Tempo{}},
-         bound
+         bound,
+         mode
        ) do
-    with {:ok, bound_to} <- bound_upper(bound),
-         bound_from = bound_lower(bound),
-         trimmed =
-           set
-           |> IntervalSet.to_list()
-           |> Enum.filter(fn %Tempo.Interval{from: from} ->
-             in_bound_window?(from, bound_from, bound_to)
-           end),
-         {:ok, %Tempo.IntervalSet{} = filtered} <- IntervalSet.new(trimmed) do
-      {:ok, filtered}
-    else
-      _other -> {:ok, set}
+    case bound_upper(bound) do
+      {:ok, bound_to} -> keep_occurrences_in_window(result, {bound_lower(bound), bound_to}, mode)
+      _no_upper_edge -> result
     end
   end
 
-  defp filter_to_bound_window(result, _interval, _bound), do: result
+  defp filter_to_bound_window(result, _interval, _bound, _mode), do: result
 
   # Materialise an unanchored recurrence from its bound's anchor. A §12.10 window
   # can move an occurrence off the period whose selection produced it — a Saturday
@@ -5603,7 +5602,7 @@ defmodule Tempo do
       {0, 0} ->
         %{interval | from: anchor_in_repeat_calendar(anchor, interval)}
         |> to_interval(opts)
-        |> filter_to_bound_window(interval, bound)
+        |> filter_to_bound_window(interval, bound, bound_keep_mode(opts))
 
       periods ->
         materialise_windowed(interval, anchor, bound, periods, opts)
@@ -5624,7 +5623,7 @@ defmodule Tempo do
 
       %{interval | from: anchor_in_repeat_calendar(widened_from, interval)}
       |> to_interval(Keyword.put(opts, :bound, widened))
-      |> keep_occurrences_in_window({bound_lower(bound), bound_to})
+      |> keep_occurrences_in_window({bound_lower(bound), bound_to}, bound_keep_mode(opts))
     end
   end
 
@@ -6446,21 +6445,41 @@ defmodule Tempo do
 
   defp domain_period_in_window?(_period, _window), do: true
 
-  defp keep_occurrences_in_window(result, :none), do: result
+  defp keep_occurrences_in_window(result, :none, _mode), do: result
 
-  defp keep_occurrences_in_window({:ok, %Tempo.IntervalSet{} = set}, {bound_from, bound_to}) do
+  defp keep_occurrences_in_window(
+         {:ok, %Tempo.IntervalSet{} = set},
+         {bound_from, bound_to},
+         mode
+       ) do
     set
     |> IntervalSet.to_list()
-    |> Enum.filter(&occurrence_in_window?(&1, bound_from, bound_to))
+    |> Enum.filter(&occurrence_kept?(&1, bound_from, bound_to, mode))
     |> IntervalSet.new()
   end
 
-  defp keep_occurrences_in_window({:error, _} = error, _window), do: error
+  defp keep_occurrences_in_window({:error, _} = error, _window, _mode), do: error
 
-  defp occurrence_in_window?(%Tempo.Interval{from: %Tempo{} = from}, bound_from, bound_to),
+  # A bound keeps the occurrences that start in its window — or, with
+  # `overlapping: true` (as a set operation materialises against its other
+  # operand), those that overlap it, so a day's holiday meets a meeting at 10:00
+  # that day.
+  defp occurrence_kept?(%Tempo.Interval{from: %Tempo{} = from}, bound_from, bound_to, :start),
     do: in_bound_window?(from, bound_from, bound_to)
 
-  defp occurrence_in_window?(_occurrence, _bound_from, _bound_to), do: true
+  defp occurrence_kept?(
+         %Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to},
+         bound_from,
+         bound_to,
+         :overlap
+       ),
+       do: under_bound?(from, bound_to) and (is_nil(bound_from) or under_bound?(bound_from, to))
+
+  defp occurrence_kept?(_occurrence, _bound_from, _bound_to, _mode), do: true
+
+  defp bound_keep_mode(opts) do
+    if Keyword.get(opts, :overlapping) == true, do: :overlap, else: :start
+  end
 
   # Close an open-ended domain range against the bound's window: a missing upper
   # end becomes the bound's end and a missing lower end the bound's start, each
@@ -6616,7 +6635,7 @@ defmodule Tempo do
         for {index, %Conditional{} = conditional, occurrences} <- first_pass,
             occurrence <- occurrences,
             outcome <- resolve_conditional_occurrence(occurrence, conditional, index, tally),
-            in_conditional_window?(outcome, window),
+            in_conditional_window?(outcome, window, bound_keep_mode(opts)),
             do: outcome
 
       {:ok, others_occurrences ++ resolved}
@@ -6688,10 +6707,10 @@ defmodule Tempo do
   defp widened_opts(opts, {_bound_from, _bound_to, widened}),
     do: Keyword.put(opts, :bound, widened)
 
-  defp in_conditional_window?(_occurrence, :none), do: true
+  defp in_conditional_window?(_occurrence, :none, _mode), do: true
 
-  defp in_conditional_window?(%Tempo.Interval{from: from}, {bound_from, bound_to, _widened}),
-    do: in_bound_window?(from, bound_from, bound_to)
+  defp in_conditional_window?(occurrence, {bound_from, bound_to, _widened}, mode),
+    do: occurrence_kept?(occurrence, bound_from, bound_to, mode)
 
   # Every member's occurrences, a conditional's being its member's, tagged with
   # the conditional's metadata as a nested set's are.
@@ -7067,7 +7086,7 @@ defmodule Tempo do
         occurrence
       end
       |> IntervalSet.new()
-      |> keep_occurrences_in_window(window)
+      |> keep_occurrences_in_window(window, bound_keep_mode(opts))
       |> with_trailing_units(trailing)
     end
   end
