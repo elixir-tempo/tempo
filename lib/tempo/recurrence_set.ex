@@ -113,7 +113,8 @@ defmodule Tempo.RecurrenceSet do
     start (`~o"-P1D"` is the day before). Required.
 
   * `:falls_on` is a map an occurrence of another member must have in its
-    metadata for a day to fall on it (`%{type: :public}`). Required.
+    metadata for a day to fall on it (`%{type: :public}`), or a recurrence set
+    whose occurrences the condition reads instead. Required.
 
   * `:metadata` is a map tagging every occurrence the member produces. The
     default is `%{}`.
@@ -164,7 +165,8 @@ defmodule Tempo.RecurrenceSet do
   ### Options
 
   * `:falls_on` is a map an occurrence of another member must have in its
-    metadata for an occurrence to fall on it (`%{type: :public}`). Required.
+    metadata for an occurrence to fall on it (`%{type: :public}`), or a
+    recurrence set whose occurrences the condition reads instead. Required.
 
   * `:to_next` is a selector (`~o"1K"`, Monday): a moved occurrence goes to the
     first span `Tempo.select/2` gives for it after the occurrence. Required.

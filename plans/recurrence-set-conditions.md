@@ -65,7 +65,7 @@ naefelser_fahrt =
 
 > *"Citizens' Holiday is 22 September, **kept** only when the day before and the day after both **fall on** public holidays. Näfelser Fahrt is the Thursday after 2 April, **moved to the next** Thursday when it falls on an observance."*
 
-* **Falls on** — a day falls on an occurrence of another member of the set whose metadata includes every key and value of `:falls_on`; the day and the occurrence overlap.
+* **Falls on** — a day falls on an occurrence of another member of the set whose metadata includes every key and value of `:falls_on`; the day and the occurrence overlap. `:falls_on` may instead be a recurrence set whose occurrences the condition reads (user, 2026-09-28): a holiday set selected by type carries the holidays a kept conditional depends on, so a selection never changes a date.
 
 * **Keep** — an occurrence is kept when every day `:at` away from its start falls on such an occurrence, and dropped otherwise.
 

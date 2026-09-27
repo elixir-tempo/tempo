@@ -53,7 +53,7 @@ defmodule Tempo.MaterialisationError do
 
   def message(%__MODULE__{reason: :conditional_member, value: value}) do
     "Cannot resolve #{inspect(value)} as a conditional Tempo.RecurrenceSet member — it " <>
-      "needs a :falls_on map and either :at, a list of durations " <>
+      "needs :falls_on, a metadata map or a recurrence set, and either :at, a list of durations " <>
       "(Tempo.RecurrenceSet.keep_when/2), or :to_next, a selector " <>
       "(Tempo.RecurrenceSet.move_when/2)."
   end

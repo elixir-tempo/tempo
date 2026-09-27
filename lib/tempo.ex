@@ -6627,14 +6627,15 @@ defmodule Tempo do
 
     with :ok <- validate_conditionals(conditionals),
          {:ok, window} <- conditional_window(conditionals, opts),
-         {:ok, first_pass} <- first_pass_occurrences(members, widened_opts(opts, window)),
+         first_opts = widened_opts(opts, window),
+         {:ok, first_pass} <- first_pass_occurrences(members, first_opts),
+         {:ok, reads} <- conditional_reads(first_pass, first_opts),
          {:ok, others_occurrences} <- members_occurrences(others, opts) do
-      tally = occurrence_tally(first_pass)
-
       resolved =
         for {index, %Conditional{} = conditional, occurrences} <- first_pass,
             occurrence <- occurrences,
-            outcome <- resolve_conditional_occurrence(occurrence, conditional, index, tally),
+            outcome <-
+              resolve_conditional_occurrence(occurrence, conditional, Map.get(reads, index, [])),
             in_conditional_window?(outcome, window, bound_keep_mode(opts)),
             do: outcome
 
@@ -6654,15 +6655,63 @@ defmodule Tempo do
     end
   end
 
-  defp valid_conditional?(%Conditional{falls_on: falls_on, at: [_ | _] = offsets, to_next: nil})
-       when is_map(falls_on),
-       do: Enum.all?(offsets, &match?(%Tempo.Duration{}, &1))
+  defp valid_conditional?(%Conditional{falls_on: falls_on, at: [_ | _] = offsets, to_next: nil}),
+    do: valid_falls_on?(falls_on) and Enum.all?(offsets, &match?(%Tempo.Duration{}, &1))
 
-  defp valid_conditional?(%Conditional{falls_on: falls_on, at: nil, to_next: %Tempo{}})
-       when is_map(falls_on),
-       do: true
+  defp valid_conditional?(%Conditional{falls_on: falls_on, at: nil, to_next: %Tempo{}}),
+    do: valid_falls_on?(falls_on)
 
   defp valid_conditional?(_conditional), do: false
+
+  # What a condition falls on: a metadata map the other members' occurrences are
+  # matched against, or a recurrence set whose own occurrences it reads.
+  defp valid_falls_on?(%Tempo.RecurrenceSet{}), do: true
+  defp valid_falls_on?(%_struct{}), do: false
+  defp valid_falls_on?(falls_on), do: is_map(falls_on)
+
+  # Each conditional's condition as the spans of the occurrences it can fall on,
+  # keyed by the conditional's member index: the other members' first-pass
+  # occurrences whose metadata includes a `:falls_on` map — never its own — or
+  # every occurrence of a `:falls_on` recurrence set, materialised over the same
+  # widened window.
+  defp conditional_reads(first_pass, opts) do
+    tally = occurrence_tally(first_pass)
+
+    first_pass
+    |> Enum.filter(&match?({_index, %Conditional{}, _occurrences}, &1))
+    |> Enum.reduce_while({:ok, %{}}, fn {index, conditional, _occurrences}, {:ok, reads} ->
+      case condition_spans(conditional, index, tally, opts) do
+        {:ok, spans} -> {:cont, {:ok, Map.put(reads, index, spans)}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp condition_spans(
+         %Conditional{falls_on: %Tempo.RecurrenceSet{} = reference},
+         _index,
+         _tally,
+         opts
+       ) do
+    with {:ok, occurrences} <- to_interval_set(reference, opts) do
+      spans =
+        for %Tempo.Interval{from: %Tempo{}, to: %Tempo{}} = occurrence <-
+              IntervalSet.to_list(occurrences),
+            do: occurrence_span(occurrence)
+
+      {:ok, spans}
+    end
+  end
+
+  defp condition_spans(%Conditional{falls_on: falls_on}, index, tally, _opts) do
+    spans =
+      for {other, from, to, metadata} <- tally,
+          other != index,
+          metadata_includes?(metadata, falls_on),
+          do: {from, to}
+
+    {:ok, spans}
+  end
 
   # The bound, and the bound widened by the conditions' reach — each `:at` offset
   # from either edge, and a move's search span back from the lower edge — so a
@@ -6743,26 +6792,17 @@ defmodule Tempo do
         do: {index, Compare.to_utc_seconds(from), Compare.to_utc_seconds(to), metadata}
   end
 
-  # Keep an occurrence when every day `:at` from its start falls on another
-  # member's occurrence; move one that falls on such an occurrence to the next
-  # span its selector gives. An occurrence never falls on its own member's.
-  defp resolve_conditional_occurrence(
-         occurrence,
-         %Conditional{to_next: nil} = conditional,
-         index,
-         tally
-       ) do
-    %Conditional{at: offsets, falls_on: falls_on} = conditional
-
-    if Enum.all?(offsets, &falls_on?(offset_span(occurrence, &1), falls_on, index, tally)),
+  # Keep an occurrence when every day `:at` from its start falls on one of the
+  # condition's spans; move one that falls on such a span to the next span its
+  # selector gives.
+  defp resolve_conditional_occurrence(occurrence, %Conditional{to_next: nil, at: offsets}, spans) do
+    if Enum.all?(offsets, &falls_on?(offset_span(occurrence, &1), spans)),
       do: [occurrence],
       else: []
   end
 
-  defp resolve_conditional_occurrence(occurrence, %Conditional{} = conditional, index, tally) do
-    %Conditional{falls_on: falls_on, to_next: selector} = conditional
-
-    if falls_on?(occurrence_span(occurrence), falls_on, index, tally),
+  defp resolve_conditional_occurrence(occurrence, %Conditional{to_next: selector}, spans) do
+    if falls_on?(occurrence_span(occurrence), spans),
       do: [next_selected(occurrence, selector)],
       else: [occurrence]
   end
@@ -6779,14 +6819,13 @@ defmodule Tempo do
     end
   end
 
-  defp falls_on?({from_seconds, to_seconds}, falls_on, index, tally) do
-    Enum.any?(tally, fn {other, other_from, other_to, metadata} ->
-      other != index and other_from < to_seconds and from_seconds < other_to and
-        metadata_includes?(metadata, falls_on)
+  defp falls_on?({from_seconds, to_seconds}, spans) do
+    Enum.any?(spans, fn {span_from, span_to} ->
+      span_from < to_seconds and from_seconds < span_to
     end)
   end
 
-  defp falls_on?(:none, _falls_on, _index, _tally), do: false
+  defp falls_on?(:none, _spans), do: false
 
   defp metadata_includes?(metadata, pattern) do
     Enum.all?(pattern, fn {key, value} -> Map.fetch(metadata, key) == {:ok, value} end)

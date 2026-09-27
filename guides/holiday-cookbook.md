@@ -182,7 +182,7 @@ And *"every N years"* is a plain cadence, not a filter — `~o"R/2024-07-04/P4Y"
 
 ## Bridge days and moved holidays (conditional members)
 
-A bridge day and a holiday moved off another depend on the *other* holidays of the set, so neither is a property of one recurrence. A `Tempo.RecurrenceSet` holds them as conditional members, resolved after its other members: `Tempo.RecurrenceSet.keep_when/2` keeps an occurrence only when the days `:at` offsets from it fall on the others' occurrences, and `Tempo.RecurrenceSet.move_when/2` moves one that falls on them to the next day its `:to_next` selector gives. `:falls_on` names the others by their metadata.
+A bridge day and a holiday moved off another depend on the *other* holidays of the set, so neither is a property of one recurrence. A `Tempo.RecurrenceSet` holds them as conditional members, resolved after its other members: `Tempo.RecurrenceSet.keep_when/2` keeps an occurrence only when the days `:at` offsets from it fall on the others' occurrences, and `Tempo.RecurrenceSet.move_when/2` moves one that falls on them to the next day its `:to_next` selector gives. `:falls_on` names the others by their metadata, or is a recurrence set of them the condition reads directly — how a set selected by holiday type keeps a holiday's date when what it depends on is left out.
 
 ```elixir
 respect_for_the_aged = Tempo.put_metadata(~o"R/../P1Y/FL9M1K3IN", %{type: :public})

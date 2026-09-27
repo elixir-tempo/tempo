@@ -13,7 +13,9 @@ defmodule Tempo.RecurrenceSet.Conditional do
 
   * **Falls on** — a day falls on an occurrence of another member whose
     metadata includes every key and value of `:falls_on`: the day and the
-    occurrence overlap.
+    occurrence overlap. When `:falls_on` is a recurrence set instead, the day
+    falls on any of that set's occurrences — the holidays a selection by type
+    leaves out of the set, so a kept holiday is still dated by them.
 
   * **Keep** — an occurrence is kept when every day `:at` away from its start
     falls on such an occurrence, and dropped otherwise.
@@ -32,7 +34,7 @@ defmodule Tempo.RecurrenceSet.Conditional do
   @typedoc "A member a `t:Tempo.RecurrenceSet.t/0` keeps or moves by its other members."
   @type t :: %__MODULE__{
           member: Tempo.Interval.t() | Tempo.t() | Tempo.RecurrenceSet.t(),
-          falls_on: map(),
+          falls_on: map() | Tempo.RecurrenceSet.t(),
           at: [Tempo.Duration.t()] | nil,
           to_next: Tempo.t() | nil,
           metadata: map()

@@ -325,6 +325,42 @@ defmodule Tempo.RecurrenceSetTest do
       assert days(set) == ["2026Y4M9D", "2026Y4M9D"]
     end
 
+    test "falls_on: a recurrence set reads that set's occurrences, which are not output" do
+      # The observance the move depends on is not a member here — as when a set
+      # selected by type leaves it out — so the conditional carries it.
+      observances = RecurrenceSet.new([typed("2026-04-09", :observance)])
+      moved = RecurrenceSet.move_when(~o"2026-04-09", falls_on: observances, to_next: ~o"4K")
+
+      {:ok, set} = Tempo.to_interval_set(RecurrenceSet.new([moved]))
+      assert days(set) == ["2026Y4M16D"]
+    end
+
+    test "falls_on: a recurrence set keeps a bridge, reading past the bound's edge" do
+      neighbours =
+        RecurrenceSet.new([
+          typed("R/../P1Y/FL9M21DN", :public),
+          typed("R/../P1Y/FL9M23DN", :public)
+        ])
+
+      bridge =
+        RecurrenceSet.keep_when(~o"R/../P1Y/FL9M22DN",
+          at: [~o"-P1D", ~o"P1D"],
+          falls_on: neighbours
+        )
+
+      {:ok, set} =
+        Tempo.to_interval_set(RecurrenceSet.new([bridge]), bound: ~o"2026-09-22/2026-09-23")
+
+      assert days(set) == ["2026Y9M22D"]
+    end
+
+    test "falls_on: another kind of struct is an error" do
+      bad = RecurrenceSet.move_when(~o"2026-04-09", falls_on: ~o"2026-04-09", to_next: ~o"4K")
+
+      assert {:error, %Tempo.MaterialisationError{reason: :conditional_member}} =
+               Tempo.to_interval_set(RecurrenceSet.new([bad]))
+    end
+
     test "a conditional without what it falls on, or with both :at and :to_next, is an error" do
       for conditional <- [
             RecurrenceSet.keep_when(~o"2026-04-09", at: [~o"-P1D"]),

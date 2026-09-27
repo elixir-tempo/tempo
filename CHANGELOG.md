@@ -8,7 +8,7 @@
 
 ### Added
 
-* `Tempo.RecurrenceSet.keep_when/2` and `move_when/2` — a member kept only when days around it fall on the other members' occurrences (a bridge day), or moved `:to_next` a selected day when it falls on one, resolved in a second pass as date-holidays does.
+* `Tempo.RecurrenceSet.keep_when/2` and `move_when/2` — a member kept only when days around it fall on the other members' occurrences (a bridge day), or moved `:to_next` a selected day when it falls on one, resolved in a second pass. `:falls_on` matches the other members' metadata, or names a recurrence set to read.
 
 * A `%Tempo{}` carries its own `:metadata`, as an interval and both sets do: `Tempo.metadata/1` and `Tempo.put_metadata/2` read and set it on any value, and materialising a value moves it to the interval or intervals the value becomes.
 
