@@ -8,12 +8,13 @@ defmodule Tempo.Interval.Relations do
   after the rebuild, never during" is `[:precedes, :preceded_by]`, and
   knowing nothing at all is all thirteen.
 
-  This module is the algebra over those sets: the converse of a set, the
-  narrowing of one set by another, and Allen's composition lifted from
-  single relations to sets. Together they are the operations a
-  qualitative constraint network is built from — Allen's propagation step
-  is `narrow(known, compose(first_leg, second_leg))` — but they are
-  useful on their own for reasoning about partial knowledge.
+  This module is the algebra over those sets — the full set, the empty
+  one, canonical order, and the narrowing of one set by another — beside
+  `Tempo.Allen.inverse/1` and `Tempo.Allen.compose/2`, which take sets
+  too. Together they are the operations a qualitative constraint network
+  is built from — Allen's propagation step is
+  `narrow(known, Tempo.Allen.compose(first_leg, second_leg))` — but they
+  are useful on their own for reasoning about partial knowledge.
 
   No interval is involved anywhere in this module. Its values are lists of
   relation atoms, always returned in Allen's canonical order so that two
@@ -107,43 +108,6 @@ defmodule Tempo.Interval.Relations do
   end
 
   @doc """
-  The converse of a relation set — what holds from `B` to `A` given the
-  set that holds from `A` to `B`.
-
-  ### Arguments
-
-  * `relations` is a list of Allen relations.
-
-  ### Returns
-
-  * The converse set, in Allen's canonical order.
-
-  * `{:error, {:invalid_relation, term}}` when an element is not one of
-    the thirteen.
-
-  ### Examples
-
-      iex> Tempo.Interval.Relations.converse([:precedes, :during])
-      [:contains, :preceded_by]
-
-      iex> Tempo.Interval.Relations.converse([:equals])
-      [:equals]
-
-  The converse of the full set is the full set — knowing nothing about
-  `A` to `B` is knowing nothing about `B` to `A`:
-
-      iex> Tempo.Interval.Relations.converse(Tempo.Interval.Relations.full())
-      Tempo.Interval.Relations.full()
-
-  """
-  @spec converse(t()) :: t() | {:error, {:invalid_relation, term()}}
-  def converse(relations) when is_list(relations) do
-    with relations when is_list(relations) <- canonical(relations) do
-      relations |> Enum.map(&Interval.inverse_relation/1) |> canonical()
-    end
-  end
-
-  @doc """
   Narrow one relation set by another — what survives when two sources of
   knowledge about the same pair are combined.
 
@@ -187,61 +151,6 @@ defmodule Tempo.Interval.Relations do
     with relations1 when is_list(relations1) <- canonical(relations1),
          relations2 when is_list(relations2) <- canonical(relations2) do
       Enum.filter(relations1, &(&1 in relations2))
-    end
-  end
-
-  @doc """
-  Compose two relation sets — the relations possible from `A` to `C`
-  given a set from `A` to `B` and a set from `B` to `C`.
-
-  Allen's composition (`Tempo.compose/2`) lifted from single relations to
-  sets: the union of composing every pair. Because each element pair
-  contributes everything it admits, composition widens — this is the step
-  that loses information, and `narrow/2` is what claws it back.
-
-  ### Arguments
-
-  * `relations1` is the set of relations from `A` to `B`.
-
-  * `relations2` is the set of relations from `B` to `C`.
-
-  ### Returns
-
-  * The union of the pairwise compositions, in Allen's canonical order.
-
-  * The empty list when either argument is empty, since there is no
-    consistent step through `B`.
-
-  * `{:error, {:invalid_relation, term}}` when an element is not one of
-    the thirteen.
-
-  ### Examples
-
-      iex> Tempo.Interval.Relations.compose([:precedes], [:precedes])
-      [:precedes]
-
-      iex> Tempo.Interval.Relations.compose([:precedes], [:during])
-      [:precedes, :meets, :overlaps, :starts, :during]
-
-  Composing with `equals` is the identity, since `B` and `C` are the same
-  interval:
-
-      iex> Tempo.Interval.Relations.compose([:overlaps, :during], [:equals])
-      [:overlaps, :during]
-
-  A step through an interval that cannot be placed yields nothing:
-
-      iex> Tempo.Interval.Relations.compose([:precedes], [])
-      []
-
-  """
-  @spec compose(t(), t()) :: t() | {:error, {:invalid_relation, term()}}
-  def compose(relations1, relations2) when is_list(relations1) and is_list(relations2) do
-    with relations1 when is_list(relations1) <- canonical(relations1),
-         relations2 when is_list(relations2) <- canonical(relations2) do
-      for(r1 <- relations1, r2 <- relations2, do: Interval.compose(r1, r2))
-      |> Enum.concat()
-      |> canonical()
     end
   end
 end

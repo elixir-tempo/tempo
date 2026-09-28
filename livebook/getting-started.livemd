@@ -66,10 +66,10 @@ Two intervals stand in exactly one of thirteen relations. `Tempo.relation/2` nam
 Tempo.relation(~o"2026-01", ~o"2026-02")
 ```
 
-> January doesn't come *before* February — they **meet**, with no gap. `before?/2` is strict about that:
+> January and February **meet**: January ends exactly where February starts, so they share no instant and January comes *before* February. Allen's strict `:precedes` also needs a gap between them, and `Tempo.Allen.precedes?/2` asks that:
 
 ```elixir
-{Tempo.before?(~o"2026-01", ~o"2026-02"), Tempo.before?(~o"2026-01", ~o"2026-03")}
+{Tempo.before?(~o"2026-01", ~o"2026-02"), Tempo.Allen.precedes?(~o"2026-01", ~o"2026-02")}
 ```
 
 ```elixir

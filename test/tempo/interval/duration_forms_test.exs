@@ -2,6 +2,7 @@ defmodule Tempo.Interval.DurationFormsTest do
   use ExUnit.Case, async: true
   import Tempo.Sigils
 
+  alias Tempo.Allen
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.MaterialisationError
@@ -25,21 +26,21 @@ defmodule Tempo.Interval.DurationFormsTest do
   ]
 
   @pair_functions [
-    :relation,
-    :before?,
-    :after?,
-    :meets?,
-    :during?,
-    :within?,
-    :adjacent?,
-    :possibly_before?,
-    :possibly_after?,
-    :possibly_overlaps?,
-    :possibly_within?,
-    :certainly_before?,
-    :certainly_after?,
-    :certainly_overlaps?,
-    :certainly_within?
+    {Interval, :relation},
+    {Interval, :before?},
+    {Interval, :after?},
+    {Allen, :meets?},
+    {Allen, :during?},
+    {Interval, :within?},
+    {Interval, :adjacent?},
+    {Interval, :possibly_before?},
+    {Interval, :possibly_after?},
+    {Interval, :possibly_overlaps?},
+    {Interval, :possibly_within?},
+    {Interval, :certainly_before?},
+    {Interval, :certainly_after?},
+    {Interval, :certainly_overlaps?},
+    {Interval, :certainly_within?}
   ]
 
   @duration_functions [:at_least?, :at_most?, :exactly?, :longer_than?, :shorter_than?]
@@ -51,13 +52,13 @@ defmodule Tempo.Interval.DurationFormsTest do
       @other other
 
       test "relation predicates, the spelling on either side" do
-        for function <- @pair_functions, spelling <- @spelled do
-          assert apply(Interval, function, [spelling, @other]) ==
-                   apply(Interval, function, [@explicit, @other]),
+        for {module, function} <- @pair_functions, spelling <- @spelled do
+          assert apply(module, function, [spelling, @other]) ==
+                   apply(module, function, [@explicit, @other]),
                  "#{function}(#{inspect(spelling)}, other)"
 
-          assert apply(Interval, function, [@other, spelling]) ==
-                   apply(Interval, function, [@other, @explicit]),
+          assert apply(module, function, [@other, spelling]) ==
+                   apply(module, function, [@other, @explicit]),
                  "#{function}(other, #{inspect(spelling)})"
         end
       end
@@ -98,7 +99,7 @@ defmodule Tempo.Interval.DurationFormsTest do
   describe "the answers themselves" do
     test "a start and a duration meets the next day" do
       assert Tempo.relation(~o"2026-01-01/P1D", ~o"2026-01-02/P1D") == :meets
-      assert Tempo.meets?(~o"2026-01-01/P1D", ~o"2026-01-02/P1D")
+      assert Allen.meets?(~o"2026-01-01/P1D", ~o"2026-01-02/P1D")
     end
 
     test "a duration and an end is exactly its duration long, not open-ended" do

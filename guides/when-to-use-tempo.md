@@ -26,7 +26,7 @@ Scheduling ("this meeting from 2pm to 3pm"), availability ("free during work hou
 
 ### You need Allen's interval algebra
 
-The thirteen named relations — `:precedes`, `:meets`, `:overlaps`, `:during`, `:equals`, and the eight inverses — exposed as `Tempo.before?/2`, `after?/2`, `meets?/2`, `adjacent?/2`, `during?/2`, `within?/2`, `overlaps?/2`. When "A comes before B" isn't specific enough ("is there a gap? does A end where B begins? do they overlap?"), stdlib's three-valued `:lt | :eq | :gt` doesn't help.
+The thirteen named relations — `:precedes`, `:meets`, `:overlaps`, `:during`, `:equals`, and the eight inverses — named by `Tempo.relation/2`, with a predicate for each in `Tempo.Allen` and the everyday unions of them as `Tempo.before?/2`, `after?/2`, `adjacent?/2`, `within?/2` and `overlaps?/2`. When "A comes before B" isn't specific enough ("is there a gap? does A end where B begins? do they overlap?"), stdlib's three-valued `:lt | :eq | :gt` doesn't help.
 
 ### You need calendar awareness beyond Gregorian
 

@@ -58,6 +58,7 @@ defmodule Tempo.Interval.RelationNetwork do
 
   """
 
+  alias Tempo.Allen
   alias Tempo.Interval.Relations
 
   defstruct labels: [], edges: %{}
@@ -143,7 +144,7 @@ defmodule Tempo.Interval.RelationNetwork do
   Narrow what is possible from `a` to `b` by `relations`.
 
   Constraints accumulate: asserting twice narrows twice, and asserting
-  something already known changes nothing. The converse is recorded on the
+  something already known changes nothing. The inverse is recorded on the
   reverse pair automatically, so `constrain(net, a, [:precedes], b)` also
   establishes that `b` is preceded by `a`.
 
@@ -316,7 +317,7 @@ defmodule Tempo.Interval.RelationNetwork do
   end
 
   defp compose_leg(network, from, via, to) do
-    Relations.compose(between(network, from, via), between(network, via, to))
+    Allen.compose(between(network, from, via), between(network, via, to))
   end
 
   # Narrow `(a,b)` by `implied`; queue the pair when it actually changed.
@@ -335,13 +336,13 @@ defmodule Tempo.Interval.RelationNetwork do
   ## Edges
   ## ------------------------------------------------------------
 
-  # Every edge is stored with its converse, so `between/3` is a lookup in
+  # Every edge is stored with its inverse, so `between/3` is a lookup in
   # either direction and the two can never disagree.
   defp put_edge(network, a, b, relations) do
     edges =
       network.edges
       |> Map.put({a, b}, relations)
-      |> Map.put({b, a}, Relations.converse(relations))
+      |> Map.put({b, a}, Allen.inverse(relations))
 
     %{network | edges: edges}
   end

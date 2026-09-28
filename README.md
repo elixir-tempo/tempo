@@ -32,7 +32,7 @@ Every mainstream language treats `date`, `time`, and `datetime` as distinct scal
 
 3. *The "I can't express that" ceiling:* Archaeological dates ("sometime in the 1560s"), EDTF-qualified values ("approximately 2022"), open-ended intervals ("from 1985 onwards"), Hebrew-to-Gregorian queries, recurrences, free-busy spans — all awkward or impossible to express cleanly as scalar instants. All natural in Tempo.
 
-Once every value is a bounded interval, set operations follow naturally: union, intersection, complement, difference, and predicates (`overlaps?`, `subset?`, `contains?`) all work on any combination of Tempo values, across resolutions, across timezones, across calendars.
+Once every value is a bounded interval, set operations follow naturally: union, intersection, complement, difference, and predicates (`overlaps?`, `within?`, `contains?`) all work on any combination of Tempo values, across resolutions, across timezones, across calendars.
 
 ## What it looks like
 
@@ -164,7 +164,7 @@ Full specification including modifier-binding, container patterns, and calendar-
 
 * **Full support for the time standards that matter.** ISO 8601 Parts 1 and 2, EDTF Levels 0–2, IXDTF. 100% of the `unt-libraries/edtf-validate` corpus passes. Leap seconds, long years (`Y17E8`), significant-digits notation, mask syntax, open-ended intervals, per-endpoint qualifications — all parsed and queryable.
 
-* **First-class set algebra on time.** Union, intersection, complement, difference, symmetric difference — plus the predicate set (`disjoint?`, `overlaps?`, `subset?`, `contains?`, `equal?`) — all defined over any Tempo value. Cross-zone, cross-calendar, across resolutions.
+* **First-class set algebra on time.** Union, intersection, complement, difference, symmetric difference — plus the predicate set (`disjoint?`, `overlaps?`, `within?`, `contains?`, `equal?`) — all defined over any Tempo value. Cross-zone, cross-calendar, across resolutions.
 
 * **Constraint reasoning, not just representation.** `Tempo.Network` models a web of partially-known intervals — reigns, strata, project tasks — and computes the tightest dates each one can take (the ChronoLog scheme), with a plain-English trace for every bound. `Tempo.Schedule` applies the same solver to project scheduling: declare tasks, durations, and dependencies, and get each task's earliest/latest run plus the critical path.
 
@@ -230,6 +230,7 @@ Interactive, runnable tours for [Livebook](https://livebook.dev):
 
 ## Guides
 
+* [Migrating to Tempo 2.0](https://hexdocs.pm/ex_tempo/migration.html) — each 1.x name that changed, with its 2.0 form.
 * [Tutorial: build a booking-availability service](https://hexdocs.pm/ex_tempo/tutorial-booking-availability.html) — the journey-shaped introduction: one small system, every core concept.
 * [Cookbook](https://hexdocs.pm/ex_tempo/cookbook.html) — recipe-format answers to common temporal questions.
 * [When to use Tempo](https://hexdocs.pm/ex_tempo/when-to-use-tempo.html) — where the interval model earns its keep (and where it doesn't).

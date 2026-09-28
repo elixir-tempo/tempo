@@ -16,7 +16,7 @@ defmodule Tempo.AllenAxiomsTest do
 
     * Self-equality — `relation(a, a) == :equals`.
 
-    * Inverse consistency — `inverse_relation(relation(a, b)) == relation(b, a)`
+    * Inverse consistency — `Allen.inverse(relation(a, b)) == relation(b, a)`
       for every pair.
 
     * Meets asymmetry — when `relation(a, b) == :meets`, the inverse pair
@@ -26,15 +26,17 @@ defmodule Tempo.AllenAxiomsTest do
     * Sum Axiom — chain-meeting intervals coalesce into a single interval,
       realising axiom 15 of $T_{bounded\\_meeting}$.
 
-    * Predicate-relation consistency — the named predicates (`within?`,
-      `before?`, `adjacent?`, `during?`) correspond to specific subsets
-      of the 13 Allen relations as documented.
+    * Predicate-relation consistency — the everyday predicates
+      (`within?`, `before?`, `after?`, `adjacent?`) correspond to
+      specific subsets of the 13 Allen relations as documented, and
+      each `Tempo.Allen` predicate holds exactly when its relation does.
 
   """
 
   use ExUnit.Case, async: true
   use ExUnitProperties
 
+  alias Tempo.Allen
   alias Tempo.Interval
   alias Tempo.IntervalSet
 
@@ -70,14 +72,14 @@ defmodule Tempo.AllenAxiomsTest do
       end
     end
 
-    property "inverse_relation(relation(a, b)) == relation(b, a)" do
+    property "inverse(relation(a, b)) == relation(b, a)" do
       check all(
               a <- interval_gen(),
               b <- interval_gen()
             ) do
         forward = Interval.relation(a, b)
         backward = Interval.relation(b, a)
-        assert Interval.inverse_relation(forward) == backward
+        assert Allen.inverse(forward) == backward
       end
     end
 
@@ -124,12 +126,34 @@ defmodule Tempo.AllenAxiomsTest do
   end
 
   describe "named predicates ↔ Allen relations" do
-    property "before?(a, b) iff relation(a, b) == :precedes" do
+    property "before?(a, b) iff relation(a, b) in [:precedes, :meets]" do
       check all(
               a <- interval_gen(),
               b <- interval_gen()
             ) do
-        assert Interval.before?(a, b) == (Interval.relation(a, b) == :precedes)
+        assert Interval.before?(a, b) == Interval.relation(a, b) in [:precedes, :meets]
+      end
+    end
+
+    property "after?(a, b) iff relation(a, b) in [:preceded_by, :met_by]" do
+      check all(
+              a <- interval_gen(),
+              b <- interval_gen()
+            ) do
+        assert Interval.after?(a, b) == Interval.relation(a, b) in [:preceded_by, :met_by]
+      end
+    end
+
+    property "each Allen predicate iff its relation holds" do
+      check all(
+              a <- interval_gen(),
+              b <- interval_gen()
+            ) do
+        held = Interval.relation(a, b)
+
+        for relation <- @relations do
+          assert apply(Allen, :"#{relation}?", [a, b]) == (held == relation)
+        end
       end
     end
 
@@ -140,15 +164,6 @@ defmodule Tempo.AllenAxiomsTest do
             ) do
         assert Interval.adjacent?(a, b) ==
                  Interval.relation(a, b) in [:meets, :met_by]
-      end
-    end
-
-    property "during?(a, b) iff relation(a, b) == :during" do
-      check all(
-              a <- interval_gen(),
-              b <- interval_gen()
-            ) do
-        assert Interval.during?(a, b) == (Interval.relation(a, b) == :during)
       end
     end
 
@@ -179,12 +194,12 @@ defmodule Tempo.AllenAxiomsTest do
       end
     end
 
-    property "inverse_relation(relation(a, b)) == relation(b, a)" do
+    property "inverse(relation(a, b)) == relation(b, a)" do
       check all(
               a <- microsecond_interval_gen(),
               b <- microsecond_interval_gen()
             ) do
-        assert Interval.inverse_relation(Interval.relation(a, b)) == Interval.relation(b, a)
+        assert Allen.inverse(Interval.relation(a, b)) == Interval.relation(b, a)
       end
     end
 

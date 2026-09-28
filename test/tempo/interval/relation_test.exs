@@ -2,6 +2,7 @@ defmodule Tempo.Interval.CompareTest do
   use ExUnit.Case, async: true
   import Tempo.Sigils
 
+  alias Tempo.Allen
   alias Tempo.Interval
   alias Tempo.IntervalSet
 
@@ -82,7 +83,7 @@ defmodule Tempo.Interval.CompareTest do
     end
   end
 
-  describe "inverse_relation/1 — every relation and its inverse" do
+  describe "Allen.inverse/1 — every relation and its inverse" do
     test "every pair round-trips via inverse" do
       # For every pair of intervals (X, Y), compare(Y, X) must
       # equal inverse(compare(X, Y)). Walk every case once.
@@ -108,7 +109,7 @@ defmodule Tempo.Interval.CompareTest do
                "expected compare(x, y) == #{inspect(expected)} for X=#{inspect(x.from)}..#{inspect(x.to)}"
 
         # Inverse round-trip: compare(y, x) == inverse(expected).
-        assert Interval.relation(@y, x) == Interval.inverse_relation(expected),
+        assert Interval.relation(@y, x) == Allen.inverse(expected),
                "expected compare(y, x) == inverse(#{inspect(expected)}) for X=#{inspect(x.from)}..#{inspect(x.to)}"
       end
     end
@@ -129,12 +130,16 @@ defmodule Tempo.Interval.CompareTest do
             :met_by,
             :preceded_by
           ] do
-        assert Interval.inverse_relation(Interval.inverse_relation(r)) == r
+        assert Allen.inverse(Allen.inverse(r)) == r
       end
     end
 
     test ":equals is its own inverse" do
-      assert Interval.inverse_relation(:equals) == :equals
+      assert Allen.inverse(:equals) == :equals
+    end
+
+    test "an unknown relation is an error" do
+      assert Allen.inverse(:nonsense) == {:error, {:invalid_relation, :nonsense}}
     end
   end
 

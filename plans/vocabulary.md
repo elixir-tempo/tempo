@@ -136,15 +136,12 @@ The `?` functions mix two vocabularies. `before?/2` and `after?/2` follow Allen 
 | `Interval.equivalent?/2` | removed |
 | `Interval.inverse_relation/1`, `Relations.converse/1` | `Tempo.Allen.inverse/1` |
 | `compose/2` on `Tempo`, `Interval` and `Relations` | `Tempo.Allen.compose/2` |
-| `certainly_contemporary?/3` | `certainly_overlaps?/3` |
-| `possibly_contemporary?/3` | `possibly_overlaps?/3` |
-| `contemporaneity/3` | `overlap_certainty/3` |
 
 * **`Tempo` keeps the everyday predicates** — `before?/2`, `after?/2`, `adjacent?/2`, `overlaps?`, `disjoint?`, `within?`, `contains?` and `equal?`, for intervals and sets alike. `before?/2`'s doc explains the everyday sense — an 11:00–12:00 meeting is before a 12:00 lunch — and points to `Tempo.Allen.precedes?/2` for the version that needs a gap. The certainty family (`certainly_before?/2`, `possibly_before?/2` and the rest) follows the everyday predicates.
 
 * **`Tempo.Allen` holds Allen's exact vocabulary** — a predicate for each of the 13 relations, named as Allen named them (`precedes?/2`, `meets?/2`, `overlaps?/2`, `finished_by?/2`, `contains?/2`, `starts?/2`, `equals?/2`, `started_by?/2`, `during?/2`, `finishes?/2`, `overlapped_by?/2`, `met_by?/2`, `preceded_by?/2`), with `inverse/1` and `compose/2`. Inside it every name is Allen's — the module name is the quotation — so `Tempo.Allen.overlaps?/2` is the strict relation while `Tempo.overlaps?/3` is the everyday one. `Tempo.relation/2` stays the way in.
 
-* **The network solver** takes the interval family's words: its three contemporaneity functions become `certainly_overlaps?/3`, `possibly_overlaps?/3` and `overlap_certainty/3`.
+* **The network solver keeps "contemporary"** — `contemporaneity/3`, `certainly_contemporary?/3` and `possibly_contemporary?/3` treat a period's ends as closed, so two periods that only touch are contemporary, the chronology literature's own sense and that of `add_relation(:contemporary, …)`. `Tempo.overlaps?/3` needs a shared instant, so naming the solver's functions "overlaps" would give that word two meanings. (Found while implementing, 2026-09-28; the plan first proposed the rename.)
 
 ## Workdays
 
@@ -250,13 +247,15 @@ Taken by the user on 2026-09-28:
 
 * **`floating?/1`** — stays, the pair of `zoned?/1`.
 
+* **A migration guide** — `guides/migration.md` shows each change with its 1.x and 2.0 forms.
+
 ## Tasks
 
-Each task is one commit, verified on both upstream branches, with its guides, README, cookbook and livebook examples updated in the same commit.
+Each task is one commit, verified on both upstream branches, with its guides, README, cookbook and livebook examples updated in the same commit, and its section of the migration guide written in it.
 
 * [x] **2.0 and the defects** — `2.0.0-dev`, the CHANGELOG's migration table, the four defects, covered time as `duration/1`'s one meaning. 2026-09-28, `a7a4010`.
 
-* [ ] **Within** — `:within` for `:bound`, overlap as the one rule for every recurrence and calendar format, `:overlapping` removed, a leftover `:bound` an error.
+* [x] **Within** — `:within` for `:bound`, overlap as the one rule for every recurrence and calendar format, `:overlapping` removed, a leftover `:bound` an error. 2026-09-28, `b92a189`.
 
 * [ ] **Predicates and `Tempo.Allen`** — the everyday `before?/2` and `after?/2`, `Tempo.Allen`, and the removals and renames above.
 

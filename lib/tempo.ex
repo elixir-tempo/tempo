@@ -7570,23 +7570,8 @@ defmodule Tempo do
   defdelegate overlaps?(a, b, opts \\ []), to: Tempo.Operations
 
   @doc """
-  `true` when every instant of `a` is also in `b`.
-  See `Tempo.Operations.subset?/3`.
-  ### Examples
-
-
-      iex> Tempo.subset?(~o"2026-06-15", ~o"2026-06")
-      true
-
-      iex> Tempo.subset?(~o"2026-06", ~o"2026-06-15")
-      false
-
-  """
-  defdelegate subset?(a, b, opts \\ []), to: Tempo.Operations
-
-  @doc """
-  `true` when every instant of `b` is also in `a`. Alias for
-  `subset?(b, a, opts)`. See `Tempo.Operations.contains?/3`.
+  `true` when every instant of `b` is also in `a` — the mirror of
+  `within?/3`. See `Tempo.Operations.contains?/3`.
   ### Examples
 
 
@@ -7669,25 +7654,6 @@ defmodule Tempo do
 
   """
   defdelegate compare(a, b, options \\ []), to: Tempo.Compare
-
-  @doc """
-  Compose two Allen relations — the relations possible from `A` to `C`
-  given `A r1 B` and `B r2 C`.
-
-  Thin delegate to `Tempo.Interval.compose/2`. Allen's composition
-  (1983) chains a qualitative inference without holding any interval:
-  *"if A precedes B and B is during C, how can A relate to C?"*
-
-  ### Examples
-
-      iex> Tempo.compose(:precedes, :during)
-      [:precedes, :meets, :overlaps, :starts, :during]
-
-      iex> Tempo.compose(:contains, :during)
-      [:overlaps, :finished_by, :contains, :starts, :equals, :started_by, :during, :finishes, :overlapped_by]
-
-  """
-  defdelegate compose(relation1, relation2), to: Tempo.Interval
 
   @doc """
   Return the length of an interval, or the time an interval set
@@ -7897,27 +7863,30 @@ defmodule Tempo do
   defdelegate empty?(interval), to: Tempo.Interval
 
   @doc """
-  `true` when `a` ends strictly before `b` starts (Allen's
-  `:precedes`). See `Tempo.Interval.before?/2`.
-  ### Examples
+  `true` when `a` ends at or before `b` starts — the two share no
+  instant and `a` is earlier. An 11:00–12:00 meeting is before a 12:00
+  lunch. Allen's `:precedes`, which also needs a gap, is
+  `Tempo.Allen.precedes?/2`. See `Tempo.Interval.before?/2`.
 
+  ### Examples
 
       iex> Tempo.before?(~o"2026-01", ~o"2026-03")
       true
 
-  Adjacent months meet — no gap — so `before?/2` is `false`:
+  Adjacent months share no instant, so January is before February:
 
       iex> Tempo.before?(~o"2026-01", ~o"2026-02")
-      false
+      true
 
   """
   defdelegate before?(a, b), to: Tempo.Interval
 
   @doc """
-  `true` when `a` starts strictly after `b` ends (Allen's
-  `:preceded_by`). See `Tempo.Interval.after?/2`.
-  ### Examples
+  `true` when `a` starts at or after `b` ends — the two share no
+  instant and `a` is later. Allen's `:preceded_by`, which also needs a
+  gap, is `Tempo.Allen.preceded_by?/2`. See `Tempo.Interval.after?/2`.
 
+  ### Examples
 
       iex> Tempo.after?(~o"2026-03", ~o"2026-01")
       true
@@ -7927,21 +7896,6 @@ defmodule Tempo do
 
   """
   defdelegate after?(a, b), to: Tempo.Interval
-
-  @doc """
-  `true` when `a`'s end coincides exactly with `b`'s start
-  (Allen's `:meets`). See `Tempo.Interval.meets?/2`.
-  ### Examples
-
-
-      iex> Tempo.meets?(~o"2026-01", ~o"2026-02")
-      true
-
-      iex> Tempo.meets?(~o"2026-01", ~o"2026-03")
-      false
-
-  """
-  defdelegate meets?(a, b), to: Tempo.Interval
 
   @doc """
   `true` when the two intervals touch at a single boundary
@@ -7959,33 +7913,16 @@ defmodule Tempo do
   defdelegate adjacent?(a, b), to: Tempo.Interval
 
   @doc """
-  `true` when `a` is strictly inside `b` (Allen's `:during`).
-  See `Tempo.Interval.during?/2`.
-  ### Examples
+  `true` when every instant of `a` is also in `b` — `a` fits inside
+  `b`, shared ends included. The canonical "does this fit inside that
+  window?" predicate, for single values and sets alike; see
+  `Tempo.Operations.within?/3`.
 
-
-      iex> lunch = ~o"2026-06-15T12/2026-06-15T13"
-      iex> Tempo.during?(lunch, ~o"2026-06-15T09/2026-06-15T17")
-      true
-
-  `during?/2` is strict — a value is not during itself; use `within?/2`
-  for the inclusive reading:
-
-      iex> Tempo.during?(~o"2026-06", ~o"2026-06")
-      false
-
-  """
-  defdelegate during?(a, b), to: Tempo.Interval
-
-  @doc """
-  `true` when `a` fits inside `b` inclusive of shared
-  endpoints. The canonical "does this fit inside that window?"
-  predicate. See `Tempo.Interval.within?/2`.
-
-  `within?/2` asks about the whole of `a`. The `:within` option of
+  `within?/3` asks about the whole of `a`. The `:within` option of
   `to_interval_set/2` and the set operations is looser: it keeps
   every occurrence that overlaps its window, one already in
-  progress when the window opens included.
+  progress when the window opens included. Allen's strict `:during`
+  is `Tempo.Allen.during?/2`.
 
   ### Examples
 
@@ -7995,8 +7932,11 @@ defmodule Tempo do
       iex> Tempo.within?(~o"2026-06", ~o"2026-06")
       true
 
+      iex> Tempo.within?(~o"2026-06", ~o"2026-06-15")
+      false
+
   """
-  defdelegate within?(a, b), to: Tempo.Interval
+  defdelegate within?(a, b, opts \\ []), to: Tempo.Operations
 
   @doc """
   The three-valued certainty that `a` and `b` intersect, given their

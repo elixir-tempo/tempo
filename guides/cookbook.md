@@ -226,16 +226,16 @@ iex> Tempo.relation(~o"2026-06-15", ~o"2026-06-16")
 :meets
 ```
 
-Named predicates cover the common one-shot checks:
+Everyday predicates cover the common one-shot checks, and `Tempo.Allen` has one for each of the thirteen relations under Allen's own name:
 
 | Predicate | Maps to |
 |---|---|
-| `Tempo.before?(a, b)` | `:precedes` — ends with a gap before b |
-| `Tempo.after?(a, b)` | `:preceded_by` |
-| `Tempo.meets?(a, b)` | `:meets` — ends exactly at b's start |
+| `Tempo.before?(a, b)` | `:precedes \| :meets` — over by the time b starts |
+| `Tempo.after?(a, b)` | `:preceded_by \| :met_by` — starts once b is over |
 | `Tempo.adjacent?(a, b)` | `:meets \| :met_by` — touches, no gap |
-| `Tempo.during?(a, b)` | `:during` — strictly inside |
 | `Tempo.within?(a, b)` | `:equals \| :starts \| :during \| :finishes` — fits inside, inclusive |
+| `Tempo.Allen.precedes?(a, b)` | `:precedes` alone — a gap before b |
+| `Tempo.Allen.during?(a, b)` | `:during` alone — strictly inside |
 
 `Tempo.within?/2` is the canonical "does this fit inside that window?" predicate:
 

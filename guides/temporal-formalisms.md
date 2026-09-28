@@ -60,7 +60,7 @@ Tempo.relation(~o"2022-W24", ~o"2022-W25")
 #=> :meets
 ```
 
-`Tempo.relation/2` returns Allen's thirteen relations directly; the named predicates (`within?/2`, `overlaps?/2`, `adjacent?/2`) are just human-readable unions of them.
+`Tempo.relation/2` returns Allen's thirteen relations directly, and `Tempo.Allen` has a predicate for each under Allen's own name. The everyday predicates (`before?/2`, `within?/2`, `overlaps?/2`, `adjacent?/2`) are human-readable unions of them — `before?/2` is `:precedes` or `:meets`, because two spans that meet share no instant.
 
 ### Computationally, Tempo is Vilain–Kautz
 
@@ -72,18 +72,20 @@ This buys two things:
 
 * **Cross-calendar and cross-zone comparison fall out for free**: project both operands' endpoints to the shared real-number frame and order them, regardless of calendar or zone.
 
-### Composition, without the closure
+### Composition and path consistency
 
-Allen's algebra has one more canonical operation, and Tempo now surfaces it: **composition**. Given `A r1 B` and `B r2 C`, `Tempo.compose/2` returns every relation that can hold from `A` to `C` — a constant-time read of Allen's 13×13 table:
+Allen's algebra has one more canonical operation, and Tempo surfaces it: **composition**. Given `A r1 B` and `B r2 C`, `Tempo.Allen.compose/2` returns every relation that can hold from `A` to `C` — a constant-time read of Allen's 13×13 table:
 
 ```elixir
-Tempo.compose(:precedes, :during)
+Tempo.Allen.compose(:precedes, :during)
 #=> [:precedes, :meets, :overlaps, :starts, :during]
 ```
 
 > *"If the dig predates the reign, and the reign falls within the dynasty, then the dig is somewhere at or before the dynasty — before it, meeting it, overlapping into it, sharing its start, or inside it."*
 
-This looks like it should cross the tractability line — its *result* is a disjunction, the very thing the NP-hardness warning above is about. It doesn't, and the reason is exactly where that line is drawn. The NP-hard problem is *closing a network* of disjunctive constraints under composition — composing and intersecting to a fixpoint over inputs that are themselves sets of relations. Tempo does neither: `compose/2` is a single table lookup on two *definite* relations, and `Tempo.Network.Solver.relation/3` reads its disjunction off an already-solved metric network. Emitting a disjunctive *answer* is polynomial; reasoning over disjunctive *constraints* is not — and Tempo only ever does the former.
+This looks like it should cross the tractability line — its *result* is a disjunction, the very thing the NP-hardness warning above is about. It doesn't, and the reason is exactly where that line is drawn. The NP-hard problem is *deciding* whether a network of disjunctive constraints can be satisfied. `compose/2` is a table lookup for each pair of relations it is given, and `Tempo.Network.Solver.relation/3` reads its disjunction off an already-solved metric network. Emitting a disjunctive *answer* is polynomial; deciding a network of disjunctive *constraints* is not.
+
+`Tempo.Interval.RelationNetwork` does close such a network under composition — Allen's own path-consistency propagation — and says exactly what that buys: every relation it removes is impossible, but a network that propagates cleanly may still be unsatisfiable. Path consistency is the standard polynomial approximation, and Tempo offers it as that; it never claims to decide satisfiability.
 
 ### Resolution-indexed atomicity — a granularity lattice
 
@@ -126,7 +128,7 @@ Everything above assumes *grounded* values — concrete endpoints you can projec
 
 `Tempo.Network` is the library's one constraint solver, a chronological-network layer after the ChronoLog scheme of Levy et al. (2020). The decision to add it rests on a single observation about *where* the intractability lives. The NP-hardness that motivated Vilain–Kautz comes from **qualitative disjunction** — constraints of the form "*a* is `before` **or** `after` *b*". `Tempo.Network` never admits one. Its constraints are **metric and conjunctive**: every relation, sequence link, duration, and absolute date reduces to atomic inequalities `b₁ − b₂ ≤ k` over endpoint variables. That is precisely a **Simple Temporal Problem** (Dechter, Meiri & Pearl 1991) — the quantitative generalisation of the Vilain–Kautz point algebra — and it is solved in **polynomial time** by all-pairs shortest paths (Floyd–Warshall): a network is consistent iff its constraint graph has no negative cycle, and the tightest bound on any pair of endpoints is a shortest-path weight.
 
-So the layer extends Tempo *along its existing tractable axis* rather than across the divide. The point algebra handles grounded endpoints by comparison; the STP handles bounded endpoints by shortest paths; both are polynomial, and both are metric rather than qualitative-disjunctive. The one regime Tempo declines to enter — by construction, since it exposes no disjunctive relation — is the NP-hard qualitative-network fragment that Allen's full algebra inhabits. Adding a solver did not cost the library its tractability guarantee; the solver inherited it. The interval ontology supplies the vocabulary (periods are intervals, the relations are Allen's plus metric delays), and the point-algebra heritage supplies the engine; `Tempo.Network` is what falls out when both are already present and the values stop being grounded.
+So the layer extends Tempo *along its existing tractable axis* rather than across the divide. The point algebra handles grounded endpoints by comparison; the STP handles bounded endpoints by shortest paths; both are polynomial, and both are metric rather than qualitative-disjunctive. The one regime the solver declines to enter — by construction, since it exposes no disjunctive relation — is the NP-hard qualitative-network fragment that Allen's full algebra inhabits. Adding a solver did not cost the library its tractability guarantee; the solver inherited it. The interval ontology supplies the vocabulary (periods are intervals, the relations are Allen's plus metric delays), and the point-algebra heritage supplies the engine; `Tempo.Network` is what falls out when both are already present and the values stop being grounded.
 
 The accompanying [chronological-networks guide](chronological-networks.md) develops the layer from a practitioner's point of view, and notes where a plain interval chain suffices and the solver is not needed at all.
 

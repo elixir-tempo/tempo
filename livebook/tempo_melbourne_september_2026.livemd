@@ -360,7 +360,7 @@ meetups
   * `union/2` — everything in either
   * `intersection/2` — everything in both
   * `difference/2` — in the first, not the second
-  * `overlaps?/2`, `subset?/2`, `contains?/2`
+  * `overlaps?/2`, `within?/2`, `contains?/2`
 
 ## Holidays arrive as an .ics
 

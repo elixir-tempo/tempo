@@ -2,7 +2,7 @@ defmodule Tempo.Interval.CompositionTest do
   use ExUnit.Case, async: true
   use ExUnitProperties
 
-  alias Tempo.Interval
+  alias Tempo.Allen
 
   # Allen's 13 relations in canonical order.
   @order [
@@ -28,22 +28,22 @@ defmodule Tempo.Interval.CompositionTest do
       # (an oracle independent of the literal) and demands an exact match —
       # catching both a missing relation and a spurious one.
       for relation1 <- @order, relation2 <- @order do
-        assert Tempo.compose(relation1, relation2) == derive(relation1, relation2),
+        assert Allen.compose(relation1, relation2) == derive(relation1, relation2),
                "compose(#{relation1}, #{relation2}) drifted from its derivation"
       end
     end
 
     test "matches Allen (1983) on landmark cells" do
-      assert Tempo.compose(:precedes, :precedes) == [:precedes]
-      assert Tempo.compose(:precedes, :during) == [:precedes, :meets, :overlaps, :starts, :during]
-      assert Tempo.compose(:overlaps, :overlaps) == [:precedes, :meets, :overlaps]
-      assert Tempo.compose(:meets, :during) == [:overlaps, :starts, :during]
-      assert Tempo.compose(:meets, :met_by) == [:finished_by, :equals, :finishes]
-      assert Tempo.compose(:starts, :started_by) == [:starts, :equals, :started_by]
-      assert Tempo.compose(:finishes, :finished_by) == [:finished_by, :equals, :finishes]
+      assert Allen.compose(:precedes, :precedes) == [:precedes]
+      assert Allen.compose(:precedes, :during) == [:precedes, :meets, :overlaps, :starts, :during]
+      assert Allen.compose(:overlaps, :overlaps) == [:precedes, :meets, :overlaps]
+      assert Allen.compose(:meets, :during) == [:overlaps, :starts, :during]
+      assert Allen.compose(:meets, :met_by) == [:finished_by, :equals, :finishes]
+      assert Allen.compose(:starts, :started_by) == [:starts, :equals, :started_by]
+      assert Allen.compose(:finishes, :finished_by) == [:finished_by, :equals, :finishes]
 
       # contains ∘ during — the nine "concurrent" relations.
-      assert Tempo.compose(:contains, :during) == [
+      assert Allen.compose(:contains, :during) == [
                :overlaps,
                :finished_by,
                :contains,
@@ -58,21 +58,21 @@ defmodule Tempo.Interval.CompositionTest do
 
     test "equals is the identity on both sides" do
       for relation <- @order do
-        assert Tempo.compose(:equals, relation) == [relation]
-        assert Tempo.compose(relation, :equals) == [relation]
+        assert Allen.compose(:equals, relation) == [relation]
+        assert Allen.compose(relation, :equals) == [relation]
       end
     end
 
     test "opposite disjoint relations lose all information" do
       # before ∘ after (and after ∘ before) admit every relation.
-      assert Tempo.compose(:precedes, :preceded_by) == @order
-      assert Tempo.compose(:preceded_by, :precedes) == @order
-      assert Tempo.compose(:during, :contains) == @order
+      assert Allen.compose(:precedes, :preceded_by) == @order
+      assert Allen.compose(:preceded_by, :precedes) == @order
+      assert Allen.compose(:during, :contains) == @order
     end
 
     test "every cell is a non-empty subset in canonical order" do
       for relation1 <- @order, relation2 <- @order do
-        cell = Tempo.compose(relation1, relation2)
+        cell = Allen.compose(relation1, relation2)
         assert cell != []
         assert Enum.all?(cell, &(&1 in @order))
         # No duplicates, and listed in Allen's canonical order.
@@ -96,7 +96,7 @@ defmodule Tempo.Interval.CompositionTest do
         c = interval(c_start, c_len)
 
         relation_ac = Tempo.relation(a, c)
-        composed = Tempo.compose(Tempo.relation(a, b), Tempo.relation(b, c))
+        composed = Allen.compose(Tempo.relation(a, b), Tempo.relation(b, c))
 
         assert relation_ac in composed,
                "A #{Tempo.relation(a, b)} B, B #{Tempo.relation(b, c)} C, " <>
@@ -105,28 +105,36 @@ defmodule Tempo.Interval.CompositionTest do
     end
   end
 
-  describe "compose/2 — error handling and delegation" do
+  describe "compose/2 — sets and error handling" do
     test "an unknown relation atom returns the offending atom" do
-      assert Interval.compose(:precedes, :nonsense) ==
+      assert Allen.compose(:precedes, :nonsense) ==
                {:error, {:invalid_relation, :nonsense}}
 
-      assert Interval.compose(:bogus, :during) ==
+      assert Allen.compose(:bogus, :during) ==
                {:error, {:invalid_relation, :bogus}}
     end
 
     test "a non-atom argument is rejected without raising" do
-      assert Interval.compose("precedes", 42) ==
+      assert Allen.compose("precedes", 42) ==
                {:error, {:invalid_relation, "precedes"}}
 
-      assert Interval.compose(:precedes, nil) ==
+      assert Allen.compose(:precedes, nil) ==
                {:error, {:invalid_relation, nil}}
     end
 
-    test "Tempo.compose/2 delegates to Tempo.Interval.compose/2" do
+    test "a set composes every pair and returns the union" do
       for relation1 <- @order, relation2 <- @order do
-        assert Tempo.compose(relation1, relation2) ==
-                 Interval.compose(relation1, relation2)
+        assert Allen.compose([relation1], [relation2]) == Allen.compose(relation1, relation2)
       end
+
+      assert Allen.compose([:precedes, :meets], :precedes) == [:precedes]
+      assert Allen.compose(:equals, [:during, :starts]) == [:starts, :during]
+      assert Allen.compose([], [:precedes]) == []
+    end
+
+    test "an invalid relation inside a set is reported" do
+      assert Allen.compose([:precedes, :nonsense], [:during]) ==
+               {:error, {:invalid_relation, :nonsense}}
     end
   end
 

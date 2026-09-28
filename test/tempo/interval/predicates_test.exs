@@ -2,6 +2,7 @@ defmodule Tempo.Interval.PredicatesTest do
   use ExUnit.Case, async: true
   import Tempo.Sigils
 
+  alias Tempo.Allen
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.MaterialisationError
@@ -102,24 +103,31 @@ defmodule Tempo.Interval.PredicatesTest do
   describe "relation predicates — thin wrappers over relation/2" do
     @y %Interval{from: ~o"2026-06-05", to: ~o"2026-06-11"}
 
-    test "before?/2 — strict precedes" do
+    test "before?/2 — with a gap" do
       x = %Interval{from: ~o"2026-06-01", to: ~o"2026-06-03"}
       assert Interval.before?(x, @y)
     end
 
-    test "before?/2 — meets does NOT count" do
+    test "before?/2 — meeting counts: the two share no instant" do
       x = %Interval{from: ~o"2026-06-01", to: ~o"2026-06-05"}
+      assert Interval.before?(x, @y)
+      refute Allen.precedes?(x, @y)
+    end
+
+    test "before?/2 — overlapping does not count" do
+      x = %Interval{from: ~o"2026-06-01", to: ~o"2026-06-06"}
       refute Interval.before?(x, @y)
     end
 
-    test "after?/2 — strict preceded_by" do
-      x = %Interval{from: ~o"2026-06-13", to: ~o"2026-06-15"}
-      assert Interval.after?(x, @y)
+    test "after?/2 — with a gap, or met by" do
+      assert Interval.after?(%Interval{from: ~o"2026-06-13", to: ~o"2026-06-15"}, @y)
+      assert Interval.after?(%Interval{from: ~o"2026-06-11", to: ~o"2026-06-15"}, @y)
+      refute Allen.preceded_by?(%Interval{from: ~o"2026-06-11", to: ~o"2026-06-15"}, @y)
     end
 
-    test "meets?/2 — boundary coincidence" do
+    test "Allen.meets?/2 — boundary coincidence" do
       x = %Interval{from: ~o"2026-06-01", to: ~o"2026-06-05"}
-      assert Interval.meets?(x, @y)
+      assert Allen.meets?(x, @y)
     end
 
     test "adjacent?/2 — meets OR met_by" do
@@ -130,13 +138,13 @@ defmodule Tempo.Interval.PredicatesTest do
       assert Interval.adjacent?(met_by_y, @y)
     end
 
-    test "during?/2 — strict interior, no shared endpoints" do
+    test "Allen.during?/2 — strict interior, no shared endpoints" do
       inside = %Interval{from: ~o"2026-06-07", to: ~o"2026-06-09"}
       shares_start = %Interval{from: ~o"2026-06-05", to: ~o"2026-06-09"}
 
-      assert Interval.during?(inside, @y)
+      assert Allen.during?(inside, @y)
       # `starts` is not `during`
-      refute Interval.during?(shares_start, @y)
+      refute Allen.during?(shares_start, @y)
     end
 
     test "within?/2 — equals + starts + during + finishes" do
@@ -561,9 +569,9 @@ defmodule Tempo.Interval.PredicatesTest do
       refute Tempo.within?(~o"2026-08-02", ~o"2026Y32W")
     end
 
-    test "within? agrees with the set-algebra subset?" do
+    test "the set-level within? agrees with the interval one" do
       assert Tempo.within?(~o"2026-08-03", ~o"2026Y32W") ==
-               Tempo.subset?(~o"2026-08-03", ~o"2026Y32W")
+               Interval.within?(~o"2026-08-03", ~o"2026Y32W")
     end
   end
 end

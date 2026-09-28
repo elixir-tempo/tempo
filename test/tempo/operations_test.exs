@@ -16,7 +16,7 @@ defmodule Tempo.Operations.Test do
   #   1. Preflight (align/2,3) — validation, anchor-class, resolution
   #   2. Core set operations — union, intersection, complement,
   #      difference, symmetric_difference
-  #   3. Predicates — disjoint?, overlaps?, subset?, contains?, equal?
+  #   3. Predicates — disjoint?, overlaps?, within?, contains?, equal?
   #   4. Cross-axis (window-based materialisation)
   #   5. Algebraic identities — ∅ ∪ A = A, De Morgan's laws, etc.
 
@@ -434,12 +434,12 @@ defmodule Tempo.Operations.Test do
       assert Tempo.overlaps?(~o"2022Y", ~o"2022-06")
     end
 
-    test "subset?/2" do
-      assert Tempo.subset?(~o"2022-06", ~o"2022Y")
-      refute Tempo.subset?(~o"2022Y", ~o"2022-06")
+    test "within?/2" do
+      assert Tempo.within?(~o"2022-06", ~o"2022Y")
+      refute Tempo.within?(~o"2022Y", ~o"2022-06")
     end
 
-    test "contains?/2 — inverse of subset" do
+    test "contains?/2 — the mirror of within?" do
       assert Tempo.contains?(~o"2022Y", ~o"2022-06")
       refute Tempo.contains?(~o"2022-06", ~o"2022Y")
     end
@@ -948,7 +948,7 @@ defmodule Tempo.Operations.Test do
     end
 
     test "predicates agree across II, IS, SI, SS representations", ctx do
-      for op <- [:disjoint?, :overlaps?, :subset?, :contains?, :equal?] do
+      for op <- [:disjoint?, :overlaps?, :within?, :contains?, :equal?] do
         ii = apply(Tempo, op, [ctx.a_i, ctx.b_i])
         assert ii == apply(Tempo, op, [ctx.a_i, ctx.b_s]), "#{op}: Interval×Set"
         assert ii == apply(Tempo, op, [ctx.a_s, ctx.b_i]), "#{op}: Set×Interval"

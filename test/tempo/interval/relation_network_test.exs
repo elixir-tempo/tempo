@@ -12,6 +12,7 @@ defmodule Tempo.Interval.RelationNetworkTest do
 
   import Tempo.Sigils
 
+  alias Tempo.Allen
   alias Tempo.Interval
   alias Tempo.Interval.RelationNetwork, as: Net
   alias Tempo.Interval.Relations
@@ -54,7 +55,7 @@ defmodule Tempo.Interval.RelationNetworkTest do
   end
 
   describe "constrain/4" do
-    test "records the converse on the reverse pair" do
+    test "records the inverse on the reverse pair" do
       net = Net.new([:a, :b]) |> Net.constrain(:a, [:precedes, :meets], :b)
 
       assert Net.between(net, :a, :b) == [:precedes, :meets]
@@ -137,7 +138,7 @@ defmodule Tempo.Interval.RelationNetworkTest do
       assert once == twice
     end
 
-    test "preserves the converse invariant on every pair" do
+    test "preserves the inverse invariant on every pair" do
       net =
         Net.new([:a, :b, :c])
         |> Net.constrain(:a, [:precedes, :meets], :b)
@@ -146,7 +147,7 @@ defmodule Tempo.Interval.RelationNetworkTest do
       assert {:ok, solved} = Net.propagate(net)
 
       for x <- [:a, :b, :c], y <- [:a, :b, :c], x != y do
-        assert Net.between(solved, y, x) == Relations.converse(Net.between(solved, x, y))
+        assert Net.between(solved, y, x) == Allen.inverse(Net.between(solved, x, y))
       end
     end
 

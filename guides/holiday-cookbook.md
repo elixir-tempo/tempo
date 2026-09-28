@@ -173,12 +173,12 @@ end)
 
 # bridge / "if it is a holiday then…" — test a candidate day against the set:
 {:ok, holidays} = Tempo.union(~o"2026-05-14", [~o"2026-05-25"])   # Ascension + Whit Monday
-Tempo.subset?(~o"2026-05-14", holidays)                          # => true
+Tempo.within?(~o"2026-05-14", holidays)                          # => true
 ```
 
 And *"every N years"* is a plain cadence, not a filter — `~o"R/2024-07-04/P4Y"` fires on the 4th of July only every fourth year (2024, 2028, 2032, …).
 
-`union/2` gives the enable family; `IntervalSet.filter/2` the weekday gates; and `subset?/2`, `contains?/2` are the predicates the bridge and "if it is a holiday then…" cascades test against the year's holiday set. This is the point of modelling holidays as interval sets: they compose with each other, and with anyone's free-time set, through the same algebra.
+`union/2` gives the enable family; `IntervalSet.filter/2` the weekday gates; and `within?/2`, `contains?/2` are the predicates the bridge and "if it is a holiday then…" cascades test against the year's holiday set. This is the point of modelling holidays as interval sets: they compose with each other, and with anyone's free-time set, through the same algebra.
 
 ## Bridge days and moved holidays (conditional members)
 

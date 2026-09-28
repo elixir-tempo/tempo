@@ -3,6 +3,8 @@ defmodule Tempo.FloatingTest do
 
   import Tempo.Sigils
 
+  alias Tempo.Allen
+
   doctest Tempo, only: [floating?: 1, grounded?: 1, in_zone: 2]
 
   describe "floating?/1 and grounded?/1" do
@@ -63,19 +65,18 @@ defmodule Tempo.FloatingTest do
       assert_raise Tempo.FloatingTempoError, fn -> Tempo.relation(g, f) end
     end
 
-    test "the Allen predicates raise", %{floating: f, grounded: g} do
+    test "the relation predicates raise", %{floating: f, grounded: g} do
       assert_raise Tempo.FloatingTempoError, fn -> Tempo.before?(f, g) end
       assert_raise Tempo.FloatingTempoError, fn -> Tempo.after?(f, g) end
-      assert_raise Tempo.FloatingTempoError, fn -> Tempo.during?(f, g) end
-      assert_raise Tempo.FloatingTempoError, fn -> Tempo.within?(f, g) end
-      assert_raise Tempo.FloatingTempoError, fn -> Tempo.meets?(f, g) end
+      assert_raise Tempo.FloatingTempoError, fn -> Allen.during?(f, g) end
+      assert_raise Tempo.FloatingTempoError, fn -> Allen.meets?(f, g) end
     end
 
     test "the set-theoretic predicates raise", %{floating: f, grounded: g} do
       assert_raise Tempo.FloatingTempoError, fn -> Tempo.overlaps?(f, g) end
       assert_raise Tempo.FloatingTempoError, fn -> Tempo.disjoint?(f, g) end
       assert_raise Tempo.FloatingTempoError, fn -> Tempo.contains?(f, g) end
-      assert_raise Tempo.FloatingTempoError, fn -> Tempo.subset?(f, g) end
+      assert_raise Tempo.FloatingTempoError, fn -> Tempo.within?(f, g) end
     end
 
     test "the certainty API raises", %{floating: f, grounded: g} do

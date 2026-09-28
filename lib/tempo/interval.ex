@@ -53,7 +53,6 @@ defmodule Tempo.Interval do
   alias Tempo.Compare
   alias Tempo.Duration
   alias Tempo.FloatingTempoError
-  alias Tempo.Interval.Composition
   alias Tempo.IntervalEndpointsError
   alias Tempo.IntervalSet
   alias Tempo.InvalidUnitError
@@ -1079,7 +1078,9 @@ defmodule Tempo.Interval do
   | `:preceded_by`    | X starts strictly after Y's end  | `x₁ > y₂`                      |
 
   Every pair of non-empty bounded intervals stands in exactly
-  one of these relations.
+  one of these relations. `Tempo.Allen` has a predicate for each,
+  and the inverse (`Tempo.Allen.inverse/1`) and composition
+  (`Tempo.Allen.compose/2`) of relations.
 
   ### Arguments
 
@@ -1119,92 +1120,6 @@ defmodule Tempo.Interval do
          {:ok, iv_b} <- to_single_interval(b, :b) do
       classify(iv_a, iv_b)
     end
-  end
-
-  @doc """
-  The inverse Allen relation.
-
-  If `relation(a, b)` returns `r`, then `relation(b, a)` returns
-  `inverse_relation(r)`.
-
-  ### Examples
-
-      iex> Tempo.Interval.inverse_relation(:contains)
-      :during
-
-      iex> Tempo.Interval.inverse_relation(:precedes)
-      :preceded_by
-
-      iex> Tempo.Interval.inverse_relation(:equals)
-      :equals
-
-  """
-  @spec inverse_relation(relation()) :: relation()
-  def inverse_relation(:precedes), do: :preceded_by
-  def inverse_relation(:preceded_by), do: :precedes
-  def inverse_relation(:meets), do: :met_by
-  def inverse_relation(:met_by), do: :meets
-  def inverse_relation(:overlaps), do: :overlapped_by
-  def inverse_relation(:overlapped_by), do: :overlaps
-  def inverse_relation(:starts), do: :started_by
-  def inverse_relation(:started_by), do: :starts
-  def inverse_relation(:finishes), do: :finished_by
-  def inverse_relation(:finished_by), do: :finishes
-  def inverse_relation(:during), do: :contains
-  def inverse_relation(:contains), do: :during
-  def inverse_relation(:equals), do: :equals
-
-  @doc """
-  Compose two Allen relations — the relations possible from `A` to `C` given
-  `A r1 B` and `B r2 C`.
-
-  This is Allen's interval-algebra composition (Allen 1983): a constant-time
-  read of the 13×13 table. Where `relation/2` compares two intervals you hold,
-  `compose/2` takes one qualitative step with no interval in hand —
-  *"if A precedes B and B is during C, how can A relate to C?"* — and returns
-  every relation some arrangement of the three intervals allows. It is the same
-  reasoning `Tempo.Network.Solver.relation/3` applies across a whole network,
-  reduced to a single step.
-
-  ### Arguments
-
-  * `relation1` is the Allen relation from `A` to `B` — one of the 13 atoms
-    `relation/2` returns.
-
-  * `relation2` is the Allen relation from `B` to `C`.
-
-  ### Returns
-
-  * A list of the relations possible from `A` to `C`, in Allen's canonical
-    order — one element when the composition is determined, up to all 13 when
-    the step is fully ambiguous.
-
-  * `{:error, {:invalid_relation, term}}` when either argument is not one of
-    the 13 relation atoms.
-
-  ### Examples
-
-      iex> Tempo.Interval.compose(:precedes, :during)
-      [:precedes, :meets, :overlaps, :starts, :during]
-
-      iex> Tempo.Interval.compose(:equals, :overlaps)
-      [:overlaps]
-
-      iex> Tempo.Interval.compose(:precedes, :nonsense)
-      {:error, {:invalid_relation, :nonsense}}
-
-  """
-  @spec compose(relation(), relation()) ::
-          [relation()] | {:error, {:invalid_relation, term()}}
-  def compose(relation1, relation2) do
-    case Composition.compose(relation1, relation2) do
-      nil -> {:error, {:invalid_relation, first_invalid(relation1, relation2)}}
-      relations -> relations
-    end
-  end
-
-  defp first_invalid(relation1, relation2) do
-    if relation1 in Composition.relations(), do: relation2, else: relation1
   end
 
   # Three endpoint comparisons drive the 13-way branch:
@@ -1402,66 +1317,6 @@ defmodule Tempo.Interval do
   end
 
   def empty?(%__MODULE__{}), do: false
-
-  @doc """
-  `true` when two intervals describe the same temporal extent,
-  regardless of calendar, zone display, or attached metadata.
-
-  Standard `==` compares all struct fields, including `:metadata`,
-  `:calendar`, and the zone-display details on the endpoints, so the
-  same span shown in two different zones compares unequal.
-  `equivalent?/2` projects endpoints to UTC and compares only the
-  temporal positions — matching the equivalence notion of the
-  T_bounded_meeting ontology of Grüninger and Li (TIME 2017), under
-  which intervals are individuated by their position in the structure
-  of `meets`, not by labels.
-
-  Recurrence-related fields (`:recurrence`, `:direction`,
-  `:repeat_rule`, `:duration`) must match structurally: two recurring
-  intervals with different rules describe different extents.
-
-  ### Arguments
-
-  * `a` and `b` are `t:t/0` values.
-
-  ### Returns
-
-  * `true` if both intervals occupy the same temporal extent under UTC projection.
-
-  * `false` otherwise.
-
-  ### Examples
-
-      iex> a = %Tempo.Interval{from: ~o"2026-06-15", to: ~o"2026-06-16"}
-      iex> b = %Tempo.Interval{from: ~o"2026-06-15", to: ~o"2026-06-16"}
-      iex> Tempo.Interval.equivalent?(a, b)
-      true
-
-      iex> a = %Tempo.Interval{from: ~o"2026-06-15", to: ~o"2026-06-16"}
-      iex> b = %Tempo.Interval{from: ~o"2026-06-15", to: ~o"2026-06-17"}
-      iex> Tempo.Interval.equivalent?(a, b)
-      false
-
-  """
-  @spec equivalent?(t(), t()) :: boolean()
-  def equivalent?(%__MODULE__{} = a, %__MODULE__{} = b) do
-    endpoints_equivalent?(a.from, b.from) and
-      endpoints_equivalent?(a.to, b.to) and
-      a.recurrence == b.recurrence and
-      a.direction == b.direction and
-      a.repeat_rule == b.repeat_rule and
-      a.duration == b.duration
-  end
-
-  defp endpoints_equivalent?(%Tempo{} = a, %Tempo{} = b) do
-    Compare.compare_endpoints(a, b) == :same
-  end
-
-  defp endpoints_equivalent?(:undefined, :undefined), do: true
-  defp endpoints_equivalent?(nil, nil), do: true
-  defp endpoints_equivalent?(nil, :undefined), do: true
-  defp endpoints_equivalent?(:undefined, nil), do: true
-  defp endpoints_equivalent?(_, _), do: false
 
   ## ----------------------------------------------------------
   ## Duration query + duration predicates
@@ -2006,38 +1861,56 @@ defmodule Tempo.Interval do
   ## Relation predicates — thin shortcuts over relation/2
   ## ----------------------------------------------------------
 
-  @doc """
-  `true` when `a` ends strictly before `b` starts, with a gap
-  (Allen's `:precedes`). Use `adjacent?/2` to include the
-  no-gap case.
+  # The everyday `before?/2` and `after?/2`: the two share no instant, one
+  # earlier — Allen's gap relation or its meeting.
+  @before_relations [:precedes, :meets]
+  @after_relations [:preceded_by, :met_by]
 
-  Returns `false` for any other relation, and raises when an
-  operand is not a single bounded interval (a multi-member set, an
-  open or recurring interval, a one-of set), as `relation/2`
-  returns an error there.
+  @doc """
+  `true` when `a` ends at or before `b` starts — the two share no
+  instant and `a` is earlier.
+
+  This is the everyday sense: an 11:00–12:00 meeting is before a
+  12:00 lunch, since under the half-open convention the meeting ends
+  as lunch begins. Allen's `:precedes` also needs a gap between the
+  two; `Tempo.Allen.precedes?/2` tests for it.
+
+  Raises when an operand is not a single bounded interval (a
+  multi-member set, an open or recurring interval, a one-of set), as
+  `relation/2` returns an error there.
+
+  ### Examples
+
+      iex> meeting = ~o"2026-06-15T11/2026-06-15T12"
+      iex> Tempo.Interval.before?(meeting, ~o"2026-06-15T12/2026-06-15T13")
+      true
+      iex> Tempo.Interval.before?(meeting, ~o"2026-06-15T11:30/2026-06-15T13")
+      false
+
   """
   @spec before?(interval_like(), interval_like()) :: boolean()
-  def before?(a, b), do: match_relation(a, b, [:precedes])
+  def before?(a, b), do: match_relation(a, b, @before_relations)
 
   @doc """
-  `true` when `a` starts strictly after `b` ends, with a gap
-  (Allen's `:preceded_by`).
+  `true` when `a` starts at or after `b` ends — the two share no
+  instant and `a` is later.
+
+  The mirror of `before?/2`. Allen's `:preceded_by` also needs a gap
+  between the two; `Tempo.Allen.preceded_by?/2` tests for it.
+
+  ### Examples
+
+      iex> Tempo.Interval.after?(~o"2026-02", ~o"2026-01")
+      true
+
   """
   @spec after?(interval_like(), interval_like()) :: boolean()
-  def after?(a, b), do: match_relation(a, b, [:preceded_by])
-
-  @doc """
-  `true` when `a`'s end coincides exactly with `b`'s start
-  (Allen's `:meets`). Under the half-open convention this means
-  the intervals share no point but have no gap.
-  """
-  @spec meets?(interval_like(), interval_like()) :: boolean()
-  def meets?(a, b), do: match_relation(a, b, [:meets])
+  def after?(a, b), do: match_relation(a, b, @after_relations)
 
   @doc """
   `true` when the two intervals touch at a single boundary —
-  either `a` meets `b` or `b` meets `a` (Allen's
-  `:meets | :met_by`).
+  either ends exactly where the other starts (Allen's
+  `:meets | :met_by`; `Tempo.Allen.meets?/2` tests one direction).
 
   ### Examples
 
@@ -2052,18 +1925,10 @@ defmodule Tempo.Interval do
   def adjacent?(a, b), do: match_relation(a, b, [:meets, :met_by])
 
   @doc """
-  `true` when `a` is strictly inside `b` — both endpoints of
-  `a` lie strictly within `b` (Allen's `:during`). Shared-
-  endpoint cases (`:starts`, `:finishes`) return `false`; use
-  `within?/2` for the inclusive version.
-  """
-  @spec during?(interval_like(), interval_like()) :: boolean()
-  def during?(a, b), do: match_relation(a, b, [:during])
-
-  @doc """
   `true` when `a` lies inside `b` inclusive of shared
   endpoints (Allen's `:equals | :starts | :during | :finishes`).
-  The canonical "does this fit inside that window?" predicate.
+  The canonical "does this fit inside that window?" predicate;
+  Allen's strict `:during` is `Tempo.Allen.during?/2`.
 
   `within?/2` asks about the whole of `a`. The `:within` option of
   `Tempo.to_interval_set/2` and the set operations is looser: it
@@ -2323,9 +2188,9 @@ defmodule Tempo.Interval do
   def possibly_within?(a, b), do: certainty_in?(within_certainty(a, b), [:certain, :possible])
 
   @doc """
-  `true` when `a` ends before `b` starts, with a gap (Allen `:precedes`),
-  for *every* placement of their `±` margins. Crisp counterpart:
-  `before?/2`.
+  `true` when `a` ends at or before `b` starts — they share no instant
+  and `a` is earlier — for *every* placement of their `±` margins.
+  Crisp counterpart: `before?/2`.
 
   ### Examples
 
@@ -2337,11 +2202,12 @@ defmodule Tempo.Interval do
 
   """
   @spec certainly_before?(interval_like(), interval_like()) :: boolean()
-  def certainly_before?(a, b), do: certainty_in?(relation_certainty(a, b, :precedes), [:certain])
+  def certainly_before?(a, b),
+    do: certainty_in?(relation_certainty(a, b, @before_relations), [:certain])
 
   @doc """
-  `true` when `a` *could* end before `b` starts for some placement of
-  their `±` margins.
+  `true` when `a` *could* end at or before `b` starts for some placement
+  of their `±` margins.
 
   ### Examples
 
@@ -2351,11 +2217,11 @@ defmodule Tempo.Interval do
   """
   @spec possibly_before?(interval_like(), interval_like()) :: boolean()
   def possibly_before?(a, b),
-    do: certainty_in?(relation_certainty(a, b, :precedes), [:certain, :possible])
+    do: certainty_in?(relation_certainty(a, b, @before_relations), [:certain, :possible])
 
   @doc """
-  `true` when `a` starts after `b` ends, with a gap (Allen
-  `:preceded_by`), for *every* placement of their `±` margins. Crisp
+  `true` when `a` starts at or after `b` ends — they share no instant
+  and `a` is later — for *every* placement of their `±` margins. Crisp
   counterpart: `after?/2`.
 
   ### Examples
@@ -2366,11 +2232,11 @@ defmodule Tempo.Interval do
   """
   @spec certainly_after?(interval_like(), interval_like()) :: boolean()
   def certainly_after?(a, b),
-    do: certainty_in?(relation_certainty(a, b, :preceded_by), [:certain])
+    do: certainty_in?(relation_certainty(a, b, @after_relations), [:certain])
 
   @doc """
-  `true` when `a` *could* start after `b` ends for some placement of
-  their `±` margins.
+  `true` when `a` *could* start at or after `b` ends for some placement
+  of their `±` margins.
 
   ### Examples
 
@@ -2380,7 +2246,7 @@ defmodule Tempo.Interval do
   """
   @spec possibly_after?(interval_like(), interval_like()) :: boolean()
   def possibly_after?(a, b),
-    do: certainty_in?(relation_certainty(a, b, :preceded_by), [:certain, :possible])
+    do: certainty_in?(relation_certainty(a, b, @after_relations), [:certain, :possible])
 
   # A certainty error must surface, not read as `false` — a silent false
   # asserts "impossible", a claim the error explicitly could not make.

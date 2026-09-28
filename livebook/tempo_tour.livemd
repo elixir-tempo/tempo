@@ -86,7 +86,7 @@ Enum.take(~o"156X", 10)
 
 ## Comparison and predicates
 
-Tempo implements Allen's interval algebra: `Tempo.relation/2` names the precise relation (all thirteen, `:precedes` through `:preceded_by`), and the everyday questions have named predicates — `overlaps?`, `contains?`, `before?`, `after?`, `meets?`, `adjacent?`, `during?`, `within?`, `equal?`, `disjoint?`.
+Tempo implements Allen's interval algebra: `Tempo.relation/2` names the precise relation (all thirteen, `:precedes` through `:preceded_by`), `Tempo.Allen` has a predicate for each, and the everyday questions have named predicates — `overlaps?`, `contains?`, `before?`, `after?`, `adjacent?`, `within?`, `equal?`, `disjoint?`.
 
 ```elixir
 a = ~o"2026-06-01/2026-06-15"
@@ -400,7 +400,7 @@ b = ~o"2026-06-05/2026-06-15"
 }
 ```
 
-Named predicates wrap the common checks — `within?`, `adjacent?`, `before?`, `after?`, `meets?`, `during?`:
+Named predicates wrap the common checks — `within?`, `adjacent?`, `before?`, `after?` — and `Tempo.Allen` tests for one exact relation, such as `Tempo.Allen.meets?/2`:
 
 ```elixir
 window = ~o"2026-06-15T09/2026-06-15T17"

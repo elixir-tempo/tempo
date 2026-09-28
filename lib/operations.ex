@@ -3,7 +3,7 @@ defmodule Tempo.Operations do
   Set operations on Tempo values — union, intersection,
   complement, difference, symmetric difference — plus the
   companion predicates (`disjoint?/2`, `overlaps?/2`,
-  `subset?/2`, `contains?/2`, `equal?/2`).
+  `within?/2`, `contains?/2`, `equal?/2`).
 
   Every operation accepts any Tempo value (implicit `%Tempo{}`,
   `%Tempo.Interval{}`, `%Tempo.IntervalSet{}`, or all-of
@@ -1371,19 +1371,20 @@ defmodule Tempo.Operations do
 
   @doc """
   `true` when every instant covered by `a` is also covered by
-  `b`. Operates at the instant-set level (both operands
-  coalesced internally) — not member-by-member.
+  `b` — `a` fits inside `b`, shared ends included. Operates at the
+  instant-set level (both operands coalesced internally), not
+  member by member, so it answers for single values and sets alike.
 
   ### Examples
 
-      iex> {Tempo.subset?(~o"2026-01-15", ~o"2026-01"),
-      ...>  Tempo.subset?(~o"2026-01", ~o"2026-01-15")}
+      iex> {Tempo.within?(~o"2026-01-15", ~o"2026-01"),
+      ...>  Tempo.within?(~o"2026-01", ~o"2026-01-15")}
       {true, false}
 
   """
-  @spec subset?(operand, operand, keyword()) :: boolean()
+  @spec within?(operand, operand, keyword()) :: boolean()
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def subset?(a, b, opts \\ []) do
+  def within?(a, b, opts \\ []) do
     Interval.reject_mixed_frame!(a, b)
 
     case difference(a, b, opts) do
@@ -1394,7 +1395,7 @@ defmodule Tempo.Operations do
 
   @doc """
   `true` when every instant covered by `b` is also covered by
-  `a`. Alias for `subset?(b, a, opts)`.
+  `a` — the mirror of `within?/3`.
 
   ### Examples
 
@@ -1405,7 +1406,7 @@ defmodule Tempo.Operations do
   """
   @spec contains?(operand, operand, keyword()) :: boolean()
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def contains?(a, b, opts \\ []), do: subset?(b, a, opts)
+  def contains?(a, b, opts \\ []), do: within?(b, a, opts)
 
   @doc """
   `true` when `a` and `b` cover the same instants — i.e. they

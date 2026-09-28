@@ -4,18 +4,29 @@
 
 ### Breaking changes
 
-Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name that changed to its 2.0 form.
+Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name that changed to its 2.0 form, and the [migration guide](guides/migration.md) shows each change with examples.
 
 | 1.x | 2.0 |
 |---|---|
 | `Tempo.IntervalSet.total_duration/1` | `Tempo.IntervalSet.duration/1` |
 | the `:bound` option | `:within` |
+| `Tempo.subset?/3` | `Tempo.within?/3` |
+| `during?/2`, `meets?/2` on `Tempo` and `Tempo.Interval` | `Tempo.Allen.during?/2`, `Tempo.Allen.meets?/2` |
+| `Tempo.Interval.inverse_relation/1` | `Tempo.Allen.inverse/1` |
+| `compose/2` on `Tempo` and `Tempo.Interval` | `Tempo.Allen.compose/2` |
+| `Tempo.Interval.equivalent?/2` | `Tempo.equal?/3` |
 
 * `Tempo.duration/1` and `Tempo.IntervalSet.duration/1` measure the time a set covers, counting time its members share once; `IntervalSet.total_duration/1`, which did, is removed.
 
 * `:within` replaces `:bound` on `Tempo.to_interval/2`, `to_interval_set/2`, the set operations, `complement/2`, `Tempo.ICal.from_ical/2`, `Tempo.JSCalendar.from_jscalendar/2` and the RRULE expander; a leftover `:bound` is an error naming it.
 
 * The `:within` window keeps every occurrence that overlaps it, for every recurrence: `R/2020-01-01/P1Y` within 2026 is 2026's occurrence alone, not every year since 2020, and iCalendar and JSCalendar return only the events that overlap the window.
+
+* `Tempo.before?/2` and `after?/2`, with their `certainly_` and `possibly_` forms, hold when the two share no instant, so an 11:00–12:00 meeting is before a 12:00 lunch. Allen's strict relations, which need a gap, are `Tempo.Allen.precedes?/2` and `preceded_by?/2`.
+
+* `Tempo.Allen` has a predicate for each of Allen's thirteen relations under Allen's own name, with `inverse/1` and `compose/2` on a relation or a set; `during?/2`, `meets?/2`, `inverse_relation/1` and `compose/2` move there.
+
+* `Tempo.within?/3` takes `subset?/3`'s place and compares any two values instant by instant, as `contains?/3` does; `Tempo.Interval.within?/2` stays the single-interval form, and `Interval.equivalent?/2` is removed for `Tempo.equal?/3`.
 
 * `Tempo.new/1`'s `:metadata` is the value's own metadata, read with `Tempo.metadata/1` and never written to its ISO 8601 form, where it was written as IXDTF suffix tags; tags take the new `:tags` option, validated so `to_iso8601/1` cannot fail on one.
 
@@ -55,7 +66,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.Interval.RelationNetwork` — Allen's path-consistency propagation over a network of partially known intervals, deriving what a web of relation constraints implies. It represents disjunction (`[:precedes, :preceded_by]`), which `Tempo.Network`'s convex metric vocabulary cannot.
 
-* `Tempo.Interval.Relations` — converse, narrowing and composition over *sets* of Allen relations, for reasoning when the relation between two intervals is constrained but not known. `narrow/2` combines two sources of knowledge; it is not `Tempo.intersection/2`, which operates on time values.
+* `Tempo.Interval.Relations` — narrowing and canonical order over *sets* of Allen relations (with `Tempo.Allen.inverse/1` and `compose/2`, which take sets too), for reasoning when the relation between two intervals is constrained but not known. `narrow/2` combines two sources of knowledge; it is not `Tempo.intersection/2`, which operates on time values.
 
 ### Changed
 

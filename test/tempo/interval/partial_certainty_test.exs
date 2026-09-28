@@ -47,10 +47,11 @@ defmodule Tempo.Interval.PartialCertaintyTest do
     test "a masked decade digit narrows the span accordingly" do
       # ~o"201XY" is some year in [2010, 2020).
       assert Interval.within_certainty(~o"201XY", ~o"2010Y/2020Y") == :certain
-      # 2019 is adjacent to 2020 (Allen :meets, no gap), so :precedes is only
-      # certain once a gap opens — 2021 clears the whole span.
-      assert Interval.certainly_before?(~o"201XY", ~o"2021Y")
-      refute Interval.certainly_before?(~o"201XY", ~o"2020Y")
+      # 2019 meets 2020 and shares no instant with it, so every grounding is
+      # before 2020; Allen's strict :precedes needs the gap 2021 opens.
+      assert Interval.certainly_before?(~o"201XY", ~o"2020Y")
+      assert Interval.relation_certainty(~o"201XY", ~o"2020Y", :precedes) == :possible
+      assert Interval.relation_certainty(~o"201XY", ~o"2021Y", :precedes) == :certain
       refute Interval.certainly_before?(~o"201XY", ~o"2015Y")
     end
 

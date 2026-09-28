@@ -8,7 +8,7 @@ When you need to ask an **event-list question** — "*which* meetings hit this w
 * `members_outside/2` — companion to `difference/2`
 * `members_in_exactly_one/2` — companion to `symmetric_difference/2`
 
-Companion predicates (`disjoint?/2`, `overlaps?/2`, `subset?/2`, `contains?/2`, `equal?/2`) operate at the instant-set level.
+Companion predicates (`disjoint?/2`, `overlaps?/2`, `within?/2`, `contains?/2`, `equal?/2`) operate at the instant-set level.
 
 Every operation accepts any Tempo shape — an implicit `%Tempo{}`, an `%Tempo.Interval{}`, a `%Tempo.IntervalSet{}`, or an all-of `%Tempo.Set{}` — and returns a `%Tempo.IntervalSet{}` (or a boolean for predicates). The top-level API lives on the `Tempo` module: `Tempo.union/2`, `Tempo.intersection/2`, and so on.
 
@@ -282,11 +282,11 @@ true
 iex> Tempo.overlaps?(~o"2022Y", ~o"2022-06")
 true
 
-iex> Tempo.subset?(~o"2022-06", ~o"2022Y")
+iex> Tempo.within?(~o"2022-06", ~o"2022Y")
 true                                 # June ⊆ 2022
 
 iex> Tempo.contains?(~o"2022Y", ~o"2022-06")
-true                                 # 2022 ⊇ June (alias: subset?(b, a))
+true                                 # 2022 ⊇ June (the mirror: within?(b, a))
 
 iex> Tempo.equal?(~o"2022Y", Tempo.from_iso8601!("2022-01-01/2023-01-01"))
 true                                 # same covered instants, different representations

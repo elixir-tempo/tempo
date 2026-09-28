@@ -3,6 +3,7 @@ defmodule Tempo.CoreCoverageTest do
 
   import Tempo.Sigils
 
+  alias Tempo.Allen
   alias Tempo.IntervalSet
   alias Tempo.InvalidDateError
   alias Tempo.MaterialisationError
@@ -21,18 +22,23 @@ defmodule Tempo.CoreCoverageTest do
     end
   end
 
-  describe "Allen relation predicates (delegated to Tempo.Interval)" do
+  describe "relation predicates" do
     test "before? / after? hold across a gap" do
       assert Tempo.before?(~o"2020Y", ~o"2022Y")
       assert Tempo.after?(~o"2022Y", ~o"2020Y")
     end
 
-    test "meets? holds for adjacent spans" do
-      assert Tempo.meets?(~o"2020Y/2021Y", ~o"2021Y/2022Y")
+    test "before? / after? hold for adjacent spans, which share no instant" do
+      assert Tempo.before?(~o"2020Y", ~o"2021Y")
+      assert Tempo.after?(~o"2021Y", ~o"2020Y")
     end
 
-    test "during? holds for a contained span" do
-      assert Tempo.during?(~o"2020Y6M", ~o"2020Y")
+    test "Allen.meets? holds for adjacent spans" do
+      assert Allen.meets?(~o"2020Y/2021Y", ~o"2021Y/2022Y")
+    end
+
+    test "Allen.during? holds for a contained span" do
+      assert Allen.during?(~o"2020Y6M", ~o"2020Y")
     end
   end
 

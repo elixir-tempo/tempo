@@ -123,7 +123,7 @@ defmodule Tempo.MixProject do
       Core: ~r/^Tempo(?:\.(Interval|IntervalSet|Duration|Set|RecurrenceSet))?$/,
       "Clock and current time": ~r/^Tempo\.Clock(\.|$)/,
       "Set algebra and comparison":
-        ~r/^Tempo\.(Operations|Compare|Select|Territory)$|^Tempo\.Interval\.(Relations|RelationNetwork)$/,
+        ~r/^Tempo\.(Operations|Compare|Allen|Select|Territory)$|^Tempo\.Interval\.(Relations|RelationNetwork)$/,
       "Recurrence (RRULE)": ~r/^Tempo\.RRule(\.|$)/,
       "Computed events": ~r/^Tempo\.Event(\.|$)/,
       "iCalendar integration": ~r/^Tempo\.ICal(\.|$)/,
@@ -141,6 +141,9 @@ defmodule Tempo.MixProject do
     [
       Tutorial: [
         "guides/tutorial-booking-availability.md"
+      ],
+      Upgrading: [
+        "guides/migration.md"
       ],
       Livebooks: [
         "livebook/getting-started.livemd",
