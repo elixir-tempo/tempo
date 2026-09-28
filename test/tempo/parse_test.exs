@@ -45,6 +45,14 @@ defmodule Tempo.ParseTest do
       assert Tempo.to_iso8601(range) == "2026Y5M5D/10D"
     end
 
+    test "an impossible date in words is an error, not part of a date" do
+      # `en` reads slashes as month/day/year, and there is no month 15. The
+      # parser once dropped the month and read the rest as 6 January.
+      assert {:error, _reason} = Tempo.parse("15/06/2026", locale: :en)
+      assert {:error, %Tempo.ParseError{}} = Tempo.parse_date("15/06/2026", locale: :en)
+      assert Tempo.parse("06/15/2026", locale: :en) == {:ok, ~o"2026-06-15"}
+    end
+
     test "text that names nothing keeps the locale's error" do
       assert {:error, %Localize.DateTimeParseError{}} = Tempo.parse("tomorrow", locale: :en)
     end
