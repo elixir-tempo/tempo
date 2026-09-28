@@ -1,6 +1,8 @@
 defmodule Tempo.NowTest do
   use ExUnit.Case, async: true
 
+  import Tempo.Sigils
+
   alias Tempo.Clock.Test
 
   # Install `Tempo.Clock.Test` as the clock for this test process
@@ -46,7 +48,7 @@ defmodule Tempo.NowTest do
     end
 
     test "crosses the date line when the zone moves the wall date" do
-      # 23:30 UTC on 2026-06-15 is 07:30 on the 16th in Tokyo (UTC+9).
+      # 23:30 UTC on 2026-06-15 is 08:30 on the 16th in Tokyo (UTC+9).
       Test.put(~U[2026-06-15 23:30:00Z])
 
       tempo = Tempo.now("Asia/Tokyo")
@@ -57,16 +59,17 @@ defmodule Tempo.NowTest do
   end
 
   describe "Tempo.utc_today/0" do
-    test "returns a day-resolution Tempo" do
+    test "returns a floating day-resolution Tempo" do
       Test.put(~U[2026-06-15 14:30:00Z])
 
       assert Tempo.utc_today() |> Tempo.resolution() == {:day, 1}
       assert Tempo.utc_today().time == [year: 2026, month: 6, day: 15]
+      assert Tempo.floating?(Tempo.utc_today())
     end
   end
 
   describe "Tempo.today/1" do
-    test "returns the date in the given zone" do
+    test "returns the date in the given zone, floating" do
       # 23:30 UTC on 2026-06-15 is already the 16th in Tokyo.
       Test.put(~U[2026-06-15 23:30:00Z])
 
@@ -74,6 +77,14 @@ defmodule Tempo.NowTest do
 
       assert Tempo.resolution(tempo) == {:day, 1}
       assert tempo.time == [year: 2026, month: 6, day: 16]
+      assert Tempo.floating?(tempo)
+    end
+
+    test "compares with a holiday date written without a zone" do
+      Test.put(~U[2026-12-24 20:00:00Z])
+
+      # Already Christmas Day in Sydney.
+      assert Tempo.relation(Tempo.today("Australia/Sydney"), ~o"2026-12-25") == :equals
     end
   end
 end

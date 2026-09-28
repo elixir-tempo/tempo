@@ -404,6 +404,13 @@ defmodule Tempo.NewTest do
       assert {:error, %Tempo.NonAnchoredError{}} = Tempo.duration(~o"T10", ~o"T14")
     end
 
+    test "a zoned endpoint against a floating one returns a FloatingTempoError, never raising" do
+      sydney = ~o"2026-09-28T09:00:00[Australia/Sydney]"
+
+      assert {:error, %Tempo.FloatingTempoError{}} = Tempo.duration(sydney, ~o"2026-11-03")
+      assert {:error, %Tempo.FloatingTempoError{}} = Tempo.duration(~o"2026-09-28", sydney)
+    end
+
     test "duration!/2 returns the bare Duration on success" do
       assert Tempo.duration!(~o"2026-06-15T09", ~o"2026-06-15T17") == ~o"PT28800S"
     end

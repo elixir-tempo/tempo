@@ -213,6 +213,24 @@ The two behaviours consumers implement, `Tempo.Event.Resolver` and `Tempo.Interv
 
 `select/2`, `shift/3`, `shift_zone/2`, `in_zone/2`, `at/2`, `on/2`, the set operations and the `members_*` filters, `relation/2` and Allen's atoms, `resolution/1` and `:unit`, `metadata/1` and `put_metadata/2`, `floating?/1`, `anchored?/1`, `to_interval/2`, `to_interval_set/2`, `from_iso8601/2`, `to_iso8601/1`, `parse/2`, `to_string/2`, `explain/1`, the duration predicates (`at_least?/2`, `at_most?/2`, `exactly?/2`, `longer_than?/2`, `shorter_than?/2`), the certainty family (`certainly_*?`, `possibly_*?`, `*_certainty`), "territory", and ISO 8601's "repeat rule" and "selection".
 
+## Real-world questions
+
+A livebook of everyday questions tests the vocabulary: when the next Victorian school holidays are, how many days until the next US Election Day, how many public holidays the UK has, and which of them it shares with Australia. Wherever an answer needed a helper, a library was missing something:
+
+* **The next school holidays** — `within:` refused an open-ended window, so "next" needed a guessed horizon. An open-ended window gives the occurrences from its start, and `Tempo.IntervalSet.first/1` of them is the next.
+
+* **Today against a holiday** — `today/1` returned a zoned day, so `relation/2` raised against a floating holiday date and `duration/2` silently added the zone's offset (36 days 10 hours to Election Day). `today/1` returns the floating date, `now/1` stays zoned, and `duration/2` refuses a zoned value against a floating one as `relation/2` does.
+
+* **Days until Election Day** — `duration/2` answered in seconds. It answers in its endpoints' unit: `~o"P36D"` between two days, `~o"PT8H"` between two hours.
+
+* **Showing an answer** — an interval set's inspect hides its members' metadata, so every answer mapped `Tempo.metadata/1` over its members. `Table.Reader` for `Tempo.IntervalSet` lets Livebook show a set as a table.
+
+* **Victorian school holidays** — tempo_holidays dropped a dated period's length: `2026-09-19 P16D` became one day. A dated period keeps its length. (date-holidays has no NSW school holidays; the user will add them there.)
+
+* **England's holidays** — `subdivision: "ENG"` silently returned the national set, because England is a `:division`. One `:subdivision` option, the ISO 3166-2 word, names a subdivision at whichever level the data holds it, and an unknown one is an error.
+
+* **How many holidays** — a weekend holiday and its substitute day were both occurrences, so England counted 9 holidays in 2026 for its 8. `dates: :substitute` (the default) gives the substitute day when there is one, `:gazetted` the gazetted date, and `:both` both.
+
 ## Defects found on the way
 
 These need no rename:
@@ -249,6 +267,8 @@ Taken by the user on 2026-09-28:
 
 * **A migration guide** — `guides/migration.md` shows each change with its 1.x and 2.0 forms.
 
+* **The real-world gaps** — decided as "Real-world questions" describes: an open-ended window for "next", the floating `today/1`, durations at their endpoints' resolution, and a holiday on its substitute day by default, its gazetted date or both on request. The livebook uses Victoria's school holidays.
+
 ## Tasks
 
 Each task is one commit, verified on both upstream branches, with its guides, README, cookbook and livebook examples updated in the same commit, and its section of the migration guide written in it.
@@ -257,7 +277,13 @@ Each task is one commit, verified on both upstream branches, with its guides, RE
 
 * [x] **Within** — `:within` for `:bound`, overlap as the one rule for every recurrence and calendar format, `:overlapping` removed, a leftover `:bound` an error. 2026-09-28, `b92a189`.
 
-* [ ] **Predicates and `Tempo.Allen`** — the everyday `before?/2` and `after?/2`, `Tempo.Allen`, and the removals and renames above.
+* [x] **Predicates and `Tempo.Allen`** — the everyday `before?/2` and `after?/2`, `Tempo.Allen`, the removals and renames above, and the migration guide. 2026-09-28, `c669d20`.
+
+* [ ] **From now on** — an open-ended `within:` window, the floating `today/1`, and `duration/2` refusing a zoned value against a floating one.
+
+* [ ] **Durations at resolution** — `duration/1` and `duration/2` in their endpoints' unit, and the duration predicates comparing them.
+
+* [ ] **Sets as tables** — `Table.Reader` for `Tempo.IntervalSet`, so Livebook shows a set's members and their metadata as a table.
 
 * [ ] **Anchor** — one meaning, `UnanchoredError`, `anchor/2` folded into `at/2` and `on/2`.
 
@@ -273,6 +299,8 @@ Each task is one commit, verified on both upstream branches, with its guides, RE
 
 * [ ] **Span ends and specialist modules** — `:from`/`:to`, `Schedule.Slot`, the deleted instant helpers, `:not_before`, `propagate/1`.
 
-* [ ] **tempo_holidays** — `materialise/3` removed, `within:`, the year-end merge in `holidays/2`, `day_start/2`, `{:sunset, location}`, and its publish comment at `~> 2.0`. Its per-year checks compare by start year, date-holidays' convention: under the overlap rule a year's window also holds a holiday still running from December (Hanukkah 2005–06, Eid al-Adha 2006–07), which made 6 rules and 3 Hebrew conformance dates differ when measured against task 2.
+* [ ] **tempo_holidays** — `materialise/3` removed, `within:`, the year-end merge in `holidays/2`, `day_start/2`, `{:sunset, location}`, and its publish comment at `~> 2.0`. Its per-year checks compare by start year, date-holidays' convention: under the overlap rule a year's window also holds a holiday still running from December (Hanukkah 2005–06, Eid al-Adha 2006–07), which made 6 rules and 3 Hebrew conformance dates differ when measured against task 2. Also a dated period's length, one `:subdivision` option with an unknown one an error, and `dates: :substitute | :gazetted | :both`.
+
+* [ ] **Real-world livebook** — the next Victorian school holidays, the days until the next US Election Day, the UK's public holidays, and those the UK shares with Australia, each read as prose.
 
 * [ ] **Downstream** — `tempo_sql` moves to `~> 2.0` once 2.0.0 is on hex.

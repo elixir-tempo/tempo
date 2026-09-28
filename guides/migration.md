@@ -19,6 +19,8 @@ These keep their names and change their meaning:
 
 * **`before?/2` and `after?/2`** — two spans that meet now count, because they share no instant.
 
+* **`today/1` and `utc_today/0`** — the date with no zone, where 1.x returned the zoned day.
+
 * **`duration/1` on a set** — the time the set covers, counting time its members share once.
 
 * **The `:within` window** — every occurrence that overlaps the window, for every kind of recurrence.
@@ -170,6 +172,37 @@ true
 > *"Christmas and Boxing Day both fall **within** December. June is **equal** to the span from the first of June to the first of July."*
 
 `Tempo.Interval.within?/2` stays, for a single interval: Allen's `:equals`, `:starts`, `:during` or `:finishes`.
+
+## Today is a date
+
+`Tempo.today/1` and `Tempo.utc_today/0` return the calendar date with no zone, where 1.x returned the zoned day. A date written without a zone — a holiday, a birthday — compares with it directly, where the zoned day raised `Tempo.FloatingTempoError`. `Tempo.now/1` is still the zoned instant.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.x — raises: a zoned day against a floating date
+Tempo.relation(Tempo.today("Australia/Sydney"), ~o"2026-12-25")
+```
+
+```elixir
+iex> Tempo.today("Australia/Sydney") |> Tempo.floating?()
+true
+```
+
+For the zoned day, place today's date in the zone:
+
+```elixir
+iex> {:ok, zoned} = Tempo.in_zone(Tempo.today("Australia/Sydney"), "Australia/Sydney")
+iex> Tempo.floating?(zoned)
+false
+```
+
+`Tempo.duration/2` refuses a zoned value against a floating one, as `relation/2` always has, where 1.x measured the floating one as though it were in UTC:
+
+```elixir
+iex> Tempo.duration(~o"2026-09-28T09:00:00[Australia/Sydney]", ~o"2026-11-03")
+{:error, %Tempo.FloatingTempoError{operation: :measure, value: ~o"2026Y11M3D"}}
+```
 
 ## Metadata belongs to the value
 

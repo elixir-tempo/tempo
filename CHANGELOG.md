@@ -28,9 +28,15 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.within?/3` takes `subset?/3`'s place and compares any two values instant by instant, as `contains?/3` does; `Tempo.Interval.within?/2` stays the single-interval form, and `Interval.equivalent?/2` is removed for `Tempo.equal?/3`.
 
+* `Tempo.today/1` and `utc_today/0` return the floating date, so it compares with a holiday or any date written without a zone; `now/1` stays zoned.
+
+* `Tempo.duration/2` returns `{:error, %Tempo.FloatingTempoError{}}` for a zoned value against a floating one, the pair `relation/2` refuses, where it measured the floating one as UTC.
+
 * `Tempo.new/1`'s `:metadata` is the value's own metadata, read with `Tempo.metadata/1` and never written to its ISO 8601 form, where it was written as IXDTF suffix tags; tags take the new `:tags` option, validated so `to_iso8601/1` cannot fail on one.
 
 ### Added
+
+* An open-ended `:within` window (`~o"2026-09-28/.."`) gives a recurrence's occurrences from its start on as a lazy set, so `Tempo.IntervalSet.first/1` is the next one. Set operations, `complement/2` and the calendar formats return an error for one.
 
 * `Tempo.RecurrenceSet.keep_when/2` and `move_when/2` — a member kept only when days around it fall on the other members' occurrences (a bridge day), or moved `:to_next` a selected day when it falls on one, resolved in a second pass. `:falls_on` matches the other members' metadata, or names a recurrence set to read.
 

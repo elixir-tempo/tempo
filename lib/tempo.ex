@@ -3884,30 +3884,36 @@ defmodule Tempo do
   end
 
   @doc """
-  Return today's date in UTC as a day-resolution `t:t/0`.
+  Return today's date in UTC, as a floating day-resolution `t:t/0`.
 
   ### Returns
 
-  * A `t:t/0` at day resolution anchored in `Etc/UTC`.
+  * A floating `t:t/0` at day resolution: the calendar date in UTC,
+    with no zone. `utc_now/0` returns the zoned instant.
 
   ### Examples
 
       iex> Tempo.utc_today() |> Tempo.resolution()
       {:day, 1}
 
+      iex> Tempo.utc_today() |> Tempo.floating?()
+      true
+
   """
   @spec utc_today() :: t() | {:error, error_reason()}
   def utc_today do
-    utc_now() |> trunc(:day)
+    today("Etc/UTC")
   end
 
   @doc """
-  Return today's date in the given IANA time zone as a
+  Return today's date in the given IANA time zone, as a floating
   day-resolution `t:t/0`.
 
-  "Today" is zone-relative: at 11pm New York on the 14th it is
+  "Today" is zone-relative: at 11pm in New York on the 14th it is
   already the 15th in Paris. This function answers the zone-local
-  question.
+  question with the calendar date there, and no zone: a date has
+  none, so it compares with a holiday, or any other date written
+  without one. `now/1` returns the zoned instant.
 
   ### Arguments
 
@@ -3915,19 +3921,39 @@ defmodule Tempo do
 
   ### Returns
 
-  * A `t:t/0` at day resolution whose wall date is the date in
-    `zone` at the current UTC instant.
+  * A floating `t:t/0` at day resolution: the date in `zone` at the
+    current UTC instant.
 
   ### Examples
 
       iex> Tempo.today("Etc/UTC") |> Tempo.resolution()
       {:day, 1}
 
+      iex> Tempo.today("Australia/Sydney") |> Tempo.floating?()
+      true
+
   """
   @spec today(String.t()) :: t() | {:error, error_reason()}
   def today(zone \\ "Etc/UTC") when is_binary(zone) do
-    now(zone) |> trunc(:day)
+    zone |> now() |> trunc(:day) |> drop_zone()
   end
+
+  # A zoned value's wall-clock reading with its zone and offset removed — its
+  # floating form. A calendar or tags it carries stay.
+  defp drop_zone(%__MODULE__{extended: %{calendar: nil, tags: tags}} = tempo)
+       when map_size(tags) == 0,
+       do: %{tempo | shift: nil, extended: nil}
+
+  defp drop_zone(%__MODULE__{extended: %{} = extended} = tempo) do
+    %{
+      tempo
+      | shift: nil,
+        extended: Map.merge(extended, %{zone_id: nil, zone_offset: nil, zone_critical: false})
+    }
+  end
+
+  defp drop_zone(%__MODULE__{} = tempo), do: %{tempo | shift: nil}
+  defp drop_zone({:error, _reason} = error), do: error
 
   ## ---------------------------------------------------------
   ## Zone grounding — place a floating Tempo into a zone
@@ -5040,13 +5066,18 @@ defmodule Tempo do
     with an open start (`R/../P1Y/…`) and a selection in an
     unspecified year; a single value or interval ignores it.
 
-  * `:coalesce` controls whether the resulting IntervalSet
-    merges adjacent or overlapping intervals (`true`, the
-    default) or preserves each expanded occurrence as a
-    distinct interval (`false`). Expansion consumers that care
-    about event identity — `Tempo.ICal`, the RRULE expander —
-    pass `false`; ordinary implicit-span materialisation uses
-    the default.
+    An open-ended window — `~o"2026-09-28/.."`, or
+    `Tempo.Interval.new(from: today)` — keeps the occurrences from
+    its start on. For a value with no end of its own they are a
+    lazy `t:Tempo.IntervalSet.t/0`, walked as it is read, so
+    `Tempo.IntervalSet.first/1` is the next occurrence; a walk that
+    finds none in a thousand years ends.
+
+  * `:coalesce` — `true` merges adjacent or overlapping
+    occurrences into single spans; `false`, the default, keeps
+    each occurrence as its own interval, as event identity needs
+    (`Tempo.ICal`, the RRULE expander). An open-ended window's
+    occurrences are never merged.
 
   ### Returns
 
@@ -5055,6 +5086,12 @@ defmodule Tempo do
 
   * `{:ok, interval_set}` when the value expands to multiple
     disjoint spans.
+
+  * `{:ok, interval_set}` on the lazy backend when an open-ended
+    `:within` window walks a value with no end of its own. It
+    answers `Tempo.IntervalSet.first/1` and the other walking
+    questions; `Tempo.IntervalSet.count/1` and `to_list/1` raise
+    `Tempo.UnboundedSetError`.
 
   * `{:error, reason}` when the input cannot be materialised — a
     bare `Tempo.Duration` (no anchor), a `Tempo` at a resolution
@@ -5098,6 +5135,10 @@ defmodule Tempo do
       iex> Tempo.IntervalSet.count(christmases)
       2
 
+      iex> {:ok, christmases} = Tempo.to_interval(~o"R/../P1Y/FL12M25DN", within: ~o"2026-12-26/..")
+      iex> Tempo.IntervalSet.first(christmases)
+      ~o"2027Y12M25D/26D"
+
   """
   @spec to_interval(
           Tempo.t()
@@ -5109,17 +5150,29 @@ defmodule Tempo do
         ) ::
           {:ok, Tempo.Interval.t() | Tempo.IntervalSet.t()} | {:error, error_reason()}
   def to_interval(value, opts \\ []) do
-    with :ok <- check_within_option(opts, "Tempo.to_interval/2") do
-      materialise(value, opts)
+    with :ok <- check_bound_option(opts, "Tempo.to_interval/2") do
+      case open_window_start(Keyword.get(opts, :within)) do
+        {:ok, window_from} -> occurrences_from(value, window_from, opts)
+        {:error, _reason} = error -> error
+        :bounded -> materialise(value, opts)
+      end
     end
   end
 
   @doc false
   # 1.x called the window `:bound`. A leftover `:bound` is an error naming
   # `:within`, never silently ignored — every function that takes the window
-  # checks its options here.
+  # checks its options here. An open-ended window (`2026-09-28/..`) is a lazy
+  # walk that only `to_interval/2` and `to_interval_set/2` return, so every
+  # other function that takes a window needs one with an end.
   @spec check_within_option(keyword(), String.t()) :: :ok | {:error, Exception.t()}
   def check_within_option(options, function) do
+    with :ok <- check_bound_option(options, function) do
+      check_window_end(Keyword.get(options, :within), function)
+    end
+  end
+
+  defp check_bound_option(options, function) do
     if Keyword.has_key?(options, :bound) do
       {:error,
        ArgumentError.exception(
@@ -5129,6 +5182,203 @@ defmodule Tempo do
       :ok
     end
   end
+
+  defp check_window_end(within, function) do
+    case open_window_start(within) do
+      :bounded ->
+        :ok
+
+      _open ->
+        {:error,
+         ArgumentError.exception(
+           "#{function} needs a :within window with an end; " <>
+             "an open-ended window is for Tempo.to_interval_set/2"
+         )}
+    end
+  end
+
+  # An open-ended window — `~o"2026-09-28/.."`, or `Tempo.Interval.new(from: today)`
+  # — has a start and no end. Its start is the earliest instant of its `from`,
+  # as a bounded window's is, so a masked or selected `from` starts where the
+  # span it names does.
+  defp open_window_start(%Tempo.Interval{
+         from: %Tempo{} = from,
+         to: to,
+         duration: nil,
+         recurrence: 1
+       })
+       when to in [nil, :undefined] do
+    with %Tempo{} = start <- bound_lower(from),
+         true <- anchored?(start) do
+      {:ok, start}
+    else
+      _no_point_in_time ->
+        {:error,
+         ArgumentError.exception(
+           "an open-ended :within window must start at a point in time; " <>
+             "#{inspect(from)} names none"
+         )}
+    end
+  end
+
+  defp open_window_start(_within), do: :bounded
+
+  # With an open-ended window, a value with no end of its own walks its
+  # occurrences lazily from the window's start; any other value materialises as
+  # in a bounded window, keeping what overlaps the time from the start on.
+  defp occurrences_from(value, window_from, opts) do
+    if unending?(value) do
+      lazy_occurrences(value, window_from, opts)
+    else
+      materialise(value, opts)
+    end
+  end
+
+  # A value with no end of its own: a recurrence with no count or UNTIL, one
+  # with an open start, one over an open domain, a selection made in every
+  # year, or a recurrence set holding one — a conditional member counting when
+  # the set it reads its condition from has no end.
+  defp unending?(%Tempo.Interval{from: %Tempo.Set{} = domain}), do: open_domain?(domain)
+
+  defp unending?(%Tempo.Interval{from: from, to: to, recurrence: recurrence})
+       when from in [nil, :undefined] and to in [nil, :undefined] and recurrence != 1,
+       do: true
+
+  defp unending?(%Tempo.Interval{from: %Tempo{}, to: to, recurrence: :infinity})
+       when to in [nil, :undefined],
+       do: true
+
+  defp unending?(%Tempo.RecurrenceSet{members: members}), do: Enum.any?(members, &unending?/1)
+
+  defp unending?(%Conditional{member: member, falls_on: falls_on}),
+    do: unending?(member) or unending?(falls_on)
+
+  defp unending?(%Tempo{time: time}), do: every_year_selection?(time)
+  defp unending?(_value), do: false
+
+  defp open_domain?(%Tempo.Set{set: [_ | _] = members}),
+    do: Enum.any?(members, &open_ended_range?/1)
+
+  defp open_domain?(%Tempo.Set{set: [], except: [], filter: nil}), do: false
+  defp open_domain?(%Tempo.Set{set: []}), do: true
+
+  defp open_ended_range?(%Tempo.Range{last: :undefined}), do: true
+  defp open_ended_range?(_member), do: false
+
+  defp every_year_selection?(time) do
+    case Enum.split_while(time, &(not match?({:selection, _}, &1))) do
+      {context, [{:selection, _selection} | _trailing]} ->
+        Keyword.get(context, :year) in [nil, :any]
+
+      {_time, []} ->
+        false
+    end
+  end
+
+  # How far the walk from an open-ended window's start goes without finding an
+  # occurrence before it ends. A calendar rule repeats within its calendar's
+  # cycle — 400 years in the Gregorian — so a rule with no occurrence in a
+  # thousand years has none to find.
+  @occurrence_horizon %Tempo.Duration{time: [year: 1_000]}
+
+  # The occurrences of a value with no end of its own, from an open-ended
+  # window's start on, as a lazy set. The walk materialises one bounded window
+  # at a time, as a `:within` window does: small at first, so the next
+  # occurrence comes quickly, then doubling to a limit. An occurrence belongs to
+  # the window it starts in, the first window also keeping one already under
+  # way, so none repeats and they come in time order, never coalesced. The walk
+  # ends once the horizon passes with no occurrence, or where a window cannot be
+  # materialised (beyond a calendar's range); an error in the first window is
+  # returned.
+  defp lazy_occurrences(value, window_from, opts) do
+    base = value |> cadence_unit() |> walk_base()
+    walk_opts = Keyword.delete(opts, :coalesce)
+
+    with %Tempo{} = first_to <- walk_end(window_from, base, 0),
+         {:ok, first} <- walk_window(value, window_from, first_to, walk_opts) do
+      found = IntervalSet.to_list(first)
+      horizon = horizon_after(Math.add(window_from, @occurrence_horizon), found)
+
+      later =
+        {first_to, 1, horizon}
+        |> Stream.unfold(&walk_next(&1, value, base, walk_opts))
+        |> Stream.concat()
+
+      {:ok,
+       IntervalSet.from_stream(Stream.concat(found, later), metadata: IntervalSet.metadata(first))}
+    end
+  end
+
+  defp walk_next({_window_from, _step, horizon}, _value, _base, _opts)
+       when not is_struct(horizon, Tempo),
+       do: nil
+
+  defp walk_next({window_from, step, horizon}, value, base, opts) do
+    with :earlier <- Compare.compare_endpoints(window_from, horizon),
+         %Tempo{} = window_to <- walk_end(window_from, base, step) do
+      value
+      |> walk_window(window_from, window_to, opts)
+      |> walked(window_from, window_to, step, horizon)
+    else
+      _past_the_horizon_or_unreachable -> nil
+    end
+  end
+
+  # A window's occurrences that start in it, and the walk's next state; a window
+  # that cannot be materialised ends the walk.
+  defp walked({:ok, set}, window_from, window_to, step, horizon) do
+    found = set |> IntervalSet.to_list() |> Enum.filter(&starts_from?(&1, window_from))
+    {found, {window_to, step + 1, horizon_after(horizon, found)}}
+  end
+
+  defp walked({:error, _reason}, _window_from, _window_to, _step, _horizon), do: nil
+
+  defp walk_window(value, window_from, window_to, opts) do
+    window = %Tempo.Interval{from: window_from, to: window_to}
+
+    case materialise(value, Keyword.put(opts, :within, window)) do
+      {:ok, %IntervalSet{} = set} -> {:ok, set}
+      {:ok, %Tempo.Interval{} = interval} -> IntervalSet.new([interval])
+      {:error, _reason} = error -> error
+    end
+  end
+
+  # The end of the walk's `step`th window: the base size, doubled each step up
+  # to 64 times it.
+  defp walk_end(window_from, {unit, count}, step) do
+    Math.add(window_from, %Tempo.Duration{time: [{unit, count * Integer.pow(2, min(step, 6))}]})
+  end
+
+  defp starts_from?(%Tempo.Interval{from: %Tempo{} = from}, window_from),
+    do: at_or_after_bound?(from, window_from)
+
+  defp starts_from?(_occurrence, _window_from), do: false
+
+  # The walk ends a horizon after the last occurrence it found.
+  defp horizon_after(horizon, []), do: horizon
+  defp horizon_after(_horizon, found), do: horizon_from(List.last(found))
+
+  defp horizon_from(%Tempo.Interval{from: %Tempo{} = from}),
+    do: Math.add(from, @occurrence_horizon)
+
+  # The finest unit a value recurs by, which sizes the walk's windows.
+  defp cadence_unit(%Tempo.Interval{duration: %Tempo.Duration{time: [_ | _] = time}}),
+    do: time |> List.last() |> elem(0)
+
+  defp cadence_unit(%Tempo.RecurrenceSet{members: [_ | _] = members}),
+    do: members |> Enum.map(&cadence_unit/1) |> Enum.reduce(&finer_unit/2)
+
+  defp cadence_unit(%Conditional{member: member}), do: cadence_unit(member)
+  defp cadence_unit(_value), do: :year
+
+  defp finer_unit(unit, other), do: if(coarser_unit?(unit, other), do: other, else: unit)
+
+  defp walk_base(unit) when unit in [:year, :month], do: {:year, 1}
+  defp walk_base(unit) when unit in [:week, :day], do: {:month, 1}
+  defp walk_base(:hour), do: {:day, 1}
+  defp walk_base(:minute), do: {:hour, 1}
+  defp walk_base(:second), do: {:minute, 1}
+  defp walk_base(_unit), do: {:year, 1}
 
   @doc false
   # The occurrences a `:within` window keeps — those that overlap it — for the
@@ -6460,16 +6710,28 @@ defmodule Tempo do
 
   # A caller's `:within` as a half-open `{window_from, window_to}` start window,
   # or `:none` when no window is given (a domain, a count or an UNTIL then
-  # bounds the recurrence alone).
+  # bounds the recurrence alone). An open-ended window has no `window_to`.
   defp within_window(opts) do
     case Keyword.fetch(opts, :within) do
-      {:ok, within} ->
+      {:ok, within} -> window_edges(within)
+      :error -> {:ok, :none}
+    end
+  end
+
+  # An open-ended window's start and no end, or the earliest start and the
+  # latest end of what any other window materialises to.
+  defp window_edges(within) do
+    case open_window_start(within) do
+      {:ok, window_from} ->
+        {:ok, {window_from, nil}}
+
+      {:error, _reason} = error ->
+        error
+
+      :bounded ->
         with {:ok, window_to} <- bound_upper(within) do
           {:ok, {bound_lower(within), window_to}}
         end
-
-      :error ->
-        {:ok, :none}
     end
   end
 
@@ -6508,7 +6770,7 @@ defmodule Tempo do
         cadence = interval.duration
 
         {window_from && add_n_durations(window_from, negate_duration(cadence), periods_before),
-         add_n_durations(window_to, cadence, periods_after)}
+         window_to && add_n_durations(window_to, cadence, periods_after)}
     end
   end
 
@@ -6526,16 +6788,21 @@ defmodule Tempo do
   # An occurrence overlaps the window `[window_from, window_to)` when it starts
   # before the window's end and ends after its start — so one that only touches
   # an edge does not. A nil `window_from` (an empty window) enforces only the
-  # upper edge.
+  # upper edge, and a nil `window_to` (an open-ended window) only the lower.
   defp overlaps_window?(
          %Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to},
          window_from,
          window_to
        ),
-       do:
-         under_bound?(from, window_to) and (is_nil(window_from) or under_bound?(window_from, to))
+       do: starts_before?(from, window_to) and ends_after?(to, window_from)
 
   defp overlaps_window?(_occurrence, _window_from, _window_to), do: true
+
+  defp starts_before?(_from, nil), do: true
+  defp starts_before?(from, window_to), do: under_bound?(from, window_to)
+
+  defp ends_after?(_to, nil), do: true
+  defp ends_after?(to, window_from), do: under_bound?(window_from, to)
 
   # A domain run keeps the occurrences its own periods yield: those that start
   # within the run's span. (The caller's window then keeps those that overlap it.)
@@ -6783,28 +7050,27 @@ defmodule Tempo do
   # Without a window (or with an empty one) the members bound themselves and
   # nothing widens.
   defp conditional_window(conditionals, opts) do
-    case Keyword.fetch(opts, :within) do
-      {:ok, bound} -> widened_bound_window(bound, conditionals)
-      :error -> {:ok, :none}
+    with {:ok, window} <- within_window(opts) do
+      widened_window(window, conditional_reach(conditionals))
     end
   end
 
-  defp widened_bound_window(bound, conditionals) do
-    with {:ok, bound_to} <- bound_upper(bound) do
-      widened_bound_window(bound_lower(bound), bound_to, conditional_reach(conditionals))
-    end
-  end
+  defp widened_window(:none, _reach), do: {:ok, :none}
+  defp widened_window({nil, _window_to}, _reach), do: {:ok, :none}
 
-  defp widened_bound_window(nil, _bound_to, _reach), do: {:ok, :none}
-
-  defp widened_bound_window(%Tempo{} = bound_from, bound_to, {lower_reach, upper_reach}) do
+  defp widened_window({%Tempo{} = window_from, window_to}, {lower_reach, upper_reach}) do
     widened_from =
-      Enum.reduce(lower_reach, bound_from, &earlier_endpoint(Math.add(bound_from, &1), &2))
+      Enum.reduce(lower_reach, window_from, &earlier_endpoint(Math.add(window_from, &1), &2))
 
-    widened_to = Enum.reduce(upper_reach, bound_to, &later_endpoint(Math.add(bound_to, &1), &2))
-
-    {:ok, {bound_from, bound_to, %Tempo.Interval{from: widened_from, to: widened_to}}}
+    widened = %Tempo.Interval{from: widened_from, to: widened_upper(window_to, upper_reach)}
+    {:ok, {window_from, window_to, widened}}
   end
+
+  # An open-ended window stays open.
+  defp widened_upper(nil, _upper_reach), do: :undefined
+
+  defp widened_upper(window_to, upper_reach),
+    do: Enum.reduce(upper_reach, window_to, &later_endpoint(Math.add(window_to, &1), &2))
 
   defp conditional_reach(conditionals) do
     Enum.reduce(conditionals, {[], []}, fn
@@ -6992,7 +7258,9 @@ defmodule Tempo do
   * `:within` is the window whose occurrences you want. Every
     recurrence (or a `t:Tempo.RecurrenceSet.t/0` of them) keeps the
     occurrences that overlap it — one already in progress when the
-    window opens, and one that runs past its end. See `to_interval/2`.
+    window opens, and one that runs past its end. An open-ended
+    window (`~o"2026-09-28/.."`) keeps those from its start on,
+    lazily for a value with no end of its own. See `to_interval/2`.
 
   ### Returns
 
@@ -7223,6 +7491,14 @@ defmodule Tempo do
 
   defp selection_years(%Tempo{calendar: calendar}, year, :none) do
     {:ok, context_years(year, calendar)}
+  end
+
+  # An open-ended window keeps the named years from its start on.
+  defp selection_years(%Tempo{calendar: calendar}, year, {%Tempo{} = window_from, nil})
+       when year not in [nil, :any] do
+    with {:ok, first} <- year_in_calendar(window_from, calendar) do
+      {:ok, year |> context_years(calendar) |> Enum.filter(&(&1 >= first))}
+    end
   end
 
   defp selection_years(%Tempo{calendar: calendar}, year, window) do
@@ -7719,6 +7995,10 @@ defmodule Tempo do
     endpoints are of incompatible calendars, or `from` is not
     strictly earlier than `to`.
 
+  * `{:error, %Tempo.FloatingTempoError{}}` when one endpoint is
+    zoned and the other floating: they are on different time lines,
+    and `relation/2` refuses the same pair.
+
   ### Examples
 
       iex> {:ok, duration} = Tempo.duration(~o"2026-06-15T09", ~o"2026-06-15T17")
@@ -7737,6 +8017,10 @@ defmodule Tempo do
 
       not anchored?(to) ->
         {:error, NonAnchoredError.exception(operation: :duration, value: to)}
+
+      floating?(from) != floating?(to) ->
+        floating = if floating?(from), do: from, else: to
+        {:error, FloatingTempoError.exception(operation: :measure, value: floating)}
 
       true ->
         with {:ok, interval} <- Interval.new(from, to) do
