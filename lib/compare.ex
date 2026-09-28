@@ -190,9 +190,9 @@ defmodule Tempo.Compare do
 
   # Two anchored time lists on different sub-year axes (week vs month vs
   # ordinal day) cannot be compared structurally — route them through the
-  # UTC projection instead. Non-anchored lists stay on the structural
+  # UTC projection instead. Unanchored lists stay on the structural
   # path: they have no year to project through, and the set-operations
-  # layer already rejects cross-axis non-anchored operands upstream.
+  # layer already rejects cross-axis unanchored operands upstream.
   defp comparable_axes?(time_a, time_b) do
     cond do
       not (Keyword.has_key?(time_a, :year) and Keyword.has_key?(time_b, :year)) -> true
@@ -449,7 +449,7 @@ defmodule Tempo.Compare do
   ### Raises
 
   * `ArgumentError` when the Tempo has no `:year` component
-    (non-anchored values can't be projected to a universal
+    (unanchored values can't be projected to a universal
     instant).
 
   """
@@ -460,10 +460,9 @@ defmodule Tempo.Compare do
 
     if year == nil do
       raise ArgumentError,
-            "Cannot project a non-anchored Tempo (no :year component) to a UTC " <>
-              "instant. Non-anchored values live on the time-of-day axis; anchor " <>
-              "them first via `Tempo.anchor/2` or supply a `within:` window to the " <>
-              "calling operation."
+            "Cannot place an unanchored Tempo (one with no year) on the UTC time " <>
+              "line. Place it on a date first with `Tempo.at/2` or `Tempo.on/2`, " <>
+              "or give the calling operation a `within:` window."
     end
 
     wall = wall_seconds(time, year, calendar)

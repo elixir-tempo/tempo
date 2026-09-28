@@ -363,7 +363,7 @@ defmodule Tempo.Duration do
   * `:relative_to` is a `t:Tempo.t/0` to resolve calendar-variable
     components against. A duration containing `:month` or `:year` has
     no fixed length — February and August are not the same size — so
-    comparing one without an anchor raises.
+    comparing one without a `:relative_to` date raises.
 
   ### Returns
 
@@ -558,7 +558,7 @@ defmodule Tempo.Duration do
   def to_unit(%__MODULE__{} = duration, unit, options) when unit in @fixed_units do
     case Keyword.get(options, :relative_to) do
       nil -> to_unit_nominal(duration, unit)
-      anchor -> to_unit_relative(duration, unit, anchor)
+      reference -> to_unit_relative(duration, unit, reference)
     end
   end
 
@@ -635,26 +635,26 @@ defmodule Tempo.Duration do
 
   defp component_seconds(_unit, _value), do: :error
 
-  # Anchor-relative conversion: apply the duration to the reference
+  # Relative conversion: apply the duration to the reference
   # date, then measure the elapsed seconds on the UTC time line and
   # express them in `unit`. A zoned reference makes day/week DST-exact
   # and resolves month/year against the calendar. Runtime calls into
   # `Tempo` (no struct match) keep this module free of a compile cycle.
-  defp to_unit_relative(duration, unit, anchor) do
+  defp to_unit_relative(duration, unit, reference) do
     cond do
-      not is_struct(anchor, Tempo) ->
+      not is_struct(reference, Tempo) ->
         {:error,
-         ArgumentError.exception(":relative_to must be a Tempo value; got #{inspect(anchor)}")}
+         ArgumentError.exception(":relative_to must be a Tempo value; got #{inspect(reference)}")}
 
-      not Tempo.anchored?(anchor) ->
+      not Tempo.anchored?(reference) ->
         {:error,
          ArgumentError.exception(
-           ":relative_to must be anchored (carry a year); got #{inspect(anchor)}"
+           ":relative_to must be anchored (carry a year); got #{inspect(reference)}"
          )}
 
       true ->
-        ended = Tempo.shift(anchor, duration)
-        seconds = Compare.to_utc_seconds(ended) - Compare.to_utc_seconds(anchor)
+        ended = Tempo.shift(reference, duration)
+        seconds = Compare.to_utc_seconds(ended) - Compare.to_utc_seconds(reference)
         {:ok, seconds / @fixed_unit_seconds[unit]}
     end
   end

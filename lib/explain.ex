@@ -304,7 +304,7 @@ defmodule Tempo.Explain do
   defp time_of_day_headline(time) do
     h = Keyword.get(time, :hour, 0)
     m = Keyword.get(time, :minute, 0)
-    "The time-of-day #{two_digit(h)}:#{two_digit(m)} (non-anchored — recurs every day)."
+    "The time-of-day #{two_digit(h)}:#{two_digit(m)} (unanchored — recurs every day)."
   end
 
   defp mask_headline(%Tempo{time: time}) do
@@ -480,7 +480,7 @@ defmodule Tempo.Explain do
   defp interval_parts(%Tempo.Interval{from: :undefined, to: :undefined}) do
     [
       {:headline, "A fully open interval (`../..`)."},
-      {:hint, "No anchor on either side — not enumerable, not usable in set operations."}
+      {:hint, "No start and no end — not enumerable, not usable in set operations."}
     ]
   end
 
@@ -537,7 +537,7 @@ defmodule Tempo.Explain do
     |> Enum.reject(&is_nil/1)
   end
 
-  # An unanchored recurrence — `R/../P1Y/FL11M4K4IN`, "every year, the
+  # A recurrence with an open start — `R/../P1Y/FL11M4K4IN`, "every year, the
   # fourth Thursday of November", beginning nowhere. Two sentinels spell
   # "no endpoint": `:undefined` from the ISO 8601 parser and `nil` from
   # the RRULE parser, and the clauses above match only the first. The
@@ -555,10 +555,10 @@ defmodule Tempo.Explain do
 
     [
       {:headline, recurrence_headline(recurrence)},
-      {:span, "Starting: unanchored — the rule names no start."},
+      {:span, "Starting: open — the rule names no start."},
       selection && {:span, "Selects: #{selection_prose(selection)}."},
       {:span, "Cadence: #{duration_prose(duration_time)}."},
-      {:hint, unanchored_hint()}
+      {:hint, open_start_hint()}
     ]
     |> Enum.reject(&is_nil/1)
   end
@@ -759,8 +759,7 @@ defmodule Tempo.Explain do
   defp duration_parts(%Tempo.Duration{time: time}) do
     [
       {:headline, "A duration of #{duration_prose(time)}."},
-      {:hint,
-       "Has no anchor on the time line — add to or subtract from a Tempo via `Tempo.Math.add/2` / `Tempo.Math.subtract/2`."},
+      {:hint, "Has no place on the time line — shift a value by it with `Tempo.shift/2`."},
       {:hint, "Not directly usable in set operations."}
     ]
   end
@@ -929,7 +928,7 @@ defmodule Tempo.Explain do
   defp recurrence_headline(:infinity), do: "An unbounded recurrence."
   defp recurrence_headline(n) when is_integer(n), do: "A recurrence of #{n} occurrences."
 
-  defp unanchored_hint do
+  defp open_start_hint do
     "The rule names no start of its own. Materialise it into a window " <>
       "— `Tempo.to_interval(interval, within: ~o\"2026\")` " <>
       "lists the occurrences that fall inside it — or give the literal a " <>

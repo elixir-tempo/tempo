@@ -125,52 +125,48 @@ The practical rule: **event-list questions** (the member-preserving operations) 
 
 ## 2. The anchor-class rule
 
-A Tempo value is **anchored** when it has a year-level component — it's a position on the universal time line. A **non-anchored** value has no year: it recurs on a cycle rather than sitting at one instant. That's a pure time-of-day (`~o"T10:30"` — 10:30 every day), but also a month/day (`~o"1M31D"` — January 31st every year), a bare day (`~o"15D"` — the 15th of every month), a month (`~o"3M"` — every March), and so on. A `Tempo.Duration` is neither — it's a length, not a set of instants.
+A Tempo value is **anchored** when it has a year-level component — it's a position on the universal time line. An **unanchored** value has no year: it recurs on a cycle rather than sitting at one instant. That's a pure time-of-day (`~o"T10:30"` — 10:30 every day), but also a month/day (`~o"1M31D"` — January 31st every year), a bare day (`~o"15D"` — the 15th of every month), a month (`~o"3M"` — every March), and so on. A `Tempo.Duration` is neither — it's a length, not a set of instants.
 
 Set operations require **both operands to share an anchor class**:
 
 | A | B | Valid without `:within`? |
 |---|---|---|
 | anchored | anchored | ✓ compare on the universal time line |
-| non-anchored | non-anchored | ✓ when both recur on the **same axis** (see below) |
-| anchored | non-anchored | needs `:within` |
-| duration | anything | always raises — anchor it first |
+| unanchored | unanchored | ✓ when both recur on the **same axis** (see below) |
+| anchored | unanchored | needs `:within` |
+| duration | anything | an error — a duration has no place on the time line |
 
-Two non-anchored operands must recur on the **same axis** — share their coarsest (leading) unit — to be comparable. `~o"1M31D"` and `~o"6M15D"` are both annual, so they align; `~o"1M31D"` (annual) and `~o"15D"` (monthly) recur on different cycles with no common time line, so they return a `Tempo.NonAnchoredError` rather than a silently misaligned result. Anchor them, or give both the same leading unit.
+Two unanchored operands must recur on the **same axis** — share their coarsest (leading) unit — to be comparable. `~o"1M31D"` and `~o"6M15D"` are both annual, so they align; `~o"1M31D"` (annual) and `~o"15D"` (monthly) recur on different cycles with no common time line, so they return a `Tempo.UnanchoredError` rather than a silently misaligned result. Place them on a date, or give both the same leading unit.
 
 The cross-axis case *is* mathematically defined — a bare time-of-day is an infinite set of 1-second slots (one per day), and an anchored operand bounds it to finite occurrences. But picking the universe (what year range does "every day" mean?) isn't something Tempo can do without inventing a default. The `:within` option makes the choice explicit:
 
 ```elixir
-# No window — raises
+# No window — an error
 Tempo.intersection(~o"2026-01-04", ~o"T10:30")
-# ** (ArgumentError) Set operations between an anchored operand and a 
-#    non_anchored operand require a `:within` option to anchor the 
-#    non-anchored side. Alternatively, use `Tempo.anchor/2` to combine 
-#    a date-like value with a time-of-day value before the operation.
+#=> {:error, %Tempo.UnanchoredError{}}
+#   Cannot combine a value with a year and one without in a set operation
+#   that has no `:within` window to place it on. Place a value without a
+#   year on a date first with `Tempo.at/2` or `Tempo.on/2`.
 
 # With a window — works
 Tempo.intersection(~o"2026-01-04", ~o"T10:30", within: ~o"2026-01-04")
-# {:ok, #Tempo.IntervalSet<[~o"2026Y1M4DT10H30M/T31M"]>}
+#=> {:ok, #Tempo.IntervalSet<[~o"2026Y1M4DT10H30M/T31M"]>}
 ```
 
 The `:within` option is also required on `complement/2` — for the same reason. An unbounded complement is infinite; Tempo refuses to pick a universe.
 
-### Composing across axes — `at/2` and `anchor/2`
+### Composing across axes — `at/2` and `on/2`
 
-When you want to *compose* a date with a time-of-day rather than intersect them, use `at/2` or its mirror `anchor/2`. This is axis composition, not a set operation, and no algebraic laws apply — these are constructors.
+When you want to *compose* a date with a time-of-day rather than intersect them, place one on the other with `at/2` or `on/2`. This is axis composition, not a set operation, and no algebraic laws apply — these are constructors.
 
-`at/2` *right-fills*: it sets the time-of-day on a value already on the timeline, replacing any finer components it carried (a value that was `09:30` becomes exactly `10:30`, not a merge of the two).
+The value with a year keeps it, and the other supplies the finer components it lacks, taken whole (a value that was `09:30` becomes exactly `10:30`, not a merge of the two). `at/2` and `on/2` are one function, so the code reads the way English does — *"4 January **at** 10:30"*, *"10:30 **on** 4 January"* — and either order gives the same value.
 
 ```elixir
 iex> Tempo.at(~o"2026-01-04", ~o"T10:30")
 {:ok, ~o"2026Y1M4DT10H30M"}
-```
 
-`anchor/2` *left-fills*: it places a floating time onto a reference date, supplying the missing year so the value can sit on the timeline.
-
-```elixir
-iex> Tempo.anchor(~o"T10:30", ~o"2026-01-04")
-~o"2026Y1M4DT10H30M"
+iex> Tempo.on(~o"T10:30", ~o"2026-01-04")
+{:ok, ~o"2026Y1M4DT10H30M"}
 ```
 
 ## 3. The operations
@@ -342,7 +338,7 @@ Note that `≡` here is covered-instant equality (via `Tempo.equal?/2`), not mem
 | One-of `Tempo.Set` (`[a,b,c]`) | Raises — epistemic disjunction, not IntervalSet |
 | Cross-calendar operands | Second operand converted to first's calendar via `Date.convert!/2`; result inherits first's calendar |
 | Cross-zone operands | Compared via UTC; result inherits first operand's zone |
-| Midnight-crossing non-anchored interval (`T23:30/T01:00`) | Anchored to day D materialises as `[D T23:30, D+1 T01:00)`; on the time-of-day axis, split into `[T23:30, T24:00)` ∪ `[T00:00, T01:00)` before sweep-line |
+| Midnight-crossing unanchored interval (`T23:30/T01:00`) | Placed on day D materialises as `[D T23:30, D+1 T01:00)`; on the time-of-day axis, split into `[T23:30, T24:00)` ∪ `[T00:00, T01:00)` before sweep-line |
 
 ## 6. Not in scope
 

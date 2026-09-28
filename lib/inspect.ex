@@ -211,10 +211,10 @@ defmodule Tempo.Inspect do
     end
   end
 
-  # Render an anchored recurrence's endpoint with its IXDTF `[u-ca=…]` calendar
+  # Render a recurrence's written start with its IXDTF `[u-ca=…]` calendar
   # lifted off into a separate trailing suffix, so a whole-value calendar reads
   # as `R/5787Y3M25D/P1Y[u-ca=hebrew]` — one trailer on the recurrence — rather
-  # than mid-string on the anchor date. Any zone/tags stay on the endpoint,
+  # than mid-string on the start date. Any zone/tags stay on the endpoint,
   # where they belong; only the calendar, which qualifies the whole value,
   # hoists. Returns `{endpoint_iodata, calendar_suffix_iodata}`.
   defp hoist_calendar_suffix(%Tempo{extended: %{calendar: calendar} = extended} = tempo)
@@ -497,7 +497,7 @@ defmodule Tempo.Inspect do
   end
 
   # Intervals with a nil `from` are produced by callers that build
-  # the struct directly without an anchor (e.g. the RRule parser
+  # the struct directly without a start (e.g. the RRule parser
   # for a rule without DTSTART). These clauses come *before* the
   # generic repeat-rule clauses below so the nil case is matched
   # first — otherwise those clauses would bind `from: from` to

@@ -18,7 +18,7 @@ defmodule Tempo.IntervalSet.Backend.Tree do
 
   Because that projection needs a year, **members must be anchored**
   (and bounded, as every set member already is). Building a tree from
-  non-anchored members (`~o"T10:00/T11:00"`) raises an
+  unanchored members (`~o"T10:00/T11:00"`) raises an
   `ArgumentError` — keep those sets on the default list backend.
 
   Choose this backend for large, query-heavy sets — multi-year
@@ -90,7 +90,7 @@ defmodule Tempo.IntervalSet.Backend.Tree do
   defp tree_requires_anchored(interval) do
     "the Tree backend requires anchored, bounded members so their " <>
       "timeline positions can be indexed; got #{inspect(interval)}. " <>
-      "Use the default list backend for non-anchored or open-ended sets."
+      "Use the default list backend for unanchored or open-ended sets."
   end
 
   # Build a perfectly balanced tree from a sorted payload list in one

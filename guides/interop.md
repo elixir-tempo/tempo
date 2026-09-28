@@ -75,9 +75,9 @@ Three notes:
 
 * **Durations keep the width's unit.** `duration/1` counts in the unit the endpoints are written in, so the day is `~o"P1D"`, the second `~o"PT1S"`, and the microsecond `~o"PT0.000001S"`.
 
-* **A bare `Time` materialises non-anchored.** `~T[14:30:00]` becomes `T14H30M0S/T1S` — a one-second span on the *time-of-day* axis with no date. Operations that need an absolute position (a duration, a cross-zone comparison) require anchoring it to a date first.
+* **A bare `Time` materialises unanchored.** `~T[14:30:00]` becomes `T14H30M0S/T1S` — a one-second span on the *time-of-day* axis with no date. Operations that need an absolute position (a duration, a cross-zone comparison) require placing it on a date first with `Tempo.on/2`.
 
-* **A pure time-of-day group materialises non-anchored too.** A grouped time value with no date — for example the first quarter-hour of 16:00, `T16H1GT15MU` (`[hour: 16, minute: {:group, 0..14}]`) — becomes the relative span `[16:00, 16:15)` on the time-of-day axis. The same anchoring caveat applies. A group whose upper bound would carry off the end of the day (`23:45..`, with no date to carry into) or any group with a date component (`5G10DU`) needs anchoring first and returns a `Tempo.MaterialisationError` until then.
+* **A pure time-of-day group materialises unanchored too.** A grouped time value with no date — for example the first quarter-hour of 16:00, `T16H1GT15MU` (`[hour: 16, minute: {:group, 0..14}]`) — becomes the relative span `[16:00, 16:15)` on the time-of-day axis. The same caveat applies. A group whose upper bound would carry off the end of the day (`23:45..`, with no date to carry into) or any group with a date component (`5G10DU`) needs placing on a date first and returns a `Tempo.MaterialisationError` until then.
 
 ## 3. Why the width matters
 
@@ -256,7 +256,7 @@ Tempo.from_iso8601("2026-06-15")                 # any shape, when the shape is 
 
 # Stdlib → Tempo  (resolution = the type's precision; override with :resolution)
 Tempo.from_date(~D[2026-06-15])                  # :day
-Tempo.from_time(~T[14:30:00])                    # :second (time-of-day, non-anchored)
+Tempo.from_time(~T[14:30:00])                    # :second (time-of-day, unanchored)
 Tempo.from_naive_date_time(~N[2026-06-15 14:30:00])
 Tempo.from_date_time(~U[2026-06-15 14:30:00Z])   # :second, zoned
 Tempo.from_elixir(value, resolution: :day)       # unified gateway + explicit widen

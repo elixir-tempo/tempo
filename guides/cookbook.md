@@ -770,7 +770,7 @@ iex> Tempo.Network.Solver.contemporaneity(network, :phase_a, :phase_b)
 
 ## 12. Scheduling
 
-`Tempo.Schedule` is critical-path project planning built on `Tempo.Network`: declare tasks with durations and finish-to-start dependencies (plus optional anchors and deadlines), then `solve/1` for each task's earliest/latest position and its critical-path flag. See the [Scheduling guide](scheduling.md).
+`Tempo.Schedule` is critical-path project planning built on `Tempo.Network`: declare tasks with durations and finish-to-start dependencies (plus optional fixed starts and deadlines), then `solve/1` for each task's earliest/latest position and its critical-path flag. See the [Scheduling guide](scheduling.md).
 
 ### How do I schedule tasks with dependencies?
 

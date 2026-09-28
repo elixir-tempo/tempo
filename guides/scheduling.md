@@ -122,7 +122,7 @@ Grounded values come in three flavours; the table lays out all four forms:
 |---|---|---|
 | `~o"2030-03-01T08:00:00"` | **Floating** | 8am in whatever zone the reader is in — no universal instant |
 | `~o"2030-03-01T08:00:00[Europe/Paris]"` | Grounded — zoned | 8am Paris wall time, UTC derived on demand |
-| `~o"2030-03-01T08:00:00Z"` | Grounded — UTC-anchored | a specific UTC instant, wall times vary by zone |
+| `~o"2030-03-01T08:00:00Z"` | Grounded — UTC | a specific UTC instant, wall times vary by zone |
 | `~o"2030-03-01T08:00:00+05:30"` | Grounded — fixed-offset | UTC+05:30 regardless of zone-rule changes |
 
 The right choice depends on what the user said:
@@ -131,7 +131,7 @@ The right choice depends on what the user said:
 
 * "Meeting at 2pm Paris" — grounded, zoned (`[Europe/Paris]`).
 
-* "Server job at 03:00 UTC" — grounded, UTC-anchored (`Z`).
+* "Server job at 03:00 UTC" — grounded, in UTC (`Z`).
 
 * "Event at UTC+05:30" (fixed-offset calendar system) — grounded, fixed-offset.
 
@@ -310,7 +310,7 @@ Tempo.Schedule.span(plan)          #=> the project interval, 06-01 .. 06-08
 
 > *"Design, then build and docs in parallel, then ship — due the 8th. Ship starts on the 6th; docs has slack and isn't on the critical path; the project runs design → build → ship."*
 
-Each task carries a `:duration` (exact or a `{min, max}` range) and optional `:after` dependencies (finish-to-start — a successor starts no earlier than its predecessors finish). Bounds come from `:start` (a fixed anchor), `:earliest`, `:deadline`, or a `:within` window. `solve/1` returns a `%Tempo.Schedule.Slot{}` per task with its early and late positions; `critical?` is true when a task has zero slack. An over-tight deadline or a dependency cycle returns `{:error, :infeasible}`.
+Each task carries a `:duration` (exact or a `{min, max}` range) and optional `:after` dependencies (finish-to-start — a successor starts no earlier than its predecessors finish). Bounds come from `:start` (an exact start date), `:earliest`, `:deadline`, or a `:within` window. `solve/1` returns a `%Tempo.Schedule.Slot{}` per task with its early and late positions; `critical?` is true when a task has zero slack. An over-tight deadline or a dependency cycle returns `{:error, :infeasible}`.
 
 ### What this is not
 

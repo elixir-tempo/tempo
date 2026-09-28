@@ -2,7 +2,7 @@ defmodule Tempo.Interval.PartialCertaintyTest do
   @moduledoc """
   Three-valued certainty (`:certain | :possible | :impossible`) over
   *underspecified* operands: unspecified-digit (masked) values read as their set
-  of possible groundings, and un-anchored values compared on a shared axis.
+  of possible groundings, and unanchored values compared on a shared axis.
   """
   use ExUnit.Case, async: true
   use ExUnitProperties
@@ -10,7 +10,7 @@ defmodule Tempo.Interval.PartialCertaintyTest do
   import Tempo.Sigils
 
   alias Tempo.Interval
-  alias Tempo.RequiresAnchorError
+  alias Tempo.UnanchoredError
 
   describe "masked (unspecified-digit) operands read as a grounding set" do
     test "a masked year is certainly within the span its mask admits" do
@@ -91,7 +91,7 @@ defmodule Tempo.Interval.PartialCertaintyTest do
     end
   end
 
-  describe "un-anchored operands" do
+  describe "unanchored operands" do
     test "same-axis month-days compare positionally and definitely" do
       assert Interval.certainly_before?(~o"1M31D", ~o"3M15D")
       assert Interval.relation_certainty(~o"2M", ~o"5M", :precedes) == :certain
@@ -99,11 +99,11 @@ defmodule Tempo.Interval.PartialCertaintyTest do
     end
 
     test "comparing across resolution axes requires an anchor" do
-      # An un-anchored month against an anchored year depends on the missing
+      # An unanchored month against an anchored year depends on the missing
       # year — a clean error, not a guess and not a crash.
-      assert {:error, %RequiresAnchorError{}} = Interval.within_certainty(~o"2M", ~o"2050Y")
+      assert {:error, %UnanchoredError{}} = Interval.within_certainty(~o"2M", ~o"2050Y")
 
-      assert {:error, %RequiresAnchorError{}} =
+      assert {:error, %UnanchoredError{}} =
                Interval.relation_certainty(~o"2M", ~o"2050Y", :precedes)
     end
 
@@ -111,11 +111,11 @@ defmodule Tempo.Interval.PartialCertaintyTest do
       # A silent `false` would assert "impossible" — a claim the error
       # explicitly could not make. The boolean forms raise the same error
       # the tuple-returning certainty functions report.
-      assert_raise RequiresAnchorError, fn ->
+      assert_raise UnanchoredError, fn ->
         Interval.certainly_before?(~o"2M", ~o"2050Y")
       end
 
-      assert_raise RequiresAnchorError, fn ->
+      assert_raise UnanchoredError, fn ->
         Interval.possibly_before?(~o"2M", ~o"2050Y")
       end
     end

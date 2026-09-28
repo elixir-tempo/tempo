@@ -148,10 +148,10 @@ defmodule Tempo.ToRelativeStringTest do
   end
 
   describe "error cases" do
-    test "non-anchored Tempo raises" do
+    test "unanchored Tempo raises" do
       now = Tempo.from_iso8601!("2026-06-15T12:00:00Z")
 
-      assert_raise Tempo.NonAnchoredError, fn ->
+      assert_raise Tempo.UnanchoredError, fn ->
         Tempo.to_relative_string(~o"T10:30:00", from: now)
       end
     end

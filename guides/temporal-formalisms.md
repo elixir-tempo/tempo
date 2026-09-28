@@ -108,7 +108,7 @@ See the [interop guide](interop.md) for how this plays out when you convert Elix
 
 The granularity literature is about *mapping and relating* granularities — converting an index in one to a span in another, deciding whether one is finer than another. What has no home there, nor in the calendar-arithmetic literature (which operates on *complete* dates), is **arithmetic on a value that omits a coarser field**. A month-day with no year lives on a repeating axis; shifting it is sometimes well-defined and sometimes not, depending entirely on the missing year.
 
-Tempo answers this with one principle: **compute the shift when its result is invariant to the missing field, and return a typed `Tempo.RequiresAnchorError` when the result would depend on it — never guess, never raise.**
+Tempo answers this with one principle: **compute the shift when its result is invariant to the missing field, and return a typed `Tempo.UnanchoredError` when the result would depend on it — never guess, never raise.**
 
 ```elixir
 # Invariant to the missing year — computed
@@ -117,7 +117,7 @@ Tempo.shift(~o"10M", ~o"P3M")     #=> ~o"1M"      # October + 3 months wraps to 
 
 # Depends on the missing year — refused, not guessed
 Tempo.shift(~o"2M28D", ~o"P1D")
-#=> {:error, %Tempo.RequiresAnchorError{}}          # 28 Feb + 1 day is 29 Feb or 1 Mar
+#=> {:error, %Tempo.UnanchoredError{}}              # 28 Feb + 1 day is 29 Feb or 1 Mar
 ```
 
 The nearest formal frame is time-granularity theory; the shift-invariance operation on underspecified values appears to be new — it is the one move in this guide with no cited precedent.
@@ -139,7 +139,7 @@ The accompanying [chronological-networks guide](chronological-networks.md) devel
 * Because its core values are **fully grounded**, relation queries are point-algebra comparisons, not constraint propagation — the core is an algebra, not a solver.
 * Where the values *aren't* grounded, the opt-in **`Tempo.Network`** layer does solve constraints, but only in the polynomial **Simple Temporal Problem** fragment (metric, conjunctive) — never the NP-hard qualitative-disjunctive regime.
 * Its **atomicity is resolution-indexed** — an "instant" is the one-unit interval at the finest declared ISO 8601 resolution — a special case of the **time-granularity** lattice (Bettini; Euzenat & Montanari).
-* Its one **genuinely novel** move is **shift-invariance arithmetic**: a shift on an underspecified value (a month-day with no year) is computed only when the result is invariant to the missing field, and returns a typed `RequiresAnchorError` otherwise.
+* Its one **genuinely novel** move is **shift-invariance arithmetic**: a shift on an underspecified value (a month-day with no year) is computed only when the result is invariant to the missing field, and returns a typed `UnanchoredError` otherwise.
 
 ## Further reading
 

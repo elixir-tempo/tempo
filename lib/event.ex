@@ -12,7 +12,8 @@ defmodule Tempo.Event do
     solstices, and the first new moon of the year, from `Astro`.
 
   * **The 24 solar terms** (jié-qì) — the fifteen-degree divisions of the solar
-    year that anchor East Asian festivals such as Qīngmíng, from `Calendrical`.
+    year that set the dates of East Asian festivals such as Qīngmíng, from
+    `Calendrical`.
     They are meridian-dependent; `date/3` takes the calendar whose meridian to
     use (Chinese by default, or Vietnamese / Korean / Japanese lunisolar).
 

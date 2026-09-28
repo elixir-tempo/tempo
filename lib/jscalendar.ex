@@ -30,7 +30,7 @@ if Code.ensure_loaded?(JSCalendar) do
 
     An event with no `timeZone` is *floating* — the same wall clock
     wherever it is read — and materialises as a zone-less `%Tempo{}`
-    rather than being anchored to the reader's zone.
+    rather than being placed in the reader's zone.
 
     ## Where a local time is ambiguous
 

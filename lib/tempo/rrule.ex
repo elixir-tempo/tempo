@@ -80,14 +80,14 @@ defmodule Tempo.RRule do
 
   ### Options
 
-  * `:from` — a `%Tempo{}` anchor (DTSTART). Sets `Interval.from`
+  * `:from` — the recurrence's start, a `%Tempo{}` (DTSTART). Sets `Interval.from`
     so occurrence enumeration has a starting point. Optional;
     callers that intend to enumerate must supply this.
 
   * `:duration` — a `%Tempo.Duration{}` span for each occurrence,
     the RRULE echo of iCalendar's `DURATION`. Each occurrence spans
     this rather than one unit of its own resolution, so a
-    `FREQ=MONTHLY;BYDAY=1WE` rule anchored at 18:00 with a two-hour
+    `FREQ=MONTHLY;BYDAY=1WE` rule starting at 18:00 with a two-hour
     duration emits `18:00/20:00` occurrences.
 
   * `:base_to` — a `%Tempo{}` upper endpoint for occurrence #0, the

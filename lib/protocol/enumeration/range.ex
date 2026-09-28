@@ -25,7 +25,7 @@ defimpl Enumerable, for: Tempo.Interval do
   # endpoint down to the unit once at the start (`Steps.fill_to_unit/3`)
   # instead of the bounds carrying drilled components.
   #
-  # Open-lower and fully-open intervals have no anchor to iterate
+  # Open-lower and fully-open intervals have no start to iterate
   # from, so `reduce/3` raises a clear `ArgumentError`.
   #
   # A *recurring* interval (`recurrence` > 1 or `:infinity`) enumerates
@@ -151,7 +151,7 @@ defimpl Enumerable, for: Tempo.Interval do
   def reduce(%Tempo.Interval{from: :undefined, to: :undefined}, _acc, _fun) do
     raise ArgumentError,
           "Cannot enumerate a fully open interval `../..` — " <>
-            "no anchor from which to start iteration."
+            "no start to iterate from."
   end
 
   def reduce(%Tempo.Interval{from: :undefined, to: %Tempo{}, duration: nil}, _acc, _fun) do
@@ -205,7 +205,7 @@ defimpl Enumerable, for: Tempo.Interval do
             "open-upper `from/..`, and `from/duration` intervals are iterable."
   end
 
-  # Fill the walk anchor down to the interval's explicit iteration
+  # Fill the walk's start down to the interval's explicit iteration
   # unit (no-op when `:unit` is nil or already at the endpoint's
   # resolution). Subsequent steps derive from the filled value, so
   # the fill happens exactly once per walk.
@@ -374,8 +374,8 @@ defimpl Enumerable, for: Tempo.Interval do
 
       # `Enumerable.reduce/3` has no error channel, so a value whose next
       # step depends on a year it does not carry has to signal by raising.
-      {:error, :requires_anchor} ->
-        raise Tempo.RequiresAnchorError, value: tempo
+      {:error, :unanchored} ->
+        raise Tempo.UnanchoredError, value: tempo
     end
   end
 end

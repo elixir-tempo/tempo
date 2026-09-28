@@ -4,7 +4,7 @@ defmodule Tempo.Schedule do
 
   A schedule is a set of **tasks** — each with a duration — joined by
   **dependencies** (task B starts no earlier than task A finishes) and
-  bounded by **anchors** and **deadlines**. `solve/1` finds, for every
+  bounded by **fixed starts** and **deadlines**. `solve/1` finds, for every
   task, the earliest and latest it can run and whether it sits on the
   **critical path**. This is the classic project-scheduling / critical
   path method, expressed as the Simple Temporal Problem `Tempo.Network`
@@ -92,7 +92,7 @@ defmodule Tempo.Schedule do
   * `:after` is a task id, or list of ids, this task depends on: it
     starts no earlier than each of them finishes.
 
-  * `:start` pins the task's start to an exact date (an anchor).
+  * `:start` fixes the task's start on an exact date.
 
   * `:earliest` requires the task to start on or after a date.
 

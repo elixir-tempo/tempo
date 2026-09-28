@@ -18,7 +18,7 @@ defmodule Tempo.Interval.Steps do
     granularity.
 
   * `on_step?/4` — whether `element` falls on a `unit`-step
-    boundary anchored at `from`.
+    boundary counted from `from`.
 
   Phase 1 covers `:year`, `:month`, and `:day`. Sub-day units
   (`:hour`, `:minute`, `:second`, `:microsecond`) are added in
@@ -167,7 +167,7 @@ defmodule Tempo.Interval.Steps do
 
   ### Arguments
 
-  * `from` is the anchor `t:Tempo.t/0`.
+  * `from` is the `t:Tempo.t/0` the steps count from.
 
   * `n` is a non-negative integer step count (0 returns `from`).
 
@@ -260,13 +260,13 @@ defmodule Tempo.Interval.Steps do
 
   @doc """
   Return `true` when `element` falls on a `unit`-step boundary
-  anchored at `from`.
+  counted from `from`.
 
   ### Arguments
 
   * `element` is any `t:Tempo.t/0`.
 
-  * `from` is the anchor `t:Tempo.t/0`.
+  * `from` is the `t:Tempo.t/0` the steps count from.
 
   * `unit` is one of `:year`, `:month`, `:day` (Phase 1 scope).
 

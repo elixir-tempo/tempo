@@ -58,33 +58,33 @@ defmodule Tempo.Operations.Test do
       assert {:ok, _} = Operations.align(~o"2022Y", ~o"2023Y")
     end
 
-    test "two non-anchored operands — OK" do
+    test "two unanchored operands — OK" do
       assert {:ok, _} = Operations.align(~o"T10:00", ~o"T14:30")
     end
 
-    test "two non-anchored operands on the same axis — OK" do
+    test "two unanchored operands on the same axis — OK" do
       # Both lead with :month, so they recur on the same (annual) cycle.
       assert {:ok, _} = Operations.align(~o"1M31D", ~o"6M15D")
       assert {:ok, _} = Operations.align(~o"1M31D", ~o"1M")
     end
 
-    test "two non-anchored operands on different axes — error" do
+    test "two unanchored operands on different axes — error" do
       # `1M31D` recurs annually, `15D` monthly; there is no common timeline.
-      assert {:error, %Tempo.NonAnchoredError{} = e} =
+      assert {:error, %Tempo.UnanchoredError{} = e} =
                Operations.align(~o"1M31D", ~o"15D")
 
-      assert Exception.message(e) =~ "different resolution axes"
+      assert Exception.message(e) =~ "different axes"
     end
 
-    test "anchored + non-anchored without a window — error" do
-      assert {:error, %Tempo.NonAnchoredError{} = e} =
+    test "anchored + unanchored without a window — error" do
+      assert {:error, %Tempo.UnanchoredError{} = e} =
                Operations.align(~o"2022Y", ~o"T10:30")
 
       assert Exception.message(e) =~ ":within"
-      assert Exception.message(e) =~ "anchor/2"
+      assert Exception.message(e) =~ "Tempo.at/2"
     end
 
-    test "anchored + non-anchored WITH a window — OK" do
+    test "anchored + unanchored WITH a window — OK" do
       assert {:ok, _} =
                Operations.align(~o"2026-01-04", ~o"T10:30", within: ~o"2026-01-04")
     end
@@ -473,7 +473,7 @@ defmodule Tempo.Operations.Test do
   end
 
   describe "cross-axis with a window" do
-    test "anchored ∩ non-anchored within a single-day window → trimmed time slot" do
+    test "anchored ∩ unanchored within a single-day window → trimmed time slot" do
       # Trimmed intersection gives the minute slot inside the day
       # span. The member-preserving filter returns the day itself.
       {:ok, r} = Tempo.intersection(~o"2026-01-04", ~o"T10:30", within: ~o"2026-01-04")
@@ -483,7 +483,7 @@ defmodule Tempo.Operations.Test do
       assert iv.from.time[:minute] == 30
     end
 
-    test "anchored ∩ non-anchored within a multi-day window → trimmed slot on matched day" do
+    test "anchored ∩ unanchored within a multi-day window → trimmed slot on matched day" do
       {:ok, r} =
         Tempo.intersection(~o"2026-01-04", ~o"T10:30", within: ~o"2026-01-01/2026-01-10")
 
@@ -492,24 +492,24 @@ defmodule Tempo.Operations.Test do
       assert iv.from.time[:day] == 4
     end
 
-    test "a non-anchored window is rejected" do
-      assert {:error, %Tempo.NonAnchoredError{} = e} =
+    test "an unanchored window is rejected" do
+      assert {:error, %Tempo.UnanchoredError{} = e} =
                Operations.align(~o"2026-01-04", ~o"T10:30", within: ~o"T00:00")
 
       assert Exception.message(e) =~ ":within window"
-      assert Exception.message(e) =~ "anchored"
+      assert Exception.message(e) =~ "has no year"
     end
 
     test "month/day-axis partial with a :within window is rejected, not silently absorbed" do
-      # Day anchoring grafts a non-anchored value onto every day of the
+      # Day anchoring grafts an unanchored value onto every day of the
       # window, which only makes sense for time-of-day values. `~o"15D"`
       # grafted that way matched all 90 days of the quarter (regression).
       quarter = ~o"2026-01-01/2026-04-01"
 
-      assert {:error, %Tempo.NonAnchoredError{} = e} =
+      assert {:error, %Tempo.UnanchoredError{} = e} =
                Tempo.intersection(~o"15D", quarter, within: quarter)
 
-      assert Exception.message(e) =~ "time-of-day"
+      assert Exception.message(e) =~ "time of day"
     end
   end
 
@@ -604,30 +604,27 @@ defmodule Tempo.Operations.Test do
     end
   end
 
-  describe "anchor/2 (left-fill)" do
-    test "places a floating time onto a reference date" do
-      assert Tempo.anchor(~o"T10:30", ~o"2026-01-04") == ~o"2026Y1M4DT10H30M"
+  describe "on/2 and at/2 place a value without a year on one with a year" do
+    test "a time of day on a date" do
+      assert Tempo.on(~o"T10:30", ~o"2026-01-04") == {:ok, ~o"2026Y1M4DT10H30M"}
     end
 
-    test "takes the reference's zone" do
-      assert Tempo.anchor(~o"T17", ~o"2026-06-15[Australia/Sydney]") ==
-               ~o"2026Y6M15DT17H[Australia/Sydney]"
+    test "the placed value takes the date's zone" do
+      assert Tempo.on(~o"T17", ~o"2026-06-15[Australia/Sydney]") ==
+               {:ok, ~o"2026Y6M15DT17H[Australia/Sydney]"}
     end
 
-    test "raises when the subject is already anchored, pointing at at/2" do
-      assert_raise ArgumentError, ~r/must be non-anchored.*at\/2/s, fn ->
-        Tempo.anchor(~o"2026-01-04", ~o"T10:30")
-      end
+    test "either order gives the same value" do
+      assert Tempo.at(~o"T10:30", ~o"2026-01-04") == Tempo.at(~o"2026-01-04", ~o"T10:30")
     end
 
-    test "raises when the reference is not anchored" do
-      assert_raise ArgumentError, ~r/reference.*must be anchored/s, fn ->
-        Tempo.anchor(~o"T10:30", ~o"T14:00")
-      end
+    test "of two values without a year, the coarser keeps its place" do
+      assert Tempo.on(~o"T17", ~o"3M2D") == {:ok, ~o"3M2DT17H"}
+      assert Tempo.on(~o"2D", ~o"3M") == {:ok, ~o"3M2D"}
     end
   end
 
-  describe "at/2 (right-fill)" do
+  describe "at/2" do
     test "sets the time-of-day on a date" do
       assert Tempo.at(~o"2026-06-15", ~o"T17") == {:ok, ~o"2026Y6M15DT17H"}
     end
@@ -636,26 +633,26 @@ defmodule Tempo.Operations.Test do
       assert Tempo.at(~o"2026-06-15T09:30", ~o"T17") == {:ok, ~o"2026Y6M15DT17H"}
     end
 
-    test "keeps the subject's zone" do
+    test "keeps the date's zone" do
       assert Tempo.at(~o"2026-06-15[Australia/Sydney]", ~o"T17") ==
                {:ok, ~o"2026Y6M15DT17H[Australia/Sydney]"}
     end
 
-    test "refines a non-anchored subject when the addition is calendar-independent" do
+    test "of two times of day, the second is taken whole" do
       assert Tempo.at(~o"T09", ~o"T14:30") == {:ok, ~o"T14H30M"}
     end
 
-    test "respects partials — refines a non-anchored subject with a date unit" do
+    test "places a day on a month without a year" do
       assert Tempo.at(~o"3M", ~o"2D") == {:ok, ~o"3M2D"}
       assert Tempo.at(~o"2M", ~o"29D") == {:ok, ~o"2M29D"}
     end
 
-    test "validates against the calendar when the subject is anchored" do
+    test "checks a value with a year against its calendar" do
       assert Tempo.at(~o"2024-02", ~o"29D") == {:ok, ~o"2024Y2M29D"}
       assert {:error, %Tempo.InvalidDateError{}} = Tempo.at(~o"2026-02", ~o"29D")
     end
 
-    test "rejects an anchored addition" do
+    test "rejects two values that both have a year" do
       assert {:error, %ArgumentError{}} = Tempo.at(~o"2026-06-15", ~o"2027-01-01")
     end
 
@@ -665,7 +662,7 @@ defmodule Tempo.Operations.Test do
     end
   end
 
-  describe "on/2 (right-fill, date phrasing)" do
+  describe "on/2" do
     test "is an alias of at/2" do
       assert Tempo.on(~o"3M", ~o"2D") == Tempo.at(~o"3M", ~o"2D")
       assert Tempo.on(~o"3M", ~o"2D") == {:ok, ~o"3M2D"}
@@ -815,7 +812,7 @@ defmodule Tempo.Operations.Test do
     end
   end
 
-  describe "midnight-crossing non-anchored intervals" do
+  describe "midnight-crossing unanchored intervals" do
     test "intersection with single-day anchor — crossing materialises the pre-midnight portion" do
       {:ok, na} = Tempo.from_iso8601("T23:30/T01:00")
 
@@ -869,7 +866,7 @@ defmodule Tempo.Operations.Test do
       assert Tempo.disjoint?(evening, morning)
     end
 
-    test "zero-width non-anchored interval is treated as empty" do
+    test "zero-width unanchored interval is treated as empty" do
       # `T12:00/T12:00` — from == to. compare_time gives :eq, which
       # is not :gt, so crosses_midnight? returns false and the
       # interval stays as zero-width.

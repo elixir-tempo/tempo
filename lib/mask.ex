@@ -31,7 +31,7 @@ defmodule Tempo.Mask do
   # resolver — just like the month/day path below. `valid_values/4` ignores
   # `previous`/`calendar` for years.
   # A year mask never depends on a coarser unit, so `valid_values/4`
-  # cannot report a missing anchor here — unwrap it.
+  # cannot report a missing year here — unwrap it.
   def fill_unspecified(:year, [:negative | _] = mask, calendar, previous) do
     {:ok, values} = valid_values(:year, mask, previous, calendar)
     values
@@ -80,11 +80,11 @@ defmodule Tempo.Mask do
       # only `{:done, acc}`, `{:halted, acc}` and `{:suspended, …}` — so a
       # value that cannot be enumerated has to signal by raising. This is
       # a documented exception with a message, not a bare `throw`: callers
-      # can match on it, and it names the anchor the value is missing.
-      {:error, :requires_anchor} ->
-        raise Tempo.RequiresAnchorError,
+      # can match on it, and it names the value that is missing its year.
+      {:error, :unanchored} ->
+        raise Tempo.UnanchoredError,
           value: Enum.reverse(concrete),
-          reason: :mask_requires_anchor
+          reason: :masked
     end
   end
 
@@ -122,7 +122,7 @@ defmodule Tempo.Mask do
     the mask pattern when formatted to the mask's width with
     zero-padding.
 
-  * `{:error, :requires_anchor}` when the range depends on a
+  * `{:error, :unanchored}` when the range depends on a
     coarser unit that `previous` does not supply — a month range
     in a calendar whose month count varies by year, or a day range
     with no month.
@@ -144,7 +144,7 @@ defmodule Tempo.Mask do
           mask :: list(),
           previous :: keyword(),
           calendar :: module()
-        ) :: {:ok, [integer()]} | {:error, :requires_anchor}
+        ) :: {:ok, [integer()]} | {:error, :unanchored}
   # Year masks are digit-bounded — there is no calendar range for years —
   # so their candidates come straight from the digit pattern.
   def valid_values(:year, [:negative | rest], _previous, _calendar) do
@@ -169,10 +169,10 @@ defmodule Tempo.Mask do
   # A yearless value (`XX-15`, "the 15th of any month") has no year to
   # ask the calendar about, and `Keyword.fetch!/2` raised a bare
   # `KeyError` from four frames down. The calendars answer the
-  # un-anchored question too: Gregorian always has 12 months, so the
+  # unanchored question too: Gregorian always has 12 months, so the
   # candidates are exact, while Hebrew reports `{:ambiguous, 12..13}`
   # because a leap year adds one — there the answer really does depend
-  # on the missing year, and `:requires_anchor` says so.
+  # on the missing year, and `:unanchored` says so.
   defp valid_range(:month, previous, calendar) do
     case Keyword.get(previous, :year) do
       year when is_integer(year) -> {:ok, 1..calendar.months_in_year(year)}
@@ -187,7 +187,7 @@ defmodule Tempo.Mask do
     cond do
       is_integer(year) and is_integer(month) -> {:ok, 1..calendar.days_in_month(year, month)}
       is_integer(month) -> unanchored_range(calendar.days_in_month(month))
-      true -> {:error, :requires_anchor}
+      true -> {:error, :unanchored}
     end
   end
 
@@ -196,7 +196,7 @@ defmodule Tempo.Mask do
   defp valid_range(:second, _previous, _calendar), do: {:ok, 0..59}
 
   defp unanchored_range(count) when is_integer(count), do: {:ok, 1..count}
-  defp unanchored_range(_ambiguous_or_undefined), do: {:error, :requires_anchor}
+  defp unanchored_range(_ambiguous_or_undefined), do: {:error, :unanchored}
 
   # Pad candidate to the mask's width with leading zeros, then
   # compare digit-by-digit: `:X` matches any digit, a digit set

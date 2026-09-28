@@ -3,7 +3,7 @@ defmodule Tempo.MaterialisationError do
   Exception raised when a value cannot be materialised into an
   explicit `Tempo.Interval` or `Tempo.IntervalSet`.
 
-  Reasons include a bare `Tempo.Duration` (no time-line anchor),
+  Reasons include a bare `Tempo.Duration` (no place on the time line),
   a one-of `Tempo.Set` (epistemic disjunction, not an interval
   list), a `Tempo` already at its finest resolution (no finer unit
   to bound the implicit span), and an unanchored group (e.g.
@@ -35,7 +35,7 @@ defmodule Tempo.MaterialisationError do
   @impl true
   def message(%__MODULE__{reason: :bare_duration}) do
     "Cannot materialise a Tempo.Duration into an interval — a duration has no " <>
-      "anchor on the time line."
+      "place on the time line."
   end
 
   def message(%__MODULE__{reason: :one_of_set}) do
@@ -83,7 +83,7 @@ defmodule Tempo.MaterialisationError do
   def message(%__MODULE__{reason: :unanchored_group, value: value}) when not is_nil(value) do
     "Cannot materialise the group #{inspect(value)} into an interval — its unit " <>
       "needs coarser calendar context (year/month) to bound the span, which a " <>
-      "non-anchored or ordinal-day group does not supply."
+      "unanchored or ordinal-day group does not supply."
   end
 
   def message(%__MODULE__{reason: :unanchored_group}) do

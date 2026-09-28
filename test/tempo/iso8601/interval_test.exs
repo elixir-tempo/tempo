@@ -294,7 +294,7 @@ defmodule Tempo.Parser.Interval.Test do
       assert {:ok, _} = Tempo.from_iso8601("198X/1999")
     end
 
-    test "non-anchored time-of-day intervals (midnight-crossing) stay valid" do
+    test "unanchored time-of-day intervals (midnight-crossing) stay valid" do
       # `from > to` here represents a span that crosses midnight.
       assert {:ok, _} = Tempo.from_iso8601("T22/T02")
       assert {:ok, _} = Tempo.from_iso8601("T11/T10")

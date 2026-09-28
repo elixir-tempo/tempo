@@ -43,7 +43,7 @@ defmodule Tempo.IntervalSetTreeTest do
       assert IntervalSet.to_list(set) == []
     end
 
-    test "non-anchored members are rejected with direction" do
+    test "unanchored members are rejected with direction" do
       {:ok, time_of_day} = Tempo.to_interval(~o"T10:00/T11:00")
 
       assert_raise ArgumentError, ~r/requires anchored/, fn ->

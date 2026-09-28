@@ -62,7 +62,7 @@ end)
 
 ## Expressing fixed-rule holidays directly in ISO 8601
 
-Many holidays need no feed at all: the ones with a purely calendrical rule — "the third Monday in January" — are recurrences Tempo can express as a native ISO 8601 string. Each round-trips through `Tempo.from_iso8601/1` and materialises to concrete dates once anchored to a year. Here are the eight US federal holidays with a fixed rule, given as the **observed public holiday** (not the underlying event date — see the notes below):
+Many holidays need no feed at all: the ones with a purely calendrical rule — "the third Monday in January" — are recurrences Tempo can express as a native ISO 8601 string. Each round-trips through `Tempo.from_iso8601/1` and materialises to concrete dates within a year's window. Here are the eight US federal holidays with a fixed rule, given as the **observed public holiday** (not the underlying event date — see the notes below):
 
 | Holiday | When it occurs (public holiday) | ISO 8601 expression |
 |---|---|---|

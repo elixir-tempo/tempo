@@ -121,15 +121,15 @@ defmodule Tempo.ShiftSkippingTest do
                Tempo.shift(~o"2026-06-15", ~o"P1Y", skipping: busy)
     end
 
-    test "a non-anchored origin requires an anchor" do
+    test "an origin without a year is an error" do
       busy = ~o"2026-06-16"
 
-      assert {:error, %Tempo.RequiresAnchorError{}} =
+      assert {:error, %Tempo.UnanchoredError{}} =
                Tempo.shift(~o"T10:00", ~o"PT1H", skipping: busy)
     end
 
-    test "a non-anchored busy span requires an anchor" do
-      assert {:error, %Tempo.NonAnchoredError{}} =
+    test "a busy span without a year is an error" do
+      assert {:error, %Tempo.UnanchoredError{}} =
                Tempo.shift(~o"2026-06-15T09:00", ~o"PT1H", skipping: ~o"T10:00/T11:00")
     end
 

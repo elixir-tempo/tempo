@@ -997,7 +997,7 @@ defmodule Tempo.IntervalSet do
   def covered?(%__MODULE__{backend: backend, intervals: state} = set, %Tempo{} = point) do
     # The backend prunes to candidate members (an interval tree answers
     # in O(log n + k)); the exact resolution-aware containment check
-    # stays here. A non-anchored point has no timeline position to
+    # stays here. An unanchored point has no timeline position to
     # prune by, so it scans.
     candidates =
       case point_span_seconds(point) do

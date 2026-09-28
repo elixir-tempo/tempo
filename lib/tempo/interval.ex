@@ -63,7 +63,7 @@ defmodule Tempo.Interval do
   alias Tempo.Mask
   alias Tempo.MaterialisationError
   alias Tempo.Math
-  alias Tempo.RequiresAnchorError
+  alias Tempo.UnanchoredError
 
   @type t :: %__MODULE__{
           recurrence: pos_integer() | :infinity,
@@ -182,7 +182,7 @@ defmodule Tempo.Interval do
   @spec new(keyword()) :: {:ok, t()} | {:error, Exception.t()}
   def new(options) when is_list(options) do
     with :ok <- ensure_keyword_options(options),
-         :ok <- ensure_has_anchor(options),
+         :ok <- ensure_describes_span(options),
          from <- Keyword.get(options, :from),
          to <- Keyword.get(options, :to),
          :ok <- validate_endpoint_types(from, to),
@@ -300,7 +300,7 @@ defmodule Tempo.Interval do
     end
   end
 
-  defp ensure_has_anchor(options) do
+  defp ensure_describes_span(options) do
     if Keyword.has_key?(options, :from) or Keyword.has_key?(options, :to) or
          Keyword.has_key?(options, :duration) do
       :ok
@@ -519,7 +519,7 @@ defmodule Tempo.Interval do
     %__MODULE__{from: AST.build(time), to: :undefined}
   end
 
-  # An unanchored recurrence with no selection — `R/../P1W`, the inspect form
+  # A recurrence with an open start and no selection — `R/../P1W`, the inspect form
   # of a cron/`RRule` value that has no `:from`. The duration is the cadence,
   # kept as-is; the start stays `nil` (not `:undefined`) so it matches what
   # inspect renders and round-trips to the same value.
@@ -562,7 +562,7 @@ defmodule Tempo.Interval do
 
   ## Three-element forms with a repeat_rule.
 
-  # An unanchored recurrence carrying a selection — `R/../P1W/FLT17H0M5KN`, the
+  # A recurrence with an open start and a selection — `R/../P1W/FLT17H0M5KN`, the
   # inspect form of a cron schedule with no `:from`. Start stays `nil`; the
   # duration is the cadence and the selection is the repeat rule.
   def build([:undefined, {:duration, duration}, {:repeat_rule, repeat_rule}]) do
@@ -734,7 +734,7 @@ defmodule Tempo.Interval do
   # carry (days-in-month needs year+month; months-in-year needs
   # year), and the carry can cascade up to year. A group materialises
   # only when its value carries that contiguous anchored prefix; a
-  # non-anchored fragment (`5G10DU` — days 41..50, no year) does not,
+  # unanchored fragment (`5G10DU` — days 41..50, no year) does not,
   # and has no concrete span. A year alone anchors a group of its weeks,
   # its days (`1933Y1G80DU`, the first eighty) or its hours
   # (`2018Y20GT12HU`, noon to midnight on 10 January), which
@@ -773,7 +773,7 @@ defmodule Tempo.Interval do
         materialise_group(tempo, prefix, unit, first, last, calendar)
 
       # A *pure* time-of-day group (no date components) materialises to
-      # a **non-anchored** interval — the relative span it denotes on
+      # an **unanchored** interval — the relative span it denotes on
       # the time-of-day axis (`T16H1GT15MU` is `16:00..16:15`) — provided the upper
       # bound's carry stays within the present time units and cannot
       # overflow into an absent day. The result lives on the
@@ -906,7 +906,7 @@ defmodule Tempo.Interval do
   # The implicit span is one unit wide at the value's own resolution — a
   # day spans `[day, day+1)`, not `[day T0H, day+1 T0H)`. The next-finer
   # unit is returned separately as the iteration granularity; the walk
-  # fills the anchor to it at iteration time (`Steps.fill_to_unit/3`).
+  # fills the start to it at iteration time (`Steps.fill_to_unit/3`).
   defp implicit_span(tempo, time, unit, next_unit, calendar) do
     with {:ok, bounds} <- span_bounds(tempo, time, unit, calendar) do
       {:ok, bounds, next_unit}
@@ -1042,14 +1042,14 @@ defmodule Tempo.Interval do
   # bound, increment the coarsest stated unit for the upper bound.
   # `1985-XX-XX` → prefix `[year: 1985]` → `[[year: 1985], [year: 1986]]`.
   defp parent_widen([]) do
-    # No un-masked prefix — nothing to anchor against. Shouldn't
+    # No un-masked prefix — nothing to place the span on. Shouldn't
     # happen in practice (the parser always resolves a year before
-    # finer units can appear), but raise a clear error if it does.
+    # finer units can appear), but return a clear error if it does.
     {:error,
      MaterialisationError.exception(
        reason:
          "Cannot materialise a masked Tempo with no un-masked coarser unit — " <>
-           "nothing to anchor the span against."
+           "nothing to place the span on."
      )}
   end
 
@@ -1936,7 +1936,7 @@ defmodule Tempo.Interval do
          %Tempo{calendar: cal, time: to_time},
          _context
        ) do
-    # Non-anchored endpoints (no year) share the time-of-day axis
+    # Unanchored endpoints (no year) share the time-of-day axis
     # across any calendar — no conversion needed.
     _ = from_time
     _ = to_time
@@ -2215,9 +2215,9 @@ defmodule Tempo.Interval do
   #     read as their *grounding envelope*: the resolution-wide value
   #     slides anywhere inside the span the mask admits, so certainty is
   #     over every year the mask could be, not the enclosing block.
-  #   * Un-anchored values (no year) — comparable only on a shared leading
+  #   * Unanchored values (no year) — comparable only on a shared leading
   #     unit (the same-axis rule); off-axis they return a
-  #     `RequiresAnchorError` rather than guess the missing year.
+  #     `UnanchoredError` rather than guess the missing year.
   #
   # Endpoints are treated independently, which for a rigidly-shifting ±
   # or a masked value is a *sound over-approximation*: `:certain` and
@@ -2298,7 +2298,7 @@ defmodule Tempo.Interval do
   * `:certain`, `:possible`, or `:impossible`.
 
   * `{:error, reason}` for open-ended or multi-member operands, or a
-    `t:Tempo.RequiresAnchorError.t/0` when an un-anchored operand is
+    `t:Tempo.UnanchoredError.t/0` when an unanchored operand is
     compared across resolution axes.
 
   ### Examples
@@ -2323,7 +2323,7 @@ defmodule Tempo.Interval do
   Certainty is containment of the possible relations in `target`. The
   possible relations account for any `±` margin and for underspecification:
   an unspecified-digit operand (`~o"20XXY"`) is read over every grounding
-  its mask admits, and two un-anchored operands compare on a shared leading
+  its mask admits, and two unanchored operands compare on a shared leading
   unit.
 
   ### Arguments
@@ -2338,7 +2338,7 @@ defmodule Tempo.Interval do
   * `:certain`, `:possible`, or `:impossible`.
 
   * `{:error, reason}` for open-ended or multi-member operands, or a
-    `t:Tempo.RequiresAnchorError.t/0` when an un-anchored operand is
+    `t:Tempo.UnanchoredError.t/0` when an unanchored operand is
     compared across resolution axes.
 
   ### Examples
@@ -2679,7 +2679,7 @@ defmodule Tempo.Interval do
 
   defp non_contiguous_mask?(_operand), do: false
 
-  # Two un-anchored values (no year) compare only on a shared leading unit —
+  # Two unanchored values (no year) compare only on a shared leading unit —
   # the same-axis rule the set operations use. Same axis: the positional
   # `relation/2` is definite, so the possible set is the single relation it
   # returns. Different axes (or one operand anchored, the other not): the answer
@@ -2691,8 +2691,7 @@ defmodule Tempo.Interval do
         {:error, _reason} = error -> error
       end
     else
-      {:error,
-       RequiresAnchorError.exception(value: unanchored_operand(a, b), reason: :comparison)}
+      {:error, UnanchoredError.exception(value: unanchored_operand(a, b), reason: :comparison)}
     end
   end
 

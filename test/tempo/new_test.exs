@@ -400,8 +400,8 @@ defmodule Tempo.NewTest do
       assert {:error, _} = Tempo.duration(~o"2026-06-15T17", ~o"2026-06-15T09")
     end
 
-    test "a non-anchored endpoint returns a NonAnchoredError, never raising" do
-      assert {:error, %Tempo.NonAnchoredError{}} = Tempo.duration(~o"T10", ~o"T14")
+    test "an unanchored endpoint returns an UnanchoredError, never raising" do
+      assert {:error, %Tempo.UnanchoredError{}} = Tempo.duration(~o"T10", ~o"T14")
     end
 
     test "a zoned endpoint against a floating one returns a FloatingTempoError, never raising" do
@@ -416,7 +416,7 @@ defmodule Tempo.NewTest do
     end
 
     test "duration!/2 raises on invalid endpoints" do
-      assert_raise Tempo.NonAnchoredError, fn -> Tempo.duration!(~o"T10", ~o"T14") end
+      assert_raise Tempo.UnanchoredError, fn -> Tempo.duration!(~o"T10", ~o"T14") end
     end
   end
 
@@ -509,7 +509,7 @@ defmodule Tempo.NewTest do
       assert msg =~ "fixed-length"
     end
 
-    test "a non-anchored :relative_to is rejected, never raising" do
+    test "an unanchored :relative_to is rejected, never raising" do
       assert {:error, %ArgumentError{}} = Duration.to_unit(~o"P1M", :day, relative_to: ~o"T10")
     end
 

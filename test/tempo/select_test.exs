@@ -665,11 +665,11 @@ defmodule Tempo.Select.Test do
       assert IntervalSet.count(empty) == 0
     end
 
-    test "anchor/2 reports the same impossible date, because it names one year" do
-      # Selecting across a range skips what cannot exist; anchoring onto
+    test "on/2 reports the same impossible date, because it names one year" do
+      # Selecting across a range skips what cannot exist; placing the day on
       # exactly one year has nothing to skip to, so it says so.
-      assert {:error, %InvalidDateError{}} = Tempo.anchor(~o"2M29D", ~o"2026")
-      assert Tempo.anchor(~o"2M29D", ~o"2028") == ~o"2028Y2M29D"
+      assert {:error, %InvalidDateError{}} = Tempo.on(~o"2M29D", ~o"2026")
+      assert Tempo.on(~o"2M29D", ~o"2028") == {:ok, ~o"2028Y2M29D"}
     end
 
     test "a date that always exists is unaffected" do

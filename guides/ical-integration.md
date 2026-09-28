@@ -67,7 +67,7 @@ config :elixir, :time_zone_database, Tz.TimeZoneDatabase
 
 Any `Calendar.TimeZoneDatabase` implementation works — [`:tz`](https://hex.pm/packages/tz), [`:tzdata`](https://hex.pm/packages/tzdata), [`:time_zone_info`](https://hex.pm/packages/time_zone_info), or [`:zoneinfo`](https://hex.pm/packages/zoneinfo); Tempo does not bundle one. Tempo's own dev and test environments pull in `:tz` and configure `Tz.TimeZoneDatabase` via `config/dev.exs` and `config/test.exs`, which is how the project's demo schedules (`demo/calendars/*.ics`) round-trip zoned events in `mix test` runs.
 
-UTC-anchored datetimes (the `20260401T090000Z` form) and floating/naive datetimes do not need a zone database — only the `TZID=`-parameterised form does.
+UTC datetimes (the `20260401T090000Z` form) and floating/naive datetimes do not need a zone database — only the `TZID=`-parameterised form does.
 
 ## 3. What each event produces
 
@@ -77,7 +77,7 @@ A `VEVENT` becomes a `%Tempo.Interval{}`:
 |---|---|
 | `DTSTART` (date) | `interval.from` at day resolution |
 | `DTSTART` (datetime) | `interval.from` at datetime resolution |
-| `DTSTART` (floating datetime, no `Z` or `TZID`) | `interval.from` zone-less (`extended: nil`) — RFC 5545 §3.3.5 floating time, preserved as-is rather than anchored to a zone |
+| `DTSTART` (floating datetime, no `Z` or `TZID`) | `interval.from` zone-less (`extended: nil`) — RFC 5545 §3.3.5 floating time, preserved as-is rather than placed in a zone |
 | `DTEND` | `interval.to` at matching resolution |
 | `TZID` (on DTSTART/DTEND) | `interval.from.extended.zone_id` via `Tempo.from_elixir/2` |
 | `UID` | `metadata.uid` |

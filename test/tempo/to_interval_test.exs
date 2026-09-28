@@ -228,7 +228,7 @@ defmodule Tempo.ToInterval.Test do
       assert interval.to.time == [year: 2018, month: 3, day: 1]
     end
 
-    test "non-anchored day group `5G10DU` returns a clean error (no crash)" do
+    test "unanchored day group `5G10DU` returns a clean error (no crash)" do
       # Days 41..50 of no particular year — the `:day` carry needs
       # year/month context the fragment doesn't carry, so it has no
       # concrete span. Must not raise.
@@ -282,7 +282,7 @@ defmodule Tempo.ToInterval.Test do
     end
   end
 
-  describe "non-anchored time-of-day groups materialise to a relative interval" do
+  describe "unanchored time-of-day groups materialise to a relative interval" do
     defp group(time), do: %Tempo{calendar: Calendrical.Gregorian, time: time}
 
     test "a minute group materialises to its relative span" do
@@ -291,7 +291,7 @@ defmodule Tempo.ToInterval.Test do
       assert interval.to.time == [hour: 16, minute: 16]
     end
 
-    test "the result is non-anchored (lives on the time-of-day axis)" do
+    test "the result is unanchored (lives on the time-of-day axis)" do
       {:ok, interval} = Tempo.to_interval(group(hour: 16, minute: {:group, 1..15}))
       refute Tempo.anchored?(interval.from)
       refute Tempo.anchored?(interval.to)
@@ -380,13 +380,13 @@ defmodule Tempo.ToInterval.Test do
                Tempo.to_interval(duration)
 
       assert Exception.message(e) =~ "Duration"
-      assert Exception.message(e) =~ "no anchor"
+      assert Exception.message(e) =~ "no place on the time line"
     end
 
     test "to_interval!/1 raises on duration" do
       {:ok, duration} = Tempo.from_iso8601("P3M")
 
-      assert_raise Tempo.MaterialisationError, ~r/no anchor/, fn ->
+      assert_raise Tempo.MaterialisationError, ~r/no place on the time line/, fn ->
         Tempo.to_interval!(duration)
       end
     end

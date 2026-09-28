@@ -15,6 +15,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 | `Tempo.Interval.inverse_relation/1` | `Tempo.Allen.inverse/1` |
 | `compose/2` on `Tempo` and `Tempo.Interval` | `Tempo.Allen.compose/2` |
 | `Tempo.Interval.equivalent?/2` | `Tempo.equal?/3` |
+| `Tempo.anchor/2` | `Tempo.on/2` or `Tempo.at/2`, in either order |
+| `Tempo.NonAnchoredError`, `Tempo.RequiresAnchorError` | `Tempo.UnanchoredError` |
 
 * `Tempo.duration/1` and `Tempo.IntervalSet.duration/1` measure the time a set covers, counting time its members share once; `IntervalSet.total_duration/1`, which did, is removed.
 
@@ -39,6 +41,10 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * A zone or offset on an interval's start applies to a floating end, as ISO 8601-1 §5.5.1 says: `2018-01-15T10:00+05:00/2018-02-20T10:00` ends at +05:00, where its end was floating. `Tempo.Interval.new/1` follows the same rule.
 
 * `Tempo.new/1`'s `:metadata` is the value's own metadata, read with `Tempo.metadata/1` and never written to its ISO 8601 form, where it was written as IXDTF suffix tags; tags take the new `:tags` option, validated so `to_iso8601/1` cannot fail on one.
+
+* `Tempo.anchor/2` is removed: `at/2` and `on/2` place a value without a year on one with a year in either order, so `Tempo.on(~o"T17", ~o"2026-06-15")` is 17:00 on 15 June.
+
+* `Tempo.UnanchoredError` replaces `NonAnchoredError` and `RequiresAnchorError`, and a recurrence with an open start returns `IntervalEndpointsError` with `reason: :open_start`, where it was `:unanchored`.
 
 ### Added
 

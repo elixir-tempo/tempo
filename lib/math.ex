@@ -9,9 +9,8 @@ defmodule Tempo.Math do
   alias Tempo.IntervalSet
   alias Tempo.InvalidUnitError
   alias Tempo.Mask
-  alias Tempo.NonAnchoredError
-  alias Tempo.RequiresAnchorError
   alias Tempo.TimeZoneDatabase
+  alias Tempo.UnanchoredError
   alias Tempo.Validation
 
   @doc """
@@ -58,7 +57,7 @@ defmodule Tempo.Math do
   reports that rather than guessing:
 
       iex> Tempo.Math.add_unit(~o"2M28D", :day, Calendrical.Gregorian)
-      {:error, :requires_anchor}
+      {:error, :unanchored}
 
   """
   def add_unit(%Tempo{time: time, calendar: calendar} = tempo, unit, calendar) do
@@ -73,7 +72,7 @@ defmodule Tempo.Math do
     with {:ok, stepped} <- add_unit(time, unit, calendar), do: {:ok, %{tempo | time: stepped}}
   end
 
-  # On an un-anchored value (no `:year`) a whole-year step is a no-op: the
+  # On an unanchored value (no `:year`) a whole-year step is a no-op: the
   # untracked year advances but the month/day/time axis is unchanged, so
   # "one year after January 31st" is January 31st. This is always unambiguous.
   def add_unit(time, :year, _calendar) when is_list(time) do
@@ -218,13 +217,13 @@ defmodule Tempo.Math do
   end
 
   # Without a year the week count is 52 or 53 depending on the year, so a
-  # week below 52 steps cleanly and the wrap needs an anchor.
+  # week below 52 steps cleanly and the wrap needs a year.
   defp advance_week_unanchored(time) do
     week = Keyword.fetch!(time, :week)
 
     if week < 52,
       do: {:ok, Keyword.replace!(time, :week, week + 1)},
-      else: {:error, :requires_anchor}
+      else: {:error, :unanchored}
   end
 
   # A grouped component is `{unit, {:group, members}, size}` — a set of
@@ -302,14 +301,14 @@ defmodule Tempo.Math do
     end
   end
 
-  # ── Un-anchored arithmetic (no :year) ──────────────────────────
+  # ── Unanchored arithmetic (no :year) ──────────────────────────
   #
   # A value with no `:year` lives on a repeating month/day axis. One principle
   # governs every case below, and any new case must be decided by it — not by
   # whatever the day-clamp happens to do:
   #
   #   Compute the shift when its result is invariant to the missing year;
-  #   return `%Tempo.RequiresAnchorError{}` when the result would depend on the
+  #   return `%Tempo.UnanchoredError{}` when the result would depend on the
   #   year. Never raise.
   #
   # The calendar answers via the year-less `days_in_month/1` and
@@ -322,21 +321,22 @@ defmodule Tempo.Math do
   #     because whether Feb 29 exists next year depends on the year.
   #   * A **month** step is answerable (12 months is invariant) and wraps
   #     December to January (`12M31D` + `P1M` = `1M31D`); only clamping the day
-  #     onto the new month can force an anchor (`1M31D` + `P1M` = "Feb 31").
+  #     onto the new month can force a year (`1M31D` + `P1M` = "Feb 31").
   #   * A **day/week** step advances while the day stays within the month's
   #     *guaranteed* length; crossing a boundary whose position depends on the
   #     year errors (`2M28D` + `P1D` — Feb 29 or Mar 1?). A bare-day value
   #     (no month) advances while below the shortest month any month can be.
   #
-  # `add/2` catches the internal `:requires_anchor` throw and converts it to the
-  # error tuple, so callers see a value or a clean error, never a crash.
+  # `add/2` turns the internal `{:error, :unanchored}` into an
+  # `UnanchoredError` naming the value and the duration, so callers see a
+  # value or a clean error, never a crash.
 
   # `Keyword.has_key?(time, :year)` is not the same question as "is this
   # value anchored". An unspecified year (`X*Y12M28D`, parsed as
   # `year: :any`) has the key but not a number, and every anchored branch
   # above either hands the year to a calendar function that guards
   # `is_integer/1` or does arithmetic on it. Asking for a concrete year
-  # routes those values down the un-anchored path, which is what they are.
+  # routes those values down the unanchored path, which is what they are.
   # A grouped component is a 3-tuple (`{:year, {:group, …}, size}`), so the
   # time list is not always a valid keyword list and `Keyword.get/3` raises
   # on it. Match the pair shape directly instead.
@@ -361,7 +361,7 @@ defmodule Tempo.Math do
       {:ok, month} -> advance_day_in_month(time, day, calendar.days_in_month(month), calendar)
       # Day-only value (no month): the day advances while it stays valid in
       # *every* month; at the shortest month's length the roll-over depends on
-      # the unknown month, so it needs an anchor.
+      # the unknown month, so it needs a year.
       :error -> advance_day_no_month(time, day, calendar)
     end
   end
@@ -378,12 +378,12 @@ defmodule Tempo.Math do
     cond do
       day < Enum.min(range) -> {:ok, Keyword.replace!(time, :day, day + 1)}
       day >= Enum.max(range) -> start_of_next_month_unanchored(time, calendar)
-      true -> {:error, :requires_anchor}
+      true -> {:error, :unanchored}
     end
   end
 
   defp advance_day_in_month(_time, _day, _undefined, _calendar) do
-    {:error, :requires_anchor}
+    {:error, :unanchored}
   end
 
   defp advance_scalar_day_in_month(time, day, count, calendar) when is_integer(count) do
@@ -395,7 +395,7 @@ defmodule Tempo.Math do
   defp advance_day_no_month(time, day, calendar) do
     case shortest_month(calendar) do
       {:ok, shortest} when day < shortest -> {:ok, Keyword.replace!(time, :day, day + 1)}
-      {:ok, _shortest} -> {:error, :requires_anchor}
+      {:ok, _shortest} -> {:error, :unanchored}
       {:error, _reason} = error -> error
     end
   end
@@ -406,7 +406,7 @@ defmodule Tempo.Math do
   defp shortest_month(calendar) do
     case months_in_year_unanchored(calendar) do
       count when is_integer(count) -> shortest_of_months(calendar, 1..count)
-      _undefined_or_ambiguous -> {:error, :requires_anchor}
+      _undefined_or_ambiguous -> {:error, :unanchored}
     end
   end
 
@@ -426,7 +426,7 @@ defmodule Tempo.Math do
     case calendar.days_in_month(month) do
       count when is_integer(count) -> {:ok, count}
       {:ambiguous, range} -> {:ok, Enum.min(range)}
-      _undefined -> {:error, :requires_anchor}
+      _undefined -> {:error, :unanchored}
     end
   end
 
@@ -453,17 +453,17 @@ defmodule Tempo.Math do
   defp advance_month_present(time, month, {:ambiguous, range}) do
     if month < Enum.min(range),
       do: {:ok, Keyword.replace!(time, :month, month + 1)},
-      else: {:error, :requires_anchor}
+      else: {:error, :unanchored}
   end
 
   defp advance_month_present(_time, _month, _undefined) do
-    {:error, :requires_anchor}
+    {:error, :unanchored}
   end
 
   # `months_in_year/0` is an optional calendar callback — a calendar
   # that can't state its month count without a year simply doesn't
   # implement it, so guard the call and treat its absence as "needs
-  # an anchor".
+  # a year".
   defp months_in_year_unanchored(calendar) do
     # `function_exported?/3` returns false for a module that has not been loaded
     # yet, so force a load first — otherwise the result is non-deterministic
@@ -488,7 +488,7 @@ defmodule Tempo.Math do
   defp retreat_to_last_month(time, calendar) do
     case months_in_year_unanchored(calendar) do
       count when is_integer(count) -> {:ok, Keyword.replace!(time, :month, count)}
-      _undefined -> {:error, :requires_anchor}
+      _undefined -> {:error, :unanchored}
     end
   end
 
@@ -507,18 +507,18 @@ defmodule Tempo.Math do
 
       # Day-only value: retreating stays valid while the day is above the 1st;
       # the 1st's predecessor is the last day of an unknown month, so it needs
-      # an anchor.
+      # a year.
       :error ->
         if day > 1,
           do: {:ok, Keyword.replace!(time, :day, day - 1)},
-          else: {:error, :requires_anchor}
+          else: {:error, :unanchored}
     end
   end
 
   defp retreat_to_end_of_last_month(time, calendar) do
     case months_in_year_unanchored(calendar) do
       count when is_integer(count) -> end_of_previous_month_unanchored(time, count, calendar)
-      _undefined -> {:error, :requires_anchor}
+      _undefined -> {:error, :unanchored}
     end
   end
 
@@ -531,7 +531,7 @@ defmodule Tempo.Math do
          |> Keyword.replace!(:day, count)}
 
       _ambiguous_or_undefined ->
-        {:error, :requires_anchor}
+        {:error, :unanchored}
     end
   end
 
@@ -573,7 +573,7 @@ defmodule Tempo.Math do
   end
 
   # Mirror of the year no-op in `add_unit/3`: a whole-year step on an
-  # un-anchored value leaves its month/day/time axis untouched.
+  # unanchored value leaves its month/day/time axis untouched.
   def subtract_unit(time, :year, _calendar) when is_list(time) do
     if concrete_year?(time),
       do: {:ok, Keyword.update!(time, :year, &(&1 - 1))},
@@ -779,7 +779,7 @@ defmodule Tempo.Math do
           Tempo.t()
           | Tempo.Set.t()
           | Tempo.IntervalSet.t()
-          | {:error, RequiresAnchorError.t() | :requires_anchor}
+          | {:error, UnanchoredError.t() | :unanchored}
   def add(%Tempo{} = tempo, %Tempo.Duration{} = duration) do
     case wall_zone(tempo) do
       nil -> add_wall(tempo, duration)
@@ -1011,13 +1011,13 @@ defmodule Tempo.Math do
 
   defp plain_datetime?(_time), do: false
 
-  # Un-anchored arithmetic that would depend on the missing year returns
-  # `{:error, :requires_anchor}` from the stepper; name the value and the
+  # Unanchored arithmetic that would depend on the missing year returns
+  # `{:error, :unanchored}` from the stepper; name the value and the
   # duration here, where both are still in scope.
   defp add_general(%Tempo{} = tempo, %Tempo.Duration{} = duration) do
     case route_general(tempo, duration) do
-      {:error, :requires_anchor} ->
-        {:error, RequiresAnchorError.exception(value: tempo, duration: duration)}
+      {:error, :unanchored} ->
+        {:error, UnanchoredError.exception(value: tempo, duration: duration)}
 
       other ->
         other
@@ -1212,8 +1212,8 @@ defmodule Tempo.Math do
            {:ok, last} <- add_crisp(%{tempo | time: max_time}, duration) do
         remask_or_set(masks, first, last)
       else
-        {:error, :requires_anchor} ->
-          {:error, RequiresAnchorError.exception(value: tempo, duration: duration)}
+        {:error, :unanchored} ->
+          {:error, UnanchoredError.exception(value: tempo, duration: duration)}
       end
     else
       # A mask with a concrete component after it denotes *disjoint*
@@ -1377,7 +1377,7 @@ defmodule Tempo.Math do
           Tempo.t()
           | Tempo.Set.t()
           | Tempo.IntervalSet.t()
-          | {:error, RequiresAnchorError.t()}
+          | {:error, UnanchoredError.t()}
   def subtract(%Tempo{} = tempo, %Tempo.Duration{time: duration_time}) do
     negated =
       Enum.map(duration_time, fn
@@ -1481,7 +1481,7 @@ defmodule Tempo.Math do
     # Only a month/year step can leave the day past the new month's length
     # ("Jan 31 + 1 month = Feb 31"); day/week/time steps already carry into the
     # next month as they go. Clamping only when a month or year is present
-    # avoids a spurious anchor requirement for a value that already sits on an
+    # avoids a spurious demand for a year from a value that already sits on an
     # ambiguous day — e.g. `~o"2M29D"` shifted by an hour keeps its 29th.
     with {:ok, new_time} <- maybe_clamp(stepped, duration_time, calendar) do
       {:ok, %{tempo | time: new_time}}
@@ -1515,7 +1515,7 @@ defmodule Tempo.Math do
         {:ok, :month, whole_units(fraction, calendar.months_in_year(year))}
 
       _no_year ->
-        {:error, :requires_anchor}
+        {:error, :unanchored}
     end
   end
 
@@ -1528,7 +1528,7 @@ defmodule Tempo.Math do
          {:ok, month_later} <- Date.new(next_year, next_month, next_day, calendar) do
       {:ok, :day, whole_units(fraction, Date.diff(month_later, date))}
     else
-      _no_full_date -> {:error, :requires_anchor}
+      _no_full_date -> {:error, :unanchored}
     end
   end
 
@@ -1787,17 +1787,17 @@ defmodule Tempo.Math do
   # Clamp without a year: a day that fits every possible length of the
   # month is kept; one that overflows an unambiguous month is clamped;
   # anything whose validity depends on the missing year (a 29th/30th of
-  # a variable-length month) throws `:requires_anchor`.
+  # a variable-length month) is `{:error, :unanchored}`.
   defp clamp_day_to_month_unanchored(time, day, calendar) do
     case calendar.days_in_month(Keyword.fetch!(time, :month)) do
       count when is_integer(count) ->
         {:ok, if(day > count, do: Keyword.replace!(time, :day, count), else: time)}
 
       {:ambiguous, range} ->
-        if day <= Enum.min(range), do: {:ok, time}, else: {:error, :requires_anchor}
+        if day <= Enum.min(range), do: {:ok, time}, else: {:error, :unanchored}
 
       _undefined ->
-        {:error, :requires_anchor}
+        {:error, :unanchored}
     end
   end
 
@@ -1860,7 +1860,12 @@ defmodule Tempo.Math do
     if Tempo.anchored?(origin) do
       :ok
     else
-      {:error, RequiresAnchorError.exception(value: origin, reason: :shift_skipping)}
+      {:error,
+       UnanchoredError.exception(
+         operation: "shift skipping busy time",
+         value: origin,
+         reason: :shift_skipping
+       )}
     end
   end
 
@@ -1919,15 +1924,16 @@ defmodule Tempo.Math do
   end
 
   defp busy_member_error(%Interval{from: %Tempo{} = from, to: %Tempo{} = to}) do
-    if Tempo.anchored?(from) and Tempo.anchored?(to) do
-      nil
-    else
-      {:error,
-       NonAnchoredError.exception(
-         operation:
-           "use a non-anchored interval as a busy span in `skipping:` " <>
-             "(anchor it via `Tempo.anchor/2` first)"
-       )}
+    case Enum.reject([from, to], &Tempo.anchored?/1) do
+      [] ->
+        nil
+
+      [endpoint | _rest] ->
+        {:error,
+         UnanchoredError.exception(
+           operation: "use an interval as a `skipping:` busy span",
+           value: endpoint
+         )}
     end
   end
 

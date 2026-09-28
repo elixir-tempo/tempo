@@ -290,7 +290,7 @@ Tempo.from_iso8601!("5786Y7m15D[u-ca=hebrew]")
 #=> Tempo.from_iso8601!("5786Y7M15D[u-ca=hebrew]", Calendrical.Hebrew)
 ```
 
-Adding years to such a date keeps its traditional month, as the calendar's own arithmetic does, so a yearly recurrence anchored on it recurs on the same named month: `R/5786Y7m15D/P1Y[u-ca=hebrew]` is Passover every year, `5787Y8M15D` in the leap year 5787.
+Adding years to such a date keeps its traditional month, as the calendar's own arithmetic does, so a yearly recurrence starting on it recurs on the same named month: `R/5786Y7m15D/P1Y[u-ca=hebrew]` is Passover every year, `5787Y8M15D` in the leap year 5787.
 
 In a **selection** — a recurrence, which has no year — there is nothing to resolve against, so `m`/`+m` survive the round-trip and the traditional→ordinal step happens per year at materialisation. This is what makes a lunisolar holiday a re-materialisable recurrence: `R/../P1Y/FL8m15DN[u-ca=chinese]` ("the 15th of traditional month 8, every year") lands on ordinal month 8 in a common year and ordinal 9 in a leap year, tracking the true traditional month rather than a fixed ordinal. A `<n>+m` selection yields an occurrence only in the years that actually carry that leap month.
 

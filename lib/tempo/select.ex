@@ -573,15 +573,15 @@ defmodule Tempo.Select do
   defp span_endpoint(%Interval{}), do: :point
 
   defp project_span(%Interval{} = base, %Tempo{} = c_from, %Tempo{} = c_to) do
-    from_anchor = merged_constraint_tempo(base, c_from.time)
-    to_anchor = merged_constraint_tempo(base, c_to.time)
-    build_span(from_anchor, roll_past_midnight(from_anchor, to_anchor))
+    span_from = merged_constraint_tempo(base, c_from.time)
+    span_to = merged_constraint_tempo(base, c_to.time)
+    build_span(span_from, roll_past_midnight(span_from, span_to))
   end
 
   defp project_span_duration(%Interval{} = base, %Tempo{} = c_from, %Duration{} = duration) do
-    with %Tempo{} = from_anchor <- merged_constraint_tempo(base, c_from.time),
-         %Tempo{} = to_anchor <- Math.add(from_anchor, duration) do
-      build_span(from_anchor, to_anchor)
+    with %Tempo{} = span_from <- merged_constraint_tempo(base, c_from.time),
+         %Tempo{} = span_to <- Math.add(span_from, duration) do
+      build_span(span_from, span_to)
     else
       _other -> nil
     end
@@ -591,16 +591,16 @@ defmodule Tempo.Select do
   # `to` does not land after its `from` crossed midnight — its end
   # belongs to the following day. `:same` rolls too: "21:00 to 21:00"
   # reads as a full day, and a zero-extent interval is not a value.
-  defp roll_past_midnight(%Tempo{} = from_anchor, %Tempo{} = to_anchor) do
-    if Compare.compare_endpoints(to_anchor, from_anchor) == :later do
-      to_anchor
+  defp roll_past_midnight(%Tempo{} = span_from, %Tempo{} = span_to) do
+    if Compare.compare_endpoints(span_to, span_from) == :later do
+      span_to
     else
-      Math.add(to_anchor, Duration.build(day: 1))
+      Math.add(span_to, Duration.build(day: 1))
     end
   end
 
-  defp build_span(%Tempo{} = from_anchor, %Tempo{} = to_anchor) do
-    case Interval.new(from: from_anchor, to: to_anchor) do
+  defp build_span(%Tempo{} = span_from, %Tempo{} = span_to) do
+    case Interval.new(from: span_from, to: span_to) do
       {:ok, %Interval{} = interval} -> interval
       _other -> nil
     end
@@ -611,8 +611,8 @@ defmodule Tempo.Select do
   # `:unit` with bounds at the value's own resolution, and merging
   # `day: 10` into an unfilled `[year: 2026]` would produce an
   # ordinal-shaped list no calendar math accepts. Fill to the unit
-  # first (`[year: 2026, month: 1]`), exactly the anchor the walk
-  # itself starts from.
+  # first (`[year: 2026, month: 1]`), exactly the start the walk
+  # itself takes.
   defp merged_constraint_tempo(
          %Interval{from: %Tempo{calendar: calendar} = base_from} = base,
          c_time
@@ -648,7 +648,7 @@ defmodule Tempo.Select do
   # A member the constraint cannot land on is skipped, not an error: that
   # is what selecting across a range means, and it matches RFC 5545 §3.3.10
   # ("invalid dates are ignored") for the same rule expressed as a
-  # recurrence. `Tempo.anchor/2`, which projects onto exactly one year,
+  # recurrence. `Tempo.on/2`, which places the day on exactly one year,
   # still reports the impossible case rather than silently yielding
   # nothing.
   defp validated_projection(%Tempo{calendar: calendar} = merged) do

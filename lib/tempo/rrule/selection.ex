@@ -98,7 +98,7 @@ defmodule Tempo.RRule.Selection do
     # The recurrence's *original* start day rides along as a tagged
     # entry: cadence stepping clamps the candidate's day (Feb 29 →
     # Feb 28 in a common year), and an expansion that repositions the
-    # month must clamp from the day the rule was anchored on, per
+    # month must clamp from the day the rule started on, per
     # occurrence — not from an intermediate clamp. Handlers that
     # don't consume the tag pass it through.
     selection =
@@ -172,7 +172,7 @@ defmodule Tempo.RRule.Selection do
   # and the `within` selectors pick INSIDE each window. `LLL2K2IN/P10DN4K2IN`
   # is "the 2nd Thursday within the ten days from the 2nd Tuesday". The `scope`
   # (e.g. `11M` in US Election Day) is folded into the inner resolution so the
-  # anchor is found in the right context. The window's days are enumerated and
+  # window's start is found in the right context. The window's days are enumerated and
   # the `within` selectors applied at day scope, so a weekday LIMITs to matching
   # days and a position (`I`) picks the Nth of them.
   defp apply_windowed_selection(
@@ -184,19 +184,19 @@ defmodule Tempo.RRule.Selection do
          wkst
        ) do
     inner_selection = scope ++ inner_selection(inner)
-    anchors = apply_selection(candidate, inner_selection, freq)
+    starts = apply_selection(candidate, inner_selection, freq)
 
     # `:origin_day`/`:wkst` are passthrough context, not selectors, so they do
     # not make a window non-terminal.
     case Enum.reject(within, fn {key, _value} -> key in [:origin_day, :wkst] end) do
       [] ->
         # A terminal window (no inner selectors) is itself the occurrence: the
-        # interval from the anchor for the given duration (§12.11.3 Example 1).
-        Enum.map(anchors, fn anchor -> window_interval(anchor, duration) end)
+        # interval from the window's start for the given duration (§12.11.3 Example 1).
+        Enum.map(starts, fn start -> window_interval(start, duration) end)
 
       selectors ->
-        Enum.flat_map(anchors, fn anchor ->
-          anchor
+        Enum.flat_map(starts, fn start ->
+          start
           |> window_days(duration)
           |> apply_window_selectors(selectors, wkst)
         end)
@@ -217,27 +217,27 @@ defmodule Tempo.RRule.Selection do
     end)
   end
 
-  # Each day in the window `[anchor, anchor + duration)` (a negative duration
-  # extends backward), as a day-resolution candidate in the anchor's calendar.
-  # Half-open — `lo` the earlier of anchor and shifted endpoint, `hi` the
-  # later — so a forward duration keeps the anchor and a backward one
+  # Each day in the window `[start, start + duration)` (a negative duration
+  # extends backward), as a day-resolution candidate in the start's calendar.
+  # Half-open — `lo` the earlier of start and shifted endpoint, `hi` the
+  # later — so a forward duration keeps the start and a backward one
   # excludes it. A window within one day (`lo == hi`) is `lo` and the day
   # before, as `Date.range/2` infers for a reversed range: see TODO.md.
   defp window_days(
-         %Interval{from: %Tempo{calendar: calendar, time: time} = from} = anchor,
+         %Interval{from: %Tempo{calendar: calendar, time: time} = from} = start,
          %Tempo.Duration{} = duration
        ) do
-    with {:ok, anchor_date} <- date_of(time, calendar),
+    with {:ok, start_date} <- date_of(time, calendar),
          %Tempo{time: shifted_time} <- Tempo.shift(from, duration),
          {:ok, shifted_date} <- date_of(shifted_time, calendar) do
-      {lo, hi} = window_bounds(anchor_date, shifted_date)
+      {lo, hi} = window_bounds(start_date, shifted_date)
 
       days =
         for date <- window_dates(lo, hi) do
           {date.year, date.month, date.day, date}
         end
 
-      swap_dates(anchor, days)
+      swap_dates(start, days)
     else
       _ -> []
     end
@@ -255,35 +255,35 @@ defmodule Tempo.RRule.Selection do
     end
   end
 
-  # Half-open `[lo, hi)`: `lo` is the earlier of anchor / shifted endpoint, `hi`
-  # the later. A forward duration keeps the anchor; a backward one excludes it.
-  defp window_bounds(%Date{} = anchor_date, %Date{} = shifted_date) do
-    if Date.compare(anchor_date, shifted_date) == :gt do
-      {shifted_date, anchor_date}
+  # Half-open `[lo, hi)`: `lo` is the earlier of start / shifted endpoint, `hi`
+  # the later. A forward duration keeps the start; a backward one excludes it.
+  defp window_bounds(%Date{} = start_date, %Date{} = shifted_date) do
+    if Date.compare(start_date, shifted_date) == :gt do
+      {shifted_date, start_date}
     else
-      {anchor_date, shifted_date}
+      {start_date, shifted_date}
     end
   end
 
-  # The window `[anchor, anchor + duration)` as a single interval occurrence.
+  # The window `[start, start + duration)` as a single interval occurrence.
   defp window_interval(
-         %Interval{from: %Tempo{calendar: calendar, time: time} = from} = anchor,
+         %Interval{from: %Tempo{calendar: calendar, time: time} = from} = start,
          %Tempo.Duration{} = duration
        ) do
-    with {:ok, %Date{} = anchor_date} <- date_of(time, calendar),
+    with {:ok, %Date{} = start_date} <- date_of(time, calendar),
          %Tempo{time: shifted_time} <- Tempo.shift(from, duration),
          {:ok, %Date{} = shifted_date} <- date_of(shifted_time, calendar) do
-      {lo, hi} = window_bounds(anchor_date, shifted_date)
+      {lo, hi} = window_bounds(start_date, shifted_date)
       # Mark it windowed so the recurrence keeps its multi-day span instead of
       # resizing the occurrence down to one resolution unit.
       %{
-        anchor
+        start
         | from: tempo_at_date(from, lo),
           to: tempo_at_date(from, hi),
-          metadata: Map.put(anchor.metadata, :windowed, true)
+          metadata: Map.put(start.metadata, :windowed, true)
       }
     else
-      _ -> anchor
+      _ -> start
     end
   end
 
@@ -611,7 +611,7 @@ defmodule Tempo.RRule.Selection do
   defp no_ordinal_byday_role(:week, _selection), do: {:expand, :week}
   defp no_ordinal_byday_role(_, _), do: :limit
 
-  # BYDAY-with-ordinal period scope (for `nth_kday` anchoring):
+  # BYDAY-with-ordinal period scope (for `nth_kday` counting):
   #
   # * FREQ=MONTHLY → `:month`.
   # * FREQ=YEARLY with BYMONTH present → `:month` (per RFC).
@@ -879,7 +879,7 @@ defmodule Tempo.RRule.Selection do
 
   # Build the week around the candidate's date as seven
   # `{year, month, day, weekday}` tuples in chronological order,
-  # with the week anchored on `wkst` (1..7, Monday=1, default 1): the
+  # with the week starting on `wkst` (1..7, Monday=1, default 1): the
   # `wkst` day on or before the candidate, from `Calendrical.Kday`, and
   # the six days Calendrical gives after it.
   defp week_date_range(%Interval{from: %Tempo{time: time, calendar: calendar}}, wkst) do
@@ -1456,9 +1456,9 @@ defmodule Tempo.RRule.Selection do
          _wkst
        )
        when is_integer(ordinal) do
-    anchor = if ordinal >= 0, do: start_date, else: end_date
+    origin = if ordinal >= 0, do: start_date, else: end_date
 
-    case Kday.nth_kday(anchor, ordinal, weekday) do
+    case Kday.nth_kday(origin, ordinal, weekday) do
       %Date{year: y, month: m, day: d} = d_struct ->
         if date_in_period?(d_struct, start_date, end_date),
           do: [swap_date(candidate, y, m, d)],

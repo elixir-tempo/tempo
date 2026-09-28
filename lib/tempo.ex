@@ -127,9 +127,7 @@ defmodule Tempo do
   alias Tempo.Mask
   alias Tempo.MaterialisationError
   alias Tempo.Math
-  alias Tempo.NonAnchoredError
   alias Tempo.RecurrenceSet.Conditional
-  alias Tempo.RequiresAnchorError
   alias Tempo.ResolutionError
   alias Tempo.Rounding
   alias Tempo.RRule.Encoder
@@ -137,6 +135,7 @@ defmodule Tempo do
   alias Tempo.Split
   alias Tempo.Territory
   alias Tempo.TimeZoneDatabase
+  alias Tempo.UnanchoredError
   alias Tempo.UnboundedRecurrenceError
   alias Tempo.UnknownZoneError
   alias Tempo.Validation
@@ -1509,8 +1508,8 @@ defmodule Tempo do
     `Calendrical.Hebrew`. Defaults to `Calendar.ISO`. A CLDR calendar
     name such as `:hebrew` is not a calendar and returns an error.
 
-  * `:reference_date` is the "today" anchor used for two-digit-year
-    pivoting and partial-date inheritance.
+  * `:reference_date` is the "today" that two-digit years pivot on
+    and partial dates inherit from.
 
   The `:as` option is set to `:map` regardless of any caller-supplied
   value — Tempo always asks Calendrical for the field-map form so it
@@ -2442,7 +2441,7 @@ defmodule Tempo do
   ### Returns
 
   * `:ok` when the offset agrees, or when there is nothing to check (no
-    zone, no explicit offset, or a non-anchored value).
+    zone, no explicit offset, or an unanchored value).
 
   * `{:error, t:Tempo.ZoneOffsetMismatchError.t/0}` on disagreement.
 
@@ -2666,8 +2665,8 @@ defmodule Tempo do
     end
   end
 
-  # Like `anchor/2`, passes through any non-`{:ok, _}` from
-  # `Validation.validate/2`, which dialyzer widens beyond the spec.
+  # Passes through any non-`{:ok, _}` from `Validation.validate/2`,
+  # which dialyzer widens beyond the spec.
   @dialyzer {:nowarn_function, merge: 2}
   @spec merge(t(), t()) :: t() | {:error, error_reason()}
   def merge(%__MODULE__{} = base, %Tempo{} = from) do
@@ -2681,115 +2680,40 @@ defmodule Tempo do
   end
 
   @doc """
-  Place a non-anchored value onto the timeline by supplying its
-  missing higher-order components — a *left-fill*.
+  Place one value on another: the value with a year keeps it, and the
+  other supplies the finer components it lacks.
 
-  `anchor/2` is for a value that cannot yet be located on the
-  timeline because it lacks a year — a bare time-of-day like
-  `~o"T17"` or `~o"T09:30"`. The `reference` supplies the coarser
-  components (year, and month/day as needed) until the value is
-  anchored — see `anchored?/1` for what "anchored" means.
+  `~o"2026-06-15" |> Tempo.at(~o"T17")` reads *"15 June **at** 17:00"*
+  and `~o"T17" |> Tempo.on(~o"2026-06-15")` *"17:00 **on** 15 June"*;
+  both are the same value. The finer side is taken whole, so
+  `~o"2026-06-15T09:30" |> Tempo.at(~o"T17")` is 17:00, not 17:30.
+  When neither value has a year the coarser keeps its components —
+  `~o"3M" |> Tempo.on(~o"2D")` is `~o"3M2D"`, the 2nd of March in any
+  year — and when both have one there is nothing to place. `at/2` and
+  `on/2` are one function, so use the word that reads.
 
-  It is the mirror of `at/2`, which *right-fills* — adding finer
-  components to a value already on the timeline. `time |> anchor(date)`
-  places the time; `date |> at(time)` sets the time.
-
-  ### Arguments
-
-  * `non_anchored` is a non-anchored `t:#{__MODULE__}.t/0` — the
-    value being placed. It flows through the pipe as the subject.
-
-  * `reference` is an anchored `t:#{__MODULE__}.t/0` (carries a
-    year) whose higher-order components fill in the subject's.
-
-  ### Returns
-
-  * A new anchored `t:t/0` — the reference's components coarser
-    than the subject's coarsest, plus the subject's own.
-
-  * `{:error, reason}` when the composed value fails calendar
-    validation.
-
-  ### Raises
-
-  * `ArgumentError` when the subject is already anchored (there is
-    nothing to place — use `at/2` to set finer components), or when
-    `reference` is not anchored (it cannot supply a year).
-
-  ### Examples
-
-      iex> Tempo.anchor(~o"T10:30", ~o"2026-01-04")
-      ~o"2026Y1M4DT10H30M"
-
-  """
-  # `graft/2` passes through any non-`{:ok, _}` return from
-  # `Validation.validate/2`, which dialyzer widens to include
-  # `nil | :undefined`. The spec reflects what the function is
-  # actually contracted to return; suppress the underspecs warning
-  # rather than widening.
-  @dialyzer {:nowarn_function, anchor: 2}
-
-  @spec anchor(t(), t()) :: t() | {:error, error_reason()}
-  def anchor(%__MODULE__{} = non_anchored, %__MODULE__{} = reference) do
-    cond do
-      anchored?(non_anchored) ->
-        raise ArgumentError,
-              "anchor/2: the first argument must be non-anchored (a value to place " <>
-                "on the timeline). Got: #{inspect(non_anchored)}. To set finer " <>
-                "components on an already-anchored value, use at/2."
-
-      not anchored?(reference) ->
-        raise ArgumentError,
-              "anchor/2: the reference (second argument) must be anchored (carry a " <>
-                "year) so it can place the value. Got: #{inspect(reference)}"
-
-      true ->
-        graft(reference, non_anchored)
-    end
-  end
-
-  @doc """
-  Set finer components on a value already located on the timeline —
-  a *right-fill*.
-
-  `at/2` replaces a value's lower-order tail with `addition`,
-  keeping everything coarser untouched. `~o"2026-06-15" |> at(~o"T17")`
-  reads *"June 15th **at** 17:00"*. The whole time-of-day is
-  replaced, so a value that already carried a finer time loses it
-  cleanly rather than merging — `~o"2026-06-15T09:30" |> at(~o"T17")`
-  is `17:00`, not `17:30`.
-
-  It is the mirror of `anchor/2`: `anchor` left-fills an unanchored
-  value with coarser components; `at` right-fills a placed value
-  with finer ones.
-
-  Partial values are first-class, so the subject need not be
-  anchored — `~o"3M" |> at(~o"2D")` is the yearless `~o"3M2D"`
-  ("the 2nd of March, in some year"). When the subject *is*
-  anchored, the composed value is validated against the calendar,
-  so `~o"2026-02" |> at(~o"29D")` fails because 2026 is not a leap
-  year. See `on/2` for the same operation phrased for date units
-  (*on the 2nd*).
+  A value with a year is checked against its calendar, so
+  `~o"2026-02" |> Tempo.on(~o"29D")` is an error: 2026 is not a leap
+  year.
 
   ### Arguments
 
-  * `subject` is the `t:#{__MODULE__}.t/0` being refined — it flows
-    through the pipe.
-
-  * `addition` is a non-anchored `t:#{__MODULE__}.t/0` fragment
-    whose components are grafted onto the subject, replacing any at
-    the same or finer resolution.
+  * `value` and `other` are `t:#{__MODULE__}.t/0` values, at most one
+    of them with a year.
 
   ### Returns
 
-  * `{:ok, tempo}` with the refined value.
+  * `{:ok, tempo}` with the one value placed on the other.
 
-  * `{:error, reason}` when `addition` is anchored, or when an
-    anchored result fails calendar validation.
+  * `{:error, reason}` when both values have a year, or when the
+    result is not a date in its calendar.
 
   ### Examples
 
       iex> Tempo.at(~o"2026-06-15", ~o"T17")
+      {:ok, ~o"2026Y6M15DT17H"}
+
+      iex> Tempo.at(~o"T17", ~o"2026-06-15")
       {:ok, ~o"2026Y6M15DT17H"}
 
       iex> Tempo.at(~o"3M", ~o"2D")
@@ -2799,23 +2723,42 @@ defmodule Tempo do
   @dialyzer {:nowarn_function, at: 2}
 
   @spec at(t(), t()) :: {:ok, t()} | {:error, error_reason()}
-  def at(%__MODULE__{} = subject, %__MODULE__{} = addition) do
-    if anchored?(addition) do
-      {:error,
-       ArgumentError.exception(
-         "at/2: the second argument must be a non-anchored fragment — a bare " <>
-           "time-of-day or day — not an already-anchored value: #{inspect(addition)}."
-       )}
-    else
-      case graft(subject, addition) do
-        %__MODULE__{} = tempo -> {:ok, tempo}
-        error -> error
-      end
+  def at(%__MODULE__{} = value, %__MODULE__{} = other) do
+    place(value, other, anchored?(value), anchored?(other))
+  end
+
+  defp place(value, other, true = _year, true = _other_year) do
+    {:error,
+     ArgumentError.exception(
+       "at/2 and on/2 place a value without a year on one with a year, and both " <>
+         "#{inspect(value)} and #{inspect(other)} have one."
+     )}
+  end
+
+  defp place(value, other, false = _year, true = _other_year), do: placed(graft(other, value))
+  defp place(value, other, true = _year, false = _other_year), do: placed(graft(value, other))
+
+  defp place(value, other, false = _year, false = _other_year) do
+    if leading_key(value) >= leading_key(other),
+      do: placed(graft(value, other)),
+      else: placed(graft(other, value))
+  end
+
+  defp placed(%__MODULE__{} = tempo), do: {:ok, tempo}
+  defp placed(error), do: error
+
+  # How coarse a value's leading unit is; a value with none is the finest.
+  defp leading_key(%__MODULE__{time: [{unit, _value} | _rest]}) do
+    case Unit.fetch_sort_key(unit) do
+      {:ok, key} -> key
+      :error -> -1
     end
   end
 
+  defp leading_key(%__MODULE__{}), do: -1
+
   @doc """
-  Bang variant of `at/2` — returns the refined value or raises.
+  Bang variant of `at/2` — returns the placed value or raises.
 
   ### Examples
 
@@ -2824,8 +2767,8 @@ defmodule Tempo do
 
   """
   @spec at!(t(), t()) :: t()
-  def at!(%__MODULE__{} = subject, %__MODULE__{} = addition) do
-    case at(subject, addition) do
+  def at!(%__MODULE__{} = value, %__MODULE__{} = other) do
+    case at(value, other) do
       {:ok, tempo} -> tempo
       {:error, exception} when is_exception(exception) -> raise exception
       {:error, reason} -> raise ArgumentError, "at!/2 failed: #{inspect(reason)}"
@@ -2833,19 +2776,18 @@ defmodule Tempo do
   end
 
   @doc """
-  Right-fill a value with a fragment — `at/2`, spelled for how
-  English reads dates.
+  Place one value on another — `at/2`, spelled for how English reads
+  a date.
 
-  `at/2` reads naturally for a time-of-day (*"June 15th **at**
-  17:00"*); `on/2` reads naturally for a day (*"March, **on** the
-  2nd"*). They are the same function — interchangeable, both
-  respecting partial values — so pick whichever suits the fragment.
+  `at/2` reads for a time of day (*"15 June **at** 17:00"*) and `on/2`
+  for a day (*"17:00 **on** 15 June"*, *"March, **on** the 2nd"*).
+  They are the same function: the value with a year keeps it, and the
+  other supplies what it lacks.
 
   ### Arguments
 
-  * `subject` is the `t:#{__MODULE__}.t/0` being refined.
-
-  * `addition` is a non-anchored `t:#{__MODULE__}.t/0` fragment.
+  * `value` and `other` are `t:#{__MODULE__}.t/0` values, at most one
+    of them with a year.
 
   ### Returns
 
@@ -2853,16 +2795,19 @@ defmodule Tempo do
 
   ### Examples
 
+      iex> Tempo.on(~o"T17", ~o"2026-06-15")
+      {:ok, ~o"2026Y6M15DT17H"}
+
       iex> Tempo.on(~o"3M", ~o"2D")
       {:ok, ~o"3M2D"}
 
   """
   @spec on(t(), t()) :: {:ok, t()} | {:error, error_reason()}
-  def on(%__MODULE__{} = subject, %__MODULE__{} = addition), do: at(subject, addition)
+  def on(%__MODULE__{} = value, %__MODULE__{} = other), do: at(value, other)
 
   @doc """
-  Bang variant of `on/2` — the `at!/2` spelling for date fragments.
-  See `on/2`.
+  Bang variant of `on/2` — returns the placed value or raises. See
+  `on/2`.
 
   ### Examples
 
@@ -2871,14 +2816,17 @@ defmodule Tempo do
 
   """
   @spec on!(t(), t()) :: t()
-  def on!(%__MODULE__{} = subject, %__MODULE__{} = addition), do: at!(subject, addition)
+  def on!(%__MODULE__{} = value, %__MODULE__{} = other), do: at!(value, other)
 
   # Compose two values along the resolution axis: keep `high_source`'s
   # components strictly coarser than `low_value`'s coarsest, then graft
-  # `low_value` on. Shared engine for `at/2` (subject is the high
-  # source) and `anchor/2` (reference is the high source). Reusing
-  # `merge/2` keeps a single validated path; pre-trimming `high_source`
-  # is what makes it a clean replace rather than a leaky overlay.
+  # `low_value` on. The engine of `at/2`, whose value with a year (or
+  # coarser value) is the high source. Reusing `merge/2` keeps a single
+  # validated path; pre-trimming `high_source` is what makes it a clean
+  # replace rather than a leaky overlay.
+  defp graft(%__MODULE__{} = high_source, %__MODULE__{time: []} = low_value),
+    do: merge(high_source, low_value)
+
   defp graft(%__MODULE__{} = high_source, %__MODULE__{time: [{unit, _value} | _]} = low_value) do
     cutoff = Unit.sort_key(unit)
     trimmed = Enum.filter(high_source.time, fn {other, _v} -> Unit.sort_key(other) > cutoff end)
@@ -3810,7 +3758,7 @@ defmodule Tempo do
 
   @doc """
   Return the current UTC time as a second-resolution `t:t/0`
-  anchored in `Etc/UTC`.
+  in `Etc/UTC`.
 
   Reads from the clock configured under `:ex_tempo, :clock`,
   defaulting to `Tempo.Clock.System`. Tests that need determinism
@@ -4040,8 +3988,8 @@ defmodule Tempo do
   ## ---------------------------------------------------------
 
   @doc """
-  Project a zoned or UTC-anchored Tempo into another IANA time
-  zone, preserving the UTC instant.
+  Project a zoned Tempo — one with a zone or an offset — into
+  another IANA time zone, preserving the UTC instant.
 
   The returned Tempo names the same point on the time line, but the
   wall-clock reading is the one an observer in `target_zone` would
@@ -4081,7 +4029,7 @@ defmodule Tempo do
   def shift_zone(%Tempo{} = tempo, target_zone) when is_binary(target_zone) do
     cond do
       not anchored?(tempo) ->
-        {:error, NonAnchoredError.exception(operation: :shift_zone, value: tempo)}
+        {:error, UnanchoredError.exception(operation: :shift_zone, value: tempo)}
 
       floating?(tempo) ->
         {:error, FloatingTempoError.exception(operation: :shift_zone, value: tempo)}
@@ -4819,10 +4767,10 @@ defmodule Tempo do
 
   * The shifted `t:t/0`.
 
-  * `{:error, %Tempo.RequiresAnchorError{}}` when the value has no
-    `:year` (an un-anchored month/day, bare-day, or time-of-day value)
+  * `{:error, %Tempo.UnanchoredError{}}` when the value has no
+    `:year` (an unanchored month/day, bare-day, or time-of-day value)
     and the shift's result would depend on the missing year. The rule:
-    an un-anchored shift is **computed when its result is invariant to
+    an unanchored shift is **computed when its result is invariant to
     the year, and errors when it isn't** (it never raises). So
     `~o"1M31D"` plus one day is `~o"2M1D"` (January always has 31 days)
     and a whole-year step is a no-op (`~o"1M31D"` plus `P1Y` is
@@ -4852,7 +4800,7 @@ defmodule Tempo do
       iex> Tempo.shift(~o"1M31D", ~o"P1Y")
       ~o"1M31D"
 
-      iex> match?({:error, %Tempo.RequiresAnchorError{}}, Tempo.shift(~o"1M31D", ~o"P1M"))
+      iex> match?({:error, %Tempo.UnanchoredError{}}, Tempo.shift(~o"1M31D", ~o"P1M"))
       true
 
   On the night New York's clocks spring forward, five hours after 23:00
@@ -5017,8 +4965,8 @@ defmodule Tempo do
   ### Arguments
 
   * `value` is a `t:t/0` or `t:Tempo.Interval.t/0`. The value
-    must be anchored (have a year component); non-anchored values
-    raise `Tempo.NonAnchoredError`.
+    must be anchored (have a year component); unanchored values
+    raise `Tempo.UnanchoredError`.
 
   ### Options
 
@@ -5130,7 +5078,7 @@ defmodule Tempo do
     `Tempo.UnboundedSetError`.
 
   * `{:error, reason}` when the input cannot be materialised — a
-    bare `Tempo.Duration` (no anchor), a `Tempo` at a resolution
+    bare `Tempo.Duration` (no start), a `Tempo` at a resolution
     with no finer unit available to bound the span (microsecond
     materialises to a one-microsecond span; only exotic selector
     resolutions have no span), a one-of `Tempo.Set` (epistemic
@@ -5138,7 +5086,7 @@ defmodule Tempo do
     handle the disjunction themselves), a recurrence with no end and
     no `:within` window, or a leftover `:bound` option.
 
-  * `{:error, %Tempo.RequiresAnchorError{}}` when the value has no
+  * `{:error, %Tempo.UnanchoredError{}}` when the value has no
     concrete year and resolving the span would depend on the missing
     one — `~o"X*Y2M28D"` (February is 28 or 29 days), or a yearless
     masked month in a calendar whose month count varies by year.
@@ -5443,7 +5391,7 @@ defmodule Tempo do
          opts
        )
        when is_integer(n) and n > 1 do
-    {from, interval} = fill_selection_anchor(from, interval)
+    {from, interval} = fill_selection_start(from, interval)
     step = if direction == -1, do: negate_duration(duration), else: duration
 
     intervals =
@@ -5479,7 +5427,7 @@ defmodule Tempo do
          } = interval,
          opts
        ) do
-    {from, interval} = fill_selection_anchor(from, interval)
+    {from, interval} = fill_selection_start(from, interval)
 
     intervals =
       from
@@ -5535,7 +5483,7 @@ defmodule Tempo do
          _opts
        )
        when to in [nil, :undefined] do
-    {from, interval} = fill_selection_anchor(from, interval)
+    {from, interval} = fill_selection_start(from, interval)
     step = if direction == -1, do: negate_duration(duration), else: duration
 
     case iterate_recurrence(
@@ -5700,12 +5648,12 @@ defmodule Tempo do
          IntervalEndpointsError.exception(
            interval: interval,
            operation: "materialise a recurrence that has no start",
-           reason: :unanchored
+           reason: :open_start
          )}
 
       within ->
-        case bound_anchor(within, interval) do
-          {:ok, anchor} -> materialise_from_bound(interval, anchor, within, opts)
+        case window_start(within, interval) do
+          {:ok, start} -> materialise_from_bound(interval, start, within, opts)
           {:error, _} = error -> error
         end
     end
@@ -5810,7 +5758,7 @@ defmodule Tempo do
          opts
        ) do
     with {:ok, window_to} <- bound_upper(within),
-         {from, interval} = fill_selection_anchor(from, interval),
+         {from, interval} = fill_selection_start(from, interval),
          intervals =
            iterate_recurrence(
              from,
@@ -5837,55 +5785,55 @@ defmodule Tempo do
   # the start is converted into that calendar first, so the periods are that
   # calendar's and the selection resolves in-calendar, with the window
   # intersection converting back. This makes `R/../P1Y/FL1M1DN[u-ca=persian]`
-  # behave like the calendared-anchor form `R/<persian new year>/P1Y[u-ca=persian]`.
-  defp anchor_in_repeat_calendar(
-         %Tempo{} = anchor,
+  # behave like the form with a calendared start, `R/<persian new year>/P1Y[u-ca=persian]`.
+  defp start_in_repeat_calendar(
+         %Tempo{} = start,
          %Tempo.Interval{
            repeat_rule: %Tempo{calendar: calendar},
            duration: %Tempo.Duration{} = cadence
          }
        )
        when calendar not in [nil, Calendrical.Gregorian, Calendrical.ISOWeek] do
-    with {:ok, %Tempo{} = converted} <- to_calendar(anchor, calendar),
+    with {:ok, %Tempo{} = converted} <- to_calendar(start, calendar),
          %Tempo{} = aligned <- aligned_to_cadence(converted, cadence) do
-      tag_anchor_calendar(aligned, calendar)
+      tag_start_calendar(aligned, calendar)
     else
-      _other -> anchor
+      _other -> start
     end
   end
 
-  defp anchor_in_repeat_calendar(%Tempo{} = anchor, %Tempo.Interval{
+  defp start_in_repeat_calendar(%Tempo{} = start, %Tempo.Interval{
          duration: %Tempo.Duration{} = cadence
        }) do
-    case aligned_to_cadence(anchor, cadence) do
+    case aligned_to_cadence(start, cadence) do
       %Tempo{} = aligned -> aligned
-      _other -> anchor
+      _other -> start
     end
   end
 
-  defp anchor_in_repeat_calendar(%Tempo{} = anchor, _interval), do: anchor
+  defp start_in_repeat_calendar(%Tempo{} = start, _interval), do: start
 
-  # The start of the cadence period an anchor sits in, at the anchor's own
+  # The start of the cadence period a value sits in, at the value's own
   # resolution: 1 April 2026 for a month, 30 March 2026 (its week's Monday) for
   # a week holding 3 April.
-  defp aligned_to_cadence(%Tempo{} = anchor, cadence) do
-    with {unit, _span} <- resolution(anchor),
-         %Tempo{} = period <- at_resolution(anchor, freq_of(cadence)) do
+  defp aligned_to_cadence(%Tempo{} = start, cadence) do
+    with {unit, _span} <- resolution(start),
+         %Tempo{} = period <- at_resolution(start, freq_of(cadence)) do
       at_resolution(period, unit)
     end
   end
 
-  # Attach the calendar's IXDTF `u-ca` identifier to the synthesised anchor's
+  # Attach the calendar's IXDTF `u-ca` identifier to the synthesised start's
   # extended metadata, so each materialised occurrence round-trips as
-  # `[u-ca=tag]` — the same self-describing form a written calendared anchor
+  # `[u-ca=tag]` — the same self-describing form a written calendared start
   # gives its occurrences. A calendar with no faithful identifier is left as is.
-  defp tag_anchor_calendar(%Tempo{} = anchor, calendar) do
+  defp tag_start_calendar(%Tempo{} = start, calendar) do
     case repeat_calendar_tag(calendar) do
       nil ->
-        anchor
+        start
 
       tag ->
-        attach_extended(anchor, %{
+        attach_extended(start, %{
           calendar: tag,
           zone_id: nil,
           zone_offset: nil,
@@ -5951,31 +5899,31 @@ defmodule Tempo do
   # after — so a windowed recurrence also walks as many periods either side of
   # the window as the §12.10 window can reach across, and keeps the occurrences
   # that overlap the window.
-  defp materialise_from_bound(interval, anchor, within, opts) do
+  defp materialise_from_bound(interval, start, within, opts) do
     case window_periods(interval) do
       {0, 0} ->
-        %{interval | from: anchor_in_repeat_calendar(anchor, interval)}
+        %{interval | from: start_in_repeat_calendar(start, interval)}
         |> to_interval(opts)
         |> filter_to_bound_window(interval, within)
 
       periods ->
-        materialise_windowed(interval, anchor, within, periods, opts)
+        materialise_windowed(interval, start, within, periods, opts)
     end
   end
 
   defp materialise_windowed(
          %Tempo.Interval{duration: cadence} = interval,
-         anchor,
+         start,
          within,
          {periods_before, periods_after},
          opts
        ) do
     with {:ok, window_to} <- bound_upper(within) do
-      widened_from = add_n_durations(anchor, negate_duration(cadence), periods_before)
+      widened_from = add_n_durations(start, negate_duration(cadence), periods_before)
       widened_to = add_n_durations(window_to, cadence, periods_after)
       widened = %Tempo.Interval{from: widened_from, to: widened_to}
 
-      %{interval | from: anchor_in_repeat_calendar(widened_from, interval)}
+      %{interval | from: start_in_repeat_calendar(widened_from, interval)}
       |> to_interval(Keyword.put(opts, :within, widened))
       |> keep_occurrences_in_window({bound_lower(within), window_to})
     end
@@ -6055,8 +6003,8 @@ defmodule Tempo do
   # `tempo + (n × duration)` in one call, not `n` successive
   # `+ duration` calls.
   #
-  # Scalar vs iterative matters when the anchor hits a
-  # calendar-clamped day. DTSTART = 2020-02-29 with cadence
+  # Scalar vs iterative matters when the start is a day the
+  # calendar clamps. DTSTART = 2020-02-29 with cadence
   # `year: 1`:
   #
   # * Iterative (+1y then +1y then +1y then +1y): the first step
@@ -6229,9 +6177,9 @@ defmodule Tempo do
     end
   end
 
-  # The day the recurrence was anchored on — DTSTART's day-of-month —
+  # The day the recurrence started on — DTSTART's day-of-month —
   # which cadence stepping may have clamped away on individual
-  # candidates (Feb 29 anchors step to Feb 28 in common years).
+  # candidates (a start on 29 February steps to the 28th in common years).
   defp origin_day_of(%Tempo.Interval{from: %Tempo{time: time}}) do
     case Keyword.get(time, :day) do
       day when is_integer(day) -> day
@@ -6420,38 +6368,38 @@ defmodule Tempo do
   # window: the window's lower endpoint, taken at the resolution the
   # recurrence's selection names — day for `FL6M1K2IN` ("the 2nd Monday
   # of June"), month for `FL6MN` ("June"), hour for a time-of-day rule.
-  # Anchoring at that grain (rather than always a day) is what lets a
-  # coarse selection yield a coarse occurrence; the bound already says
-  # where the window starts, so a separate `:anchor` would be redundant.
-  defp bound_anchor(bound, %Tempo.Interval{} = interval) do
+  # Starting at that grain (rather than always a day) is what lets a
+  # coarse selection yield a coarse occurrence; the window already says
+  # where it starts, so a separate start option would be redundant.
+  defp window_start(bound, %Tempo.Interval{} = interval) do
     case to_interval_set(bound) do
-      {:ok, %Tempo.IntervalSet{} = set} -> bound_anchor_from_set(set, anchor_unit(interval))
+      {:ok, %Tempo.IntervalSet{} = set} -> window_start_from_set(set, start_unit(interval))
       {:error, _} = err -> err
     end
   end
 
-  # An explicit anchor coarser than the grain its selection names —
-  # `R/2020Y/P4Y/FL11M3DN`, a year anchoring a day selection — is filled down to
-  # that grain (2020-01-01) before the recurrence walks from it, as an unanchored
-  # recurrence's bound anchor is; otherwise the selection would expand days within
-  # a year that names no month. An anchor at or finer than the grain is left
-  # exactly as written.
-  defp fill_selection_anchor(
+  # A written start coarser than the grain its selection names —
+  # `R/2020Y/P4Y/FL11M3DN`, a year starting a day selection — is filled down to
+  # that grain (2020-01-01) before the recurrence walks from it, as the window
+  # start of a recurrence with an open start is; otherwise the selection would
+  # expand days within a year that names no month. A start at or finer than the
+  # grain is left exactly as written.
+  defp fill_selection_start(
          %Tempo{} = from,
          %Tempo.Interval{repeat_rule: %Tempo{time: [selection: [_ | _]]}} = interval
        ) do
-    unit = anchor_unit(interval)
+    unit = start_unit(interval)
 
     with {from_unit, _span} <- resolution(from),
          true <- coarser_unit?(from_unit, unit),
-         {:ok, %Tempo{} = filled} <- anchor_at_unit(from, unit) do
+         {:ok, %Tempo{} = filled} <- start_at_unit(from, unit) do
       {filled, %{interval | from: filled}}
     else
       _other -> {from, interval}
     end
   end
 
-  defp fill_selection_anchor(from, interval), do: {from, interval}
+  defp fill_selection_start(from, interval), do: {from, interval}
 
   defp coarser_unit?(unit_1, unit_2) do
     case {Unit.fetch_sort_key(unit_1), Unit.fetch_sort_key(unit_2)} do
@@ -6460,16 +6408,16 @@ defmodule Tempo do
     end
   end
 
-  defp bound_anchor_from_set(set, unit) do
+  defp window_start_from_set(set, unit) do
     case IntervalSet.first(set) do
-      %Tempo.Interval{from: %Tempo{} = from} -> anchor_at_unit(from, unit)
+      %Tempo.Interval{from: %Tempo{} = from} -> start_at_unit(from, unit)
       _ -> {:error, empty_bound_error()}
     end
   end
 
-  defp anchor_at_unit(%Tempo{} = from, :day) do
+  defp start_at_unit(%Tempo{} = from, :day) do
     case at_resolution(from, :day) do
-      %Tempo{} = anchor -> {:ok, anchor}
+      %Tempo{} = start -> {:ok, start}
       {:error, _} = error -> error
     end
   end
@@ -6479,42 +6427,42 @@ defmodule Tempo do
   # the calendar axis — falls back to the day floor rather than failing.
   # Day is reachable from every value, so the recurrence still
   # materialises (at day grain) instead of erroring.
-  defp anchor_at_unit(%Tempo{} = from, unit) do
+  defp start_at_unit(%Tempo{} = from, unit) do
     case at_resolution(from, unit) do
-      %Tempo{} = anchor -> {:ok, anchor}
-      {:error, _} -> anchor_at_unit(from, :day)
+      %Tempo{} = start -> {:ok, start}
+      {:error, _} -> start_at_unit(from, :day)
     end
   end
 
-  # The grain to anchor a recurrence at: the finest unit its selection
+  # The grain a recurrence starts at: the finest unit its selection
   # names, mapped onto the calendar axis (a weekday or ordinal selects a
   # *day*). With no selection, the day floor keeps a plain cadence
   # (`R/../P1D`) walking days.
-  defp anchor_unit(%Tempo.Interval{repeat_rule: %Tempo{time: [selection: selection]}})
+  defp start_unit(%Tempo.Interval{repeat_rule: %Tempo{time: [selection: selection]}})
        when selection != [] do
     # The finest unit is the last selection component (they are written
     # coarse-to-fine). Read it straight from the AST rather than through
     # `resolution/1`, whose declared `time_unit()` return elides the
     # selection-only keys (`:byday`, `:day_of_week`) this must normalise.
     {finest_unit, _value} = List.last(selection)
-    calendar_anchor_unit(finest_unit)
+    calendar_start_unit(finest_unit)
   end
 
-  defp anchor_unit(%Tempo.Interval{}), do: :day
+  defp start_unit(%Tempo.Interval{}), do: :day
 
-  # A week-of-year selection anchors on its enclosing year (a dayless
+  # A week-of-year selection starts from its enclosing year (a dayless
   # year value), not the week axis: `at_resolution/2` has no path from a
   # calendar year to a week, and the week expander builds the week from
-  # the candidate's year. The dayless anchor is also what marks the
+  # the candidate's year. The dayless start is also what marks the
   # selection as native (a whole week), distinct from RRULE `BYWEEKNO`,
   # whose `DTSTART` day expands the week to its seven days.
-  defp calendar_anchor_unit(week) when week in [:week, :calendar_week], do: :year
+  defp calendar_start_unit(week) when week in [:week, :calendar_week], do: :year
 
-  defp calendar_anchor_unit(unit)
+  defp calendar_start_unit(unit)
        when unit in [:byday, :day_of_week, :day_of_year, :instance, :event],
        do: :day
 
-  defp calendar_anchor_unit(unit), do: unit
+  defp calendar_start_unit(unit), do: unit
 
   defp empty_bound_error do
     UnboundedRecurrenceError.exception(
@@ -6544,7 +6492,7 @@ defmodule Tempo do
     case find_non_contiguous_mask(time, [], calendar) do
       nil -> {:ok, tempo}
       {new_time} -> {:ok, %{tempo | time: new_time}}
-      {:error, :requires_anchor} -> {:error, RequiresAnchorError.exception(value: tempo)}
+      {:error, :unanchored} -> {:error, UnanchoredError.exception(value: tempo)}
     end
   end
 
@@ -6570,7 +6518,7 @@ defmodule Tempo do
     case Mask.valid_values(unit, mask, prefix, calendar) do
       {:ok, [single]} -> {prefix ++ [{unit, single}] ++ rest}
       {:ok, many} -> {prefix ++ [{unit, many}] ++ rest}
-      {:error, :requires_anchor} = error -> error
+      {:error, :unanchored} = error -> error
     end
   end
 
@@ -7444,7 +7392,7 @@ defmodule Tempo do
   failure and report it — analogous to Gleam's `list.try_map` or a Rust
   `collect::<Result<_, _>>()`. `fun` returns a plain Tempo value (exactly
   as for `map/2`); the error is the first result that `Tempo.to_interval/1`
-  rejects (an unbounded, non-anchored, or otherwise un-materialisable
+  rejects (an unbounded, unanchored, or otherwise un-materialisable
   value), so a partially-resolvable set never yields a partial result.
 
   ### Arguments
@@ -7492,10 +7440,10 @@ defmodule Tempo do
   defp materialise_value(%Tempo{} = tempo) do
     # `X*Y2M28D` is "28 February of an unspecified year", and whether the
     # next day is the 29th or 1 March depends on which year. The stepper
-    # reports that as `{:error, :requires_anchor}`; name the value here,
+    # reports that as `{:error, :unanchored}`; name the value here,
     # where it is still in scope.
     case do_to_interval(tempo) do
-      {:error, :requires_anchor} -> {:error, RequiresAnchorError.exception(value: tempo)}
+      {:error, :unanchored} -> {:error, UnanchoredError.exception(value: tempo)}
       {:error, :grouped_component} -> {:error, materialisation_error(tempo, :grouped_component)}
       other -> other
     end
@@ -7532,10 +7480,10 @@ defmodule Tempo do
   # filled down to the grain the selection names, as the one candidate the
   # selection resolves in.
   defp member_selection(%Tempo{} = member, rule, cadence) do
-    {anchor, recurrence} =
-      fill_selection_anchor(member, %Tempo.Interval{from: member, repeat_rule: rule})
+    {start, recurrence} =
+      fill_selection_start(member, %Tempo.Interval{from: member, repeat_rule: rule})
 
-    %Tempo.Interval{from: anchor, to: Math.add(anchor, cadence)}
+    %Tempo.Interval{from: start, to: Math.add(start, cadence)}
     |> Selection.apply(rule, freq_of(cadence), origin_day: origin_day_of(recurrence))
     |> resize_selected_occurrences(true)
   end
@@ -8057,7 +8005,7 @@ defmodule Tempo do
 
   * `{:ok, duration}` where `duration` is a `t:Tempo.Duration.t/0`.
 
-  * `{:error, reason}` when an endpoint is non-anchored, the
+  * `{:error, reason}` when an endpoint is unanchored, the
     endpoints are of incompatible calendars, or `from` is not
     strictly earlier than `to`.
 
@@ -8083,10 +8031,10 @@ defmodule Tempo do
   def duration(%__MODULE__{} = from, %__MODULE__{} = to) do
     cond do
       not anchored?(from) ->
-        {:error, NonAnchoredError.exception(operation: :duration, value: from)}
+        {:error, UnanchoredError.exception(operation: :duration, value: from)}
 
       not anchored?(to) ->
-        {:error, NonAnchoredError.exception(operation: :duration, value: to)}
+        {:error, UnanchoredError.exception(operation: :duration, value: to)}
 
       floating?(from) != floating?(to) ->
         floating = if floating?(from), do: from, else: to
@@ -8835,7 +8783,7 @@ defmodule Tempo do
   ### Arguments
 
   * `tempo` is a `t:t/0` that denotes a single day; a coarser or
-    non-anchored value raises `ArgumentError`.
+    unanchored value raises `ArgumentError`.
 
   * `territory` is resolved through `Tempo.Territory.resolve/1` and sets
     which days are the weekend.

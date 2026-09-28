@@ -228,18 +228,18 @@ Enum.map(2026..2032, anzac_day)
 ```elixir
 birthday = ~o"4M3D"
 
-Tempo.anchor(birthday, ~o"2026")
+Tempo.on(birthday, ~o"2026")
 ```
 
 ## Project it when you need a point on the line
 
-* The year arrives later, from the question being asked — not from the fact. Anchor it onto one year, or onto a decade, and it becomes an ordinary Tempo value that every other operation already understands.
+* The year arrives later, from the question being asked — not from the fact. Place it on one year, or on each year of a decade, and it becomes an ordinary Tempo value that every other operation already understands.
 
 <!-- slide: code -->
 
 ```elixir
 ~o"{2026..2035}Y"
-|> Enum.map(&Tempo.anchor(birthday, &1))
+|> Enum.map(&Tempo.on!(birthday, &1))
 |> Enum.filter(&Tempo.weekend?(&1, :AU))
 ```
 
@@ -256,7 +256,7 @@ Tempo.anchor(birthday, ~o"2026")
 <!-- slide: code -->
 
 ```elixir
-{Tempo.anchor(~o"2M29D", ~o"2027"), Tempo.anchor(~o"2M29D", ~o"2028")}
+{Tempo.on(~o"2M29D", ~o"2027"), Tempo.on(~o"2M29D", ~o"2028")}
 ```
 
 *"29 is not valid. The valid values are 1..28"* — and 2028 is fine. The value was always correct; only its projection onto a particular year can fail, and it fails loudly.

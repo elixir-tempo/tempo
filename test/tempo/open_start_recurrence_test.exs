@@ -1,4 +1,4 @@
-defmodule Tempo.UnanchoredRecurrenceTest do
+defmodule Tempo.OpenStartRecurrenceTest do
   use ExUnit.Case, async: true
 
   import Tempo.Sigils
@@ -11,7 +11,7 @@ defmodule Tempo.UnanchoredRecurrenceTest do
   alias Tempo.RRule
   alias Tempo.UnboundedRecurrenceError
 
-  # `RRule.parse/2` without a `:from` anchor yields a recurrence
+  # `RRule.parse/2` without a `:from` start yields a recurrence
   # with no endpoints at all — `~o"R/../P1W/FL1KN"`, "every Monday"
   # beginning nowhere. It reached set algebra as a value that looked
   # ordinary and crashed several frames down, in code that could no
@@ -22,13 +22,13 @@ defmodule Tempo.UnanchoredRecurrenceTest do
   # recognised, so the second walked straight past the gate.
 
   setup do
-    {:ok, unanchored} = RRule.parse("FREQ=WEEKLY;BYDAY=MO", [])
+    {:ok, open_start} = RRule.parse("FREQ=WEEKLY;BYDAY=MO", [])
     {:ok, dtstart} = Tempo.from_iso8601("2026-06-01T09:00:00")
-    {:ok, anchored} = RRule.parse("FREQ=WEEKLY;BYDAY=MO", from: dtstart)
+    {:ok, with_start} = RRule.parse("FREQ=WEEKLY;BYDAY=MO", from: dtstart)
 
     %{
-      unanchored: unanchored,
-      anchored: anchored,
+      open_start: open_start,
+      with_start: with_start,
       window: ~o"2026Y6M1D/7M1D"
     }
   end
@@ -39,7 +39,7 @@ defmodule Tempo.UnanchoredRecurrenceTest do
       # Materialising it into June 2026 yields that month's five Mondays,
       # and the window's half-open end keeps the following Monday out.
       assert {:ok, %IntervalSet{} = set} =
-               Tempo.to_interval(context.unanchored, within: context.window)
+               Tempo.to_interval(context.open_start, within: context.window)
 
       assert IntervalSet.count(set) == 5
       assert Interval.from(IntervalSet.first(set)) == ~o"2026Y6M1D"
@@ -49,7 +49,7 @@ defmodule Tempo.UnanchoredRecurrenceTest do
       # The same recurrence, a decade-wide window: the window is the
       # extent to walk, so it materialises every Monday it spans.
       assert {:ok, %IntervalSet{} = set} =
-               Tempo.to_interval(context.unanchored, within: ~o"2020Y/2030Y")
+               Tempo.to_interval(context.open_start, within: ~o"2020Y/2030Y")
 
       assert IntervalSet.count(set) > 500
     end
@@ -59,9 +59,9 @@ defmodule Tempo.UnanchoredRecurrenceTest do
       # an open start has neither a start nor a stop, so it stays a clean
       # refusal rather than an open-ended walk.
       assert {:error, %IntervalEndpointsError{} = error} =
-               Tempo.to_interval(context.unanchored)
+               Tempo.to_interval(context.open_start)
 
-      assert error.reason == :unanchored
+      assert error.reason == :open_start
     end
 
     test "the window may be given at any resolution — year, month or day" do
@@ -98,13 +98,13 @@ defmodule Tempo.UnanchoredRecurrenceTest do
     test "it returns the materialised set, never the rule itself", context do
       # A materialised recurrence is the set of its occurrences — never
       # the rule handed straight back as though it had been expanded.
-      refute Tempo.to_interval(context.unanchored, within: context.window) ==
-               {:ok, context.unanchored}
+      refute Tempo.to_interval(context.open_start, within: context.window) ==
+               {:ok, context.open_start}
     end
 
-    test "an anchored recurrence still materialises", context do
+    test "a recurrence with a start still materialises", context do
       assert {:ok, %IntervalSet{} = set} =
-               Tempo.to_interval(context.anchored, within: context.window)
+               Tempo.to_interval(context.with_start, within: context.window)
 
       assert IntervalSet.count(set) == 5
     end
@@ -154,7 +154,7 @@ defmodule Tempo.UnanchoredRecurrenceTest do
       assert starts(set) == ["2026Y12M25D"]
     end
 
-    test "an anchored recurrence's expanded days stop at the window's end" do
+    test "a recurrence with a start stops expanding its days at the window's end" do
       assert {:ok, set} =
                Tempo.to_interval(~o"R/2026-12-28/P1W/FL{1..7}KN",
                  within: ~o"2026-12-20/2027-01-09"
@@ -184,26 +184,26 @@ defmodule Tempo.UnanchoredRecurrenceTest do
   describe "set operations reject rather than crash" do
     test "intersection, in either argument order", context do
       assert {:error, %IntervalEndpointsError{}} =
-               Tempo.intersection(context.unanchored, context.window)
+               Tempo.intersection(context.open_start, context.window)
 
       assert {:error, %IntervalEndpointsError{}} =
-               Tempo.intersection(context.window, context.unanchored)
+               Tempo.intersection(context.window, context.open_start)
     end
 
     test "union and difference", context do
       assert {:error, %IntervalEndpointsError{}} =
-               Tempo.union(context.unanchored, context.window)
+               Tempo.union(context.open_start, context.window)
 
       assert {:error, %IntervalEndpointsError{}} =
-               Tempo.difference(context.window, context.unanchored)
+               Tempo.difference(context.window, context.open_start)
 
       assert {:error, %IntervalEndpointsError{}} =
-               Tempo.difference(context.unanchored, context.window)
+               Tempo.difference(context.open_start, context.window)
     end
 
     test "it is the same kind of failure open-ended ISO intervals already gave", context do
-      # `2020Y/..` and an unanchored recurrence are the same kind of
-      # problem — an endpoint that is not there — so they raise the
+      # `2020Y/..` and a recurrence with an open start are the same kind
+      # of problem — an endpoint that is not there — so they raise the
       # same exception type rather than two unrelated ones. The
       # `operation` differs because they are caught at different
       # points: the recurrence cannot even be materialised, while the
@@ -212,21 +212,21 @@ defmodule Tempo.UnanchoredRecurrenceTest do
                Tempo.intersection(~o"2020Y/..", ~o"2020Y/2025Y")
 
       assert {:error, %IntervalEndpointsError{}} =
-               Tempo.intersection(context.unanchored, context.window)
+               Tempo.intersection(context.open_start, context.window)
     end
 
-    test "an anchored but infinite recurrence gets its own diagnosis", context do
-      # Anchored is not the same as bounded. An infinite recurrence
-      # with a start still needs materialising against a bound before
-      # set algebra, and Tempo already says so — the point here is
-      # that the two cases stay distinguishable rather than collapsing
-      # into one vague failure.
+    test "a recurrence with a start but no end gets its own diagnosis", context do
+      # Having a start is not the same as being bounded. An infinite
+      # recurrence with a start still needs materialising in a window
+      # before set algebra, and Tempo already says so — the point here
+      # is that the two cases stay distinguishable rather than
+      # collapsing into one vague failure.
       assert {:error, %UnboundedRecurrenceError{}} =
-               Tempo.intersection(context.anchored, context.window)
+               Tempo.intersection(context.with_start, context.window)
     end
 
-    test "an anchored recurrence intersects once materialised", context do
-      {:ok, materialised} = Tempo.to_interval(context.anchored, within: context.window)
+    test "a recurrence with a start intersects once materialised", context do
+      {:ok, materialised} = Tempo.to_interval(context.with_start, within: context.window)
 
       assert {:ok, %IntervalSet{} = set} =
                Tempo.intersection(materialised, context.window)

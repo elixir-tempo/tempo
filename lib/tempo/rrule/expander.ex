@@ -7,7 +7,7 @@ defmodule Tempo.RRule.Expander do
 
   The iCalendar `RRULE`, ISO 8601-2 recurring intervals
   (`R5/DTSTART/P1D`), and hand-built `Tempo.RRule.Rule` structs
-  all express the same thing: a recurrence anchored at a point
+  all express the same thing: a recurrence that starts at a point
   in time, repeated at a cadence, optionally filtered by BY-rule
   selections. Tempo's `%Tempo.Interval{}` struct already has
   every field needed to represent this shape: `recurrence`,
@@ -53,7 +53,7 @@ defmodule Tempo.RRule.Expander do
     * `%ICal.Recurrence{}` — mapped via `from_ical_recurrence/1`
       (only when the `ical` library is loadable).
 
-  * `dtstart` is a `t:Tempo.t/0` anchor for the first occurrence.
+  * `dtstart` is the start of the first occurrence, a `t:Tempo.t/0`.
 
   ### Options
 
@@ -111,7 +111,7 @@ defmodule Tempo.RRule.Expander do
   end
 
   @doc """
-  Convert a `%Tempo.RRule.Rule{}` (plus an anchor) to the
+  Convert a `%Tempo.RRule.Rule{}` (plus its start) to the
   canonical `%Tempo.Interval{}` AST.
 
   The AST has the same shape as `Tempo.RRule.parse/2`'s output
@@ -122,7 +122,7 @@ defmodule Tempo.RRule.Expander do
 
   * `rule` is a `%Tempo.RRule.Rule{}`.
 
-  * `dtstart` is a `%Tempo{}` anchor for the first occurrence.
+  * `dtstart` is the start of the first occurrence, a `%Tempo{}`.
 
   ### Options
 

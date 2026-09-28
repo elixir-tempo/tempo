@@ -8,11 +8,11 @@ defmodule Tempo.Schedule.Slot do
   (the latest it can begin and end without making the plan infeasible).
   A task is on the **critical path** when its early and late starts
   coincide — it has zero slack, so any slip delays the whole project (a
-  task pinned by an anchor counts: it cannot move at all).
+  task with a fixed start counts: it cannot move at all).
 
   The late schedule and `critical?` are determined only when something
-  bounds how late the task can run — a deadline downstream, or an anchor
-  on the task itself. When nothing does, `latest_start`/`latest_finish`
+  bounds how late the task can run — a deadline downstream, or a fixed
+  start on the task itself. When nothing does, `latest_start`/`latest_finish`
   and `critical?` are `nil`: the early start is known, but the task's
   latest position is open.
 

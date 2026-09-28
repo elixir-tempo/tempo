@@ -154,7 +154,7 @@ defmodule Tempo.Validation do
   # anchored (a year is present) and fully concrete (no mask, group,
   # range, or set). This leaves two legitimate shapes untouched:
   #
-  #   * Non-anchored time-of-day intervals, where `from > to` is the
+  #   * Unanchored time-of-day intervals, where `from > to` is the
   #     representation of a midnight-crossing span (`T22/T02`).
   #
   #   * EDTF reduced-precision and masked intervals

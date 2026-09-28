@@ -67,8 +67,8 @@ defmodule Tempo.Explain.Test do
       assert Explain.explain(~o"T10:30").kind == :time_of_day
     end
 
-    test "mentions the non-anchored nature" do
-      assert Tempo.explain(~o"T10:30") =~ "non-anchored"
+    test "mentions the unanchored nature" do
+      assert Tempo.explain(~o"T10:30") =~ "unanchored"
     end
   end
 
@@ -80,10 +80,10 @@ defmodule Tempo.Explain.Test do
   end
 
   describe "Tempo.Duration" do
-    test "classified :duration with no anchor hint" do
+    test "classified :duration with a hint that it has no place on the time line" do
       exp = Explain.explain(~o"P1Y2M")
       assert exp.kind == :duration
-      assert Tempo.explain(~o"P1Y2M") =~ "no anchor"
+      assert Tempo.explain(~o"P1Y2M") =~ "no place on the time line"
     end
 
     test "reads in human units" do
@@ -125,7 +125,7 @@ defmodule Tempo.Explain.Test do
       assert prose =~ "in November, on the 2nd–8th, on a Tuesday"
     end
 
-    test "an unanchored recurrence explains its selection and names what is missing" do
+    test "a recurrence with an open start explains its selection and names what is missing" do
       # `R/../…` has no start at all. Two sentinels spell "no endpoint" —
       # `:undefined` from the ISO 8601 parser and `nil` from the RRULE
       # parser — and only the first was recognised, so a fully described
@@ -137,13 +137,13 @@ defmodule Tempo.Explain.Test do
       assert prose =~ "unbounded recurrence"
       assert prose =~ "in November, on the 4th Thursday"
       assert prose =~ "1 year"
-      assert prose =~ "unanchored"
+      assert prose =~ "Starting: open"
       refute prose =~ "unusual shape"
     end
 
-    test "an unanchored recurrence materialises into a bound and the hint says so" do
-      # A bound is the window to materialise into: "every Monday" bounded
-      # to 2026 lists that year's 52 Mondays, and the explain hint points
+    test "a recurrence with an open start materialises into a window and the hint says so" do
+      # A window is where to materialise: "every Monday" within 2026
+      # lists that year's 52 Mondays, and the explain hint points
       # at exactly that path.
       assert {:ok, %IntervalSet{} = set} =
                Tempo.to_interval(~o"R/../P1W/FL1KN", within: ~o"2026Y")
@@ -165,16 +165,16 @@ defmodule Tempo.Explain.Test do
       assert {:ok, %Tempo.Interval{}} = Tempo.to_interval(~o"X*Y12M31D")
     end
 
-    test "an unspecified year reports the anchor it needs when the answer depends on one" do
+    test "an unspecified year reports the year it needs when the answer depends on one" do
       # February's length does depend on the year, so this is the case
-      # `RequiresAnchorError` exists for — an error, not a guess.
-      assert {:error, %Tempo.RequiresAnchorError{}} = Tempo.to_interval(~o"X*Y2M28D")
+      # `UnanchoredError` exists for — an error, not a guess.
+      assert {:error, %Tempo.UnanchoredError{}} = Tempo.to_interval(~o"X*Y2M28D")
     end
 
     test "a yearless masked month resolves against the calendar's own month count" do
       # `XX-15` is "the 15th of any month" with no year at all.
       # `Keyword.fetch!(previous, :year)` raised a bare KeyError; the
-      # un-anchored calendar callback answers it exactly for Gregorian.
+      # unanchored calendar callback answers it exactly for Gregorian.
       assert {:ok, set} = Tempo.to_interval(~o"XX-15")
       assert IntervalSet.count(set) == 12
 
@@ -182,12 +182,12 @@ defmodule Tempo.Explain.Test do
       assert Tempo.explain(~o"XX-15") =~ "12 disjoint intervals"
     end
 
-    test "a yearless masked month needs an anchor where the month count varies" do
+    test "a yearless masked month needs a year where the month count varies" do
       # A Hebrew leap year has 13 months, so "any month" is genuinely
       # unanswerable without knowing the year.
       hebrew = Tempo.from_iso8601!("XX-15", Calendrical.Hebrew)
 
-      assert {:error, %Tempo.RequiresAnchorError{}} = Tempo.to_interval(hebrew)
+      assert {:error, %Tempo.UnanchoredError{}} = Tempo.to_interval(hebrew)
     end
 
     test "a start-and-duration interval is described, not called an unusual shape" do
@@ -226,12 +226,12 @@ defmodule Tempo.Explain.Test do
       assert Tempo.explain(~o"R1/2026-01-01/P1Y") =~ "start and a duration"
     end
 
-    test "a counted but unanchored recurrence is explained the same way" do
+    test "a counted recurrence with an open start is explained the same way" do
       prose = Tempo.explain(~o"R5/../P1Y/FL5M1K-1IN")
 
       assert prose =~ "recurrence of 5 occurrences"
       assert prose =~ "in May, on the last Monday"
-      assert prose =~ "unanchored"
+      assert prose =~ "Starting: open"
     end
   end
 
@@ -388,13 +388,13 @@ defmodule Tempo.Explain.Test do
       assert Enum.any?(parts, fn {tag, _text} -> tag == :margin end)
     end
 
-    test "a non-anchored margin states the margin without an uncomputable span" do
-      non_anchored = %Tempo{
+    test "an unanchored margin states the margin without an uncomputable span" do
+      unanchored = %Tempo{
         time: [month: {6, [margin_of_error: 1]}],
         calendar: Calendrical.Gregorian
       }
 
-      explanation = Tempo.explain(non_anchored)
+      explanation = Tempo.explain(unanchored)
 
       assert explanation =~ "Margin: ±1 month."
       refute explanation =~ "groundings span"

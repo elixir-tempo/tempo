@@ -30,7 +30,7 @@ Tempo puts each concern in its own field on `%Tempo.Interval{}`:
 | Count | `:recurrence` (integer or `:infinity`) | `R<n>/...` | `COUNT=<n>` |
 | Until | `:to` (`%Tempo{}` or `:undefined` or `nil`) | `...<to>/...` | `UNTIL=<date>` |
 | Selection | `:repeat_rule` (`%Tempo{time: [selection: [...]]}`) | `/F<rule>` or inline `L…N` | `BY*` rules |
-| Anchor | `:from` (`%Tempo{}`) | `<from>/...` | `DTSTART` (not in RRULE itself) |
+| Start | `:from` (`%Tempo{}`) | `<from>/...` | `DTSTART` (not in RRULE itself) |
 
 The token-level selection shape — `{:selection, [unit: value_or_list, ...]}` — is **byte-for-byte identical** whether it comes from parsing `L4KN` in ISO 8601-2 or `BYDAY=4TH` in RRULE. That shared shape is what makes `Tempo.to_rrule/1` and `Tempo.to_iso8601/1` both possible without any format-specific intermediate.
 

@@ -55,7 +55,7 @@ defmodule Tempo.Format do
   alias Tempo.Interval.Steps
   alias Tempo.IntervalSet
   alias Tempo.Math
-  alias Tempo.NonAnchoredError
+  alias Tempo.UnanchoredError
 
   @doc """
   Format a Tempo, Interval, or IntervalSet as a locale-aware
@@ -159,7 +159,7 @@ defmodule Tempo.Format do
 
   defp render_relative(%Tempo{} = tempo, options) do
     unless Tempo.anchored?(tempo) do
-      raise NonAnchoredError.exception(
+      raise UnanchoredError.exception(
               operation: :to_relative_string,
               value: tempo
             )
@@ -207,7 +207,7 @@ defmodule Tempo.Format do
   ## ---------------------------------------------------------
 
   # Rule B: year and month expand; day, hour, minute, second, and
-  # non-anchored values collapse. A non-anchored Tempo has no
+  # unanchored values collapse. An unanchored Tempo has no
   # enumeration start in interval terms — we fall through to the
   # single-value path which routes to Localize.Time.
   defp expand_as_closed_interval?(unit, tempo, options)
@@ -389,7 +389,7 @@ defmodule Tempo.Format do
 
   # A Tempo is date-only when its time kv list contains none of
   # :hour, :minute, :second. It is time-only when it contains
-  # none of :year, :month, :day (i.e. non-anchored). Otherwise
+  # none of :year, :month, :day (i.e. unanchored). Otherwise
   # it's a datetime.
   defp date_only?(%Tempo{time: time}) do
     Keyword.has_key?(time, :year) and

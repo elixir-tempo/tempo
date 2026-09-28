@@ -57,10 +57,10 @@ defmodule Tempo.ShiftZoneTest do
                Tempo.shift_zone(floating, "Europe/Paris")
     end
 
-    test "rejects a non-anchored Tempo" do
+    test "rejects an unanchored Tempo" do
       non_anchored = %Tempo{time: [hour: 10, minute: 30, second: 0]}
 
-      assert {:error, %Tempo.NonAnchoredError{operation: :shift_zone}} =
+      assert {:error, %Tempo.UnanchoredError{operation: :shift_zone}} =
                Tempo.shift_zone(non_anchored, "Europe/Paris")
     end
 

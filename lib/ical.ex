@@ -76,7 +76,7 @@ if Code.ensure_loaded?(ICal) do
     Tempo supports `ical ~> 2.0 or ~> 3.0`. The zone-less mapping of
     floating times holds on `ical` 3.0+, which surfaces them as
     `NaiveDateTime`; on 2.x the parser coerced floating times to a
-    zoned `DateTime`, so they arrive already anchored to a zone.
+    zoned `DateTime`, so they arrive already zoned.
     Tempo maps whatever the installed parser produces — it does not
     itself invent a zone.
 

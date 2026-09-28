@@ -20,7 +20,7 @@ defmodule Tempo.Operations do
   * how timezones and DST are handled,
   * why the `:within` option is required for some operand
     combinations,
-  * and the axis-compatibility rule (anchored vs non-anchored).
+  * and the axis-compatibility rule (anchored vs unanchored).
 
   The top-level user API lives on `Tempo` via delegation — callers
   should prefer `Tempo.union/2`, `Tempo.intersection/2`, etc. over
@@ -34,8 +34,8 @@ defmodule Tempo.Operations do
   alias Tempo.Iso8601.Unit
   alias Tempo.MaterialisationError
   alias Tempo.Math
-  alias Tempo.NonAnchoredError
   alias Tempo.ResolutionError
+  alias Tempo.UnanchoredError
   alias Tempo.UnboundedRecurrenceError
   alias Tempo.Validation
 
@@ -115,19 +115,19 @@ defmodule Tempo.Operations do
 
   ## Midnight-crossing normalisation for time-of-day set ops.
   ##
-  ## A non-anchored interval like `T23:30/T01:00` represents a
+  ## An unanchored interval like `T23:30/T01:00` represents a
   ## 1.5-hour span that wraps around midnight on the time-of-day
   ## axis. For set operations to sweep-line cleanly, split any
   ## such interval into two non-wrapping sub-intervals:
   ##
   ##     [T23:30, T24:00) ∪ [T00:00, T01:00)
   ##
-  ## The split only runs when both operands are non-anchored.
+  ## The split only runs when both operands are unanchored.
   ## Anchored intervals that cross midnight (after materialisation
   ## to a specific day) are already concrete — they live on the
   ## universal time line and their endpoints don't wrap.
 
-  defp maybe_split_midnight_crossers(a, b, :non_anchored, :non_anchored) do
+  defp maybe_split_midnight_crossers(a, b, :unanchored, :unanchored) do
     {:ok, split_crossers(a), split_crossers(b)}
   end
 
@@ -173,10 +173,10 @@ defmodule Tempo.Operations do
   end
 
   ## Cross-axis materialisation — when one operand is
-  ## non-anchored and a `:within` window is supplied, anchor the
-  ## non-anchored operand to every day of the window.
+  ## unanchored and a `:within` window is supplied, anchor the
+  ## unanchored operand to every day of the window.
   ##
-  ## v1 scope: the non-anchored operand's intervals must not
+  ## v1 scope: the unanchored operand's intervals must not
   ## cross midnight (i.e. `from` and `to` share a wall-clock day).
   ## A Tempo like `T10:30` materialises cleanly to an hour- or
   ## minute-slot that fits within a single day.
@@ -193,8 +193,8 @@ defmodule Tempo.Operations do
 
     with {:ok, window_set} <- Tempo.to_interval_set(within),
          :ok <- ensure_anchored_window(window_set, within),
-         {:ok, a2} <- anchor_if_non_anchored(class_a, a, window_set),
-         {:ok, b2} <- anchor_if_non_anchored(class_b, b, window_set) do
+         {:ok, a2} <- anchor_if_unanchored(class_a, a, window_set),
+         {:ok, b2} <- anchor_if_unanchored(class_b, b, window_set) do
       {:ok, a2, b2}
     end
   end
@@ -203,41 +203,41 @@ defmodule Tempo.Operations do
     if anchor_class(window_set) == :anchored do
       :ok
     else
-      {:error, NonAnchoredError.exception(operation: "use as the :within window", value: within)}
+      {:error,
+       UnanchoredError.exception(operation: "use a value as the :within window", value: within)}
     end
   end
 
-  # Anchoring to a `:within` window walks its days and grafts each non-anchored
+  # Anchoring to a `:within` window walks its days and grafts each unanchored
   # interval onto every day, which is only meaningful for time-of-day values.
   # A month- or day-axis partial (`~o"15D"`, `~o"06-15"`) grafted onto a day
   # would silently match every day of the window, so reject it and point at
   # the vocabulary that expresses the recurring reading properly.
-  defp anchor_if_non_anchored(:non_anchored, value, window_set) do
+  defp anchor_if_unanchored(:unanchored, value, window_set) do
     if leading_unit(value) in [:hour, :minute, :second] do
       anchor_to_days(value, window_set)
     else
       {:error,
-       NonAnchoredError.exception(
+       UnanchoredError.exception(
          operation:
-           "anchor a non-anchored operand with leading #{inspect(leading_unit(value))} " <>
-             "to a :within window (day anchoring covers time-of-day values only — " <>
-             "anchor it with `Tempo.anchor/2`, or express the recurring " <>
-             "reading with a selection or RRULE)"
+           "place a value led by #{inspect(leading_unit(value))} on each day of a " <>
+             ":within window, which takes a time of day only (write a recurring " <>
+             "date as a selection or an RRULE)"
        )}
     end
   end
 
-  defp anchor_if_non_anchored(_class, value, _window_set), do: {:ok, value}
+  defp anchor_if_unanchored(_class, value, _window_set), do: {:ok, value}
 
   # For each interval in the window, walk each day, and anchor
-  # every non-anchored interval to that day. Returns {:ok,
+  # every unanchored interval to that day. Returns {:ok,
   # IntervalSet} or {:error, _}.
 
-  defp anchor_to_days(%IntervalSet{} = non_anchored_set, %IntervalSet{} = window_set) do
+  defp anchor_to_days(%IntervalSet{} = unanchored_set, %IntervalSet{} = window_set) do
     materialised =
       for window_interval <- IntervalSet.to_list(window_set),
           day_tempo <- days_in(window_interval),
-          na_interval <- IntervalSet.to_list(non_anchored_set) do
+          na_interval <- IntervalSet.to_list(unanchored_set) do
         anchor_interval_to_day(na_interval, day_tempo)
       end
 
@@ -254,7 +254,7 @@ defmodule Tempo.Operations do
     Stream.unfold(from_day, fn day ->
       if Compare.compare_time(day.time, to_day.time) == :lt do
         # `from_day` is `trunc_to_day/1` of a concrete endpoint, so the
-        # year is always present and the step cannot need an anchor.
+        # year is always present and the step cannot need a year.
         {:ok, next_time} = Math.add_unit(day.time, :day, calendar)
         {day, %{day | time: next_time}}
       else
@@ -276,7 +276,7 @@ defmodule Tempo.Operations do
          %Tempo{time: day_time, calendar: calendar}
        ) do
     if crosses_midnight?(na_from, na_to) do
-      # Non-anchored interval like `T23:30/T01:00` anchored to
+      # Unanchored interval like `T23:30/T01:00` anchored to
       # day D → `[D T23:30, (D+1) T01:00)`. Advance `to`'s day.
       # The anchoring day is a concrete date, so this step is total.
       {:ok, next_day_time} = Math.add_unit(day_time, :day, calendar)
@@ -290,7 +290,7 @@ defmodule Tempo.Operations do
     end
   end
 
-  # A non-anchored interval "crosses midnight" when its `from`
+  # An unanchored interval "crosses midnight" when its `from`
   # time-of-day is at or after its `to` time-of-day — e.g.
   # `T23:30/T01:00`. Zero-width cases (`from == to`) are treated
   # as not crossing.
@@ -332,18 +332,18 @@ defmodule Tempo.Operations do
       class_b == :empty ->
         {:ok, class_a, class_a}
 
-      # Two non-anchored operands only share a timeline when they sit on the
+      # Two unanchored operands only share a timeline when they sit on the
       # same resolution axis. `~o"1M31D"` (a month/day) and `~o"15D"` (a bare
       # day) recur on different cycles — annual vs monthly — so aligning them
       # would silently compare incomparable spans. Require a matching leading
-      # unit; otherwise it needs an anchor, like the mixed-class case.
-      class_a == :non_anchored and class_b == :non_anchored and not same_axis?(a, b) ->
+      # unit; otherwise it needs a year, like the mixed-class case.
+      class_a == :unanchored and class_b == :unanchored and not same_axis?(a, b) ->
         {:error,
-         NonAnchoredError.exception(
+         UnanchoredError.exception(
            operation:
-             "combine non-anchored operands on different resolution axes " <>
-               "(leading #{inspect(leading_unit(a))} vs #{inspect(leading_unit(b))}) " <>
-               "in a set operation (anchor them, or give both the same leading unit)"
+             "combine values on different axes (led by #{inspect(leading_unit(a))} " <>
+               "and #{inspect(leading_unit(b))}) in a set operation; give both the " <>
+               "same leading unit"
          )}
 
       class_a == class_b ->
@@ -354,18 +354,18 @@ defmodule Tempo.Operations do
 
       true ->
         {:error,
-         NonAnchoredError.exception(
+         UnanchoredError.exception(
            operation:
-             "combine a #{class_a} operand with a #{class_b} operand " <>
-               "in a set operation (use a `:within` option, or anchor the " <>
-               "non-anchored side via `Tempo.anchor/2`)"
+             "combine a value with a year and one without in a set operation " <>
+               "that has no `:within` window to place it on"
          )}
     end
   end
 
-  # Classify a value's anchor class. `:anchored` = has year-level
-  # position; `:non_anchored` = time-of-day only; `:empty` = empty
-  # IntervalSet (identity element, compatible with any class).
+  # Classify a value's anchor class. `:anchored` = has a year;
+  # `:unanchored` = has none (a time of day, a month and day, a bare
+  # day); `:empty` = empty IntervalSet (identity element, compatible
+  # with any class).
 
   defp anchor_class(%IntervalSet{} = set) do
     case IntervalSet.first(set) do
@@ -382,10 +382,10 @@ defmodule Tempo.Operations do
   defp anchor_class(%Tempo.Set{set: []}), do: :empty
 
   defp anchor_class(%Tempo{} = tempo) do
-    if Tempo.anchored?(tempo), do: :anchored, else: :non_anchored
+    if Tempo.anchored?(tempo), do: :anchored, else: :unanchored
   end
 
-  # Two non-anchored operands are comparable only when they lead with the same
+  # Two unanchored operands are comparable only when they lead with the same
   # (coarsest) unit — the axis they recur on. A bare-day value has no month, so
   # it cannot be placed against a month/day value.
   defp same_axis?(a, b), do: leading_unit(a) == leading_unit(b)
@@ -426,7 +426,7 @@ defmodule Tempo.Operations do
   end
 
   ## Calendar alignment — second operand converts to first's
-  ## calendar. Non-anchored intervals (pure time-of-day) skip this
+  ## calendar. Unanchored intervals (pure time-of-day) skip this
   ## step because their time components are calendar-independent.
   ##
   ## For anchored intervals, we extend every endpoint to day+
@@ -462,7 +462,7 @@ defmodule Tempo.Operations do
       is_nil(a_cal) ->
         {:ok, b_set}
 
-      # Non-anchored intervals don't have calendar-bound components;
+      # Unanchored intervals don't have calendar-bound components;
       # their time-of-day units work the same in any calendar.
       not anchored_endpoint?(b_first.from) ->
         {:ok, b_set}
@@ -495,7 +495,7 @@ defmodule Tempo.Operations do
   end
 
   # Convert a single %Tempo{}'s year/month/day into the target
-  # calendar. Non-anchored Tempos (no :year) pass through
+  # calendar. Unanchored Tempos (no :year) pass through
   # unchanged — their components are calendar-independent.
   # An unbounded endpoint carries no calendar-bound components.
   defp convert_tempo_calendar(nil, _target_calendar), do: nil

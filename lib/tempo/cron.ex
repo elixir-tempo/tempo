@@ -7,7 +7,7 @@ defmodule Tempo.Cron do
   Lets Tempo consume any cron-configured schedule (Oban, Quantum,
   system crontab) without rewriting it in another vocabulary. Once
   parsed, materialise it like any other recurrence — `Tempo.to_interval/2`
-  with a `:within` window — or supply `:from` to anchor the occurrences.
+  with a `:within` window — or supply `:from` to start the occurrences.
 
   ### Supported formats
 
@@ -152,7 +152,7 @@ defmodule Tempo.Cron do
 
   ### Options
 
-  * `:from` — a `t:Tempo.t/0` anchor for the recurrence. Optional;
+  * `:from` — the recurrence's start, a `t:Tempo.t/0`. Optional;
     supply it to enumerate or materialise concrete occurrences.
 
   ### Returns

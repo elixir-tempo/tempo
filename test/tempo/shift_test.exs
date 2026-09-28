@@ -58,10 +58,10 @@ defmodule Tempo.ShiftTest do
     end
   end
 
-  describe "Tempo.shift/2 on un-anchored values (no :year)" do
+  describe "Tempo.shift/2 on unanchored values (no :year)" do
     # A value with no year lives on a repeating month/day axis. Cases
     # the calendar can resolve without a year are computed; cases that
-    # depend on the missing year return {:error, %RequiresAnchorError{}}
+    # depend on the missing year return {:error, %UnanchoredError{}}
     # — never a raise.
 
     test "day arithmetic that stays within a month is computed" do
@@ -80,9 +80,9 @@ defmodule Tempo.ShiftTest do
     end
 
     test "arithmetic that depends on the missing year returns an error, not a raise" do
-      assert {:error, %Tempo.RequiresAnchorError{}} = Tempo.shift(~o"1M31D", ~o"P1M")
-      assert {:error, %Tempo.RequiresAnchorError{}} = Tempo.shift(~o"2M28D", ~o"P1D")
-      assert {:error, %Tempo.RequiresAnchorError{}} = Tempo.shift(~o"3M1D", day: -1)
+      assert {:error, %Tempo.UnanchoredError{}} = Tempo.shift(~o"1M31D", ~o"P1M")
+      assert {:error, %Tempo.UnanchoredError{}} = Tempo.shift(~o"2M28D", ~o"P1D")
+      assert {:error, %Tempo.UnanchoredError{}} = Tempo.shift(~o"3M1D", day: -1)
     end
 
     test "a whole-year step is a no-op — the untracked year moves, the date does not" do
@@ -91,7 +91,7 @@ defmodule Tempo.ShiftTest do
     end
 
     test "a year step on Feb 29 needs an anchor — next year may not be a leap year" do
-      assert {:error, %Tempo.RequiresAnchorError{}} = Tempo.shift(~o"2M29D", ~o"P1Y")
+      assert {:error, %Tempo.UnanchoredError{}} = Tempo.shift(~o"2M29D", ~o"P1Y")
     end
 
     test "a month step that keeps a valid day is computed, and wraps the year" do
@@ -126,7 +126,7 @@ defmodule Tempo.ShiftTest do
     end
 
     test "a fractional month needs a year to measure the month in" do
-      assert {:error, %Tempo.RequiresAnchorError{}} = Tempo.shift(~o"3M", ~o"P0.5M")
+      assert {:error, %Tempo.UnanchoredError{}} = Tempo.shift(~o"3M", ~o"P0.5M")
     end
 
     test "a month-only value carries a month/year step and extends for finer steps" do
@@ -144,8 +144,8 @@ defmodule Tempo.ShiftTest do
       # A month/year step leaves a bare day untouched.
       assert Tempo.shift(~o"15D", ~o"P1M") == ~o"15D"
       # The 29th isn't in every month, and the 1st's predecessor is unknown.
-      assert {:error, %Tempo.RequiresAnchorError{}} = Tempo.shift(~o"28D", ~o"P1D")
-      assert {:error, %Tempo.RequiresAnchorError{}} = Tempo.shift(~o"1D", day: -1)
+      assert {:error, %Tempo.UnanchoredError{}} = Tempo.shift(~o"28D", ~o"P1D")
+      assert {:error, %Tempo.UnanchoredError{}} = Tempo.shift(~o"1D", day: -1)
     end
   end
 end

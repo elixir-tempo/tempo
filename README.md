@@ -2,7 +2,7 @@
 
 ![Tempo](https://raw.githubusercontent.com/elixir-tempo/tempo/main/assets/logo-social-cropped.png)
 
-Tempo is an Elixir library that models time the way humans actually use it — as bounded spans on a shared timeline rather than as scalar instants. Everything positioned is an interval — a year, a month, an afternoon, a meeting, an archaeological period, a recurring event — each a bounded interval at some resolution. Collections of them, like a free-busy calendar, are *derivations* over that one type rather than new types; the sole companion is `Duration`, an unpositioned width from which an interval is formed once anchored. Every operation (iteration, comparison, set-theoretic combination) is defined uniformly.
+Tempo is an Elixir library that models time the way humans actually use it — as bounded spans on a shared timeline rather than as scalar instants. Everything positioned is an interval — a year, a month, an afternoon, a meeting, an archaeological period, a recurring event — each a bounded interval at some resolution. Collections of them, like a free-busy calendar, are *derivations* over that one type rather than new types; the sole companion is `Duration`, an unpositioned width from which an interval is formed once it is given a start. Every operation (iteration, comparison, set-theoretic combination) is defined uniformly.
 
 This conceptual shift — *time as interval, not instant* — removes a surprising number of real-world bugs (off-by-one day errors, ambiguous "end of day", last day of month, last day of year, DST edge cases, "what date does this year mean?") while unlocking queries that are awkward or impossible in other libraries.
 
@@ -241,7 +241,7 @@ Interactive, runnable tours for [Livebook](https://livebook.dev):
 * [Holidays](https://hexdocs.pm/ex_tempo/holidays.html) — composing a real holiday calendar with workday logic.
 * [iCalendar integration](https://hexdocs.pm/ex_tempo/ical-integration.html) — importing `.ics` schedules with metadata preserved.
 * [Enumeration semantics](https://hexdocs.pm/ex_tempo/enumeration-semantics.html) — iterating across Tempo values and interval sets.
-* [Interop](https://hexdocs.pm/ex_tempo/interop.html) — anchored vs non-anchored values, and bridging native Elixir types.
+* [Interop](https://hexdocs.pm/ex_tempo/interop.html) — anchored and unanchored values, and bridging native Elixir types.
 * [Pattern matching with sigils](https://hexdocs.pm/ex_tempo/pattern-matching-with-sigils.html) — destructuring Tempo values in function heads.
 * [ISO 8601 conformance](https://hexdocs.pm/ex_tempo/iso8601-conformance.html) — what's supported from the standards.
 * [RFC 5545 RRULE conformance](https://hexdocs.pm/ex_tempo/rfc5545_rrule_conformance.html) — recurrence-rule coverage, property by property.

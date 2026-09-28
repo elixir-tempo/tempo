@@ -14,6 +14,8 @@ Tempo 2.0 gives each word in its API one meaning, the one it has in everyday Eng
 | `compose/2` on `Tempo` and `Tempo.Interval` | `Tempo.Allen.compose/2` |
 | `Tempo.Interval.equivalent?/2` | `Tempo.equal?/3` |
 | IXDTF tags through `Tempo.new/1`'s `:metadata` | `:tags` |
+| `Tempo.anchor/2` | `Tempo.on/2` or `Tempo.at/2`, in either order |
+| `Tempo.NonAnchoredError`, `Tempo.RequiresAnchorError` | `Tempo.UnanchoredError` |
 
 These keep their names and change their meaning:
 
@@ -46,7 +48,7 @@ end
 A search for the removed names finds the renames:
 
 ```bash
-grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(meets|during)\?|Interval\.(meets|during)\?|(Tempo|Interval)\.compose' lib test
+grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(meets|during)\?|Interval\.(meets|during)\?|(Tempo|Interval)\.compose|Tempo\.anchor[(/]|(NonAnchored|RequiresAnchor)Error|:unanchored' lib test
 ```
 
 The changes of meaning need a read rather than a replace: every `before?`, `after?` and their `certainly_` and `possibly_` forms, every duration read as a count of seconds, every shift of a zoned value by hours, every `duration/1` of a set, every window, and every `:metadata` passed to `Tempo.new/1`.
@@ -132,7 +134,7 @@ iex> Tempo.to_interval(~o"R/2020-01-01/P1Y", bound: ~o"2026")
 {:error, %ArgumentError{message: ":bound is not an option of Tempo.to_interval/2; pass the window as :within"}}
 ```
 
-The window keeps every occurrence that overlaps it, including one already under way when the window opens — the rule calendar clients use. In 1.x an anchored recurrence read `:bound` as an upper limit and returned every occurrence from its start up to the bound. In 2.0 the window is a window:
+The window keeps every occurrence that overlaps it, including one already under way when the window opens — the rule calendar clients use. In 1.x a recurrence with a start read `:bound` as an upper limit and returned every occurrence from its start up to the bound. In 2.0 the window is a window:
 
 <!-- guides:skip -->
 
@@ -299,3 +301,34 @@ iex> Tempo.to_iso8601(tagged)
 ```
 
 Materialising a value moves its metadata to the interval or intervals it becomes, so a holiday's name travels with its day through the set operations.
+
+## A value without a year is placed with at and on
+
+`Tempo.anchor/2` is removed, and `at/2` and `on/2` do its work: the value with a year keeps it, the other supplies what it lacks, and either order gives the same value, so the code reads the way the sentence does. They return `{:ok, value}`, where `anchor/2` returned the value itself; `at!/2` and `on!/2` return it bare.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.x
+Tempo.anchor(~o"T17", ~o"2026-06-15")
+#=> ~o"2026Y6M15DT17H"
+```
+
+```elixir
+iex> Tempo.on(~o"T17", ~o"2026-06-15")
+{:ok, ~o"2026Y6M15DT17H"}
+iex> Tempo.at(~o"2026-06-15", ~o"T17")
+{:ok, ~o"2026Y6M15DT17H"}
+```
+
+> *"Five in the afternoon **on** the fifteenth of June is the fifteenth of June **at** five in the afternoon."*
+
+`Tempo.UnanchoredError` replaces `Tempo.NonAnchoredError` and `Tempo.RequiresAnchorError`. Every operation that needs a year and is given a value without one returns it, with a message that names the value and says to place it on a date with `Tempo.at/2` or `Tempo.on/2`:
+
+```elixir
+iex> {:error, %Tempo.UnanchoredError{} = error} = Tempo.shift(~o"2M28D", day: 1)
+iex> Exception.message(error) =~ "Place the value on a date first"
+true
+```
+
+"Anchored" now means one thing, that a value has a year. A recurrence whose rule names no start has an open start, and converting one with no `:within` window returns `Tempo.IntervalEndpointsError` with `reason: :open_start`, where 1.x said `:unanchored`.

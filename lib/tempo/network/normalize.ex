@@ -5,7 +5,7 @@ defmodule Tempo.Network.Normalize do
   shape `b₁ − b₂ ≤ k`.
 
   Every period contributes a `start` and an `end` boundary; a single
-  shared origin `z₀` (`:origin`) anchors absolute dates. The network's
+  shared origin `z₀` (`:origin`) is what absolute dates count from. The network's
   **finest unit** (the finest resolution among its dates) fixes the
   integer axis: a date becomes its count of that unit relative to `z₀`,
   a duration its count of that unit.

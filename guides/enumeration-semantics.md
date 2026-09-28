@@ -111,7 +111,7 @@ Time zone, calendar, and tagged suffixes attach to the `:extended` field and flo
 | Zone + offset + calendar | `2022-06-15T10:30[+05:30][u-ca=hebrew]` |
 | Per-endpoint on interval | `10:00[Europe/Paris]/12:00[Europe/London]` |
 
-The endpoint that anchors iteration (`from`) provides the metadata carried on each yielded value.
+The endpoint iteration starts from (`from`) provides the metadata carried on each yielded value.
 
 ### 2.9. Intervals — closed and forward-open
 
@@ -165,7 +165,7 @@ Mask rules:
 | Stepped range `~o"2022Y{1..-1//3}M"` | `%Tempo.IntervalSet{}` with N disjoint members |
 | All-of set `~o"{2020,2021,2022}Y"` | `%Tempo.IntervalSet{}` with 3 members (one per year) |
 | One-of set `~o"[2020Y,2021Y,2022Y]"` | `{:error, "... epistemic disjunction ..."}` |
-| Bare Duration `~o"P3M"` | `{:error, "... no anchor ..."}` |
+| Bare Duration `~o"P3M"` | `{:error, "... no place on the time line"}` |
 
 For the canonical instant-set form (touching members merged into one span), pipe the result through `Tempo.IntervalSet.coalesce/1`.
 
@@ -199,7 +199,7 @@ These constructs *cannot* be enumerated, and no amount of future implementation 
 
 ### 3.1. Bare `%Tempo.Duration{}` values
 
-A duration is a **length**, not a sequence. `P3M` means "three months" with no anchor on the time line. Iterating it would be nonsensical — three months starting *when*?
+A duration is a **length**, not a sequence. `P3M` means "three months" with no place on the time line. Iterating it would be nonsensical — three months starting *when*?
 
 | Construct | Example |
 |---|---|
@@ -211,17 +211,17 @@ No `Enumerable` instance is defined for `Tempo.Duration`. Calls like `Enum.take(
 
 ### 3.2. Fully open intervals
 
-`../..` has no anchor at all. There is nowhere to start and nowhere to stop.
+`../..` has no endpoints at all. There is nowhere to start and nowhere to stop.
 
 ```
 iex> {:ok, interval} = Tempo.from_iso8601("../..")
 iex> Enum.take(interval, 3)
-** (ArgumentError) Cannot enumerate a fully open interval `../..` — no anchor from which to start iteration.
+** (ArgumentError) Cannot enumerate a fully open interval `../..` — no start to iterate from.
 ```
 
 ### 3.3. Open-lower intervals
 
-`../1985` has an upper anchor but no lower anchor. `Enumerable` iterates forward by protocol convention, which requires a lower bound. Iterating backwards from the upper bound would be surprising and would invert the half-open semantics.
+`../1985` has an end but no start. `Enumerable` iterates forward by protocol convention, which requires a lower bound. Iterating backwards from the upper bound would be surprising and would invert the half-open semantics.
 
 ```
 iex> {:ok, interval} = Tempo.from_iso8601("../1985-12-31")
@@ -337,7 +337,7 @@ Known divergences:
 
 | Category | Examples |
 |---|---|
-| **Enumerable** | every standard ISO 8601 / EDTF value with a concrete anchor — single values, ranges, sets, masks, long years, qualified values, IXDTF-tagged values, closed intervals, open-upper intervals, seasons, mixed-resolution intervals |
+| **Enumerable** | every standard ISO 8601 / EDTF value with a concrete start — single values, ranges, sets, masks, long years, qualified values, IXDTF-tagged values, closed intervals, open-upper intervals, seasons, mixed-resolution intervals |
 | **Not enumerable by design** | bare `%Tempo.Duration{}`, fully open intervals `../..`, open-lower intervals `../to`, microsecond values at precision 6 (the finest resolution), significant-digits blocks > 10 000 candidates |
 | **O(1) fast paths** | `count/1`, `member?/2`, `slice/1` on `%Tempo{}` and `%Tempo.Interval{}` (calendar- and DST-aware) |
 | **Deferred** | `count/1` / `member?/2` on `%Tempo.Set{}` (falls back to `reduce/3`) |

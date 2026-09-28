@@ -65,7 +65,7 @@ The end-to-end formula: **`occurrences = (expand(rrule) ∪ rdates) − exdates`
 
 ## Calendar awareness
 
-RFC 5545 is implicitly Gregorian. RFC 7529 defines a separate `RSCALE` property for alternative calendars; Tempo does not implement `RSCALE` as a parsed property. Instead, **Tempo's RRULE expansion is calendar-aware through the rule's DTSTART**. Parse a DTSTART in the Hebrew calendar (`5786-09-30[u-ca=hebrew]`) and expand an RRULE against it, and the expansion iterates in Hebrew months. The same rule string yields different occurrences depending on which calendar the anchor is in — which is closer to what most applications want than the RSCALE annotation dance.
+RFC 5545 is implicitly Gregorian. RFC 7529 defines a separate `RSCALE` property for alternative calendars; Tempo does not implement `RSCALE` as a parsed property. Instead, **Tempo's RRULE expansion is calendar-aware through the rule's DTSTART**. Parse a DTSTART in the Hebrew calendar (`5786-09-30[u-ca=hebrew]`) and expand an RRULE against it, and the expansion iterates in Hebrew months. The same rule string yields different occurrences depending on which calendar the DTSTART is in — which is closer to what most applications want than the RSCALE annotation dance.
 
 Occurrence selection dispatches to the calendar module (`days_in_month/2`, `day_of_year/3`, `day_of_week/4`) and steps through Calendrical, so BYMONTH/BYMONTHDAY/BYYEARDAY respect calendar-specific month and year lengths, and BYWEEKNO numbers the weeks of the calendar's own year from `WKST`.
 

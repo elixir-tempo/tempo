@@ -101,7 +101,7 @@ The equinoxes and solstices come from `Astro`; the 24 East Asian solar terms and
 
 ## Other calendars — Islamic, Hebrew, and the lunisolar new years
 
-A holiday defined in another calendar is anchored at a start date **in that calendar** and given a `P1Y` cadence — one *calendar* year — so successive occurrences **recur on that calendar's own year** and drift against the Gregorian year exactly as the holiday does. The `[u-ca=…]` tag is a single **trailing suffix** on the whole recurrence (`R/5787Y3M25D/P1Y[u-ca=hebrew]`), qualifying the anchor and the cadence together, not embedded mid-string on the date. RRULE is Gregorian-only, so every row is a dash; the **Materialises to** column is the Gregorian date each recurrence resolves to in 2026.
+A holiday defined in another calendar starts on a date **in that calendar** and is given a `P1Y` cadence — one *calendar* year — so successive occurrences **recur on that calendar's own year** and drift against the Gregorian year exactly as the holiday does. The `[u-ca=…]` tag is a single **trailing suffix** on the whole recurrence (`R/5787Y3M25D/P1Y[u-ca=hebrew]`), qualifying the start and the cadence together, not embedded mid-string on the date. RRULE is Gregorian-only, so every row is a dash; the **Materialises to** column is the Gregorian date each recurrence resolves to in 2026.
 
 | Rule type | Holiday (rule in English) | Tempo | Materialises to (2026) | RRULE |
 |---|---|---|---|---|
