@@ -38,6 +38,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Added
 
+* A `Tempo.IntervalSet` is tabular data (`Table.Reader`) when the optional `table` package is present: a row per member with its `from`, `to` and metadata, so `Kino.DataTable.new/1` shows a set of holidays with their names.
+
 * An open-ended `:within` window (`~o"2026-09-28/.."`) gives a recurrence's occurrences from its start on as a lazy set, so `Tempo.IntervalSet.first/1` is the next one. Set operations, `complement/2` and the calendar formats return an error for one.
 
 * `Tempo.RecurrenceSet.keep_when/2` and `move_when/2` — a member kept only when days around it fall on the other members' occurrences (a bridge day), or moved `:to_next` a selected day when it falls on one, resolved in a second pass. `:falls_on` matches the other members' metadata, or names a recurrence set to read.

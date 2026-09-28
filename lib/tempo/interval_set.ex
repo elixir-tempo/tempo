@@ -1,7 +1,7 @@
 defmodule Tempo.IntervalSet do
   @moduledoc """
-  A sorted, non-overlapping collection of `t:Tempo.Interval.t/0`
-  values — the multi-interval counterpart to `Tempo.Interval`.
+  A sorted collection of `t:Tempo.Interval.t/0` values — the
+  multi-interval counterpart to `Tempo.Interval`.
 
   `IntervalSet` is the operational form for set operations. Every
   AST shape that expands to a disjoint list of bounded spans
@@ -27,9 +27,11 @@ defmodule Tempo.IntervalSet do
 
   * Intervals are sorted ascending by `from`.
 
-  * Adjacent or overlapping intervals are coalesced. Half-open
-    semantics means `[a, b) ++ [b, c) == [a, c)` — the coalesce
-    pass merges both overlap and touch cases.
+  * Members keep their identity: two covering the same time stay
+    distinct, each with its own metadata. `new/2` with
+    `coalesce: true`, or `coalesce/1`, merges overlapping and
+    touching members — under half-open semantics
+    `[a, b) ++ [b, c) == [a, c)`.
 
   * No missing endpoints, spelled either `:undefined` (an ISO 8601
     open interval such as `2020Y/..`) or `nil` (an unanchored
@@ -50,7 +52,7 @@ defmodule Tempo.IntervalSet do
     across every window, not the number of windows.
 
   * **How long** (elapsed time)? — `Tempo.duration/1` on the whole
-    set (the members' total) or on a member, or `Tempo.at_least?/2`
+    set (the time it covers) or on a member, or `Tempo.at_least?/2`
     to keep only windows of a given length. Never
     count sub-points for this: across a DST boundary the walk skips the
     spring-forward hour and emits the fall-back hour twice, so
@@ -64,6 +66,15 @@ defmodule Tempo.IntervalSet do
       2
       iex> Enum.count(free)
       62
+
+  ## As a table
+
+  When the `table` package is present (Livebook's Kino brings it), a
+  bounded set is tabular data through `Table.Reader`: one row per
+  member, with its `from`, its `to` and a column for each metadata key
+  the members carry. `Kino.DataTable.new(holidays)` shows a year of
+  holidays with their names, and `Table.to_rows/1` reads the rows as
+  maps. A lazy set is not tabular — its rows never end.
 
   ## Timezone handling
 

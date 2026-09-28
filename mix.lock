@@ -24,5 +24,6 @@
   "nimble_parsec": {:hex, :nimble_parsec, "1.4.2", "8efba0122db06df95bfaa78f791344a89352ba04baedd3849593bfce4d0dc1c6", [:mix], [], "hexpm", "4b21398942dda052b403bbe1da991ccd03a053668d147d53fb8c4e0efe09c973"},
   "statistex": {:hex, :statistex, "1.1.1", "73612aa7f79e53c30569be065fd121e380f1cf57bc4c2da5b41be9246da18df9", [:mix], [], "hexpm", "310c4b49b34adf683de3103639006bed233ab54c08a4add65a531448e653857c"},
   "stream_data": {:hex, :stream_data, "1.4.0", "026f929db613aabea6208012ae9b8970d3fd5f88b3bdf26831bc536f98c42036", [:mix], [], "hexpm", "2b0ee3a340dcce1c8cf6302a763ee757d1e01c54d6e16d9069062509d68b1dc9"},
+  "table": {:hex, :table, "0.1.2", "87ad1125f5b70c5dea0307aa633194083eb5182ec537efc94e96af08937e14a8", [:mix], [], "hexpm", "7e99bc7efef806315c7e65640724bf165c3061cdc5d854060f74468367065029"},
   "tz": {:hex, :tz, "0.28.4", "f5433914dcf8619d593979ec65bbe878158cad818bc2b53b44d9e4bda509753f", [:mix], [{:castore, "~> 0.1 or ~> 1.0", [hex: :castore, repo: "hexpm", optional: true]}, {:mint, "~> 1.6", [hex: :mint, repo: "hexpm", optional: true]}], "hexpm", "72fe8d526cf30fcc4e07cec4ceb583ba5f2d69c6334c9533419c836a6acd1c56"},
 }

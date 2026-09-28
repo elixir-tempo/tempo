@@ -196,6 +196,10 @@ defmodule Tempo.MixProject do
       {:astro, "~> 2.7"},
       {:ical, "~> 3.2", optional: true},
       {:jscalendar, "~> 0.1", optional: true},
+      # Optional: `Table.Reader` for `Tempo.IntervalSet`, so Livebook's
+      # `Kino.DataTable` and anything else that reads tables shows a set's
+      # members and their metadata as rows.
+      {:table, "~> 0.1.2", optional: true},
       {:ex_doc, "~> 0.38", only: [:dev, :test, :release], optional: true, runtime: false},
       {:benchee, "~> 1.3", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
