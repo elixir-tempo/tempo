@@ -279,7 +279,7 @@ Each task is one commit, verified on both upstream branches, with its guides, RE
 
 * [x] **Predicates and `Tempo.Allen`** — the everyday `before?/2` and `after?/2`, `Tempo.Allen`, the removals and renames above, and the migration guide. 2026-09-28, `c669d20`.
 
-* [ ] **From now on** — an open-ended `within:` window, the floating `today/1`, and `duration/2` refusing a zoned value against a floating one.
+* [x] **From now on** — an open-ended `within:` window, the floating `today/1`, and `duration/2` refusing a zoned value against a floating one. 2026-09-28, `f04caaa`.
 
 * [ ] **Durations at resolution** — `duration/1` and `duration/2` in their endpoints' unit, and the duration predicates comparing them.
 

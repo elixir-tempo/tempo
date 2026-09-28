@@ -169,7 +169,7 @@ This is the comparison corollary of "same wall clock is not the same instant" (s
 
 ### A zone on an interval
 
-When you write an interval as an ISO 8601 string, the zone goes once at the end, where IXDTF binds it to the upper endpoint — and it grounds the whole span. Tempo propagates that trailing zone backward onto a floating lower endpoint, so a single-zone interval never straddles the floating and universal time lines:
+When you write an interval as an ISO 8601 string, the zone may go once at the end, where IXDTF binds it to the upper endpoint — and it grounds the whole span. Tempo propagates that trailing zone backward onto a floating lower endpoint, so a single-zone interval never straddles the floating and universal time lines:
 
 ```elixir
 {:ok, iv} = Tempo.from_iso8601("2030-03-01T08:00/2030-03-05T08:00[Europe/Paris]")
@@ -177,7 +177,15 @@ When you write an interval as an ISO 8601 string, the zone goes once at the end,
 {Tempo.grounded?(from), Tempo.grounded?(to)}   #=> {true, true}
 ```
 
-Propagation is one-directional and non-destructive: it flows only from the upper endpoint (`to`) back to a floating lower one (`from`), never forward, and never over a zone an endpoint already carries — so `2030-03-01T08:00[Europe/Paris]/2030-03-05T08:00[Europe/London]` keeps both zones as written. It applies only to parsed interval *strings*; `Tempo.Interval.new/2` builds exactly the endpoints you hand it, mixed frames included.
+A zone written on the lower endpoint applies to a floating upper one too, as ISO 8601-1 §5.5.1 says — "representations for time zones and UTC included with the component preceding the separator shall be assumed to apply to the component following the separator":
+
+```elixir
+{:ok, iv} = Tempo.from_iso8601("2030-03-01T08:00[Europe/Paris]/2030-03-05T08:00")
+{from, to} = Tempo.Interval.endpoints(iv)
+{Tempo.grounded?(from), Tempo.grounded?(to)}   #=> {true, true}
+```
+
+Propagation never overwrites a zone an endpoint already carries, so `2030-03-01T08:00[Europe/Paris]/2030-03-05T08:00[Europe/London]` keeps both zones as written. `Tempo.Interval.new/1` follows the same rule, so an interval you build and its ISO 8601 string agree.
 
 ### Principle
 

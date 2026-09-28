@@ -32,6 +32,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.duration/2` returns `{:error, %Tempo.FloatingTempoError{}}` for a zoned value against a floating one, the pair `relation/2` refuses, where it measured the floating one as UTC.
 
+* A zone or offset on an interval's start applies to a floating end, as ISO 8601-1 §5.5.1 says: `2018-01-15T10:00+05:00/2018-02-20T10:00` ends at +05:00, where its end was floating. `Tempo.Interval.new/1` follows the same rule.
+
 * `Tempo.new/1`'s `:metadata` is the value's own metadata, read with `Tempo.metadata/1` and never written to its ISO 8601 form, where it was written as IXDTF suffix tags; tags take the new `:tags` option, validated so `to_iso8601/1` cannot fail on one.
 
 ### Added
@@ -95,6 +97,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* `Tempo.now/1` and `today/1` return `{:error, %Tempo.UnknownZoneError{}}` for a zone the time zone database does not know, where they raised.
 
 * A recurrence walks every period its `:within` window overlaps, however the window is aligned — `R/../P1Y/FL1M15DN` within September 2026 to March 2027 is 15 January 2027, where it was nothing — and an UNTIL holds every day a period's selection expands to.
 

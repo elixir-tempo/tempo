@@ -329,13 +329,17 @@ defmodule Tempo.Interval do
 
   @doc false
   # A single interval names one span, and a span cannot straddle the
-  # floating and universal time lines — so a grounded `to` frame (zone
-  # or offset) propagates backward onto a floating `from`. Propagation
-  # is one-directional (`to` → `from` only) and never overwrites a
-  # frame `from` already carries; a zone on `from` alone never flows
-  # forward. The same rule serves the IXDTF parser (where a trailing
-  # `[zone]` binds to the upper endpoint) and `new/1`, so a constructed
-  # interval and its re-parsed ISO 8601 string cannot disagree.
+  # floating and universal time lines — so a zone or offset on either
+  # endpoint applies to a floating other. Forward, from the start to the
+  # end, is ISO 8601-1 §5.5.1: "Representations for time zones and UTC
+  # included with the component preceding the separator shall be assumed
+  # to apply to the component following the separator" —
+  # `2018-01-15T10:00+05:00/2018-02-20T10:00` ends at +05:00 too. Backward,
+  # from the end to the start, is where IXDTF binds a trailing `[zone]`.
+  # Propagation never overwrites a frame an endpoint carries, so two zoned
+  # endpoints keep their own. The same rule serves the parser and `new/1`,
+  # so a constructed interval and its re-parsed ISO 8601 string cannot
+  # disagree.
   def propagate_endpoint_frame(%Tempo{} = from, %Tempo{} = to) do
     {from, to}
     |> propagate_zone()
@@ -344,13 +348,16 @@ defmodule Tempo.Interval do
 
   def propagate_endpoint_frame(from, to), do: {from, to}
 
-  defp propagate_zone({%Tempo{} = from, %Tempo{} = to}) do
-    if Tempo.floating?(from) and not Tempo.floating?(to) do
-      {copy_frame(to, from), to}
-    else
-      {from, to}
-    end
-  end
+  defp propagate_zone({%Tempo{} = from, %Tempo{} = to}),
+    do: propagate_zone(from, to, Tempo.floating?(from), Tempo.floating?(to))
+
+  defp propagate_zone(from, to, true = _floating_from, false = _floating_to),
+    do: {copy_frame(to, from), to}
+
+  defp propagate_zone(from, to, false = _floating_from, true = _floating_to),
+    do: {from, copy_frame(from, to)}
+
+  defp propagate_zone(from, to, _floating_from, _floating_to), do: {from, to}
 
   # A `[u-ca=…]` at the end names the calendar the interval is written in,
   # and an endpoint carrying none of its own inherits it — the same

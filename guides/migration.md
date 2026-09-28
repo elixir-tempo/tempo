@@ -21,6 +21,8 @@ These keep their names and change their meaning:
 
 * **`today/1` and `utc_today/0`** — the date with no zone, where 1.x returned the zoned day.
 
+* **An interval with a zone on its start only** — the zone applies to its end too, as ISO 8601-1 says.
+
 * **`duration/1` on a set** — the time the set covers, counting time its members share once.
 
 * **The `:within` window** — every occurrence that overlaps the window, for every kind of recurrence.
@@ -202,6 +204,27 @@ false
 ```elixir
 iex> Tempo.duration(~o"2026-09-28T09:00:00[Australia/Sydney]", ~o"2026-11-03")
 {:error, %Tempo.FloatingTempoError{operation: :measure, value: ~o"2026Y11M3D"}}
+```
+
+## A zone on an interval's start applies to its end
+
+An interval written with a zone or offset on its start and none on its end ends in that zone too, as ISO 8601-1 §5.5.1 says. In 1.x its end was floating, so the span straddled the zoned and floating time lines and measuring it treated the end as UTC. `Tempo.Interval.new/1` follows the same rule.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.x — the end is floating
+{:ok, iv} = Tempo.from_iso8601("2018-01-15T10:00+05:00/2018-02-20T10:00")
+{_from, to} = Tempo.Interval.endpoints(iv)
+Tempo.floating?(to)
+#=> true
+```
+
+```elixir
+iex> {:ok, iv} = Tempo.from_iso8601("2018-01-15T10:00+05:00/2018-02-20T10:00")
+iex> {_from, to} = Tempo.Interval.endpoints(iv)
+iex> Tempo.floating?(to)
+false
 ```
 
 ## Metadata belongs to the value

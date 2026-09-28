@@ -874,12 +874,11 @@ defmodule Tempo do
     end
   end
 
-  # IXDTF writes an interval's `[zone]` or offset suffix at the end,
-  # binding it to the upper (`to`) endpoint. The pair-level propagation
-  # rule (a grounded `to` frame flows backward onto a floating `from`,
-  # never the reverse, never overwriting) lives on `Tempo.Interval` so
-  # the parser and `Interval.new/1` cannot disagree about what the same
-  # endpoints mean.
+  # A zone or offset on either endpoint applies to a floating other: forward
+  # as ISO 8601-1 §5.5.1 says, and backward from a `[zone]` suffix IXDTF writes
+  # at the end. The pair-level rule (never overwriting) lives on
+  # `Tempo.Interval` so the parser and `Interval.new/1` cannot disagree about
+  # what the same endpoints mean.
   defp propagate_endpoint_frame(%Interval{from: from, to: to} = interval) do
     {from, to} = Interval.propagate_endpoint_frame(from, to)
     %{interval | from: from, to: to}
@@ -3857,6 +3856,9 @@ defmodule Tempo do
 
   * A `t:t/0` at second resolution with `extended.zone_id: zone`.
 
+  * `{:error, %Tempo.UnknownZoneError{}}` when `zone` is not a zone
+    the time zone database knows.
+
   ### Examples
 
       iex> tempo = Tempo.now("Europe/London")
@@ -3866,20 +3868,27 @@ defmodule Tempo do
       iex> Tempo.now("Etc/UTC").extended.zone_id
       "Etc/UTC"
 
+      iex> Tempo.now("Continent/Imaginary")
+      {:error, %Tempo.UnknownZoneError{zone_id: "Continent/Imaginary"}}
+
   """
-  @spec now(String.t()) :: t()
-  def now(zone \\ "Etc/UTC") when is_binary(zone) do
+  @spec now(String.t()) :: t() | {:error, UnknownZoneError.t()}
+  def now(zone \\ "Etc/UTC")
+
+  def now(zone) when is_binary(zone) do
     # Second resolution per the contract — see `utc_now/0`.
-    utc = Clock.utc_now() |> DateTime.truncate(:second)
+    Clock.utc_now() |> DateTime.truncate(:second) |> zoned_now(zone)
+  end
 
-    case zone do
-      "Etc/UTC" ->
-        from_date_time(utc)
+  def now(zone), do: {:error, UnknownZoneError.exception(zone_id: inspect(zone))}
 
-      _other ->
-        utc
-        |> DateTime.shift_zone!(zone, TimeZoneDatabase.database())
-        |> from_date_time()
+  # The current UTC instant read in `zone`.
+  defp zoned_now(utc, "Etc/UTC"), do: from_date_time(utc)
+
+  defp zoned_now(utc, zone) do
+    case DateTime.shift_zone(utc, zone, TimeZoneDatabase.database()) do
+      {:ok, zoned} -> from_date_time(zoned)
+      {:error, _reason} -> {:error, UnknownZoneError.exception(zone_id: zone)}
     end
   end
 
@@ -3924,6 +3933,9 @@ defmodule Tempo do
   * A floating `t:t/0` at day resolution: the date in `zone` at the
     current UTC instant.
 
+  * `{:error, %Tempo.UnknownZoneError{}}` when `zone` is not a zone
+    the time zone database knows.
+
   ### Examples
 
       iex> Tempo.today("Etc/UTC") |> Tempo.resolution()
@@ -3934,8 +3946,11 @@ defmodule Tempo do
 
   """
   @spec today(String.t()) :: t() | {:error, error_reason()}
-  def today(zone \\ "Etc/UTC") when is_binary(zone) do
-    zone |> now() |> trunc(:day) |> drop_zone()
+  def today(zone \\ "Etc/UTC") do
+    case now(zone) do
+      %__MODULE__{} = now -> now |> trunc(:day) |> drop_zone()
+      {:error, _reason} = error -> error
+    end
   end
 
   # A zoned value's wall-clock reading with its zone and offset removed — its

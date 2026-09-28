@@ -87,4 +87,22 @@ defmodule Tempo.NowTest do
       assert Tempo.relation(Tempo.today("Australia/Sydney"), ~o"2026-12-25") == :equals
     end
   end
+
+  describe "a zone the database does not know" do
+    test "now/1 and today/1 return an UnknownZoneError, never raising" do
+      Test.put(~U[2026-06-15 14:30:00Z])
+
+      assert {:error, %Tempo.UnknownZoneError{zone_id: "Continent/Imaginary"}} =
+               Tempo.now("Continent/Imaginary")
+
+      assert {:error, %Tempo.UnknownZoneError{}} = Tempo.today("Continent/Imaginary")
+    end
+
+    test "a zone that is not a name is an UnknownZoneError too" do
+      Test.put(~U[2026-06-15 14:30:00Z])
+
+      assert {:error, %Tempo.UnknownZoneError{}} = Tempo.now(:paris)
+      assert {:error, %Tempo.UnknownZoneError{}} = Tempo.today(nil)
+    end
+  end
 end

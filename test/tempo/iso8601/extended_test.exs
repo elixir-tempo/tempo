@@ -389,14 +389,24 @@ defmodule Tempo.Iso8601.Extended.Test do
       assert interval.to.shift == [hour: 0]
     end
 
-    test "a zone on the lower endpoint does not flow forward to the upper" do
+    test "a zone on the lower endpoint applies to the upper (ISO 8601-1 §5.5.1)" do
       assert {:ok, interval} =
                Tempo.from_iso8601("2022-06-15T10:00[Europe/Paris]/2022-06-15T12:00")
 
-      # Propagation is `to` → `from` only. A zone on `from` alone leaves
-      # `to` floating.
       assert interval.from.extended.zone_id == "Europe/Paris"
-      assert interval.to.extended == nil
+      assert interval.to.extended.zone_id == "Europe/Paris"
+    end
+
+    test "an offset on the lower endpoint applies to the upper (ISO 8601-1 §5.5.1)" do
+      # The standard's own example: `2018-01-15+05:00/2018-02-20` is
+      # `2018-01-15+05:00/2018-02-20+05:00`.
+      assert {:ok, interval} = Tempo.from_iso8601("2018-01-15T10:00+05:00/2018-02-20T10:00")
+
+      refute Tempo.floating?(interval.to)
+      assert interval.to.shift == interval.from.shift
+
+      assert {:ok, reparsed} = interval |> Tempo.to_iso8601() |> Tempo.from_iso8601()
+      assert reparsed == interval
     end
 
     test "endpoints with different zones are left as written" do
@@ -424,11 +434,11 @@ defmodule Tempo.Iso8601.Extended.Test do
       assert reparsed.to.extended == built.to.extended
     end
 
-    test "Interval.new/1 does not flow a :from frame forward or overwrite" do
+    test "Interval.new/1 flows a :from frame forward and never overwrites" do
       {:ok, paris} = Tempo.from_iso8601("2022-06-15[Europe/Paris]")
       {:ok, floating} = Tempo.from_iso8601("2022-06-20")
       {:ok, forward} = Interval.new(from: paris, to: floating)
-      assert Tempo.floating?(forward.to)
+      assert forward.to.extended.zone_id == "Europe/Paris"
 
       {:ok, london} = Tempo.from_iso8601("2022-06-20[Europe/London]")
       {:ok, both} = Interval.new(from: paris, to: london)

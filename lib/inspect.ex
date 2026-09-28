@@ -958,13 +958,13 @@ defmodule Tempo.Inspect do
   defp recurrence(recurrence), do: Integer.to_string(recurrence)
 
   # IXDTF binds an interval's extended suffix to its *end*, and
-  # `Tempo.Interval.propagate_endpoint_frame/2` flows a grounded `to`
-  # frame backward onto a floating `from`. So when both endpoints carry
-  # the same *zone*, writing it twice is redundant — the single-suffix
-  # form re-parses to the same value.
+  # `Tempo.Interval.propagate_endpoint_frame/2` flows a zone between the
+  # endpoints (either way) and a calendar backward onto a floating `from`.
+  # So when both endpoints carry the same *zone*, writing it twice is
+  # redundant — the single-suffix form re-parses to the same value.
   #
-  # Both the zone and a `u-ca` calendar propagate backward, so either may
-  # be written once. Arbitrary IXDTF tags do not propagate — they are
+  # Both the zone and a `u-ca` calendar reach `from` from the end, so
+  # either may be written once. Arbitrary IXDTF tags do not propagate — they are
   # per-endpoint metadata — so a suffix carrying any is kept on both ends.
   defp drop_shared_suffix(%Tempo{extended: same} = from, %Tempo{extended: same})
        when not is_nil(same) do
