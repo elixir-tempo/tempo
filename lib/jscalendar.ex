@@ -130,7 +130,7 @@ if Code.ensure_loaded?(JSCalendar) do
         ...>   "start": "2026-06-02T09:00:00",
         ...>   "duration": "PT1H"
         ...> })
-        iex> {:ok, set} = Tempo.JSCalendar.from_jscalendar(json)
+        iex> {:ok, set} = Tempo.JSCalendar.parse(json)
         iex> [interval] = Tempo.IntervalSet.to_list(set)
         iex> Tempo.to_iso8601(interval)
         "2026Y6M2DT9H0M0S/T10H0M0S"
@@ -138,9 +138,9 @@ if Code.ensure_loaded?(JSCalendar) do
         "Quarterly review"
 
     """
-    @spec from_jscalendar(binary(), keyword()) :: {:ok, IntervalSet.t()} | {:error, term()}
-    def from_jscalendar(json, options \\ []) when is_binary(json) do
-      with :ok <- Tempo.check_within_option(options, "Tempo.JSCalendar.from_jscalendar/2"),
+    @spec parse(binary(), keyword()) :: {:ok, IntervalSet.t()} | {:error, term()}
+    def parse(json, options \\ []) when is_binary(json) do
+      with :ok <- Tempo.check_within_option(options, "Tempo.JSCalendar.parse/2"),
            {:ok, object} <- JSCalendar.decode(json) do
         to_interval_set(object, options)
       end
@@ -149,7 +149,7 @@ if Code.ensure_loaded?(JSCalendar) do
     @doc """
     Place an already-parsed JSCalendar object on a timeline.
 
-    The struct counterpart of `from_jscalendar/2`, for when the
+    The struct counterpart of `parse/2`, for when the
     document has been decoded once already — as part of a JMAP
     response, say.
 
@@ -160,7 +160,7 @@ if Code.ensure_loaded?(JSCalendar) do
 
     ### Options
 
-    See `from_jscalendar/2`.
+    See `parse/2`.
 
     ### Returns
 

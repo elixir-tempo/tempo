@@ -126,10 +126,10 @@ defmodule Tempo do
   alias Tempo.Mask
   alias Tempo.MaterialisationError
   alias Tempo.Math
+  alias Tempo.ParseError
   alias Tempo.RecurrenceSet.Conditional
   alias Tempo.ResolutionError
   alias Tempo.Rounding
-  alias Tempo.RRule.Encoder
   alias Tempo.RRule.Selection
   alias Tempo.Split
   alias Tempo.Territory
@@ -733,30 +733,40 @@ defmodule Tempo do
   consistency: a numeric offset that disagrees with the critical
   zone is rejected with a `Tempo.ZoneOffsetMismatchError`. An
   elective zone leaves the offset authoritative; pass `strict: true`
-  (see the options form) to reject an elective disagreement too.
+  to reject an elective disagreement too.
+
+  `parse/2` reads everything this function reads, and a locale's own
+  words besides.
 
   ### Arguments
 
   * `string` is any ISO 8601 formatted string, optionally
     followed by an IXDTF suffix.
 
-  * `calendar` (optional) is any `t:Calendar.calendar/0`. When
-    passed, the explicit calendar always wins over any
+  * `calendar_or_options` (optional) is a calendar module or a
+    keyword list of options. A calendar module always wins over any
     `[u-ca=NAME]` tag in the IXDTF suffix. When omitted, the
-    `[u-ca=NAME]` tag is resolved to a `Calendrical.*` module via
-    `Calendrical.calendar_from_cldr_calendar_type/1`; if no tag is present,
+    `[u-ca=NAME]` tag names the calendar, and with no tag
     `Calendrical.Gregorian` is used.
+
+  ### Options
+
+  * `:calendar` is the calendar module, as above.
+
+  * `:strict` when `true` rejects a value whose numeric offset
+    disagrees with an elective IXDTF zone (RFC 9557 §4.2). Defaults
+    to `false`.
 
   ### Returns
 
-  * `{:ok, t}` where the returned struct's `:extended` field
-    is populated when an IXDTF suffix was parsed, or `nil`
-    otherwise.
+  * `{:ok, value}` — a `t:t/0`, `t:Tempo.Interval.t/0`,
+    `t:Tempo.Duration.t/0` or `t:Tempo.Set.t/0` — whose `:extended`
+    field is populated when an IXDTF suffix was parsed.
 
   * `{:error, reason}` when the string cannot be parsed or a
     critical IXDTF suffix is unrecognised.
 
-  ## Examples
+  ### Examples
 
       iex> Tempo.from_iso8601("2022-11-20")
       {:ok, ~o"2022Y11M20D"}
@@ -776,15 +786,6 @@ defmodule Tempo do
 
       iex> {:error, %Tempo.UnknownZoneError{zone_id: "Continent/Imaginary"}} =
       ...>   Tempo.from_iso8601("2022-11-20T10:30:00Z[!Continent/Imaginary]")
-
-  ### Examples
-
-
-      iex> Tempo.from_iso8601("2026-06-15")
-      {:ok, ~o"2026Y6M15D"}
-
-  ### Examples
-
 
       iex> Tempo.from_iso8601("2026-06-15", Calendrical.ISOWeek)
       {:ok, ~o"2026Y6M15D"W}
@@ -1037,14 +1038,15 @@ defmodule Tempo do
   end
 
   @doc """
-  Parse a string that must be an ISO 8601 duration.
+  Parse a duration, written in ISO 8601.
 
-  `from_iso8601/1` admits every shape the standard defines and returns
-  whichever type the string turned out to be. When the caller already
-  knows the profile its value belongs to — an iCalendar `DURATION`
-  property, a duration-form `TRIGGER` (RFC 5545 §3.3.6) — that is one
-  guarantee short: a property holding a date-time parses *successfully
-  as the wrong type*, and the mistake surfaces later, somewhere else.
+  `parse/2` reads every shape and returns whichever type the string
+  turned out to be. When the caller already knows the profile its value
+  belongs to — an iCalendar `DURATION` property, a duration-form
+  `TRIGGER` (RFC 5545 §3.3.6) — that is one guarantee short: a property
+  holding a date-time parses *successfully as the wrong type*, and the
+  mistake surfaces later, somewhere else. A duration is read in ISO 8601
+  only; unlike a date, it has no locale text form to read.
 
   This function takes the profile as the caller's declaration. Only a
   duration is admitted, and the whole string must be one, so a
@@ -1119,30 +1121,35 @@ defmodule Tempo do
   end
 
   @doc """
-  Parse a string that must be an ISO 8601 date.
+  Parse a date, written in ISO 8601 or in a locale's own words.
 
-  Unlike `from_iso8601/1`, which returns whichever shape the string
-  turns out to be, this requires the value to be a date and says so
-  when it is not. A date at any resolution is accepted — `"2026"`,
-  `"2026-06"`, `"2026-06-15"`, `"2026-W12"` and `"2026-166"` are all
-  dates, being intervals of a year, month, day, week and day
-  respectively. A date carrying a time of day is not.
+  `parse_date/2` reads what `parse/2` reads and requires the value to
+  be a date, saying so when it is not. A date at any resolution is
+  accepted — a year (`"2026"`), a month (`"2026-06"`, `"June 2026"`), a
+  week (`"2026-W12"`) or a day (`"2026-06-15"`, `"2026-166"`,
+  `"15 June 2026"`). A date carrying a time of day is not.
 
-  Prefer this over `from_iso8601/1` wherever the field is known to hold
-  a date. A date, a datetime and a time all come back from
-  `from_iso8601/1` as a `t:Tempo.t/0`, so a time-of-day string arriving
-  in a date field is not detected at the point of parsing — it is
-  detected much later, or not at all.
+  Prefer this over `parse/2` wherever the field is known to hold a
+  date. A date, a datetime and a time all come back from `parse/2` as a
+  `t:Tempo.t/0`, so a time of day arriving in a date field is not
+  detected at the point of parsing — it is detected much later, or not
+  at all.
 
   ### Arguments
 
-  * `string` is the candidate ISO 8601 date.
+  * `string` is the date to parse.
 
   ### Options
 
-  * `:calendar` is the calendar to parse against. Defaults to the
-    calendar named by an IXDTF `[u-ca=NAME]` suffix, or
+  * `:locale` is the locale whose words text is read in. Defaults to
+    `Localize.get_locale/0`.
+
+  * `:calendar` is the calendar module to parse against. Defaults to
+    the calendar named by an IXDTF `[u-ca=NAME]` suffix, or
     `Calendrical.Gregorian`.
+
+  * `:reference_date` is the "today" that two-digit years pivot on and
+    partial dates inherit from, when the input is text.
 
   * `:strict` when `true` rejects a value whose numeric offset
     disagrees with its IXDTF zone (RFC 9557 §4.2). Defaults to `false`.
@@ -1162,6 +1169,9 @@ defmodule Tempo do
       iex> Tempo.parse_date("2026-06")
       {:ok, ~o"2026Y6M"}
 
+      iex> Tempo.parse_date("15 June 2026", locale: :en)
+      {:ok, ~o"2026Y6M15D"}
+
   A datetime is not a date, and says so rather than succeeding as the
   wrong shape:
 
@@ -1170,7 +1180,7 @@ defmodule Tempo do
   """
   @spec parse_date(String.t(), keyword()) :: {:ok, t()} | {:error, error_reason()}
   def parse_date(string, options \\ []) when is_binary(string) and is_list(options) do
-    parse_profile(string, :date, options)
+    parse_kind(string, :date, options)
   end
 
   @doc """
@@ -1178,7 +1188,7 @@ defmodule Tempo do
 
   ### Arguments
 
-  * `string` is the candidate ISO 8601 date.
+  * `string` is the date to parse.
 
   ### Options
 
@@ -1200,15 +1210,16 @@ defmodule Tempo do
   end
 
   @doc """
-  Parse a string that must be an ISO 8601 datetime.
+  Parse a datetime, written in ISO 8601 or in a locale's own words.
 
-  A datetime carries both a date and a time of day. A date alone is not
-  a datetime — use `parse_date/2` for that — and neither is a time
+  `parse_datetime/2` reads what `parse/2` reads and requires the value
+  to carry both a date and a time of day. A date alone is not a
+  datetime — use `parse_date/2` for that — and neither is a time
   alone.
 
   ### Arguments
 
-  * `string` is the candidate ISO 8601 datetime.
+  * `string` is the datetime to parse.
 
   ### Options
 
@@ -1228,6 +1239,9 @@ defmodule Tempo do
       iex> Tempo.parse_datetime("2026-06-15T10:30Z")
       {:ok, ~o"2026Y6M15DT10H30MZ"}
 
+      iex> Tempo.parse_datetime("15 June 2026 14:30", locale: :en)
+      {:ok, ~o"2026Y6M15DT14H30M"}
+
   A date with no time of day is not a datetime:
 
       iex> {:error, %Tempo.ParseError{}} = Tempo.parse_datetime("2026-06-15")
@@ -1235,7 +1249,7 @@ defmodule Tempo do
   """
   @spec parse_datetime(String.t(), keyword()) :: {:ok, t()} | {:error, error_reason()}
   def parse_datetime(string, options \\ []) when is_binary(string) and is_list(options) do
-    parse_profile(string, :datetime, options)
+    parse_kind(string, :datetime, options)
   end
 
   @doc """
@@ -1243,7 +1257,7 @@ defmodule Tempo do
 
   ### Arguments
 
-  * `string` is the candidate ISO 8601 datetime.
+  * `string` is the datetime to parse.
 
   ### Options
 
@@ -1265,7 +1279,10 @@ defmodule Tempo do
   end
 
   @doc """
-  Parse a string that must be an ISO 8601 time of day.
+  Parse a time of day, written in ISO 8601 or in a locale's own words.
+
+  `parse_time/2` reads what `parse/2` reads and requires the value to
+  be a time of day, with no date.
 
   ### Ambiguity is resolved in favour of the profile
 
@@ -1290,7 +1307,7 @@ defmodule Tempo do
 
   ### Arguments
 
-  * `string` is the candidate ISO 8601 time of day.
+  * `string` is the time of day to parse.
 
   ### Options
 
@@ -1310,6 +1327,9 @@ defmodule Tempo do
       iex> Tempo.parse_time("T10:30")
       {:ok, ~o"T10H30M"}
 
+      iex> Tempo.parse_time("2:30 PM", locale: :en)
+      {:ok, ~o"T14H30M"}
+
   A datetime is not a time of day:
 
       iex> {:error, %Tempo.ParseError{}} = Tempo.parse_time("2026-06-15T10:30")
@@ -1317,7 +1337,7 @@ defmodule Tempo do
   """
   @spec parse_time(String.t(), keyword()) :: {:ok, t()} | {:error, error_reason()}
   def parse_time(string, options \\ []) when is_binary(string) and is_list(options) do
-    parse_profile(string, :time, options)
+    parse_kind(string, :time, options)
   end
 
   @doc """
@@ -1325,7 +1345,7 @@ defmodule Tempo do
 
   ### Arguments
 
-  * `string` is the candidate ISO 8601 time of day.
+  * `string` is the time of day to parse.
 
   ### Options
 
@@ -1347,20 +1367,21 @@ defmodule Tempo do
   end
 
   @doc """
-  Parse a string that must be an ISO 8601 interval.
+  Parse an interval, written in ISO 8601 or in a locale's own words.
 
-  Every form the standard gives an interval is accepted: a pair of
+  Every form ISO 8601 gives an interval is accepted — a pair of
   datetimes, a datetime and a duration in either order, an open-ended
-  pair, and any of those carrying a repeat rule.
+  pair, and any of those carrying a repeat rule — and so is a range in
+  the locale's words (`"May 5 – May 10, 2026"`).
 
   A `t:Tempo.Interval.t/0` is already distinguishable from the other
-  shapes `from_iso8601/1` returns, so this adds a named error where a
+  shapes `parse/2` returns, so this adds a named error where a
   match would otherwise raise `MatchError`, rather than a type
   guarantee unavailable by other means.
 
   ### Arguments
 
-  * `string` is the candidate ISO 8601 interval.
+  * `string` is the interval to parse.
 
   ### Options
 
@@ -1380,6 +1401,9 @@ defmodule Tempo do
       iex> Tempo.parse_interval("R5/2026-06-15/P1D")
       {:ok, ~o"R5/2026Y6M15D/P1D"}
 
+      iex> Tempo.parse_interval("May 5 – May 10, 2026", locale: :en)
+      {:ok, ~o"2026Y5M5D/10D"}
+
   A single date is not an interval, even though every Tempo value spans
   one — an implicit span is not written with a range operator:
 
@@ -1389,7 +1413,7 @@ defmodule Tempo do
   @spec parse_interval(String.t(), keyword()) ::
           {:ok, Tempo.Interval.t()} | {:error, error_reason()}
   def parse_interval(string, options \\ []) when is_binary(string) and is_list(options) do
-    parse_profile(string, :interval, options)
+    parse_kind(string, :interval, options)
   end
 
   @doc """
@@ -1397,7 +1421,7 @@ defmodule Tempo do
 
   ### Arguments
 
-  * `string` is the candidate ISO 8601 interval.
+  * `string` is the interval to parse.
 
   ### Options
 
@@ -1430,6 +1454,57 @@ defmodule Tempo do
       enforce_strict(value, options)
     end
   end
+
+  # A typed parser reads its ISO 8601 profile first. A string the
+  # profile does not describe is then read as the locale's text, as
+  # `parse/2` reads it, and kept only when it is of the kind asked for.
+  # ISO 8601 that names no real date (`2026-02-30`) stays that error
+  # rather than being read again as text, and a string neither reads
+  # keeps the profile's error.
+  defp parse_kind(string, kind, options) do
+    case parse_profile(string, kind, options) do
+      {:error, %ParseError{} = iso_error} -> text_of_kind(string, kind, options, iso_error)
+      result -> result
+    end
+  end
+
+  defp text_of_kind(string, kind, options, iso_error) do
+    case parse_text(string, options) do
+      {:ok, value} -> of_kind(value, kind, string)
+      {:error, _text_error} -> {:error, iso_error}
+    end
+  end
+
+  defp of_kind(value, kind, string) do
+    case value_kind(value) do
+      ^kind ->
+        {:ok, value}
+
+      other ->
+        {:error,
+         ParseError.exception(
+           input: string,
+           reason: "it reads as #{kind_phrase(other)}, not #{kind_phrase(kind)}"
+         )}
+    end
+  end
+
+  defp value_kind(%Interval{}), do: :interval
+  defp value_kind(%Duration{}), do: :duration
+
+  defp value_kind(%__MODULE__{} = tempo) do
+    case split(tempo) do
+      {%__MODULE__{}, nil} -> :date
+      {nil, %__MODULE__{}} -> :time
+      {%__MODULE__{}, %__MODULE__{}} -> :datetime
+    end
+  end
+
+  defp kind_phrase(:date), do: "a date"
+  defp kind_phrase(:datetime), do: "a datetime"
+  defp kind_phrase(:time), do: "a time of day"
+  defp kind_phrase(:interval), do: "an interval"
+  defp kind_phrase(:duration), do: "a duration"
 
   defp raise_on_error({:ok, value}), do: value
   defp raise_on_error({:error, exception}) when is_exception(exception), do: raise(exception)
@@ -1476,100 +1551,122 @@ defmodule Tempo do
   defp zone_critical?(_other), do: false
 
   @doc """
-  Parse a locale-formatted date, time, datetime, or interval
-  string into a Tempo value.
+  Parse a date, time, datetime, interval, duration or recurrence,
+  written in ISO 8601 or in a locale's own words.
 
-  Delegates to `Calendrical.parse/2` with `as: :map`, then routes
-  the resulting field map (or `{from_map, to_map}` interval pair)
-  through `Tempo.new/1`. Useful when the input shape is not known
-  up-front — a single text field that may carry any of
-  `"2026-05-16"`, `"14:30"`, `"May 16, 2026 2:30 PM"`, or
-  `"May 5 – May 10, 2026"`.
+  ISO 8601 is read first, with the whole grammar `from_iso8601/2`
+  reads — IXDTF suffixes, EDTF qualifiers, intervals, recurrences and
+  durations included. A string ISO 8601 does not describe is then read
+  as the locale's text by `Calendrical.parse/2` — `"May 16, 2026"`,
+  `"2:30 PM"`, `"May 5 – May 10, 2026"` — so one text field can take
+  either form.
 
-  For ISO 8601 / IXDTF input prefer `from_iso8601/1`, which
-  preserves EDTF qualification and IXDTF extended suffixes that
-  the locale-style parser does not understand.
+  The typed parsers — `parse_date/2`, `parse_datetime/2`,
+  `parse_time/2`, `parse_interval/2` and `parse_duration/1` — read the
+  same input and return an error for a value of any other kind.
 
   ### Arguments
 
-  * `input` is the raw user input string.
+  * `input` is the string to parse.
 
-  * `options` is a keyword list forwarded to `Calendrical.parse/2`.
+  * `options` is a keyword list of options.
 
   ### Options
 
-  Notable keys forwarded to `Calendrical.parse/2`:
-
-  * `:locale` is the locale used to interpret month names, AM/PM
-    markers, and similar locale-dependent tokens. Defaults to
-    `Localize.get_locale/0`.
+  * `:locale` is the locale whose month names, AM/PM markers and other
+    words text is read in. Defaults to `Localize.get_locale/0`.
 
   * `:calendar` is the calendar module the input is read in, such as
-    `Calendrical.Hebrew`. Defaults to `Calendar.ISO`. A CLDR calendar
-    name such as `:hebrew` is not a calendar and returns an error.
+    `Calendrical.Hebrew`. Defaults to the calendar an IXDTF
+    `[u-ca=NAME]` suffix names, or `Calendrical.Gregorian`. A CLDR
+    calendar name such as `:hebrew` is not a calendar and returns an
+    error.
 
-  * `:reference_date` is the "today" that two-digit years pivot on
-    and partial dates inherit from.
+  * `:reference_date` is the "today" that two-digit years pivot on and
+    partial dates inherit from, when the input is text.
 
-  The `:as` option is set to `:map` regardless of any caller-supplied
-  value — Tempo always asks Calendrical for the field-map form so it
-  can rebuild a Tempo value from the parsed fields. A UTC offset such
-  as `"+05:00"` becomes the value's shift, as `from_iso8601/1` reads
-  it, and a week of the year (`"week 1 of 2026"`) is the week
-  `from_iso8601/1` reads in `2026-W01`.
+  * `:strict` when `true` rejects a value whose numeric offset
+    disagrees with its IXDTF zone (RFC 9557 §4.2). Defaults to `false`.
+
+  In text, a UTC offset such as `"+05:00"` becomes the value's shift,
+  as `from_iso8601/1` reads it, and a week of the year
+  (`"week 1 of 2026"`) is the week `from_iso8601/1` reads in
+  `2026-W01`.
 
   ### Returns
 
-  * `{:ok, t()}` for a single-value input.
+  * `{:ok, value}` — a `t:t/0` for a date, time or datetime, a
+    `t:Tempo.Interval.t/0` for an interval or recurrence, a
+    `t:Tempo.Duration.t/0` for a duration, or a `t:Tempo.Set.t/0` for
+    a set.
 
-  * `{:ok, Tempo.Interval.t()}` when the input names a range.
-
-  * `{:error, exception}` when Calendrical cannot parse the string,
-    or when `Tempo.new/1` rejects the resulting field map.
+  * `{:error, exception}` when the string is neither ISO 8601 nor text
+    the locale reads, or is ISO 8601 that names no real date
+    (`"2026-02-30"`).
 
   ### Examples
 
-      iex> {:ok, tempo} = Tempo.parse("2026-05-16", locale: :en)
-      iex> tempo.time
-      [year: 2026, month: 5, day: 16]
+      iex> Tempo.parse("2026-06-15T10:30", locale: :en)
+      {:ok, ~o"2026Y6M15DT10H30M"}
 
-      iex> {:ok, tempo} = Tempo.parse("May 16, 2026", locale: :en)
-      iex> tempo.time
-      [year: 2026, month: 5, day: 16]
+      iex> Tempo.parse("15 June 2026", locale: :en)
+      {:ok, ~o"2026Y6M15D"}
 
-      iex> {:ok, tempo} = Tempo.parse("14:30", locale: :en)
-      iex> tempo.time
-      [hour: 14, minute: 30]
+      iex> Tempo.parse("2:30 PM", locale: :en)
+      {:ok, ~o"T14H30M"}
 
-      iex> {:ok, %Tempo.Interval{}} = Tempo.parse("2026-05-05 – 2026-05-10", locale: :en)
+      iex> Tempo.parse("May 5 – May 10, 2026", locale: :en)
+      {:ok, ~o"2026Y5M5D/10D"}
+
+      iex> Tempo.parse("P1DT12H")
+      {:ok, ~o"P1DT12H"}
 
   """
   @spec parse(String.t(), Keyword.t()) ::
-          {:ok, t() | Tempo.Interval.t()} | {:error, Exception.t()}
+          {:ok, t() | Tempo.Interval.t() | Duration.t() | Tempo.Set.t()}
+          | {:error, error_reason()}
   def parse(input, options \\ []) when is_binary(input) do
-    options = Keyword.put(options, :as, :map)
-
-    with {:ok, value} <- Calendrical.parse(input, options) do
-      parsed_to_tempo(value)
+    case from_iso8601(input, options) do
+      {:error, %ParseError{}} -> parse_text(input, options)
+      result -> result
     end
   end
 
   @doc """
-  Bang variant of `parse/2`. Raises on parse failure or invalid
-  component combination.
+  Bang variant of `parse/2`: the parsed value, or a raised exception.
+
+  ### Arguments
+
+  * `input` is the string to parse.
+
+  * `options` is a keyword list of options; see `parse/2`.
+
+  ### Returns
+
+  * The parsed value, as `parse/2` returns it.
 
   ### Examples
 
-      iex> Tempo.parse!("2026-05-16", locale: :en).time
-      [year: 2026, month: 5, day: 16]
+      iex> Tempo.parse!("15 June 2026", locale: :en)
+      ~o"2026Y6M15D"
 
   """
-  @spec parse!(String.t(), Keyword.t()) :: t() | Tempo.Interval.t()
+  @spec parse!(String.t(), Keyword.t()) ::
+          t() | Tempo.Interval.t() | Duration.t() | Tempo.Set.t()
   def parse!(input, options \\ []) when is_binary(input) do
     case parse(input, options) do
       {:ok, value} -> value
       {:error, exception} when is_exception(exception) -> raise exception
       {:error, reason} -> raise ArgumentError, "Tempo.parse!/2 failed: #{inspect(reason)}"
+    end
+  end
+
+  # Read a string as the locale's text: Calendrical parses it to a field
+  # map (or a pair of them for a range), which `Tempo.new/1` rebuilds.
+  defp parse_text(input, options) do
+    with {:ok, value} <- Calendrical.parse(input, Keyword.put(options, :as, :map)),
+         {:ok, parsed} <- parsed_to_tempo(value) do
+      enforce_strict(parsed, options)
     end
   end
 
@@ -1692,94 +1789,6 @@ defmodule Tempo do
     value
     |> Tempo.Inspect.to_iodata()
     |> IO.iodata_to_binary()
-  end
-
-  @doc """
-  Encode a `t:Tempo.Interval.t/0` into an RFC 5545 RRULE string.
-
-  The output does **not** include the leading `RRULE:` prefix,
-  nor a `DTSTART` property — RRULE is a recurrence pattern, not
-  a full iCalendar record. Callers wanting the full record
-  prepend `DTSTART` themselves using the interval's `:from`
-  field.
-
-  ### Supported inputs
-
-  * A `%Tempo.Interval{}` with a single-unit `%Tempo.Duration{}`
-    cadence. Supported units: `:second`, `:minute`, `:hour`,
-    `:day`, `:week`, `:month`, `:year`.
-
-  * `:recurrence` of `:infinity` (no COUNT), a positive integer
-    (COUNT), or `1` combined with `:to` (UNTIL).
-
-  * `:repeat_rule` of `nil`, or a `%Tempo{}` whose `:time` holds a
-    single `{:selection, [...]}` entry. Selection entries for
-    `:month`, `:day` (→ BYMONTHDAY), `:day_of_year`, `:week`,
-    `:hour`, `:minute`, `:second`, and the paired
-    `:day_of_week`/`:instance` (→ BYDAY with optional ordinals)
-    are encoded directly.
-
-  ### Returns
-
-  * `{:ok, rrule_string}` on success.
-
-  * `{:error, reason}` when the interval cannot be expressed as
-    an RRULE (e.g. multi-unit duration, unsupported selection
-    entry).
-
-  ### Examples
-
-      iex> {:ok, i} = Tempo.RRule.parse("FREQ=DAILY;COUNT=10")
-      iex> Tempo.to_rrule(i)
-      {:ok, "COUNT=10;FREQ=DAILY"}
-
-      iex> {:ok, i} = Tempo.RRule.parse("FREQ=YEARLY;BYMONTH=11;BYDAY=4TH")
-      iex> Tempo.to_rrule(i)
-      {:ok, "FREQ=YEARLY;BYMONTH=11;BYDAY=4TH"}
-
-      iex> {:error, %Tempo.ConversionError{}} =
-      ...>   Tempo.to_rrule(Tempo.from_iso8601!("2022-06-15"))
-
-  """
-  @spec to_rrule(Tempo.Interval.t() | term()) ::
-          {:ok, String.t()} | {:error, Tempo.ConversionError.t()}
-  def to_rrule(%Tempo.Interval{} = interval) do
-    Encoder.encode(interval)
-  end
-
-  def to_rrule(other) do
-    {:error,
-     ConversionError.exception(
-       reason:
-         "Only a %Tempo.Interval{} can be converted to an RRULE. " <>
-           "RRULE is a recurrence rule; got: #{inspect(other)}",
-       value: other,
-       target: :rrule
-     )}
-  end
-
-  @doc """
-  Bang variant of `to_rrule/1`.
-
-  ### Returns
-
-  * The RRULE string on success.
-
-  * Raises `Tempo.ConversionError` otherwise.
-
-  ### Examples
-
-
-      iex> Tempo.to_rrule!(~o"R12/2026-01-05/P1D")
-      "COUNT=12;FREQ=DAILY"
-
-  """
-  @spec to_rrule!(Tempo.Interval.t()) :: String.t() | no_return()
-  def to_rrule!(value) do
-    case to_rrule(value) do
-      {:ok, rrule} -> rrule
-      {:error, %Tempo.ConversionError{} = error} -> raise error
-    end
   end
 
   @doc """

@@ -111,6 +111,8 @@ The zone axis has two words for one side: `grounded?/1`, `GroundedTempoError` an
 | `JSCalendar.from_jscalendar/2` | `JSCalendar.parse/2` |
 | `Tempo.to_rrule/1` | `RRule.to_string/1` |
 
+In the event `parse/2` read ISO dates through Calendrical but not ISO datetimes, intervals, durations or IXDTF, so it now reads Tempo's ISO 8601 grammar first and the locale's words after, and the typed parsers read the same.
+
 `parse` with `to_string` is the text pair, as in Localize and `URI`. `Tempo.from_iso8601/2` and `to_iso8601/1` stay on `Tempo`: ISO 8601 is Tempo's own syntax, as it is `Date`'s.
 
 ## Elixir conversions
@@ -287,7 +289,7 @@ Each task is one commit, verified on both upstream branches, with its guides, RE
 
 * [x] **Anchor** — one meaning, `UnanchoredError`, `anchor/2` folded into `at/2` and `on/2`. 2026-09-28, `3a1b236`.
 
-* [ ] **Floating, zoned and datetime** — `zoned?/1`, `ZonedTempoError`, the `datetime` conversions, `to_calendar/1` removed.
+* [x] **Floating, zoned and datetime** — `zoned?/1`, `ZonedTempoError`, the `datetime` conversions, `to_calendar/1` removed. 2026-09-28, `93e2e25`.
 
 * [ ] **Parsing and formats** — the typed parsers, `ICal.parse/2`, `JSCalendar.parse/2`, `RRule.to_string/1`.
 

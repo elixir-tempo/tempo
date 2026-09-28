@@ -18,7 +18,7 @@ Given an RRULE, Tempo will:
 
 * **Iterate** via `Enum` — `Enum.to_list/1`, `Stream.take/2`, etc. — when the rule is bounded or a `:within` window is supplied.
 
-* **Re-encode** back to an RRULE string via `Tempo.to_rrule/1` for values that originated as RRULEs.
+* **Re-encode** back to an RRULE string via `Tempo.RRule.to_string/1` for values that originated as RRULEs.
 
 ## Property-by-property support
 
@@ -55,7 +55,7 @@ RFC 5545 defines each BY-rule as either **EXPAND** (generates additional candida
 
 ### RDATE and EXDATE
 
-These are VEVENT-level properties rather than RRULE-level, but they compose with RRULE expansion through `Tempo.ICal.from_ical/2`:
+These are VEVENT-level properties rather than RRULE-level, but they compose with RRULE expansion through `Tempo.ICal.parse/2`:
 
 * **`RDATE`** contributes additional occurrences beyond the RRULE expansion. Tempo implements this as a `union` of the RRULE expansion with an `%Tempo.IntervalSet{}` of the RDATEs (each RDATE carries the event's original `DTEND - DTSTART` span; metadata is preserved).
 
@@ -85,7 +85,7 @@ A small list of features outside Tempo's current RRULE scope:
 
 * **`EXRULE`** — deprecated by RFC 5545 Errata in favour of EXDATE. Not exposed by the underlying `ical` library and not implemented in Tempo. EXDATE covers every use case.
 
-* **Duration-only VEVENT** (DURATION without DTEND) — not yet supported in `Tempo.ICal.from_ical/2`. The iCal library parses it; Tempo's conversion doesn't handle it. Raises `Tempo.ConversionError`.
+* **Duration-only VEVENT** (DURATION without DTEND) — not yet supported in `Tempo.ICal.parse/2`. The iCal library parses it; Tempo's conversion doesn't handle it. Raises `Tempo.ConversionError`.
 
 * **Sub-second `FREQ` or `BY*`** — Tempo's resolution ladder currently stops at `:second`. Sub-second recurrence isn't meaningful within Tempo's AST.
 
@@ -112,7 +112,7 @@ Tempo's iCalendar integration (event parsing, VTIMEZONE, RDATE/EXDATE collection
 
 * [Scheduling](./scheduling.md) — bounded enumeration, the `:within` option, wall-clock-vs-UTC authority, floating vs zoned events.
 
-* [iCalendar integration](./ical-integration.md) — full details on `Tempo.ICal.from_ical/2` and round-tripping `.ics` files.
+* [iCalendar integration](./ical-integration.md) — full details on `Tempo.ICal.parse/2` and round-tripping `.ics` files.
 
 * [Set operations](./set-operations.md) — the member-preserving set algebra that RRULE expansions compose into.
 

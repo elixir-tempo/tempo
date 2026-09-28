@@ -98,7 +98,7 @@ defmodule Tempo.OpenWindowTest do
     end
 
     test "an iCalendar import returns an error" do
-      assert {:error, %ArgumentError{}} = ICal.from_ical("", within: ~o"2026/..")
+      assert {:error, %ArgumentError{}} = ICal.parse("", within: ~o"2026/..")
     end
   end
 end

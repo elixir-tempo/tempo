@@ -332,7 +332,7 @@ defmodule Tempo.Explain.Test do
       END:VCALENDAR
       """
 
-      {:ok, set} = ICal.from_ical(ics)
+      {:ok, set} = ICal.parse(ics)
       text = Tempo.explain(set)
       assert text =~ "IntervalSet with 1 interval"
       assert text =~ "Standup"

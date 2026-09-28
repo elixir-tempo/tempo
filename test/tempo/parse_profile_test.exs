@@ -113,8 +113,44 @@ defmodule Tempo.ParseProfileTest do
       assert Exception.message(error) =~ "as a date"
       assert Exception.message(error) =~ "2026-06-15T10:30"
 
+      # A date is read, so the error says what it read as well as what
+      # was expected.
       {:error, error} = Tempo.parse_interval("2026-06-15")
-      assert Exception.message(error) =~ "as an interval"
+      assert Exception.message(error) =~ "2026-06-15"
+      assert Exception.message(error) =~ "it reads as a date, not an interval"
+    end
+  end
+
+  describe "each profile reads the locale's words too" do
+    test "text of the profile's own kind" do
+      assert Tempo.parse_date("15 June 2026", locale: :en) == {:ok, ~o"2026-06-15"}
+      assert Tempo.parse_date("June 2026", locale: :en) == {:ok, ~o"2026-06"}
+
+      assert Tempo.parse_datetime("15 June 2026 14:30", locale: :en) ==
+               {:ok, ~o"2026-06-15T14:30"}
+
+      assert Tempo.parse_time("2:30 PM", locale: :en) == {:ok, ~o"T14:30"}
+
+      assert {:ok, %Tempo.Interval{}} =
+               Tempo.parse_interval("May 5 – May 10, 2026", locale: :en)
+    end
+
+    test "text of another kind says what it reads as" do
+      assert {:error, %Tempo.ParseError{} = error} =
+               Tempo.parse_date("15 June 2026 14:30", locale: :en)
+
+      assert Exception.message(error) =~ "it reads as a datetime, not a date"
+
+      assert {:error, %Tempo.ParseError{} = error} = Tempo.parse_time("15 June 2026", locale: :en)
+      assert Exception.message(error) =~ "it reads as a date, not a time of day"
+    end
+
+    test "a string neither reads keeps the profile's error, stated once" do
+      assert {:error, %Tempo.ParseError{} = error} = Tempo.parse_date("tomorrow", locale: :en)
+
+      message = Exception.message(error)
+      assert message =~ "as a date"
+      assert length(String.split(message, "Could not parse")) == 2
     end
   end
 

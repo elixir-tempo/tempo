@@ -85,13 +85,13 @@ defmodule Tempo.RoundTripTest do
       test "#{rrule}" do
         input = unquote(rrule)
         {:ok, ast} = RRule.parse(input)
-        {:ok, encoded} = Tempo.to_rrule(ast)
+        {:ok, encoded} = RRule.to_string(ast)
 
         {:ok, ast2} = RRule.parse(encoded)
         assert ast == ast2, "AST changed after round-trip for #{inspect(input)}"
 
         # Fixed-point: encoding twice should match.
-        {:ok, encoded2} = Tempo.to_rrule(ast2)
+        {:ok, encoded2} = RRule.to_string(ast2)
         assert encoded == encoded2, "encoder is not a fixed point for #{inspect(input)}"
       end
     end
@@ -101,31 +101,31 @@ defmodule Tempo.RoundTripTest do
       # FREQ+INTERVAL (analog to duration), then BY* (analog to
       # /F<rule>).
       assert {:ok, "COUNT=10;FREQ=DAILY"} =
-               RRule.parse!("FREQ=DAILY;COUNT=10") |> Tempo.to_rrule()
+               RRule.parse!("FREQ=DAILY;COUNT=10") |> RRule.to_string()
 
       assert {:ok, "UNTIL=20221231;FREQ=WEEKLY"} =
-               RRule.parse!("FREQ=WEEKLY;UNTIL=20221231") |> Tempo.to_rrule()
+               RRule.parse!("FREQ=WEEKLY;UNTIL=20221231") |> RRule.to_string()
 
       assert {:ok, "UNTIL=20221231;FREQ=WEEKLY;BYDAY=MO,WE,FR"} =
                RRule.parse!("FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20221231")
-               |> Tempo.to_rrule()
+               |> RRule.to_string()
     end
   end
 
   describe "cross-format: ISO recurring interval → RRULE" do
     test "R/2022-01-01/P1D → FREQ=DAILY" do
       {:ok, ast} = Tempo.from_iso8601("R/2022-01-01/P1D")
-      assert {:ok, "FREQ=DAILY"} = Tempo.to_rrule(ast)
+      assert {:ok, "FREQ=DAILY"} = RRule.to_string(ast)
     end
 
     test "R10/2022-01-01/P1M → COUNT=10;FREQ=MONTHLY" do
       {:ok, ast} = Tempo.from_iso8601("R10/2022-01-01/P1M")
-      assert {:ok, "COUNT=10;FREQ=MONTHLY"} = Tempo.to_rrule(ast)
+      assert {:ok, "COUNT=10;FREQ=MONTHLY"} = RRule.to_string(ast)
     end
 
     test "R5/2022-01-01/P2W → COUNT=5;FREQ=WEEKLY;INTERVAL=2" do
       {:ok, ast} = Tempo.from_iso8601("R5/2022-01-01/P2W")
-      assert {:ok, "COUNT=5;FREQ=WEEKLY;INTERVAL=2"} = Tempo.to_rrule(ast)
+      assert {:ok, "COUNT=5;FREQ=WEEKLY;INTERVAL=2"} = RRule.to_string(ast)
     end
   end
 
@@ -178,10 +178,10 @@ defmodule Tempo.RoundTripTest do
     end
   end
 
-  describe "to_rrule error cases (ConversionError)" do
+  describe "RRule.to_string/1 error cases (ConversionError)" do
     test "non-interval rejected with ConversionError" do
       assert {:error, %Tempo.ConversionError{target: :rrule, reason: message}} =
-               Tempo.to_rrule(Tempo.from_iso8601!("2022-06-15"))
+               RRule.to_string(Tempo.from_iso8601!("2022-06-15"))
 
       assert message =~ "Interval"
     end
@@ -193,7 +193,7 @@ defmodule Tempo.RoundTripTest do
       }
 
       assert {:error, %Tempo.ConversionError{target: :rrule, reason: message}} =
-               Tempo.to_rrule(interval)
+               RRule.to_string(interval)
 
       assert message =~ "duration"
     end
@@ -202,7 +202,7 @@ defmodule Tempo.RoundTripTest do
       interval = %Tempo.Interval{duration: %Tempo.Duration{time: [year: 1, month: 6]}}
 
       assert {:error, %Tempo.ConversionError{target: :rrule, reason: message}} =
-               Tempo.to_rrule(interval)
+               RRule.to_string(interval)
 
       assert message =~ "single"
     end
@@ -211,7 +211,7 @@ defmodule Tempo.RoundTripTest do
       interval = %Tempo.Interval{duration: %Tempo.Duration{time: [century: 1]}}
 
       assert {:error, %Tempo.ConversionError{target: :rrule, reason: message}} =
-               Tempo.to_rrule(interval)
+               RRule.to_string(interval)
 
       assert message =~ "century"
     end
@@ -225,7 +225,7 @@ defmodule Tempo.RoundTripTest do
             {"R/2026-01-01/P1Y/FLLL2K2IN/P10DN4K2IN", "a selection window"}
           ] do
         assert {:error, %Tempo.ConversionError{target: :rrule, reason: reason}} =
-                 iso |> Tempo.from_iso8601!() |> Tempo.to_rrule()
+                 iso |> Tempo.from_iso8601!() |> RRule.to_string()
 
         assert reason =~ named
       end
@@ -239,21 +239,21 @@ defmodule Tempo.RoundTripTest do
         {:ok, rule} = Cron.parse(expression)
 
         assert {:error, %Tempo.ConversionError{target: :rrule, reason: reason}} =
-                 Tempo.to_rrule(rule)
+                 RRule.to_string(rule)
 
         assert reason =~ named
       end
     end
 
-    test "to_rrule! raises on conversion failure" do
+    test "RRule.to_string!/1 raises on conversion failure" do
       assert_raise Tempo.ConversionError, ~r/Interval/, fn ->
-        Tempo.to_rrule!(Tempo.from_iso8601!("2022-06-15"))
+        RRule.to_string!(Tempo.from_iso8601!("2022-06-15"))
       end
     end
 
-    test "to_rrule! returns the string on success" do
+    test "RRule.to_string!/1 returns the string on success" do
       {:ok, interval} = Tempo.from_iso8601("R5/2022-01-01/P1D")
-      assert "COUNT=5;FREQ=DAILY" = Tempo.to_rrule!(interval)
+      assert "COUNT=5;FREQ=DAILY" = RRule.to_string!(interval)
     end
   end
 end

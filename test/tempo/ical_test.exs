@@ -9,7 +9,7 @@ defmodule Tempo.ICal.Test do
 
   doctest Tempo.ICal
 
-  # Tests for `Tempo.ICal.from_ical/2` — iCalendar → IntervalSet
+  # Tests for `Tempo.ICal.parse/2` — iCalendar → IntervalSet
   # conversion with event metadata preserved on each interval.
   #
   # Three input sources:
@@ -42,7 +42,7 @@ defmodule Tempo.ICal.Test do
     :ok
   end
 
-  describe "from_ical/2 — simple events" do
+  describe "parse/2 — simple events" do
     test "a single datetime event becomes one interval with metadata" do
       ics = """
       BEGIN:VCALENDAR
@@ -60,7 +60,7 @@ defmodule Tempo.ICal.Test do
       END:VCALENDAR
       """
 
-      assert {:ok, set} = ICal.from_ical(ics)
+      assert {:ok, set} = ICal.parse(ics)
       assert length(set.intervals) == 1
 
       [iv] = set.intervals
@@ -80,7 +80,7 @@ defmodule Tempo.ICal.Test do
       END:VCALENDAR
       """
 
-      assert {:ok, set} = ICal.from_ical(ics)
+      assert {:ok, set} = ICal.parse(ics)
       assert set.metadata.prodid == "-//Vendor//Product//EN"
       assert set.metadata.version == "2.0"
       assert set.metadata.scale == "GREGORIAN"
@@ -102,7 +102,7 @@ defmodule Tempo.ICal.Test do
       END:VCALENDAR
       """
 
-      {:ok, set} = ICal.from_ical(ics)
+      {:ok, set} = ICal.parse(ics)
       [iv] = set.intervals
 
       assert iv.from.time == [year: 2022, month: 7, day: 4]
@@ -125,7 +125,7 @@ defmodule Tempo.ICal.Test do
       END:VCALENDAR
       """
 
-      {:ok, set} = ICal.from_ical(ics)
+      {:ok, set} = ICal.parse(ics)
       [iv] = set.intervals
       assert iv.from.time[:day] == 13
       assert iv.to.time[:day] == 16
@@ -147,7 +147,7 @@ defmodule Tempo.ICal.Test do
       END:VCALENDAR
       """
 
-      {:ok, set} = ICal.from_ical(ics)
+      {:ok, set} = ICal.parse(ics)
       [iv] = set.intervals
 
       # `to` advances by one day and stays at day resolution — no
@@ -173,7 +173,7 @@ defmodule Tempo.ICal.Test do
       END:VCALENDAR
       """
 
-      {:ok, set} = ICal.from_ical(ics)
+      {:ok, set} = ICal.parse(ics)
       [iv] = set.intervals
 
       # RFC 5545 calls this a zero-duration point, but Tempo's domain
@@ -203,7 +203,7 @@ defmodule Tempo.ICal.Test do
       END:VCALENDAR
       """
 
-      {:ok, set} = ICal.from_ical(ics)
+      {:ok, set} = ICal.parse(ics)
       [iv] = set.intervals
 
       # The same chokepoint catches an explicit zero-duration DTEND.
@@ -236,7 +236,7 @@ defmodule Tempo.ICal.Test do
       END:VCALENDAR
       """
 
-      {:ok, set} = ICal.from_ical(ics)
+      {:ok, set} = ICal.parse(ics)
 
       refute Enum.any?(set.intervals, &Interval.empty?/1)
     end
@@ -266,7 +266,7 @@ defmodule Tempo.ICal.Test do
       END:VCALENDAR
       """
 
-      {:ok, set} = ICal.from_ical(ics)
+      {:ok, set} = ICal.parse(ics)
       assert length(set.intervals) == 2
       summaries = set.intervals |> Enum.map(& &1.metadata.summary) |> Enum.sort()
       assert summaries == ["Event A", "Event B"]
@@ -294,13 +294,13 @@ defmodule Tempo.ICal.Test do
       END:VCALENDAR
       """
 
-      {:ok, set} = ICal.from_ical(ics)
+      {:ok, set} = ICal.parse(ics)
       assert Enum.map(set.intervals, & &1.metadata.summary) == ["Earlier", "Later"]
     end
   end
 
   if @ical_floating_supported do
-    describe "from_ical/2 — floating (zone-less) date-times" do
+    describe "parse/2 — floating (zone-less) date-times" do
       # RFC 5545 §3.3.5 "FORM #1": a DATE-TIME with neither a `Z`
       # suffix nor a `TZID` parameter is a *floating* time — the same
       # wall-clock reading in whatever zone the observer is in. As of
@@ -324,7 +324,7 @@ defmodule Tempo.ICal.Test do
         END:VCALENDAR
         """
 
-        assert {:ok, set} = ICal.from_ical(ics)
+        assert {:ok, set} = ICal.parse(ics)
         assert [iv] = set.intervals
 
         # Zone-less: no invented UTC/offset, unlike a `Z`-suffixed value
@@ -355,7 +355,7 @@ defmodule Tempo.ICal.Test do
         END:VCALENDAR
         """
 
-        assert {:ok, set} = ICal.from_ical(ics)
+        assert {:ok, set} = ICal.parse(ics)
 
         starts =
           set
@@ -372,7 +372,7 @@ defmodule Tempo.ICal.Test do
     end
   end
 
-  describe "from_ical/2 — recurrence" do
+  describe "parse/2 — recurrence" do
     test "FREQ=WEEKLY;COUNT=3 — three weekly occurrences" do
       ics = """
       BEGIN:VCALENDAR
@@ -389,7 +389,7 @@ defmodule Tempo.ICal.Test do
       END:VCALENDAR
       """
 
-      {:ok, set} = ICal.from_ical(ics)
+      {:ok, set} = ICal.parse(ics)
       assert length(set.intervals) == 3
 
       # Each occurrence keeps its summary; days are 7 apart.
@@ -418,7 +418,7 @@ defmodule Tempo.ICal.Test do
       END:VCALENDAR
       """
 
-      {:ok, set} = ICal.from_ical(ics)
+      {:ok, set} = ICal.parse(ics)
       assert length(set.intervals) == 5
       # All in June.
       assert Enum.all?(set.intervals, fn iv -> iv.from.time[:month] == 6 end)
@@ -439,7 +439,7 @@ defmodule Tempo.ICal.Test do
       END:VCALENDAR
       """
 
-      {:ok, set} = ICal.from_ical(ics)
+      {:ok, set} = ICal.parse(ics)
       assert length(set.intervals) == 4
 
       # 14-day spacing: Jun 1, Jun 15, Jun 29, Jul 13.
@@ -462,7 +462,7 @@ defmodule Tempo.ICal.Test do
       END:VCALENDAR
       """
 
-      assert {:error, reason} = ICal.from_ical(ics)
+      assert {:error, reason} = ICal.parse(ics)
       assert Exception.message(reason) =~ "unbounded"
       assert Exception.message(reason) =~ ":within"
     end
@@ -484,7 +484,7 @@ defmodule Tempo.ICal.Test do
       END:VCALENDAR
       """
 
-      {:ok, set} = ICal.from_ical(ics, within: ~o"2022-06-01/2022-06-08")
+      {:ok, set} = ICal.parse(ics, within: ~o"2022-06-01/2022-06-08")
       # 7 days in the window (Jun 1..Jun 7 inclusive; Jun 8 is
       # excluded by the window's half-open end).
       assert length(set.intervals) == 7
@@ -511,7 +511,7 @@ defmodule Tempo.ICal.Test do
       END:VCALENDAR
       """
 
-      {:ok, set} = ICal.from_ical(ics)
+      {:ok, set} = ICal.parse(ics)
       assert length(set.intervals) == 3
 
       # No fallback metadata — all fully materialised.
@@ -529,7 +529,7 @@ defmodule Tempo.ICal.Test do
     end
   end
 
-  describe "from_ical/2 — edge cases" do
+  describe "parse/2 — edge cases" do
     test "events with nil DTSTART are skipped silently" do
       # Technically malformed per RFC 5545, but some exports
       # include them. Skipping is less disruptive than erroring.
@@ -547,7 +547,7 @@ defmodule Tempo.ICal.Test do
       END:VCALENDAR
       """
 
-      {:ok, set} = ICal.from_ical(ics)
+      {:ok, set} = ICal.parse(ics)
       assert length(set.intervals) == 1
     end
 
@@ -555,7 +555,7 @@ defmodule Tempo.ICal.Test do
       # The underlying `ical` library is tolerant: non-iCalendar
       # input parses to an empty calendar, not a raise. We pass
       # that through — the caller sees zero intervals.
-      assert {:ok, set} = ICal.from_ical("not valid ical")
+      assert {:ok, set} = ICal.parse("not valid ical")
       assert set.intervals == []
     end
   end
@@ -579,7 +579,7 @@ defmodule Tempo.ICal.Test do
       END:VCALENDAR
       """
 
-      {:ok, events} = ICal.from_ical(ics)
+      {:ok, events} = ICal.parse(ics)
       work_hours = ~o"2022-06-15T09/2022-06-15T17"
 
       {:ok, overlap} = Tempo.intersection(events, work_hours)
@@ -608,7 +608,7 @@ defmodule Tempo.ICal.Test do
       END:VCALENDAR
       """
 
-      {:ok, events} = ICal.from_ical(ics)
+      {:ok, events} = ICal.parse(ics)
       break_time = ~o"2022-06-15T10/2022-06-15T11"
 
       # Instant-level difference: the event member is trimmed into
@@ -651,8 +651,8 @@ defmodule Tempo.ICal.Test do
       END:VCALENDAR
       """
 
-      {:ok, a} = ICal.from_ical(a_ics)
-      {:ok, b} = ICal.from_ical(b_ics)
+      {:ok, a} = ICal.parse(a_ics)
+      {:ok, b} = ICal.parse(b_ics)
 
       {:ok, result} = Tempo.intersection(a, b)
       # The set-level metadata comes from the first operand.
@@ -660,10 +660,10 @@ defmodule Tempo.ICal.Test do
     end
   end
 
-  describe "from_ical/2 — public fixtures (borrowed from ical library)" do
+  describe "parse/2 — public fixtures (borrowed from ical library)" do
     test "one_event.ics parses and carries full metadata" do
       path = Path.join(@fixtures_dir, "one_event.ics")
-      {:ok, set} = ICal.from_ical_file(path)
+      {:ok, set} = ICal.parse_file(path)
       [iv] = set.intervals
 
       assert iv.metadata.uid == "1001"
@@ -684,19 +684,19 @@ defmodule Tempo.ICal.Test do
       # can't be placed on the time line). The test exists mainly
       # to prove we don't crash on incomplete events.
       path = Path.join(@fixtures_dir, "attendees.ics")
-      {:ok, set} = ICal.from_ical_file(path)
+      {:ok, set} = ICal.parse_file(path)
       assert set.intervals == []
     end
 
     test "timezone_event.ics parses (zoned events)" do
       path = Path.join(@fixtures_dir, "timezone_event.ics")
-      assert {:ok, set} = ICal.from_ical_file(path)
+      assert {:ok, set} = ICal.parse_file(path)
       assert set.intervals != []
     end
 
     test "calendar_name.ics surfaces X-WR-CALNAME on the set's metadata" do
       path = Path.join(@fixtures_dir, "calendar_name.ics")
-      {:ok, set} = ICal.from_ical_file(path)
+      {:ok, set} = ICal.parse_file(path)
       # Even if the fixture uses a plain WR-CALNAME, the metadata
       # should be a plain string.
       if set.metadata[:name] do
@@ -706,7 +706,7 @@ defmodule Tempo.ICal.Test do
 
     test "recurrance_with_count.ics expands to N occurrences" do
       path = Path.join(@fixtures_dir, "recurrance_with_count.ics")
-      {:ok, set} = ICal.from_ical_file(path)
+      {:ok, set} = ICal.parse_file(path)
       # The fixture has FREQ=DAILY;COUNT=3 so expansion gives us
       # three day-long occurrences.
       assert length(set.intervals) == 3
@@ -720,7 +720,7 @@ defmodule Tempo.ICal.Test do
   # doesn't try to run tests whose setup can't produce an `ics`
   # context.
   if File.exists?(@apple_fixture) do
-    describe "from_ical/2 — real Apple Calendar export" do
+    describe "parse/2 — real Apple Calendar export" do
       @describetag :real_ical_fixture
 
       setup do
@@ -728,13 +728,13 @@ defmodule Tempo.ICal.Test do
       end
 
       test "parses without error and produces an IntervalSet", %{ics: ics} do
-        assert {:ok, set} = ICal.from_ical(ics)
+        assert {:ok, set} = ICal.parse(ics)
         assert %Tempo.IntervalSet{} = set
         assert set.intervals != []
       end
 
       test "preserves every event's summary on its interval", %{ics: ics} do
-        {:ok, set} = ICal.from_ical(ics)
+        {:ok, set} = ICal.parse(ics)
         # Every interval should have a summary (optional in RFC 5545
         # but present in every real export we've seen).
         summaries =
@@ -746,7 +746,7 @@ defmodule Tempo.ICal.Test do
       end
 
       test "calendar name from X-WR-CALNAME is captured", %{ics: ics} do
-        {:ok, set} = ICal.from_ical(ics)
+        {:ok, set} = ICal.parse(ics)
         # The Apple export carries an X-WR-CALNAME; it should come
         # through as a plain string, not a wrapped struct.
         case set.metadata[:name] do

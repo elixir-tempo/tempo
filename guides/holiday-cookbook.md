@@ -2,7 +2,7 @@
 
 Holidays are the sternest test of a recurrence language: they are fixed dates, nth-weekdays, moon phases, computed feasts, and dates in half a dozen calendars, often with an observed-day shift on top. This cookbook takes each **rule family** a holiday library uses (the shapes `date-holidays` and `tempo_holidays` classify rules into) and gives the equivalent Tempo value.
 
-Every expression below has been **materialised and checked against the holiday's real date** — the dates in the prose are what Tempo produces, not what it ought to. The fourth column is the equivalent RFC 5545 **RRULE** where one exists; a dash means the rule is one RRULE genuinely cannot express (a computed feast, or a date in a non-Gregorian calendar), and `Tempo.to_rrule/1` reports as much rather than emitting a wrong approximation.
+Every expression below has been **materialised and checked against the holiday's real date** — the dates in the prose are what Tempo produces, not what it ought to. The fourth column is the equivalent RFC 5545 **RRULE** where one exists; a dash means the rule is one RRULE genuinely cannot express (a computed feast, or a date in a non-Gregorian calendar), and `Tempo.RRule.to_string/1` reports as much rather than emitting a wrong approximation.
 
 ## Reading a holiday value
 
@@ -154,7 +154,7 @@ Several rule families do not change *which day* a holiday falls on but *which ye
 
 > The domain is **inclusion-first**: `{2020Y..2030Y}` is the span of years the holiday runs, each `^2026Y` removes one, and a trailing `e`/`o`/`l`/`c` filters the rest to the even, odd, leap or common years — `l` and `c` follow the calendar's own leap rule, so `{2096Y..2104Y}l` skips 2100 and `c` keeps it. A domain of *only* exclusions (`~o"R/^2026Y/P1Y/FL12M25DN"`) or an open filter (`~o"R/..e/P1Y/FL12M25DN"`, every even year) carries no window of its own, so it needs a `:within` window naming the years to work over: `Tempo.to_interval(value, within: ~o"{2024..2028}Y")`.
 
-Every RRULE here is a dash, and for a reason worth stating: RFC 5545 keeps year restrictions *out* of the recurrence rule. It can bound a run (`UNTIL`, `COUNT`) and thin a cadence (`INTERVAL`), but a *disabled* year is an `EXDATE` alongside the rule, not in it, and even/odd or leap-year selection it cannot express at all. `Tempo.to_rrule/1` folds none of these back into the `RRULE`; it emits the base recurrence — `FREQ=YEARLY;BYMONTH=12;BYMONTHDAY=25` for every row above — which, taken alone, would fire in the cancelled and off-parity years. Rather than present that as the equivalent, the column is a dash, exactly as it is for the computed feasts.
+Every RRULE here is a dash, and for a reason worth stating: RFC 5545 keeps year restrictions *out* of the recurrence rule. It can bound a run (`UNTIL`, `COUNT`) and thin a cadence (`INTERVAL`), but a *disabled* year is an `EXDATE` alongside the rule, not in it, and even/odd or leap-year selection it cannot express at all. `Tempo.RRule.to_string/1` folds none of these back into the `RRULE`; it emits the base recurrence — `FREQ=YEARLY;BYMONTH=12;BYMONTHDAY=25` for every row above — which, taken alone, would fire in the cancelled and off-parity years. Rather than present that as the equivalent, the column is a dash, exactly as it is for the computed feasts.
 
 ## Enable, weekday gates, and bridges (set algebra)
 

@@ -334,7 +334,7 @@ lunch    = ~o"2026-06-15T12/2026-06-15T13"
 <!-- guides:skip -->
 
 ```elixir
-{:ok, schedule} = Tempo.ICal.from_ical_file("~/work.ics")
+{:ok, schedule} = Tempo.ICal.parse_file("~/work.ics")
 
 work = ~o"2026-06-15T09/2026-06-15T17"
 {:ok, free} = Tempo.difference(work, schedule)
@@ -569,7 +569,7 @@ iex> Tempo.IntervalSet.count(set)
 <!-- guides:skip -->
 
 ```elixir
-iex> {:ok, schedule} = Tempo.ICal.from_ical_file("~/work.ics")
+iex> {:ok, schedule} = Tempo.ICal.parse_file("~/work.ics")
 iex> Tempo.IntervalSet.count(schedule)
 # One interval per VEVENT (or per materialised recurrence occurrence).
 ```
@@ -583,7 +583,7 @@ Pass a `:within` so unbounded recurrences terminate:
 <!-- guides:skip -->
 
 ```elixir
-iex> {:ok, schedule} = Tempo.ICal.from_ical(ics, within: ~o"2026-04-01/2026-07-01")
+iex> {:ok, schedule} = Tempo.ICal.parse(ics, within: ~o"2026-04-01/2026-07-01")
 ```
 
 Every RRULE part (including BY-rules, BYSETPOS, WKST, RDATE, EXDATE) materialises correctly — one `%Tempo.Interval{}` per occurrence carrying the event's metadata.
@@ -593,7 +593,7 @@ Every RRULE part (including BY-rules, BYSETPOS, WKST, RDATE, EXDATE) materialise
 <!-- guides:skip -->
 
 ```elixir
-{:ok, schedule} = Tempo.ICal.from_ical(ics)
+{:ok, schedule} = Tempo.ICal.parse(ics)
 
 ada_meetings =
   schedule
@@ -833,8 +833,8 @@ century = ~o"2000-01-01/2100-01-01"
 <!-- guides:skip -->
 
 ```elixir
-{:ok, ada}   = Tempo.ICal.from_ical_file("~/ada.ics")
-{:ok, grace} = Tempo.ICal.from_ical_file("~/grace.ics")
+{:ok, ada}   = Tempo.ICal.parse_file("~/ada.ics")
+{:ok, grace} = Tempo.ICal.parse_file("~/grace.ics")
 
 work = ~o"2026-06-15T09/2026-06-15T17"
 
@@ -894,8 +894,8 @@ Tempo.overlaps?(dig_layer, ming_period)
 <!-- guides:skip -->
 
 ```elixir
-{:ok, ny}     = Tempo.ICal.from_ical_file("~/cal_ny.ics")
-{:ok, london} = Tempo.ICal.from_ical_file("~/cal_london.ics")
+{:ok, ny}     = Tempo.ICal.parse_file("~/cal_ny.ics")
+{:ok, london} = Tempo.ICal.parse_file("~/cal_london.ics")
 
 work = ~o"2026-06-15T09/2026-06-15T17"
 
@@ -942,7 +942,7 @@ ANBIMA publishes the holiday list (2001–2099) as a spreadsheet; `scripts/anbim
 <!-- guides:skip -->
 
 ```elixir
-{:ok, holidays} = Tempo.ICal.from_ical_file("feriados_anbima.ics")
+{:ok, holidays} = Tempo.ICal.parse_file("feriados_anbima.ics")
 
 settlement = ~o"2024-01-01"
 maturity   = ~o"2025-01-01"
@@ -1065,7 +1065,7 @@ workable_daylight.(lisbon_december, :PT, {-9.1393, 38.7223}, "Europe/Lisbon")
 Three details matter. The December value carries its zone (`~o"2026-12[Europe/Helsinki]"`), and `select` propagates it down to the hour members — without it, naive site hours would compare as UTC and shift the overlap by two hours. `Astro.sunrise/3` needs `time_zone:` named explicitly unless `tz_world` is a dependency to resolve zones from coordinates. And the `DateTime.truncate(:second)` keeps sunrise at whole-second resolution, which is as precise as any site schedule needs.
 
 ```elixir
-{:ok, schedule} = Tempo.ICal.from_ical(ics, within: ~o"2026-06")
+{:ok, schedule} = Tempo.ICal.parse(ics, within: ~o"2026-06")
 
 month = ~o"2026-06"
 {:ok, free} = Tempo.difference(month, schedule)
@@ -1182,7 +1182,7 @@ iex> Tempo.relation(~o"2022-06", ~o"2023-06")
 * [When to use Tempo](./when-to-use-tempo.md) — a short decision guide on choosing between Tempo and the Elixir standard library.
 * [Scheduling](./scheduling.md) — bounded enumeration, wall-clock-vs-UTC authority, floating vs zoned events, and how future dates survive zone-rule changes.
 * [Working with workdays and weekends](./workdays-and-weekends.md) — business-day queries (N days from today, next workday, workdays between two dates) built from `Tempo.workdays/1` and set algebra.
-* [Holidays — planning with a real holiday calendar](./holidays.md) — fetch an ICS holiday feed, parse it with `Tempo.ICal.from_ical/1`, and compose it with `Tempo.workdays/1` for territory-aware scheduling.
+* [Holidays — planning with a real holiday calendar](./holidays.md) — fetch an ICS holiday feed, parse it with `Tempo.ICal.parse/1`, and compose it with `Tempo.workdays/1` for territory-aware scheduling.
 * [Falsehoods programmers believe about time](./falsehoods.md) — the ten most impactful wrong assumptions, each with the Tempo idiom that makes the right behaviour automatic.
 * [ISO 8601 conformance](./iso8601-conformance.md) — what's supported from the standard.
 * [Enumeration semantics](./enumeration-semantics.md) — how iteration works across Tempo values.

@@ -215,7 +215,7 @@ Tempo.RRule.parse!("FREQ=MONTHLY;BYDAY=TU,WE,TH;BYSETPOS=3")
 #   from 1997-09 → Sept 4, Oct 7, Nov 6
 ```
 
-The one recurrence shape with **no** ISO 8601 form is an ordinal spread across *distinct* weekdays — "the 2nd Monday **and** the 2nd Wednesday" (`BYDAY=2MO,2WE`). A single `I` ranks one set; it cannot name two independent per-weekday ordinals at once. Tempo holds such a rule as an internal `:byday` selection that round-trips only through `Tempo.to_rrule/1`, never through `to_iso8601/1`.
+The one recurrence shape with **no** ISO 8601 form is an ordinal spread across *distinct* weekdays — "the 2nd Monday **and** the 2nd Wednesday" (`BYDAY=2MO,2WE`). A single `I` ranks one set; it cannot name two independent per-weekday ordinals at once. Tempo holds such a rule as an internal `:byday` selection that round-trips only through `Tempo.RRule.to_string/1`, never through `to_iso8601/1`.
 
 #### `q` — week start (RRULE `WKST`)
 
@@ -236,7 +236,7 @@ Moving the week start from Monday to Sunday changes which fortnight each candida
 
 #### Interchange risk
 
-The lowercase family — `q` (week start), `e` (computed event), `m`/`+m` (traditional month), `w` (calendar week), `^` (exclusion), and the `e`/`o`/`l`/`c` domain filters — are the non-standard letters Tempo emits inside a selection or recurrence; `I` is ISO 8601-2 §12.9. Because they are not ISO 8601, a *different* system reading Tempo's ISO string would not understand them. We rate this risk **low**: we have not identified any other system that consumes ISO 8601-2 recurrence at all, let alone one a Tempo `q`/`e` string would reach in practice. Where a standard interchange form is needed — sharing a rule with a calendar server, for instance — use `Tempo.to_rrule/1`, which emits `WKST` (and `BYSETPOS`, and any multi-weekday ordinal) in its portable RFC 5545 spelling. Treat the Tempo string as the native, loss-free persistence form and the RRULE string as the wire format.
+The lowercase family — `q` (week start), `e` (computed event), `m`/`+m` (traditional month), `w` (calendar week), `^` (exclusion), and the `e`/`o`/`l`/`c` domain filters — are the non-standard letters Tempo emits inside a selection or recurrence; `I` is ISO 8601-2 §12.9. Because they are not ISO 8601, a *different* system reading Tempo's ISO string would not understand them. We rate this risk **low**: we have not identified any other system that consumes ISO 8601-2 recurrence at all, let alone one a Tempo `q`/`e` string would reach in practice. Where a standard interchange form is needed — sharing a rule with a calendar server, for instance — use `Tempo.RRule.to_string/1`, which emits `WKST` (and `BYSETPOS`, and any multi-weekday ordinal) in its portable RFC 5545 spelling. Treat the Tempo string as the native, loss-free persistence form and the RRULE string as the wire format.
 
 ### Computed events — the `e` designator
 
@@ -266,7 +266,7 @@ Tempo.to_interval(~o"R/../P1Y/FL(march-equinox@+09:00)eN", within: ~o"2002Y")
 #   → 2002-03-21
 ```
 
-An unknown event name parses but resolves to no occurrences, so a typo yields an empty result rather than a crash, as do a zone on an event with no instant (`(easter@+09:00)e`) and a zone that is not one. Like `q`, an `e` selection round-trips through `inspect/1`/`Tempo.to_iso8601/1`; there is no RFC 5545 equivalent, so `Tempo.to_rrule/1` cannot express it.
+An unknown event name parses but resolves to no occurrences, so a typo yields an empty result rather than a crash, as do a zone on an event with no instant (`(easter@+09:00)e`) and a zone that is not one. Like `q`, an `e` selection round-trips through `inspect/1`/`Tempo.to_iso8601/1`; there is no RFC 5545 equivalent, so `Tempo.RRule.to_string/1` cannot express it.
 
 ### Traditional month — the `m` marker
 
@@ -308,7 +308,7 @@ ISO 8601 numbers weeks one way: each starts on a Monday, and week 1 is the one h
 ~o"2027Y1w"     # 2026-12-28/2027-01-04, the week's seven days
 ```
 
-In a **concrete date** a `w` week resolves to its dates, so the lowercase marker never survives a round-trip, as `m` does not. In a **selection** it survives and resolves per year: `R/../P1Y/FL10wN` is the calendar's week 10 of each year and `FL10w3KN` its Wednesday. A week-based calendar's own weeks are its `W` weeks, and every other calendar's are the weeks Calendrical numbers (`Calendrical.Interval.week/3`). A calendar that numbers its weeks within its own year (Hebrew, Islamic, Julian, …) cuts week 1 and the last week short, so `5787Y1w[u-ca=hebrew]` is 1 Tishri alone, a Saturday; the day of the week `K` is ISO 8601's, and a short week holds only its own days (`5787Y1w1K` is not a date). RFC 5545's `BYWEEKNO` counts ISO 8601 weeks (from `WKST`), so `Tempo.to_rrule/1` cannot express `w`.
+In a **concrete date** a `w` week resolves to its dates, so the lowercase marker never survives a round-trip, as `m` does not. In a **selection** it survives and resolves per year: `R/../P1Y/FL10wN` is the calendar's week 10 of each year and `FL10w3KN` its Wednesday. A week-based calendar's own weeks are its `W` weeks, and every other calendar's are the weeks Calendrical numbers (`Calendrical.Interval.week/3`). A calendar that numbers its weeks within its own year (Hebrew, Islamic, Julian, …) cuts week 1 and the last week short, so `5787Y1w[u-ca=hebrew]` is 1 Tishri alone, a Saturday; the day of the week `K` is ISO 8601's, and a short week holds only its own days (`5787Y1w1K` is not a date). RFC 5545's `BYWEEKNO` counts ISO 8601 weeks (from `WKST`), so `Tempo.RRule.to_string/1` cannot express `w`.
 
 ### Exclusions and the recurrence domain — the `^` marker and `e`/`o`/`l`/`c` filters
 
@@ -346,7 +346,7 @@ Tempo.to_interval(~o"R/{2020Y..2026Y}e/P1Y/FL1M1DN")
 #   → 2020, 2022, 2024, 2026
 ```
 
-Leap (`l`) and common (`c`) ask the domain year's calendar `leap_year?/1`, so they are calendar-correct rather than a `rem/2` guess: 2100 is a common year. A domain's years are Gregorian years, as a holiday's year gates are, even when the selection is in another calendar. All four are Tempo extensions with no ISO or RFC 5545 form, so they round-trip through `inspect/1`/`to_iso8601/1` but not through `Tempo.to_rrule/1`.
+Leap (`l`) and common (`c`) ask the domain year's calendar `leap_year?/1`, so they are calendar-correct rather than a `rem/2` guess: 2100 is a common year. A domain's years are Gregorian years, as a holiday's year gates are, even when the selection is in another calendar. All four are Tempo extensions with no ISO or RFC 5545 form, so they round-trip through `inspect/1`/`to_iso8601/1` but not through `Tempo.RRule.to_string/1`.
 
 **Open-ended ranges.** A domain range may be open at either end, as an ISO 8601-2 set range may: `{2017Y..}` is 2017 on, `{..2016Y}` up to 2016, and `{..2019Y,2021Y..}` every year but 2020. An open domain has no window of its own, so it takes its missing end from a `:within`:
 
@@ -372,7 +372,7 @@ Tempo.to_interval(~o"R/2026-01-01/P1Y/FL{2026,2028}Y1M1DN", within: ~o"2026Y/203
 #   → 2026, 2028
 ```
 
-As with a domain, an occurrence belongs to the year it starts in, so `R/2025-01-01/P1Y/FL2026Y1W1KN` has none: ISO 8601 week 1 of 2026 starts on 29 December 2025. RFC 5545 has no `BYYEAR`, so `Tempo.to_rrule/1` cannot express it.
+As with a domain, an occurrence belongs to the year it starts in, so `R/2025-01-01/P1Y/FL2026Y1W1KN` has none: ISO 8601 week 1 of 2026 starts on 29 December 2025. RFC 5545 has no `BYYEAR`, so `Tempo.RRule.to_string/1` cannot express it.
 
 ### Selection with a time interval (ISO 8601-2 §12.10)
 

@@ -25,7 +25,7 @@ defmodule Tempo.RRule.CountOneTest do
     END:VCALENDAR
     """
 
-    {:ok, set} = ICal.from_ical(ics)
+    {:ok, set} = ICal.parse(ics)
     IntervalSet.to_list(set)
   end
 

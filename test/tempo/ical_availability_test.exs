@@ -18,7 +18,7 @@ defmodule Tempo.ICal.AvailabilityTest do
   end
 
   defp available(components, window \\ @week) do
-    {:ok, free} = ICal.available_from_ical(calendar(components), within: window)
+    {:ok, free} = ICal.available(calendar(components), within: window)
     free
   end
 
@@ -295,7 +295,7 @@ defmodule Tempo.ICal.AvailabilityTest do
     end
 
     test "is required, since an unbounded RRULE cannot be materialised without one" do
-      assert {:error, message} = ICal.available_from_ical(calendar(office_hours()))
+      assert {:error, message} = ICal.available(calendar(office_hours()))
       assert message =~ ":within is required"
     end
   end
@@ -314,8 +314,8 @@ defmodule Tempo.ICal.AvailabilityTest do
         END:VEVENT
         """)
 
-      assert {:ok, free} = ICal.available_from_ical(ics, within: @week)
-      assert {:ok, busy} = ICal.from_ical(ics)
+      assert {:ok, free} = ICal.available(ics, within: @week)
+      assert {:ok, busy} = ICal.parse(ics)
 
       # Open hours come from VAVAILABILITY, claims from VEVENT.
       assert IntervalSet.count(free) == 5

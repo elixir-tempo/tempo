@@ -796,7 +796,8 @@ defmodule Tempo.Inspect do
   # ever reaches here, so the only cases left interleave weekday and position
   # (`1K2I3K2I`), which the resolution-order rule rejects on re-parse. There
   # is no round-trippable ISO form, so — like `:nearest_weekday` below — raise
-  # and let the value round-trip through its RRULE string via `to_rrule/1`.
+  # and let the value round-trip through its RRULE string via
+  # `Tempo.RRule.to_string/1`.
   defp inspect_value({:byday, _entries}) do
     raise Iso8601EncodeError.exception(construct: :byday)
   end

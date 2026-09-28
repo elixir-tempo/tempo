@@ -32,7 +32,7 @@ Tempo puts each concern in its own field on `%Tempo.Interval{}`:
 | Selection | `:repeat_rule` (`%Tempo{time: [selection: [...]]}`) | `/F<rule>` or inline `L…N` | `BY*` rules |
 | Start | `:from` (`%Tempo{}`) | `<from>/...` | `DTSTART` (not in RRULE itself) |
 
-The token-level selection shape — `{:selection, [unit: value_or_list, ...]}` — is **byte-for-byte identical** whether it comes from parsing `L4KN` in ISO 8601-2 or `BYDAY=4TH` in RRULE. That shared shape is what makes `Tempo.to_rrule/1` and `Tempo.to_iso8601/1` both possible without any format-specific intermediate.
+The token-level selection shape — `{:selection, [unit: value_or_list, ...]}` — is **byte-for-byte identical** whether it comes from parsing `L4KN` in ISO 8601-2 or `BYDAY=4TH` in RRULE. That shared shape is what makes `Tempo.RRule.to_string/1` and `Tempo.to_iso8601/1` both possible without any format-specific intermediate.
 
 ## What ISO 8601 can express and RRULE cannot
 
@@ -54,7 +54,7 @@ RRULE has no concept of partial values. Every RRULE part is fully specified.
 
 `Tempo.from_iso8601!("2022-06-15")` is a perfectly valid Tempo value. It's not a recurrence — it's a single bounded interval (one day).
 
-`Tempo.to_rrule/1` rejects this with `Tempo.ConversionError`: RRULE exists to describe recurrence, and a single date has no recurrence to describe. Callers who want "a single event" in iCalendar use `DTSTART` alone, without an `RRULE`.
+`Tempo.RRule.to_string/1` rejects this with `Tempo.ConversionError`: RRULE exists to describe recurrence, and a single date has no recurrence to describe. Callers who want "a single event" in iCalendar use `DTSTART` alone, without an `RRULE`.
 
 ### Open-ended intervals
 
@@ -88,19 +88,19 @@ RRULE's UNTIL uses the RFC 3339 basic format — four-digit years only. Years ou
 
 ### Time zones and calendars (via IXDTF)
 
-Tempo's IXDTF support attaches `[Europe/Paris]`, `[u-ca=hebrew]`, or arbitrary elective tags to a datetime, storing them on the `:extended` field. The current `to_rrule/1` does **not** emit these — iCalendar handles zones and calendars via `TZID` and `CALSCALE` at the calendar-object level, not inside `RRULE`.
+Tempo's IXDTF support attaches `[Europe/Paris]`, `[u-ca=hebrew]`, or arbitrary elective tags to a datetime, storing them on the `:extended` field. `Tempo.RRule.to_string/1` does **not** emit these — iCalendar handles zones and calendars via `TZID` and `CALSCALE` at the calendar-object level, not inside `RRULE`.
 
 ## RRULE features and how they map to ISO 8601
 
-Most RRULE `BY*` filters map straight onto the ISO 8601-2 selection grammar — `BYWEEKNO` onto the ISO 8601 week `W`, which a rule without `BYDAY` gives DTSTART's weekday, as ISO 8601-2 Annex C.4 has a conversion state it. Tempo's calendar week `w` has no RRULE form, since `BYWEEKNO` counts ISO 8601 weeks. Two need comment: `BYSETPOS` **is** ISO 8601-2 (the §12.9 position designator `I`), while `WKST` has no ISO representation and so gets Tempo's project-specific designator `q`. Both are documented in `guides/iso8601-conformance.md` §5. A rule carrying either round-trips through the ISO form; the canonical *external* form remains the RRULE string via `Tempo.to_rrule/1`.
+Most RRULE `BY*` filters map straight onto the ISO 8601-2 selection grammar — `BYWEEKNO` onto the ISO 8601 week `W`, which a rule without `BYDAY` gives DTSTART's weekday, as ISO 8601-2 Annex C.4 has a conversion state it. Tempo's calendar week `w` has no RRULE form, since `BYWEEKNO` counts ISO 8601 weeks. Two need comment: `BYSETPOS` **is** ISO 8601-2 (the §12.9 position designator `I`), while `WKST` has no ISO representation and so gets Tempo's project-specific designator `q`. Both are documented in `guides/iso8601-conformance.md` §5. A rule carrying either round-trips through the ISO form; the canonical *external* form remains the RRULE string via `Tempo.RRule.to_string/1`.
 
 ### `BYSETPOS` — the ISO 8601-2 §12.9 position `I`
 
-RRULE `BYSETPOS=-1` ("take the last element of the resolved per-period set") is the ISO 8601-2 position designator: it is held as an `:instance` token, applied last, after every other BY-rule. It renders weekday-then-position, so `FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1` round-trips as `~o"R/../P1M/FL{1..5}K-1IN"`. A single-weekday ordinal is the same token: `BYDAY=2MO` ("the 2nd Monday") lowers to `day_of_week: 1, instance: 2` and renders `1K2I`. The one shape with no ISO form is an ordinal across *distinct* weekdays (`BYDAY=2MO,2WE`), held as an internal `:byday` token that round-trips only via `Tempo.to_rrule/1`.
+RRULE `BYSETPOS=-1` ("take the last element of the resolved per-period set") is the ISO 8601-2 position designator: it is held as an `:instance` token, applied last, after every other BY-rule. It renders weekday-then-position, so `FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1` round-trips as `~o"R/../P1M/FL{1..5}K-1IN"`. A single-weekday ordinal is the same token: `BYDAY=2MO` ("the 2nd Monday") lowers to `day_of_week: 1, instance: 2` and renders `1K2I`. The one shape with no ISO form is an ordinal across *distinct* weekdays (`BYDAY=2MO,2WE`), held as an internal `:byday` token that round-trips only via `Tempo.RRule.to_string/1`.
 
 ### `WKST` — the `q` designator
 
-RRULE lets a rule override the week start (`WKST=SU`), which shifts `BYWEEKNO`/`BYDAY`-weekly boundaries. Tempo holds it as a `:wkst` token: `Tempo.to_rrule/1` emits `WKST=SU`, and `Tempo.to_iso8601/1` renders it as `7q` (7 = Sunday), so it round-trips both ways. (A non-default `WKST` alone is enough to produce a `:repeat_rule`, since it changes weekly boundaries.)
+RRULE lets a rule override the week start (`WKST=SU`), which shifts `BYWEEKNO`/`BYDAY`-weekly boundaries. Tempo holds it as a `:wkst` token: `Tempo.RRule.to_string/1` emits `WKST=SU`, and `Tempo.to_iso8601/1` renders it as `7q` (7 = Sunday), so it round-trips both ways. (A non-default `WKST` alone is enough to produce a `:repeat_rule`, since it changes weekly boundaries.)
 
 ## What is lossy in the encoders
 
@@ -112,7 +112,7 @@ Because ISO 8601 can describe more than RRULE, and RRULE needs specific features
 
 This is documented as a known limitation; the test suite at `test/tempo/round_trip_test.exs` exercises it explicitly. A future encoder could emit extended form (`2022-06-15`) when qualifications are present, preserving them. Tracked as future work.
 
-### `Tempo.to_rrule/1` returns `{:error, %Tempo.ConversionError{}}` for
+### `Tempo.RRule.to_string/1` returns `{:error, %Tempo.ConversionError{}}` for
 
 * A `%Tempo{}` that is not a `%Tempo.Interval{}` (no recurrence to describe)
 * An interval without a `:duration` (no FREQ available)
@@ -122,7 +122,7 @@ This is documented as a known limitation; the test suite at `test/tempo/round_tr
 
 * A selection with no RRULE `BY*` part: a calendar week (`w`), a traditional month (`m`), a computed event (`e`), a year, a selection window (ISO 8601-2 §12.10), or a cron nearest weekday or day-of-month-or-weekday. The error names each one rather than dropping it.
 
-Every error carries a human-readable `:message` field and the source `:value`. Errors can be re-raised as exceptions — `Tempo.to_rrule!/1` does this.
+Every error carries a human-readable `:message` field and the source `:value`. Errors can be re-raised as exceptions — `Tempo.RRule.to_string!/1` does this.
 
 ## Why one AST for two formats
 
@@ -143,8 +143,8 @@ Three practical benefits:
 
 # Encoders
 iso_string = Tempo.to_iso8601(ast)              # always succeeds
-{:ok, rrule_string} = Tempo.to_rrule(ast)       # succeeds or returns ConversionError
-rrule_string = Tempo.to_rrule!(ast)             # raises on failure
+{:ok, rrule_string} = Tempo.RRule.to_string(ast)       # succeeds or returns ConversionError
+rrule_string = Tempo.RRule.to_string!(ast)             # raises on failure
 
 # Round-trip pattern
 {:ok, ast_1} = Tempo.from_iso8601(iso)
@@ -156,6 +156,5 @@ assert ast_1 == ast_2           # fixed-point property
 ## Further reading
 
 * Source: `lib/tempo/rrule.ex`, `lib/tempo/rrule/encoder.ex`, `lib/inspect.ex`
-* Validation spike: `docs/rrule-ast-validation.md`
 * Round-trip tests: `test/tempo/round_trip_test.exs` (encoder round-trips) and `test/tempo/iso8601/round_trip_test.exs` (per-token `inspect`/`to_iso8601` round-trips)
 * Conformance coverage (ISO 8601 side): `guides/iso8601-conformance.md` (§5 covers the `I` position designator and the `q` project-specific week-start)

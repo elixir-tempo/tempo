@@ -21,6 +21,10 @@ Tempo 2.0 gives each word in its API one meaning, the one it has in everyday Eng
 | `Tempo.to_date_time/1`, `from_date_time/1` | `Tempo.to_datetime/1`, `from_datetime/1` |
 | `Tempo.to_naive_date_time/1`, `from_naive_date_time/1` | `Tempo.to_naive_datetime/1`, `from_naive_datetime/1` |
 | `Tempo.to_calendar/1` | `Tempo.to_elixir/1` |
+| `Tempo.ICal.from_ical/2`, `from_ical_file/2` | `Tempo.ICal.parse/2`, `parse_file/2` |
+| `Tempo.ICal.available_from_ical/2` | `Tempo.ICal.available/2`, given text |
+| `Tempo.JSCalendar.from_jscalendar/2` | `Tempo.JSCalendar.parse/2` |
+| `Tempo.to_rrule/1`, `to_rrule!/1` | `Tempo.RRule.to_string/1`, `to_string!/1` |
 
 These keep their names and change their meaning:
 
@@ -40,6 +44,8 @@ These keep their names and change their meaning:
 
 * **`Tempo.new/1`'s `:metadata`** — the value's own data, no longer written into its ISO 8601 form.
 
+* **`parse/2` and the typed parsers** — ISO 8601 first, then the locale's words, where `parse/2` read only words and the typed parsers only ISO 8601.
+
 ## Updating the dependency
 
 ```elixir
@@ -53,7 +59,7 @@ end
 A search for the removed names finds the renames:
 
 ```bash
-grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(meets|during)\?|Interval\.(meets|during)\?|(Tempo|Interval)\.compose|Tempo\.anchor[(/]|(NonAnchored|RequiresAnchor)Error|:unanchored|grounded\?|GroundedTempoError|(to|from)_(naive_)?date_time' lib test
+grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(meets|during)\?|Interval\.(meets|during)\?|(Tempo|Interval)\.compose|Tempo\.anchor[(/]|(NonAnchored|RequiresAnchor)Error|:unanchored|grounded\?|GroundedTempoError|(to|from)_(naive_)?date_time|from_(ical|jscalendar)|available_from_ical|to_rrule' lib test
 ```
 
 The changes of meaning need a read rather than a replace: every `before?`, `after?` and their `certainly_` and `possibly_` forms, every duration read as a count of seconds, every shift of a zoned value by hours, every `duration/1` of a set, every window, and every `:metadata` passed to `Tempo.new/1`.
@@ -132,7 +138,7 @@ iex> Tempo.shift(~o"2026-03-07T12[America/New_York]", day: 1)
 
 ## The within window
 
-`:within` replaces `:bound` everywhere it appeared: `Tempo.to_interval/2`, `Tempo.to_interval_set/2`, the set operations, `Tempo.complement/2`, `Tempo.ICal.from_ical/2`, `Tempo.JSCalendar.from_jscalendar/2` and the RRULE expander. A leftover `:bound` is an error that names its replacement:
+`:within` replaces `:bound` everywhere it appeared: `Tempo.to_interval/2`, `Tempo.to_interval_set/2`, the set operations, `Tempo.complement/2`, `Tempo.ICal.parse/2`, `Tempo.JSCalendar.parse/2` and the RRULE expander. A leftover `:bound` is an error that names its replacement:
 
 ```elixir
 iex> Tempo.to_interval(~o"R/2020-01-01/P1Y", bound: ~o"2026")
@@ -159,7 +165,7 @@ iex> Tempo.IntervalSet.count(since_2020)
 
 > *"The yearly occurrence **within** 2026 is 2026's own. For every year since 2020, the window starts in 2020."*
 
-iCalendar and JSCalendar imports hold to the window the same way: `Tempo.ICal.from_ical(ics, within: window)` returns only the events that overlap it, one-off events as well as recurring ones.
+iCalendar and JSCalendar imports hold to the window the same way: `Tempo.ICal.parse(ics, within: window)` returns only the events that overlap it, one-off events as well as recurring ones.
 
 ## Before and after share no instant
 
@@ -377,3 +383,36 @@ iex> Tempo.to_datetime(~o"2026-06-15T09:00:00[Europe/Paris]")
 iex> Tempo.to_elixir(~o"2026-06-15")
 {:ok, ~D[2026-06-15]}
 ```
+
+## The format modules parse
+
+The iCalendar and JSCalendar readers are `parse/2`, as Localize's and `URI`'s are, and an RRULE is written by `Tempo.RRule.to_string/1`, the pair of `Tempo.RRule.parse/2`. `Tempo.ICal.available/2` takes a calendar's text as well as a calendar already parsed.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.x
+Tempo.ICal.from_ical(ics, within: week)
+Tempo.ICal.available_from_ical(ics, within: week)
+Tempo.JSCalendar.from_jscalendar(json)
+Tempo.to_rrule(interval)
+```
+
+```elixir
+iex> {:ok, rule} = Tempo.RRule.parse("FREQ=WEEKLY;COUNT=4")
+iex> Tempo.RRule.to_string(rule)
+{:ok, "COUNT=4;FREQ=WEEKLY"}
+```
+
+## Parse reads ISO 8601 and words
+
+`Tempo.parse/2` reads ISO 8601 first, with the whole grammar `Tempo.from_iso8601/2` reads, and a locale's own words after that; in 1.x it read words only, so an ISO 8601 datetime was an error. The typed parsers read the same, keeping only a value of their own kind:
+
+```elixir
+iex> Tempo.parse("2026-06-15T10:30", locale: :en)
+{:ok, ~o"2026Y6M15DT10H30M"}
+iex> Tempo.parse_date("15 June 2026", locale: :en)
+{:ok, ~o"2026Y6M15D"}
+```
+
+> *"A date field takes **15 June 2026** as readily as **2026-06-15**."*

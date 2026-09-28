@@ -197,7 +197,7 @@ defmodule Tempo.RRuleTest do
       assert inspect(rrule) == ~s(~o"R/2025Y1M1D/P1M/FL1K2IN")
       assert Tempo.from_iso8601("R/2025Y1M1D/P1M/FL1K2IN") == {:ok, rrule}
       assert rrule.repeat_rule.time == [selection: [day_of_week: 1, instance: 2]]
-      assert Tempo.to_rrule(rrule) == {:ok, "FREQ=MONTHLY;BYDAY=2MO"}
+      assert RRule.to_string(rrule) == {:ok, "FREQ=MONTHLY;BYDAY=2MO"}
     end
 
     test "a single-weekday multi-ordinal BYDAY round-trips through its ISO form" do
@@ -207,17 +207,17 @@ defmodule Tempo.RRuleTest do
       iso = inspect(rrule) |> String.replace(~s(~o"), "") |> String.trim_trailing(~s("))
 
       assert Tempo.from_iso8601(iso) == {:ok, rrule}
-      assert Tempo.to_rrule(rrule) == {:ok, "FREQ=MONTHLY;BYDAY=1MO,3MO"}
+      assert RRule.to_string(rrule) == {:ok, "FREQ=MONTHLY;BYDAY=1MO,3MO"}
     end
 
-    test "an ordinal BYDAY across distinct weekdays round-trips only via to_rrule/1" do
+    test "an ordinal BYDAY across distinct weekdays round-trips only via RRule.to_string/1" do
       # `2MO,WE` mixes an ordinal weekday with a bare one — no single §12.9
       # position expresses it, so it has no ISO 8601 form and round-trips
       # through its RRULE string instead.
       rrule = RRule.parse!("FREQ=MONTHLY;BYDAY=2MO,WE", from: ~o"2025-01-01")
 
       assert rrule.repeat_rule.time == [selection: [byday: [{2, 1}, {nil, 3}]]]
-      assert Tempo.to_rrule(rrule) == {:ok, "FREQ=MONTHLY;BYDAY=2MO,WE"}
+      assert RRule.to_string(rrule) == {:ok, "FREQ=MONTHLY;BYDAY=2MO,WE"}
     end
 
     test "a weekday-plus-time selection serialises the weekday before the time" do

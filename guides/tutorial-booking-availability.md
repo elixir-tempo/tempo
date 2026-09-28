@@ -52,7 +52,7 @@ END:VCALENDAR
 ```
 
 ```elixir
-iex> {:ok, bookings} = Tempo.ICal.from_ical(ics)
+iex> {:ok, bookings} = Tempo.ICal.parse(ics)
 iex> Tempo.IntervalSet.count(bookings)
 2
 ```

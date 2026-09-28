@@ -23,15 +23,15 @@ if Code.ensure_loaded?(ICal) do
 
     ## Availability
 
-    `VEVENT`s say what is **taken**. `available_from_ical/2` reads the
+    `VEVENT`s say what is **taken**. `available/2` reads the
     complementary [RFC 7953](https://www.rfc-editor.org/rfc/rfc7953.html)
     `VAVAILABILITY` components, which say what is **offered** — a
     resource's open hours, with `AVAILABLE` subcomponents repeating
     under their own `RRULE` and `PRIORITY` resolving overlaps. A
     scheduler usually wants both, and they compose directly:
 
-        {:ok, free} = Tempo.ICal.available_from_ical(ics, within: week)
-        {:ok, busy} = Tempo.ICal.from_ical(ics, within: week)
+        {:ok, free} = Tempo.ICal.available(ics, within: week)
+        {:ok, busy} = Tempo.ICal.parse(ics, within: week)
         {:ok, bookable} = Tempo.difference(free, busy)
 
     ## Required reading
@@ -149,7 +149,7 @@ if Code.ensure_loaded?(ICal) do
         ...> END:VEVENT
         ...> END:VCALENDAR
         ...> \"\"\"
-        iex> {:ok, set} = Tempo.ICal.from_ical(ics)
+        iex> {:ok, set} = Tempo.ICal.parse(ics)
         iex> Tempo.IntervalSet.count(set)
         1
         iex> [iv] = Tempo.IntervalSet.to_list(set)
@@ -159,9 +159,9 @@ if Code.ensure_loaded?(ICal) do
         "Paris"
 
     """
-    @spec from_ical(binary(), keyword()) :: {:ok, IntervalSet.t()} | {:error, term()}
-    def from_ical(ics, options \\ []) when is_binary(ics) do
-      with :ok <- Tempo.check_within_option(options, "Tempo.ICal.from_ical/2") do
+    @spec parse(binary(), keyword()) :: {:ok, IntervalSet.t()} | {:error, term()}
+    def parse(ics, options \\ []) when is_binary(ics) do
+      with :ok <- Tempo.check_within_option(options, "Tempo.ICal.parse/2") do
         calendar = ICal.from_ics(ics)
         build_interval_set(calendar, options)
       end
@@ -173,7 +173,7 @@ if Code.ensure_loaded?(ICal) do
     @doc """
     Parse an iCalendar file and return a `%Tempo.IntervalSet{}`.
 
-    Wraps `from_ical/2` with `File.read/1`.
+    Wraps `parse/2` with `File.read/1`.
 
     ### Arguments
 
@@ -181,18 +181,18 @@ if Code.ensure_loaded?(ICal) do
 
     ### Options
 
-    See `from_ical/2`.
+    See `parse/2`.
 
     ### Returns
 
     * `{:ok, interval_set}` or `{:error, reason}`.
 
     """
-    @spec from_ical_file(binary(), keyword()) ::
+    @spec parse_file(binary(), keyword()) ::
             {:ok, IntervalSet.t()} | {:error, term()}
-    def from_ical_file(path, options \\ []) do
+    def parse_file(path, options \\ []) do
       with {:ok, ics} <- File.read(path) do
-        from_ical(ics, options)
+        parse(ics, options)
       end
     end
 
@@ -200,7 +200,7 @@ if Code.ensure_loaded?(ICal) do
     Materialise the *available* time an iCalendar's `VAVAILABILITY`
     components declare, as a `%Tempo.IntervalSet{}`.
 
-    Where `from_ical/2` reads `VEVENT`s — time that is **taken** —
+    Where `parse/2` reads `VEVENT`s — time that is **taken** —
     this reads [RFC 7953](https://www.rfc-editor.org/rfc/rfc7953.html)
     availability: time that is **offered**. The two are complements,
     not variants, and a scheduler usually wants both: open hours from
@@ -230,7 +230,9 @@ if Code.ensure_loaded?(ICal) do
 
     ### Arguments
 
-    * `ics` is iCalendar data as a string.
+    * `calendar` is iCalendar text, or an `%ICal{}` struct the `ical`
+      library has already parsed — for a calendar asked several
+      questions.
 
     * `options` is a keyword list of options.
 
@@ -267,42 +269,12 @@ if Code.ensure_loaded?(ICal) do
         ...> END:VAVAILABILITY
         ...> END:VCALENDAR
         ...> \"\"\"
-        iex> {:ok, free} = Tempo.ICal.available_from_ical(ics, within: ~o"2026Y6M1D/8D")
+        iex> {:ok, free} = Tempo.ICal.available(ics, within: ~o"2026Y6M1D/8D")
         iex> Tempo.IntervalSet.count(free)
         5
 
-    """
-    @spec available_from_ical(binary(), keyword()) ::
-            {:ok, IntervalSet.t()} | {:error, term()}
-    def available_from_ical(ics, options \\ []) when is_binary(ics) do
-      available(ICal.from_ics(ics), options)
-    rescue
-      e in [ArgumentError, MatchError, FunctionClauseError] ->
-        {:error, Exception.message(e)}
-    end
-
-    @doc """
-    The available time an already-parsed calendar declares.
-
-    The `%ICal{}` counterpart of `available_from_ical/2`, for when the
-    calendar has been parsed once and is being asked several
-    questions.
-
-    ### Arguments
-
-    * `calendar` is an `%ICal{}` struct.
-
-    * `options` is a keyword list of options.
-
-    ### Options
-
-    See `available_from_ical/2`.
-
-    ### Returns
-
-    * `{:ok, interval_set}` or `{:error, reason}`.
-
-    ### Examples
+    A calendar already parsed, and asked several questions, is passed
+    as its `%ICal{}` struct:
 
         iex> calendar = Elixir.ICal.from_ics(\"\"\"
         ...> BEGIN:VCALENDAR
@@ -327,8 +299,18 @@ if Code.ensure_loaded?(ICal) do
         {2, 9, 17}
 
     """
-    @spec available(ICal.t(), keyword()) :: {:ok, IntervalSet.t()} | {:error, term()}
-    def available(%ICal{} = calendar, options \\ []) do
+    @spec available(binary() | ICal.t(), keyword()) ::
+            {:ok, IntervalSet.t()} | {:error, term()}
+    def available(calendar, options \\ [])
+
+    def available(ics, options) when is_binary(ics) do
+      available(ICal.from_ics(ics), options)
+    rescue
+      e in [ArgumentError, MatchError, FunctionClauseError] ->
+        {:error, Exception.message(e)}
+    end
+
+    def available(%ICal{} = calendar, options) do
       with :ok <- Tempo.check_within_option(options, "Tempo.ICal.available/2"),
            {:ok, window} <- query_window(options) do
         calendar

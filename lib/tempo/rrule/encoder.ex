@@ -5,7 +5,7 @@ defmodule Tempo.RRule.Encoder do
 
   # Converts a `%Tempo.Interval{}` back into an RFC 5545 RRULE
   # string. Pure AST → text; no parsing. Called via
-  # `Tempo.to_rrule/1`.
+  # `Tempo.RRule.to_string/1`.
 
   @freq_for %{
     second: "SECONDLY",
@@ -237,7 +237,7 @@ defmodule Tempo.RRule.Encoder do
   # Each selection token maps to one RRULE BY-part, with one recombination
   # first: ISO 8601-2 §12.9 lowers an ordinal `BYDAY` to a weekday followed
   # by a position (`2MO` → `day_of_week: 1, instance: 2`). Re-fusing that
-  # adjacent pair lets `to_rrule/1` emit the compact, idiomatic `BYDAY=2MO`
+  # adjacent pair lets `Tempo.RRule.to_string/1` emit the compact, idiomatic `BYDAY=2MO`
   # rather than the equivalent-but-verbose `BYDAY=MO;BYSETPOS=2`. A genuine
   # set-position over several weekdays keeps `day_of_week` as a list and is
   # left untouched, so it still encodes as `BYDAY=…;BYSETPOS=…`.

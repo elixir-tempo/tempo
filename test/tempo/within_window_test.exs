@@ -81,7 +81,7 @@ defmodule Tempo.WithinWindowTest do
             vevent("the-week-after", "20260623T090000Z", "20260623T100000Z")
         )
 
-      assert {:ok, events} = ICal.from_ical(calendar, within: ~o"2026-06-15/2026-06-22")
+      assert {:ok, events} = ICal.parse(calendar, within: ~o"2026-06-15/2026-06-22")
       assert Enum.map(IntervalSet.to_list(events), &Interval.metadata(&1).uid) == ["in-the-week"]
     end
 
@@ -95,7 +95,7 @@ defmodule Tempo.WithinWindowTest do
       })
 
       assert {:ok, events} =
-               JSCalendar.from_jscalendar(json, within: ~o"2026-06-15/2026-06-22")
+               JSCalendar.parse(json, within: ~o"2026-06-15/2026-06-22")
 
       assert IntervalSet.empty?(events)
     end
@@ -124,12 +124,12 @@ defmodule Tempo.WithinWindowTest do
       json =
         ~s({"@type": "Event", "uid": "e", "start": "2026-06-02T09:00:00", "duration": "PT1H"})
 
-      assert {:error, %ArgumentError{}} = ICal.from_ical(calendar, bound: ~o"2026")
+      assert {:error, %ArgumentError{}} = ICal.parse(calendar, bound: ~o"2026")
 
       assert {:error, %ArgumentError{}} =
-               ICal.available_from_ical(calendar, bound: ~o"2026")
+               ICal.available(calendar, bound: ~o"2026")
 
-      assert {:error, %ArgumentError{}} = JSCalendar.from_jscalendar(json, bound: ~o"2026")
+      assert {:error, %ArgumentError{}} = JSCalendar.parse(json, bound: ~o"2026")
 
       assert {:error, %ArgumentError{}} =
                Expander.expand(

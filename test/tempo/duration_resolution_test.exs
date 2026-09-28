@@ -140,7 +140,7 @@ defmodule Tempo.DurationResolutionTest do
       END:VCALENDAR
       """
 
-      {:ok, set} = ICal.from_ical(ics)
+      {:ok, set} = ICal.parse(ics)
 
       rdate =
         Enum.find(IntervalSet.to_list(set), &(&1.from.time == [year: 2022, month: 8, day: 1]))

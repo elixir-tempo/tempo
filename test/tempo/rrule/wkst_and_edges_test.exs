@@ -125,7 +125,7 @@ defmodule Tempo.RRule.WkstAndEdgesTest do
       assert ast.repeat_rule.time == [selection: [day_of_week: 7, wkst: 7]]
 
       # Re-emit and reparse to ensure round-trip stability.
-      {:ok, encoded} = Tempo.to_rrule(ast)
+      {:ok, encoded} = RRule.to_string(ast)
       assert encoded =~ "WKST=SU"
       assert encoded =~ "BYDAY=SU"
 

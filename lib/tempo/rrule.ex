@@ -1,14 +1,14 @@
 defmodule Tempo.RRule do
   @moduledoc """
-  Parses [iCalendar RFC 5545](https://datatracker.ietf.org/doc/html/rfc5545#section-3.3.10)
-  `RRULE` strings into Tempo AST (`%Tempo.Interval{}` with a
-  `%Tempo.Duration{}` cadence and, where needed, a `repeat_rule`
-  built from selection tokens).
+  Reads and writes [iCalendar RFC 5545](https://datatracker.ietf.org/doc/html/rfc5545#section-3.3.10)
+  `RRULE` strings. `parse/2` turns a rule into Tempo's AST — a
+  `%Tempo.Interval{}` with a `%Tempo.Duration{}` cadence and, where
+  needed, a `repeat_rule` built from selection tokens — and
+  `to_string/1` writes one back.
 
-  This module is intentionally small — it exists to validate that
-  Tempo's AST is a sufficient target for recurrence rules expressed
-  in formats other than ISO 8601-2. See
-  `docs/rrule-ast-validation.md` for findings.
+  The AST is the one ISO 8601-2 recurrences parse to, so a rule read
+  here and a recurrence read by `Tempo.from_iso8601/1` expand and
+  compare alike; the shared AST guide describes the mapping.
 
   ## Supported rule parts
 
@@ -48,6 +48,10 @@ defmodule Tempo.RRule do
 
   """
 
+  import Kernel, except: [to_string: 1]
+
+  alias Tempo.ConversionError
+  alias Tempo.RRule.Encoder
   alias Tempo.RRule.Rule
 
   @weekdays %{
@@ -137,6 +141,78 @@ defmodule Tempo.RRule do
     case parse(rrule, options) do
       {:ok, interval} -> interval
       {:error, reason} -> raise ArgumentError, "Invalid RRULE: #{inspect(reason)}"
+    end
+  end
+
+  @doc """
+  Write a `t:Tempo.Interval.t/0` as an RRULE string — the inverse of
+  `parse/2`.
+
+  The output has no leading `RRULE:` prefix and no `DTSTART`: an
+  RRULE is a recurrence pattern, not a full iCalendar record, so a
+  caller writing the full record adds `DTSTART` from the interval's
+  start.
+
+  ### Arguments
+
+  * `interval` is a recurring `t:Tempo.Interval.t/0`. Its cadence is
+    one unit — `:second`, `:minute`, `:hour`, `:day`, `:week`,
+    `:month` or `:year` — and its recurrence is `:infinity` (no
+    `COUNT`), a positive integer (`COUNT`), or `1` with an end
+    (`UNTIL`). Its repeat rule is `nil` or a selection whose entries
+    for `:month`, `:day` (`BYMONTHDAY`), `:day_of_year`, `:week`,
+    `:hour`, `:minute`, `:second` and the paired `:day_of_week` and
+    `:instance` (`BYDAY`, with ordinals) have RRULE parts.
+
+  ### Returns
+
+  * `{:ok, rrule}` with the rule as a string.
+
+  * `{:error, %Tempo.ConversionError{}}` when the value has no RRULE
+    form — it is not an interval, its cadence has more than one unit,
+    or its selection has an entry RRULE cannot express.
+
+  ### Examples
+
+      iex> {:ok, interval} = Tempo.RRule.parse("FREQ=DAILY;COUNT=10")
+      iex> Tempo.RRule.to_string(interval)
+      {:ok, "COUNT=10;FREQ=DAILY"}
+
+      iex> {:ok, interval} = Tempo.RRule.parse("FREQ=YEARLY;BYMONTH=11;BYDAY=4TH")
+      iex> Tempo.RRule.to_string(interval)
+      {:ok, "FREQ=YEARLY;BYMONTH=11;BYDAY=4TH"}
+
+      iex> {:error, %Tempo.ConversionError{}} = Tempo.RRule.to_string(~o"2022-06-15")
+
+  """
+  @spec to_string(Tempo.Interval.t() | term()) ::
+          {:ok, String.t()} | {:error, ConversionError.t()}
+  def to_string(value), do: Encoder.encode(value)
+
+  @doc """
+  Bang variant of `to_string/1`: the RRULE string, or a raised
+  `Tempo.ConversionError`.
+
+  ### Arguments
+
+  * `interval` is a recurring `t:Tempo.Interval.t/0`; see
+    `to_string/1`.
+
+  ### Returns
+
+  * The RRULE string.
+
+  ### Examples
+
+      iex> Tempo.RRule.to_string!(~o"R12/2026-01-05/P1D")
+      "COUNT=12;FREQ=DAILY"
+
+  """
+  @spec to_string!(Tempo.Interval.t()) :: String.t() | no_return()
+  def to_string!(interval) do
+    case to_string(interval) do
+      {:ok, rrule} -> rrule
+      {:error, %ConversionError{} = error} -> raise error
     end
   end
 

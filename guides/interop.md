@@ -164,25 +164,30 @@ This is why such an interval inspects in the decorated form (`#Tempo.Interval<~o
 
 ## 6. Strings → Tempo: declare the shape you expect
 
-`Tempo.from_iso8601/1` admits every shape ISO 8601 defines and returns whichever one the string turned out to be. That is the right tool when the shape is genuinely unknown — a single text field a user may fill with anything. At an edge where the shape *is* known, declaring it turns a wrong value into an error at the point of parsing:
+`Tempo.parse/2` reads every shape ISO 8601 defines, and a locale's own words (`"15 June 2026"`, `"2:30 PM"`) after that, and returns whichever one the string turned out to be. That is the right tool when the shape is genuinely unknown — a single text field a user may fill with anything. At an edge where the shape *is* known, declaring it turns a wrong value into an error at the point of parsing:
 
 ```elixir
 Tempo.parse_date("2026-06-15")
+#=> {:ok, ~o"2026Y6M15D"}
+
+Tempo.parse_date("15 June 2026", locale: :en)
 #=> {:ok, ~o"2026Y6M15D"}
 
 Tempo.parse_date("2026-06-15T10:30")
 #=> {:error, %Tempo.ParseError{}}   # a datetime is not a date
 ```
 
-One function per shape, each with a bang variant:
+One function per shape, each with a bang variant, each reading ISO 8601 first and the locale's words after:
 
 | Function | Admits | Returns |
-| --- | --- | --- |
-| `Tempo.parse_date/2` | a date at any resolution — `2026`, `2026-06`, `2026-06-15`, `2026-W12`, `2026-166` | `%Tempo{}` |
+|---|---|---|
+| `Tempo.parse_date/2` | a date at any resolution — `2026`, `2026-06`, `June 2026`, `2026-06-15`, `15 June 2026`, `2026-W12`, `2026-166` | `%Tempo{}` |
 | `Tempo.parse_datetime/2` | a date *and* a time of day | `%Tempo{}` |
-| `Tempo.parse_time/2` | a time of day alone | `%Tempo{}` |
-| `Tempo.parse_interval/2` | any interval form, including a repeat rule | `%Tempo.Interval{}` |
-| `Tempo.parse_duration/1` | a duration | `%Tempo.Duration{}` |
+| `Tempo.parse_time/2` | a time of day alone — `T14:30`, `2:30 PM` | `%Tempo{}` |
+| `Tempo.parse_interval/2` | any interval form, including a repeat rule, or a range in words | `%Tempo.Interval{}` |
+| `Tempo.parse_duration/1` | a duration, in ISO 8601 only | `%Tempo.Duration{}` |
+
+Text of another kind says what it read as, rather than only that it failed: `Tempo.parse_date("15 June 2026 14:30", locale: :en)` returns a `Tempo.ParseError` whose message ends *it reads as a datetime, not a date*.
 
 The whole string must be the declared shape, so a value that merely *begins* with one is rejected rather than truncated:
 
@@ -199,8 +204,8 @@ An interval and a duration are already distinguishable by their struct, so a cal
 ```elixir
 # Both succeed, and both are a %Tempo{}. The general parser cannot
 # tell a date field that it received something else.
-{:ok, %Tempo{}} = Tempo.from_iso8601("2026-06-15")
-{:ok, %Tempo{}} = Tempo.from_iso8601("10:30")
+{:ok, %Tempo{}} = Tempo.parse("2026-06-15")
+{:ok, %Tempo{}} = Tempo.parse("10:30")
 
 # Declaring the shape is what makes the second one an error.
 {:ok, %Tempo{}} = Tempo.parse_date("2026-06-15")
@@ -248,11 +253,12 @@ See [When to use Tempo](when-to-use-tempo.md) for the full decision tree.
 ```elixir
 # String → Tempo  (declare the shape; the whole string must be it)
 Tempo.parse_date("2026-06-15")                   # {:ok, %Tempo{}}
+Tempo.parse_date("15 June 2026", locale: :en)    # {:ok, %Tempo{}}, from the locale's words
 Tempo.parse_datetime("2026-06-15T14:30")         # {:ok, %Tempo{}}
 Tempo.parse_time("14:30")                        # {:ok, %Tempo{}}
 Tempo.parse_interval("2026-06-15/2026-06-20")    # {:ok, %Tempo.Interval{}}
 Tempo.parse_duration("PT1H30M")                  # {:ok, %Tempo.Duration{}}
-Tempo.from_iso8601("2026-06-15")                 # any shape, when the shape is unknown
+Tempo.parse("2026-06-15")                        # any shape, when the shape is unknown
 
 # Stdlib → Tempo  (resolution = the type's precision; override with :resolution)
 Tempo.from_date(~D[2026-06-15])                  # :day

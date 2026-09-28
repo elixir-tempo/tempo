@@ -1,6 +1,6 @@
 # iCalendar integration
 
-Tempo imports iCalendar (RFC 5545) data — the interchange format used by Google Calendar, Apple Calendar, Outlook, CalDAV servers, and every `.ics` file on disk — via `Tempo.ICal.from_ical/2`. Events convert to `%Tempo.Interval{}` values with their full metadata (summary, location, attendees, status, …) preserved and carried through every downstream operation, including set operations and enumeration.
+Tempo imports iCalendar (RFC 5545) data — the interchange format used by Google Calendar, Apple Calendar, Outlook, CalDAV servers, and every `.ics` file on disk — via `Tempo.ICal.parse/2`. Events convert to `%Tempo.Interval{}` values with their full metadata (summary, location, attendees, status, …) preserved and carried through every downstream operation, including set operations and enumeration.
 
 This unlocks free/busy scheduling, schedule overlap analysis, and event-aware time queries as direct expressions over the same API you use for any other Tempo value.
 
@@ -19,7 +19,7 @@ The import adds only `sigil_o/2` and `sigil_TEMPO/2` to the caller's namespace; 
 ```elixir
 ics = File.read!("~/my-schedule.ics")
 
-{:ok, schedule} = Tempo.ICal.from_ical(ics)
+{:ok, schedule} = Tempo.ICal.parse(ics)
 # #Tempo.IntervalSet<[
 #   #Tempo.Interval<~o"..." · Design review @ Room 101>,
 #   #Tempo.Interval<~o"..." · 1:1 with Ada>,
@@ -128,10 +128,10 @@ The rule: **result intervals inherit the A-operand's per-interval metadata**. Fo
 
 ## 5. Overlapping events are preserved
 
-Real schedules routinely have overlapping events — a travel event on top of a lunch meeting, an all-day conference covering several one-hour talks. `Tempo.ICal.from_ical/2` returns **an IntervalSet with overlaps preserved** — each VEVENT is a distinct member with its own metadata, and `Tempo.union/2` (the only member-preserving default in the set algebra) keeps it that way through compositions like merging multiple calendars.
+Real schedules routinely have overlapping events — a travel event on top of a lunch meeting, an all-day conference covering several one-hour talks. `Tempo.ICal.parse/2` returns **an IntervalSet with overlaps preserved** — each VEVENT is a distinct member with its own metadata, and `Tempo.union/2` (the only member-preserving default in the set algebra) keeps it that way through compositions like merging multiple calendars.
 
 ```elixir
-{:ok, set} = Tempo.ICal.from_ical(ics)
+{:ok, set} = Tempo.ICal.parse(ics)
 # The set may contain overlapping intervals — each one a
 # distinct VEVENT with its own metadata.
 ```
@@ -150,8 +150,8 @@ The most common iCal workflow:
 
 ```elixir
 # 1. Import the schedules
-{:ok, work} = Tempo.ICal.from_ical_file("work.ics")
-{:ok, personal} = Tempo.ICal.from_ical_file("personal.ics")
+{:ok, work} = Tempo.ICal.parse_file("work.ics")
+{:ok, personal} = Tempo.ICal.parse_file("personal.ics")
 
 # 2. Merge into one busy-set
 {:ok, all_busy} = Tempo.union(work, personal)
@@ -207,26 +207,28 @@ Every RFC 5545 BY-rule flows through one interpreter — there is no "simple cor
 
 ### Termination paths
 
-- **`COUNT=N`** — stop after N materialised occurrences (after BY-rule filtering / expansion).
-- **`UNTIL=<date-or-datetime>`** — stop when the next occurrence would start past `UNTIL`.
-- **No `COUNT` or `UNTIL`** — a `:within` option is required at the call site. The rule expands within the window.
+* **`COUNT=N`** — stop after N materialised occurrences (after BY-rule filtering / expansion).
+
+* **`UNTIL=<date-or-datetime>`** — stop when the next occurrence would start past `UNTIL`.
+
+* **No `COUNT` or `UNTIL`** — a `:within` option is required at the call site. The rule expands within the window.
 
 ### Worked examples
 
 ```elixir
 # "Every Friday the 13th, 5 occurrences"
 ics = "...RRULE:FREQ=MONTHLY;BYDAY=FR;BYMONTHDAY=13;COUNT=5..."
-{:ok, set} = Tempo.ICal.from_ical(ics)
+{:ok, set} = Tempo.ICal.parse(ics)
 # => 1998-02-13, 1998-03-13, 1998-11-13, 1999-08-13, 2000-10-13
 
 # "The 4th Thursday of November" (US Thanksgiving)
 ics = "...RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=4TH;COUNT=3..."
-{:ok, set} = Tempo.ICal.from_ical(ics)
+{:ok, set} = Tempo.ICal.parse(ics)
 # => 2022-11-24, 2023-11-23, 2024-11-28
 
 # "Last weekday of every month"
 ics = "...RRULE:FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1;COUNT=3..."
-{:ok, set} = Tempo.ICal.from_ical(ics)
+{:ok, set} = Tempo.ICal.parse(ics)
 
 # With RDATE + EXDATE
 ics = """
@@ -236,7 +238,7 @@ RDATE:20220618T140000Z
 EXDATE:20220608T090000Z
 ...
 """
-{:ok, set} = Tempo.ICal.from_ical(ics)
+{:ok, set} = Tempo.ICal.parse(ics)
 # Weekly series has Jun 8 removed and Jun 18 14:00 added
 ```
 
@@ -246,23 +248,24 @@ Per RFC 5545, `DTSTART` is the first instance in the recurrence. When `BY*` rule
 
 ### Calendar-aware throughout
 
-Every arithmetic operation goes through the candidate's own calendar (`calendar.day_of_week/4`, `calendar.days_in_month/2`, `calendar.iso_week_of_year/3`, `Date.add/2` with the calendar arg, `Calendrical.Kday.nth_kday/3`). A Hebrew-calendar VEVENT with `FREQ=YEARLY;BYMONTHDAY=-1` expands correctly against Hebrew month lengths.
+Every arithmetic operation goes through the candidate's own calendar (`calendar.day_of_week/4`, `calendar.days_in_month/2`, `calendar.iso_week_of_year/3`, Calendrical's date arithmetic, `Calendrical.Kday.nth_kday/3`). A Hebrew-calendar VEVENT with `FREQ=YEARLY;BYMONTHDAY=-1` expands correctly against Hebrew month lengths.
 
-## 8. What's not in v1
+## 8. What's not supported
 
-- **`EXRULE`** — RFC-deprecated (RFC 2445 → 5545) and not surfaced by the underlying `ical` library. If you need subtractive rules, use `EXDATE` for specific dates.
+* **`EXRULE`** — RFC-deprecated (RFC 2445 → 5545) and not surfaced by the underlying `ical` library. If you need subtractive rules, use `EXDATE` for specific dates.
 
-- **Multiple `RRULE` per `VEVENT`** — RFC 5545 says SHOULD NOT. Some exports do it anyway; the `ical` library exposes only the first `RRULE` on `event.rrule`, so we materialise that one and silently ignore the rest.
+* **Multiple `RRULE` per `VEVENT`** — RFC 5545 says SHOULD NOT. Some exports do it anyway; the `ical` library exposes only the first `RRULE` on `event.rrule`, so we materialise that one and silently ignore the rest.
 
-- **Duration-only events.** `VEVENT`s with `DURATION` but no `DTEND` — the `ical` library exposes the duration in its own record shape that doesn't line up with Tempo's `%Tempo.Duration{}`. Bridging the two is a small follow-up.
+* **VTIMEZONE definitions.** `VTIMEZONE` blocks in the input are used by the `ical` library to resolve zoned DTSTART/DTEND values, but Tempo itself relies on the configured time zone database for zone calculations. Zones absent from the IANA data (historical / non-standard zones defined in the `VTIMEZONE`) may not round-trip cleanly.
 
-- **VTIMEZONE definitions.** `VTIMEZONE` blocks in the input are used by the `ical` library to resolve zoned DTSTART/DTEND values, but Tempo itself relies on the configured time zone database for zone calculations. Zones absent from the IANA data (historical / non-standard zones defined in the `VTIMEZONE`) may not round-trip cleanly.
-
-- **Export.** `Tempo → iCalendar` (going the other way) isn't implemented. Tempo emits RRULE via `to_rrule/1` for individual values; a full `to_ical/1` that produces a VCALENDAR envelope with VEVENTs is a future step.
+* **Export.** `Tempo → iCalendar` (going the other way) isn't implemented. Tempo writes an RRULE with `Tempo.RRule.to_string/1` for individual values; a full `to_ical/1` that produces a VCALENDAR envelope with VEVENTs is a future step.
 
 ## 9. Related reading
 
-- [`guides/rfc5545_rrule_conformance.md`](./rfc5545_rrule_conformance.md) for the property-by-property RRULE coverage table.
-- [`guides/set-operations.md`](./set-operations.md) for how to combine imported schedules.
-- [`guides/enumeration-semantics.md`](./enumeration-semantics.md) for how iteration works over the resulting IntervalSets.
-- [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545) for the iCalendar spec itself.
+* [`guides/rfc5545_rrule_conformance.md`](./rfc5545_rrule_conformance.md) for the property-by-property RRULE coverage table.
+
+* [`guides/set-operations.md`](./set-operations.md) for how to combine imported schedules.
+
+* [`guides/enumeration-semantics.md`](./enumeration-semantics.md) for how iteration works over the resulting IntervalSets.
+
+* [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545) for the iCalendar spec itself.

@@ -100,7 +100,7 @@ iex> Tempo.IntervalSet.count(set)
 12
 
 # Free time, accounting for meetings in a real schedule
-iex> {:ok, schedule} = Tempo.ICal.from_ical_file("~/work.ics")
+iex> {:ok, schedule} = Tempo.ICal.parse_file("~/work.ics")
 iex> {:ok, free} = Tempo.difference(~o"2026-06-15T09/2026-06-15T17", schedule)
 ```
 
@@ -108,7 +108,7 @@ The inspect output carries metadata inline — iCalendar events show their summa
 
 ```elixir
 iex> ics = File.read!("~/work.ics")
-iex> {:ok, schedule} = Tempo.ICal.from_ical(ics)
+iex> {:ok, schedule} = Tempo.ICal.parse(ics)
 iex> schedule
 #Tempo.IntervalSet<[
   #Tempo.Interval<~o"2026Y6M15DT10HZ/2026Y6M15DT11HZ" · Design review @ Room 101>,
@@ -170,7 +170,7 @@ Full specification including modifier-binding, container patterns, and calendar-
 
 * **Business days and territory-aware calendars.** `Tempo.weekend?/2`, `Tempo.workday?/2`, `Tempo.add_working_days/3`, and `Tempo.working_days_in/2` answer "how many working days until the deadline?" with CLDR-correct weekends per territory (the US weekends Saturday/Sunday, Saudi Arabia Friday/Saturday) and correct on any calendar.
 
-* **iCalendar import with metadata that travels.** `Tempo.ICal.from_ical/2` parses RFC 5545 `.ics` data and every event's metadata (summary, location, attendees, status, …) rides along through every downstream operation. Intersect your schedule with work hours, get back *which meetings* are in work hours.
+* **iCalendar import with metadata that travels.** `Tempo.ICal.parse/2` parses RFC 5545 `.ics` data and every event's metadata (summary, location, attendees, status, …) rides along through every downstream operation. Intersect your schedule with work hours, get back *which meetings* are in work hours.
 
 * **Unlocking queries that used to be hard.** "Every Friday the 13th this century." "When was I both in Japan and enrolled at my university?" "Free time on Tuesday, accounting for meetings across three zones." "Does this dig layer overlap with this dynasty?" All direct expressions over the same `Tempo` API.
 
@@ -194,7 +194,7 @@ Tempo draws on several bodies of work:
 
 * **ISO 8601-2 / EDTF.** The 2019 extension to ISO 8601 formalises archaeological and approximate dates. The `unt-libraries/edtf-validate` conformance corpus — the only public test suite for EDTF — is exercised in full.
 
-* **RFC 5545 (iCalendar) / RFC 7529 (RSCALE).** The iCalendar specification for RRULE, RDATE, EXDATE, VTIMEZONE. Tempo imports `.ics` data via `Tempo.ICal.from_ical/2`.
+* **RFC 5545 (iCalendar) / RFC 7529 (RSCALE).** The iCalendar specification for RRULE, RDATE, EXDATE, VTIMEZONE. Tempo imports `.ics` data via `Tempo.ICal.parse/2`.
 
 * **IETF draft-ietf-sedate-datetime-extended (IXDTF).** The extended date-time format for annotations such as `[Europe/Paris][u-ca=hebrew]`. Supported in both parse and round-trip.
 

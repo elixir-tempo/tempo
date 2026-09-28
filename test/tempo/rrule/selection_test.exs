@@ -363,7 +363,7 @@ defmodule Tempo.RRule.SelectionTest do
     end
   end
 
-  describe "end-to-end — BYMONTH through Tempo.ICal.from_ical/2" do
+  describe "end-to-end — BYMONTH through Tempo.ICal.parse/2" do
     test "FREQ=MONTHLY;BYMONTH=6,7,8;COUNT=6 no longer falls back to first-only" do
       ics = """
       BEGIN:VCALENDAR
@@ -380,7 +380,7 @@ defmodule Tempo.RRule.SelectionTest do
       END:VCALENDAR
       """
 
-      {:ok, set} = ICal.from_ical(ics)
+      {:ok, set} = ICal.parse(ics)
       assert length(set.intervals) == 6
 
       # No event has the fallback marker — all are real
@@ -413,7 +413,7 @@ defmodule Tempo.RRule.SelectionTest do
       END:VCALENDAR
       """
 
-      {:ok, set} = ICal.from_ical(ics)
+      {:ok, set} = ICal.parse(ics)
       assert length(set.intervals) == 10
 
       assert Enum.all?(set.intervals, fn iv ->
@@ -437,7 +437,7 @@ defmodule Tempo.RRule.SelectionTest do
       END:VCALENDAR
       """
 
-      {:ok, set} = ICal.from_ical(ics)
+      {:ok, set} = ICal.parse(ics)
       assert length(set.intervals) == 3
 
       assert Enum.all?(set.intervals, fn iv ->
@@ -594,7 +594,7 @@ defmodule Tempo.RRule.SelectionTest do
     end
   end
 
-  describe "end-to-end — BYSETPOS through Tempo.ICal.from_ical/2" do
+  describe "end-to-end — BYSETPOS through Tempo.ICal.parse/2" do
     test "last-weekday-of-month event materialises fully" do
       ics = """
       BEGIN:VCALENDAR
@@ -611,7 +611,7 @@ defmodule Tempo.RRule.SelectionTest do
       END:VCALENDAR
       """
 
-      {:ok, set} = ICal.from_ical(ics)
+      {:ok, set} = ICal.parse(ics)
       assert length(set.intervals) == 3
 
       assert Enum.all?(set.intervals, fn iv ->

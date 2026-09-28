@@ -22,6 +22,10 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 | `Tempo.to_date_time/1`, `from_date_time/1` | `Tempo.to_datetime/1`, `from_datetime/1` |
 | `Tempo.to_naive_date_time/1`, `from_naive_date_time/1` | `Tempo.to_naive_datetime/1`, `from_naive_datetime/1` |
 | `Tempo.to_calendar/1` | `Tempo.to_elixir/1` |
+| `Tempo.ICal.from_ical/2`, `from_ical_file/2` | `Tempo.ICal.parse/2`, `parse_file/2` |
+| `Tempo.ICal.available_from_ical/2` | `Tempo.ICal.available/2`, given text |
+| `Tempo.JSCalendar.from_jscalendar/2` | `Tempo.JSCalendar.parse/2` |
+| `Tempo.to_rrule/1`, `to_rrule!/1` | `Tempo.RRule.to_string/1`, `to_string!/1` |
 
 * `Tempo.duration/1` and `Tempo.IntervalSet.duration/1` measure the time a set covers, counting time its members share once; `IntervalSet.total_duration/1`, which did, is removed.
 
@@ -29,7 +33,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * A zoned value's hours, minutes and seconds are time on the time line in `Tempo.shift/2`, a start-and-duration interval, an hour's own span and an hourly recurrence, and its days stay calendar days: five hours after 23:00 on the night the clocks spring forward is 05:00, where it was 04:00.
 
-* `:within` replaces `:bound` on `Tempo.to_interval/2`, `to_interval_set/2`, the set operations, `complement/2`, `Tempo.ICal.from_ical/2`, `Tempo.JSCalendar.from_jscalendar/2` and the RRULE expander; a leftover `:bound` is an error naming it.
+* `:within` replaces `:bound` on `Tempo.to_interval/2`, `to_interval_set/2`, the set operations, `complement/2`, `Tempo.ICal.parse/2`, `Tempo.JSCalendar.parse/2` and the RRULE expander; a leftover `:bound` is an error naming it.
 
 * The `:within` window keeps every occurrence that overlaps it, for every recurrence: `R/2020-01-01/P1Y` within 2026 is 2026's occurrence alone, not every year since 2020, and iCalendar and JSCalendar return only the events that overlap the window.
 
@@ -54,6 +58,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * A value with a zone or an offset is zoned, the pair of floating: `Tempo.zoned?/1` replaces `grounded?/1`, and `Tempo.ZonedTempoError` replaces `GroundedTempoError`.
 
 * The Elixir conversions write "datetime" as one word, as Elixir does: `to_datetime/1`, `from_datetime/1`, `to_naive_datetime/1` and `from_naive_datetime/1`. The deprecated `to_calendar/1` is removed for `to_elixir/1`.
+
+* The format modules read with `parse`: `Tempo.ICal.parse/2` and `parse_file/2`, `ICal.available/2` given text or a parsed calendar, and `Tempo.JSCalendar.parse/2`. An RRULE is written with `Tempo.RRule.to_string/1`, the pair of `RRule.parse/2`.
 
 ### Added
 
@@ -103,7 +109,9 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * Date arithmetic in validation, selection, recurrence week expansion, recurrence windows, interval stepping and conversion goes through Calendrical rather than `Date.add/2`, day numbers and month walks.
 
-* `Tempo.parse/2`'s `:calendar` option is a calendar module, `Calendar.ISO` by default, as Calendrical 1.4's is: a CLDR calendar name such as `:hebrew` returns an error.
+* `Tempo.parse/2` reads ISO 8601 first, with the whole grammar `from_iso8601/2` reads, then the locale's words, and `parse_date/2`, `parse_datetime/2`, `parse_time/2` and `parse_interval/2` read the same, naming what text of another kind reads as.
+
+* `Tempo.parse/2`'s `:calendar` option is a calendar module, as Calendrical 1.4's is: a CLDR calendar name such as `:hebrew` returns an error.
 
 * A recurrence whose selection has a §12.10 window looks into the period before its `:within` window only for a forward §12.10 window, and the one after only for a backward one, and a domain runs its adjacent periods as one recurrence. Results are unchanged.
 
@@ -147,7 +155,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * A year in a recurrence's selection limits it to the occurrences that start in the listed years, as a domain does: `R/2026-01-01/P1Y/FL2027Y1M1DN` is 1 January 2027 alone, where the year was ignored. A set, range or mask of years, or `X*Y`, works too.
 
-* `Tempo.to_rrule/1` returns a `Tempo.ConversionError` naming any selection RRULE cannot express — a traditional month (`m`), a computed event (`e`), a year, a selection window, and cron's nearest weekday and day-of-month-or-weekday — where it silently dropped them.
+* `Tempo.RRule.to_string/1` returns a `Tempo.ConversionError` naming any selection RRULE cannot express — a traditional month (`m`), a computed event (`e`), a year, a selection window, and cron's nearest weekday and day-of-month-or-weekday — where it silently dropped them.
 
 * A week (`W`) is an ISO 8601 week throughout — dates, week counts, arithmetic, rounding, groups and selections — counted over the calendar's own year in a non-Gregorian calendar. `2026Y53W` is valid, `Tempo.shift(~o"2026Y52W", week: 2)` is `2027Y1W` and Hebrew `5787Y10W1K` is 6 Kislev, where week counts were the Gregorian calendar's and Hebrew week dates came from the Gregorian year 5787.
 

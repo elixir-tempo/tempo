@@ -1,7 +1,8 @@
 defmodule Tempo.ParseError do
   @moduledoc """
-  Exception raised when an ISO 8601 or IXDTF string cannot be
-  parsed.
+  Exception returned when a string cannot be parsed: it is not ISO
+  8601 or IXDTF, or — from a typed parser such as
+  `Tempo.parse_date/2` — it is not a value of the kind asked for.
 
   Carries the raw input, a short reason atom or phrase identifying
   the parse failure, and the byte offset into `input` at which the
@@ -27,6 +28,8 @@ defmodule Tempo.ParseError do
   end
 
   @impl true
+  def message(%__MODULE__{reason: "Could not parse " <> _rest = reason}), do: reason
+
   def message(%__MODULE__{input: nil, reason: reason}) when is_binary(reason) do
     reason
   end

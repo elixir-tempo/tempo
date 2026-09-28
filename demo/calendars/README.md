@@ -27,8 +27,8 @@ Events use `DTSTART;TZID=Australia/Sydney:…` and the file carries a matching `
 ## Quick demo lines
 
 ```elixir
-{:ok, bruce}  = Tempo.ICal.from_ical(File.read!("demo/calendars/bruce.ics"))
-{:ok, shiela} = Tempo.ICal.from_ical(File.read!("demo/calendars/shiela.ics"))
+{:ok, bruce}  = Tempo.ICal.parse(File.read!("demo/calendars/bruce.ics"))
+{:ok, shiela} = Tempo.ICal.parse(File.read!("demo/calendars/shiela.ics"))
 
 # When are they both busy?
 {:ok, clash} = Tempo.intersection(bruce, shiela)

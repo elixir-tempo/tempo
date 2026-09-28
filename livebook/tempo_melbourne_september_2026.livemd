@@ -394,7 +394,7 @@ END:VEVENT
 END:VCALENDAR
 """
 
-{:ok, holidays} = Tempo.ICal.from_ical(holidays_ics)
+{:ok, holidays} = Tempo.ICal.parse(holidays_ics)
 
 # The set inspects with each interval's summary intact — the point of the slide.
 holidays

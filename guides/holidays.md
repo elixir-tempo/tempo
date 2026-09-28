@@ -1,6 +1,6 @@
 # Holidays — Planning with a Real Holiday Calendar
 
-The [workdays-and-weekends guide](./workdays-and-weekends.md) showed how `Tempo.select(interval, Tempo.workdays(:US))` filters out weekends. Holidays are the other half of "when is the office closed?" — they're territory-specific, year-specific, and maintained by people who care about them. Tempo doesn't ship holiday data; instead, it consumes standard iCalendar (`.ics`) feeds through `Tempo.ICal.from_ical/1` and lets set operations do the rest.
+The [workdays-and-weekends guide](./workdays-and-weekends.md) showed how `Tempo.select(interval, Tempo.workdays(:US))` filters out weekends. Holidays are the other half of "when is the office closed?" — they're territory-specific, year-specific, and maintained by people who care about them. Tempo doesn't ship holiday data; instead, it consumes standard iCalendar (`.ics`) feeds through `Tempo.ICal.parse/1` and lets set operations do the rest.
 
 This guide walks through fetching a real holiday calendar from [officeholidays.com](https://www.officeholidays.com/subscribe), parsing it into a `%Tempo.IntervalSet{}`, and using it to answer three scheduling questions: "how many working days are actually in Q3?", "which holidays will hit my project?", and "what's five business days from today if we skip holidays?".
 
@@ -34,7 +34,7 @@ The end-to-end fetch-and-parse is three lines:
 %Req.Response{body: ics} =
   Req.get!("https://www.officeholidays.com/ics-fed/usa")
 
-{:ok, holidays} = Tempo.ICal.from_ical(ics)
+{:ok, holidays} = Tempo.ICal.parse(ics)
 
 Tempo.IntervalSet.count(holidays)
 #=> 12    (US federal holidays for 2026)
@@ -42,7 +42,7 @@ Tempo.IntervalSet.count(holidays)
 
 (Any HTTP client works — the examples use [`:req`](https://hex.pm/packages/req); `:httpc` from OTP or another library is equally fine. What Tempo needs is the response body as a string.)
 
-`Tempo.ICal.from_ical/1` returns a `%Tempo.IntervalSet{}` where each member is a `%Tempo.Interval{}` with the iCal event metadata preserved on `:metadata` — `summary`, `description`, `location`, `uid`, custom `X-*` properties. The intervals themselves are half-open `[from, to)` day-spans in Tempo's standard convention.
+`Tempo.ICal.parse/1` returns a `%Tempo.IntervalSet{}` where each member is a `%Tempo.Interval{}` with the iCal event metadata preserved on `:metadata` — `summary`, `description`, `location`, `uid`, custom `X-*` properties. The intervals themselves are half-open `[from, to)` day-spans in Tempo's standard convention.
 
 <!-- guides:skip -->
 
@@ -203,7 +203,7 @@ defmodule MyApp.HolidayCalendar do
     url = "https://www.officeholidays.com/ics/#{territory_slug(territory)}"
 
     with {:ok, %Req.Response{status: 200, body: ics}} <- Req.get(url),
-         {:ok, set} <- Tempo.ICal.from_ical(ics) do
+         {:ok, set} <- Tempo.ICal.parse(ics) do
       {:ok, set}
     end
   end
@@ -262,6 +262,6 @@ Read aloud: *"Take the open workdays of Q3, group them by week, keep only the we
 
 * [Set operations](./set-operations.md) — union, intersection, difference, the instant-level vs member-preserving distinction, and companions like `members_overlapping`/`members_outside`.
 
-* [iCalendar integration](./ical-integration.md) — full detail on `Tempo.ICal.from_ical/1`, metadata preservation, and round-tripping `.ics` files.
+* [iCalendar integration](./ical-integration.md) — full detail on `Tempo.ICal.parse/1`, metadata preservation, and round-tripping `.ics` files.
 
 * [Cookbook](./cookbook.md) — recipe-format examples for scheduling, availability, and related queries.
