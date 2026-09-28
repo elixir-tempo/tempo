@@ -111,7 +111,7 @@ defmodule Tempo.EventTest do
 
     test "a multi-year bound yields one occurrence per year" do
       {:ok, rule} = Tempo.from_iso8601("R/../P1Y/FL(easter)eN")
-      {:ok, set} = Tempo.to_interval(rule, bound: ~o"{2026..2028}Y")
+      {:ok, set} = Tempo.to_interval(rule, within: ~o"{2026..2028}Y")
 
       dates =
         set
@@ -186,7 +186,7 @@ defmodule Tempo.EventTest do
   # list the ISO dates.
   defp event_dates(iso, bound \\ ~o"2026Y") do
     {:ok, rule} = Tempo.from_iso8601(iso)
-    {:ok, set} = Tempo.to_interval(rule, bound: bound)
+    {:ok, set} = Tempo.to_interval(rule, within: bound)
 
     set
     |> IntervalSet.to_list()

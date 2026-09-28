@@ -9,8 +9,13 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 | 1.x | 2.0 |
 |---|---|
 | `Tempo.IntervalSet.total_duration/1` | `Tempo.IntervalSet.duration/1` |
+| the `:bound` option | `:within` |
 
 * `Tempo.duration/1` and `Tempo.IntervalSet.duration/1` measure the time a set covers, counting time its members share once; `IntervalSet.total_duration/1`, which did, is removed.
+
+* `:within` replaces `:bound` on `Tempo.to_interval/2`, `to_interval_set/2`, the set operations, `complement/2`, `Tempo.ICal.from_ical/2`, `Tempo.JSCalendar.from_jscalendar/2` and the RRULE expander; a leftover `:bound` is an error naming it.
+
+* The `:within` window keeps every occurrence that overlaps it, for every recurrence: `R/2020-01-01/P1Y` within 2026 is 2026's occurrence alone, not every year since 2020, and iCalendar and JSCalendar return only the events that overlap the window.
 
 * `Tempo.new/1`'s `:metadata` is the value's own metadata, read with `Tempo.metadata/1` and never written to its ISO 8601 form, where it was written as IXDTF suffix tags; tags take the new `:tags` option, validated so `to_iso8601/1` cannot fail on one.
 
@@ -60,7 +65,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.parse/2`'s `:calendar` option is a calendar module, `Calendar.ISO` by default, as Calendrical 1.4's is: a CLDR calendar name such as `:hebrew` returns an error.
 
-* A recurrence whose selection has a §12.10 window looks into the period before its bound only for a forward window, and the period after only for a backward one, and a domain runs its adjacent periods as one recurrence. Results are unchanged.
+* A recurrence whose selection has a §12.10 window looks into the period before its `:within` window only for a forward §12.10 window, and the one after only for a backward one, and a domain runs its adjacent periods as one recurrence. Results are unchanged.
 
 * A recurrence selection that moves a candidate to several dates (weekday, month-day, week and window expansions) finds the candidate's own day numbers once, and a move onto its own date asks the calendar nothing — about a third fewer calendar calls for a lunisolar calendar.
 
@@ -74,7 +79,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
-* A recurrence over a bound that starts mid-period reaches every period the bound overlaps, and keeps only occurrences starting in the bound or by its UNTIL: `R/../P1Y/FL1M15DN` over September 2026 to March 2027 is 15 January 2027, where it was nothing. `overlapping: true` keeps those overlapping the bound, as set operations do against a recurrence set's other operand.
+* A recurrence walks every period its `:within` window overlaps, however the window is aligned — `R/../P1Y/FL1M15DN` within September 2026 to March 2027 is 15 January 2027, where it was nothing — and an UNTIL holds every day a period's selection expands to.
 
 * An interval written as a start and a duration (`2026-01-01/P1D`) or a duration and an end (`P1D/2026-01-02`) answers `relation/2`, the relation, certainty and duration predicates, `duration/1`, `bounded?/1`, the endpoint accessors and `IntervalSet.new/2` as its two-endpoint form does, where they raised, crashed or read it as open-ended.
 
@@ -134,7 +139,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.Network.Relation.from_allen/1` preserves direction for `:overlapped_by`, which previously mapped to `:overlaps` and silently reversed the operands. Every Allen relation now round-trips through `to_allen/1`.
 
-* An unanchored recurrence materialises against a `:bound` alone: `Tempo.to_interval(~o"R/../P1Y/FL6M1K2IN", bound: ~o"2026")` projects "the second Monday of June" onto 2026 with no separate `:anchor`. Each occurrence takes the resolution its selection names — `FL6MN` a month (`~o"2026Y6M"`), `FL10WN` a week (`~o"2026Y10W"`), `FL12M25DN` a day — with RRULE `BYMONTH`/`BYWEEKNO` semantics unchanged.
+* A recurrence with an open start materialises within a `:within` window alone: `Tempo.to_interval(~o"R/../P1Y/FL6M1K2IN", within: ~o"2026")` is the second Monday of June 2026. Each occurrence takes the resolution its selection names — `FL6MN` a month, `FL12M25DN` a day.
 
 ## [v1.6.4] — 2026-09-03
 

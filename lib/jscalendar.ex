@@ -106,16 +106,19 @@ if Code.ensure_loaded?(JSCalendar) do
 
     ### Options
 
-    * `:bound` is a Tempo value within which recurring events are
-      expanded. Required when any event has a recurrence rule with
-      neither `count` nor `until`; ignored when there are none.
+    * `:within` is a Tempo value: the window whose events you want.
+      It keeps every event occurrence that overlaps the window — one
+      already in progress when the window opens, and one that runs
+      past its end. Required when an event recurs with neither
+      `count` nor `until`; with no window, every event is returned.
 
     ### Returns
 
     * `{:ok, interval_set}`; or
 
     * `{:error, reason}` when the document cannot be parsed, a zone is
-      unknown, or a recurrence needs a `:bound` that was not supplied.
+      unknown, a recurrence needs a `:within` window that was not
+      supplied, or a leftover `:bound` is given.
 
     ### Examples
 
@@ -137,7 +140,8 @@ if Code.ensure_loaded?(JSCalendar) do
     """
     @spec from_jscalendar(binary(), keyword()) :: {:ok, IntervalSet.t()} | {:error, term()}
     def from_jscalendar(json, options \\ []) when is_binary(json) do
-      with {:ok, object} <- JSCalendar.decode(json) do
+      with :ok <- Tempo.check_within_option(options, "Tempo.JSCalendar.from_jscalendar/2"),
+           {:ok, object} <- JSCalendar.decode(json) do
         to_interval_set(object, options)
       end
     end
@@ -175,19 +179,21 @@ if Code.ensure_loaded?(JSCalendar) do
 
     """
     @spec to_interval_set(struct(), keyword()) :: {:ok, IntervalSet.t()} | {:error, term()}
-    def to_interval_set(object, options \\ [])
-
-    def to_interval_set(%Event{} = event, options) do
-      with {:ok, intervals} <- occurrences(event, options) do
-        IntervalSet.new(intervals, coalesce: false)
+    def to_interval_set(object, options \\ []) do
+      with :ok <- Tempo.check_within_option(options, "Tempo.JSCalendar.to_interval_set/2"),
+           {:ok, intervals} <- object_occurrences(object, options),
+           {:ok, kept} <- Tempo.occurrences_within(intervals, options) do
+        IntervalSet.new(kept, coalesce: false)
       end
     end
 
+    defp object_occurrences(%Event{} = event, options), do: occurrences(event, options)
+
     # A task is work, not time occupied. Placing one on a timeline
     # would assert something the document does not say.
-    def to_interval_set(%Task{}, _options), do: IntervalSet.new([])
+    defp object_occurrences(%Task{}, _options), do: {:ok, []}
 
-    def to_interval_set(%Group{entries: entries}, options) do
+    defp object_occurrences(%Group{entries: entries}, options) do
       entries
       |> List.wrap()
       |> Enum.filter(&is_struct(&1, Event))
@@ -197,13 +203,9 @@ if Code.ensure_loaded?(JSCalendar) do
           {:error, _reason} = error -> {:halt, error}
         end
       end)
-      |> case do
-        {:ok, intervals} -> IntervalSet.new(intervals, coalesce: false)
-        {:error, _reason} = error -> error
-      end
     end
 
-    def to_interval_set(other, _options), do: {:error, {:not_a_calendar_object, other}}
+    defp object_occurrences(other, _options), do: {:error, {:not_a_calendar_object, other}}
 
     ## ------------------------------------------------------------
     ## Event → Interval(s)
@@ -279,7 +281,7 @@ if Code.ensure_loaded?(JSCalendar) do
     defp materialise(rules, %Interval{} = base, event, options) do
       expander_options =
         options
-        |> Keyword.take([:bound])
+        |> Keyword.take([:within])
         |> Keyword.put(:metadata, metadata(event))
         |> Keyword.put(:duration, occurrence_duration(base))
 

@@ -414,12 +414,12 @@ defmodule Tempo.RRuleTest do
   end
 
   defp first_occurrence(value) do
-    {:ok, set} = Tempo.to_interval(value, bound: ~o"2025")
+    {:ok, set} = Tempo.to_interval(value, within: ~o"2025")
     set |> IntervalSet.to_list() |> hd()
   end
 
   defp occurrences(value) do
-    {:ok, set} = Tempo.to_interval(value, bound: ~o"2024/2028")
+    {:ok, set} = Tempo.to_interval(value, within: ~o"2024/2028")
     IntervalSet.to_list(set)
   end
 end

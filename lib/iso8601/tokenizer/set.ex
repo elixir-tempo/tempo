@@ -98,7 +98,7 @@ defmodule Tempo.Iso8601.Tokenizer.Set do
                   # An open lower endpoint `..`, then either a year filter — an
                   # open, filtered domain (all even/odd/leap years, e.g. R/..e/P1Y),
                   # which like an exclusions-only domain has no window of its own
-                  # and needs a `:bound` — or the upper end after the slash:
+                  # and needs a `:within` window — or the upper end after the slash:
                   # ../date, ../duration (an unanchored recurrence, e.g. a cron
                   # schedule with no `:from`, inspecting as `R/../P1W/…`), ../..
                   # or ../ (both endpoints open).

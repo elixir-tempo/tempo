@@ -254,7 +254,7 @@ defmodule Tempo.CronTest do
       {:ok, rule} = Cron.to_rule(expression)
 
       {:ok, occurrences} =
-        Expander.expand(rule, ~o"2026-01-01T09:00:00", bound: ~o"2027Y")
+        Expander.expand(rule, ~o"2026-01-01T09:00:00", within: ~o"2026Y")
 
       Enum.map(occurrences, fn occurrence ->
         {occurrence.from.time[:month], occurrence.from.time[:day]}
@@ -321,7 +321,7 @@ defmodule Tempo.CronTest do
       {:ok, rule} = Cron.to_rule(expression)
 
       {:ok, occurrences} =
-        Expander.expand(rule, ~o"2026-01-01T00:00:00", bound: ~o"2027Y")
+        Expander.expand(rule, ~o"2026-01-01T00:00:00", within: ~o"2026Y")
 
       occurrences
       |> Enum.map(fn occurrence ->
@@ -430,7 +430,7 @@ defmodule Tempo.CronTest do
 
       # Bound `~o"2026-06-15T10"` is the implicit one-hour span
       # `[10:00, 11:00)`; at 15-minute intervals that's 4 occurrences.
-      {:ok, set} = Tempo.to_interval(cron, bound: ~o"2026-06-15T10", coalesce: false)
+      {:ok, set} = Tempo.to_interval(cron, within: ~o"2026-06-15T10", coalesce: false)
 
       # 10:00, 10:15, 10:30, 10:45.
       assert IntervalSet.count(set) == 4

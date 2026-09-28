@@ -483,7 +483,7 @@ See `Tempo.Select` for the full selector vocabulary.
 
 ## 7. Recurring events (RRULE)
 
-An RRULE parses into a recurring `%Tempo.Interval{}` with `Tempo.RRule.parse!/2`; you materialise it into occurrences with `Tempo.to_interval/2`, limited by a `:bound` window or by the rule's own `COUNT`/`UNTIL`. (A plain periodic cadence with no calendar filter needs no RRULE at all — build it directly with `Tempo.Interval.new!(from: ~o"2026-06-01", duration: ~o"P1W", recurrence: 10)`; see the [scheduling guide](./scheduling.md).)
+An RRULE parses into a recurring `%Tempo.Interval{}` with `Tempo.RRule.parse!/2`; you materialise it into occurrences with `Tempo.to_interval/2`, limited by a `:within` window or by the rule's own `COUNT`/`UNTIL`. (A plain periodic cadence with no calendar filter needs no RRULE at all — build it directly with `Tempo.Interval.new!(from: ~o"2026-06-01", duration: ~o"P1W", recurrence: 10)`; see the [scheduling guide](./scheduling.md).)
 
 ### How do I express "every Monday for 10 weeks"?
 
@@ -547,11 +547,11 @@ iex> Tempo.IntervalSet.count(set)
 
 ### How do I handle an unbounded rule?
 
-Supply `:bound`:
+Supply `:within`:
 
 ```elixir
 iex> recurrence = Tempo.RRule.parse!("FREQ=DAILY", from: ~o"2026-06-01")  # No COUNT, no UNTIL
-iex> {:ok, set} = Tempo.to_interval(recurrence, bound: ~o"2026-06")
+iex> {:ok, set} = Tempo.to_interval(recurrence, within: ~o"2026-06")
 iex> Tempo.IntervalSet.count(set)
 30
 ```
@@ -574,12 +574,12 @@ Each event becomes a `%Tempo.Interval{}` with full metadata (summary, location, 
 
 ### How do I import an `.ics` that contains recurring events?
 
-Pass a `:bound` so unbounded recurrences terminate:
+Pass a `:within` so unbounded recurrences terminate:
 
 <!-- guides:skip -->
 
 ```elixir
-iex> {:ok, schedule} = Tempo.ICal.from_ical(ics, bound: ~o"2026-04-01/2026-07-01")
+iex> {:ok, schedule} = Tempo.ICal.from_ical(ics, within: ~o"2026-04-01/2026-07-01")
 ```
 
 Every RRULE part (including BY-rules, BYSETPOS, WKST, RDATE, EXDATE) materialises correctly — one `%Tempo.Interval{}` per occurrence carrying the event's metadata.
@@ -819,7 +819,7 @@ friday_the_13th =
 
 century = ~o"2000-01-01/2100-01-01"
 
-{:ok, occurrences} = Tempo.to_interval(friday_the_13th, bound: century)
+{:ok, occurrences} = Tempo.to_interval(friday_the_13th, within: century)
 ```
 
 > **Friday the 13th** is a monthly rule — Fridays whose day-of-month is 13. **Expanding** the rule across the **century** gives every occurrence.
@@ -926,7 +926,7 @@ An RRULE equivalent is available when you need the full rule machinery (byday co
 weekdays =
   Tempo.RRule.parse!("FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR", from: ~o"2026-06-01")
 
-{:ok, days} = Tempo.to_interval(weekdays, bound: ~o"2026-06")
+{:ok, days} = Tempo.to_interval(weekdays, within: ~o"2026-06")
 ```
 
 ### Business/252 — Brazil's business-day year fraction
@@ -1061,7 +1061,7 @@ workable_daylight.(lisbon_december, :PT, {-9.1393, 38.7223}, "Europe/Lisbon")
 Three details matter. The December value carries its zone (`~o"2026-12[Europe/Helsinki]"`), and `select` propagates it down to the hour members — without it, naive site hours would compare as UTC and shift the overlap by two hours. `Astro.sunrise/3` needs `time_zone:` named explicitly unless `tz_world` is a dependency to resolve zones from coordinates. And the `DateTime.truncate(:second)` keeps sunrise at whole-second resolution, which is as precise as any site schedule needs.
 
 ```elixir
-{:ok, schedule} = Tempo.ICal.from_ical(ics, bound: ~o"2026-06")
+{:ok, schedule} = Tempo.ICal.from_ical(ics, within: ~o"2026-06")
 
 month = ~o"2026-06"
 {:ok, free} = Tempo.difference(month, schedule)

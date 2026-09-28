@@ -61,10 +61,11 @@ defmodule Tempo.RRule.Expander do
     span. Defaults to the natural span of `dtstart` (a day for
     day-resolution, an hour for hour-resolution, etc.).
 
-  * `:bound` is any Tempo value whose upper endpoint limits the
-    expansion. Required when the rule has neither `COUNT` nor
-    `UNTIL`. The expansion stops when an occurrence would start
-    at or after the bound's upper edge.
+  * `:within` is any Tempo value: the window whose occurrences you
+    want. It keeps every occurrence that overlaps the window — one
+    already in progress when the window opens, and one that runs
+    past its end. Required when the rule has neither `COUNT` nor
+    `UNTIL`.
 
   * `:metadata` is a map of per-occurrence metadata attached to
     every materialised interval.
@@ -73,9 +74,9 @@ defmodule Tempo.RRule.Expander do
 
   * `{:ok, [%Tempo.Interval{}]}` on success.
 
-  * `{:error, reason}` when the rule is unbounded and no bound
-    is supplied, or the input cannot be converted to the
-    canonical AST.
+  * `{:error, reason}` when the rule has no end and no `:within`
+    window is supplied, a leftover `:bound` is given, or the input
+    cannot be converted to the canonical AST.
 
   ### Examples
 

@@ -41,7 +41,7 @@ Different questions need different views, so Tempo gives you both. Each canonica
 | "What time is in both?" / "What time is the overlap?" | `intersection/2` — trimmed `A ∩ B` | `members_overlapping/2` — whole A members that overlap B |
 | "What time is in A but not B?" / "What's left after subtracting?" | `difference/2` — trimmed `A ∖ B` | `members_outside/2` — whole A members that don't overlap B |
 | "What time is in exactly one of A or B?" | `symmetric_difference/2` — trimmed `A △ B` | `members_in_exactly_one/2` — whole members of either side that don't overlap the other |
-| "What time is uncovered within a bound?" | `complement/2` (always instant-level) | — |
+| "What time is uncovered within a window?" | `complement/2` (always instant-level) | — |
 | "What members are in either set?" | — | `union/2` (always member-preserving — coalesce explicitly with `IntervalSet.coalesce/1` for the instant-level form) |
 
 **Instant-level operations** treat operands as covered time and produce a trimmed result. The result interval(s) cover exactly the instants the question asks for. A single A member may split into multiple fragments; each fragment carries the source A member's metadata.
@@ -129,31 +129,31 @@ A Tempo value is **anchored** when it has a year-level component — it's a posi
 
 Set operations require **both operands to share an anchor class**:
 
-| A | B | Valid without `:bound`? |
+| A | B | Valid without `:within`? |
 |---|---|---|
 | anchored | anchored | ✓ compare on the universal time line |
 | non-anchored | non-anchored | ✓ when both recur on the **same axis** (see below) |
-| anchored | non-anchored | needs `:bound` |
+| anchored | non-anchored | needs `:within` |
 | duration | anything | always raises — anchor it first |
 
 Two non-anchored operands must recur on the **same axis** — share their coarsest (leading) unit — to be comparable. `~o"1M31D"` and `~o"6M15D"` are both annual, so they align; `~o"1M31D"` (annual) and `~o"15D"` (monthly) recur on different cycles with no common time line, so they return a `Tempo.NonAnchoredError` rather than a silently misaligned result. Anchor them, or give both the same leading unit.
 
-The cross-axis case *is* mathematically defined — a bare time-of-day is an infinite set of 1-second slots (one per day), and an anchored operand bounds it to finite occurrences. But picking the universe (what year range does "every day" mean?) isn't something Tempo can do without inventing a default. The `:bound` option makes the choice explicit:
+The cross-axis case *is* mathematically defined — a bare time-of-day is an infinite set of 1-second slots (one per day), and an anchored operand bounds it to finite occurrences. But picking the universe (what year range does "every day" mean?) isn't something Tempo can do without inventing a default. The `:within` option makes the choice explicit:
 
 ```elixir
-# No bound — raises
+# No window — raises
 Tempo.intersection(~o"2026-01-04", ~o"T10:30")
 # ** (ArgumentError) Set operations between an anchored operand and a 
-#    non_anchored operand require a `:bound` option to anchor the 
+#    non_anchored operand require a `:within` option to anchor the 
 #    non-anchored side. Alternatively, use `Tempo.anchor/2` to combine 
 #    a date-like value with a time-of-day value before the operation.
 
-# With bound — works
-Tempo.intersection(~o"2026-01-04", ~o"T10:30", bound: ~o"2026-01-04")
+# With a window — works
+Tempo.intersection(~o"2026-01-04", ~o"T10:30", within: ~o"2026-01-04")
 # {:ok, #Tempo.IntervalSet<[~o"2026Y1M4DT10H30M/T31M"]>}
 ```
 
-The `:bound` option is also required on `complement/2` — for the same reason. An unbounded complement is infinite; Tempo refuses to pick a universe.
+The `:within` option is also required on `complement/2` — for the same reason. An unbounded complement is infinite; Tempo refuses to pick a universe.
 
 ### Composing across axes — `at/2` and `anchor/2`
 
@@ -219,10 +219,10 @@ The surviving A member inherits A's calendar and metadata; the B operand is used
 
 ### Complement — instant-level
 
-Every instant in the universe that is NOT covered by any member of `set`. The `:bound` option is **required**. Internally coalesces before computing gaps.
+Every instant in the universe that is NOT covered by any member of `set`. The `:within` option is **required**. Internally coalesces before computing gaps.
 
 ```elixir
-iex> {:ok, r} = Tempo.complement(~o"2022-06", bound: ~o"2022Y")
+iex> {:ok, r} = Tempo.complement(~o"2022-06", within: ~o"2022Y")
 iex> Tempo.IntervalSet.count(r)
 2                                    # January–May and July–December
 ```
@@ -324,8 +324,8 @@ Set-algebra identities hold at the **instant-set level** — i.e. after coalesci
 
 - Commutativity: `intersection(A, B) ≡ intersection(B, A)` (same covered instants — symmetric by construction)
 - Associativity: `(A ∪ B) ∪ C ≡ A ∪ (B ∪ C)` under coalescing
-- Identity: `A ∪ ∅ ≡ A`, `intersection(A, U) ≡ A` (with `U` = bound)
-- De Morgan's laws: `¬(A ∪ B) ≡ ¬A ∩ ¬B` and `¬(A ∩ B) ≡ ¬A ∪ ¬B` (within a common bound)
+- Identity: `A ∪ ∅ ≡ A`, `intersection(A, U) ≡ A` (with `U` = the window)
+- De Morgan's laws: `¬(A ∪ B) ≡ ¬A ∩ ¬B` and `¬(A ∩ B) ≡ ¬A ∪ ¬B` (within a common window)
 
 Tempo's test suite covers all of these.
 
@@ -355,7 +355,7 @@ Note that `≡` here is covered-instant equality (via `Tempo.equal?/2`), not mem
 - **Intersection** (instant-level): sweep-line, O(n+m). Each step emits the trimmed overlap and advances whichever interval ends first.
 - **Difference** (instant-level): sweep-line over A with a running cursor into B, emitting A's uncovered portions.
 - **Symmetric difference** (instant-level): derived as `(A ∖ B) ∪ (B ∖ A)`.
-- **Complement**: internally coalesces the input and then calls `difference(bound, coalesced)`.
+- **Complement**: internally coalesces the input and then calls `difference(window, coalesced)`.
 - **`members_overlapping`** (member-preserving): per-A-member overlap check against B. O(n × m) in the worst case; sweep-line optimisation planned for large sets.
 - **`members_outside`** (member-preserving): per-A-member anti-overlap check against B. Same complexity as `members_overlapping`.
 - **`members_in_exactly_one`**: derived as `members_outside(A, B) ∪ members_outside(B, A)`.

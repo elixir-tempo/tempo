@@ -436,10 +436,10 @@ defmodule Tempo.Enumeration.Test do
       assert Enum.take(r5, 5) == Enum.take(set, 5)
     end
 
-    test "an unbounded recurrence raises with the :bound direction" do
+    test "an unbounded recurrence raises with the :within direction" do
       {:ok, r} = Tempo.from_iso8601("R/2022-01-01/P1M")
 
-      assert_raise Tempo.UnboundedRecurrenceError, ~r/:bound/, fn ->
+      assert_raise Tempo.UnboundedRecurrenceError, ~r/:within/, fn ->
         Enum.take(r, 3)
       end
     end

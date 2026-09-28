@@ -81,7 +81,7 @@ defmodule Tempo.RRule.SelectionTest do
       rule = %Rule{freq: :month, interval: 1, bymonth: [6, 7, 8]}
 
       {:ok, occurrences} =
-        Expander.expand(rule, ~o"2022-06-15", bound: ~o"2023-12-31")
+        Expander.expand(rule, ~o"2022-06-15", within: ~o"2022/2024")
 
       months = Enum.map(occurrences, & &1.from.time[:month])
       assert months == [6, 7, 8, 6, 7, 8]
@@ -206,7 +206,7 @@ defmodule Tempo.RRule.SelectionTest do
 
     test "an RRULE without a DTSTART keeps the whole week" do
       {:ok, rule} = RRule.parse("FREQ=YEARLY;BYWEEKNO=20")
-      {:ok, weeks} = Tempo.to_interval(rule, bound: ~o"2026")
+      {:ok, weeks} = Tempo.to_interval(rule, within: ~o"2026")
 
       assert Tempo.relation(weeks, ~o"2026-05-11/2026-05-18") == :equals
     end
@@ -289,7 +289,7 @@ defmodule Tempo.RRule.SelectionTest do
       rule = %Rule{freq: :month, interval: 1, byday: [{nil, 1}]}
 
       {:ok, occ} =
-        Expander.expand(rule, ~o"2022-06-06", bound: ~o"2022-08-01")
+        Expander.expand(rule, ~o"2022-06-06", within: ~o"2022-06/2022-08")
 
       pairs =
         Enum.map(occ, fn iv -> {iv.from.time[:month], iv.from.time[:day]} end)
@@ -513,7 +513,7 @@ defmodule Tempo.RRule.SelectionTest do
 
       # `~o"2022-06"` has upper endpoint = July 1 (exclusive),
       # so the iterator terminates before the July anchor.
-      {:ok, occ} = Expander.expand(rule, ~o"2022-06-01", bound: ~o"2022-06")
+      {:ok, occ} = Expander.expand(rule, ~o"2022-06-01", within: ~o"2022-06")
 
       pairs = Enum.map(occ, fn iv -> {iv.from.time[:month], iv.from.time[:day]} end)
 
@@ -524,7 +524,7 @@ defmodule Tempo.RRule.SelectionTest do
     test "out-of-range ordinal drops silently — `BYDAY=5MO` in a 4-Monday month" do
       # June 2022 has 4 Mondays (6, 13, 20, 27) — no 5th Monday.
       rule = %Rule{freq: :month, interval: 1, byday: [{5, 1}]}
-      {:ok, occ} = Expander.expand(rule, ~o"2022-06-01", bound: ~o"2022-06-30")
+      {:ok, occ} = Expander.expand(rule, ~o"2022-06-01", within: ~o"2022-06-30")
 
       assert occ == []
     end
@@ -589,7 +589,7 @@ defmodule Tempo.RRule.SelectionTest do
         bysetpos: [99]
       }
 
-      {:ok, occ} = Expander.expand(rule, ~o"2022-06-06", bound: ~o"2022-06")
+      {:ok, occ} = Expander.expand(rule, ~o"2022-06-06", within: ~o"2022-06")
       assert occ == []
     end
   end
@@ -707,7 +707,7 @@ defmodule Tempo.RRule.SelectionTest do
 
     test "a terminal window is one interval spanning its duration" do
       {:ok, rule} = Tempo.from_iso8601("R/../P1Y/FLL3K4IN/P5DN")
-      {:ok, set} = Tempo.to_interval(rule, bound: ~o"2026Y")
+      {:ok, set} = Tempo.to_interval(rule, within: ~o"2026Y")
 
       # "the 4th Wednesday for 5 days": one occurrence, [Jan 28, Feb 2).
       assert [%Interval{} = occurrence] = IntervalSet.to_list(set)
@@ -765,7 +765,7 @@ defmodule Tempo.RRule.SelectionTest do
   describe "an explicit anchor coarser than its selection" do
     test "a year anchor walks a day selection rather than raising" do
       {:ok, rule} = Tempo.from_iso8601("R/2020Y/P4Y/FL11M3DN")
-      {:ok, set} = Tempo.to_interval(rule, bound: ~o"{2019..2028}Y")
+      {:ok, set} = Tempo.to_interval(rule, within: ~o"{2019..2028}Y")
 
       assert Enum.map(IntervalSet.to_list(set), &Tempo.to_iso8601(Interval.from(&1))) ==
                ["2020Y11M3D", "2024Y11M3D", "2028Y11M3D"]
@@ -784,7 +784,7 @@ defmodule Tempo.RRule.SelectionTest do
   # (2026 by default).
   defp holiday_dates(iso, bound \\ ~o"2026Y") do
     {:ok, rule} = Tempo.from_iso8601(iso)
-    {:ok, set} = Tempo.to_interval(rule, bound: bound)
+    {:ok, set} = Tempo.to_interval(rule, within: bound)
 
     set
     |> IntervalSet.to_list()
@@ -797,7 +797,7 @@ defmodule Tempo.RRule.SelectionTest do
   # As `holiday_dates/2`, converting a calendar recurrence's dates to Gregorian.
   defp gregorian_dates(iso, bound) do
     {:ok, rule} = Tempo.from_iso8601(iso)
-    {:ok, set} = Tempo.to_interval(rule, bound: bound)
+    {:ok, set} = Tempo.to_interval(rule, within: bound)
 
     set
     |> IntervalSet.to_list()
@@ -811,8 +811,8 @@ defmodule Tempo.RRule.SelectionTest do
     # 2027 starts on a Friday, so ISO 8601's week 1 starts on Monday 4
     # January and Calendrical.Gregorian's own week 1 on Monday 28 December.
     test "W selects an ISO 8601 week and w the calendar's own" do
-      {:ok, iso} = Tempo.to_interval(~o"R/../P1Y/FL10WN", bound: ~o"2027")
-      {:ok, calendar} = Tempo.to_interval(~o"R/../P1Y/FL10wN", bound: ~o"2027")
+      {:ok, iso} = Tempo.to_interval(~o"R/../P1Y/FL10WN", within: ~o"2027")
+      {:ok, calendar} = Tempo.to_interval(~o"R/../P1Y/FL10wN", within: ~o"2027")
 
       assert Tempo.relation(iso, ~o"2027-03-08/2027-03-15") == :equals
       assert Tempo.relation(calendar, ~o"2027-03-01/2027-03-08") == :equals
@@ -907,7 +907,7 @@ defmodule Tempo.RRule.SelectionTest do
       # §12.11.1 Example 8: the Tuesday after the first Monday of November
       election_day = "XXX{0,2,4,6,8}Y11MLLL1K1IN/P9DN2K1IN"
 
-      assert selection_dates(election_day, bound: ~o"2024Y/2029Y") ==
+      assert selection_dates(election_day, within: ~o"2024Y/2029Y") ==
                ["2024-11-05", "2026-11-03", "2028-11-07"]
 
       assert selection_dates("2024Y11MLLL1K1IN/P9DN2K1IN") == ["2024-11-05"]
@@ -915,7 +915,7 @@ defmodule Tempo.RRule.SelectionTest do
 
     test "a selection in an unspecified year needs a bound" do
       # §12.11.1 Example 4: Mother's Day, the second Sunday of May
-      assert selection_dates("X*YL5M7K2IN", bound: ~o"2024Y/2027Y") ==
+      assert selection_dates("X*YL5M7K2IN", within: ~o"2024Y/2027Y") ==
                ["2024-05-12", "2025-05-11", "2026-05-10"]
 
       assert {:error, %Tempo.UnboundedRecurrenceError{}} =

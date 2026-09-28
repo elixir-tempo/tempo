@@ -16,7 +16,7 @@ Given an RRULE, Tempo will:
 
 * **Apply set operations**: occurrences compose with every operation (`Tempo.union/2`, `Tempo.intersection/2`, `Tempo.difference/2`, `Tempo.symmetric_difference/2`, `Tempo.complement/2`, `Tempo.members_overlapping/2`, `Tempo.members_outside/2`, `Tempo.members_in_exactly_one/2`) and with the predicates (`overlaps?/2`, `disjoint?/2`, `contains?/2`, `equal?/2`, `subset?/2`).
 
-* **Iterate** via `Enum` — `Enum.to_list/1`, `Stream.take/2`, etc. — when the rule is bounded or a `:bound` is supplied.
+* **Iterate** via `Enum` — `Enum.to_list/1`, `Stream.take/2`, etc. — when the rule is bounded or a `:within` window is supplied.
 
 * **Re-encode** back to an RRULE string via `Tempo.to_rrule/1` for values that originated as RRULEs.
 
@@ -71,13 +71,13 @@ Occurrence selection dispatches to the calendar module (`days_in_month/2`, `day_
 
 ## Unbounded rules require a bound
 
-A rule with `FREQ` but no `COUNT`, no `UNTIL`, and no externally-supplied `:bound` is infinite — Tempo cannot materialise it. Attempting to do so returns:
+A rule with `FREQ` but no `COUNT`, no `UNTIL`, and no `:within` window is infinite — Tempo cannot materialise it. Attempting to do so returns:
 
 ```elixir
 {:error, %Tempo.UnboundedRecurrenceError{reason: ...}}
 ```
 
-The error message points callers at the `:bound` option. This is a deliberate design choice (see the [scheduling guide](./scheduling.md)) — infinite recurrences are rule-shaped, not set-shaped, and Tempo refuses to silently iterate without a stop condition.
+The error message points callers at the `:within` option. This is a deliberate design choice (see the [scheduling guide](./scheduling.md)) — infinite recurrences are rule-shaped, not set-shaped, and Tempo refuses to silently iterate without a stop condition.
 
 ## Not supported
 
@@ -110,7 +110,7 @@ Tempo's iCalendar integration (event parsing, VTIMEZONE, RDATE/EXDATE collection
 
 ## Related reading
 
-* [Scheduling](./scheduling.md) — bounded enumeration, the `:bound` option, wall-clock-vs-UTC authority, floating vs zoned events.
+* [Scheduling](./scheduling.md) — bounded enumeration, the `:within` option, wall-clock-vs-UTC authority, floating vs zoned events.
 
 * [iCalendar integration](./ical-integration.md) — full details on `Tempo.ICal.from_ical/2` and round-tripping `.ics` files.
 

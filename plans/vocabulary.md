@@ -25,15 +25,15 @@ The review read the documentation of all 73 public modules and 414 public functi
 | Today | Decided |
 |---|---|
 | `:bound` (seven functions) | `:within` |
-| upper limit or window, by recurrence | occurrences that start within it |
-| `:overlapping` (unreleased) | internal |
+| upper limit or window, by recurrence | occurrences that overlap it |
+| `:overlapping` (unreleased) | removed: overlap is the rule |
 | the positional window of `materialise/3` | `within:` on `Tempo.to_interval_set/2` |
 
 The seven are `to_interval/2`, `to_interval_set/2`, the set operations (through `Operations.align/3`), `complement/2`, `ICal.from_ical/2`, `JSCalendar.from_jscalendar/2` and `RRule.Expander.expand/3`. The iCalendar availability functions already call it `:within` and keep it.
 
-* **One rule, in the same sentence everywhere** — `within?/2` asks whether a whole span is inside another; the `:within` option keeps every occurrence that starts inside the window, so a school break from 21 December that runs into January is among 2026's holidays and not 2027's. Every function that takes `:within` states the rule in the same words, and `within?/2`'s doc points out the difference. Starting is the rule because it is the half-open convention: back-to-back windows share no occurrence and miss none.
+* **One rule, in the same sentence everywhere** — the `:within` option keeps every occurrence that overlaps the window: one already in progress when the window opens, and one that runs past its end. It is the calendar convention (CalDAV's time range, Google's `timeMin`/`timeMax`, Outlook's calendar view), so busy time read from an iCalendar keeps the overnight shift that began before the week. An occurrence that spans two back-to-back windows is in both: the December–January school break is among 2026's holidays and 2027's. `within?/2` asks whether a whole span is inside another, and its doc points out the difference.
 
-* **Touching the window already has a name** — `Tempo.members_overlapping(holidays, ~o"2027-01-04/2027-01-11")` returns the whole Christmas break that runs into the first week of 2027, so no switch is needed.
+* **Every occurrence, every source** — the rule holds for anchored, counted, UNTIL and open-start recurrences, for a recurrence set's one-off members, and for the events `Tempo.ICal.from_ical/2` and `Tempo.JSCalendar.from_jscalendar/2` return, one-off events included. A domain year still owns the occurrences its selection yields; the window then keeps those that overlap it.
 
 * **`Schedule.task/3`'s `:within`** is the window the whole task must fit inside, as `within?/2` reads.
 
@@ -232,7 +232,9 @@ These need no rename:
 
 Taken by the user on 2026-09-28:
 
-* **The window's name** — `:within`, with the start rule stated in every doc that takes it: clearer than `:window` despite the difference from `within?/2`.
+* **The window's name** — `:within`: clearer than `:window` despite the difference from `within?/2`.
+
+* **The window's rule** — every occurrence that overlaps the window, the calendar convention; chosen over the start rule, which drops an event already in progress when the window opens and so loses busy time.
 
 * **`before?/2` and `after?/2`** — the everyday sense, sharing no instant, with the difference explained in their docs; Allen's exact relations live in `Tempo.Allen`.
 
@@ -252,9 +254,9 @@ Taken by the user on 2026-09-28:
 
 Each task is one commit, verified on both upstream branches, with its guides, README, cookbook and livebook examples updated in the same commit.
 
-* [ ] **2.0 and the defects** — `2.0.0-dev`, the CHANGELOG's v2.0.0 section with its migration table begun, the four defects, and covered time as the one meaning of `duration/1` (`total_duration/1` removed).
+* [x] **2.0 and the defects** — `2.0.0-dev`, the CHANGELOG's migration table, the four defects, covered time as `duration/1`'s one meaning. 2026-09-28, `a7a4010`.
 
-* [ ] **Within** — `:within` for `:bound`, one rule for every recurrence, `:overlapping` internal, a leftover `:bound` an error.
+* [ ] **Within** — `:within` for `:bound`, overlap as the one rule for every recurrence and calendar format, `:overlapping` removed, a leftover `:bound` an error.
 
 * [ ] **Predicates and `Tempo.Allen`** — the everyday `before?/2` and `after?/2`, `Tempo.Allen`, and the removals and renames above.
 
@@ -272,6 +274,6 @@ Each task is one commit, verified on both upstream branches, with its guides, RE
 
 * [ ] **Span ends and specialist modules** — `:from`/`:to`, `Schedule.Slot`, the deleted instant helpers, `:not_before`, `propagate/1`.
 
-* [ ] **tempo_holidays** — `materialise/3` removed, `within:`, the year-end merge in `holidays/2`, `day_start/2`, `{:sunset, location}`, and its publish comment at `~> 2.0`.
+* [ ] **tempo_holidays** — `materialise/3` removed, `within:`, the year-end merge in `holidays/2`, `day_start/2`, `{:sunset, location}`, and its publish comment at `~> 2.0`. Its per-year checks compare by start year, date-holidays' convention: under the overlap rule a year's window also holds a holiday still running from December (Hanukkah 2005–06, Eid al-Adha 2006–07), which made 6 rules and 3 Hebrew conformance dates differ when measured against task 2.
 
 * [ ] **Downstream** — `tempo_sql` moves to `~> 2.0` once 2.0.0 is on hex.

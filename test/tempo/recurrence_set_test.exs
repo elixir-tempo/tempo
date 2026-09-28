@@ -29,13 +29,13 @@ defmodule Tempo.RecurrenceSetTest do
           named("R/../P1Y/FL1M1DN", "New Year")
         ])
 
-      {:ok, set} = Tempo.to_interval_set(rset, bound: ~o"2026Y")
+      {:ok, set} = Tempo.to_interval_set(rset, within: ~o"2026Y")
       assert isos(set) == ["2026Y1M1D", "2026Y12M25D"]
     end
 
     test "propagates each member's metadata onto its occurrences" do
       rset = RecurrenceSet.new([named("R/../P1Y/FL12M25DN", "Christmas")])
-      {:ok, set} = Tempo.to_interval_set(rset, bound: ~o"2026Y")
+      {:ok, set} = Tempo.to_interval_set(rset, within: ~o"2026Y")
 
       assert [interval] = IntervalSet.to_list(set)
       assert Interval.metadata(interval)[:name] == "Christmas"
@@ -48,7 +48,7 @@ defmodule Tempo.RecurrenceSetTest do
         | metadata: %{name: "Christmas break", occurrence_duration: ~o"P3D"}
       }
 
-      {:ok, set} = Tempo.to_interval_set(RecurrenceSet.new([member]), bound: ~o"2026Y")
+      {:ok, set} = Tempo.to_interval_set(RecurrenceSet.new([member]), within: ~o"2026Y")
       assert [interval] = IntervalSet.to_list(set)
       assert Tempo.to_iso8601(interval) == "2026Y12M24D/27D"
       assert Interval.metadata(interval) == %{name: "Christmas break"}
@@ -61,7 +61,7 @@ defmodule Tempo.RecurrenceSetTest do
           named("R/../P1Y/FL12M25DN", "Christmas")
         ])
 
-      {:ok, set} = Tempo.to_interval_set(rset, bound: ~o"2026Y")
+      {:ok, set} = Tempo.to_interval_set(rset, within: ~o"2026Y")
       assert years(set) == [2026, 2026]
     end
 
@@ -78,7 +78,7 @@ defmodule Tempo.RecurrenceSetTest do
           named("R/../P1Y/FL12M25DN", "Christmas")
         ])
 
-      {:ok, set} = Tempo.to_interval_set(rset, bound: ~o"2026Y")
+      {:ok, set} = Tempo.to_interval_set(rset, within: ~o"2026Y")
       assert "2026Y7M4D" in isos(set)
       assert "2026Y12M25D" in isos(set)
     end
@@ -86,7 +86,7 @@ defmodule Tempo.RecurrenceSetTest do
     test "a plain Tempo member stands for its own span" do
       rset = RecurrenceSet.new([~o"2026Y7M4D", named("R/../P1Y/FL12M25DN", "Christmas")])
 
-      {:ok, set} = Tempo.to_interval_set(rset, bound: ~o"2026Y")
+      {:ok, set} = Tempo.to_interval_set(rset, within: ~o"2026Y")
       assert isos(set) == ["2026Y7M4D", "2026Y12M25D"]
     end
 
@@ -96,7 +96,7 @@ defmodule Tempo.RecurrenceSetTest do
           metadata: %{territory: :AU}
         )
 
-      {:ok, set} = Tempo.to_interval_set(rset, bound: ~o"2026Y")
+      {:ok, set} = Tempo.to_interval_set(rset, within: ~o"2026Y")
       assert IntervalSet.metadata(set) == %{territory: :AU}
     end
 
@@ -114,7 +114,7 @@ defmodule Tempo.RecurrenceSetTest do
 
       {:ok, set} =
         Tempo.to_interval_set(RecurrenceSet.new([christmas], metadata: %{territory: :AU}),
-          bound: ~o"2026Y"
+          within: ~o"2026Y"
         )
 
       assert set
@@ -133,7 +133,7 @@ defmodule Tempo.RecurrenceSetTest do
           metadata: %{name: "Boxing Day", type: :public}
         )
 
-      {:ok, set} = Tempo.to_interval_set(RecurrenceSet.new([nested]), bound: ~o"2026Y")
+      {:ok, set} = Tempo.to_interval_set(RecurrenceSet.new([nested]), within: ~o"2026Y")
 
       assert [interval] = IntervalSet.to_list(set)
       assert Interval.metadata(interval) == %{name: "Boxing Day (observed)", type: :public}
@@ -143,14 +143,14 @@ defmodule Tempo.RecurrenceSetTest do
       nested = RecurrenceSet.new([:not_a_member])
 
       assert {:error, %Tempo.MaterialisationError{reason: :recurrence_set_member}} =
-               Tempo.to_interval_set(RecurrenceSet.new([nested]), bound: ~o"2026Y")
+               Tempo.to_interval_set(RecurrenceSet.new([nested]), within: ~o"2026Y")
     end
 
     test "a member that is not a Tempo value is an error, not a raise" do
       rset = RecurrenceSet.new([named("R/../P1Y/FL12M25DN", "Christmas"), :not_a_member])
 
       assert {:error, %Tempo.MaterialisationError{reason: :recurrence_set_member}} =
-               Tempo.to_interval_set(rset, bound: ~o"2026Y")
+               Tempo.to_interval_set(rset, within: ~o"2026Y")
     end
   end
 
@@ -178,7 +178,7 @@ defmodule Tempo.RecurrenceSetTest do
           citizens_holiday
         ])
 
-      {:ok, set} = Tempo.to_interval_set(holidays, bound: ~o"2020Y/2031Y")
+      {:ok, set} = Tempo.to_interval_set(holidays, within: ~o"2020Y/2031Y")
 
       citizens =
         set
@@ -279,7 +279,7 @@ defmodule Tempo.RecurrenceSetTest do
           bridge
         ])
 
-      {:ok, set} = Tempo.to_interval_set(holidays, bound: ~o"2026-09-22/2026-09-23")
+      {:ok, set} = Tempo.to_interval_set(holidays, within: ~o"2026-09-22/2026-09-23")
       assert days(set) == ["2026Y9M22D"]
     end
 
@@ -292,10 +292,10 @@ defmodule Tempo.RecurrenceSetTest do
 
       holidays = RecurrenceSet.new([typed("R/../P1Y/FL4M9DN", :observance), moved])
 
-      {:ok, into} = Tempo.to_interval_set(holidays, bound: ~o"2026-04-16/2026-04-30")
+      {:ok, into} = Tempo.to_interval_set(holidays, within: ~o"2026-04-16/2026-04-30")
       assert days(into) == ["2026Y4M16D"]
 
-      {:ok, out_of} = Tempo.to_interval_set(holidays, bound: ~o"2026-04-01/2026-04-12")
+      {:ok, out_of} = Tempo.to_interval_set(holidays, within: ~o"2026-04-01/2026-04-12")
       assert days(out_of) == ["2026Y4M9D"]
     end
 
@@ -349,7 +349,7 @@ defmodule Tempo.RecurrenceSetTest do
         )
 
       {:ok, set} =
-        Tempo.to_interval_set(RecurrenceSet.new([bridge]), bound: ~o"2026-09-22/2026-09-23")
+        Tempo.to_interval_set(RecurrenceSet.new([bridge]), within: ~o"2026-09-22/2026-09-23")
 
       assert days(set) == ["2026Y9M22D"]
     end

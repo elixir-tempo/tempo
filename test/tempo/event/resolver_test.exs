@@ -53,7 +53,7 @@ defmodule Tempo.Event.ResolverTest do
   describe "a registered event as a (name)e selection" do
     test "materialises against a bound like a built-in event" do
       {:ok, recurrence} = Tempo.from_iso8601("R/../P1Y/FL(fiscal-year-start)eN")
-      {:ok, set} = Tempo.to_interval(recurrence, bound: ~o"2026")
+      {:ok, set} = Tempo.to_interval(recurrence, within: ~o"2026")
 
       assert [interval] = IntervalSet.to_list(set)
       assert Interval.from(interval) == ~o"2026Y4M1D"
@@ -61,7 +61,7 @@ defmodule Tempo.Event.ResolverTest do
 
     test "yields zero occurrences for a year the resolver reports it cannot compute" do
       {:ok, recurrence} = Tempo.from_iso8601("R/../P1Y/FL(fiscal-year-start)eN")
-      {:ok, set} = Tempo.to_interval(recurrence, bound: ~o"1999")
+      {:ok, set} = Tempo.to_interval(recurrence, within: ~o"1999")
 
       assert IntervalSet.to_list(set) == []
     end
@@ -74,7 +74,7 @@ defmodule Tempo.Event.ResolverTest do
 
     test "yields zero occurrences rather than raising" do
       {:ok, recurrence} = Tempo.from_iso8601("R/../P1Y/FL(brigadoon)eN")
-      assert {:ok, set} = Tempo.to_interval(recurrence, bound: ~o"2026")
+      assert {:ok, set} = Tempo.to_interval(recurrence, within: ~o"2026")
       assert IntervalSet.to_list(set) == []
     end
   end

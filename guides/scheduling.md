@@ -38,14 +38,14 @@ Tempo splits the two operations: parsing the rule into a recurring interval is c
 recurrence = Tempo.RRule.parse!("FREQ=MONTHLY;BYDAY=2MO", from: ~o"2025-01-01")
 
 # `recurrence` is a %Tempo.Interval{recurrence: :infinity, ...} — not an error.
-# Materialising it requires a bound:
+# Materialising it needs a `:within` window — here, all of 2025:
 
-{:ok, set} = Tempo.to_interval(recurrence, bound: ~o"2025-07-01")
+{:ok, set} = Tempo.to_interval(recurrence, within: ~o"2025")
 Tempo.IntervalSet.count(set)
-#=> 7
+#=> 12
 ```
 
-> The **recurring interval** is the recurrence *rule*; the **IntervalSet** is its *occurrences* inside a window. `:bound` is always supplied at materialisation, never at the rule. Tempo's default member-preserving semantics keep each occurrence as a distinct member of the IntervalSet — which is what you want for scheduling. For the covered-instant form (individual occurrences merged into contiguous spans), pipe through `Tempo.IntervalSet.coalesce/1` — useful for free/busy questions but not for "list the events."
+> The **recurring interval** is the recurrence *rule*; the **IntervalSet** is its *occurrences* inside a window. `:within` is always supplied at materialisation, never at the rule. Tempo's default member-preserving semantics keep each occurrence as a distinct member of the IntervalSet — which is what you want for scheduling. For the covered-instant form (individual occurrences merged into contiguous spans), pipe through `Tempo.IntervalSet.coalesce/1` — useful for free/busy questions but not for "list the events."
 
 For ad-hoc use, `Stream.take/2` and `Enum.take/2` work directly on the recurring interval — it's enumerable, lazily:
 
@@ -55,14 +55,14 @@ recurrence |> Stream.take(10) |> Enum.to_list()
 
 ### Pitfall
 
-Forgetting the bound and calling `Tempo.to_interval(recurrence)`:
+Forgetting the window and calling `Tempo.to_interval(recurrence)`:
 
 ```elixir
 {:error,
- "Cannot materialise an unbounded recurrence (recurrence: :infinity, no UNTIL). Supply a :bound option — any Tempo value whose upper endpoint limits the expansion."}
+ "Cannot materialise an unbounded recurrence (recurrence: :infinity, no UNTIL). Supply a :within option — the window whose occurrences you want."}
 ```
 
-Tempo refuses rather than hanging — forgotten bounds are a design error, not a runtime surprise.
+Tempo refuses rather than hanging — a forgotten window is a design error, not a runtime surprise.
 
 ## 2. Wall-clock time is authoritative
 
@@ -266,7 +266,7 @@ The weekend comes from the calendar's own vocabulary — `Tempo.weekend?/1` is t
 
 The rules at the edges: an origin already inside a busy span first moves to its end (a shift of `PT0S` from inside a meeting lands at the meeting's end); a negative duration walks backward symmetrically; and the duration must be exact — `~o"P1M"` of free time has no fixed length, so `:year`/`:month` components return `{:error, %Tempo.InvalidUnitError{}}`.
 
-When the only busy time *is* the weekend, skip the window arithmetic entirely: `Tempo.weekends/1` is an unbounded lazy busy set, and the walk consumes only as much of it as the shift needs — no `:bound` required.
+When the only busy time *is* the weekend, skip the window arithmetic entirely: `Tempo.weekends/1` is an unbounded lazy busy set, and the walk consumes only as much of it as the shift needs — no `:within` required.
 
 ```elixir
 Tempo.shift(~o"2026-06-18T16:00", ~o"P3D", skipping: Tempo.weekends(from: ~o"2026-06-18"))
@@ -325,8 +325,8 @@ defmodule Schedule do
   end
 
   def occurrences_in(%{recurrence: recurrence}, from, to) do
-    bound = Tempo.Interval.new!(from: from, to: to)
-    {:ok, set} = Tempo.to_interval(recurrence, bound: bound)
+    window = Tempo.Interval.new!(from: from, to: to)
+    {:ok, set} = Tempo.to_interval(recurrence, within: window)
     Tempo.IntervalSet.to_list(set)
   end
 end

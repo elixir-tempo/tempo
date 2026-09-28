@@ -60,7 +60,7 @@ defmodule Tempo.MaterialisationError do
 
   def message(%__MODULE__{reason: :recurring_interval}) do
     "A recurring interval is a rule generating occurrences, not a single span. " <>
-      "Materialise it with `Tempo.to_interval/2` (pass `:bound` for an unbounded " <>
+      "Materialise it with `Tempo.to_interval/2` (pass `:within` for an unbounded " <>
       "recurrence) and use the set-level API (`Tempo.overlaps?/2`, " <>
       "`Tempo.IntervalSet.relation_matrix/2`)."
   end

@@ -18,7 +18,7 @@ defmodule Tempo.Operations do
 
   * why IntervalSet (not rule-algebra) is the operational form,
   * how timezones and DST are handled,
-  * why the `:bound` option is required for some operand
+  * why the `:within` option is required for some operand
     combinations,
   * and the axis-compatibility rule (anchored vs non-anchored).
 
@@ -55,9 +55,11 @@ defmodule Tempo.Operations do
 
   ### Options
 
-  * `:bound` — a Tempo value (any of the above types) that
-    bounds non-anchored or otherwise unbounded operands. Required
-    when `a` and `b` belong to different anchor classes.
+  * `:within` — a Tempo value (any of the above types), the window
+    the operation works within: a time-of-day operand is placed on
+    every day of it, and a `t:Tempo.RecurrenceSet.t/0` operand gives
+    the occurrences that overlap it (the other operand, by default).
+    Required when `a` and `b` belong to different anchor classes.
 
   ### Returns
 
@@ -65,7 +67,8 @@ defmodule Tempo.Operations do
 
   * `{:error, reason}` when a preflight check fails (duration
     operand, one-of set operand, incompatible anchor classes
-    without `:bound`, calendar mismatch, etc.).
+    without `:within`, calendar mismatch, a leftover `:bound`,
+    etc.).
 
   ### Examples
 
@@ -87,16 +90,21 @@ defmodule Tempo.Operations do
   def align(a, b, opts \\ []) do
     # A `%Tempo.RecurrenceSet{}` operand is materialised against the other
     # operand (its window), so `intersection(diary, holidays)` needs no explicit
-    # `:bound` — the diary supplies it. An explicit `:bound` still wins.
-    a = resolve_recurrence_set(a, b, opts)
-    b = resolve_recurrence_set(b, a, opts)
+    # `:within` — the diary supplies it. An explicit `:within` still wins.
+    with :ok <- Tempo.check_within_option(opts, "a set operation") do
+      a = resolve_recurrence_set(a, b, opts)
+      b = resolve_recurrence_set(b, a, opts)
+      align_resolved(a, b, opts)
+    end
+  end
 
+  defp align_resolved(a, b, opts) do
     with :ok <- validate_operand(a),
          :ok <- validate_operand(b),
          {:ok, class_a, class_b} <- compatible_classes(a, b, opts),
          {:ok, a_set} <- to_aligned_set(a, class_a, opts),
          {:ok, b_set} <- to_aligned_set(b, class_b, opts),
-         {:ok, a_set, b_set} <- maybe_anchor_to_bound(a_set, b_set, class_a, class_b, opts),
+         {:ok, a_set, b_set} <- maybe_anchor_to_window(a_set, b_set, class_a, class_b, opts),
          {:ok, a_set, b_set} <- maybe_split_midnight_crossers(a_set, b_set, class_a, class_b),
          {:ok, b_set} <- convert_calendar(b_set, a_set),
          {:ok, a_set, b_set} <- canonicalize_axes(a_set, b_set),
@@ -165,70 +173,70 @@ defmodule Tempo.Operations do
   end
 
   ## Cross-axis materialisation — when one operand is
-  ## non-anchored and a `:bound` is supplied, anchor the
-  ## non-anchored operand to every day in the bound.
+  ## non-anchored and a `:within` window is supplied, anchor the
+  ## non-anchored operand to every day of the window.
   ##
   ## v1 scope: the non-anchored operand's intervals must not
   ## cross midnight (i.e. `from` and `to` share a wall-clock day).
   ## A Tempo like `T10:30` materialises cleanly to an hour- or
   ## minute-slot that fits within a single day.
 
-  defp maybe_anchor_to_bound(a, b, class_a, class_b, _opts)
+  defp maybe_anchor_to_window(a, b, class_a, class_b, _opts)
        when class_a == class_b,
        do: {:ok, a, b}
 
-  defp maybe_anchor_to_bound(a, b, :empty, _class_b, _opts), do: {:ok, a, b}
-  defp maybe_anchor_to_bound(a, b, _class_a, :empty, _opts), do: {:ok, a, b}
+  defp maybe_anchor_to_window(a, b, :empty, _class_b, _opts), do: {:ok, a, b}
+  defp maybe_anchor_to_window(a, b, _class_a, :empty, _opts), do: {:ok, a, b}
 
-  defp maybe_anchor_to_bound(a, b, class_a, class_b, opts) do
-    bound = Keyword.fetch!(opts, :bound)
+  defp maybe_anchor_to_window(a, b, class_a, class_b, opts) do
+    within = Keyword.fetch!(opts, :within)
 
-    with {:ok, bound_set} <- Tempo.to_interval_set(bound),
-         :ok <- ensure_anchored_bound(bound_set, bound),
-         {:ok, a2} <- anchor_if_non_anchored(class_a, a, bound_set),
-         {:ok, b2} <- anchor_if_non_anchored(class_b, b, bound_set) do
+    with {:ok, window_set} <- Tempo.to_interval_set(within),
+         :ok <- ensure_anchored_window(window_set, within),
+         {:ok, a2} <- anchor_if_non_anchored(class_a, a, window_set),
+         {:ok, b2} <- anchor_if_non_anchored(class_b, b, window_set) do
       {:ok, a2, b2}
     end
   end
 
-  defp ensure_anchored_bound(bound_set, bound) do
-    if anchor_class(bound_set) == :anchored do
+  defp ensure_anchored_window(window_set, within) do
+    if anchor_class(window_set) == :anchored do
       :ok
     else
-      {:error, NonAnchoredError.exception(operation: "use as :bound", value: bound)}
+      {:error, NonAnchoredError.exception(operation: "use as the :within window", value: within)}
     end
   end
 
-  # `:bound` anchoring walks the bound's days and grafts each non-anchored
+  # Anchoring to a `:within` window walks its days and grafts each non-anchored
   # interval onto every day, which is only meaningful for time-of-day values.
   # A month- or day-axis partial (`~o"15D"`, `~o"06-15"`) grafted onto a day
-  # would silently match every day of the bound, so reject it and point at
+  # would silently match every day of the window, so reject it and point at
   # the vocabulary that expresses the recurring reading properly.
-  defp anchor_if_non_anchored(:non_anchored, value, bound_set) do
+  defp anchor_if_non_anchored(:non_anchored, value, window_set) do
     if leading_unit(value) in [:hour, :minute, :second] do
-      anchor_to_days(value, bound_set)
+      anchor_to_days(value, window_set)
     else
       {:error,
        NonAnchoredError.exception(
          operation:
            "anchor a non-anchored operand with leading #{inspect(leading_unit(value))} " <>
-             "to a :bound (day anchoring covers time-of-day values only — " <>
+             "to a :within window (day anchoring covers time-of-day values only — " <>
              "anchor it with `Tempo.anchor/2`, or express the recurring " <>
              "reading with a selection or RRULE)"
        )}
     end
   end
 
-  defp anchor_if_non_anchored(_class, value, _bound_set), do: {:ok, value}
+  defp anchor_if_non_anchored(_class, value, _window_set), do: {:ok, value}
 
-  # For each interval in the bound, walk each day, and anchor
+  # For each interval in the window, walk each day, and anchor
   # every non-anchored interval to that day. Returns {:ok,
   # IntervalSet} or {:error, _}.
 
-  defp anchor_to_days(%IntervalSet{} = non_anchored_set, %IntervalSet{} = bound_set) do
+  defp anchor_to_days(%IntervalSet{} = non_anchored_set, %IntervalSet{} = window_set) do
     materialised =
-      for bound_interval <- IntervalSet.to_list(bound_set),
-          day_tempo <- days_in(bound_interval),
+      for window_interval <- IntervalSet.to_list(window_set),
+          day_tempo <- days_in(window_interval),
           na_interval <- IntervalSet.to_list(non_anchored_set) do
         anchor_interval_to_day(na_interval, day_tempo)
       end
@@ -236,7 +244,7 @@ defmodule Tempo.Operations do
     IntervalSet.new(materialised)
   end
 
-  # Iterate wall-clock days within a bound interval. Each yielded
+  # Iterate wall-clock days within a window interval. Each yielded
   # value is a %Tempo{} with year/month/day filled in.
   defp days_in(%Interval{from: from, to: to}) do
     from_day = trunc_to_day(from)
@@ -315,7 +323,7 @@ defmodule Tempo.Operations do
   defp compatible_classes(a, b, opts) do
     class_a = anchor_class(a)
     class_b = anchor_class(b)
-    bound = Keyword.get(opts, :bound)
+    within = Keyword.get(opts, :within)
 
     cond do
       class_a == :empty ->
@@ -341,7 +349,7 @@ defmodule Tempo.Operations do
       class_a == class_b ->
         {:ok, class_a, class_b}
 
-      bound != nil ->
+      within != nil ->
         {:ok, class_a, class_b}
 
       true ->
@@ -349,7 +357,7 @@ defmodule Tempo.Operations do
          NonAnchoredError.exception(
            operation:
              "combine a #{class_a} operand with a #{class_b} operand " <>
-               "in a set operation (use a `:bound` option, or anchor the " <>
+               "in a set operation (use a `:within` option, or anchor the " <>
                "non-anchored side via `Tempo.anchor/2`)"
          )}
     end
@@ -393,14 +401,14 @@ defmodule Tempo.Operations do
   ## Conversion to IntervalSet.
 
   # A `%Tempo.RecurrenceSet{}` operand materialises against `counterparty` (or an
-  # explicit `:bound`) as its window, keeping every occurrence that overlaps it —
+  # explicit `:within`) as its window, keeping every occurrence that overlaps it —
   # a day's holiday meets a meeting at 10:00 that day. If it cannot (no usable
   # window), it is left as-is for `validate_operand/1` to reject with a clear
   # error.
   defp resolve_recurrence_set(%Tempo.RecurrenceSet{} = recurrence_set, counterparty, opts) do
-    bound = Keyword.get(opts, :bound, counterparty)
+    within = Keyword.get(opts, :within, counterparty)
 
-    case Tempo.to_interval_set(recurrence_set, bound: bound, overlapping: true) do
+    case Tempo.to_interval_set(recurrence_set, within: within) do
       {:ok, %IntervalSet{} = set} -> set
       _other -> recurrence_set
     end
@@ -1014,27 +1022,38 @@ defmodule Tempo.Operations do
   end
 
   @doc """
-  Complement of `set` within `bound` — the instants in `bound`
-  that are NOT covered by any member of `set`.
+  Complement of `set` within a window — the instants of the
+  `:within` window that no member of `set` covers.
 
   Unlike `difference/3` (which is member-preserving),
   `complement/2` returns the **instant-set** form: one member
   per gap in the covered region. This is the right semantics
   for "find all free time in the workday" style queries.
 
-  The `:bound` option is required — an unbounded complement is
-  infinite, and Tempo refuses to pick a universe implicitly.
+  ### Arguments
+
+  * `set` is any Tempo value.
+
+  * `opts` is a keyword list of options.
 
   ### Options
 
-  * `:bound` — the universe to complement within. Any Tempo
-    value. Required.
+  * `:within` is the window to complement within — any Tempo
+    value. Required: a complement with no window is infinite,
+    and Tempo does not pick one implicitly.
+
+  ### Returns
+
+  * `{:ok, interval_set}` — the gaps, one member each.
+
+  * `{:error, reason}` when no `:within` window is given, a
+    leftover `:bound` is, or the operands cannot be aligned.
 
   ### Examples
 
       iex> lunch = ~o"2026-06-15T12:00:00/2026-06-15T13:00:00"
       iex> day = ~o"2026-06-15T09:00:00/2026-06-15T17:00:00"
-      iex> {:ok, free} = Tempo.complement(lunch, bound: day)
+      iex> {:ok, free} = Tempo.complement(lunch, within: day)
       iex> Tempo.IntervalSet.members(free)
       [~o"2026Y6M15DT9H0M0S/T12H0M0S", ~o"2026Y6M15DT13H0M0S/T17H0M0S"]
 
@@ -1042,31 +1061,34 @@ defmodule Tempo.Operations do
   @spec complement(operand, keyword()) :: {:ok, IntervalSet.t()} | {:error, term()}
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
   def complement(set, opts) do
-    case Keyword.get(opts, :bound) do
-      nil ->
-        {:error,
-         UnboundedRecurrenceError.exception(
-           reason:
-             "`complement/2` requires an explicit `:bound` option. " <>
-               "An unbounded complement is infinite; supply the universe to " <>
-               "complement within."
-         )}
+    with :ok <- Tempo.check_within_option(opts, "Tempo.complement/2") do
+      complement_within(set, Keyword.get(opts, :within), opts)
+    end
+  end
 
-      bound ->
-        with {:ok, {bound_set, input_set}} <- align(bound, set, opts) do
-          # Coalesce the input so gaps are computed against the
-          # union-of-covered-instants, not against overlapping
-          # members individually.
-          coalesced_input = IntervalSet.coalesce(input_set)
+  defp complement_within(_set, nil, _opts) do
+    {:error,
+     UnboundedRecurrenceError.exception(
+       reason:
+         "`complement/2` requires a `:within` window. A complement with no " <>
+           "window is infinite; supply the window to complement within."
+     )}
+  end
 
-          IntervalSet.new(
-            sweep_difference(
-              IntervalSet.to_list(bound_set),
-              IntervalSet.to_list(coalesced_input)
-            ),
-            metadata: bound_set.metadata
-          )
-        end
+  defp complement_within(set, within, opts) do
+    with {:ok, {window_set, input_set}} <- align(within, set, opts) do
+      # Coalesce the input so gaps are computed against the
+      # union-of-covered-instants, not against overlapping
+      # members individually.
+      coalesced_input = IntervalSet.coalesce(input_set)
+
+      IntervalSet.new(
+        sweep_difference(
+          IntervalSet.to_list(window_set),
+          IntervalSet.to_list(coalesced_input)
+        ),
+        metadata: window_set.metadata
+      )
     end
   end
 

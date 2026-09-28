@@ -151,16 +151,16 @@ defmodule Tempo.JSCalendarTest do
       end
     end
 
-    test "an unbounded rule needs a :bound" do
+    test "an unbounded rule needs a :within window" do
       json =
         event(~s(
           "start":"2026-06-01T09:00:00","duration":"PT1H",
           "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"daily"}]
         ))
 
-      assert {:error, _needs_bound} = Tempo.JSCalendar.from_jscalendar(json)
+      assert {:error, _needs_window} = Tempo.JSCalendar.from_jscalendar(json)
 
-      assert {:ok, set} = Tempo.JSCalendar.from_jscalendar(json, bound: ~o"2026Y6M1D/5D")
+      assert {:ok, set} = Tempo.JSCalendar.from_jscalendar(json, within: ~o"2026Y6M1D/5D")
       assert IntervalSet.count(set) == 4
     end
 

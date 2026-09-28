@@ -253,7 +253,7 @@ The recognised names are `easter` and `orthodox-easter` (the same computus in th
 
 ```elixir
 # "Easter Sunday, every year" — resolved across 2026–2028
-Tempo.to_interval(~o"R/../P1Y/FL(easter)eN", bound: ~o"{2026..2028}Y")
+Tempo.to_interval(~o"R/../P1Y/FL(easter)eN", within: ~o"{2026..2028}Y")
 #   → 2026-04-05, 2027-03-28, 2028-04-16
 ```
 
@@ -262,7 +262,7 @@ An equinox or solstice happens at an instant, so its date depends on where it is
 ```elixir
 # Japan's Vernal Equinox Day is the March equinox's date in +09:00:
 # in 2002 the equinox was on 20 March in UTC and 21 March in Tokyo
-Tempo.to_interval(~o"R/../P1Y/FL(march-equinox@+09:00)eN", bound: ~o"2002Y")
+Tempo.to_interval(~o"R/../P1Y/FL(march-equinox@+09:00)eN", within: ~o"2002Y")
 #   → 2002-03-21
 ```
 
@@ -330,15 +330,15 @@ Tempo.to_interval(~o"R/{2020Y..2024Y,^2022Y}/P1Y/FL12M25DN")
 #   → 2020, 2021, 2023, 2024
 ```
 
-A domain of plain members is **self-bounding** — it needs no `:bound`, because the listed years *are* the window. A domain of only exclusions (`R/^2022Y/P1Y/…`, or a brace set with `^` members alone) has no window of its own, so it still takes a `:bound` and subtracts from it:
+A domain of plain members is **self-bounding** — it needs no `:within`, because the listed years *are* the window. A domain of only exclusions (`R/^2022Y/P1Y/…`, or a brace set with `^` members alone) has no window of its own, so it still takes a `:within` and subtracts from it:
 
 ```elixir
-# Christmas 2020–2023, skipping 2022 — exclusions-only, so a bound supplies the window
-Tempo.to_interval(~o"R/^2022Y/P1Y/FL12M25DN", bound: ~o"2020Y/2024Y")
+# Christmas 2020–2023, skipping 2022 — exclusions-only, so `:within` supplies the window
+Tempo.to_interval(~o"R/^2022Y/P1Y/FL12M25DN", within: ~o"2020Y/2024Y")
 #   → 2020, 2021, 2023
 ```
 
-**`e` / `o` / `l` / `c` — even / odd / leap / common-year filters.** A lowercase `e`, `o`, `l` or `c` after a domain set keeps only its even, odd, leap or common (non-leap) years. It composes with a range and with `^` exclusions, and works on an open range (`{2020Y..}e`) when a `:bound` closes it:
+**`e` / `o` / `l` / `c` — even / odd / leap / common-year filters.** A lowercase `e`, `o`, `l` or `c` after a domain set keeps only its even, odd, leap or common (non-leap) years. It composes with a range and with `^` exclusions, and works on an open range (`{2020Y..}e`) when a `:within` closes it:
 
 ```elixir
 # New Year's Day in even years only, 2020–2026
@@ -348,11 +348,11 @@ Tempo.to_interval(~o"R/{2020Y..2026Y}e/P1Y/FL1M1DN")
 
 Leap (`l`) and common (`c`) ask the domain year's calendar `leap_year?/1`, so they are calendar-correct rather than a `rem/2` guess: 2100 is a common year. A domain's years are Gregorian years, as a holiday's year gates are, even when the selection is in another calendar. All four are Tempo extensions with no ISO or RFC 5545 form, so they round-trip through `inspect/1`/`to_iso8601/1` but not through `Tempo.to_rrule/1`.
 
-**Open-ended ranges.** A domain range may be open at either end, as an ISO 8601-2 set range may: `{2017Y..}` is 2017 on, `{..2016Y}` up to 2016, and `{..2019Y,2021Y..}` every year but 2020. An open domain has no window of its own, so it takes its missing end from a `:bound`:
+**Open-ended ranges.** A domain range may be open at either end, as an ISO 8601-2 set range may: `{2017Y..}` is 2017 on, `{..2016Y}` up to 2016, and `{..2019Y,2021Y..}` every year but 2020. An open domain has no window of its own, so it takes its missing end from a `:within`:
 
 ```elixir
 # The 2nd of January, from 2017 on
-Tempo.to_interval(~o"R/{2017Y..}/P1Y/FL1M2DN", bound: ~o"{2015..2019}Y")
+Tempo.to_interval(~o"R/{2017Y..}/P1Y/FL1M2DN", within: ~o"{2015..2019}Y")
 #   → 2017, 2018, 2019
 ```
 
@@ -360,7 +360,7 @@ Tempo.to_interval(~o"R/{2017Y..}/P1Y/FL1M2DN", bound: ~o"{2015..2019}Y")
 
 ```elixir
 # US presidential Election Day, every four years since 1848
-Tempo.to_interval(~o"R/{1848Y..}/P4Y/FLLL11M1K1IN/P7DN2K-1IN", bound: ~o"{2019..2028}Y")
+Tempo.to_interval(~o"R/{1848Y..}/P4Y/FLLL11M1K1IN/P7DN2K-1IN", within: ~o"{2019..2028}Y")
 #   → 2020-11-03, 2024-11-05, 2028-11-07
 ```
 
@@ -368,7 +368,7 @@ Tempo.to_interval(~o"R/{1848Y..}/P4Y/FLLL11M1K1IN/P7DN2K-1IN", bound: ~o"{2019..
 
 ```elixir
 # New Year's Day in 2026 and 2028 only
-Tempo.to_interval(~o"R/2026-01-01/P1Y/FL{2026,2028}Y1M1DN", bound: ~o"2026Y/2030Y")
+Tempo.to_interval(~o"R/2026-01-01/P1Y/FL{2026,2028}Y1M1DN", within: ~o"2026Y/2030Y")
 #   → 2026, 2028
 ```
 
@@ -380,19 +380,19 @@ A selection followed by `/[duration]` makes each resolved date the **start of a 
 
 ```elixir
 # Good Friday — the last Friday in the 7 days before Easter
-Tempo.to_interval(~o"R/../P1Y/FLLL(easter)eN/-P7DN5K-1IN", bound: ~o"2026")  # → 2026-04-03
+Tempo.to_interval(~o"R/../P1Y/FLLL(easter)eN/-P7DN5K-1IN", within: ~o"2026")  # → 2026-04-03
 
 # US Election Day — the 1st Tuesday in the 9 days from November's 1st Monday
-Tempo.to_interval(~o"R/../P1Y/FL11MLL1K1IN/P9DN2K1IN", bound: ~o"2026")       # → 2026-11-03
+Tempo.to_interval(~o"R/../P1Y/FL11MLL1K1IN/P9DN2K1IN", within: ~o"2026")       # → 2026-11-03
 ```
 
 The spec's worked examples resolve as written: `~o"R/../P1Y/FLLL2K2IN/P10DN4K2IN"` is "the 2nd Thursday within the ten days from the 2nd Tuesday" (§12.11 Example 3), and `~o"R/../P1Y/FLL4M4D/-P20DN7K-2IN"` is "the 2nd Sunday before April 4" (Example 7). A terminal window with no inner selectors — `~o"R/../P1Y/FLL3K4IN/P5DN"`, "the 4th Wednesday for 5 days" — yields one interval per period spanning its whole duration.
 
-A window can carry an occurrence out of the period that produced it, and a bound keeps each occurrence in the year it lands in. A holiday observed on the previous Friday when it falls on a Saturday — `FLLL1M1D6KN/-P7DN5K1IN` — lands on 31 December 2021 for New Year's Day 2022:
+A window can carry an occurrence out of the period that produced it, and the `:within` window keeps each occurrence in the year it lands in. A holiday observed on the previous Friday when it falls on a Saturday — `FLLL1M1D6KN/-P7DN5K1IN` — lands on 31 December 2021 for New Year's Day 2022:
 
 ```elixir
-Tempo.to_interval(~o"R/../P1Y/FLLL1M1D6KN/-P7DN5K1IN", bound: ~o"2021")  # → 2021-12-31
-Tempo.to_interval(~o"R/../P1Y/FLLL1M1D6KN/-P7DN5K1IN", bound: ~o"2022")  # → (none)
+Tempo.to_interval(~o"R/../P1Y/FLLL1M1D6KN/-P7DN5K1IN", within: ~o"2021")  # → 2021-12-31
+Tempo.to_interval(~o"R/../P1Y/FLLL1M1D6KN/-P7DN5K1IN", within: ~o"2022")  # → (none)
 ```
 
 ## 6. Ambiguity resolution

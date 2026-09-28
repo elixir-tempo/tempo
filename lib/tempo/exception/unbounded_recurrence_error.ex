@@ -2,11 +2,11 @@ defmodule Tempo.UnboundedRecurrenceError do
   @moduledoc """
   Exception raised when a caller attempts to materialise an
   unbounded recurrence (`recurrence: :infinity` with no `UNTIL`
-  and no `:bound` option) into a concrete `IntervalSet`.
+  and no `:within` option) into a concrete `IntervalSet`.
 
-  Supply a `:bound` Tempo value — any Tempo whose upper endpoint
-  limits the expansion — or convert the rule to a finite count
-  before materialising.
+  Supply a `:within` window — the Tempo value whose occurrences
+  you want — or convert the rule to a finite count before
+  materialising.
 
   """
 
@@ -27,7 +27,6 @@ defmodule Tempo.UnboundedRecurrenceError do
 
   def message(%__MODULE__{}) do
     "Cannot materialise an unbounded recurrence (recurrence: :infinity, no UNTIL). " <>
-      "Supply a :bound option — any Tempo value whose upper endpoint limits the " <>
-      "expansion."
+      "Supply a :within option — the window whose occurrences you want."
   end
 end

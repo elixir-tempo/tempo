@@ -447,7 +447,7 @@ defmodule Tempo.ICal.Test do
       assert days == [{6, 1}, {6, 15}, {6, 29}, {7, 13}]
     end
 
-    test "unbounded recurrence (no COUNT, no UNTIL) requires :bound" do
+    test "unbounded recurrence (no COUNT, no UNTIL) requires :within" do
       ics = """
       BEGIN:VCALENDAR
       VERSION:2.0
@@ -464,10 +464,10 @@ defmodule Tempo.ICal.Test do
 
       assert {:error, reason} = ICal.from_ical(ics)
       assert Exception.message(reason) =~ "unbounded"
-      assert Exception.message(reason) =~ "bound"
+      assert Exception.message(reason) =~ ":within"
     end
 
-    test "unbounded recurrence with :bound — materialises within the bound" do
+    test "unbounded recurrence with :within — materialises within the window" do
       import Tempo.Sigils
 
       ics = """
@@ -484,9 +484,9 @@ defmodule Tempo.ICal.Test do
       END:VCALENDAR
       """
 
-      {:ok, set} = ICal.from_ical(ics, bound: ~o"2022-06-01/2022-06-08")
-      # 7 days in the bound (Jun 1..Jun 7 inclusive; Jun 8 is
-      # excluded by the half-open upper bound).
+      {:ok, set} = ICal.from_ical(ics, within: ~o"2022-06-01/2022-06-08")
+      # 7 days in the window (Jun 1..Jun 7 inclusive; Jun 8 is
+      # excluded by the window's half-open end).
       assert length(set.intervals) == 7
     end
 
@@ -495,7 +495,7 @@ defmodule Tempo.ICal.Test do
       # first-occurrence-only fallback. Phase C lifted every
       # RFC 5545 BY-rule into the interpreter, so events like
       # "1st Monday of every month" expand fully. Unbounded
-      # rules still need a `:bound` option — nothing special
+      # rules still need a `:within` option — nothing special
       # about BY-rules in that respect.
       ics = """
       BEGIN:VCALENDAR

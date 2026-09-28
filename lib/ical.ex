@@ -31,7 +31,7 @@ if Code.ensure_loaded?(ICal) do
     scheduler usually wants both, and they compose directly:
 
         {:ok, free} = Tempo.ICal.available_from_ical(ics, within: week)
-        {:ok, busy} = Tempo.ICal.from_ical(ics, bound: week)
+        {:ok, busy} = Tempo.ICal.from_ical(ics, within: week)
         {:ok, bookable} = Tempo.difference(free, busy)
 
     ## Required reading
@@ -117,19 +117,21 @@ if Code.ensure_loaded?(ICal) do
 
     ### Options
 
-    * `:bound` — a `t:Tempo.t/0`, `t:Tempo.Interval.t/0`, or
-      `t:Tempo.IntervalSet.t/0` within which recurring events
-      (those with an `RRULE`) are expanded. Required when any
-      event in the input has a recurrence rule; ignored when
-      there are none. An unbounded recurrence is infinite and
-      refused at set-op time.
+    * `:within` — a `t:Tempo.t/0`, `t:Tempo.Interval.t/0`, or
+      `t:Tempo.IntervalSet.t/0`: the window whose events you want.
+      It keeps every event occurrence that overlaps the window —
+      one already in progress when the window opens, and one that
+      runs past its end. Required when an event repeats with
+      neither `COUNT` nor `UNTIL`; with no window, every event is
+      returned.
 
     ### Returns
 
     * `{:ok, interval_set}` — sorted, coalesced IntervalSet of
       the events.
-    * `{:error, reason}` when parsing fails or a recurring event
-      requires a `:bound` that wasn't supplied.
+    * `{:error, reason}` when parsing fails, a recurring event
+      needs a `:within` window that wasn't supplied, or a leftover
+      `:bound` is given.
 
     ### Examples
 
@@ -159,8 +161,10 @@ if Code.ensure_loaded?(ICal) do
     """
     @spec from_ical(binary(), keyword()) :: {:ok, IntervalSet.t()} | {:error, term()}
     def from_ical(ics, options \\ []) when is_binary(ics) do
-      calendar = ICal.from_ics(ics)
-      build_interval_set(calendar, options)
+      with :ok <- Tempo.check_within_option(options, "Tempo.ICal.from_ical/2") do
+        calendar = ICal.from_ics(ics)
+        build_interval_set(calendar, options)
+      end
     rescue
       e in [ArgumentError, MatchError, FunctionClauseError] ->
         {:error, Exception.message(e)}
@@ -325,7 +329,8 @@ if Code.ensure_loaded?(ICal) do
     """
     @spec available(ICal.t(), keyword()) :: {:ok, IntervalSet.t()} | {:error, term()}
     def available(%ICal{} = calendar, options \\ []) do
-      with {:ok, window} <- query_window(options) do
+      with :ok <- Tempo.check_within_option(options, "Tempo.ICal.available/2"),
+           {:ok, window} <- query_window(options) do
         calendar
         |> Map.get(:availabilities, [])
         |> by_descending_priority()
@@ -398,7 +403,7 @@ if Code.ensure_loaded?(ICal) do
       do: {:ok, empty_set()}
 
     defp offered_within(%ICal.Availability{available: available}, scope, options) do
-      options = Keyword.put_new(options, :bound, scope)
+      options = Keyword.put(options, :within, scope)
 
       Enum.reduce_while(available, {:ok, empty_set()}, fn subcomponent, {:ok, acc} ->
         case expand_available(subcomponent, scope, options) do
@@ -447,21 +452,17 @@ if Code.ensure_loaded?(ICal) do
     ## Calendar → IntervalSet
     ## ------------------------------------------------------------
 
+    # Every event occurrence — a one-off event, an RRULE's, an RDATE's — is held
+    # to the same `:within` window, so the calendar's events are those that
+    # overlap it. Events are preserved as distinct intervals — overlapping events
+    # (e.g. an all-day travel event on top of a lunch meeting) are common and
+    # each carries its own metadata. Coalescing would collapse these and silently
+    # lose event identity. Callers who want coalesced free/busy spans can union
+    # the set with itself or call a future explicit coalesce helper.
     defp build_interval_set(%ICal{events: events} = calendar, opts) do
-      case convert_events(events, opts) do
-        {:ok, intervals} ->
-          metadata = calendar_metadata(calendar)
-          # Events are preserved as distinct intervals — overlapping
-          # events (e.g. an all-day travel event on top of a lunch
-          # meeting) are common and each carries its own metadata.
-          # Coalescing would collapse these and silently lose
-          # event identity. Callers who want coalesced free/busy
-          # spans can union the set with itself or call a future
-          # explicit coalesce helper.
-          IntervalSet.new(intervals, metadata: metadata, coalesce: false)
-
-        {:error, _} = err ->
-          err
+      with {:ok, intervals} <- convert_events(events, opts),
+           {:ok, kept} <- Tempo.occurrences_within(intervals, opts) do
+        IntervalSet.new(kept, metadata: calendar_metadata(calendar), coalesce: false)
       end
     end
 
@@ -557,13 +558,13 @@ if Code.ensure_loaded?(ICal) do
     # EXRULE is RFC-deprecated and the `ical` library does not
     # surface it, so we don't need to handle it.
     defp expand_recurrence(event, %ICal.Recurrence{} = rule, opts) do
-      if rule.count == nil and rule.until == nil and not Keyword.has_key?(opts, :bound) do
+      if rule.count == nil and rule.until == nil and not Keyword.has_key?(opts, :within) do
         {:error,
          UnboundedRecurrenceError.exception(
            reason:
              "Event #{inspect(event.uid)} has an unbounded recurrence rule " <>
-               "(no COUNT, no UNTIL). Provide a `:bound` option — a Tempo " <>
-               "value within which the recurrence will be materialised."
+               "(no COUNT, no UNTIL). Provide a `:within` option — the " <>
+               "window whose occurrences you want."
          )}
       else
         with {:ok, base} <- single_event_to_interval(event),
@@ -575,7 +576,7 @@ if Code.ensure_loaded?(ICal) do
 
     defp expander_opts(opts, base) do
       []
-      |> maybe_put(:bound, Keyword.get(opts, :bound))
+      |> maybe_put(:within, Keyword.get(opts, :within))
       |> Keyword.put(:metadata, base.metadata)
       |> Keyword.put(:base_to, base.to)
     end

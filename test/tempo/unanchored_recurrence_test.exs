@@ -34,45 +34,45 @@ defmodule Tempo.UnanchoredRecurrenceTest do
   end
 
   describe "to_interval/2" do
-    test "a bound materialises an unanchored recurrence into its window", context do
-      # "Every Monday" has no start of its own; the bound supplies one.
+    test "a window materialises a recurrence with an open start", context do
+      # "Every Monday" has no start of its own; the window supplies one.
       # Materialising it into June 2026 yields that month's five Mondays,
-      # and the half-open upper bound keeps the following Monday out.
+      # and the window's half-open end keeps the following Monday out.
       assert {:ok, %IntervalSet{} = set} =
-               Tempo.to_interval(context.unanchored, bound: context.window)
+               Tempo.to_interval(context.unanchored, within: context.window)
 
       assert IntervalSet.count(set) == 5
       assert Interval.from(IntervalSet.first(set)) == ~o"2026Y6M1D"
     end
 
-    test "a wider bound materialises more occurrences", context do
-      # The same recurrence, a decade-wide window: the bound is the
+    test "a wider window materialises more occurrences", context do
+      # The same recurrence, a decade-wide window: the window is the
       # extent to walk, so it materialises every Monday it spans.
       assert {:ok, %IntervalSet{} = set} =
-               Tempo.to_interval(context.unanchored, bound: ~o"2020Y/2030Y")
+               Tempo.to_interval(context.unanchored, within: ~o"2020Y/2030Y")
 
       assert IntervalSet.count(set) > 500
     end
 
-    test "with no bound there is still nothing to anchor against", context do
-      # A bound is the window to materialise into. Without one, an
-      # unanchored recurrence has neither a start nor a stop, so it stays
-      # a clean refusal rather than an open-ended walk.
+    test "with no window there is still nothing to start from", context do
+      # The window is where to materialise. Without one, a recurrence with
+      # an open start has neither a start nor a stop, so it stays a clean
+      # refusal rather than an open-ended walk.
       assert {:error, %IntervalEndpointsError{} = error} =
                Tempo.to_interval(context.unanchored)
 
       assert error.reason == :unanchored
     end
 
-    test "the bound may be given at any resolution — year, month or day" do
+    test "the window may be given at any resolution — year, month or day" do
       # The ISO 8601 holiday form for the fourth Thursday of November.
-      # Whatever the resolution of the bound that anchors it — the whole
+      # Whatever the resolution of the window that starts it — the whole
       # year, that November, or Thanksgiving Day itself — it lands on the
-      # same day. The bound says where to walk, not at what grain.
+      # same day. The window says where to walk, not at what grain.
       {:ok, thanksgiving} = Tempo.from_iso8601("R/../P1Y/FL11M4K4IN")
 
-      for bound <- [~o"2026", ~o"2026-11", ~o"2026-11-26"] do
-        assert {:ok, %IntervalSet{} = set} = Tempo.to_interval(thanksgiving, bound: bound)
+      for window <- [~o"2026", ~o"2026-11", ~o"2026-11-26"] do
+        assert {:ok, %IntervalSet{} = set} = Tempo.to_interval(thanksgiving, within: window)
         assert Interval.from(IntervalSet.first(set)) == ~o"2026Y11M26D"
       end
     end
@@ -85,26 +85,26 @@ defmodule Tempo.UnanchoredRecurrenceTest do
       {:ok, june} = Tempo.from_iso8601("R/../P1Y/FL6MN")
       {:ok, week10} = Tempo.from_iso8601("R/../P1Y/FL10WN")
 
-      assert {:ok, day_set} = Tempo.to_interval(christmas, bound: ~o"2026")
+      assert {:ok, day_set} = Tempo.to_interval(christmas, within: ~o"2026")
       assert Interval.from(IntervalSet.first(day_set)) == ~o"2026Y12M25D"
 
-      assert {:ok, month_set} = Tempo.to_interval(june, bound: ~o"2026")
+      assert {:ok, month_set} = Tempo.to_interval(june, within: ~o"2026")
       assert Interval.from(IntervalSet.first(month_set)) == ~o"2026Y6M"
 
-      assert {:ok, week_set} = Tempo.to_interval(week10, bound: ~o"2026")
+      assert {:ok, week_set} = Tempo.to_interval(week10, within: ~o"2026")
       assert Interval.from(IntervalSet.first(week_set)) == ~o"2026Y10W"
     end
 
     test "it returns the materialised set, never the rule itself", context do
       # A materialised recurrence is the set of its occurrences — never
       # the rule handed straight back as though it had been expanded.
-      refute Tempo.to_interval(context.unanchored, bound: context.window) ==
+      refute Tempo.to_interval(context.unanchored, within: context.window) ==
                {:ok, context.unanchored}
     end
 
     test "an anchored recurrence still materialises", context do
       assert {:ok, %IntervalSet{} = set} =
-               Tempo.to_interval(context.anchored, bound: context.window)
+               Tempo.to_interval(context.anchored, within: context.window)
 
       assert IntervalSet.count(set) == 5
     end
@@ -114,55 +114,50 @@ defmodule Tempo.UnanchoredRecurrenceTest do
     end
   end
 
-  describe "the bound is half-open, [bound_from, bound_to)" do
+  describe "the window is half-open, [from, to)" do
     defp starts(set),
       do: set |> IntervalSet.to_list() |> Enum.map(&Tempo.to_iso8601(Interval.from(&1)))
 
-    test "an occurrence starting at the bound's end is outside it" do
+    test "an occurrence starting at the window's end is outside it" do
       assert {:ok, set} =
-               Tempo.to_interval(~o"R/../P1Y/FL9M23DN", bound: ~o"2026-09-01/2026-09-23")
+               Tempo.to_interval(~o"R/../P1Y/FL9M23DN", within: ~o"2026-09-01/2026-09-23")
 
       assert starts(set) == []
     end
 
-    test "a bound starting mid-period still reaches the last period it overlaps" do
+    test "a window starting mid-period still reaches the last period it overlaps" do
       assert {:ok, monthly} =
-               Tempo.to_interval(~o"R/../P1M/FL15DN", bound: ~o"2026-01-20/2026-03-20")
+               Tempo.to_interval(~o"R/../P1M/FL15DN", within: ~o"2026-01-20/2026-03-20")
 
       assert starts(monthly) == ["2026Y2M15D", "2026Y3M15D"]
 
       assert {:ok, yearly} =
-               Tempo.to_interval(~o"R/../P1Y/FL1M15DN", bound: ~o"2026-09-01/2027-03-01")
+               Tempo.to_interval(~o"R/../P1Y/FL1M15DN", within: ~o"2026-09-01/2027-03-01")
 
       assert starts(yearly) == ["2027Y1M15D"]
 
       assert {:ok, weekly} =
-               Tempo.to_interval(~o"R/../P1W/FL4KN", bound: ~o"2026-04-03/2026-04-17")
+               Tempo.to_interval(~o"R/../P1W/FL4KN", within: ~o"2026-04-03/2026-04-17")
 
       assert starts(weekly) == ["2026Y4M9D", "2026Y4M16D"]
     end
 
-    test "overlapping: true keeps an occurrence that starts before the bound and reaches into it" do
-      bound = ~o"2026-12-25T10/2026-12-25T11"
+    test "an occurrence already in progress when the window opens is kept" do
+      assert {:ok, christmas} =
+               Tempo.to_interval(~o"R/../P1Y/FL12M25DN", within: ~o"2026-12-25T10/2026-12-25T11")
 
-      assert {:ok, starting} = Tempo.to_interval(~o"R/../P1Y/FL12M25DN", bound: bound)
-      assert starts(starting) == []
-
-      assert {:ok, overlapping} =
-               Tempo.to_interval(~o"R/../P1Y/FL12M25DN", bound: bound, overlapping: true)
-
-      assert starts(overlapping) == ["2026Y12M25D"]
+      assert starts(christmas) == ["2026Y12M25D"]
     end
 
-    test "a bound aligned to the cadence is unchanged" do
-      assert {:ok, set} = Tempo.to_interval(~o"R/../P1Y/FL12M25DN", bound: ~o"2026Y")
+    test "a window aligned to the cadence is unchanged" do
+      assert {:ok, set} = Tempo.to_interval(~o"R/../P1Y/FL12M25DN", within: ~o"2026Y")
       assert starts(set) == ["2026Y12M25D"]
     end
 
-    test "an anchored recurrence's expanded days stop at the bound's end" do
+    test "an anchored recurrence's expanded days stop at the window's end" do
       assert {:ok, set} =
                Tempo.to_interval(~o"R/2026-12-28/P1W/FL{1..7}KN",
-                 bound: ~o"2026-12-20/2027-01-09"
+                 within: ~o"2026-12-20/2027-01-09"
                )
 
       assert List.last(starts(set)) == "2027Y1M8D"
@@ -231,7 +226,7 @@ defmodule Tempo.UnanchoredRecurrenceTest do
     end
 
     test "an anchored recurrence intersects once materialised", context do
-      {:ok, materialised} = Tempo.to_interval(context.anchored, bound: context.window)
+      {:ok, materialised} = Tempo.to_interval(context.anchored, within: context.window)
 
       assert {:ok, %IntervalSet{} = set} =
                Tempo.intersection(materialised, context.window)

@@ -462,7 +462,7 @@ defmodule Tempo.Compare do
       raise ArgumentError,
             "Cannot project a non-anchored Tempo (no :year component) to a UTC " <>
               "instant. Non-anchored values live on the time-of-day axis; anchor " <>
-              "them first via `Tempo.anchor/2` or supply a `bound:` option to the " <>
+              "them first via `Tempo.anchor/2` or supply a `within:` window to the " <>
               "calling operation."
     end
 

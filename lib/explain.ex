@@ -505,7 +505,7 @@ defmodule Tempo.Explain do
     [
       {:headline, "An open-lower interval (`../#{render_endpoint(to)}`)."},
       {:span, "Upper bound: #{render_endpoint(to)}."},
-      {:hint, "Enumeration requires a lower bound; set operations need a `:bound` option."}
+      {:hint, "Enumeration requires a lower bound; set operations need a `:within` window."}
     ]
   end
 
@@ -744,10 +744,9 @@ defmodule Tempo.Explain do
     "#{members_phrase(members)}#{set_qualifiers(except, filter)}"
   end
 
-  # A plain-member domain is its own window; an exclusions-only one needs a bound.
+  # A plain-member domain is its own window; an exclusions-only one needs a `:within` window.
   defp domain_hint(%Tempo.Set{set: []}),
-    do:
-      "Exclusions only — supply a `:bound` for the window; the excluded periods are removed from it."
+    do: "Exclusions only — supply a `:within` window; the excluded periods are removed from it."
 
   defp domain_hint(%Tempo.Set{}),
     do:
@@ -932,7 +931,7 @@ defmodule Tempo.Explain do
 
   defp unanchored_hint do
     "The rule names no start of its own. Materialise it into a window " <>
-      "with a bound — `Tempo.to_interval(interval, bound: ~o\"2026\")` " <>
+      "— `Tempo.to_interval(interval, within: ~o\"2026\")` " <>
       "lists the occurrences that fall inside it — or give the literal a " <>
       "start (`R/2026-01-01/…`) or re-parse with one " <>
       "(`Tempo.RRule.parse(rule, from: ~o\"2026-01-01\")`)."
@@ -940,7 +939,7 @@ defmodule Tempo.Explain do
 
   defp recurrence_hint(:infinity, from),
     do:
-      "List a window of occurrences: `Tempo.to_interval(interval, bound: #{bound_example(from)})`."
+      "List a window of occurrences: `Tempo.to_interval(interval, within: #{bound_example(from)})`."
 
   defp recurrence_hint(n, _from) when is_integer(n),
     do: "Materialise the #{n} occurrences: `Tempo.to_interval(interval)`."

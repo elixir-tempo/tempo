@@ -146,7 +146,7 @@ defmodule Tempo.Explain.Test do
       # to 2026 lists that year's 52 Mondays, and the explain hint points
       # at exactly that path.
       assert {:ok, %IntervalSet{} = set} =
-               Tempo.to_interval(~o"R/../P1W/FL1KN", bound: ~o"2026Y")
+               Tempo.to_interval(~o"R/../P1W/FL1KN", within: ~o"2026Y")
 
       assert IntervalSet.count(set) == 52
       assert Tempo.explain(~o"R/../P1W/FL1KN") =~ "Materialise it into a window"

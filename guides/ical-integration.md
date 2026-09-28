@@ -209,7 +209,7 @@ Every RFC 5545 BY-rule flows through one interpreter — there is no "simple cor
 
 - **`COUNT=N`** — stop after N materialised occurrences (after BY-rule filtering / expansion).
 - **`UNTIL=<date-or-datetime>`** — stop when the next occurrence would start past `UNTIL`.
-- **No `COUNT` or `UNTIL`** — a `:bound` option is required at the call site. The rule expands within the bound.
+- **No `COUNT` or `UNTIL`** — a `:within` option is required at the call site. The rule expands within the window.
 
 ### Worked examples
 

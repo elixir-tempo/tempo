@@ -5022,27 +5022,23 @@ defmodule Tempo do
   selection picks in each period of the units before it:
   `~o"2018Y3ML1K1IN"` is the first Monday of March 2018, and a set or
   mask of years resolves one year at a time. A selection in an
-  unspecified year (`~o"X*YL5M7K2IN"`) needs a `:bound`.
+  unspecified year (`~o"X*YL5M7K2IN"`) needs a `:within` window.
 
   ### Arguments
 
   * `value` is a `t:#{__MODULE__}.t/0`, `t:Tempo.Interval.t/0`,
-    `t:Tempo.IntervalSet.t/0`, or `t:Tempo.Set.t/0`.
+    `t:Tempo.IntervalSet.t/0`, `t:Tempo.RecurrenceSet.t/0`, or
+    `t:Tempo.Set.t/0`.
 
   ### Options
 
-  * `:bound` is a Tempo value whose upper endpoint limits
-    expansion of an unbounded recurrence (`recurrence: :infinity`
-    with no `UNTIL`), or the years a selection in an unspecified
-    year is resolved in. Required to materialise such values;
-    ignored otherwise. An unanchored or domain recurrence keeps the
-    occurrences that start in the bound, `[from, to)`.
-
-  * `:overlapping` keeps, with `true`, the occurrences that overlap
-    the bound rather than only those that start in it — a day's
-    holiday for a bound from 10:00 that day. The set operations use
-    it when they materialise a recurrence set against their other
-    operand. The default is `false`.
+  * `:within` is the window whose occurrences you want — a Tempo
+    value such as `~o"2026"`. Every recurrence keeps the occurrences
+    that overlap the window: one already in progress when the
+    window opens, and one that runs past its end. Required for a
+    recurrence with no end (no count and no `UNTIL`), a recurrence
+    with an open start (`R/../P1Y/…`) and a selection in an
+    unspecified year; a single value or interval ignores it.
 
   * `:coalesce` controls whether the resulting IntervalSet
     merges adjacent or overlapping intervals (`true`, the
@@ -5066,8 +5062,8 @@ defmodule Tempo do
     materialises to a one-microsecond span; only exotic selector
     resolutions have no span), a one-of `Tempo.Set` (epistemic
     disjunction is not an interval list; the user must pick one or
-    handle the disjunction themselves), or an unbounded recurrence
-    with no `:bound`.
+    handle the disjunction themselves), a recurrence with no end and
+    no `:within` window, or a leftover `:bound` option.
 
   * `{:error, %Tempo.RequiresAnchorError{}}` when the value has no
     concrete year and resolving the span would depend on the missing
@@ -5098,6 +5094,10 @@ defmodule Tempo do
       iex> Tempo.relation(dates, ~o"2024-11-05")
       :equals
 
+      iex> {:ok, christmases} = Tempo.to_interval(~o"R/../P1Y/FL12M25DN", within: ~o"2026/2028")
+      iex> Tempo.IntervalSet.count(christmases)
+      2
+
   """
   @spec to_interval(
           Tempo.t()
@@ -5108,7 +5108,36 @@ defmodule Tempo do
           keyword()
         ) ::
           {:ok, Tempo.Interval.t() | Tempo.IntervalSet.t()} | {:error, error_reason()}
-  def to_interval(value, opts \\ [])
+  def to_interval(value, opts \\ []) do
+    with :ok <- check_within_option(opts, "Tempo.to_interval/2") do
+      materialise(value, opts)
+    end
+  end
+
+  @doc false
+  # 1.x called the window `:bound`. A leftover `:bound` is an error naming
+  # `:within`, never silently ignored — every function that takes the window
+  # checks its options here.
+  @spec check_within_option(keyword(), String.t()) :: :ok | {:error, Exception.t()}
+  def check_within_option(options, function) do
+    if Keyword.has_key?(options, :bound) do
+      {:error,
+       ArgumentError.exception(
+         ":bound is not an option of #{function}; pass the window as :within"
+       )}
+    else
+      :ok
+    end
+  end
+
+  @doc false
+  # The occurrences a `:within` window keeps — those that overlap it — for the
+  # modules that assemble occurrences themselves (an iCalendar's events, a
+  # JSCalendar's), so every function that takes a window keeps the same ones.
+  # No window keeps them all.
+  @spec occurrences_within([Tempo.Interval.t()], keyword()) ::
+          {:ok, [Tempo.Interval.t()]} | {:error, error_reason()}
+  def occurrences_within(occurrences, options), do: keep_within(occurrences, options)
 
   # A bounded recurrence (`R3/1985-01/P1M`) expands to N disjoint
   # intervals. Each occurrence starts at `from + i*duration` and
@@ -5116,17 +5145,18 @@ defmodule Tempo do
   #
   # When `repeat_rule` is present, BY-rule selections apply
   # before the COUNT cap: N = "the first N occurrences that
-  # survived the BY-rule filter," per RFC 5545.
-  def to_interval(
-        %Tempo.Interval{
-          recurrence: n,
-          direction: direction,
-          from: %Tempo{} = from,
-          duration: %Tempo.Duration{} = duration
-        } = interval,
-        opts
-      )
-      when is_integer(n) and n > 1 do
+  # survived the BY-rule filter," per RFC 5545. A `:within` window
+  # then keeps those of the N that overlap it.
+  defp materialise(
+         %Tempo.Interval{
+           recurrence: n,
+           direction: direction,
+           from: %Tempo{} = from,
+           duration: %Tempo.Duration{} = duration
+         } = interval,
+         opts
+       )
+       when is_integer(n) and n > 1 do
     {from, interval} = fill_selection_anchor(from, interval)
     step = if direction == -1, do: negate_duration(duration), else: duration
 
@@ -5141,7 +5171,9 @@ defmodule Tempo do
         n
       )
 
-    IntervalSet.new(intervals, coalesce: coalesce_opt(opts))
+    with {:ok, kept} <- keep_within(intervals, opts) do
+      IntervalSet.new(kept, coalesce: coalesce_opt(opts))
+    end
   end
 
   # An unbounded recurrence with UNTIL: `recurrence: :infinity`
@@ -5150,16 +5182,17 @@ defmodule Tempo do
   # the UNTIL endpoint. `from + i*duration` while `from(i) ≤ to`, and
   # every occurrence a period's selection gives is held to the same
   # inclusive UNTIL (RFC 5545), so a week expanded to its days stops
-  # at the UNTIL day.
-  def to_interval(
-        %Tempo.Interval{
-          recurrence: :infinity,
-          from: %Tempo{} = from,
-          duration: %Tempo.Duration{} = duration,
-          to: %Tempo{} = until
-        } = interval,
-        opts
-      ) do
+  # at the UNTIL day. A `:within` window then keeps those that start
+  # within it.
+  defp materialise(
+         %Tempo.Interval{
+           recurrence: :infinity,
+           from: %Tempo{} = from,
+           duration: %Tempo.Duration{} = duration,
+           to: %Tempo{} = until
+         } = interval,
+         opts
+       ) do
     {from, interval} = fill_selection_anchor(from, interval)
 
     intervals =
@@ -5173,51 +5206,29 @@ defmodule Tempo do
       )
       |> Enum.filter(&starts_under_until?(&1, until))
 
-    IntervalSet.new(intervals, coalesce: coalesce_opt(opts))
+    with {:ok, kept} <- keep_within(intervals, opts) do
+      IntervalSet.new(kept, coalesce: coalesce_opt(opts))
+    end
   end
 
-  # An unbounded recurrence with `:bound` option: `recurrence:
-  # :infinity`, `to` is nil/:undefined, and the caller has
-  # supplied a `:bound` Tempo value. Iterate while every new
-  # occurrence's start falls strictly before the bound's upper
-  # endpoint — a period that starts before it can select days at
-  # or past it (a week expanded to its days), so those are dropped.
-  def to_interval(
-        %Tempo.Interval{
-          recurrence: :infinity,
-          from: %Tempo{} = from,
-          duration: %Tempo.Duration{} = duration,
-          to: to
-        } = interval,
-        opts
-      )
-      when to in [nil, :undefined] do
-    case Keyword.get(opts, :bound) do
-      nil ->
-        {:error, UnboundedRecurrenceError.exception(interval: interval)}
-
-      bound ->
-        case bound_upper(bound) do
-          {:ok, bound_to} ->
-            {from, interval} = fill_selection_anchor(from, interval)
-
-            intervals =
-              from
-              |> iterate_recurrence(
-                duration,
-                occurrence_end_fn(from, duration, interval),
-                &under_bound?(&1, bound_to),
-                selection_fn(interval, duration),
-                interval.metadata
-              )
-              |> Enum.filter(&starts_under_bound?(&1, bound_to))
-
-            IntervalSet.new(intervals, coalesce: coalesce_opt(opts))
-
-          {:error, _} = err ->
-            err
-        end
-    end
+  # A recurrence with no end: `recurrence: :infinity`, `to` is
+  # nil/:undefined, so the caller's `:within` window is what ends it.
+  # Iterate while every new occurrence's start falls strictly before
+  # the window's end — a period that starts before it can select days
+  # at or past it (a week expanded to its days) — and keep the
+  # occurrences that overlap the window, as every recurrence does:
+  # `R/2020-01-01/P1Y` within 2026 is 2026's occurrence alone.
+  defp materialise(
+         %Tempo.Interval{
+           recurrence: :infinity,
+           from: %Tempo{},
+           duration: %Tempo.Duration{},
+           to: to
+         } = interval,
+         opts
+       )
+       when to in [nil, :undefined] do
+    materialise_unending(interval, Keyword.get(opts, :within), opts)
   end
 
   # A count-1 recurrence carrying a BY-rule selection —
@@ -5226,18 +5237,18 @@ defmodule Tempo do
   # (DTSTART itself need not satisfy the rule — it may be a Monday). So
   # apply the selection and return that first occurrence, still a single
   # interval per the count-1 contract and consistent with COUNT ≥ 2.
-  def to_interval(
-        %Tempo.Interval{
-          recurrence: 1,
-          direction: direction,
-          from: %Tempo{} = from,
-          duration: %Tempo.Duration{} = duration,
-          repeat_rule: %Tempo{},
-          to: to
-        } = interval,
-        _opts
-      )
-      when to in [nil, :undefined] do
+  defp materialise(
+         %Tempo.Interval{
+           recurrence: 1,
+           direction: direction,
+           from: %Tempo{} = from,
+           duration: %Tempo.Duration{} = duration,
+           repeat_rule: %Tempo{},
+           to: to
+         } = interval,
+         _opts
+       )
+       when to in [nil, :undefined] do
     {from, interval} = fill_selection_anchor(from, interval)
     step = if direction == -1, do: negate_duration(duration), else: duration
 
@@ -5268,17 +5279,17 @@ defmodule Tempo do
   # source interval's metadata — callers like `Tempo.ICal` need
   # event-level metadata (summary, location, …) to ride along
   # onto every materialised occurrence.
-  def to_interval(
-        %Tempo.Interval{
-          from: %Tempo{time: time} = from,
-          duration: %Tempo.Duration{} = duration,
-          to: to,
-          recurrence: 1,
-          metadata: metadata
-        },
-        opts
-      )
-      when to in [nil, :undefined] do
+  defp materialise(
+         %Tempo.Interval{
+           from: %Tempo{time: time} = from,
+           duration: %Tempo.Duration{} = duration,
+           to: to,
+           recurrence: 1,
+           metadata: metadata
+         },
+         opts
+       )
+       when to in [nil, :undefined] do
     if Keyword.has_key?(time, :selection) do
       selected_spans(from, &{&1, Math.add(&1, duration)}, metadata, opts)
     else
@@ -5289,16 +5300,16 @@ defmodule Tempo do
 
   # A `duration + to` interval (`P1M/1985-06`). Materialise to a
   # closed `[to - duration, to)` interval.
-  def to_interval(
-        %Tempo.Interval{
-          from: :undefined,
-          duration: %Tempo.Duration{} = duration,
-          to: %Tempo{time: time} = to,
-          recurrence: 1,
-          metadata: metadata
-        },
-        opts
-      ) do
+  defp materialise(
+         %Tempo.Interval{
+           from: :undefined,
+           duration: %Tempo.Duration{} = duration,
+           to: %Tempo{time: time} = to,
+           recurrence: 1,
+           metadata: metadata
+         },
+         opts
+       ) do
     if Keyword.has_key?(time, :selection) do
       selected_spans(to, &{Math.subtract(&1, duration), &1}, metadata, opts)
     else
@@ -5307,50 +5318,39 @@ defmodule Tempo do
     end
   end
 
-  # An unanchored recurrence — `Tempo.RRule.parse("FREQ=WEEKLY;BYDAY=MO")`
-  # ("every Monday" beginning nowhere), or the ISO 8601 holiday form
-  # `R/../P1Y/FL…N` — has no start of its own. A `:bound` supplies one: it
-  # is the window to materialise into, so the recurrence anchors to the
-  # bound's start and yields every occurrence the window contains. The
-  # anchor takes the recurrence's own selection resolution — day for
-  # `FL6M1K2IN` ("the 2nd Monday of June"), month for `FL6MN` ("June") —
-  # so each occurrence lands at the grain the selection names rather than
-  # being forced to a day. With no `:bound` there is nothing to anchor
-  # against, so it stays an error rather than reporting success while
-  # handing back the unmaterialised rule.
   # A recurrence over a domain set (`R/{2020Y..2030Y,^2026Y}/P1Y/FL…N`). The
   # domain's plain members are the window: the selection is materialised for each
   # and unioned. `^` exclusions are already removed by materialising the domain
   # set, so an excluded year yields no occurrence — the domain is self-bounding.
-  # A `:bound`, when given, narrows it further: only the domain periods that meet
-  # the bound's window are materialised, and only the occurrences starting within
-  # that window are kept — the same `[bound_from, bound_to)` start rule a bound
-  # applies to any unanchored recurrence. An open-ended range (`{2017Y..}`,
-  # `{..2016Y}`) takes its missing end from the bound, so it needs one. A cadence
-  # longer than one period (`R/{1848Y..}/P4Y/…`) keeps every nth period, phased
-  # from the domain's first stated value.
-  def to_interval(%Tempo.Interval{from: %Tempo.Set{set: [_ | _]} = domain} = interval, opts) do
-    with {:ok, window} <- domain_bound_window(opts),
-         {:ok, closed_domain} <- close_domain_ranges(domain, window),
+  # A `:within` window, when given, narrows it further: only the domain periods
+  # whose occurrences can reach it are materialised, and only the occurrences
+  # that overlap it are kept — the rule every recurrence keeps. An open-ended
+  # range (`{2017Y..}`, `{..2016Y}`) takes its missing end from the window, so it
+  # needs one. A cadence longer than one period (`R/{1848Y..}/P4Y/…`) keeps every
+  # nth period, phased from the domain's first stated value.
+  defp materialise(%Tempo.Interval{from: %Tempo.Set{set: [_ | _]} = domain} = interval, opts) do
+    with {:ok, window} <- within_window(opts),
+         reach = domain_reach_window(window, interval),
+         {:ok, closed_domain} <- close_domain_ranges(domain, reach),
          {:ok, domain_set} <- to_interval(closed_domain) do
       domain_set
       |> IntervalSet.to_list()
       |> filter_domain_years(domain.filter)
       |> step_domain_periods(domain, interval.duration)
-      |> Enum.filter(&domain_period_in_window?(&1, window))
+      |> Enum.filter(&domain_period_in_window?(&1, reach))
       |> reduce_domain_occurrences(interval, opts)
-      |> keep_occurrences_in_window(window, bound_keep_mode(opts))
+      |> keep_occurrences_in_window(window)
     end
   end
 
   # An open, filtered domain (`R/..e/P1Y/FL…N`) has no window of its own, so it
-  # needs a `:bound`: materialise the recurrence there, then keep only the years
-  # matching the `:even` / `:odd` / `:leap` filter.
-  def to_interval(
-        %Tempo.Interval{from: %Tempo.Set{set: [], except: [], filter: filter}} = interval,
-        opts
-      )
-      when not is_nil(filter) do
+  # needs a `:within` window: materialise the recurrence there, then keep only
+  # the years matching the `:even` / `:odd` / `:leap` filter.
+  defp materialise(
+         %Tempo.Interval{from: %Tempo.Set{set: [], except: [], filter: filter}} = interval,
+         opts
+       )
+       when not is_nil(filter) do
     with {:ok, occurrences} <- to_interval(%{interval | from: nil}, opts) do
       occurrences
       |> IntervalSet.to_list()
@@ -5360,18 +5360,28 @@ defmodule Tempo do
   end
 
   # An exclusions-only domain (`R/^2026/P1Y/FL…N`) has no window of its own, so
-  # it needs a `:bound`: materialise the recurrence there, then subtract the
-  # excluded values.
-  def to_interval(%Tempo.Interval{from: %Tempo.Set{set: [], except: except}} = interval, opts) do
+  # it needs a `:within` window: materialise the recurrence there, then subtract
+  # the excluded values.
+  defp materialise(%Tempo.Interval{from: %Tempo.Set{set: [], except: except}} = interval, opts) do
     with {:ok, occurrences} <- to_interval(%{interval | from: nil}, opts),
          {:ok, excluded} <- to_interval(%Tempo.Set{type: :all, set: except}) do
       difference(occurrences, excluded)
     end
   end
 
-  def to_interval(%Tempo.Interval{from: from, to: to, recurrence: recurrence} = interval, opts)
-      when from in [nil, :undefined] and to in [nil, :undefined] and recurrence != 1 do
-    case Keyword.get(opts, :bound) do
+  # A recurrence with an open start — `Tempo.RRule.parse("FREQ=WEEKLY;BYDAY=MO")`
+  # ("every Monday" beginning nowhere), or the ISO 8601 holiday form
+  # `R/../P1Y/FL…N` — has no start of its own. The `:within` window supplies
+  # one: the recurrence starts at the window's start and yields every
+  # occurrence that starts within it. The start takes the recurrence's own
+  # selection resolution — day for `FL6M1K2IN` ("the 2nd Monday of June"),
+  # month for `FL6MN` ("June") — so each occurrence lands at the grain the
+  # selection names rather than being forced to a day. With no window there is
+  # nothing to start from, so it stays an error rather than reporting success
+  # while handing back the unmaterialised rule.
+  defp materialise(%Tempo.Interval{from: from, to: to, recurrence: recurrence} = interval, opts)
+       when from in [nil, :undefined] and to in [nil, :undefined] and recurrence != 1 do
+    case Keyword.get(opts, :within) do
       nil ->
         {:error,
          IntervalEndpointsError.exception(
@@ -5380,43 +5390,46 @@ defmodule Tempo do
            reason: :unanchored
          )}
 
-      bound ->
-        case bound_anchor(bound, interval) do
-          {:ok, anchor} -> materialise_from_bound(interval, anchor, bound, opts)
+      within ->
+        case bound_anchor(within, interval) do
+          {:ok, anchor} -> materialise_from_bound(interval, anchor, within, opts)
           {:error, _} = error -> error
         end
     end
   end
 
-  def to_interval(%Tempo.Interval{} = interval, _opts) do
+  defp materialise(%Tempo.Interval{} = interval, _opts) do
     {:ok, interval}
   end
 
-  def to_interval(%Tempo.IntervalSet{} = set, _opts) do
+  defp materialise(%Tempo.IntervalSet{} = set, _opts) do
     {:ok, set}
   end
 
-  # A `%Tempo.RecurrenceSet{}` materialises each member against the `:bound`
+  # A `%Tempo.RecurrenceSet{}` materialises each member in the `:within` window
   # (recurrences and nested sets) or as-is (concrete members), tags each
   # occurrence with the member's own metadata (a holiday name, say), and unions
   # them into one set carrying the recurrence set's own metadata. Conditional
-  # members resolve in a second pass over the others' occurrences.
-  def to_interval(%Tempo.RecurrenceSet{members: members, metadata: metadata}, opts) do
-    with {:ok, occurrences} <- set_member_occurrences(members, opts) do
-      IntervalSet.new(occurrences, metadata: metadata)
+  # members resolve in a second pass over the others' occurrences. The window's
+  # start rule holds for every member, a concrete one included: a one-off 2026
+  # member is not among the set's occurrences within 2027.
+  defp materialise(%Tempo.RecurrenceSet{members: members, metadata: metadata}, opts) do
+    with {:ok, occurrences} <- set_member_occurrences(members, opts),
+         {:ok, kept} <- keep_within(occurrences, opts) do
+      IntervalSet.new(kept, metadata: metadata)
     end
   end
 
   # A value's metadata (`new/1`'s `:metadata`) moves to the interval or
   # intervals it materialises to, so each endpoint is the value alone and
   # compares equal to it written plainly.
-  def to_interval(%Tempo{metadata: metadata} = tempo, opts) when map_size(metadata) > 0 do
+  defp materialise(%Tempo{metadata: metadata} = tempo, opts) when map_size(metadata) > 0 do
     with {:ok, materialised} <- to_interval(%{tempo | metadata: %{}}, opts) do
       {:ok, with_value_metadata(materialised, metadata)}
     end
   end
 
-  def to_interval(%Tempo{time: time} = tempo, opts) do
+  defp materialise(%Tempo{time: time} = tempo, opts) do
     case Enum.split_while(time, &(not match?({:selection, _}, &1))) do
       {context, [{:selection, selection} | trailing]} ->
         materialise_selection(tempo, context, selection, trailing, opts)
@@ -5437,18 +5450,18 @@ defmodule Tempo do
   # Exclusion members (`^x`, carried in `:except`) are subtracted
   # from the plain members — `{2020..2030, ^2026}` is the range
   # 2020–2030 with 2026 removed.
-  def to_interval(%Tempo.Set{type: :all, set: members, except: [_ | _] = except}, opts) do
+  defp materialise(%Tempo.Set{type: :all, set: members, except: [_ | _] = except}, opts) do
     with {:ok, included} <- members_to_interval_set(members),
          {:ok, excluded} <- members_to_interval_set(except) do
       difference(included, excluded, opts)
     end
   end
 
-  def to_interval(%Tempo.Set{type: :all, set: members}, _opts) do
+  defp materialise(%Tempo.Set{type: :all, set: members}, _opts) do
     members_to_interval_set(members)
   end
 
-  def to_interval(%Tempo.Set{type: :one} = value, _opts) do
+  defp materialise(%Tempo.Set{type: :one} = value, _opts) do
     {:error, MaterialisationError.exception(value: value, reason: :one_of_set)}
   end
 
@@ -5456,7 +5469,7 @@ defmodule Tempo do
   # so it materialises to every value from `first` to `last` at the range's own
   # resolution — a year range yields years, a month range months. An open-ended
   # range (`:undefined` endpoint) spans no finite set and cannot materialise.
-  def to_interval(%Tempo.Range{first: %Tempo{} = first, last: %Tempo{} = last}, _opts) do
+  defp materialise(%Tempo.Range{first: %Tempo{} = first, last: %Tempo{} = last}, _opts) do
     {unit, _level} = resolution(first)
 
     first
@@ -5465,25 +5478,51 @@ defmodule Tempo do
     |> members_to_interval_set()
   end
 
-  def to_interval(%Tempo.Range{} = range, _opts) do
+  defp materialise(%Tempo.Range{} = range, _opts) do
     {:error, MaterialisationError.exception(value: range, reason: :open_range)}
   end
 
-  def to_interval(%Tempo.Duration{} = value, _opts) do
+  defp materialise(%Tempo.Duration{} = value, _opts) do
     {:error, MaterialisationError.exception(value: value, reason: :bare_duration)}
   end
 
-  # The `:bound` supplies the anchor, at its start. The anchor is aligned to the
-  # start of the cadence period it sits in, so the recurrence walks whole
-  # calendar periods — a `P1Y` cadence whole calendar years, `P1M` whole months,
-  # `P1W` whole weeks from their Monday — and every period the bound overlaps is
-  # walked; the occurrences are then kept by start within the bound. Unaligned, a
-  # period boundary falls mid-period, and the last period the bound reaches into
-  # is never walked (`R/../P1Y/FL1M15DN` over September 2026 to March 2027 lost
+  # A recurrence with no end is ended by the caller's `:within` window; with
+  # none it cannot be materialised.
+  defp materialise_unending(interval, nil, _opts),
+    do: {:error, UnboundedRecurrenceError.exception(interval: interval)}
+
+  defp materialise_unending(
+         %Tempo.Interval{from: from, duration: duration} = interval,
+         within,
+         opts
+       ) do
+    with {:ok, window_to} <- bound_upper(within),
+         {from, interval} = fill_selection_anchor(from, interval),
+         intervals =
+           iterate_recurrence(
+             from,
+             duration,
+             occurrence_end_fn(from, duration, interval),
+             &under_bound?(&1, window_to),
+             selection_fn(interval, duration),
+             interval.metadata
+           ),
+         {:ok, kept} <- keep_within(intervals, opts) do
+      IntervalSet.new(kept, coalesce: coalesce_opt(opts))
+    end
+  end
+
+  # The `:within` window supplies the recurrence's start, at the window's start.
+  # The start is aligned to the start of the cadence period it sits in, so the
+  # recurrence walks whole calendar periods — a `P1Y` cadence whole calendar
+  # years, `P1M` whole months, `P1W` whole weeks from their Monday — and every
+  # period the window overlaps is walked; the occurrences are then kept by
+  # overlap with the window. Unaligned, a period boundary falls mid-period, and
+  # the last period the window reaches into is never walked (`R/../P1Y/FL1M15DN` over September 2026 to March 2027 lost
   # 15 January 2027). When the selection resolves in another calendar — an IXDTF
   # `[u-ca=…]` suffix on the whole expression, carried on the `repeat_rule` —
-  # the anchor is converted into that calendar first, so the periods are that
-  # calendar's and the selection resolves in-calendar, with the bound
+  # the start is converted into that calendar first, so the periods are that
+  # calendar's and the selection resolves in-calendar, with the window
   # intersection converting back. This makes `R/../P1Y/FL1M1DN[u-ca=persian]`
   # behave like the calendared-anchor form `R/<persian new year>/P1Y[u-ca=persian]`.
   defp anchor_in_repeat_calendar(
@@ -5572,60 +5611,60 @@ defmodule Tempo do
     end
   end
 
-  # An unanchored recurrence keeps the occurrences that start in its bound,
-  # `[bound_from, bound_to)`. The periods it walks can place one outside: a
-  # calendar-aligned recurrence walks whole calendar years, so the year it
-  # anchors on can start before `bound_from` or straddle `bound_to`, and in any
-  # calendar a period that starts inside the bound can select a day at or after
-  # its end (`R/../P1Y/FL9M23DN` over `[1 Sep, 23 Sep)` selects 23 September).
-  # Trim the materialised set to the window.
+  # A recurrence with an open start keeps the occurrences that overlap its
+  # window, `[window_from, window_to)`. The periods it walks can place one
+  # outside: a calendar-aligned recurrence walks whole calendar years, so the
+  # year it starts in can begin before `window_from` or straddle `window_to`, and
+  # in any calendar a period that starts inside the window can select a day at
+  # or after its end (`R/../P1Y/FL9M23DN` over `[1 Sep, 23 Sep)` selects 23
+  # September). Trim the materialised set to the window.
   defp filter_to_bound_window(
          {:ok, %Tempo.IntervalSet{}} = result,
          %Tempo.Interval{repeat_rule: %Tempo{}},
-         bound,
-         mode
+         within
        ) do
-    case bound_upper(bound) do
-      {:ok, bound_to} -> keep_occurrences_in_window(result, {bound_lower(bound), bound_to}, mode)
+    case bound_upper(within) do
+      {:ok, window_to} -> keep_occurrences_in_window(result, {bound_lower(within), window_to})
       _no_upper_edge -> result
     end
   end
 
-  defp filter_to_bound_window(result, _interval, _bound, _mode), do: result
+  defp filter_to_bound_window(result, _interval, _within), do: result
 
-  # Materialise an unanchored recurrence from its bound's anchor. A §12.10 window
-  # can move an occurrence off the period whose selection produced it — a Saturday
-  # 1 January observed the previous Friday lands in the year before, a Saturday
-  # 31 December observed the following Monday in the year after — so a windowed
-  # recurrence also walks as many periods either side of the bound as the window
-  # can reach across, and keeps the occurrences that start inside the bound.
-  defp materialise_from_bound(interval, anchor, bound, opts) do
+  # Materialise a recurrence with an open start from its window's start. A
+  # §12.10 window can move an occurrence off the period whose selection produced
+  # it — a Saturday 1 January observed the previous Friday lands in the year
+  # before, a Saturday 31 December observed the following Monday in the year
+  # after — so a windowed recurrence also walks as many periods either side of
+  # the window as the §12.10 window can reach across, and keeps the occurrences
+  # that overlap the window.
+  defp materialise_from_bound(interval, anchor, within, opts) do
     case window_periods(interval) do
       {0, 0} ->
         %{interval | from: anchor_in_repeat_calendar(anchor, interval)}
         |> to_interval(opts)
-        |> filter_to_bound_window(interval, bound, bound_keep_mode(opts))
+        |> filter_to_bound_window(interval, within)
 
       periods ->
-        materialise_windowed(interval, anchor, bound, periods, opts)
+        materialise_windowed(interval, anchor, within, periods, opts)
     end
   end
 
   defp materialise_windowed(
          %Tempo.Interval{duration: cadence} = interval,
          anchor,
-         bound,
+         within,
          {periods_before, periods_after},
          opts
        ) do
-    with {:ok, bound_to} <- bound_upper(bound) do
+    with {:ok, window_to} <- bound_upper(within) do
       widened_from = add_n_durations(anchor, negate_duration(cadence), periods_before)
-      widened_to = add_n_durations(bound_to, cadence, periods_after)
+      widened_to = add_n_durations(window_to, cadence, periods_after)
       widened = %Tempo.Interval{from: widened_from, to: widened_to}
 
       %{interval | from: anchor_in_repeat_calendar(widened_from, interval)}
-      |> to_interval(Keyword.put(opts, :bound, widened))
-      |> keep_occurrences_in_window({bound_lower(bound), bound_to}, bound_keep_mode(opts))
+      |> to_interval(Keyword.put(opts, :within, widened))
+      |> keep_occurrences_in_window({bound_lower(within), window_to})
     end
   end
 
@@ -5732,7 +5771,7 @@ defmodule Tempo do
   ## Recurrence-expansion helpers
   ##
   ## `iterate_recurrence/5` is the single stepwise expander used
-  ## by both the UNTIL and :bound clauses above. The only
+  ## by both the UNTIL and :within clauses above. The only
   ## difference between the two is the termination predicate;
   ## factoring it out keeps the interpreter's loop authoritative
   ## and eliminates parallel engines in calling modules.
@@ -5763,7 +5802,7 @@ defmodule Tempo do
   #
   # * `start_predicate` drives upstream termination — returns
   #   `true` while the candidate's start is still in-bounds
-  #   (pre-filter), `false` once we're past UNTIL / the `:bound`.
+  #   (pre-filter), `false` once we're past UNTIL / the `:within` window's end.
   #
   # * `selection_fn` is the BY-rule resolver. It takes one
   #   candidate `%Interval{}` and returns a list (0 for LIMIT
@@ -5999,11 +6038,6 @@ defmodule Tempo do
     Compare.compare_endpoints(from, bound_to) == :earlier
   end
 
-  defp starts_under_bound?(%Tempo.Interval{from: %Tempo{} = from}, bound_to),
-    do: under_bound?(from, bound_to)
-
-  defp starts_under_bound?(_occurrence, _bound_to), do: true
-
   defp starts_under_until?(%Tempo.Interval{from: %Tempo{} = from}, until),
     do: under_until?(from, until)
 
@@ -6013,17 +6047,12 @@ defmodule Tempo do
     Compare.compare_endpoints(from, bound_from) in [:same, :later]
   end
 
-  # An occurrence lies in the half-open bound window `[bound_from, bound_to)`.
-  # A nil `bound_from` (empty bound) enforces only the upper edge.
-  defp in_bound_window?(%Tempo{} = from, nil, %Tempo{} = bound_to) do
-    under_bound?(from, bound_to)
+  # A start lies in the half-open span `[span_from, span_to)`.
+  defp in_bound_window?(%Tempo{} = from, %Tempo{} = span_from, %Tempo{} = span_to) do
+    at_or_after_bound?(from, span_from) and under_bound?(from, span_to)
   end
 
-  defp in_bound_window?(%Tempo{} = from, %Tempo{} = bound_from, %Tempo{} = bound_to) do
-    at_or_after_bound?(from, bound_from) and under_bound?(from, bound_to)
-  end
-
-  # Compute the upper endpoint of a `:bound` option. Accepts any
+  # Compute the upper endpoint of a `:within` window. Accepts any
   # Tempo value that `to_interval_set/1` handles; uses the
   # highest `:to` across the set's intervals as the termination
   # boundary.
@@ -6038,7 +6067,7 @@ defmodule Tempo do
     if IntervalSet.empty?(set) do
       {:error,
        UnboundedRecurrenceError.exception(
-         reason: "Empty `:bound` — nothing to terminate the recurrence against."
+         reason: "An empty `:within` window — nothing to end the recurrence against."
        )}
     else
       upper =
@@ -6051,10 +6080,10 @@ defmodule Tempo do
     end
   end
 
-  # The lower endpoint of a `:bound` — the earliest `:from` across its
-  # intervals. Used to drop occurrences that a calendar-aligned anchor places
-  # before the window (an anchor at the start of the calendar year that
-  # contains the bound's start can precede the bound itself). `nil` when the
+  # The lower endpoint of a `:within` window — the earliest `:from` across its
+  # intervals. Used to drop occurrences that a calendar-aligned start places
+  # before the window (a start at the beginning of the calendar year that
+  # contains the window's start can precede the window itself). `nil` when the
   # bound is empty, so the window has no lower edge to enforce.
   defp bound_lower(bound) do
     case to_interval_set(bound) do
@@ -6074,8 +6103,8 @@ defmodule Tempo do
     end
   end
 
-  # The anchor for an unanchored recurrence materialised against a
-  # `:bound`: the bound's lower endpoint, taken at the resolution the
+  # The start for a recurrence with an open start, materialised in a `:within`
+  # window: the window's lower endpoint, taken at the resolution the
   # recurrence's selection names — day for `FL6M1K2IN` ("the 2nd Monday
   # of June"), month for `FL6MN` ("June"), hour for a time-of-day rule.
   # Anchoring at that grain (rather than always a day) is what lets a
@@ -6176,7 +6205,7 @@ defmodule Tempo do
 
   defp empty_bound_error do
     UnboundedRecurrenceError.exception(
-      reason: "Empty `:bound` — no anchor to start the recurrence from."
+      reason: "An empty `:within` window — nothing to start the recurrence from."
     )
   end
 
@@ -6373,22 +6402,31 @@ defmodule Tempo do
 
   # Materialise a recurrence's selection once per year of its domain (each an
   # interval from the domain set), unioning the occurrences. The domain year is
-  # passed as the `:bound`, so the existing bound-materialisation projects the
-  # selection onto it.
+  # passed as the `:within` window, so the open-start materialisation projects
+  # the selection onto it.
   # Adjacent domain periods — each starting where the one before ends, as the
   # years of `{2020Y..2024Y}` do — run as one recurrence across them, so the
-  # periods a window must look into beyond its bound are looked into once per
-  # run rather than once per period. A run spans only domain periods, so it
-  # keeps exactly the occurrences the periods would each keep.
+  # periods a §12.10 window must look into beyond the run are looked into once
+  # per run rather than once per period. A run keeps the occurrences that start
+  # within it — exactly those its periods would each keep — so a neighbouring
+  # year outside the domain contributes none.
   defp reduce_domain_occurrences(domain_intervals, %Tempo.Interval{} = interval, opts) do
     domain_intervals
     |> adjacent_periods()
     |> Enum.reduce_while({:ok, []}, fn {first, last}, {:ok, acc} ->
-      bound = %Tempo.Interval{from: Interval.from(first), to: Interval.to(last)}
+      run_from = Interval.from(first)
+      run_to = Interval.to(last)
+      run = %Tempo.Interval{from: run_from, to: run_to}
 
-      case to_interval(%{interval | from: nil}, Keyword.put(opts, :bound, bound)) do
-        {:ok, %Tempo.IntervalSet{} = set} -> {:cont, {:ok, acc ++ IntervalSet.to_list(set)}}
-        {:error, _} = err -> {:halt, err}
+      case to_interval(%{interval | from: nil}, Keyword.put(opts, :within, run)) do
+        {:ok, %Tempo.IntervalSet{} = set} ->
+          own =
+            set |> IntervalSet.to_list() |> Enum.filter(&starts_in_window?(&1, run_from, run_to))
+
+          {:cont, {:ok, acc ++ own}}
+
+        {:error, _} = err ->
+          {:halt, err}
       end
     end)
     |> case do
@@ -6420,13 +6458,14 @@ defmodule Tempo do
 
   defp adjacent_period?(_previous, _next), do: false
 
-  # A caller's `:bound` as a half-open `{bound_from, bound_to}` start window, or
-  # `:none` when no bound is given and the domain alone bounds the recurrence.
-  defp domain_bound_window(opts) do
-    case Keyword.fetch(opts, :bound) do
-      {:ok, bound} ->
-        with {:ok, bound_to} <- bound_upper(bound) do
-          {:ok, {bound_lower(bound), bound_to}}
+  # A caller's `:within` as a half-open `{window_from, window_to}` start window,
+  # or `:none` when no window is given (a domain, a count or an UNTIL then
+  # bounds the recurrence alone).
+  defp within_window(opts) do
+    case Keyword.fetch(opts, :within) do
+      {:ok, within} ->
+        with {:ok, window_to} <- bound_upper(within) do
+          {:ok, {bound_lower(within), window_to}}
         end
 
       :error ->
@@ -6434,54 +6473,76 @@ defmodule Tempo do
     end
   end
 
-  # A domain period only yields occurrences that start inside it, so a period
-  # that does not meet the window is skipped rather than materialised.
-  defp domain_period_in_window?(_period, :none), do: true
-
-  defp domain_period_in_window?(
-         %Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to},
-         {bound_from, bound_to}
-       ) do
-    under_bound?(from, bound_to) and (is_nil(bound_from) or under_bound?(bound_from, to))
+  # One rule for every recurrence: the occurrences kept are those that overlap
+  # the caller's window, `[from, to)` — one already in progress when the window
+  # opens, and one that runs past its end. No window keeps them all.
+  defp keep_within(occurrences, opts) do
+    with {:ok, window} <- within_window(opts) do
+      {:ok, occurrences_in_window(occurrences, window)}
+    end
   end
 
-  defp domain_period_in_window?(_period, _window), do: true
+  defp occurrences_in_window(occurrences, :none), do: occurrences
 
-  defp keep_occurrences_in_window(result, :none, _mode), do: result
+  defp occurrences_in_window(occurrences, {window_from, window_to}) do
+    Enum.filter(occurrences, &overlaps_window?(&1, window_from, window_to))
+  end
 
-  defp keep_occurrences_in_window(
-         {:ok, %Tempo.IntervalSet{} = set},
-         {bound_from, bound_to},
-         mode
-       ) do
+  # A domain period is materialised when an occurrence it yields can overlap
+  # the window: the periods the window overlaps, and as many either side as a
+  # §12.10 window can reach across (a December–January break yielded by 2025
+  # overlaps a window in January 2026). The rest are skipped.
+  defp domain_period_in_window?(_period, :none), do: true
+
+  defp domain_period_in_window?(%Tempo.Interval{} = period, {window_from, window_to}),
+    do: overlaps_window?(period, window_from, window_to)
+
+  defp domain_reach_window(:none, _interval), do: :none
+
+  defp domain_reach_window({window_from, window_to} = window, %Tempo.Interval{} = interval) do
+    case window_periods(interval) do
+      {0, 0} ->
+        window
+
+      {periods_before, periods_after} ->
+        cadence = interval.duration
+
+        {window_from && add_n_durations(window_from, negate_duration(cadence), periods_before),
+         add_n_durations(window_to, cadence, periods_after)}
+    end
+  end
+
+  defp keep_occurrences_in_window(result, :none), do: result
+
+  defp keep_occurrences_in_window({:ok, %Tempo.IntervalSet{} = set}, window) do
     set
     |> IntervalSet.to_list()
-    |> Enum.filter(&occurrence_kept?(&1, bound_from, bound_to, mode))
+    |> occurrences_in_window(window)
     |> IntervalSet.new()
   end
 
-  defp keep_occurrences_in_window({:error, _} = error, _window, _mode), do: error
+  defp keep_occurrences_in_window({:error, _} = error, _window), do: error
 
-  # A bound keeps the occurrences that start in its window — or, with
-  # `overlapping: true` (as a set operation materialises against its other
-  # operand), those that overlap it, so a day's holiday meets a meeting at 10:00
-  # that day.
-  defp occurrence_kept?(%Tempo.Interval{from: %Tempo{} = from}, bound_from, bound_to, :start),
-    do: in_bound_window?(from, bound_from, bound_to)
-
-  defp occurrence_kept?(
+  # An occurrence overlaps the window `[window_from, window_to)` when it starts
+  # before the window's end and ends after its start — so one that only touches
+  # an edge does not. A nil `window_from` (an empty window) enforces only the
+  # upper edge.
+  defp overlaps_window?(
          %Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to},
-         bound_from,
-         bound_to,
-         :overlap
+         window_from,
+         window_to
        ),
-       do: under_bound?(from, bound_to) and (is_nil(bound_from) or under_bound?(bound_from, to))
+       do:
+         under_bound?(from, window_to) and (is_nil(window_from) or under_bound?(window_from, to))
 
-  defp occurrence_kept?(_occurrence, _bound_from, _bound_to, _mode), do: true
+  defp overlaps_window?(_occurrence, _window_from, _window_to), do: true
 
-  defp bound_keep_mode(opts) do
-    if Keyword.get(opts, :overlapping) == true, do: :overlap, else: :start
-  end
+  # A domain run keeps the occurrences its own periods yield: those that start
+  # within the run's span. (The caller's window then keeps those that overlap it.)
+  defp starts_in_window?(%Tempo.Interval{from: %Tempo{} = from}, window_from, window_to),
+    do: in_bound_window?(from, window_from, window_to)
+
+  defp starts_in_window?(_occurrence, _window_from, _window_to), do: true
 
   # Close an open-ended domain range against the bound's window: a missing upper
   # end becomes the bound's end and a missing lower end the bound's start, each
@@ -6620,10 +6681,11 @@ defmodule Tempo do
   end
 
   # The second pass — date-holidays' `PostRule`, generalised. Every member's
-  # occurrences over the bound widened by the conditions' reach are the tally a
-  # condition reads; each conditional resolves its own occurrences against the
-  # others' and keeps those starting in the bound. The other members materialise
-  # over the bound itself, exactly as in a set without conditionals.
+  # occurrences over the `:within` window widened by the conditions' reach are
+  # the tally a condition reads; each conditional resolves its own occurrences
+  # against the others' and keeps those that overlap the window. The other
+  # members materialise over the window itself, exactly as in a set without
+  # conditionals.
   defp conditional_set_occurrences(members, opts) do
     {conditionals, others} = Enum.split_with(members, &match?(%Conditional{}, &1))
 
@@ -6638,7 +6700,7 @@ defmodule Tempo do
             occurrence <- occurrences,
             outcome <-
               resolve_conditional_occurrence(occurrence, conditional, Map.get(reads, index, [])),
-            in_conditional_window?(outcome, window, bound_keep_mode(opts)),
+            in_conditional_window?(outcome, window),
             do: outcome
 
       {:ok, others_occurrences ++ resolved}
@@ -6715,12 +6777,13 @@ defmodule Tempo do
     {:ok, spans}
   end
 
-  # The bound, and the bound widened by the conditions' reach — each `:at` offset
-  # from either edge, and a move's search span back from the lower edge — so a
-  # condition near an edge reads the occurrences just outside it. Without a bound
-  # (or with an empty one) the members bound themselves and nothing widens.
+  # The `:within` window, and the window widened by the conditions' reach — each
+  # `:at` offset from either edge, and a move's search span back from the lower
+  # edge — so a condition near an edge reads the occurrences just outside it.
+  # Without a window (or with an empty one) the members bound themselves and
+  # nothing widens.
   defp conditional_window(conditionals, opts) do
-    case Keyword.fetch(opts, :bound) do
+    case Keyword.fetch(opts, :within) do
       {:ok, bound} -> widened_bound_window(bound, conditionals)
       :error -> {:ok, :none}
     end
@@ -6756,12 +6819,12 @@ defmodule Tempo do
   defp widened_opts(opts, :none), do: opts
 
   defp widened_opts(opts, {_bound_from, _bound_to, widened}),
-    do: Keyword.put(opts, :bound, widened)
+    do: Keyword.put(opts, :within, widened)
 
-  defp in_conditional_window?(_occurrence, :none, _mode), do: true
+  defp in_conditional_window?(_occurrence, :none), do: true
 
-  defp in_conditional_window?(occurrence, {bound_from, bound_to, _widened}, mode),
-    do: occurrence_kept?(occurrence, bound_from, bound_to, mode)
+  defp in_conditional_window?(occurrence, {window_from, window_to, _widened}),
+    do: overlaps_window?(occurrence, window_from, window_to)
 
   # Every member's occurrences, a conditional's being its member's, tagged with
   # the conditional's metadata as a nested set's are.
@@ -6926,8 +6989,10 @@ defmodule Tempo do
 
   ### Options
 
-  * `:bound` is the window an unbounded recurrence (or a
-    `t:Tempo.RecurrenceSet.t/0` of them) materialises across.
+  * `:within` is the window whose occurrences you want. Every
+    recurrence (or a `t:Tempo.RecurrenceSet.t/0` of them) keeps the
+    occurrences that overlap it — one already in progress when the
+    window opens, and one that runs past its end. See `to_interval/2`.
 
   ### Returns
 
@@ -7111,15 +7176,15 @@ defmodule Tempo do
   # (§12.11.2). Each period of the context (a year, or a month of a year)
   # resolves the selection once, so a set or mask of years
   # (`XXX{0,2,4,6,8}Y11MLLL1K1IN/P9DN2K1IN`, US Election Day) costs one
-  # selection per year it names. A `:bound` keeps the dates that start in it
-  # and narrows the years before any is resolved; a context without a year
-  # takes its years from the bound, so it needs one.
+  # selection per year it names. A `:within` window keeps the dates that overlap
+  # it and narrows the years before any is resolved; a context without a year
+  # takes its years from the window, so it needs one.
   defp materialise_selection(%Tempo{} = tempo, context, selection, trailing, opts) do
     rule = %{tempo | time: [selection: selection]}
     cadence = %Tempo.Duration{time: [{selection_cadence_unit(context), 1}]}
     finer_context = Keyword.delete(context, :year)
 
-    with {:ok, window} <- domain_bound_window(opts),
+    with {:ok, window} <- within_window(opts),
          {:ok, years} <- selection_years(tempo, Keyword.get(context, :year), window) do
       for year <- years,
           member <- context_members(%{tempo | time: [{:year, year} | finer_context]}),
@@ -7127,7 +7192,7 @@ defmodule Tempo do
         occurrence
       end
       |> IntervalSet.new()
-      |> keep_occurrences_in_window(window, bound_keep_mode(opts))
+      |> keep_occurrences_in_window(window)
       |> with_trailing_units(trailing)
     end
   end
@@ -7151,7 +7216,7 @@ defmodule Tempo do
     {:error,
      UnboundedRecurrenceError.exception(
        reason:
-         "#{inspect(tempo)} selects in every year, so it needs a :bound — " <>
+         "#{inspect(tempo)} selects in every year, so it needs a :within window — " <>
            "any Tempo value that limits the years."
      )}
   end
@@ -7369,13 +7434,15 @@ defmodule Tempo do
   defdelegate intersection(a, b, opts \\ []), to: Tempo.Operations
 
   @doc """
-  Complement of a Tempo value within a bounding universe. The
-  `:bound` option is required. See `Tempo.Operations.complement/2`.
+  Complement of a Tempo value within a window — the instants of the
+  `:within` window it does not cover. The `:within` option is
+  required. See `Tempo.Operations.complement/2`.
+
   ### Examples
 
 
       iex> meeting = ~o"2026-06-15T10:00/2026-06-15T11:00"
-      iex> {:ok, free} = Tempo.complement(meeting, bound: ~o"2026-06-15T09:00/2026-06-15T17:00")
+      iex> {:ok, free} = Tempo.complement(meeting, within: ~o"2026-06-15T09:00/2026-06-15T17:00")
       iex> free
       #Tempo.IntervalSet<[~o"2026Y6M15DT9H0M/T10H0M", ~o"2026Y6M15DT11H0M/T17H0M"]>
 
@@ -7914,8 +7981,13 @@ defmodule Tempo do
   `true` when `a` fits inside `b` inclusive of shared
   endpoints. The canonical "does this fit inside that window?"
   predicate. See `Tempo.Interval.within?/2`.
-  ### Examples
 
+  `within?/2` asks about the whole of `a`. The `:within` option of
+  `to_interval_set/2` and the set operations is looser: it keeps
+  every occurrence that overlaps its window, one already in
+  progress when the window opens included.
+
+  ### Examples
 
       iex> Tempo.within?(~o"2026-06-01/2026-06-15", ~o"2026-06")
       true
@@ -8281,7 +8353,7 @@ defmodule Tempo do
   member is one weekend day's span, generated on demand and never
   materialised in full. Use it wherever a walk suffices — most
   naturally as a `Tempo.shift/3` `skipping:` busy set, with no
-  `:bound` required:
+  `:within` window required:
 
       Tempo.shift(start, ~o"P3D", skipping: Tempo.weekends(from: start))
 

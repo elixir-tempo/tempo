@@ -105,14 +105,16 @@ defmodule Tempo.RRule.ExpanderTest do
       assert Enum.map(occurrences, & &1.from.time[:day]) == [1, 8, 15, 22, 29]
     end
 
-    test "unbounded rule with :bound materialises within the bound" do
+    test "unbounded rule with :within materialises within the window" do
       rule = %Rule{freq: :day}
-      {:ok, occurrences} = Expander.expand(rule, ~o"2022-06-01", bound: ~o"2022-06-01/2022-06-08")
+
+      {:ok, occurrences} =
+        Expander.expand(rule, ~o"2022-06-01", within: ~o"2022-06-01/2022-06-08")
 
       assert length(occurrences) == 7
     end
 
-    test "unbounded rule with no :bound errors cleanly" do
+    test "unbounded rule with no :within window errors cleanly" do
       rule = %Rule{freq: :day}
       {:error, reason} = Expander.expand(rule, ~o"2022-06-01")
 

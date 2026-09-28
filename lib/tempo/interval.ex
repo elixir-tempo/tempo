@@ -2065,6 +2065,11 @@ defmodule Tempo.Interval do
   endpoints (Allen's `:equals | :starts | :during | :finishes`).
   The canonical "does this fit inside that window?" predicate.
 
+  `within?/2` asks about the whole of `a`. The `:within` option of
+  `Tempo.to_interval_set/2` and the set operations is looser: it
+  keeps every occurrence that overlaps its window, one already in
+  progress when the window opens included.
+
   ### Examples
 
       iex> a = %Tempo.Interval{from: ~o"2026-06-15T10", to: ~o"2026-06-15T11"}

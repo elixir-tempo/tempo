@@ -118,7 +118,7 @@ defmodule Tempo.CalendarTest do
     test "a Julian recurrence materialises to the Gregorian day it falls on" do
       # Orthodox Christmas: Julian 25 December, projected onto Gregorian 2026.
       {:ok, recurrence} = Tempo.from_iso8601("R/2025Y12M25D/P1Y[u-ca=julian]")
-      {:ok, set} = Tempo.to_interval(recurrence, bound: Tempo.from_iso8601!("2026Y"))
+      {:ok, set} = Tempo.to_interval(recurrence, within: Tempo.from_iso8601!("2026Y"))
 
       assert gregorian_days(set) == ["2026-01-07"]
     end
@@ -154,7 +154,7 @@ defmodule Tempo.CalendarTest do
       {:ok, orthodox_christmas} = Tempo.from_iso8601("R/../P1Y/FL12M25DN[u-ca=julian]")
       assert orthodox_christmas.repeat_rule.calendar == Calendrical.Julian
 
-      {:ok, set} = Tempo.to_interval(orthodox_christmas, bound: Tempo.from_iso8601!("2026Y"))
+      {:ok, set} = Tempo.to_interval(orthodox_christmas, within: Tempo.from_iso8601!("2026Y"))
       assert gregorian_days(set) == ["2026-01-07"]
     end
 
@@ -167,7 +167,7 @@ defmodule Tempo.CalendarTest do
 
       for {iso, gregorian} <- cases do
         {:ok, recurrence} = Tempo.from_iso8601(iso)
-        {:ok, set} = Tempo.to_interval(recurrence, bound: Tempo.from_iso8601!("2026Y"))
+        {:ok, set} = Tempo.to_interval(recurrence, within: Tempo.from_iso8601!("2026Y"))
         assert gregorian_days(set) == [gregorian], "#{iso} should fall on #{gregorian}"
       end
     end
@@ -176,7 +176,7 @@ defmodule Tempo.CalendarTest do
       # A synthesised anchor still yields self-describing `[u-ca=cal]` values, so
       # a materialised occurrence is struct-equal to the date written by hand.
       {:ok, orthodox_christmas} = Tempo.from_iso8601("R/../P1Y/FL12M25DN[u-ca=julian]")
-      {:ok, set} = Tempo.to_interval(orthodox_christmas, bound: Tempo.from_iso8601!("2025Y"))
+      {:ok, set} = Tempo.to_interval(orthodox_christmas, within: Tempo.from_iso8601!("2025Y"))
       [occurrence] = IntervalSet.to_list(set)
 
       assert Interval.from(occurrence) == Tempo.from_iso8601!("2024Y12M25D[u-ca=julian]")
@@ -186,7 +186,7 @@ defmodule Tempo.CalendarTest do
       # Islamic New Year fell twice in 2008 — 10 January and 29 December —
       # because the Hijri year is ~11 days shorter than the Gregorian one.
       {:ok, islamic_new_year} = Tempo.from_iso8601("R/../P1Y/FL1M1DN[u-ca=islamic]")
-      {:ok, set} = Tempo.to_interval(islamic_new_year, bound: Tempo.from_iso8601!("2008Y"))
+      {:ok, set} = Tempo.to_interval(islamic_new_year, within: Tempo.from_iso8601!("2008Y"))
 
       assert gregorian_days(set) == ["2008-01-10", "2008-12-29"]
     end
@@ -206,7 +206,7 @@ defmodule Tempo.CalendarTest do
       {:ok, christmas} = Tempo.from_iso8601("R/../P1Y/FL12M25DN")
       assert Tempo.to_iso8601(christmas) == "R/../P1Y/FL12M25DN"
 
-      {:ok, set} = Tempo.to_interval(christmas, bound: Tempo.from_iso8601!("2026Y"))
+      {:ok, set} = Tempo.to_interval(christmas, within: Tempo.from_iso8601!("2026Y"))
       assert gregorian_days(set) == ["2026-12-25"]
     end
   end
@@ -293,7 +293,7 @@ defmodule Tempo.CalendarTest do
     test "resolves to the true traditional month per year, tracking leap shifts" do
       {:ok, rec} = Tempo.from_iso8601("R/../P1Y/FL8m15DN[u-ca=chinese]")
       {:ok, bound} = Tempo.from_iso8601("2024Y/2027Y")
-      {:ok, set} = Tempo.to_interval(rec, bound: bound)
+      {:ok, set} = Tempo.to_interval(rec, within: bound)
       months = set |> IntervalSet.to_list() |> Enum.map(&Interval.from(&1).time[:month])
       # 4662 carries a leap month, so traditional 8 is ordinal 9 there; the
       # common years 4661 and 4663 keep it at ordinal 8.
@@ -303,7 +303,7 @@ defmodule Tempo.CalendarTest do
     test "a leap-month selection occurs only in years that carry it" do
       {:ok, rec} = Tempo.from_iso8601("R/../P1Y/FL6+m1DN[u-ca=chinese]")
       {:ok, bound} = Tempo.from_iso8601("2023Y/2028Y")
-      {:ok, set} = Tempo.to_interval(rec, bound: bound)
+      {:ok, set} = Tempo.to_interval(rec, within: bound)
 
       year_months =
         set
@@ -349,7 +349,7 @@ defmodule Tempo.CalendarTest do
     test "a selection is Passover every year" do
       {:ok, rec} = Tempo.from_iso8601("R/../P1Y/FL7m15DN[u-ca=hebrew]")
       {:ok, bound} = Tempo.from_iso8601("2026Y/2030Y")
-      {:ok, set} = Tempo.to_interval(rec, bound: bound)
+      {:ok, set} = Tempo.to_interval(rec, within: bound)
 
       assert gregorian_days(set) == ["2026-04-02", "2027-04-22", "2028-04-11", "2029-03-31"]
     end
@@ -357,7 +357,7 @@ defmodule Tempo.CalendarTest do
     test "an Adar I selection occurs only in leap years" do
       {:ok, rec} = Tempo.from_iso8601("R/../P1Y/FL5+m1DN[u-ca=hebrew]")
       {:ok, bound} = Tempo.from_iso8601("2026Y/2030Y")
-      {:ok, set} = Tempo.to_interval(rec, bound: bound)
+      {:ok, set} = Tempo.to_interval(rec, within: bound)
 
       assert [%Interval{} = adar_i] = IntervalSet.to_list(set)
       assert Interval.from(adar_i).time[:year] == 5787

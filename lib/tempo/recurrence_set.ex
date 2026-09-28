@@ -137,7 +137,7 @@ defmodule Tempo.RecurrenceSet do
       ...>     Tempo.put_metadata(~o"2026-09-23", %{type: :public}),
       ...>     citizens_holiday
       ...>   ])
-      iex> {:ok, set} = Tempo.to_interval_set(holidays, bound: ~o"2026Y9M")
+      iex> {:ok, set} = Tempo.to_interval_set(holidays, within: ~o"2026Y9M")
       iex> Tempo.IntervalSet.count(set)
       3
 

@@ -34,7 +34,7 @@ defimpl Enumerable, for: Tempo.Interval do
   # so a bounded recurrence yields the sub-points of every occurrence.
   # An unbounded recurrence cannot be materialised and raises
   # `Tempo.UnboundedRecurrenceError` directing the caller to
-  # `Tempo.to_interval/2` with a `:bound`.
+  # `Tempo.to_interval/2` with a `:within` window.
 
   @impl Enumerable
   def count(%Tempo.Interval{recurrence: recurrence}) when recurrence != 1 do
@@ -130,7 +130,7 @@ defimpl Enumerable, for: Tempo.Interval do
     # A recurring interval enumerates as its materialised occurrences.
     # `to_interval/1` expands a bounded recurrence to an IntervalSet;
     # an unbounded one returns `UnboundedRecurrenceError` (raised with
-    # its own `:bound` direction); a shape it cannot expand (an
+    # its own `:within` direction); a shape it cannot expand (an
     # `Rn/from/to` repetition) comes back unchanged and is refused
     # like the crisp API refuses it — never re-entered.
     case Tempo.to_interval(interval) do

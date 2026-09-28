@@ -51,17 +51,17 @@ defmodule Tempo.DomainFilterTest do
 
   describe "open domain filter ..e/o/l/c" do
     test "e keeps the even years within the bound" do
-      {:ok, set} = Tempo.to_interval(~o"R/..e/P1Y/FL12M25DN", bound: ~o"{2000..2010}Y")
+      {:ok, set} = Tempo.to_interval(~o"R/..e/P1Y/FL12M25DN", within: ~o"{2000..2010}Y")
       assert years(set) == [2000, 2002, 2004, 2006, 2008, 2010]
     end
 
     test "l keeps the leap years within the bound" do
-      {:ok, set} = Tempo.to_interval(~o"R/..l/P1Y/FL12M25DN", bound: ~o"{2000..2010}Y")
+      {:ok, set} = Tempo.to_interval(~o"R/..l/P1Y/FL12M25DN", within: ~o"{2000..2010}Y")
       assert years(set) == [2000, 2004, 2008]
     end
 
     test "c keeps the common years within the bound" do
-      {:ok, set} = Tempo.to_interval(~o"R/..c/P1Y/FL12M25DN", bound: ~o"{2000..2005}Y")
+      {:ok, set} = Tempo.to_interval(~o"R/..c/P1Y/FL12M25DN", within: ~o"{2000..2005}Y")
       assert years(set) == [2001, 2002, 2003, 2005]
     end
 

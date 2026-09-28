@@ -54,7 +54,7 @@ Any component may carry a range, a range with step, a set of values, or a cartes
 
 ### 2.3. Recurring intervals
 
-A *bounded* recurring interval enumerates exactly as its materialised occurrences do — the walk delegates to `Tempo.to_interval/1`'s `IntervalSet`, yielding the sub-points of every occurrence. `Enum.count(~o"R5/2022-01-01/P1M")` is `151` (the days of January through May), identical to counting the materialised set; for the *occurrence* count use `to_interval!/1` and `Tempo.IntervalSet.count/1`. An *unbounded* recurrence (`R/…`) raises `Tempo.UnboundedRecurrenceError` — materialise it with `Tempo.to_interval(r, bound: …)` first — matching how `relation/2` and `duration/1` refuse recurrences.
+A *bounded* recurring interval enumerates exactly as its materialised occurrences do — the walk delegates to `Tempo.to_interval/1`'s `IntervalSet`, yielding the sub-points of every occurrence. `Enum.count(~o"R5/2022-01-01/P1M")` is `151` (the days of January through May), identical to counting the materialised set; for the *occurrence* count use `to_interval!/1` and `Tempo.IntervalSet.count/1`. An *unbounded* recurrence (`R/…`) raises `Tempo.UnboundedRecurrenceError` — materialise it with `Tempo.to_interval(r, within: …)` first — matching how `relation/2` and `duration/1` refuse recurrences.
 
 ### 2.4. Missing / unknown digits (EDTF masks)
 

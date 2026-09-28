@@ -17,7 +17,7 @@ defmodule Tempo.Operations.Test do
   #   2. Core set operations — union, intersection, complement,
   #      difference, symmetric_difference
   #   3. Predicates — disjoint?, overlaps?, subset?, contains?, equal?
-  #   4. Cross-axis (bound-based materialisation)
+  #   4. Cross-axis (window-based materialisation)
   #   5. Algebraic identities — ∅ ∪ A = A, De Morgan's laws, etc.
 
   setup_all do
@@ -76,17 +76,17 @@ defmodule Tempo.Operations.Test do
       assert Exception.message(e) =~ "different resolution axes"
     end
 
-    test "anchored + non-anchored without bound — error" do
+    test "anchored + non-anchored without a window — error" do
       assert {:error, %Tempo.NonAnchoredError{} = e} =
                Operations.align(~o"2022Y", ~o"T10:30")
 
-      assert Exception.message(e) =~ ":bound"
+      assert Exception.message(e) =~ ":within"
       assert Exception.message(e) =~ "anchor/2"
     end
 
-    test "anchored + non-anchored WITH bound — OK" do
+    test "anchored + non-anchored WITH a window — OK" do
       assert {:ok, _} =
-               Operations.align(~o"2026-01-04", ~o"T10:30", bound: ~o"2026-01-04")
+               Operations.align(~o"2026-01-04", ~o"T10:30", within: ~o"2026-01-04")
     end
   end
 
@@ -252,15 +252,15 @@ defmodule Tempo.Operations.Test do
   end
 
   describe "complement/2" do
-    test "requires :bound" do
+    test "requires :within" do
       assert {:error, %Tempo.UnboundedRecurrenceError{} = e} =
                Tempo.complement(~o"2022-06", [])
 
-      assert Exception.message(e) =~ ":bound"
+      assert Exception.message(e) =~ ":within"
     end
 
     test "gap in the middle → two intervals" do
-      {:ok, r} = Tempo.complement(~o"2022-06", bound: ~o"2022Y")
+      {:ok, r} = Tempo.complement(~o"2022-06", within: ~o"2022Y")
       assert length(r.intervals) == 2
       [jan_may, jul_dec] = r.intervals
       assert jan_may.from.time == [year: 2022, month: 1]
@@ -271,12 +271,12 @@ defmodule Tempo.Operations.Test do
 
     test "complement of ∅ within U = U" do
       {:ok, empty} = IntervalSet.new([])
-      {:ok, r} = Tempo.complement(empty, bound: ~o"2022Y")
+      {:ok, r} = Tempo.complement(empty, within: ~o"2022Y")
       assert length(r.intervals) == 1
     end
 
     test "complement of U within U = ∅" do
-      {:ok, r} = Tempo.complement(~o"2022Y", bound: ~o"2022Y")
+      {:ok, r} = Tempo.complement(~o"2022Y", within: ~o"2022Y")
       assert r.intervals == []
     end
   end
@@ -472,42 +472,42 @@ defmodule Tempo.Operations.Test do
     end
   end
 
-  describe "cross-axis with bound" do
-    test "anchored ∩ non-anchored within a single-day bound → trimmed time slot" do
+  describe "cross-axis with a window" do
+    test "anchored ∩ non-anchored within a single-day window → trimmed time slot" do
       # Trimmed intersection gives the minute slot inside the day
       # span. The member-preserving filter returns the day itself.
-      {:ok, r} = Tempo.intersection(~o"2026-01-04", ~o"T10:30", bound: ~o"2026-01-04")
+      {:ok, r} = Tempo.intersection(~o"2026-01-04", ~o"T10:30", within: ~o"2026-01-04")
       assert length(r.intervals) == 1
       [iv] = r.intervals
       assert iv.from.time[:hour] == 10
       assert iv.from.time[:minute] == 30
     end
 
-    test "anchored ∩ non-anchored within a multi-day bound → trimmed slot on matched day" do
+    test "anchored ∩ non-anchored within a multi-day window → trimmed slot on matched day" do
       {:ok, r} =
-        Tempo.intersection(~o"2026-01-04", ~o"T10:30", bound: ~o"2026-01-01/2026-01-10")
+        Tempo.intersection(~o"2026-01-04", ~o"T10:30", within: ~o"2026-01-01/2026-01-10")
 
       assert length(r.intervals) == 1
       [iv] = r.intervals
       assert iv.from.time[:day] == 4
     end
 
-    test "non-anchored bound is rejected" do
+    test "a non-anchored window is rejected" do
       assert {:error, %Tempo.NonAnchoredError{} = e} =
-               Operations.align(~o"2026-01-04", ~o"T10:30", bound: ~o"T00:00")
+               Operations.align(~o"2026-01-04", ~o"T10:30", within: ~o"T00:00")
 
-      assert Exception.message(e) =~ "bound"
+      assert Exception.message(e) =~ ":within window"
       assert Exception.message(e) =~ "anchored"
     end
 
-    test "month/day-axis partial with a :bound is rejected, not silently absorbed" do
+    test "month/day-axis partial with a :within window is rejected, not silently absorbed" do
       # Day anchoring grafts a non-anchored value onto every day of the
-      # bound, which only makes sense for time-of-day values. `~o"15D"`
+      # window, which only makes sense for time-of-day values. `~o"15D"`
       # grafted that way matched all 90 days of the quarter (regression).
       quarter = ~o"2026-01-01/2026-04-01"
 
       assert {:error, %Tempo.NonAnchoredError{} = e} =
-               Tempo.intersection(~o"15D", quarter, bound: quarter)
+               Tempo.intersection(~o"15D", quarter, within: quarter)
 
       assert Exception.message(e) =~ "time-of-day"
     end
@@ -820,7 +820,7 @@ defmodule Tempo.Operations.Test do
       {:ok, na} = Tempo.from_iso8601("T23:30/T01:00")
 
       # Trimmed form: the overlap span inside the anchored day.
-      {:ok, r} = Tempo.intersection(~o"2026-01-04", na, bound: ~o"2026-01-04")
+      {:ok, r} = Tempo.intersection(~o"2026-01-04", na, within: ~o"2026-01-04")
       assert length(r.intervals) == 1
 
       [iv] = r.intervals
@@ -828,11 +828,11 @@ defmodule Tempo.Operations.Test do
       assert iv.from.time[:minute] == 30
     end
 
-    test "intersection on multi-day bound — crossing materialises three trimmed slots" do
+    test "intersection on a multi-day window — crossing materialises three trimmed slots" do
       {:ok, na} = Tempo.from_iso8601("T23:00/T01:00")
 
       {:ok, r} =
-        Tempo.intersection(~o"2026-01-01/2026-01-04", na, bound: ~o"2026-01-01/2026-01-04")
+        Tempo.intersection(~o"2026-01-01/2026-01-04", na, within: ~o"2026-01-01/2026-01-04")
 
       assert length(r.intervals) == 3
     end
@@ -893,10 +893,10 @@ defmodule Tempo.Operations.Test do
       u = ~o"2022Y"
 
       {:ok, a_or_b} = Tempo.union(a, b)
-      {:ok, not_a_or_b} = Tempo.complement(a_or_b, bound: u)
+      {:ok, not_a_or_b} = Tempo.complement(a_or_b, within: u)
 
-      {:ok, not_a} = Tempo.complement(a, bound: u)
-      {:ok, not_b} = Tempo.complement(b, bound: u)
+      {:ok, not_a} = Tempo.complement(a, within: u)
+      {:ok, not_b} = Tempo.complement(b, within: u)
       # Instant-level intersection — the sides are both
       # "covered-instants" sets, so the trimmed form is the
       # faithful one for the identity.
@@ -911,10 +911,10 @@ defmodule Tempo.Operations.Test do
       u = ~o"2022Y"
 
       {:ok, a_and_b} = Tempo.intersection(a, b)
-      {:ok, not_a_and_b} = Tempo.complement(a_and_b, bound: u)
+      {:ok, not_a_and_b} = Tempo.complement(a_and_b, within: u)
 
-      {:ok, not_a} = Tempo.complement(a, bound: u)
-      {:ok, not_b} = Tempo.complement(b, bound: u)
+      {:ok, not_a} = Tempo.complement(a, within: u)
+      {:ok, not_b} = Tempo.complement(b, within: u)
       {:ok, not_a_or_not_b} = Tempo.union(not_a, not_b)
 
       assert Tempo.equal?(not_a_and_b, not_a_or_not_b)
