@@ -64,18 +64,18 @@ Tempo.Interval.duration(interval)
 ```elixir
 {:ok, day} = Tempo.from_elixir(~D[2022-07-04]) |> Tempo.to_interval()
 Tempo.Interval.duration(day)
-#=> ~o"PT86400S"   # one whole day
+#=> ~o"P1D"
 ```
 
 The upper bound is **exclusive** (`[from, to)`), which is what makes the spans tile the time line cleanly — `[2022-07-04, 2022-07-05)` followed by `[2022-07-05, 2022-07-06)` is exactly `[2022-07-04, 2022-07-06)` with no gap or overlap. See [Enumeration semantics](enumeration-semantics.md) for how this drives iteration, and `Tempo.to_interval/2` for the full materialisation contract.
 
 > *"A day is the span from this midnight to the next; a timestamp is the span from this second to the next."*
 
-Two notes:
+Three notes:
 
-* **Sub-second spans and `duration/1`.** `duration/1` reports whole seconds, so a one-microsecond interval reads as `~o"PT0S"`. The span is still one microsecond wide — inspect the endpoints (`from/1`, `to/1`) when you need sub-second extent.
+* **Durations keep the width's unit.** `duration/1` counts in the unit the endpoints are written in, so the day is `~o"P1D"`, the second `~o"PT1S"`, and the microsecond `~o"PT0.000001S"`.
 
-* **A bare `Time` materialises non-anchored.** `~T[14:30:00]` becomes `T14H30M0S/T1S` — a one-second span on the *time-of-day* axis with no date. Operations that need an absolute position (duration in wall-clock seconds, cross-zone comparison) require anchoring it to a date first.
+* **A bare `Time` materialises non-anchored.** `~T[14:30:00]` becomes `T14H30M0S/T1S` — a one-second span on the *time-of-day* axis with no date. Operations that need an absolute position (a duration, a cross-zone comparison) require anchoring it to a date first.
 
 * **A pure time-of-day group materialises non-anchored too.** A grouped time value with no date — for example the first quarter-hour of 16:00, `T16H1GT15MU` (`[hour: 16, minute: {:group, 0..14}]`) — becomes the relative span `[16:00, 16:15)` on the time-of-day axis. The same anchoring caveat applies. A group whose upper bound would carry off the end of the day (`23:45..`, with no date to carry into) or any group with a date component (`5G10DU`) needs anchoring first and returns a `Tempo.MaterialisationError` until then.
 

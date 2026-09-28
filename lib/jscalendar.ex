@@ -296,11 +296,10 @@ if Code.ensure_loaded?(JSCalendar) do
       end)
     end
 
-    # Each occurrence spans as long as the first one does.
+    # Each occurrence spans as long as the first one does, counted in
+    # the unit its endpoints are written in.
     defp occurrence_duration(%Interval{from: from, to: to}) do
-      seconds = Compare.to_utc_seconds(to) - Compare.to_utc_seconds(from)
-
-      %Tempo.Duration{time: [second: seconds]}
+      Interval.duration(%Interval{from: from, to: to})
     end
 
     ## recurrenceOverrides

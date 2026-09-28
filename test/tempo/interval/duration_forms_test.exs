@@ -103,7 +103,7 @@ defmodule Tempo.Interval.DurationFormsTest do
     end
 
     test "a duration and an end is exactly its duration long, not open-ended" do
-      assert Tempo.duration(~o"P1D/2026-01-02") == ~o"PT86400S"
+      assert Tempo.duration(~o"P1D/2026-01-02") == ~o"P1D"
       assert Tempo.exactly?(~o"P1D/2026-01-02", ~o"P1D")
       refute Tempo.longer_than?(~o"P1D/2026-01-02", ~o"P1D")
       assert Interval.from(~o"P1D/2026-01-02") == ~o"2026-01-01"

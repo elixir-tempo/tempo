@@ -23,6 +23,8 @@ These keep their names and change their meaning:
 
 * **An interval with a zone on its start only** — the zone applies to its end too, as ISO 8601-1 says.
 
+* **`duration/1` and `duration/2`** — counted in the unit the endpoints are written in, where 1.x counted seconds.
+
 * **`duration/1` on a set** — the time the set covers, counting time its members share once.
 
 * **The `:within` window** — every occurrence that overlaps the window, for every kind of recurrence.
@@ -45,7 +47,7 @@ A search for the removed names finds the renames:
 grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(meets|during)\?|Interval\.(meets|during)\?|(Tempo|Interval)\.compose' lib test
 ```
 
-The changes of meaning need a read rather than a replace: every `before?`, `after?` and their `certainly_` and `possibly_` forms, every `duration/1` of a set, every window, and every `:metadata` passed to `Tempo.new/1`.
+The changes of meaning need a read rather than a replace: every `before?`, `after?` and their `certainly_` and `possibly_` forms, every duration read as a count of seconds, every `duration/1` of a set, every window, and every `:metadata` passed to `Tempo.new/1`.
 
 ## A set's duration is the time it covers
 
@@ -61,12 +63,41 @@ Tempo.IntervalSet.total_duration(bookings)
 ```elixir
 iex> {:ok, bookings} = Tempo.union(~o"2026-06-15T09/2026-06-15T11", ~o"2026-06-15T10/2026-06-15T12")
 iex> Tempo.duration(bookings)
-~o"PT10800S"
+~o"PT3H"
 ```
 
 > *"Two bookings, nine to eleven and ten to twelve, **cover** three hours."*
 
 The two meanings agree for the sets the set operations return, whose members never overlap. They differ only where a set keeps overlapping members apart, as a union does. A member's own length is still `Tempo.duration/1` of that member.
+
+## A duration is counted in its endpoints' unit
+
+In 1.x `duration/1` and `duration/2` answered in seconds. In 2.0 they answer in the unit the endpoints are written in: days between two days, months between two months, hours between two hours, and the finer unit where the endpoints differ. Years, months, weeks and days are counted on the calendar, so the day a clock change shortens is one day; hours, minutes and seconds are elapsed time, so the same day is 23 hours.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.x
+Tempo.duration(~o"2026-09-28", ~o"2026-11-03")
+#=> {:ok, ~o"PT3110400S"}
+```
+
+```elixir
+iex> Tempo.duration(~o"2026-09-28", ~o"2026-11-03")
+{:ok, ~o"P36D"}
+```
+
+> *"From the twenty-eighth of September to Election Day is **thirty-six days**."*
+
+Code that read the seconds converts the duration with `Tempo.Duration.to_unit/3`. A month or a year has no fixed length, so converting one, or ordering it against another duration with `Tempo.Duration.compare/3`, takes a `:relative_to` date:
+
+```elixir
+iex> Tempo.Duration.to_unit(~o"P36D", :second)
+{:ok, 3110400.0}
+
+iex> Tempo.Duration.to_unit(~o"P3M", :day, relative_to: ~o"2026-01-01")
+{:ok, 90.0}
+```
 
 ## The within window
 

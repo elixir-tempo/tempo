@@ -18,6 +18,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.duration/1` and `Tempo.IntervalSet.duration/1` measure the time a set covers, counting time its members share once; `IntervalSet.total_duration/1`, which did, is removed.
 
+* A duration is counted in the unit its endpoints are written in, where it was seconds: `~o"P36D"` between two days and `~o"PT8H"` between two hours, years to days on the calendar through `Calendrical.diff/3` and hours to fractions of a second as elapsed time.
+
 * `:within` replaces `:bound` on `Tempo.to_interval/2`, `to_interval_set/2`, the set operations, `complement/2`, `Tempo.ICal.from_ical/2`, `Tempo.JSCalendar.from_jscalendar/2` and the RRULE expander; a leftover `:bound` is an error naming it.
 
 * The `:within` window keeps every occurrence that overlaps it, for every recurrence: `R/2020-01-01/P1Y` within 2026 is 2026's occurrence alone, not every year since 2020, and iCalendar and JSCalendar return only the events that overlap the window.
@@ -101,6 +103,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 ### Fixed
 
 * `Tempo.now/1` and `today/1` return `{:error, %Tempo.UnknownZoneError{}}` for a zone the time zone database does not know, where they raised.
+
+* `Tempo.to_date/1` returns a `Tempo.ConversionError` for a value whose year, month or day is a group or a range, where it raised `FunctionClauseError`.
 
 * A recurrence walks every period its `:within` window overlaps, however the window is aligned — `R/../P1Y/FL1M15DN` within September 2026 to March 2027 is 15 January 2027, where it was nothing — and an UNTIL holds every day a period's selection expands to.
 

@@ -570,12 +570,15 @@ defmodule Tempo.IntervalSet do
   The time the set covers — the length of the union of its members,
   so time that two members share is counted once.
 
-  Each member's length is measured on the UTC time line (the same
-  measurement as `Tempo.Interval.duration/1`), so DST transitions
-  inside a member are accounted for. The set operations produce
-  disjoint members; a set built with overlapping members still
-  covers each instant once: 09:00–11:00 and 10:00–12:00 cover three
-  hours, not four.
+  Each member is measured as `Tempo.Interval.duration/1` measures it,
+  in the unit its endpoints are written in, and the lengths add unit
+  by unit: two days off are `P2D` and two three-hour sessions `PT6H`.
+  The set operations align their operands to the finer of their units,
+  so a union of a month and an afternoon is counted in hours.
+
+  The set operations produce disjoint members; a set built with
+  overlapping members still covers each instant once: 09:00–11:00 and
+  10:00–12:00 cover three hours, not four.
 
   ### Arguments
 
@@ -584,32 +587,30 @@ defmodule Tempo.IntervalSet do
 
   ### Returns
 
-  * A `t:Tempo.Duration.t/0` holding the total in seconds. The empty
-    set has a duration of zero seconds.
+  * A `t:Tempo.Duration.t/0` holding the total in its members' units.
+    The empty set has a duration of zero seconds.
 
   ### Examples
 
       iex> {:ok, free} = Tempo.union(~o"2026-06-01T09/2026-06-01T12", ~o"2026-06-01T14/2026-06-01T17")
       iex> Tempo.IntervalSet.duration(free)
-      ~o"PT21600S"
+      ~o"PT6H"
 
       iex> bookings = Tempo.IntervalSet.new!([~o"2026-06-15T09/2026-06-15T11", ~o"2026-06-15T10/2026-06-15T12"])
       iex> Tempo.IntervalSet.duration(bookings)
-      ~o"PT10800S"
+      ~o"PT3H"
+
+      iex> {:ok, christmas} = Tempo.union(~o"2026-12-25", ~o"2026-12-26")
+      iex> Tempo.IntervalSet.duration(christmas)
+      ~o"P2D"
 
   """
   @spec duration(t()) :: Duration.t()
   def duration(%__MODULE__{} = set) do
-    total =
-      set
-      |> coalesce()
-      |> to_list()
-      |> Enum.reduce(0, fn interval, acc ->
-        %Duration{time: [second: seconds]} = Interval.duration(interval)
-        acc + seconds
-      end)
-
-    %Duration{time: [second: total]}
+    case set |> coalesce() |> to_list() do
+      [] -> %Duration{time: [second: 0]}
+      members -> members |> Enum.map(&Interval.duration/1) |> Duration.sum()
+    end
   end
 
   @doc """

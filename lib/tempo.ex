@@ -2138,7 +2138,7 @@ defmodule Tempo do
       {:day, 3}
 
   """
-  @spec resolution(tempo :: t()) :: {time_unit(), time_unit() | non_neg_integer()}
+  @spec resolution(tempo :: t()) :: {atom(), atom() | non_neg_integer()}
   def resolution(%__MODULE__{time: []}), do: {:none, 0}
 
   def resolution(%__MODULE__{time: units}) do
@@ -3266,7 +3266,8 @@ defmodule Tempo do
 
   """
   @spec to_date(t()) :: {:ok, Date.t()} | {:error, error_reason()}
-  def to_date(%Tempo{time: [year: year, month: month, day: day]} = tempo) do
+  def to_date(%Tempo{time: [year: year, month: month, day: day]} = tempo)
+      when is_integer(year) and is_integer(month) and is_integer(day) do
     Date.new(year, month, day, native_calendar(tempo))
   end
 
@@ -7950,9 +7951,11 @@ defmodule Tempo do
   Return the length of an interval, or the time an interval set
   covers, as a `%Tempo.Duration{}`.
 
-  A set's duration counts time that two members share once — see
-  `Tempo.IntervalSet.duration/1`; an interval's is its length on the
-  UTC time line — see `Tempo.Interval.duration/1`.
+  A length is counted in the unit its endpoints are written in: two
+  days are a number of days apart, two times of day a number of hours
+  or minutes — see `Tempo.Interval.duration/1`. A set's duration
+  counts time that two members share once — see
+  `Tempo.IntervalSet.duration/1`.
 
   ### Arguments
 
@@ -7960,20 +7963,20 @@ defmodule Tempo do
 
   ### Returns
 
-  * A `t:Tempo.Duration.t/0` in seconds, or `:infinity` for an
-    interval with an open end.
+  * A `t:Tempo.Duration.t/0` in the endpoints' unit, or `:infinity`
+    for an interval with an open end.
 
   ### Examples
 
       iex> Tempo.duration(Tempo.to_interval!(~o"2026-06-15T09:00/2026-06-15T10:30"))
-      ~o"PT5400S"
+      ~o"PT90M"
 
       iex> Tempo.duration(Tempo.to_interval!(~o"2026-06"))
-      ~o"PT2592000S"
+      ~o"P1M"
 
       iex> bookings = Tempo.IntervalSet.new!([~o"2026-06-15T09/2026-06-15T11", ~o"2026-06-15T10/2026-06-15T12"])
       iex> Tempo.duration(bookings)
-      ~o"PT10800S"
+      ~o"PT3H"
 
   """
   def duration(%IntervalSet{} = set), do: IntervalSet.duration(set)
@@ -7983,11 +7986,12 @@ defmodule Tempo do
   Return the duration between two endpoints as a `%Tempo.Duration{}`.
 
   A convenience that builds the interval `[from, to)` internally and
-  measures it — `Tempo.duration(now, deadline)` instead of
-  constructing a `t:Tempo.Interval.t/0` first. The length is measured
-  on the UTC time line, so zoned endpoints spanning a DST transition
-  yield the true elapsed duration (a 23- or 25-hour day), not the
-  wall-clock difference.
+  measures it — `Tempo.duration(today, election_day)` instead of
+  constructing a `t:Tempo.Interval.t/0` first. The length is counted
+  in the endpoints' unit, as `Tempo.Interval.duration/1` counts it:
+  days between two days, and elapsed hours between two hours, so
+  midnight to midnight across a daylight-saving change is 23 or 25
+  hours.
 
   Unlike `duration/1`, whose interval argument is valid by
   construction, this takes raw endpoints that may not form a
@@ -8016,9 +8020,13 @@ defmodule Tempo do
 
   ### Examples
 
+      iex> {:ok, duration} = Tempo.duration(~o"2026-09-28", ~o"2026-11-03")
+      iex> duration
+      ~o"P36D"
+
       iex> {:ok, duration} = Tempo.duration(~o"2026-06-15T09", ~o"2026-06-15T17")
       iex> duration
-      ~o"PT28800S"
+      ~o"PT8H"
 
       iex> match?({:error, _reason}, Tempo.duration(~o"2026-06-15T17", ~o"2026-06-15T09"))
       true
@@ -8051,7 +8059,7 @@ defmodule Tempo do
   ### Examples
 
       iex> Tempo.duration!(~o"2026-06-15T09", ~o"2026-06-15T17")
-      ~o"PT28800S"
+      ~o"PT8H"
 
   """
   @spec duration!(t(), t()) :: Duration.t()

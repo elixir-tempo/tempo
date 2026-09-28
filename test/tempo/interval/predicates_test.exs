@@ -42,12 +42,12 @@ defmodule Tempo.Interval.PredicatesTest do
   describe "duration/1" do
     test "1 hour" do
       iv = %Interval{from: ~o"2026-06-15T09", to: ~o"2026-06-15T10"}
-      assert Interval.duration(iv) == %Tempo.Duration{time: [second: 3600]}
+      assert Interval.duration(iv) == ~o"PT1H"
     end
 
-    test "zero-length → 0 seconds" do
+    test "zero-length → zero in the endpoints' unit" do
       iv = %Interval{from: ~o"2026-06-15", to: ~o"2026-06-15"}
-      assert Interval.duration(iv) == %Tempo.Duration{time: [second: 0]}
+      assert Interval.duration(iv) == ~o"P0D"
     end
 
     test "unbounded → :infinity" do
@@ -203,7 +203,7 @@ defmodule Tempo.Interval.PredicatesTest do
 
     test "Tempo.duration/1" do
       iv = %Interval{from: ~o"2026-06-15T09", to: ~o"2026-06-15T10"}
-      assert Tempo.duration(iv) == %Tempo.Duration{time: [second: 3600]}
+      assert Tempo.duration(iv) == ~o"PT1H"
     end
 
     test "Tempo.bounded?/1 and Tempo.empty?/1" do
@@ -298,18 +298,18 @@ defmodule Tempo.Interval.PredicatesTest do
 
     test "duration/1 returns zero for degenerate intervals" do
       iv = %Interval{from: ~o"2024-06-15", to: ~o"2024-06-15"}
-      assert Interval.duration(iv) == %Tempo.Duration{time: [second: 0]}
+      assert Interval.duration(iv) == ~o"P0D"
     end
 
     test "duration/1 returns zero for inverted intervals (no negative durations)" do
       iv = %Interval{from: ~o"2024-06-20", to: ~o"2024-06-15"}
-      assert Interval.duration(iv) == %Tempo.Duration{time: [second: 0]}
+      assert Interval.duration(iv) == ~o"P0D"
     end
 
     test "non-empty intervals still compute their span correctly" do
       iv = %Interval{from: ~o"2024-06-15", to: ~o"2024-06-20"}
       refute Interval.empty?(iv)
-      assert Interval.duration(iv) == %Tempo.Duration{time: [second: 432_000]}
+      assert Interval.duration(iv) == ~o"P5D"
     end
   end
 

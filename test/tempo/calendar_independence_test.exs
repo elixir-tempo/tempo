@@ -108,7 +108,7 @@ defmodule Tempo.CalendarIndependenceTest do
 
     test "a Gregorian year is unchanged at 365 days" do
       assert span_days(~o"2021") == 365
-      assert Interval.duration(elem(Tempo.to_interval(~o"2021"), 1)) == ~o"PT31536000S"
+      assert Interval.duration(elem(Tempo.to_interval(~o"2021"), 1)) == ~o"P1Y"
     end
   end
 

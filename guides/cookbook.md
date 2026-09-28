@@ -251,12 +251,16 @@ For set-level questions across two multi-member `IntervalSet`s, use `Tempo.Inter
 ### How long is an interval?
 
 ```elixir
-iex> iv = ~o"2026-06-15T09/2026-06-15T11"
-iex> Tempo.duration(iv)
-~o"PT7200S"
+iex> Tempo.duration(~o"2026-06-15T09/2026-06-15T11")
+~o"PT2H"
+
+iex> Tempo.duration(~o"2026-06-15/2026-07-21")
+~o"P36D"
 ```
 
-Returns `:infinity` when one or both endpoints are `:undefined`.
+> *"Nine to eleven is **two hours**; the fifteenth of June to the twenty-first of July is **thirty-six days**."*
+
+A length is counted in the unit its endpoints are written in. Years, months, weeks and days are calendar steps, so the day a clock change shortens is still one day; hours, minutes and seconds are elapsed time, so that same day is 23 hours. Returns `:infinity` when one or both endpoints are `:undefined`.
 
 ### How do I check an interval's length against a duration?
 
@@ -469,8 +473,8 @@ iex> {:ok, workdays} = Tempo.select(~o"2026-07/2026-10", Tempo.workdays(:AU))
 iex> {:ok, open} = Tempo.select(workdays, [~o"T09/T12", ~o"T13/T17"])
 iex> Tempo.IntervalSet.count(open)
 132
-iex> Tempo.Duration.to_unit(Tempo.IntervalSet.duration(open), :hour)
-{:ok, 462.0}
+iex> Tempo.IntervalSet.duration(open)
+~o"PT462H"
 ```
 
 > *"The **workdays** of the quarter, **nine to five** with an **hour for lunch**"* — 66 days, two windows each, 462 open hours. Bounds are half-open throughout Tempo, so nine-to-five is written as nine to five: `~o"T09/T17"` is eight hours, no off-by-one, no `coalesce/1`.

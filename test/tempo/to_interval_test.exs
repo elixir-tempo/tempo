@@ -199,8 +199,7 @@ defmodule Tempo.ToInterval.Test do
       {:ok, interval} = Tempo.to_interval(tempo)
       assert interval.from.time == [year: 2000]
       assert interval.to.time == [year: 2100]
-      # 100 years measured in seconds.
-      assert Interval.duration(interval).time == [second: 3_155_760_000]
+      assert Interval.duration(interval).time == [year: 100]
     end
 
     test "decade `201J` → the 10-year span [2010, 2020)" do
@@ -340,11 +339,11 @@ defmodule Tempo.ToInterval.Test do
   describe "week / ordinal date duration (UTC projection)" do
     # `Compare.to_utc_seconds/1` must resolve week and ordinal dates to
     # a real calendar date; otherwise both endpoints collapse to Jan 1
-    # and the interval reports a zero-second duration.
-    test "a week spans seven days" do
+    # and the interval is empty, with a duration of zero.
+    test "a week spans one week" do
       {:ok, tempo} = Tempo.from_iso8601("2022-W24")
       {:ok, interval} = Tempo.to_interval(tempo)
-      assert Interval.duration(interval).time == [second: 604_800]
+      assert Interval.duration(interval).time == [week: 1]
     end
 
     test "adjacent weeks meet (not equal)" do
@@ -357,7 +356,7 @@ defmodule Tempo.ToInterval.Test do
     test "an ordinal date spans one day" do
       {:ok, tempo} = Tempo.from_iso8601("2022-166")
       {:ok, interval} = Tempo.to_interval(tempo)
-      assert Interval.duration(interval).time == [second: 86_400]
+      assert Interval.duration(interval).time == [day: 1]
     end
   end
 

@@ -379,7 +379,7 @@ defmodule Tempo.NewTest do
     end
 
     test "measures the interval between two endpoints" do
-      assert {:ok, ~o"PT28800S"} = Tempo.duration(~o"2026-06-15T09", ~o"2026-06-15T17")
+      assert {:ok, ~o"PT8H"} = Tempo.duration(~o"2026-06-15T09", ~o"2026-06-15T17")
     end
 
     test "agrees with building the interval then measuring it" do
@@ -412,7 +412,7 @@ defmodule Tempo.NewTest do
     end
 
     test "duration!/2 returns the bare Duration on success" do
-      assert Tempo.duration!(~o"2026-06-15T09", ~o"2026-06-15T17") == ~o"PT28800S"
+      assert Tempo.duration!(~o"2026-06-15T09", ~o"2026-06-15T17") == ~o"PT8H"
     end
 
     test "duration!/2 raises on invalid endpoints" do

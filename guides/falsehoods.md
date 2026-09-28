@@ -2,7 +2,7 @@
 
 Every programmer who has worked seriously with calendars has their own version of this list. The falsehoods below are the ones with the largest bug-surface — the ones that are true for 95% of inputs, accepted by code review, and then silently wrong in production. Each one is followed by the Tempo idiom that makes the correct behaviour automatic.
 
-The final section is honest: three things where Tempo does not yet improve the situation. Those deserve attention too.
+The final section is honest about where Tempo stops, and says what to use instead.
 
 ## Setup — required for every example
 
@@ -31,14 +31,14 @@ DateTime.add(datetime, 86_400, :second)
 
 ```elixir
 iex> iv = Tempo.Interval.new!(
-...>   from: Tempo.from_iso8601!("2024-03-09T12:00:00[America/New_York]"),
-...>   to:   Tempo.from_iso8601!("2024-03-10T12:00:00[America/New_York]")
+...>   from: Tempo.from_iso8601!("2024-03-09T12[America/New_York]"),
+...>   to:   Tempo.from_iso8601!("2024-03-10T12[America/New_York]")
 ...> )
 iex> Tempo.Interval.duration(iv)
-~o"PT82800S"
+~o"PT23H"
 ```
 
-82 800 seconds is 23 hours. Spring forward in New York removes one hour from that calendar day — Tempo returns the real elapsed time, not 86 400.
+Spring forward in New York removes one hour from that calendar day — Tempo measures hours as elapsed time, so noon to noon is 23 of them, not 24. The calendar day itself is still one day: measured in days, `2024-03-10` is `~o"P1D"`.
 
 ---
 
@@ -216,23 +216,35 @@ Ground the floating value first with `Tempo.in_zone/2` (place its wall clock int
 
 ---
 
-## Where Tempo won't help (yet)
+## 11. "A duration is a number of seconds"
 
-The guide above shows Tempo making correct behaviour automatic. Here are two areas where it does not (yet) improve the situation, with recommendations. (Two earlier entries have since been resolved: sub-second comparison and set operations now work — see below — and clock mocking landed as the `Tempo.Clock` behaviour with a `Tempo.Clock.Test` stub for deterministic "now" in tests.)
+`DateTime.diff/3` answers in seconds, and so do most date libraries. But a month has no fixed number of seconds, and neither does a day — the day a clock change shortens is 82 800 seconds long and still one day — while a count of whole seconds drops the fraction of a second a timestamp was written with.
 
-### Sub-second durations
+**Tempo — a duration is counted in the unit its endpoints are written in:**
 
-Comparison, set operations, and shifting all work at sub-second resolution — the digit count is the resolution, so `.1` and `.2` are adjacent tenth-of-a-second spans:
+```elixir
+iex> Tempo.duration(~o"2026-09-28", ~o"2026-11-03")
+{:ok, ~o"P36D"}
+
+iex> Tempo.duration(~o"2026-01", ~o"2026-04")
+{:ok, ~o"P3M"}
+
+iex> Tempo.duration(~o"2024-06-15T12:00:00.1", ~o"2024-06-15T12:00:00.9")
+{:ok, ~o"PT0.8S"}
+```
+
+Years, months, weeks and days are counted on the calendar, and hours, minutes and seconds are elapsed time. A fraction of a second keeps the precision it was written with — the digit count is the resolution, so `.1` and `.2` are adjacent tenth-of-a-second spans:
 
 ```elixir
 iex> Tempo.relation(~o"2024-06-15T12:00:00.1", ~o"2024-06-15T12:00:00.2")
 :meets
-
-iex> Tempo.shift(~o"2024-06-15T12:00:00.1", ~o"PT0.5S")
-~o"2024Y6M15DT12H0M0.6S"
 ```
 
-The remaining gap is `Tempo.duration/2`, which reports whole seconds only — the duration between `.1` and `.9` of the same second comes back as `~o"PT0S"`, truncating the 0.8-second remainder. If your domain measures sub-second elapsed time, use `DateTime.diff/3` with `:millisecond`/`:microsecond` for now. **Recommendation**: carry the sub-second remainder into `Tempo.Duration` (the type already stores microseconds — `~o"PT0.5S"` round-trips) so `duration/2` is exact at every resolution the parser admits.
+---
+
+## Where Tempo won't help (yet)
+
+The guide above shows Tempo making correct behaviour automatic. Here is where it stops, with a recommendation. (Three earlier entries have since been resolved: sub-second comparison and set operations, sub-second durations — see falsehood 11 — and clock mocking, which landed as the `Tempo.Clock` behaviour with a `Tempo.Clock.Test` stub for deterministic "now" in tests.)
 
 ### Monotonic time
 

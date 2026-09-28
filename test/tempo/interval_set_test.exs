@@ -195,8 +195,8 @@ defmodule Tempo.IntervalSet.Test do
       bookings =
         Tempo.IntervalSet.new!([~o"2026-06-15T09/2026-06-15T11", ~o"2026-06-15T10/2026-06-15T12"])
 
-      assert Tempo.IntervalSet.duration(bookings) == ~o"PT10800S"
-      assert Tempo.duration(bookings) == ~o"PT10800S"
+      assert Tempo.IntervalSet.duration(bookings) == ~o"PT3H"
+      assert Tempo.duration(bookings) == ~o"PT3H"
     end
   end
 

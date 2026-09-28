@@ -133,7 +133,8 @@ defmodule Tempo.Interval.LeapSecondTest do
       base = Interval.duration(iv)
       with_leap = Interval.duration(iv, leap_seconds: true)
 
-      assert with_leap.time[:second] == base.time[:second] + 2
+      assert base == ~o"P1095D"
+      assert with_leap == ~o"P1095DT2S"
     end
 
     test "unbounded interval still returns :infinity" do

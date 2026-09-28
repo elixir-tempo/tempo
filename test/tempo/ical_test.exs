@@ -154,7 +154,7 @@ defmodule Tempo.ICal.Test do
       # drift into a finer (hour) unit.
       assert iv.from.time == [year: 2022, month: 7, day: 4]
       assert iv.to.time == [year: 2022, month: 7, day: 5]
-      assert Interval.duration(iv) == ~o"PT86400S"
+      assert Interval.duration(iv) == ~o"P1D"
     end
 
     test "timed event with no DTEND materialises as a one-unit punctual span (RFC 5545 §3.6.1)" do

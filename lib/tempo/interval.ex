@@ -1514,13 +1514,33 @@ defmodule Tempo.Interval do
   end
 
   @doc """
-  Return the interval's length as a `%Tempo.Duration{}` in
-  seconds. Returns `:infinity` for unbounded intervals (one or
-  both endpoints `:undefined`).
+  Return the interval's length as a `%Tempo.Duration{}`, counted in
+  the unit its endpoints are written in.
 
-  The result is calendar- and zone-aware — it goes through
-  `Tempo.Compare.to_utc_seconds/1` so cross-zone intervals
-  compute a correct wall-clock delta.
+  The unit is the finer of the endpoints' resolutions: two days are a
+  number of days apart, two months a number of months, and a day and
+  an hour a number of hours. A week against a month or a year is
+  counted in days, since weeks do not divide them.
+
+  Years, months, weeks and days are counted on the calendar with
+  `Calendrical.diff/3`, so a month is one month however many days it
+  has, and the day a daylight-saving change shortens is still one day.
+  Hours, minutes and seconds are elapsed time on the UTC time line
+  (`Tempo.Compare.to_utc_seconds/1`), so the same day measured in hours
+  is 23 of them. Whatever is less than a whole unit — an hour-resolution
+  span between zones half an hour apart, or a day-resolution span whose
+  endpoints are in different zones — is kept in the finer units after
+  it (`PT5H30M`, `P2DT1H`) rather than lost.
+
+  A duration in months or years has no fixed number of seconds, so
+  ordering it against another with `Tempo.Duration.compare/3` needs a
+  `:relative_to` date.
+
+  ### Arguments
+
+  * `interval` is a `t:t/0`. One written as a start and a duration, or
+    a duration and an end, is measured between the endpoints it
+    resolves to.
 
   ### Options
 
@@ -1532,10 +1552,31 @@ defmodule Tempo.Interval do
     `Tempo.Interval.spans_leap_second?/1` and
     `leap_seconds_spanned/1` for detection without arithmetic.
 
+  ### Returns
+
+  * A `t:Tempo.Duration.t/0` in the endpoints' unit. An empty or
+    inverted interval has a duration of zero in that unit.
+
+  * `:infinity` when one or both endpoints are `:undefined`.
+
   ### Examples
 
-      iex> Tempo.Interval.duration(%Tempo.Interval{from: ~o"2026-06-15T09", to: ~o"2026-06-15T10"})
-      ~o"PT3600S"
+      iex> Tempo.Interval.duration(%Tempo.Interval{from: ~o"2026-06-15", to: ~o"2026-07-21"})
+      ~o"P36D"
+
+      iex> Tempo.Interval.duration(%Tempo.Interval{from: ~o"2026-06", to: ~o"2026-09"})
+      ~o"P3M"
+
+      iex> Tempo.Interval.duration(%Tempo.Interval{from: ~o"2026-06-15", to: ~o"2026-06-16T12"})
+      ~o"PT36H"
+
+  The day New York moves its clocks forward is one day, but 23 hours:
+
+      iex> Tempo.Interval.duration(%Tempo.Interval{from: ~o"2026-03-08[America/New_York]", to: ~o"2026-03-09[America/New_York]"})
+      ~o"P1D"
+
+      iex> Tempo.Interval.duration(%Tempo.Interval{from: ~o"2026-03-08T00[America/New_York]", to: ~o"2026-03-09T00[America/New_York]"})
+      ~o"PT23H"
 
       iex> Tempo.Interval.duration(%Tempo.Interval{from: ~o"2026-06-15", to: :undefined})
       :infinity
@@ -1567,26 +1608,182 @@ defmodule Tempo.Interval do
 
   defp resolved_duration(%__MODULE__{from: %Tempo{} = from, to: %Tempo{} = to} = iv, opts) do
     :ok = require_same_calendar(from, to, "Tempo.Interval.duration/1")
+    unit = common_unit(endpoint_unit(from), endpoint_unit(to))
 
     if empty?(iv) do
       # Degenerate (from == to) and inverted (from > to) intervals
       # contain no real instants under `[from, to)`. Duration is
-      # zero rather than a negative count of wall-clock seconds.
-      %Duration{time: [second: 0]}
+      # zero rather than a negative count.
+      %Duration{time: zero_parts(unit)}
     else
-      base = Compare.to_utc_seconds(to) - Compare.to_utc_seconds(from)
+      %Duration{time: measure(from, to, unit, spanned_leap_seconds(iv, opts))}
+    end
+  end
 
-      seconds =
-        if Keyword.get(opts, :leap_seconds, false) do
-          # Positive insertions add a second; negative removals
-          # (reserved, none yet used) would subtract one.
-          base + length(leap_second_insertions_spanned(iv)) -
-            length(leap_second_removals_spanned(iv))
-        else
-          base
-        end
+  @calendar_units [:year, :month, :week, :day]
+  @clock_units [:hour, :minute, :second]
 
-      %Duration{time: [second: seconds]}
+  # The unit a duration counts an endpoint in: its resolution, reading a
+  # day of the week or of the year (a week's members) as a day.
+  defp endpoint_unit(%Tempo{} = tempo) do
+    tempo |> Tempo.resolution() |> elem(0) |> counting_unit()
+  end
+
+  defp counting_unit(unit) when unit in [:day_of_year, :day_of_week], do: :day
+  defp counting_unit(unit) when unit in @calendar_units or unit in @clock_units, do: unit
+  defp counting_unit(:microsecond), do: :microsecond
+  defp counting_unit(_other), do: :second
+
+  # Weeks do not divide a month or a year, so a week measured against
+  # one counts days; otherwise the finer of the two units is the one.
+  defp common_unit(:week, unit) when unit in [:year, :month], do: :day
+  defp common_unit(unit, :week) when unit in [:year, :month], do: :day
+
+  defp common_unit(unit, other) do
+    if Unit.compare(unit, other) == :gt, do: other, else: unit
+  end
+
+  defp zero_parts(:microsecond), do: [second: 0]
+  defp zero_parts(unit), do: [{unit, 0}]
+
+  defp spanned_leap_seconds(iv, opts) do
+    if Keyword.get(opts, :leap_seconds, false) do
+      # Positive insertions add a second; negative removals
+      # (reserved, none yet used) would subtract one.
+      length(leap_second_insertions_spanned(iv)) - length(leap_second_removals_spanned(iv))
+    else
+      0
+    end
+  end
+
+  # A fraction of a second is elapsed time too, kept to the precision
+  # of the finer endpoint.
+  defp measure(from, to, :microsecond, leap) do
+    elapsed =
+      (seconds_between(from, to) + leap) * 1_000_000 + microseconds(to) - microseconds(from)
+
+    [second: div(elapsed, 1_000_000)] ++
+      microsecond_parts(rem(elapsed, 1_000_000), max(precision(from), precision(to)))
+  end
+
+  defp measure(from, to, unit, leap) when unit in @clock_units do
+    clock_parts(seconds_between(from, to) + leap, unit)
+  end
+
+  # Calendar units are counted on the calendar, and whatever the count
+  # leaves is kept in clock time. A calendar that cannot count them — a
+  # caller's own without `diff/3` — is measured in elapsed seconds.
+  defp measure(from, to, unit, leap) do
+    case calendar_parts(from, to, unit) do
+      {:ok, parts, reached} -> parts ++ remainder_parts(seconds_between(reached, to) + leap)
+      _cannot_count -> clock_parts(seconds_between(from, to) + leap, :second)
+    end
+  end
+
+  # The most whole units that can be added to `from` without passing
+  # `to`. Endpoints that share a frame — both floating, or both in one
+  # zone — are exactly the count between their dates apart. Endpoints in
+  # different zones can be a day out on their dates, so the count is
+  # fitted on the time line and what is left is counted in days.
+  defp calendar_parts(from, to, unit) do
+    with {:ok, from_date} <- first_date(from),
+         {:ok, to_date} <- first_date(to),
+         count when is_integer(count) <- Calendrical.diff(from_date, to_date, date_part(unit)) do
+      counted_parts(from, to, unit, count, frame(from) == frame(to))
+    end
+  end
+
+  defp counted_parts(_from, to, unit, count, true = _same_frame), do: {:ok, [{unit, count}], to}
+
+  defp counted_parts(from, to, unit, guess, false = _same_frame) do
+    with {:ok, count, reached} <- fit(from, to, unit, guess),
+         {:ok, days, reached} <- remaining_days(reached, to, unit) do
+      {:ok, [{unit, count} | day_parts(days)], reached}
+    end
+  end
+
+  defp remaining_days(reached, _to, :day), do: {:ok, 0, reached}
+
+  defp remaining_days(reached, to, _unit),
+    do: fit(reached, to, :day, div(seconds_between(reached, to), 86_400))
+
+  # Moves a guess — never more than a unit or two out — to the largest
+  # count whose step from `from` does not pass `to` on the time line.
+  defp fit(from, to, unit, count) do
+    with %Tempo{} = reached <- Tempo.shift(from, [{unit, count}]),
+         %Tempo{} = next <- Tempo.shift(from, [{unit, count + 1}]) do
+      cond do
+        count > 0 and seconds_between(to, reached) > 0 -> fit(from, to, unit, count - 1)
+        seconds_between(next, to) >= 0 -> fit(from, to, unit, count + 1)
+        true -> {:ok, count, reached}
+      end
+    end
+  end
+
+  # The first day of an endpoint, as a date in its own calendar: a year
+  # or a month from its first day, a week from its Monday.
+  defp first_date(%Tempo{time: time} = tempo) do
+    day_unit = if Keyword.has_key?(time, :week), do: :day_of_week, else: :day
+
+    case Tempo.at_resolution(tempo, day_unit) do
+      %Tempo{} = day -> Tempo.to_date(day)
+      error -> error
+    end
+  end
+
+  defp date_part(:year), do: :years
+  defp date_part(:month), do: :months
+  defp date_part(:week), do: :weeks
+  defp date_part(:day), do: :days
+
+  # An endpoint's frame is the zone it names, or else its offset;
+  # floating endpoints share the empty one.
+  defp frame(%Tempo{extended: %{zone_id: zone_id}}) when is_binary(zone_id), do: zone_id
+
+  defp frame(%Tempo{shift: shift, extended: %{zone_offset: zone_offset}}),
+    do: {shift, zone_offset}
+
+  defp frame(%Tempo{shift: shift}), do: {shift, nil}
+
+  defp seconds_between(%Tempo{} = from, %Tempo{} = to),
+    do: Compare.to_utc_seconds(to) - Compare.to_utc_seconds(from)
+
+  # Elapsed seconds in a clock unit, with any part of a unit left over
+  # in the finer clock units after it.
+  defp clock_parts(seconds, :hour),
+    do: [hour: div(seconds, 3600)] ++ minute_parts(rem(seconds, 3600))
+
+  defp clock_parts(seconds, :minute),
+    do: [minute: div(seconds, 60)] ++ second_parts(rem(seconds, 60))
+
+  defp clock_parts(seconds, :second), do: [second: seconds]
+
+  defp remainder_parts(seconds) when seconds >= 3600, do: clock_parts(seconds, :hour)
+  defp remainder_parts(seconds), do: minute_parts(seconds)
+
+  defp minute_parts(seconds) when seconds >= 60, do: clock_parts(seconds, :minute)
+  defp minute_parts(seconds), do: second_parts(seconds)
+
+  defp day_parts(0), do: []
+  defp day_parts(days), do: [day: days]
+
+  defp second_parts(0), do: []
+  defp second_parts(seconds), do: [second: seconds]
+
+  defp microsecond_parts(0, _precision), do: []
+  defp microsecond_parts(value, precision), do: [microsecond: {value, precision}]
+
+  defp microseconds(%Tempo{time: time}) do
+    case Keyword.get(time, :microsecond) do
+      {value, _precision} -> value
+      nil -> 0
+    end
+  end
+
+  defp precision(%Tempo{time: time}) do
+    case Keyword.get(time, :microsecond) do
+      {_value, precision} -> precision
+      nil -> 0
     end
   end
 

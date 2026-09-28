@@ -281,7 +281,9 @@ Each task is one commit, verified on both upstream branches, with its guides, RE
 
 * [x] **From now on** — an open-ended `within:` window, the floating `today/1`, and `duration/2` refusing a zoned value against a floating one. 2026-09-28, `f04caaa`.
 
-* [ ] **Sets as tables** — `Table.Reader` for `Tempo.IntervalSet`, so Livebook shows a set's members and their metadata as a table.
+* [x] **Sets as tables** — `Table.Reader` for `Tempo.IntervalSet`, so Livebook shows a set's members and their metadata as a table. 2026-09-28, `c902247`.
+
+* [ ] **Durations at resolution** — `duration/1` and `duration/2` in their endpoints' unit, the finer where they differ: years to days on the calendar through `Calendrical.diff/3`, hours to fractions of a second as elapsed time, and a week against a month or a year in days. "Durations honour the resolution of the duration" (user).
 
 * [ ] **Anchor** — one meaning, `UnanchoredError`, `anchor/2` folded into `at/2` and `on/2`.
 
@@ -302,7 +304,3 @@ Each task is one commit, verified on both upstream branches, with its guides, RE
 * [ ] **Real-world livebook** — the next Victorian school holidays, the days until the next US Election Day, the UK's public holidays, and those the UK shares with Australia, each read as prose.
 
 * [ ] **Downstream** — `tempo_sql` moves to `~> 2.0` once 2.0.0 is on hex.
-
-### Blocked
-
-* [ ] **Durations at resolution** — `duration/1` and `duration/2` in their endpoints' unit (days as calendar days, the finer unit where the endpoints differ), elapsed seconds through `Tempo.Duration.to_unit/3`; "durations honour the resolution of the duration" (user). Blocked on a Calendrical function counting whole months, years and weeks between two dates in their calendar (`Calendrical.diff/3` proposed), which the user adds.

@@ -646,10 +646,10 @@ if Code.ensure_loaded?(ICal) do
 
     # The RDATE's start is its full timestamp (date + time-of-day
     # if present). The end is `start + event_duration`, where the
-    # event's duration is derived from the base occurrence in
-    # UTC seconds via `Tempo.Compare.to_utc_seconds/1`. That
-    # gives us a calendar-neutral delta that `Tempo.Math.add/2`
-    # can apply to the RDATE start.
+    # event's duration is the base occurrence's, counted in the unit
+    # its endpoints are written in (`Tempo.Interval.duration/1`), so
+    # an all-day event's RDATE ends on a day rather than at midnight
+    # to the second.
     defp rdate_tempo(%Tempo{} = from_tempo, %Interval{
            from: base_from,
            to: base_to,
@@ -661,8 +661,7 @@ if Code.ensure_loaded?(ICal) do
     end
 
     defp event_duration(%Tempo{} = from, %Tempo{} = to) do
-      seconds = Compare.to_utc_seconds(to) - Compare.to_utc_seconds(from)
-      %Tempo.Duration{time: [second: seconds]}
+      Interval.duration(%Interval{from: from, to: to})
     end
 
     defp apply_exdates(occurrences, %ICal.Event{exdates: nil}), do: occurrences
