@@ -285,7 +285,7 @@ Each task is one commit, verified on both upstream branches, with its guides, RE
 
 * [x] **Durations at resolution** — `duration/1` and `duration/2` in their endpoints' unit, the finer where they differ: years to days on the calendar through `Calendrical.diff/3`, hours to fractions of a second as elapsed time, and a week against a month or a year in days. 2026-09-28, `19eecb1`.
 
-* [ ] **Anchor** — one meaning, `UnanchoredError`, `anchor/2` folded into `at/2` and `on/2`.
+* [x] **Anchor** — one meaning, `UnanchoredError`, `anchor/2` folded into `at/2` and `on/2`. 2026-09-28, `3a1b236`.
 
 * [ ] **Floating, zoned and datetime** — `zoned?/1`, `ZonedTempoError`, the `datetime` conversions, `to_calendar/1` removed.
 

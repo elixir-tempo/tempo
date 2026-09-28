@@ -376,7 +376,7 @@ defmodule Tempo.Iso8601.Extended.Test do
 
       # IXDTF writes the zone once, at the end of the interval, binding it
       # to the upper endpoint; it applies to the whole span, so the
-      # floating lower endpoint is grounded in the same zone.
+      # floating lower endpoint is placed in the same zone.
       assert interval.from.extended.zone_id == "Europe/Paris"
       assert interval.to.extended.zone_id == "Europe/Paris"
     end

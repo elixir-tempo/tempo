@@ -18,7 +18,7 @@ import Tempo.Sigils
 
 ## 1. Stdlib → Tempo: the resolution you get
 
-`Tempo.from_elixir/2` is the unified gateway (there are also type-specific `from_date/1`, `from_time/1`, `from_naive_date_time/1`, `from_date_time/1`).
+`Tempo.from_elixir/2` is the unified gateway (there are also type-specific `from_date/1`, `from_time/1`, `from_naive_datetime/1`, `from_datetime/1`).
 
 The rule is: **resolution follows the type's declared precision, not the magnitude of its fields.** Elixir's `Time`/`NaiveDateTime`/`DateTime` are second-granular by construction, so `09:00:00` is a *fully specified second* — not an under-specified hour. A zero component is still a specified component.
 
@@ -113,22 +113,22 @@ Going the other way, you choose how much of the interval/zone information to kee
 |---|---|---|
 | `to_date/1` | `Date` | dropped (wall-clock date) |
 | `to_time/1` | `Time` | dropped (wall-clock time-of-day) |
-| `to_naive_date_time/1` | `NaiveDateTime` | **dropped** (wall-clock reading) |
-| `to_date_time/1` | `DateTime` | **preserved** (lossless inverse) |
+| `to_naive_datetime/1` | `NaiveDateTime` | **dropped** (wall-clock reading) |
+| `to_datetime/1` | `DateTime` | **preserved** (lossless inverse) |
 
-`to_naive_date_time/1` keeps the wall-clock numbers and discards the offset — exactly like the stdlib `DateTime.to_naive/1`. It does **not** shift to UTC:
+`to_naive_datetime/1` keeps the wall-clock numbers and discards the offset — exactly like the stdlib `DateTime.to_naive/1`. It does **not** shift to UTC:
 
 ```elixir
 # Paris is UTC+2 in summer; the wall reading is 10:30, not 08:30.
 paris = Tempo.from_elixir(DateTime.new!(~D[2022-06-15], ~T[10:30:00], "Europe/Paris"))
-Tempo.to_naive_date_time(paris)
+Tempo.to_naive_datetime(paris)
 #=> {:ok, ~N[2022-06-15 10:30:00.000000]}
 ```
 
-When the zone matters, `to_date_time/1` is the lossless inverse of `from_elixir/2` on a `DateTime` — it preserves the named zone and re-derives the offset from the time-zone database:
+When the zone matters, `to_datetime/1` is the lossless inverse of `from_elixir/2` on a `DateTime` — it preserves the named zone and re-derives the offset from the time-zone database:
 
 ```elixir
-Tempo.to_date_time(paris)
+Tempo.to_datetime(paris)
 #=> {:ok, #DateTime<2022-06-15 10:30:00.000000+02:00 CEST Europe/Paris>}
 ```
 
@@ -136,7 +136,7 @@ If you want UTC *wall* time rather than the local reading, normalise explicitly 
 
 ```elixir
 {:ok, utc} = Tempo.shift_zone(paris, "Etc/UTC")
-Tempo.to_naive_date_time(utc)
+Tempo.to_naive_datetime(utc)
 #=> {:ok, ~N[2022-06-15 08:30:00.000000]}
 ```
 
@@ -257,8 +257,8 @@ Tempo.from_iso8601("2026-06-15")                 # any shape, when the shape is 
 # Stdlib → Tempo  (resolution = the type's precision; override with :resolution)
 Tempo.from_date(~D[2026-06-15])                  # :day
 Tempo.from_time(~T[14:30:00])                    # :second (time-of-day, unanchored)
-Tempo.from_naive_date_time(~N[2026-06-15 14:30:00])
-Tempo.from_date_time(~U[2026-06-15 14:30:00Z])   # :second, zoned
+Tempo.from_naive_datetime(~N[2026-06-15 14:30:00])
+Tempo.from_datetime(~U[2026-06-15 14:30:00Z])    # :second, zoned
 Tempo.from_elixir(value, resolution: :day)       # unified gateway + explicit widen
 
 # Point → interval  (every value is a span of one unit at its resolution)
@@ -267,7 +267,7 @@ Tempo.to_interval(tempo)                          # {:ok, %Interval{}} half-open
 # Tempo → Stdlib
 Tempo.to_date(tempo)                              # zone dropped
 Tempo.to_time(tempo)                              # zone dropped
-Tempo.to_naive_date_time(tempo)                   # zone dropped (wall-clock, not UTC)
-Tempo.to_date_time(tempo)                         # zone preserved (lossless)
+Tempo.to_naive_datetime(tempo)                    # zone dropped (wall-clock, not UTC)
+Tempo.to_datetime(tempo)                          # zone preserved (lossless)
 Tempo.shift_zone(tempo, "Etc/UTC")                # normalise to UTC first if needed
 ```

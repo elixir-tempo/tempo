@@ -112,7 +112,6 @@ defmodule Tempo do
   alias Tempo.Enumeration.Zone
   alias Tempo.Explain
   alias Tempo.FloatingTempoError
-  alias Tempo.GroundedTempoError
   alias Tempo.Interval
   alias Tempo.IntervalEndpointsError
   alias Tempo.IntervalSet
@@ -139,6 +138,7 @@ defmodule Tempo do
   alias Tempo.UnboundedRecurrenceError
   alias Tempo.UnknownZoneError
   alias Tempo.Validation
+  alias Tempo.ZonedTempoError
 
   defstruct [:time, :shift, :calendar, :extended, :qualification, :qualifications, metadata: %{}]
 
@@ -859,10 +859,10 @@ defmodule Tempo do
          {:ok, expanded} <- Group.expand_groups(parsed, effective_calendar),
          # Propagate before validating. `2026-09-02T18:00/2026-09-02T20:00[Australia/Melbourne]`
          # binds the suffix to the `to` endpoint, so an unpropagated pair reaches
-         # `validate_endpoint_order/2` as a floating `from` against a grounded `to` and
+         # `validate_endpoint_order/2` as a floating `from` against a zoned `to` and
          # is rejected as out of order. Propagation never overwrites, so running it
          # again after `attach_extended/2` (which applies a *top-level* suffix) is a
-         # no-op for the endpoints this pass already grounded.
+         # no-op for the endpoints this pass already placed in a zone.
          expanded = propagate_endpoint_frame(expanded),
          {:ok, validated} <- Validation.validate(expanded, effective_calendar),
          attached = attach_extended(validated, extended),
@@ -1805,7 +1805,7 @@ defmodule Tempo do
   # types across clauses even though `from_date/1` always hits the
   # keyword-list clause. Suppress the resulting wide-return warning
   # rather than widen the spec, which would mislead human readers.
-  @dialyzer {:nowarn_function, from_date: 1, from_time: 1, from_naive_date_time: 1}
+  @dialyzer {:nowarn_function, from_date: 1, from_time: 1, from_naive_datetime: 1}
 
   @spec from_date(date :: Date.t()) :: t()
   def from_date(%{year: year, month: month, day: day, calendar: Calendar.ISO}) do
@@ -1963,7 +1963,7 @@ defmodule Tempo do
 
   ### Arguments
 
-  * `naive_date_time` is any `t:NaiveDateTime.t/0`.
+  * `naive_datetime` is any `t:NaiveDateTime.t/0`.
 
   ### Returns
 
@@ -1973,12 +1973,12 @@ defmodule Tempo do
 
   ### Examples
 
-      iex> Tempo.from_naive_date_time ~N[2022-11-20 10:37:00]
+      iex> Tempo.from_naive_datetime ~N[2022-11-20 10:37:00]
       ~o"2022Y11M20DT10H37M0S"
 
   """
-  @spec from_naive_date_time(naive_date_time :: NaiveDateTime.t()) :: t()
-  def from_naive_date_time(
+  @spec from_naive_datetime(naive_datetime :: NaiveDateTime.t()) :: t()
+  def from_naive_datetime(
         %{
           year: year,
           month: month,
@@ -1995,7 +1995,7 @@ defmodule Tempo do
     )
   end
 
-  def from_naive_date_time(
+  def from_naive_datetime(
         %{
           year: year,
           month: month,
@@ -2012,7 +2012,7 @@ defmodule Tempo do
     )
   end
 
-  def from_naive_date_time(
+  def from_naive_datetime(
         %{
           year: year,
           month: month,
@@ -2041,7 +2041,7 @@ defmodule Tempo do
 
   ### Arguments
 
-  * `date_time` is any `t:DateTime.t/0`.
+  * `datetime` is any `t:DateTime.t/0`.
 
   ### Returns
 
@@ -2049,18 +2049,18 @@ defmodule Tempo do
 
   ### Examples
 
-      iex> Tempo.from_date_time(~U[2022-11-20 10:37:00Z]).time
+      iex> Tempo.from_datetime(~U[2022-11-20 10:37:00Z]).time
       [year: 2022, month: 11, day: 20, hour: 10, minute: 37, second: 0]
 
-      iex> Tempo.from_date_time(~U[2022-11-20 10:37:00Z]).shift
+      iex> Tempo.from_datetime(~U[2022-11-20 10:37:00Z]).shift
       [hour: 0]
 
-      iex> Tempo.from_date_time(~U[2022-11-20 10:37:00Z]).extended.zone_id
+      iex> Tempo.from_datetime(~U[2022-11-20 10:37:00Z]).extended.zone_id
       "Etc/UTC"
 
   """
-  @spec from_date_time(DateTime.t()) :: t()
-  def from_date_time(
+  @spec from_datetime(DateTime.t()) :: t()
+  def from_datetime(
         %DateTime{
           year: year,
           month: month,
@@ -2982,7 +2982,7 @@ defmodule Tempo do
     resolution = Keyword.get(options, :resolution) || infer_datetime_resolution(naive)
 
     naive
-    |> from_naive_date_time()
+    |> from_naive_datetime()
     |> at_resolution(resolution)
   end
 
@@ -2990,7 +2990,7 @@ defmodule Tempo do
     resolution = Keyword.get(options, :resolution) || infer_datetime_resolution(dt)
 
     dt
-    |> from_date_time()
+    |> from_datetime()
     |> at_resolution(resolution)
   end
 
@@ -3015,7 +3015,7 @@ defmodule Tempo do
   # zero" with "this unit was not specified", the very instant/span
   # confusion Tempo exists to remove. It also silently broke
   # round-tripping: `from_elixir(~N[2022-06-15 09:00:00])` used to
-  # coarsen to hour resolution, and `to_naive_date_time/1` then
+  # coarsen to hour resolution, and `to_naive_datetime/1` then
   # failed to reconstitute the second-granular value. Callers that
   # genuinely want a coarser span pass `:resolution`.
   defp infer_time_resolution(%Time{microsecond: {_v, p}}) when p > 0, do: :microsecond
@@ -3291,7 +3291,7 @@ defmodule Tempo do
   dropped — the same lossy projection `DateTime.to_naive/1`
   performs in the stdlib, and consistent with `to_date/1` /
   `to_time/1`. No time-zone math is involved: the wall-clock fields
-  are read verbatim. To keep the zone, use `to_date_time/1`; to
+  are read verbatim. To keep the zone, use `to_datetime/1`; to
   normalise to UTC wall time first, `shift_zone(tempo, "Etc/UTC")`.
 
   ### Arguments
@@ -3302,21 +3302,21 @@ defmodule Tempo do
 
   ### Returns
 
-  * `{:ok, naive_date_time}`, or
+  * `{:ok, naive_datetime}`, or
 
   * `{:error, reason}` when the value is not resolved to a full
     datetime.
 
   ### Examples
 
-      iex> Tempo.to_naive_date_time(~o"2022-11-19T01:02:03")
+      iex> Tempo.to_naive_datetime(~o"2022-11-19T01:02:03")
       {:ok, ~N[2022-11-19 01:02:03.000000]}
 
-      iex> {:error, _} = Tempo.to_naive_date_time(~o"2022-11")
+      iex> {:error, _} = Tempo.to_naive_datetime(~o"2022-11")
 
   """
-  @spec to_naive_date_time(t()) :: {:ok, NaiveDateTime.t()} | {:error, error_reason()}
-  def to_naive_date_time(
+  @spec to_naive_datetime(t()) :: {:ok, NaiveDateTime.t()} | {:error, error_reason()}
+  def to_naive_datetime(
         %Tempo{
           time: [
             year: year,
@@ -3332,7 +3332,7 @@ defmodule Tempo do
     NaiveDateTime.new(year, month, day, hour, minute, second, microsecond, native_calendar(tempo))
   end
 
-  def to_naive_date_time(
+  def to_naive_datetime(
         %Tempo{
           time: [year: year, month: month, day: day, hour: hour, minute: minute, second: second]
         } = tempo
@@ -3340,7 +3340,7 @@ defmodule Tempo do
     NaiveDateTime.new(year, month, day, hour, minute, second, 0, native_calendar(tempo))
   end
 
-  def to_naive_date_time(%Tempo{} = value) do
+  def to_naive_datetime(%Tempo{} = value) do
     {:error, ConversionError.exception(value: value, target: NaiveDateTime)}
   end
 
@@ -3351,20 +3351,20 @@ defmodule Tempo do
   it preserves the named time zone, re-deriving the UTC offset from
   the time-zone database so the result is DST-correct. This is the
   conversion to reach for when the zone matters — unlike
-  `to_naive_date_time/1`, which deliberately drops it.
+  `to_naive_datetime/1`, which deliberately drops it.
 
   ### Arguments
 
-  * `tempo` is a `t:t/0` resolved to at least second resolution and
-    carrying a named IANA zone on `extended.zone_id` (every value
-    built from a `DateTime` via `from_elixir/2` does). Offset-only
-    values (a numeric shift with no named zone) and floating values
-    cannot name a `DateTime` zone and return an error — attach a
-    zone with `shift_zone/2` first, or use `to_naive_date_time/1`.
+  * `tempo` is a zoned `t:t/0` resolved to at least second resolution.
+    A named IANA zone on `extended.zone_id` (every value built from a
+    `DateTime` via `from_elixir/2` has one) is kept; a UTC offset
+    (`Z` included) gives the instant in `Etc/UTC`. A floating value
+    has no instant and returns an error — place it in a zone with
+    `in_zone/2` first, or use `to_naive_datetime/1`.
 
   ### Returns
 
-  * `{:ok, date_time}`, or
+  * `{:ok, datetime}`, or
 
   * `{:error, reason}` when the value lacks a full datetime or a
     named zone, or when the wall-clock time falls in a
@@ -3372,28 +3372,28 @@ defmodule Tempo do
 
   ### Examples
 
-      iex> Tempo.to_date_time(~o"2022-11-19T01:02:03Z[Etc/UTC]")
+      iex> Tempo.to_datetime(~o"2022-11-19T01:02:03Z[Etc/UTC]")
       {:ok, ~U[2022-11-19 01:02:03.000000Z]}
 
-      iex> {:error, _} = Tempo.to_date_time(~o"2022-11-19T01:02:03")
+      iex> {:error, _} = Tempo.to_datetime(~o"2022-11-19T01:02:03")
 
   """
-  @spec to_date_time(t()) :: {:ok, DateTime.t()} | {:error, error_reason()}
-  def to_date_time(%Tempo{extended: %{zone_id: zone_id}} = tempo)
+  @spec to_datetime(t()) :: {:ok, DateTime.t()} | {:error, error_reason()}
+  def to_datetime(%Tempo{extended: %{zone_id: zone_id}} = tempo)
       when is_binary(zone_id) and zone_id != "" do
-    with {:ok, naive} <- to_naive_date_time(tempo) do
-      naive_to_zoned_date_time(naive, zone_id, tempo)
+    with {:ok, naive} <- to_naive_datetime(tempo) do
+      naive_to_zoned_datetime(naive, zone_id, tempo)
     end
   end
 
-  # A value grounded by a UTC offset (`+10:00`; `Z` is offset zero)
+  # A value with a UTC offset (`+10:00`; `Z` is offset zero)
   # denotes an exact instant. Convert the wall clock to UTC and return
   # the instant as an `Etc/UTC` DateTime — the same normalisation
   # Elixir's `DateTime.from_iso8601/1` applies to offset strings.
   # iCalendar `DATE-TIME` values commonly carry offsets rather than
   # named zones, so this is the common third-party path.
-  def to_date_time(%Tempo{shift: shift} = tempo) when is_list(shift) do
-    with {:ok, naive} <- to_naive_date_time(tempo) do
+  def to_datetime(%Tempo{shift: shift} = tempo) when is_list(shift) do
+    with {:ok, naive} <- to_naive_datetime(tempo) do
       utc_naive = NaiveDateTime.add(naive, -Compare.offset_seconds(shift), :second)
 
       # `Etc/UTC` has no transitions, so `:ambiguous`/`:gap` cannot
@@ -3408,20 +3408,20 @@ defmodule Tempo do
            ConversionError.exception(
              value: tempo,
              target: DateTime,
-             reason: "could not project the offset-grounded value to UTC"
+             reason: "could not project the value to UTC from its offset"
            )}
       end
     end
   end
 
-  def to_date_time(%Tempo{} = value) do
+  def to_datetime(%Tempo{} = value) do
     {:error,
      ConversionError.exception(
        value: value,
        target: DateTime,
        reason:
          "a floating value (no zone or offset) does not denote an instant — " <>
-           "ground it with `Tempo.in_zone/2`, or parse it with a zone, offset, or `Z`"
+           "place it in a zone with `Tempo.in_zone/2`, or parse it with a zone, offset, or `Z`"
      )}
   end
 
@@ -3431,7 +3431,7 @@ defmodule Tempo do
   # A DST fall-back (`:ambiguous`) is disambiguated by the offset
   # the Tempo already carries; a spring-forward `:gap` names a
   # wall-clock time that does not exist, so it is an error.
-  defp naive_to_zoned_date_time(naive, zone_id, %Tempo{} = tempo) do
+  defp naive_to_zoned_datetime(naive, zone_id, %Tempo{} = tempo) do
     case DateTime.from_naive(naive, zone_id, TimeZoneDatabase.database()) do
       {:ok, date_time} ->
         {:ok, date_time}
@@ -3468,32 +3468,6 @@ defmodule Tempo do
   end
 
   defp disambiguate_fold(first, _second, _tempo), do: first
-
-  @doc """
-  Convert a `t:t/0` to its best-fit native Elixir calendar type.
-
-  Deprecated: use `to_elixir/1`, the outbound mirror of `from_elixir/2`,
-  which converts `%Tempo{}` values and durations alike. This is kept as a
-  delegating alias so existing callers keep working.
-
-  ### Arguments
-
-  * `tempo` is a `t:t/0`.
-
-  ### Returns
-
-  * `{:ok, native}` where `native` is a `Date`, `Time`, or
-    `NaiveDateTime`; or
-
-  * `{:error, t:Tempo.ConversionError.t/0}` when the value is too
-    coarse to convert, or carries a zone offset.
-
-  """
-  @deprecated "Use Tempo.to_elixir/1"
-  @spec to_calendar(t()) ::
-          {:ok, Date.t() | Time.t() | NaiveDateTime.t()}
-          | {:error, Tempo.ConversionError.t()}
-  def to_calendar(%Tempo{} = tempo), do: to_elixir(tempo)
 
   @doc """
   Convert a day-resolution value from its current calendar into
@@ -3659,7 +3633,7 @@ defmodule Tempo do
   * A `t:t/0` becomes its best-fit native calendar type by resolution —
     a `Date`, `Time`, or `NaiveDateTime`. For a specific target
     (including a zoned `DateTime`) use `to_date/1`, `to_time/1`,
-    `to_date_time/1`, or `to_naive_date_time/1`. To change a value's
+    `to_datetime/1`, or `to_naive_datetime/1`. To change a value's
     *calendar* (e.g. Gregorian to Hebrew) use `to_calendar/2`.
 
   ### Arguments
@@ -3669,7 +3643,7 @@ defmodule Tempo do
   ### Returns
 
   * `{:ok, native}` where `native` is an Elixir `Duration`, `Date`,
-    `Time`, `NaiveDateTime`, or — for a grounded value (a zone, an
+    `Time`, `NaiveDateTime`, or — for a zoned value (a zone, an
     offset, or `Z`) — a `DateTime`.
 
   * `{:error, t:Tempo.ConversionError.t/0}` when the value cannot be
@@ -3702,22 +3676,22 @@ defmodule Tempo do
     end
   end
 
-  # A grounded value — a named zone, or a UTC offset (`Z` included) —
+  # A zoned value — a named zone, or a UTC offset (`Z` included) —
   # denotes an instant and converts to a `DateTime`; only floating
   # values fall through to the Date/Time/NaiveDateTime cascade.
   def to_elixir(%Tempo{extended: %{zone_id: zone_id}} = tempo)
       when is_binary(zone_id) and zone_id != "" do
-    to_date_time(tempo)
+    to_datetime(tempo)
   end
 
   def to_elixir(%Tempo{shift: shift} = tempo) when is_list(shift) do
-    to_date_time(tempo)
+    to_datetime(tempo)
   end
 
   def to_elixir(%Tempo{} = tempo) do
     with {:error, %Tempo.ConversionError{target: Date}} <- to_date(tempo),
          {:error, %Tempo.ConversionError{target: Time}} <- to_time(tempo) do
-      to_naive_date_time(tempo)
+      to_naive_datetime(tempo)
     end
   end
 
@@ -3784,7 +3758,7 @@ defmodule Tempo do
     # Truncate the clock's microsecond so the result honours the
     # documented second resolution. For a sub-second reading, use
     # `Tempo.from_elixir(DateTime.utc_now())`.
-    Clock.utc_now() |> DateTime.truncate(:second) |> from_date_time()
+    Clock.utc_now() |> DateTime.truncate(:second) |> from_datetime()
   end
 
   @doc """
@@ -3832,11 +3806,11 @@ defmodule Tempo do
   def now(zone), do: {:error, UnknownZoneError.exception(zone_id: inspect(zone))}
 
   # The current UTC instant read in `zone`.
-  defp zoned_now(utc, "Etc/UTC"), do: from_date_time(utc)
+  defp zoned_now(utc, "Etc/UTC"), do: from_datetime(utc)
 
   defp zoned_now(utc, zone) do
     case DateTime.shift_zone(utc, zone, TimeZoneDatabase.database()) do
-      {:ok, zoned} -> from_date_time(zoned)
+      {:ok, zoned} -> from_datetime(zoned)
       {:error, _reason} -> {:error, UnknownZoneError.exception(zone_id: zone)}
     end
   end
@@ -3920,24 +3894,23 @@ defmodule Tempo do
   defp drop_zone({:error, _reason} = error), do: error
 
   ## ---------------------------------------------------------
-  ## Zone grounding — place a floating Tempo into a zone
+  ## Zone placement — place a floating Tempo in a zone
   ## ---------------------------------------------------------
 
   @doc """
-  Ground a floating `Tempo` by placing its wall-clock reading into an
-  IANA time zone.
+  Place a floating `Tempo` in an IANA time zone, keeping its
+  wall-clock reading.
 
   A floating value (`~o"2024-01-01"`) names a civil reading but not
   *which* observer's — it has no position on the universal time line.
   `in_zone/2` interprets that reading as the local time in `zone`,
-  producing a grounded value that projects to UTC. The wall-clock
+  producing a zoned value that projects to UTC. The wall-clock
   fields are unchanged; only the zone is attached. This is the runtime
   equivalent of writing the `[zone]` suffix in the source
   (`~o"2024-01-01[Australia/Sydney]"`).
 
-  Use `in_zone/2` to *place* a floating value into a zone; use
-  `shift_zone/2` to *move* an already-grounded value to a different
-  zone (which re-computes the wall clock to preserve the instant).
+  Use `in_zone/2` to *place* a floating value in a zone; use
+  `shift_zone/2` to *move* a zoned value to a different zone (which re-computes the wall clock to preserve the instant).
 
   ### Arguments
 
@@ -3949,9 +3922,9 @@ defmodule Tempo do
 
   ### Returns
 
-  * `{:ok, tempo}` grounded in `zone`, with the same wall-clock fields.
+  * `{:ok, tempo}` in `zone`, with the same wall-clock fields.
 
-  * `{:error, reason}` when `tempo` is already grounded (use
+  * `{:error, reason}` when `tempo` is already zoned (use
     `shift_zone/2` instead) or `zone` is unknown to the configured
     time zone database.
 
@@ -3968,7 +3941,7 @@ defmodule Tempo do
   def in_zone(%Tempo{} = tempo, zone) when is_binary(zone) do
     cond do
       not floating?(tempo) ->
-        {:error, GroundedTempoError.exception(operation: :in_zone, value: tempo)}
+        {:error, ZonedTempoError.exception(operation: :in_zone, value: tempo)}
 
       not TimeZoneDatabase.zone_exists?(zone) ->
         {:error, UnknownZoneError.exception(zone_id: zone)}
@@ -4047,10 +4020,10 @@ defmodule Tempo do
   A floating value carries no `[IANA/Zone]` tag, no `Z`, and no numeric
   offset. `~o"2024-01-01"` is floating: it names a civil day but not
   *which* observer's civil day, so it has no single universal instant.
-  Attaching a zone with `in_zone/2` (or an offset such as `Z`) grounds
-  it. The complement is `grounded?/1`.
+  Placing it in a zone with `in_zone/2` (or writing an offset such as
+  `Z`) makes it zoned. The complement is `zoned?/1`.
 
-  Floating and grounded values cannot be compared — a floating value
+  Floating and zoned values cannot be compared — a floating value
   has no universal position — so `relation/2` and the interval
   predicates raise a `Tempo.FloatingTempoError` when only one operand
   is floating.
@@ -4084,10 +4057,10 @@ defmodule Tempo do
   def floating?(%Tempo{}), do: false
 
   @doc """
-  Return whether a `Tempo` value is *grounded* — it carries a zone or
+  Return whether a `Tempo` value is *zoned* — it carries a zone or an
   offset and so has a position on the universal (UTC) time line.
 
-  Grounded is the exact complement of `floating?/1`: a value is grounded
+  Zoned is the exact complement of `floating?/1`: a value is zoned
   when it has an `[IANA/Zone]` tag, a `Z`, or a numeric offset.
 
   ### Arguments
@@ -4102,15 +4075,15 @@ defmodule Tempo do
 
   ### Examples
 
-      iex> Tempo.grounded?(Tempo.from_iso8601!("2024-01-01[Australia/Sydney]"))
+      iex> Tempo.zoned?(Tempo.from_iso8601!("2024-01-01[Australia/Sydney]"))
       true
 
-      iex> Tempo.grounded?(Tempo.from_iso8601!("2024-01-01"))
+      iex> Tempo.zoned?(Tempo.from_iso8601!("2024-01-01"))
       false
 
   """
-  @spec grounded?(t()) :: boolean()
-  def grounded?(%Tempo{} = tempo), do: not floating?(tempo)
+  @spec zoned?(t()) :: boolean()
+  def zoned?(%Tempo{} = tempo), do: not floating?(tempo)
 
   defp do_shift_zone(%Tempo{calendar: calendar} = tempo, "Etc/UTC") do
     utc_seconds = Compare.to_utc_seconds(tempo)
@@ -4486,7 +4459,7 @@ defmodule Tempo do
   defp calendar_of(%Tempo{calendar: calendar}), do: calendar
 
   # The native Elixir calendar for a value at the outbound boundary
-  # (`to_date/1`, `to_naive_date_time/1`, `to_elixir/1`): Tempo's internal
+  # (`to_date/1`, `to_naive_datetime/1`, `to_elixir/1`): Tempo's internal
   # `Calendrical.Gregorian` becomes Elixir's `Calendar.ISO`, while any other
   # calendar passes through — so a non-Gregorian value converts to a native
   # type in its own calendar rather than being mislabelled ISO.

@@ -329,7 +329,7 @@ utc_window = ~o"2026-06-15T07Z/2026-06-15T09Z"
 Tempo.overlaps?(paris, utc_window)
 ```
 
-Both values are *grounded* — the Paris time by its zone, the window by `Z`. Comparing a grounded value with a floating one (no zone or offset) raises `Tempo.FloatingTempoError` rather than silently assuming UTC; ground the floating side first.
+Both values are *zoned* — the Paris time by its zone, the window by `Z`. Comparing a zoned value with a floating one (no zone or offset) raises `Tempo.FloatingTempoError` rather than silently assuming UTC; place the floating side in a zone first with `Tempo.in_zone/2`.
 
 Paris 10:00 CEST is UTC 08:00 — inside the UTC 07:00-09:00 window. Tempo projects to UTC via `Tzdata` per-call; the wall-clock representation is preserved on the struct.
 

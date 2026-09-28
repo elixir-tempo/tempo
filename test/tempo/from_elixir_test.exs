@@ -208,29 +208,29 @@ defmodule Tempo.FromElixir.Test do
     test "NaiveDateTime round-trips at the default (second) resolution" do
       # Previously this required an explicit `resolution: :second`
       # because `from_elixir/1` coarsened `10:30:00` to minute
-      # resolution and `to_naive_date_time/1` then failed. The default
+      # resolution and `to_naive_datetime/1` then failed. The default
       # is now second resolution, so the round-trip succeeds with no
       # override. NaiveDateTime's microsecond field defaults to
       # `{0, 0}` for sigil literals and to `{0, 6}` for
-      # `to_naive_date_time/1` output, so compare component-wise
+      # `to_naive_datetime/1` output, so compare component-wise
       # rather than structurally.
       naive = ~N[2022-06-15 10:30:00]
       tempo = Tempo.from_elixir(naive)
-      assert {:ok, round_tripped} = Tempo.to_naive_date_time(tempo)
+      assert {:ok, round_tripped} = Tempo.to_naive_datetime(tempo)
       assert NaiveDateTime.compare(round_tripped, naive) == :eq
     end
 
-    test "zoned DateTime → to_naive_date_time keeps wall-clock, drops zone" do
+    test "zoned DateTime → to_naive_datetime keeps wall-clock, drops zone" do
       # Paris is UTC+2 in June; the wall reading is 10:30, not 08:30.
       paris = DateTime.new!(~D[2022-06-15], ~T[10:30:00], "Europe/Paris")
       tempo = Tempo.from_elixir(paris)
-      assert {:ok, ~N[2022-06-15 10:30:00.000000]} = Tempo.to_naive_date_time(tempo)
+      assert {:ok, ~N[2022-06-15 10:30:00.000000]} = Tempo.to_naive_datetime(tempo)
     end
 
-    test "zoned DateTime → to_date_time preserves the zone and instant" do
+    test "zoned DateTime → to_datetime preserves the zone and instant" do
       paris = DateTime.new!(~D[2022-06-15], ~T[10:30:00], "Europe/Paris")
       tempo = Tempo.from_elixir(paris)
-      assert {:ok, round_tripped} = Tempo.to_date_time(tempo)
+      assert {:ok, round_tripped} = Tempo.to_datetime(tempo)
       assert round_tripped.time_zone == "Europe/Paris"
       assert DateTime.compare(round_tripped, paris) == :eq
     end

@@ -16,6 +16,11 @@ Tempo 2.0 gives each word in its API one meaning, the one it has in everyday Eng
 | IXDTF tags through `Tempo.new/1`'s `:metadata` | `:tags` |
 | `Tempo.anchor/2` | `Tempo.on/2` or `Tempo.at/2`, in either order |
 | `Tempo.NonAnchoredError`, `Tempo.RequiresAnchorError` | `Tempo.UnanchoredError` |
+| `Tempo.grounded?/1` | `Tempo.zoned?/1` |
+| `Tempo.GroundedTempoError` | `Tempo.ZonedTempoError` |
+| `Tempo.to_date_time/1`, `from_date_time/1` | `Tempo.to_datetime/1`, `from_datetime/1` |
+| `Tempo.to_naive_date_time/1`, `from_naive_date_time/1` | `Tempo.to_naive_datetime/1`, `from_naive_datetime/1` |
+| `Tempo.to_calendar/1` | `Tempo.to_elixir/1` |
 
 These keep their names and change their meaning:
 
@@ -48,7 +53,7 @@ end
 A search for the removed names finds the renames:
 
 ```bash
-grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(meets|during)\?|Interval\.(meets|during)\?|(Tempo|Interval)\.compose|Tempo\.anchor[(/]|(NonAnchored|RequiresAnchor)Error|:unanchored' lib test
+grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(meets|during)\?|Interval\.(meets|during)\?|(Tempo|Interval)\.compose|Tempo\.anchor[(/]|(NonAnchored|RequiresAnchor)Error|:unanchored|grounded\?|GroundedTempoError|(to|from)_(naive_)?date_time' lib test
 ```
 
 The changes of meaning need a read rather than a replace: every `before?`, `after?` and their `certainly_` and `possibly_` forms, every duration read as a count of seconds, every shift of a zoned value by hours, every `duration/1` of a set, every window, and every `:metadata` passed to `Tempo.new/1`.
@@ -332,3 +337,43 @@ true
 ```
 
 "Anchored" now means one thing, that a value has a year. A recurrence whose rule names no start has an open start, and converting one with no `:within` window returns `Tempo.IntervalEndpointsError` with `reason: :open_start`, where 1.x said `:unanchored`.
+
+## Zoned is the pair of floating
+
+A value with a zone or an offset is zoned, and a value with neither is floating — the calendaring words, as in RFC 5545's floating time and Temporal's `ZonedDateTime`. `Tempo.zoned?/1` replaces `grounded?/1`, and `Tempo.ZonedTempoError`, which `in_zone/2` returns for a value that already has a zone, replaces `GroundedTempoError`.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.x
+Tempo.grounded?(~o"2026-06-15T09:00[Europe/Paris]")
+#=> true
+```
+
+```elixir
+iex> Tempo.zoned?(~o"2026-06-15T09:00[Europe/Paris]")
+true
+iex> Tempo.floating?(~o"2026-06-15T09:00")
+true
+```
+
+> *"Nine in the morning in Paris is **zoned**; nine in the morning wherever you are is **floating**."*
+
+## Datetime is one word
+
+The conversions to and from Elixir's `DateTime` and `NaiveDateTime` write "datetime" as one word, as Elixir does and as `Tempo.parse_datetime/2` already did: `to_datetime/1`, `from_datetime/1`, `to_naive_datetime/1` and `from_naive_datetime/1`. `to_calendar/1`, deprecated since `to_elixir/1` arrived, is removed.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.x
+Tempo.to_date_time(meeting)
+Tempo.to_calendar(birthday)
+```
+
+```elixir
+iex> Tempo.to_datetime(~o"2026-06-15T09:00:00[Europe/Paris]")
+{:ok, #DateTime<2026-06-15 09:00:00.000000+02:00 CEST Europe/Paris>}
+iex> Tempo.to_elixir(~o"2026-06-15")
+{:ok, ~D[2026-06-15]}
+```

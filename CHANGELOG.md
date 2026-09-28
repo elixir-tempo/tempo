@@ -17,6 +17,11 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 | `Tempo.Interval.equivalent?/2` | `Tempo.equal?/3` |
 | `Tempo.anchor/2` | `Tempo.on/2` or `Tempo.at/2`, in either order |
 | `Tempo.NonAnchoredError`, `Tempo.RequiresAnchorError` | `Tempo.UnanchoredError` |
+| `Tempo.grounded?/1` | `Tempo.zoned?/1` |
+| `Tempo.GroundedTempoError` | `Tempo.ZonedTempoError` |
+| `Tempo.to_date_time/1`, `from_date_time/1` | `Tempo.to_datetime/1`, `from_datetime/1` |
+| `Tempo.to_naive_date_time/1`, `from_naive_date_time/1` | `Tempo.to_naive_datetime/1`, `from_naive_datetime/1` |
+| `Tempo.to_calendar/1` | `Tempo.to_elixir/1` |
 
 * `Tempo.duration/1` and `Tempo.IntervalSet.duration/1` measure the time a set covers, counting time its members share once; `IntervalSet.total_duration/1`, which did, is removed.
 
@@ -45,6 +50,10 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * `Tempo.anchor/2` is removed: `at/2` and `on/2` place a value without a year on one with a year in either order, so `Tempo.on(~o"T17", ~o"2026-06-15")` is 17:00 on 15 June.
 
 * `Tempo.UnanchoredError` replaces `NonAnchoredError` and `RequiresAnchorError`, and a recurrence with an open start returns `IntervalEndpointsError` with `reason: :open_start`, where it was `:unanchored`.
+
+* A value with a zone or an offset is zoned, the pair of floating: `Tempo.zoned?/1` replaces `grounded?/1`, and `Tempo.ZonedTempoError` replaces `GroundedTempoError`.
+
+* The Elixir conversions write "datetime" as one word, as Elixir does: `to_datetime/1`, `from_datetime/1`, `to_naive_datetime/1` and `from_naive_datetime/1`. The deprecated `to_calendar/1` is removed for `to_elixir/1`.
 
 ### Added
 

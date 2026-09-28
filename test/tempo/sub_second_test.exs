@@ -276,11 +276,11 @@ defmodule Tempo.SubSecondTest do
       refute Keyword.has_key?(Tempo.from_elixir(~N[2026-06-15 10:30:45]).time, :microsecond)
     end
 
-    test "to_naive_date_time round-trips microseconds (trailing zeros preserved)" do
-      assert Tempo.to_naive_date_time(Tempo.from_elixir(~N[2026-06-15 10:30:45.123456])) ==
+    test "to_naive_datetime round-trips microseconds (trailing zeros preserved)" do
+      assert Tempo.to_naive_datetime(Tempo.from_elixir(~N[2026-06-15 10:30:45.123456])) ==
                {:ok, ~N[2026-06-15 10:30:45.123456]}
 
-      assert Tempo.to_naive_date_time(Tempo.from_elixir(~N[2026-06-15 10:30:45.250])) ==
+      assert Tempo.to_naive_datetime(Tempo.from_elixir(~N[2026-06-15 10:30:45.250])) ==
                {:ok, ~N[2026-06-15 10:30:45.250]}
     end
 

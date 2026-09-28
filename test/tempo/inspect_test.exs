@@ -158,7 +158,7 @@ defmodule Tempo.Iso8601.InspectTest do
       assert inspect(iv) == "~o\"5786Y9M30D/10M1D[u-ca=hebrew]\""
     end
 
-    test "a calendar written once grounds both endpoints on re-parse" do
+    test "a calendar written once applies to both endpoints on re-parse" do
       # Before the calendar propagated, this parsed as a *mixed*
       # Gregorian/Hebrew pair — which the abbreviated `11M1D` cannot mean,
       # since it is only readable against `from`'s own year.

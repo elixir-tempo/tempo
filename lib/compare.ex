@@ -758,8 +758,8 @@ defmodule Tempo.Compare do
 
   @doc false
   # The signed offset in seconds denoted by a parsed ISO 8601 shift
-  # list. Shared with `Tempo.to_date_time/1`'s offset-grounded
-  # conversion.
+  # list. Shared with `Tempo.to_datetime/1`'s conversion of a value
+  # with an offset.
   def offset_seconds(shift) when is_list(shift), do: shift_to_seconds(shift)
 
   # A shift carries its sign on its first non-zero component (`-05:30`

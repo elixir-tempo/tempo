@@ -1,12 +1,16 @@
 defmodule Tempo.FloatingTempoError do
   @moduledoc """
-  Exception raised when an operation requires zone or offset
-  information but the supplied `Tempo` value is floating — no
-  `[IANA/Zone]` tag, no `Z`, no numeric offset.
+  Exception returned when an operation needs a zone or an offset and
+  is given a floating `Tempo` value — no `[IANA/Zone]` tag, no `Z`,
+  no numeric offset. A comparison between a floating value and a
+  zoned one raises it.
 
   Floating values are deliberate (see the scheduling guide) but
   cannot be projected to UTC, so any operation that needs a
-  universal instant rejects them.
+  universal instant rejects them. `Tempo.in_zone/2` places a
+  floating value in a zone. The opposite error, for an operation
+  that needs a floating value and is given a zoned one, is
+  `Tempo.ZonedTempoError`.
 
   """
 
@@ -25,8 +29,8 @@ defmodule Tempo.FloatingTempoError do
   @impl true
   def message(%__MODULE__{operation: op}) when not is_nil(op) do
     "Cannot #{describe_operation(op)} on a floating Tempo (no zone or offset information). " <>
-      "Attach a zone via an IXDTF suffix (`[Europe/Paris]`) or an offset " <>
-      "(`Z` or `+HH:MM`) first."
+      "Place it in a zone with `Tempo.in_zone/2`, or write a zone (`[Europe/Paris]`) " <>
+      "or an offset (`Z` or `+HH:MM`), first."
   end
 
   def message(%__MODULE__{}) do

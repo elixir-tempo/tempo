@@ -114,6 +114,6 @@ early_june
 
 ## Where next
 
-* The [scheduling guide](https://hexdocs.pm/ex_tempo/scheduling.html) adds floating-vs-grounded events, zone-rule-proof future dates, and critical-path scheduling over `Tempo.Network`.
+* The [scheduling guide](https://hexdocs.pm/ex_tempo/scheduling.html) adds floating-vs-zoned events, zone-rule-proof future dates, and critical-path scheduling over `Tempo.Network`.
 * The [workdays and weekends](https://hexdocs.pm/ex_tempo/workdays-and-weekends.html) and [holidays](https://hexdocs.pm/ex_tempo/holidays.html) cookbooks cover observed-holiday rules.
 * The [iCal integration guide](https://hexdocs.pm/ex_tempo/ical-integration.html) imports real calendars into this same algebra.

@@ -591,10 +591,10 @@ defmodule Tempo.Operations.Test do
       }
 
       paris_from =
-        Tempo.from_date_time(DateTime.new!(~D[2022-06-15], ~T[12:00:00], "Europe/Paris"))
+        Tempo.from_datetime(DateTime.new!(~D[2022-06-15], ~T[12:00:00], "Europe/Paris"))
 
       paris_to =
-        Tempo.from_date_time(DateTime.new!(~D[2022-06-15], ~T[13:00:00], "Europe/Paris"))
+        Tempo.from_datetime(DateTime.new!(~D[2022-06-15], ~T[13:00:00], "Europe/Paris"))
 
       paris = %Tempo.Interval{from: paris_from, to: paris_to}
 

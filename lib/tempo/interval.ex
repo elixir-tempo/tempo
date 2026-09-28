@@ -398,7 +398,7 @@ defmodule Tempo.Interval do
     %{target_extended | calendar: calendar}
   end
 
-  # Overlay `source`'s grounding frame — its numeric `shift` and the zone
+  # Overlay `source`'s zone frame — its numeric `shift` and the zone
   # fields of its `extended` — onto `target`, leaving target's own units,
   # calendar, and tags untouched.
   defp copy_frame(%Tempo{} = source, %Tempo{} = target) do
@@ -2503,10 +2503,10 @@ defmodule Tempo.Interval do
 
   @doc false
   # A floating value has no position on the universal time line, so it
-  # cannot be compared with a grounded one — every crisp relation and
+  # cannot be compared with a zoned one — every crisp relation and
   # certainty query rejects the mixed frame rather than silently
-  # grounding the floating side to UTC. Ground it first with
-  # `Tempo.in_zone/2` (or an offset). Two floating or two grounded
+  # reading the floating side as UTC. Place it in a zone first with
+  # `Tempo.in_zone/2` (or write an offset). Two floating or two zoned
   # operands compare normally. Shared with `Tempo.Operations` so the
   # set-theoretic predicates (`overlaps?/2`, `disjoint?/2`, …) reject
   # the same mismatch.
@@ -2521,7 +2521,7 @@ defmodule Tempo.Interval do
   end
 
   # Returns the floating endpoint Tempo when `a` and `b` are a
-  # floating-vs-grounded mismatch, else `nil` (same frame, or a frame
+  # floating-vs-zoned mismatch, else `nil` (same frame, or a frame
   # can't be determined — e.g. a fully open interval).
   defp floating_conflict(a, b) do
     with %Tempo{} = ta <- frame_tempo(a),

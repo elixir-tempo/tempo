@@ -1,6 +1,6 @@
-defmodule Tempo.GroundedConversionTest do
+defmodule Tempo.ZonedConversionTest do
   @moduledoc """
-  Converting grounded values to Elixir types: UTC offsets and `Z`
+  Converting zoned values to Elixir types: UTC offsets and `Z`
   produce DateTimes, zones keep their zone, floating values state why
   they cannot convert, `shift/2` accepts duration strings, and
   negative half-hour offsets project correctly.
@@ -9,7 +9,7 @@ defmodule Tempo.GroundedConversionTest do
 
   import Tempo.Sigils
 
-  describe "to_elixir/1 on grounded values" do
+  describe "to_elixir/1 on zoned values" do
     test "a UTC offset converts to the instant as a UTC DateTime" do
       # iCalendar DATE-TIMEs commonly carry offsets rather than Z.
       assert Tempo.to_elixir(~o"2026-06-15T09:00:00+10:00") ==
@@ -37,9 +37,9 @@ defmodule Tempo.GroundedConversionTest do
       assert Tempo.to_elixir(~o"2026-06-15T09:00:00") == {:ok, ~N[2026-06-15 09:00:00.000000]}
     end
 
-    test "to_date_time on a floating value names the problem" do
+    test "to_datetime on a floating value names the problem" do
       {:error, %Tempo.ConversionError{reason: reason}} =
-        Tempo.to_date_time(~o"2026-06-15T09:00:00")
+        Tempo.to_datetime(~o"2026-06-15T09:00:00")
 
       assert reason =~ "floating"
       assert reason =~ "in_zone"
@@ -49,7 +49,7 @@ defmodule Tempo.GroundedConversionTest do
   describe "negative offsets keep one sign convention" do
     test "a DateTime in a negative half-hour zone carries the sign on the hour" do
       {:ok, date_time} = DateTime.new(~D[2026-01-15], ~T[10:00:00], "America/St_Johns")
-      tempo = Tempo.from_date_time(date_time)
+      tempo = Tempo.from_datetime(date_time)
 
       assert tempo.shift == [hour: -3, minute: 30]
       assert {:ok, round_trip} = tempo |> Tempo.to_iso8601() |> Tempo.from_iso8601()

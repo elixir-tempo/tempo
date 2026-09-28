@@ -86,14 +86,14 @@ Conversion is one function call each way:
 # Stdlib → Tempo
 Tempo.from_date(~D[2026-06-15])
 Tempo.from_time(~T[14:30:00])
-Tempo.from_naive_date_time(~N[2026-06-15 14:30:00])
-Tempo.from_date_time(~U[2026-06-15 14:30:00Z])
+Tempo.from_naive_datetime(~N[2026-06-15 14:30:00])
+Tempo.from_datetime(~U[2026-06-15 14:30:00Z])
 Tempo.from_elixir(value, resolution: :day)  # unified gateway
 
 # Tempo → Stdlib
 Tempo.to_date(tempo)
 Tempo.to_time(tempo)
-Tempo.to_naive_date_time(tempo)
+Tempo.to_naive_datetime(tempo)
 Tempo.to_elixir(tempo)  # best-fit Date | Time | NaiveDateTime (durations too)
 ```
 

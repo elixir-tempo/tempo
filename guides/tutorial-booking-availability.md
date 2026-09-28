@@ -20,7 +20,7 @@ Monday June 15, 2026. The studio opens 09:00–17:00 UTC. In most systems that's
 iex> open_hours = ~o"2026-06-15T09Z/2026-06-15T17Z"
 ```
 
-The `Z` grounds the hours on the UTC timeline. Tempo distinguishes *grounded* values (zoned or offset) from *floating* ones (wall-clock only) and refuses to compare across that line — a deliberate guard you will meet if you mix them.
+The `Z` places the hours on the UTC timeline. Tempo distinguishes *zoned* values (a zone or an offset) from *floating* ones (wall-clock only) and refuses to compare across that line — a deliberate guard you will meet if you mix them.
 
 ## Step 2 — Import the bookings you already have
 
@@ -156,7 +156,7 @@ true
 
 ## Step 9 — A client in another timezone
 
-A Sydney band asks for "8 pm our time on June 15". Does that collide with anything in the book? Ground their wall-clock request in their zone and ask — Tempo compares across zones by UTC instant, no manual conversion:
+A Sydney band asks for "8 pm our time on June 15". Does that collide with anything in the book? Place their wall-clock request in their zone and ask — Tempo compares across zones by UTC instant, no manual conversion:
 
 ```elixir
 iex> sydney_request = Tempo.from_elixir(DateTime.new!(~D[2026-06-15], ~T[20:00:00], "Australia/Sydney"))
@@ -172,7 +172,7 @@ Ten values and eight operations: opening hours and an iCal feed became free time
 
 ## Where next
 
-* The [scheduling guide](https://hexdocs.pm/ex_tempo/scheduling.html) — floating vs grounded events, zone-rule-proof future dates, and critical-path scheduling.
+* The [scheduling guide](https://hexdocs.pm/ex_tempo/scheduling.html) — floating vs zoned events, zone-rule-proof future dates, and critical-path scheduling.
 * The [scheduling livebook](https://hexdocs.pm/ex_tempo/scheduling-workbook.html) — this material, runnable.
 * The [iCal integration guide](https://hexdocs.pm/ex_tempo/ical-integration.html) — recurring events in feeds, attendee filtering, metadata flow.
 * The [cookbook](https://hexdocs.pm/ex_tempo/cookbook.html) — recipe-format answers when you know the question.
