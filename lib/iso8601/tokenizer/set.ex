@@ -12,6 +12,18 @@ defmodule Tempo.Iso8601.Tokenizer.Set do
   # the modules concurrently; keeping the optimiser off keeps each cheap.
   @compile [:no_ssa_opt, :no_bsm_opt, :no_type_opt, :no_bool_opt, :no_fun_opt]
 
+  # Any set member: an all-of or one-of set, an interval, or a single
+  # date, datetime or time. Exported for the grammar; this module is
+  # hidden, so NimbleParsec's generated clauses stay out of the docs.
+  defcombinator :set,
+                choice([
+                  parsec({Tempo.Iso8601.Tokenizer.Set, :set_all}),
+                  parsec({Tempo.Iso8601.Tokenizer.Set, :set_one}),
+                  parsec({Tempo.Iso8601.Tokenizer.Set, :interval_parser}),
+                  parsec({Tempo.Iso8601.Tokenizer.Date, :datetime_or_date_or_time})
+                ]),
+                export_combinator: true
+
   defcombinator :integer_or_integer_set,
                 choice([
                   integer(min: 1) |> unwrap_and_tag(:nth),
@@ -170,7 +182,7 @@ defmodule Tempo.Iso8601.Tokenizer.Set do
 
   defcombinator :repeat_rule,
                 ignore(string("/F"))
-                |> parsec({Tempo.Iso8601.Tokenizer, :datetime_or_date_or_time})
+                |> parsec({Tempo.Iso8601.Tokenizer.Date, :datetime_or_date_or_time})
                 |> reduce(:extract_repeat_rule)
                 |> label("repeat_rule")
                 |> unwrap_and_tag(:repeat_rule),

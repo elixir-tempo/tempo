@@ -3,9 +3,9 @@ defmodule Tempo.Interval.DurationFormsTest do
   import Tempo.Sigils
 
   alias Tempo.Allen
+  alias Tempo.ConversionError
   alias Tempo.Interval
   alias Tempo.IntervalSet
-  alias Tempo.MaterialisationError
 
   # One bounded interval written three ways — both endpoints, a start and a
   # duration, a duration and an end — against the span that follows it. Every
@@ -133,7 +133,7 @@ defmodule Tempo.Interval.DurationFormsTest do
     end
 
     test "a recurrence is still refused as a single interval" do
-      assert {:error, %MaterialisationError{reason: :recurring_interval}} =
+      assert {:error, %ConversionError{reason: :recurring_interval}} =
                Tempo.relation(~o"R3/2026-01-01/P1D", ~o"2026-01-02")
     end
 

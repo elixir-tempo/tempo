@@ -1,12 +1,12 @@
 defmodule Tempo.RecurrenceSet do
   @moduledoc """
-  A collection of recurrence rules that materialises as one interval set.
+  A collection of recurrence rules whose occurrences form one interval set.
 
   A `%Tempo.RecurrenceSet{}` bundles many recurrences — a territory's public
   holidays, a calendar's events — so they compose with any other Tempo value
   through set algebra. Its members are ordinary `%Tempo.Interval{}` values, each
   either a recurrence (`~o"R/../P1Y/FL12M25DN"`) or an already-concrete interval,
-  and each may carry `:metadata` (a holiday name, say) that materialisation
+  and each may carry `:metadata` (a holiday name, say) that conversion
   preserves on every occurrence it produces. A plain `%Tempo{}` member is a
   concrete value too, standing for its own span (`~o"2026-06-15"` is that day).
   A member may itself be a `%Tempo.RecurrenceSet{}` — a holiday and its observed
@@ -14,7 +14,7 @@ defmodule Tempo.RecurrenceSet do
   each occurrence keeping its own keys where the two conflict.
 
   The set's own `:metadata` (the territory a holiday set covers) becomes the
-  metadata of the `%Tempo.IntervalSet{}` it materialises to.
+  metadata of the `%Tempo.IntervalSet{}` it converts to.
 
   A member can depend on the others: `keep_when/2` keeps a member's occurrences
   only when the days around them fall on other members' occurrences (a bridge
@@ -23,8 +23,8 @@ defmodule Tempo.RecurrenceSet do
   second pass over its members' occurrences.
 
   It completes the triad `%Tempo.Interval{}` (one rule) →
-  `%Tempo.RecurrenceSet{}` (many rules) → `%Tempo.IntervalSet{}` (materialised).
-  Materialise it against a window with `Tempo.to_interval_set/2`, or intersect it
+  `%Tempo.RecurrenceSet{}` (many rules) → `%Tempo.IntervalSet{}` (their occurrences).
+  Convert it to its occurrences within a window with `Tempo.to_interval_set/2`, or intersect it
   with a concrete set — which supplies the window — and its members' occurrences
   union into one `%Tempo.IntervalSet{}`.
 
@@ -50,7 +50,7 @@ defmodule Tempo.RecurrenceSet do
   * `members` is a list of `t:Tempo.Interval.t/0` values — each a recurrence or
     a concrete interval, optionally carrying its own `:metadata` — plain
     `t:Tempo.t/0` values, each standing for its own span, nested `t:t/0`
-    sets, each materialising as one member, or conditional members built by
+    sets, each converting to one member, or conditional members built by
     `keep_when/2` and `move_when/2`.
 
   ### Options
@@ -122,7 +122,7 @@ defmodule Tempo.RecurrenceSet do
   ### Returns
 
   * A `t:Tempo.RecurrenceSet.Conditional.t/0`. The set it joins checks the
-    options when it materialises.
+    options when it converts to its occurrences.
 
   ### Examples
 
@@ -177,7 +177,7 @@ defmodule Tempo.RecurrenceSet do
   ### Returns
 
   * A `t:Tempo.RecurrenceSet.Conditional.t/0`. The set it joins checks the
-    options when it materialises.
+    options when it converts to its occurrences.
 
   ### Examples
 
@@ -208,7 +208,7 @@ defmodule Tempo.RecurrenceSet do
 
   @doc """
   Returns the set's own metadata, which the `t:Tempo.IntervalSet.t/0` it
-  materialises to carries too.
+  converts to carries too.
 
   ### Arguments
 

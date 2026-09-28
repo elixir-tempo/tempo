@@ -447,7 +447,7 @@ defmodule Tempo.Enumeration.Test do
     test "an Rn/from/to repetition is refused, not walked as a single span" do
       {:ok, r3} = Tempo.from_iso8601("R3/2022-01-01/2022-01-08")
 
-      assert_raise Tempo.MaterialisationError, fn ->
+      assert_raise Tempo.ConversionError, fn ->
         Enum.count(r3)
       end
     end

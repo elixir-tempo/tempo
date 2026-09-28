@@ -94,7 +94,7 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 | **Range in set** | `[1900..2000]`, `{-1640-06..-1200-01}` |
 | **Groups** | `5G10DU` (5th group of 10 days), `2018Y4G60DU6D` (2018, day 6 of the 4th group of 60 days), `1933Y1G80DU` (the first 80 days of 1933), `2026Y2G13WU` (weeks 14–26), `T16H1GT15MU` (16:00–16:15) |
 | **A value within a group** | `2018Y9M2DT3GT8HU0H30M` (30 minutes into the third eight hours: 16:30), `2018Y2G3MU2M` (May) |
-| **Selections** | `L1MN`, `L2MI3N` (1st month, 3rd instance of the 2nd month). A value holding one materialises the dates it picks in each period of its context (§12.11): `2018Y3ML1K1IN` is 5 March 2018, and `XXX{0,2,4,6,8}Y11MLLL1K1IN/P9DN2K1IN` (US Election Day) resolves one year at a time. |
+| **Selections** | `L1MN`, `L2MI3N` (1st month, 3rd instance of the 2nd month). A value holding one converts to the dates it picks in each period of its context (§12.11): `2018Y3ML1K1IN` is 5 March 2018, and `XXX{0,2,4,6,8}Y11MLLL1K1IN/P9DN2K1IN` (US Election Day) resolves one year at a time. |
 | **Meteorological seasons** (codes 21–24) | `2022-21` (spring), `2022-22` (summer), `2022-23` (autumn), `2022-24` (winter) |
 | **Astronomical seasons** (codes 25–32) | `2022-25` (N spring), `2022-26` (N summer), `2022-27` (N autumn), `2022-28` (N winter), `2022-29..32` (Southern hemisphere). Boundaries computed via the `Astro` library using March/September equinoxes and June/December solstices (accurate to ≈2 minutes for years 1000–3000 CE). |
 | **Quarters** (codes 33–36) | `2022-33` (Q1), `2022-36` (Q4). The calendar's own quarters, from Calendrical: a Hebrew leap year's Q2 holds Adar I and II, and a week-based calendar's are groups of weeks. |
@@ -249,7 +249,7 @@ R/../P1Y/FL(december-solstice)eN   the December solstice
 R/../P1Y/FL(qingming)eN            Qīngmíng (Ching Ming / Tomb-Sweeping Day)
 ```
 
-The recognised names are `easter` and `orthodox-easter` (the same computus in the Julian calendar), the astronomical `march-equinox` / `june-solstice` / `september-equinox` / `december-solstice` / `new-moon` (the first new moon of the year), and the 24 solar terms (`qingming`, `lichun`, `dongzhi`, …) — see `Tempo.Event.known/0`. Materialising the recurrence into a bound resolves each event per year — Easter via `Calendrical.Ecclesiastical`, the astronomical events via `Astro`, and the solar terms via `Calendrical` (for the Chinese meridian by default; `Tempo.Event.date/3` takes a Vietnamese, Korean or Japanese lunisolar calendar to use its meridian instead):
+The recognised names are `easter` and `orthodox-easter` (the same computus in the Julian calendar), the astronomical `march-equinox` / `june-solstice` / `september-equinox` / `december-solstice` / `new-moon` (the first new moon of the year), and the 24 solar terms (`qingming`, `lichun`, `dongzhi`, …) — see `Tempo.Event.known/0`. Converting the recurrence within a window resolves each event per year — Easter via `Calendrical.Ecclesiastical`, the astronomical events via `Astro`, and the solar terms via `Calendrical` (for the Chinese meridian by default; `Tempo.Event.date/3` takes a Vietnamese, Korean or Japanese lunisolar calendar to use its meridian instead):
 
 ```elixir
 # "Easter Sunday, every year" — resolved across 2026–2028
@@ -292,7 +292,7 @@ Tempo.from_iso8601!("5786Y7m15D[u-ca=hebrew]")
 
 Adding years to such a date keeps its traditional month, as the calendar's own arithmetic does, so a yearly recurrence starting on it recurs on the same named month: `R/5786Y7m15D/P1Y[u-ca=hebrew]` is Passover every year, `5787Y8M15D` in the leap year 5787.
 
-In a **selection** — a recurrence, which has no year — there is nothing to resolve against, so `m`/`+m` survive the round-trip and the traditional→ordinal step happens per year at materialisation. This is what makes a lunisolar holiday a re-materialisable recurrence: `R/../P1Y/FL8m15DN[u-ca=chinese]` ("the 15th of traditional month 8, every year") lands on ordinal month 8 in a common year and ordinal 9 in a leap year, tracking the true traditional month rather than a fixed ordinal. A `<n>+m` selection yields an occurrence only in the years that actually carry that leap month.
+In a **selection** — a recurrence, which has no year — there is nothing to resolve against, so `m`/`+m` survive the round-trip and the traditional→ordinal step happens per year at conversion. This is what makes a lunisolar holiday a recurrence that converts afresh in every year: `R/../P1Y/FL8m15DN[u-ca=chinese]` ("the 15th of traditional month 8, every year") lands on ordinal month 8 in a common year and ordinal 9 in a leap year, tracking the true traditional month rather than a fixed ordinal. A `<n>+m` selection yields an occurrence only in the years that actually carry that leap month.
 
 A bare `<n>M` is always the ordinal month, unchanged, so existing values keep their meaning. `<n>+m` on a calendar without leap months, or in a year with no leap month at that position, is a parse error (concrete) or simply no occurrence (selection) rather than a silent misreading. It lowers to the `{n, :leap}` construct `Calendrical.Chinese.new/3` already accepts.
 
@@ -314,7 +314,7 @@ In a **concrete date** a `w` week resolves to its dates, so the lowercase marker
 
 ISO 8601 can say "every year" (`R/../P1Y/…`) but not "every year **except** these" or "only even years". Tempo adds two set-level extensions for exactly that.
 
-**`^value` — an exclusion member.** Inside any `{…}` set, a member written with a leading `^` is *removed* from the set. The set materialises to its plain members minus its excluded ones:
+**`^value` — an exclusion member.** Inside any `{…}` set, a member written with a leading `^` is *removed* from the set. The set converts to its plain members minus its excluded ones:
 
 ```elixir
 # 2024 and 2028 — the ^2026 drops the year that is also listed

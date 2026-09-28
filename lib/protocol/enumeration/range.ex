@@ -138,7 +138,7 @@ defimpl Enumerable, for: Tempo.Interval do
         Enumerable.reduce(occurrences, acc, fun)
 
       {:ok, %Tempo.Interval{}} ->
-        raise Tempo.MaterialisationError.exception(
+        raise Tempo.ConversionError.exception(
                 value: interval,
                 reason: :recurring_interval
               )

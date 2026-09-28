@@ -166,7 +166,7 @@ Tempo.IntervalSet.map(free, &Tempo.Interval.endpoints/1)
 
 ## 7. Recurrence expansion
 
-Events with an `RRULE` materialise through a single pipeline:
+Events with an `RRULE` expand through a single pipeline:
 
 ```
 RRULE string ──────────► Tempo.RRule.parse/2 ──┐
@@ -190,7 +190,7 @@ Every RFC 5545 BY-rule flows through one interpreter — there is no "simple cor
 | ------------ | ----------------------------------------------------------- |
 | `FREQ`       | `SECONDLY`, `MINUTELY`, `HOURLY`, `DAILY`, `WEEKLY`, `MONTHLY`, `YEARLY` |
 | `INTERVAL`   | Positive integer; applied as `DTSTART + i × INTERVAL`       |
-| `COUNT`      | Terminates after N materialised occurrences (post-filter)   |
+| `COUNT`      | Terminates after N occurrences (post-filter)                |
 | `UNTIL`      | Date or UTC datetime; inclusive                             |
 | `BYMONTH`    | LIMIT generally; EXPAND for `FREQ=YEARLY`                   |
 | `BYMONTHDAY` | LIMIT generally; EXPAND for `FREQ=MONTHLY` / `YEARLY`. Signed indexing (`-1` = last day of the month) |
@@ -207,7 +207,7 @@ Every RFC 5545 BY-rule flows through one interpreter — there is no "simple cor
 
 ### Termination paths
 
-* **`COUNT=N`** — stop after N materialised occurrences (after BY-rule filtering / expansion).
+* **`COUNT=N`** — stop after N occurrences (after BY-rule filtering / expansion).
 
 * **`UNTIL=<date-or-datetime>`** — stop when the next occurrence would start past `UNTIL`.
 
@@ -254,7 +254,7 @@ Every arithmetic operation goes through the candidate's own calendar (`calendar.
 
 * **`EXRULE`** — RFC-deprecated (RFC 2445 → 5545) and not surfaced by the underlying `ical` library. If you need subtractive rules, use `EXDATE` for specific dates.
 
-* **Multiple `RRULE` per `VEVENT`** — RFC 5545 says SHOULD NOT. Some exports do it anyway; the `ical` library exposes only the first `RRULE` on `event.rrule`, so we materialise that one and silently ignore the rest.
+* **Multiple `RRULE` per `VEVENT`** — RFC 5545 says SHOULD NOT. Some exports do it anyway; the `ical` library exposes only the first `RRULE` on `event.rrule`, so we expand that one and silently ignore the rest.
 
 * **VTIMEZONE definitions.** `VTIMEZONE` blocks in the input are used by the `ical` library to resolve zoned DTSTART/DTEND values, but Tempo itself relies on the configured time zone database for zone calculations. Zones absent from the IANA data (historical / non-standard zones defined in the `VTIMEZONE`) may not round-trip cleanly.
 

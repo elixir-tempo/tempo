@@ -81,8 +81,8 @@ The fall-back duplicate is the mirror of the gap. When New York sets the clocks 
 ```elixir
 iex> pre  = Tempo.from_iso8601!("2024-11-03T01:30:00-04:00[America/New_York]")
 iex> post = Tempo.from_iso8601!("2024-11-03T01:30:00-05:00[America/New_York]")
-iex> Tempo.Compare.to_utc_seconds(post) - Tempo.Compare.to_utc_seconds(pre)
-3600
+iex> Tempo.duration(pre, post)
+{:ok, ~o"PT3600S"}
 ```
 
 `-04:00` names the EDT instant; `-05:00` names the EST instant. They are 3 600 seconds apart. Tempo stores both the wall time and the offset, so the disambiguation is carried through every subsequent operation. Supplying neither offset makes the parse ambiguous — Tempo surfaces the ambiguity rather than guessing.
@@ -101,7 +101,7 @@ iex> event.extended.zone_id
 "Europe/Paris"
 ```
 
-No UTC is stored on the struct. `Tempo.Compare.to_utc_seconds/1` consults the configured time zone database at call time, so re-evaluating after a data update automatically reflects any rule change. Serialise with `Tempo.to_iso8601/1`; the round-trip is faithful.
+No UTC is stored on the struct. Comparison and conversion consult the configured time zone database at call time, so re-evaluating after a data update automatically reflects any rule change. Serialise with `Tempo.to_iso8601/1`; the round-trip is faithful.
 
 ```elixir
 iex> Tempo.to_iso8601(event)

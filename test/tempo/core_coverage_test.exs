@@ -4,9 +4,9 @@ defmodule Tempo.CoreCoverageTest do
   import Tempo.Sigils
 
   alias Tempo.Allen
+  alias Tempo.ConversionError
   alias Tempo.IntervalSet
   alias Tempo.InvalidDateError
-  alias Tempo.MaterialisationError
 
   describe "duration predicates (delegated to Tempo.Interval)" do
     @one_day ~o"2020Y1M1D/2D"
@@ -85,12 +85,12 @@ defmodule Tempo.CoreCoverageTest do
     end
 
     test "try_map halts at the first un-materialisable value" do
-      assert {:error, %MaterialisationError{reason: :bare_duration}} =
+      assert {:error, %ConversionError{reason: :bare_duration}} =
                Tempo.try_map([~o"2025-07-04", ~o"P1D"], & &1)
     end
 
     test "map raises on an un-materialisable value" do
-      assert_raise MaterialisationError, fn -> Tempo.map([~o"P1D"], & &1) end
+      assert_raise ConversionError, fn -> Tempo.map([~o"P1D"], & &1) end
     end
   end
 

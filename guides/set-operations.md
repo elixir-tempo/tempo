@@ -107,7 +107,7 @@ Tempo.disjoint?(hebrew_day, ~o"2023-01")
 
 ### 1.4. Iteration granularity — members keep it, new extents derive it
 
-A materialised operand carries its iteration granularity on the interval's `:unit` field (a month materialises with `unit: :day`, so `Enum` walks its days — see the [enumeration guide](enumeration-semantics.html)). Set operations treat that as part of member identity: a member that passes through an operation **unchanged** keeps its unit, while an interval the sweep **constructs** — an intersection overlap, a difference remainder, a complement gap, a coalesced merge (which inherits the first merged member's unit) — is a new extent that walks at its own bounds resolution.
+A converted operand carries its iteration granularity on the interval's `:unit` field (a month converts with `unit: :day`, so `Enum` walks its days — see the [enumeration guide](enumeration-semantics.html)). Set operations treat that as part of member identity: a member that passes through an operation **unchanged** keeps its unit, while an interval the sweep **constructs** — an intersection overlap, a difference remainder, a complement gap, a coalesced merge (which inherits the first merged member's unit) — is a new extent that walks at its own bounds resolution.
 
 ```elixir
 # Members pass through union unchanged — each month still walks its days.
@@ -338,7 +338,7 @@ Note that `≡` here is covered-instant equality (via `Tempo.equal?/2`), not mem
 | One-of `Tempo.Set` (`[a,b,c]`) | Raises — epistemic disjunction, not IntervalSet |
 | Cross-calendar operands | Second operand converted to first's calendar via `Date.convert!/2`; result inherits first's calendar |
 | Cross-zone operands | Compared via UTC; result inherits first operand's zone |
-| Midnight-crossing unanchored interval (`T23:30/T01:00`) | Placed on day D materialises as `[D T23:30, D+1 T01:00)`; on the time-of-day axis, split into `[T23:30, T24:00)` ∪ `[T00:00, T01:00)` before sweep-line |
+| Midnight-crossing unanchored interval (`T23:30/T01:00`) | Placed on day D converts to `[D T23:30, D+1 T01:00)`; on the time-of-day axis, split into `[T23:30, T24:00)` ∪ `[T00:00, T01:00)` before sweep-line |
 
 ## 6. Not in scope
 

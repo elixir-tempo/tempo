@@ -10,7 +10,7 @@ Scheduling is really three questions, and Tempo answers each with a different pa
 
 The first question has the sharpest edges — future dates, wall-clock vs UTC, and time zones that change rules out from under you — so it gets the most space. Sections 1–4 each give the principle, the Tempo idiom, and the pitfall to avoid:
 
-* **You can't materialise an infinite stream.** Bounded scheduling is a design decision.
+* **You can't list an infinite stream.** Bounded scheduling is a design decision.
 
 * **Wall-clock time is authoritative; UTC is a projection.** Tempo stores the user's wall time and derives the UTC instant on demand.
 
@@ -32,20 +32,20 @@ The import adds only `sigil_o/2` and `sigil_TEMPO/2` to the caller's namespace; 
 
 An RRULE like `FREQ=MONTHLY;BYDAY=2MO` ("the second Monday of every month") is **infinite** — occurrences continue forever. You cannot call `Enum.to_list/1` on an infinite sequence.
 
-Tempo splits the two operations: parsing the rule into a recurring interval is cheap and always bounded-free, but **materialising** it into a concrete `%Tempo.IntervalSet{}` requires a bound.
+Tempo splits the two operations: parsing the rule into a recurring interval is cheap and always bounded-free, but **converting** it to a concrete `%Tempo.IntervalSet{}` requires a bound.
 
 ```elixir
 recurrence = Tempo.RRule.parse!("FREQ=MONTHLY;BYDAY=2MO", from: ~o"2025-01-01")
 
 # `recurrence` is a %Tempo.Interval{recurrence: :infinity, ...} — not an error.
-# Materialising it needs a `:within` window — here, all of 2025:
+# Listing its occurrences needs a `:within` window — here, all of 2025:
 
 {:ok, set} = Tempo.to_interval(recurrence, within: ~o"2025")
 Tempo.IntervalSet.count(set)
 #=> 12
 ```
 
-> The **recurring interval** is the recurrence *rule*; the **IntervalSet** is its *occurrences* inside a window. `:within` is always supplied at materialisation, never at the rule. Tempo's default member-preserving semantics keep each occurrence as a distinct member of the IntervalSet — which is what you want for scheduling. For the covered-instant form (individual occurrences merged into contiguous spans), pipe through `Tempo.IntervalSet.coalesce/1` — useful for free/busy questions but not for "list the events."
+> The **recurring interval** is the recurrence *rule*; the **IntervalSet** is its *occurrences* inside a window. `:within` is always supplied when the occurrences are listed, never at the rule. Tempo's default member-preserving semantics keep each occurrence as a distinct member of the IntervalSet — which is what you want for scheduling. For the covered-instant form (individual occurrences merged into contiguous spans), pipe through `Tempo.IntervalSet.coalesce/1` — useful for free/busy questions but not for "list the events."
 
 For ad-hoc use, `Stream.take/2` and `Enum.take/2` work directly on the recurring interval — it's enumerable, lazily:
 
@@ -58,8 +58,9 @@ recurrence |> Stream.take(10) |> Enum.to_list()
 Forgetting the window and calling `Tempo.to_interval(recurrence)`:
 
 ```elixir
-{:error,
- "Cannot materialise an unbounded recurrence (recurrence: :infinity, no UNTIL). Supply a :within option — the window whose occurrences you want."}
+{:error, %Tempo.UnboundedRecurrenceError{}}
+# Cannot list the occurrences of an unbounded recurrence (recurrence: :infinity,
+# no UNTIL). Supply a :within option — the window whose occurrences you want.
 ```
 
 Tempo refuses rather than hanging — a forgotten window is a design error, not a runtime surprise.
@@ -91,7 +92,7 @@ Serialising a Tempo value as "the UTC seconds" and rehydrating from that:
 
 ```elixir
 # Do NOT do this for future events:
-cached_utc = Tempo.Compare.to_utc_seconds(event)
+{:ok, cached_utc} = Tempo.shift_zone(event, "Etc/UTC")
 store_in_database(cached_utc)
 ```
 
@@ -201,11 +202,11 @@ Concretely: a Paris event stored today for 2030 will be re-evaluated with whatev
 event = ~o"2030-03-01T08:00:00[Europe/Paris]"
 
 # Today, the IANA data says this is UTC+1 (standard time in March).
-Tempo.Compare.to_utc_seconds(event)
-#=> 64052726400
+Tempo.shift_zone(event, "Etc/UTC")
+#=> {:ok, ~o"2030Y3M1DT7H0M0SZ[Etc/UTC][+00:00]"}
 
 # If IANA 2028a ships saying France abolished DST in 2027,
-# the next call to to_utc_seconds returns a different number
+# the next shift_zone returns a different UTC time
 # — the event is "still 8am Paris wall time, but the UTC shifts."
 ```
 
@@ -349,7 +350,7 @@ Schedule.occurrences_in(retrospective, ~o"2025-07-01", ~o"2025-10-01")
 
 > **`Tempo.from_elixir/2` converts native Elixir date/time structs.** When a value arrives as a `Date`, `Time`, `NaiveDateTime`, or `DateTime` — from a database row, an API payload, a form — convert it with `from_elixir/2` rather than picking its fields apart by hand or re-formatting it to an ISO 8601 string and parsing it back. The time zone carries across faithfully, and the `:resolution` option lets you say how precise the value really is: a `DateTime` is second-precise, but a weekly meeting is a *to-the-minute* thing, so `resolution: :minute` makes the value — and every occurrence derived from it — a one-minute span rather than a one-second one. (For a value you are assembling from loose components rather than a struct, `Tempo.new/1` is the runtime companion to the `~o` sigil.)
 
-> **Store** the recurrence as a value — a zoned repeating interval, `~o"R/2025Y6M1DT14H0MZ+1H[Europe/London]/P1W"`. **Materialise** into an IntervalSet only when you need concrete occurrences, bounded to the query window. **Display** by projecting each endpoint's wall time through the viewer's preferred zone. Nothing about the stored value changes when the zone data does.
+> **Store** the recurrence as a value — a zoned repeating interval, `~o"R/2025Y6M1DT14H0MZ+1H[Europe/London]/P1W"`. **Convert** it to an IntervalSet only when you need concrete occurrences, bounded to the query window. **Display** by projecting each endpoint's wall time through the viewer's preferred zone. Nothing about the stored value changes when the zone data does.
 
 ## Related reading
 

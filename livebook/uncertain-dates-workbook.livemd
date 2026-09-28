@@ -22,7 +22,7 @@ An `X` is an unknown digit. `~o"156X"` is *some year in the 1560s* — one value
 Tempo.explain(~o"156X") |> IO.puts()
 ```
 
-A mask *above* concrete finer units is subtler: `~o"1985-XX-15"` is *the 15th of some unknown month of 1985*. One actual day occurred — we just don't know which of twelve candidates. Materialising expands the candidate set:
+A mask *above* concrete finer units is subtler: `~o"1985-XX-15"` is *the 15th of some unknown month of 1985*. One actual day occurred — we just don't know which of twelve candidates. Converting expands the candidate set:
 
 ```elixir
 {:ok, candidates} = Tempo.to_interval(~o"1985-XX-15")

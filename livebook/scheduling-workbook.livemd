@@ -91,7 +91,7 @@ Recurring events parse from standard RRULE strings into the same interval model,
 tuesdays
 ```
 
-An unbounded recurrence (`FREQ=WEEKLY` with no `COUNT`/`UNTIL`) refuses to materialise without a bound — supply one and it expands exactly as far as you asked:
+An unbounded recurrence (`FREQ=WEEKLY` with no `COUNT`/`UNTIL`) refuses to list its occurrences without a `:within` window — supply one and it expands exactly as far as you asked:
 
 ```elixir
 {:ok, weekly} = Tempo.RRule.parse("FREQ=WEEKLY;BYDAY=FR", from: ~o"2026-06-01")

@@ -126,7 +126,7 @@ iex> Tempo.explain(~o"156X")
 A masked year spanning the 1560s.
 Span: [1560-01-01, 1570-01-01).
 Iterates at :month granularity.
-Materialise as an interval with `Tempo.to_interval/1`.
+Convert it to an interval with `Tempo.to_interval/1`.
 """
 ```
 
@@ -141,7 +141,7 @@ iex> {Tempo.year(from), Tempo.month(from), Tempo.day(from), Tempo.year(to), Temp
 {2026, 6, 1, 2026, 7, 1}
 ```
 
-Every Tempo value *is* an interval. `to_interval/1` materialises the implicit span into explicit `from`/`to` endpoints.
+Every Tempo value *is* an interval. `to_interval/1` converts the implicit span to explicit `from`/`to` endpoints.
 
 ### How do I check a value's resolution?
 
@@ -487,7 +487,7 @@ See `Tempo.Select` for the full selector vocabulary.
 
 ## 7. Recurring events (RRULE)
 
-An RRULE parses into a recurring `%Tempo.Interval{}` with `Tempo.RRule.parse!/2`; you materialise it into occurrences with `Tempo.to_interval/2`, limited by a `:within` window or by the rule's own `COUNT`/`UNTIL`. (A plain periodic cadence with no calendar filter needs no RRULE at all — build it directly with `Tempo.Interval.new!(from: ~o"2026-06-01", duration: ~o"P1W", recurrence: 10)`; see the [scheduling guide](./scheduling.md).)
+An RRULE parses into a recurring `%Tempo.Interval{}` with `Tempo.RRule.parse!/2`; you convert it to occurrences with `Tempo.to_interval/2`, limited by a `:within` window or by the rule's own `COUNT`/`UNTIL`. (A plain periodic cadence with no calendar filter needs no RRULE at all — build it directly with `Tempo.Interval.new!(from: ~o"2026-06-01", duration: ~o"P1W", recurrence: 10)`; see the [scheduling guide](./scheduling.md).)
 
 ### How do I express "every Monday for 10 weeks"?
 
@@ -571,7 +571,7 @@ iex> Tempo.IntervalSet.count(set)
 ```elixir
 iex> {:ok, schedule} = Tempo.ICal.parse_file("~/work.ics")
 iex> Tempo.IntervalSet.count(schedule)
-# One interval per VEVENT (or per materialised recurrence occurrence).
+# One interval per VEVENT (or per recurrence occurrence).
 ```
 
 Each event becomes a `%Tempo.Interval{}` with full metadata (summary, location, attendees, …) attached to `:metadata`.
@@ -586,7 +586,7 @@ Pass a `:within` so unbounded recurrences terminate:
 iex> {:ok, schedule} = Tempo.ICal.parse(ics, within: ~o"2026-04-01/2026-07-01")
 ```
 
-Every RRULE part (including BY-rules, BYSETPOS, WKST, RDATE, EXDATE) materialises correctly — one `%Tempo.Interval{}` per occurrence carrying the event's metadata.
+Every RRULE part (including BY-rules, BYSETPOS, WKST, RDATE, EXDATE) expands correctly — one `%Tempo.Interval{}` per occurrence carrying the event's metadata.
 
 ### How do I find when a specific attendee is in a meeting?
 
@@ -1023,7 +1023,7 @@ end
 
 > Each engineer's **rota** is the set of weeks they carry the pager. Their **weekend burden** is the rota's days **selected** down to Saturdays and Sundays. Alice's five weekends against four make her weekend load **25% heavier** — from a rotation that looked fair by shift count.
 
-The mechanics: a `{a/b,c/d,…}` sigil is a set of explicit intervals; `Tempo.select/2` materialises it and applies the selector to every member, so "the weekend days of Alice's five separate weeks" needs no loop. The counts convert to hours because each selected member is exactly one day.
+The mechanics: a `{a/b,c/d,…}` sigil is a set of explicit intervals; `Tempo.select/2` converts it and applies the selector to every member, so "the weekend days of Alice's five separate weeks" needs no loop. The counts convert to hours because each selected member is exactly one day.
 
 ### Daylight-limited work — Tempo + Astro
 

@@ -2,7 +2,7 @@
 
 Holidays are the sternest test of a recurrence language: they are fixed dates, nth-weekdays, moon phases, computed feasts, and dates in half a dozen calendars, often with an observed-day shift on top. This cookbook takes each **rule family** a holiday library uses (the shapes `date-holidays` and `tempo_holidays` classify rules into) and gives the equivalent Tempo value.
 
-Every expression below has been **materialised and checked against the holiday's real date** — the dates in the prose are what Tempo produces, not what it ought to. The fourth column is the equivalent RFC 5545 **RRULE** where one exists; a dash means the rule is one RRULE genuinely cannot express (a computed feast, or a date in a non-Gregorian calendar), and `Tempo.RRule.to_string/1` reports as much rather than emitting a wrong approximation.
+Every expression below has been **converted to its dates and checked against the holiday's real date** — the dates in the prose are what Tempo produces, not what it ought to. The fourth column is the equivalent RFC 5545 **RRULE** where one exists; a dash means the rule is one RRULE genuinely cannot express (a computed feast, or a date in a non-Gregorian calendar), and `Tempo.RRule.to_string/1` reports as much rather than emitting a wrong approximation.
 
 ## Reading a holiday value
 
@@ -16,10 +16,10 @@ R/../P1Y/FL 11M 4K 4I N
 │    │  │   └ 11M  = month 11 (November)
 │    │  └ FL…N = the per-year selection frame
 │    └ P1Y = one-year cadence
-└ R/.. = repeat, no fixed start (materialise within a window to get dates)
+└ R/.. = repeat, no fixed start (convert within a window to get dates)
 ```
 
-Other markers: `nD` a day of the month, `nO` a day of the year, `nW` a week; `(name)e` a **computed event** (`Tempo.Event`); `…/±PnD` an ISO 8601-2 §12.10 **window** (the selection becomes the start of a span, and the selectors after it pick within — used for "N days before/after" feasts); a `{…}` **domain** in the repeat slot (`R/{…}/P1Y/…`) restricts which years the recurrence fires, with `^` excluding one; and a `[u-ca=…]` suffix puts the whole value in another **calendar**. Materialise any of them with `Tempo.to_interval(value, within: ~o"2026")`.
+Other markers: `nD` a day of the month, `nO` a day of the year, `nW` a week; `(name)e` a **computed event** (`Tempo.Event`); `…/±PnD` an ISO 8601-2 §12.10 **window** (the selection becomes the start of a span, and the selectors after it pick within — used for "N days before/after" feasts); a `{…}` **domain** in the repeat slot (`R/{…}/P1Y/…`) restricts which years the recurrence fires, with `^` excluding one; and a `[u-ca=…]` suffix puts the whole value in another **calendar**. Convert any of them with `Tempo.to_interval(value, within: ~o"2026")`.
 
 ## Fixed dates
 
@@ -101,9 +101,9 @@ The equinoxes and solstices come from `Astro`; the 24 East Asian solar terms and
 
 ## Other calendars — Islamic, Hebrew, and the lunisolar new years
 
-A holiday defined in another calendar starts on a date **in that calendar** and is given a `P1Y` cadence — one *calendar* year — so successive occurrences **recur on that calendar's own year** and drift against the Gregorian year exactly as the holiday does. The `[u-ca=…]` tag is a single **trailing suffix** on the whole recurrence (`R/5787Y3M25D/P1Y[u-ca=hebrew]`), qualifying the start and the cadence together, not embedded mid-string on the date. RRULE is Gregorian-only, so every row is a dash; the **Materialises to** column is the Gregorian date each recurrence resolves to in 2026.
+A holiday defined in another calendar starts on a date **in that calendar** and is given a `P1Y` cadence — one *calendar* year — so successive occurrences **recur on that calendar's own year** and drift against the Gregorian year exactly as the holiday does. The `[u-ca=…]` tag is a single **trailing suffix** on the whole recurrence (`R/5787Y3M25D/P1Y[u-ca=hebrew]`), qualifying the start and the cadence together, not embedded mid-string on the date. RRULE is Gregorian-only, so every row is a dash; the **Converts to** column is the Gregorian date each recurrence resolves to in 2026.
 
-| Rule type | Holiday (rule in English) | Tempo | Materialises to (2026) | RRULE |
+| Rule type | Holiday (rule in English) | Tempo | Converts to (2026) | RRULE |
 |---|---|---|---|---|
 | Islamic (Umm al-Qura) | Islamic New Year — 1 Muḥarram | `~o"R/1447Y1M1D/P1Y[u-ca=islamic-umalqura]"` | 2026-06-16 | — |
 | Islamic | Mawlid — 12 Rabīʿ al-awwal | `~o"R/1447Y3M12D/P1Y[u-ca=islamic-umalqura]"` | 2026-08-25 | — |
@@ -141,7 +141,7 @@ end)
 
 ## Year gates — the recurrence domain (`{…}` and `^`)
 
-Several rule families do not change *which day* a holiday falls on but *which years* it fires: an "active" window, a "since" / "prior to" bound, a year cancelled outright, an even/odd or leap-year rule. Tempo writes these into the recurrence's **domain** — the `{…}` slot between the repeat and the cadence — as an inclusion set of years and year-ranges, with `^` marking a year to carve back out and a trailing `e` / `o` / `l` keeping only the even, odd or leap years. The holiday stays one self-bounding value: it materialises to its dates with no bound and no post-hoc set operation, and it round-trips through `Tempo.to_iso8601/1`.
+Several rule families do not change *which day* a holiday falls on but *which years* it fires: an "active" window, a "since" / "prior to" bound, a year cancelled outright, an even/odd or leap-year rule. Tempo writes these into the recurrence's **domain** — the `{…}` slot between the repeat and the cadence — as an inclusion set of years and year-ranges, with `^` marking a year to carve back out and a trailing `e` / `o` / `l` keeping only the even, odd or leap years. The holiday stays one self-bounding value: it converts to its dates with no `:within` window and no post-hoc set operation, and it round-trips through `Tempo.to_iso8601/1`.
 
 | Rule type | Holiday (rule in English) | Tempo | RRULE |
 |---|---|---|---|
@@ -158,7 +158,7 @@ Every RRULE here is a dash, and for a reason worth stating: RFC 5545 keeps year 
 
 ## Enable, weekday gates, and bridges (set algebra)
 
-The families that remain need *another* set, not just a restriction on the years: adding an ad-hoc date the pattern never produces, filtering by the weekday an occurrence lands on, or testing a day against the year's other holidays. Because a materialised holiday *is* an interval set, each is one call:
+The families that remain need *another* set, not just a restriction on the years: adding an ad-hoc date the pattern never produces, filtering by the weekday an occurrence lands on, or testing a day against the year's other holidays. Because a converted holiday *is* an interval set, each is one call:
 
 ```elixir
 {:ok, xmas} = Tempo.to_interval(~o"R/{2020Y..2030Y}/P1Y/FL12M25DN")
@@ -221,7 +221,7 @@ glarus = Tempo.RecurrenceSet.new([maundy_thursday, naefelser_fahrt])
 
 > *"Näfelser Fahrt is the first Thursday from 2 April, **moved to the next** Thursday when it falls on an observance — as it does in 2026, when 2 April is Maundy Thursday."*
 
-A condition reads the other members' occurrences as they first fall, a conditional's own among them but never the member's own, so a holiday one conditional moves is not seen by another. Near a bound's edge the set looks past it — the day before a bridge on the bound's first day, a holiday moved in from the week before — and keeps what starts inside.
+A condition reads the other members' occurrences as they first fall, a conditional's own among them but never the member's own, so a holiday one conditional moves is not seen by another. Near a window's edge the set looks past it — the day before a bridge on the bound's first day, a holiday moved in from the week before — and keeps what starts inside.
 
 ## Coverage of the date-holidays grammar
 

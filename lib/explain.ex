@@ -88,7 +88,7 @@ defmodule Tempo.Explain do
   ### Examples
 
       iex> Tempo.Explain.explain(~o"2022Y") |> Tempo.Explain.to_string()
-      "The year 2022.\\nSpan: [2022-01-01, 2023-01-01).\\nIterates at :month granularity.\\nMaterialise as an interval with `Tempo.to_interval/1`."
+      "The year 2022.\\nSpan: [2022-01-01, 2023-01-01).\\nIterates at :month granularity.\\nConvert it to an interval with `Tempo.to_interval/1`."
 
   """
   @spec to_string(Explanation.t()) :: String.t()
@@ -220,7 +220,7 @@ defmodule Tempo.Explain do
       {:headline, "A selection — a rule naming which occurrences are wanted."},
       {:span, "#{scope} #{selection_prose(selection)}."},
       {:calendar, calendar_text(tempo)},
-      {:hint, "Pair it with a recurrence (`R/../P1Y/FL…N`) to materialise occurrences."}
+      {:hint, "Pair it with a recurrence (`R/../P1Y/FL…N`) to list its occurrences."}
     ]
     |> Enum.reject(&is_nil/1)
   end
@@ -234,7 +234,7 @@ defmodule Tempo.Explain do
       {:extended, extended_text(tempo)},
       {:calendar, calendar_text(tempo)},
       {:enumeration, enumeration_text(tempo)},
-      {:hint, "Materialise as an interval with `Tempo.to_interval/1`."}
+      {:hint, "Convert it to an interval with `Tempo.to_interval/1`."}
     ]
     |> Enum.reject(fn {_, v} -> v in [nil, ""] end)
   end
@@ -334,7 +334,7 @@ defmodule Tempo.Explain do
         "Span: [#{render_endpoint(from)}, #{render_endpoint(to)})."
 
       {:ok, %Tempo.IntervalSet{} = set} ->
-        "Materialises to #{IntervalSet.count(set)} disjoint intervals."
+        "Converts to #{IntervalSet.count(set)} disjoint intervals."
 
       {:error, _} ->
         nil
@@ -692,7 +692,7 @@ defmodule Tempo.Explain do
       {:headline, "An all-of set: every member happened."},
       {:member,
        "#{length(members)} member(s): #{members_phrase(members)}#{set_qualifiers(except, filter)}."},
-      {:hint, "Materialise as an IntervalSet with `Tempo.to_interval/1`."}
+      {:hint, "Convert it to an IntervalSet with `Tempo.to_interval/1`."}
     ]
   end
 
@@ -701,7 +701,7 @@ defmodule Tempo.Explain do
       {:headline,
        "A one-of set: exactly one of the members happened — we don't know which (epistemic disjunction)."},
       {:member, "#{length(members)} candidate(s): #{members_phrase(members)}."},
-      {:hint, "Cannot be materialised to an IntervalSet; pick a specific member first."}
+      {:hint, "Cannot be converted to an IntervalSet; pick a specific member first."}
     ]
   end
 
@@ -750,7 +750,7 @@ defmodule Tempo.Explain do
 
   defp domain_hint(%Tempo.Set{}),
     do:
-      "The domain's members are the window, so it materialises with `Tempo.to_interval/1` and no bound."
+      "The domain's members are the window, so `Tempo.to_interval/1` lists its occurrences with no `:within` window."
 
   ## ------------------------------------------------------------
   ## Tempo.Duration
@@ -929,7 +929,7 @@ defmodule Tempo.Explain do
   defp recurrence_headline(n) when is_integer(n), do: "A recurrence of #{n} occurrences."
 
   defp open_start_hint do
-    "The rule names no start of its own. Materialise it into a window " <>
+    "The rule names no start of its own. List its occurrences within a window " <>
       "— `Tempo.to_interval(interval, within: ~o\"2026\")` " <>
       "lists the occurrences that fall inside it — or give the literal a " <>
       "start (`R/2026-01-01/…`) or re-parse with one " <>
@@ -938,12 +938,12 @@ defmodule Tempo.Explain do
 
   defp recurrence_hint(:infinity, from),
     do:
-      "List a window of occurrences: `Tempo.to_interval(interval, within: #{bound_example(from)})`."
+      "List a window of occurrences: `Tempo.to_interval(interval, within: #{window_example(from)})`."
 
   defp recurrence_hint(n, _from) when is_integer(n),
-    do: "Materialise the #{n} occurrences: `Tempo.to_interval(interval)`."
+    do: "List the #{n} occurrences: `Tempo.to_interval(interval)`."
 
-  defp bound_example(%Tempo{time: time}) do
+  defp window_example(%Tempo{time: time}) do
     case Keyword.get(time, :year) do
       year when is_integer(year) -> "~o\"#{year}\""
       _year -> "~o\"2026\""

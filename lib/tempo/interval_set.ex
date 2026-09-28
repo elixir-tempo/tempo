@@ -6,7 +6,7 @@ defmodule Tempo.IntervalSet do
   `IntervalSet` is the operational form for set operations. Every
   AST shape that expands to a disjoint list of bounded spans
   (non-contiguous masks, stepped ranges, iterated groups, bounded
-  recurrences, all-of sets) materialises to an `IntervalSet` via
+  recurrences, all-of sets) converts to an `IntervalSet` with
   `Tempo.to_interval/1`.
 
   ## Storage backends
@@ -337,7 +337,7 @@ defmodule Tempo.IntervalSet do
 
   The lazy-safe counterpart to `to_list/1`: on the default list
   backend it is the member list; on a lazy backend it is a stream
-  that never materialises more members than the caller consumes.
+  that never builds more members than the caller consumes.
 
   ### Arguments
 
@@ -422,7 +422,7 @@ defmodule Tempo.IntervalSet do
 
   Members are held in time order, so this is the interval with the
   earliest `from` endpoint. `first/1` peeks that member in constant
-  time without materialising the set, so it is safe even on an
+  time without building the set, so it is safe even on an
   unbounded (lazy) set — unlike `last/1`, which must walk to the end
   (see its performance note).
 
@@ -458,7 +458,7 @@ defmodule Tempo.IntervalSet do
   latest `from` endpoint.
 
   Unlike `first/1` — which peeks the earliest member in constant time
-  without materialising the set, and so is safe on an unbounded (lazy)
+  without building the set, and so is safe on an unbounded (lazy)
   set — `last/1` must walk to the end. It is O(n) in the number of
   members, forces the whole set into memory, and is defined only for
   **bounded** sets: an unbounded set has no last member, so `last/1`
@@ -509,7 +509,8 @@ defmodule Tempo.IntervalSet do
 
   ### Returns
 
-  * `true` when every member can be materialised, otherwise `false`.
+  * `true` when the set is finite and every member can be listed,
+    otherwise `false`.
 
   ### Examples
 
@@ -523,7 +524,7 @@ defmodule Tempo.IntervalSet do
   @doc """
   Returns the set's own metadata.
 
-  A set materialised from a `t:Tempo.RecurrenceSet.t/0` carries the recurrence
+  A set converted from a `t:Tempo.RecurrenceSet.t/0` carries the recurrence
   set's metadata (the territory a holiday set covers, say). Each member keeps
   its own, read with `Tempo.Interval.metadata/1`.
 

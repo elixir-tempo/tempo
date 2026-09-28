@@ -15,7 +15,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     optional(qualification())
     |> choice([
       interval_or_time_or_duration(),
-      parsec({Tempo.Iso8601.Tokenizer, :set})
+      parsec({Tempo.Iso8601.Tokenizer.Set, :set})
     ])
     |> optional(qualification())
     |> optional(extended_suffix())
@@ -42,7 +42,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     |> choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :interval_parser}),
       parsec({Tempo.Iso8601.Tokenizer.Set, :duration_parser}),
-      parsec({Tempo.Iso8601.Tokenizer, :datetime_or_date_or_time})
+      parsec({Tempo.Iso8601.Tokenizer.Date, :datetime_or_date_or_time})
     ])
   end
 
@@ -297,7 +297,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     combinator
     |> choice([
       duration_elements_with_designators(),
-      parsec({Tempo.Iso8601.Tokenizer, :datetime_or_date_or_time})
+      parsec({Tempo.Iso8601.Tokenizer.Date, :datetime_or_date_or_time})
     ])
   end
 

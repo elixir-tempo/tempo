@@ -41,7 +41,7 @@ defmodule Tempo.ExclusionDomainTest do
     end
 
     test "an open-ended range cannot materialise" do
-      assert {:error, %Tempo.MaterialisationError{reason: :open_range}} =
+      assert {:error, %Tempo.ConversionError{reason: :open_range}} =
                Tempo.to_interval(%Tempo.Set{
                  type: :all,
                  set: [%Tempo.Range{first: ~o"2020Y", last: :undefined}]
@@ -173,7 +173,7 @@ defmodule Tempo.ExclusionDomainTest do
     end
 
     test "without a window an open range is an error, not a raise" do
-      assert {:error, %Tempo.MaterialisationError{reason: :open_range}} =
+      assert {:error, %Tempo.ConversionError{reason: :open_range}} =
                Tempo.to_interval(~o"R/{2023Y..}/P1Y/FL1M2DN")
     end
   end

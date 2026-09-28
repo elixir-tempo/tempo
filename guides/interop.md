@@ -47,7 +47,7 @@ Tempo.from_elixir(~N[2022-07-04 00:00:00], resolution: :day)
 
 ## 2. A point in time **is** an interval
 
-Every Tempo value materialises to an explicit half-open `[from, to)` span via `Tempo.to_interval/1`. The width is **one unit at the value's resolution** — so the resolution from §1 decides the span:
+Every Tempo value converts to an explicit half-open `[from, to)` span via `Tempo.to_interval/1`. The width is **one unit at the value's resolution** — so the resolution from §1 decides the span:
 
 | Converted from | Interval | Width |
 |---|---|---|
@@ -67,7 +67,7 @@ Tempo.Interval.duration(day)
 #=> ~o"P1D"
 ```
 
-The upper bound is **exclusive** (`[from, to)`), which is what makes the spans tile the time line cleanly — `[2022-07-04, 2022-07-05)` followed by `[2022-07-05, 2022-07-06)` is exactly `[2022-07-04, 2022-07-06)` with no gap or overlap. See [Enumeration semantics](enumeration-semantics.md) for how this drives iteration, and `Tempo.to_interval/2` for the full materialisation contract.
+The upper bound is **exclusive** (`[from, to)`), which is what makes the spans tile the time line cleanly — `[2022-07-04, 2022-07-05)` followed by `[2022-07-05, 2022-07-06)` is exactly `[2022-07-04, 2022-07-06)` with no gap or overlap. See [Enumeration semantics](enumeration-semantics.md) for how this drives iteration, and `Tempo.to_interval/2` for the full conversion contract.
 
 > *"A day is the span from this midnight to the next; a timestamp is the span from this second to the next."*
 
@@ -75,9 +75,9 @@ Three notes:
 
 * **Durations keep the width's unit.** `duration/1` counts in the unit the endpoints are written in, so the day is `~o"P1D"`, the second `~o"PT1S"`, and the microsecond `~o"PT0.000001S"`.
 
-* **A bare `Time` materialises unanchored.** `~T[14:30:00]` becomes `T14H30M0S/T1S` — a one-second span on the *time-of-day* axis with no date. Operations that need an absolute position (a duration, a cross-zone comparison) require placing it on a date first with `Tempo.on/2`.
+* **A bare `Time` converts to an unanchored interval.** `~T[14:30:00]` becomes `T14H30M0S/T1S` — a one-second span on the *time-of-day* axis with no date. Operations that need an absolute position (a duration, a cross-zone comparison) require placing it on a date first with `Tempo.on/2`.
 
-* **A pure time-of-day group materialises unanchored too.** A grouped time value with no date — for example the first quarter-hour of 16:00, `T16H1GT15MU` (`[hour: 16, minute: {:group, 0..14}]`) — becomes the relative span `[16:00, 16:15)` on the time-of-day axis. The same caveat applies. A group whose upper bound would carry off the end of the day (`23:45..`, with no date to carry into) or any group with a date component (`5G10DU`) needs placing on a date first and returns a `Tempo.MaterialisationError` until then.
+* **A pure time-of-day group converts to an unanchored interval too.** A grouped time value with no date — for example the first quarter-hour of 16:00, `T16H1GT15MU` (`[hour: 16, minute: {:group, 0..14}]`) — becomes the relative span `[16:00, 16:15)` on the time-of-day axis. The same caveat applies. A group whose upper bound would carry off the end of the day (`23:45..`, with no date to carry into) or any group with a date component (`5G10DU`) needs placing on a date first and returns a `Tempo.ConversionError` until then.
 
 ## 3. Why the width matters
 
@@ -98,7 +98,7 @@ Identical timestamps are `:equals`; consecutive ones `:meets`; only a genuine sp
 
 > *"9:30:45 and 9:30:46 don't clash — they're back-to-back."*
 
-And because a plain `DateTime`/`NaiveDateTime` now materialises (it infers to second resolution, and a second is a one-second span), converted timestamps drop straight into the set-algebra API:
+And because a plain `DateTime`/`NaiveDateTime` now converts (it infers to second resolution, and a second is a one-second span), converted timestamps drop straight into the set-algebra API:
 
 ```elixir
 {:ok, busy} = Tempo.union(~o"2022Y7M4DT14H30M45S", ~o"2022Y7M4DT14H30M46S")
@@ -148,7 +148,7 @@ Two caveats:
 
 ## 5. Serialising intervals — granularity is not in the string
 
-An interval's ISO 8601 string carries its **extent** only. The iteration granularity a materialised implicit span carries on `:unit` (why `to_interval(~o"2025-07-04")` enumerates 24 hours despite day-resolution bounds) has no ISO 8601 spelling, so `to_iso8601/1` cannot preserve it and the re-parsed interval walks at its bounds resolution instead:
+An interval's ISO 8601 string carries its **extent** only. The iteration granularity a converted implicit span carries on `:unit` (why `to_interval(~o"2025-07-04")` enumerates 24 hours despite day-resolution bounds) has no ISO 8601 spelling, so `to_iso8601/1` cannot preserve it and the re-parsed interval walks at its bounds resolution instead:
 
 ```elixir
 {:ok, day} = Tempo.to_interval(~o"2025-07-04")

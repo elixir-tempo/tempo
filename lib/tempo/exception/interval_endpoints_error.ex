@@ -1,11 +1,12 @@
 defmodule Tempo.IntervalEndpointsError do
   @moduledoc """
-  Exception raised when an operation requires an interval whose
-  endpoints are both concrete `%Tempo{}` structs, but the
-  supplied interval carries recurrence, duration-only, or
-  otherwise non-concrete endpoints.
+  Exception returned when an operation needs an interval whose
+  endpoints are both concrete `%Tempo{}` values and is given one with
+  an open or missing end, or a recurrence with no start.
 
-  Materialise the interval with `Tempo.to_interval/1,2` first.
+  Convert a recurrence or a duration-only interval to its occurrences
+  with `Tempo.to_interval/2` first, giving an open-ended one a
+  `:within` window.
 
   """
 
@@ -17,6 +18,9 @@ defmodule Tempo.IntervalEndpointsError do
           reason: atom() | String.t() | nil
         }
 
+  @convert "Convert a recurrence or a duration-only interval to its occurrences with " <>
+             "`Tempo.to_interval/2` first, giving an open-ended one a `:within` window."
+
   @impl true
   def exception(bindings) when is_list(bindings) do
     struct!(__MODULE__, bindings)
@@ -25,16 +29,24 @@ defmodule Tempo.IntervalEndpointsError do
   @impl true
   def message(%__MODULE__{reason: reason}) when is_binary(reason), do: reason
 
-  def message(%__MODULE__{operation: op}) when not is_nil(op) do
-    "#{describe_operation(op)} requires an interval with concrete endpoints. " <>
-      "Materialise recurrence / duration-only or open-ended intervals via " <>
-      "`Tempo.to_interval/1,2` first."
+  def message(%__MODULE__{reason: :open_start}) do
+    "A recurrence with an open start has no first occurrence to count from. " <>
+      "Give `Tempo.to_interval/2` a `:within` window, or give the rule a start."
+  end
+
+  def message(%__MODULE__{reason: :empty_selection}) do
+    "A recurrence of one occurrence whose selection picks no date has no span."
+  end
+
+  def message(%__MODULE__{operation: op}) when is_binary(op) do
+    "Cannot #{op}: it needs an interval whose endpoints are both concrete. " <> @convert
+  end
+
+  def message(%__MODULE__{operation: op}) when is_atom(op) and not is_nil(op) do
+    "`#{op}` needs an interval whose endpoints are both concrete. " <> @convert
   end
 
   def message(%__MODULE__{}) do
-    "Operation requires an interval with concrete endpoints (not open-ended)"
+    "This needs an interval whose endpoints are both concrete. " <> @convert
   end
-
-  defp describe_operation(atom) when is_atom(atom), do: Atom.to_string(atom)
-  defp describe_operation(string) when is_binary(string), do: string
 end

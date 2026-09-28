@@ -46,7 +46,7 @@ defmodule Tempo.ExplainCoverageTest do
     end
 
     test "a set reports how many disjoint intervals it materialises to" do
-      assert Tempo.explain(~o"{2020,2021,2022,2023}Y") =~ "Materialises to 4 disjoint intervals."
+      assert Tempo.explain(~o"{2020,2021,2022,2023}Y") =~ "Converts to 4 disjoint intervals."
     end
 
     test "an open-lower interval" do

@@ -149,7 +149,7 @@ defmodule Tempo.Explain.Test do
                Tempo.to_interval(~o"R/../P1W/FL1KN", within: ~o"2026Y")
 
       assert IntervalSet.count(set) == 52
-      assert Tempo.explain(~o"R/../P1W/FL1KN") =~ "Materialise it into a window"
+      assert Tempo.explain(~o"R/../P1W/FL1KN") =~ "List its occurrences within a window"
     end
 
     test "an unspecified year materialises instead of crashing in the calendar" do

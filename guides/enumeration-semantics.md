@@ -54,7 +54,7 @@ Any component may carry a range, a range with step, a set of values, or a cartes
 
 ### 2.3. Recurring intervals
 
-A *bounded* recurring interval enumerates exactly as its materialised occurrences do — the walk delegates to `Tempo.to_interval/1`'s `IntervalSet`, yielding the sub-points of every occurrence. `Enum.count(~o"R5/2022-01-01/P1M")` is `151` (the days of January through May), identical to counting the materialised set; for the *occurrence* count use `to_interval!/1` and `Tempo.IntervalSet.count/1`. An *unbounded* recurrence (`R/…`) raises `Tempo.UnboundedRecurrenceError` — materialise it with `Tempo.to_interval(r, within: …)` first — matching how `relation/2` and `duration/1` refuse recurrences.
+A *bounded* recurring interval enumerates exactly as its converted occurrences do — the walk delegates to `Tempo.to_interval/1`'s `IntervalSet`, yielding the sub-points of every occurrence. `Enum.count(~o"R5/2022-01-01/P1M")` is `151` (the days of January through May), identical to counting the converted set; for the *occurrence* count use `to_interval!/1` and `Tempo.IntervalSet.count/1`. An *unbounded* recurrence (`R/…`) raises `Tempo.UnboundedRecurrenceError` — convert it with `Tempo.to_interval(r, within: …)` first — matching how `relation/2` and `duration/1` refuse recurrences.
 
 ### 2.4. Missing / unknown digits (EDTF masks)
 
@@ -129,9 +129,9 @@ Mismatched-resolution endpoints are compared as their concrete start-moments: mi
 
 ### 2.10. Implicit-to-explicit conversion (`Tempo.to_interval/1`)
 
-Every enumerable `%Tempo{}` has an explicit equivalent — either a single `%Tempo.Interval{}` (contiguous span) or a `%Tempo.IntervalSet{}` (sorted, member-preserving list of intervals). `Tempo.to_interval/1` materialises the appropriate form under the half-open `[from, to)` convention. The conversion preserves every piece of source metadata (`:qualification`, `:qualifications`, `:extended`, `:shift`, `:calendar`) on both endpoints.
+Every enumerable `%Tempo{}` has an explicit equivalent — either a single `%Tempo.Interval{}` (contiguous span) or a `%Tempo.IntervalSet{}` (sorted, member-preserving list of intervals). `Tempo.to_interval/1` converts to the appropriate form under the half-open `[from, to)` convention. The conversion preserves every piece of source metadata (`:qualification`, `:qualifications`, `:extended`, `:shift`, `:calendar`) on both endpoints.
 
-The bounds keep the **value's own resolution** — *resolution = meaning*, so a day materialises as `[day, day+1)`, not as drilled `T0H` endpoints. The iteration granularity of the implicit span (the next-finer unit) travels separately on the interval's **`:unit` field**, and the walk fills its anchor down to that unit at iteration time. So the materialised interval enumerates exactly like its implicit twin (`Enum.count` of both `~o"2026-01-15"` and its interval is 24 hours) while its endpoints state only what the source stated. An interval whose `:unit` is set inspects with a decoration — `#Tempo.Interval<~o"2026-01-15/2026-01-16" unit: hour>` — because the unit is non-syntactic state the bare sigil would not round-trip.
+The bounds keep the **value's own resolution** — *resolution = meaning*, so a day converts to `[day, day+1)`, not as drilled `T0H` endpoints. The iteration granularity of the implicit span (the next-finer unit) travels separately on the interval's **`:unit` field**, and the walk fills its anchor down to that unit at iteration time. So the converted interval enumerates exactly like its implicit twin (`Enum.count` of both `~o"2026-01-15"` and its interval is 24 hours) while its endpoints state only what the source stated. An interval whose `:unit` is set inspects with a decoration — `#Tempo.Interval<~o"2026-01-15/2026-01-16" unit: hour>` — because the unit is non-syntactic state the bare sigil would not round-trip.
 
 Call `Tempo.to_interval_set/1` if you always want the IntervalSet form (a single interval is wrapped in a one-element set).
 
@@ -156,7 +156,7 @@ Mask rules:
 
 * `1985-XX-15` (day specified, month masked) is semantically non-contiguous — the covered moments are "the 15th of any 1985 month" which isn't a single interval. `to_interval/1` accepts the looser bound (`[year: 1985]..[year: 1986]`) rather than returning a set.
 
-`to_interval/1` is idempotent on existing intervals and interval sets. Multi-valued AST shapes (ranges, stepped ranges, iterated groups, all-of sets) materialise to `%Tempo.IntervalSet{}` with each expanded member distinct. One-of sets (`[a,b,c]`) are *epistemic* (the value is one of these, we don't know which) and return an error from `to_interval/1` — flattening them would assert all members happened, which is semantically wrong. Bare `%Tempo.Duration{}` values also return an error (no anchor on the time line).
+`to_interval/1` is idempotent on existing intervals and interval sets. Multi-valued AST shapes (ranges, stepped ranges, iterated groups, all-of sets) convert to `%Tempo.IntervalSet{}` with each expanded member distinct. One-of sets (`[a,b,c]`) are *epistemic* (the value is one of these, we don't know which) and return an error from `to_interval/1` — flattening them would assert all members happened, which is semantically wrong. Bare `%Tempo.Duration{}` values also return an error (no anchor on the time line).
 
 | Input shape | Result |
 |---|---|
@@ -262,7 +262,7 @@ The parsed value itself is usable for comparison, equality, and round-trip seria
 
 `Enum.count/1`, `Enum.member?/2`, and `Enum.slice/2` (with `Enum.at/2`) have O(1) implementations for `%Tempo{}` and `%Tempo.Interval{}`, backed by `Tempo.Interval.Steps`. They are calendar-aware (a Coptic year counts 13 months, not 12) and DST-aware (a spring-forward day counts 23 hours, a fall-back day 25), and they agree element-for-element with the `reduce/3` walk.
 
-Values that don't materialise to a single interval — groups, selections, ranges, sets, masks — return `{:error, …}` and let `Enum` fall back to the `reduce/3` walk, which handles them.
+Values that don't convert to a single interval — groups, selections, ranges, sets, masks — return `{:error, …}` and let `Enum` fall back to the `reduce/3` walk, which handles them.
 
 ### 4.1. Still pending: `%Tempo.Set{}`
 
@@ -329,7 +329,7 @@ true
 
 Known divergences:
 
-* **Second-resolution values.** `to_interval/1` materialises a one-second span (`~o"2026-01-15T10:30:00"` → `[10:30:00, 10:30:01)`), but implicit iteration drills one unit finer into sub-second tenths — so `Enum.to_list(~o"2026-01-15T10:30:00")` yields ten deciseconds (`.0`–`.9`) while the interval forward-steps as a single second. Coarser resolutions don't diverge because their materialised interval carries the drill unit on `:unit` (a day walks hours); the second case deliberately carries none (a clean `[t, t+1s)` span for set operations).
+* **Second-resolution values.** `to_interval/1` converts it to a one-second span (`~o"2026-01-15T10:30:00"` → `[10:30:00, 10:30:01)`), but implicit iteration drills one unit finer into sub-second tenths — so `Enum.to_list(~o"2026-01-15T10:30:00")` yields ten deciseconds (`.0`–`.9`) while the interval forward-steps as a single second. Coarser resolutions don't diverge because their converted interval carries the drill unit on `:unit` (a day walks hours); the second case deliberately carries none (a clean `[t, t+1s)` span for set operations).
 
 * **Masked values iterated implicitly.** The current implicit enumeration of masked values (`1985-XX-XX`) has known quirks — it does not always walk the full cartesian product of valid month/day pairs. `to_interval/1` widens to the coarsest un-masked prefix and produces a clean span; iterating that interval yields the straightforward forward-stepped sequence. Prefer the explicit form for set operations on masked values.
 

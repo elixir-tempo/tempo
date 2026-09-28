@@ -7,7 +7,7 @@ defmodule Tempo.IntervalSet.Backend.Lazy do
 
   A lazy set answers the walking questions — `Tempo.IntervalSet.walk/1`,
   `first/1`, `empty?/1`, `covered?/2`, `Enum.take/2`, and use as a
-  `Tempo.shift/3` `skipping:` busy set — without ever materialising more
+  `Tempo.shift/3` `skipping:` busy set — without ever building more
   members than the caller consumes. `bounded?/1` is `false`, so every
   aggregate operation (`to_list/1`, `count/1`, `coalesce/1`, set
   algebra) raises `Tempo.UnboundedSetError` instead of walking forever.

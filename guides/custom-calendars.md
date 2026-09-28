@@ -1,6 +1,6 @@
 # Custom calendars — fiscal years, retail weeks, academic years
 
-Tempo treats a calendar as **data, not a built-in assumption**. Comparison, duration, iteration, and materialisation all route through the value's calendar — so a *custom human calendar* is a first-class citizen alongside Gregorian, Hebrew, or Persian. You build the calendar once with [Calendrical](https://hexdocs.pm/calendrical), and every Tempo operation just works on values that carry it.
+Tempo treats a calendar as **data, not a built-in assumption**. Comparison, duration, iteration and conversion all route through the value's calendar — so a *custom human calendar* is a first-class citizen alongside Gregorian, Hebrew, or Persian. You build the calendar once with [Calendrical](https://hexdocs.pm/calendrical), and every Tempo operation just works on values that carry it.
 
 This is the [time-granularity idea](temporal-formalisms.md) made concrete: a **granularity is a calendar**. A fiscal quarter, a retail week, an academic term are all *granules* of a calendar whose year happens not to start on the 1st of January.
 

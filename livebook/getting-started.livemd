@@ -20,7 +20,7 @@ The `~o` sigil parses the full ISO 8601 Part 1 and Part 2 grammar (plus IXDTF zo
 ~o"2026-06-15"
 ```
 
-The value knows its own resolution — and its bounds are real. Materialising gives a half-open interval whose endpoints stay at the value's resolution, with the walk granularity carried separately on `:unit`:
+The value knows its own resolution — and its bounds are real. Converting it gives a half-open interval whose endpoints stay at the value's resolution, with the walk granularity carried separately on `:unit`:
 
 ```elixir
 {:ok, day} = Tempo.to_interval(~o"2026-06-15")

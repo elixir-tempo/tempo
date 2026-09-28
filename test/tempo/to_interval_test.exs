@@ -234,7 +234,7 @@ defmodule Tempo.ToInterval.Test do
       # concrete span. Must not raise.
       {:ok, tempo} = Tempo.from_iso8601("5G10DU")
 
-      assert {:error, %Tempo.MaterialisationError{reason: :unanchored_group}} =
+      assert {:error, %Tempo.ConversionError{reason: :unanchored_group}} =
                Tempo.to_interval(tempo)
     end
 
@@ -316,13 +316,13 @@ defmodule Tempo.ToInterval.Test do
     end
 
     test "a carry off the end of the day still errors (no absent day to carry into)" do
-      assert {:error, %Tempo.MaterialisationError{reason: :unanchored_group}} =
+      assert {:error, %Tempo.ConversionError{reason: :unanchored_group}} =
                Tempo.to_interval(group(hour: 23, minute: {:group, 45..59}))
     end
 
     test "a partially-dated value still requires anchoring" do
       # A month with no year/day is not a pure time-of-day value.
-      assert {:error, %Tempo.MaterialisationError{reason: :unanchored_group}} =
+      assert {:error, %Tempo.ConversionError{reason: :unanchored_group}} =
                Tempo.to_interval(group(month: 6, hour: 16, minute: {:group, 1..15}))
     end
 
@@ -376,7 +376,7 @@ defmodule Tempo.ToInterval.Test do
     test "bare Tempo.Duration returns an error" do
       {:ok, duration} = Tempo.from_iso8601("P3M")
 
-      assert {:error, %Tempo.MaterialisationError{reason: :bare_duration} = e} =
+      assert {:error, %Tempo.ConversionError{reason: :bare_duration} = e} =
                Tempo.to_interval(duration)
 
       assert Exception.message(e) =~ "Duration"
@@ -386,7 +386,7 @@ defmodule Tempo.ToInterval.Test do
     test "to_interval!/1 raises on duration" do
       {:ok, duration} = Tempo.from_iso8601("P3M")
 
-      assert_raise Tempo.MaterialisationError, ~r/no place on the time line/, fn ->
+      assert_raise Tempo.ConversionError, ~r/no place on the time line/, fn ->
         Tempo.to_interval!(duration)
       end
     end
@@ -407,7 +407,7 @@ defmodule Tempo.ToInterval.Test do
       # certainty.
       {:ok, set} = Tempo.from_iso8601("[2020Y,2021Y,2022Y]")
 
-      assert {:error, %Tempo.MaterialisationError{reason: :one_of_set} = e} =
+      assert {:error, %Tempo.ConversionError{reason: :one_of_set} = e} =
                Tempo.to_interval(set)
 
       assert Exception.message(e) =~ "one-of"

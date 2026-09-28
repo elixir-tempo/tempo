@@ -18,7 +18,7 @@ The import adds only `sigil_o/2` and `sigil_TEMPO/2` to the caller's namespace; 
 
 ### You're thinking in intervals
 
-Scheduling ("this meeting from 2pm to 3pm"), availability ("free during work hours Mon–Fri"), date ranges ("Q3 2026" — a span, not a moment), recurrence ("every second Monday of the month" — infinite span needing bounded materialisation). The stdlib models these as awkward pairs of `DateTime` values and hand-rolled comparison logic. Tempo models them as first-class bounded spans with predicates and operators.
+Scheduling ("this meeting from 2pm to 3pm"), availability ("free during work hours Mon–Fri"), date ranges ("Q3 2026" — a span, not a moment), recurrence ("every second Monday of the month" — infinite span whose occurrences need a window). The stdlib models these as awkward pairs of `DateTime` values and hand-rolled comparison logic. Tempo models them as first-class bounded spans with predicates and operators.
 
 ### You need set operations on time
 

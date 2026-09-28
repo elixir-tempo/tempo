@@ -142,14 +142,14 @@ defmodule Tempo.RecurrenceSetTest do
     test "a nested set's member that is not a Tempo value is an error, not a raise" do
       nested = RecurrenceSet.new([:not_a_member])
 
-      assert {:error, %Tempo.MaterialisationError{reason: :recurrence_set_member}} =
+      assert {:error, %Tempo.ConversionError{reason: :recurrence_set_member}} =
                Tempo.to_interval_set(RecurrenceSet.new([nested]), within: ~o"2026Y")
     end
 
     test "a member that is not a Tempo value is an error, not a raise" do
       rset = RecurrenceSet.new([named("R/../P1Y/FL12M25DN", "Christmas"), :not_a_member])
 
-      assert {:error, %Tempo.MaterialisationError{reason: :recurrence_set_member}} =
+      assert {:error, %Tempo.ConversionError{reason: :recurrence_set_member}} =
                Tempo.to_interval_set(rset, within: ~o"2026Y")
     end
   end
@@ -357,7 +357,7 @@ defmodule Tempo.RecurrenceSetTest do
     test "falls_on: another kind of struct is an error" do
       bad = RecurrenceSet.move_when(~o"2026-04-09", falls_on: ~o"2026-04-09", to_next: ~o"4K")
 
-      assert {:error, %Tempo.MaterialisationError{reason: :conditional_member}} =
+      assert {:error, %Tempo.ConversionError{reason: :conditional_member}} =
                Tempo.to_interval_set(RecurrenceSet.new([bad]))
     end
 
@@ -372,7 +372,7 @@ defmodule Tempo.RecurrenceSetTest do
               | at: [~o"P1D"]
             }
           ] do
-        assert {:error, %Tempo.MaterialisationError{reason: :conditional_member}} =
+        assert {:error, %Tempo.ConversionError{reason: :conditional_member}} =
                  Tempo.to_interval_set(RecurrenceSet.new([conditional]))
       end
     end

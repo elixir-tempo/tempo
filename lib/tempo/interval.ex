@@ -3,7 +3,7 @@ defmodule Tempo.Interval do
   An explicit bounded span on the time line.
 
   Every Tempo value *is* an interval at some resolution; a bare
-  `%Tempo{}` materialises to an `%Tempo.Interval{}` via
+  `%Tempo{}` converts to an `%Tempo.Interval{}` with
   `Tempo.to_interval/1`. `%Tempo.Interval{}` carries explicit
   `from` and `to` endpoints plus optional recurrence metadata
   (`recurrence`, `duration`, `repeat_rule`) for RRULE-style
@@ -51,6 +51,7 @@ defmodule Tempo.Interval do
   """
 
   alias Tempo.Compare
+  alias Tempo.ConversionError
   alias Tempo.Duration
   alias Tempo.FloatingTempoError
   alias Tempo.IntervalEndpointsError
@@ -61,7 +62,6 @@ defmodule Tempo.Interval do
   alias Tempo.Iso8601.Unit
   alias Tempo.LeapSeconds
   alias Tempo.Mask
-  alias Tempo.MaterialisationError
   alias Tempo.Math
   alias Tempo.UnanchoredError
 
@@ -816,7 +816,7 @@ defmodule Tempo.Interval do
   end
 
   defp group_error(tempo) do
-    {:error, MaterialisationError.exception(value: tempo, reason: :unanchored_group)}
+    {:error, ConversionError.exception(value: tempo, reason: :unanchored_group)}
   end
 
   defp time_of_day_unit?(unit), do: unit in [:hour, :minute, :second]
@@ -895,7 +895,7 @@ defmodule Tempo.Interval do
 
         case Unit.implicit_enumerator(unit, calendar) do
           nil ->
-            {:error, MaterialisationError.exception(value: tempo, reason: :finest_resolution)}
+            {:error, ConversionError.exception(value: tempo, reason: :finest_resolution)}
 
           {next_unit, _range} ->
             implicit_span(tempo, time, unit, next_unit, calendar)
@@ -1046,9 +1046,9 @@ defmodule Tempo.Interval do
     # happen in practice (the parser always resolves a year before
     # finer units can appear), but return a clear error if it does.
     {:error,
-     MaterialisationError.exception(
+     ConversionError.exception(
        reason:
-         "Cannot materialise a masked Tempo with no un-masked coarser unit — " <>
+         "Cannot convert a masked Tempo with no un-masked coarser unit to an interval — " <>
            "nothing to place the span on."
      )}
   end
@@ -1067,10 +1067,10 @@ defmodule Tempo.Interval do
       {:widen, prefix, unit}
     else
       {:error,
-       MaterialisationError.exception(
+       ConversionError.exception(
          reason:
-           "Cannot materialise a masked Tempo whose un-masked prefix contains ranges, " <>
-             "selections, or other non-scalar values."
+           "Cannot convert a masked Tempo whose un-masked prefix contains ranges, " <>
+             "selections or other non-scalar values to an interval."
        )}
     end
   end
@@ -1123,7 +1123,7 @@ defmodule Tempo.Interval do
 
   * `a` and `b` are each one of:
 
-    * a `t:Tempo.t/0` point (materialised via its implicit span).
+    * a `t:Tempo.t/0` point (converted to its implicit span).
 
     * a `t:Tempo.Interval.t/0`.
 
@@ -1198,7 +1198,7 @@ defmodule Tempo.Interval do
   # extent. The error directs to materialisation and the set-level API.
   defp to_single_interval(%__MODULE__{recurrence: recurrence} = interval, _label)
        when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
-    {:error, MaterialisationError.exception(value: interval, reason: :recurring_interval)}
+    {:error, ConversionError.exception(value: interval, reason: :recurring_interval)}
   end
 
   defp to_single_interval(%__MODULE__{from: %Tempo{}, to: %Tempo{}} = iv, _label), do: {:ok, iv}
@@ -1234,7 +1234,7 @@ defmodule Tempo.Interval do
   # same error `to_interval/1` gives; the certainty API (`relation_certainty/3`,
   # `possibly_before?/2`, …) answers the question the set can actually support.
   defp to_single_interval(%Tempo.Set{type: :one} = set, _label) do
-    {:error, MaterialisationError.exception(value: set, reason: :one_of_set)}
+    {:error, ConversionError.exception(value: set, reason: :one_of_set)}
   end
 
   defp to_single_interval(other, label) do
@@ -1628,7 +1628,7 @@ defmodule Tempo.Interval do
   # which is their true total extent.
   defp resolved_duration(%__MODULE__{recurrence: recurrence} = interval, _opts)
        when is_integer(recurrence) and recurrence > 1 do
-    raise MaterialisationError.exception(value: interval, reason: :recurring_duration)
+    raise ConversionError.exception(value: interval, reason: :recurring_duration)
   end
 
   defp resolved_duration(%__MODULE__{from: :undefined}, _opts), do: :infinity

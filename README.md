@@ -51,7 +51,7 @@ The import adds only `sigil_o/2` and `sigil_TEMPO/2` to the caller's namespace; 
 iex> ~o"2026-06-15"
 ~o"2026Y6M15D"
 
-# Its bounds are real — Tempo.to_interval materialises the span.
+# Its bounds are real — Tempo.to_interval converts it to that span.
 # Bounds keep the value's own resolution; `:unit` is the walk granularity.
 iex> {:ok, iv} = Tempo.to_interval(~o"2026-06-15")
 iex> {from, to} = Tempo.Interval.endpoints(iv)
@@ -125,7 +125,7 @@ iex> Tempo.explain(~o"156X")
 A masked year spanning the 1560s.
 Span: [1560-01-01, 1570-01-01).
 Iterates at :month granularity.
-Materialise as an interval with `Tempo.to_interval/1`.
+Convert it to an interval with `Tempo.to_interval/1`.
 """
 
 iex> Tempo.explain(~o"1984?/2004~")

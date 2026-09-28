@@ -124,7 +124,6 @@ defmodule Tempo do
   alias Tempo.Iso8601.Tokenizer
   alias Tempo.Iso8601.Unit
   alias Tempo.Mask
-  alias Tempo.MaterialisationError
   alias Tempo.Math
   alias Tempo.ParseError
   alias Tempo.RecurrenceSet.Conditional
@@ -340,7 +339,7 @@ defmodule Tempo do
   * `:metadata` is a map of the caller's own data carried with the
     value (a holiday name, a source), read with `metadata/1`. It is
     not part of the value's ISO 8601 form: `to_iso8601/1` leaves it
-    out, and materialising the value (`to_interval/2`) moves it to
+    out, and converting the value (`to_interval/2`) moves it to
     the interval or intervals it becomes.
 
   * `:tags` is a map of IXDTF (RFC 9557) elective suffix tags,
@@ -791,39 +790,22 @@ defmodule Tempo do
       {:ok, ~o"2026Y6M15D"W}
 
   """
-  @spec from_iso8601(string :: String.t()) ::
+  @spec from_iso8601(String.t(), Calendar.calendar() | keyword()) ::
           {:ok,
            t()
            | Tempo.Interval.t()
            | Tempo.Duration.t()
            | Tempo.Set.t()}
           | {:error, error_reason()}
-  @spec from_iso8601(string :: String.t(), calendar :: Calendar.calendar()) ::
-          {:ok,
-           t()
-           | Tempo.Interval.t()
-           | Tempo.Duration.t()
-           | Tempo.Set.t()}
-          | {:error, error_reason()}
-  def from_iso8601(string) when is_binary(string) do
-    # No explicit calendar — the IXDTF `[u-ca=NAME]` suffix wins
-    # when present, otherwise fall back to Gregorian.
-    do_from_iso8601(string, :from_ixdtf_or_default)
-  end
+  def from_iso8601(string, calendar_or_options \\ [])
 
-  @spec from_iso8601(string :: String.t(), options :: keyword()) ::
-          {:ok,
-           t()
-           | Tempo.Interval.t()
-           | Tempo.Duration.t()
-           | Tempo.Set.t()}
-          | {:error, error_reason()}
   def from_iso8601(string, options) when is_binary(string) and is_list(options) do
-    # Options form. `:calendar` selects the calendar (default: IXDTF or
-    # Gregorian); `strict: true` rejects an IXDTF value whose numeric
-    # offset disagrees with its zone (RFC 9557 §4.2), via
-    # `Tempo.Compare.validate_zone_offset/1`. Strict only applies to a
-    # `%Tempo{}` result; intervals/durations pass straight through.
+    # Options form, and the default. `:calendar` selects the calendar
+    # (default: the IXDTF `[u-ca=NAME]` suffix, else Gregorian);
+    # `strict: true` rejects an IXDTF value whose numeric offset disagrees
+    # with its zone (RFC 9557 §4.2), via `Tempo.Compare.validate_zone_offset/1`.
+    # Strict only applies to a `%Tempo{}` result; intervals and durations
+    # pass straight through.
     calendar = Keyword.get(options, :calendar, :from_ixdtf_or_default)
 
     with {:ok, %Tempo{} = tempo} <- do_from_iso8601(string, calendar) do
@@ -977,26 +959,23 @@ defmodule Tempo do
   def attach_extended(other, _extended), do: other
 
   @doc """
-  Creates a `t:Tempo.t/0` struct from an ISO8601
-  string.
-
-  The parser supports the vast majority of [ISO8601](https://www.iso.org/iso-8601-date-and-time-format.html)
-  parts 1 and 2.
+  Bang variant of `from_iso8601/2`: the parsed value, or a raised
+  exception.
 
   ### Arguments
 
-  * `string` is any ISO8601 formatted string
+  * `string` is any ISO 8601 formatted string, optionally followed by
+    an IXDTF suffix.
 
-  * `calendar` is any `t:Calendar.calendar/0`. The default is
-    `Calendrical.Gregorian`.
+  * `calendar_or_options` (optional) is a calendar module or a
+    keyword list of options, as for `from_iso8601/2`.
 
   ### Returns
 
-  * `t:t/0` or
+  * The parsed value: a `t:t/0`, `t:Tempo.Interval.t/0`,
+    `t:Tempo.Duration.t/0` or `t:Tempo.Set.t/0`.
 
-  * raises an exception
-
-  ## Examples
+  ### Examples
 
       iex> Tempo.from_iso8601!("2022-11-20")
       ~o"2022Y11M20D"
@@ -1004,35 +983,15 @@ defmodule Tempo do
       iex> Tempo.from_iso8601!("2022Y")
       ~o"2022Y"
 
-  ### Examples
-
-
       iex> Tempo.from_iso8601!("2026-06-15T14:30[Australia/Sydney]")
       ~o"2026Y6M15DT14H30M[Australia/Sydney]"
 
   """
-  @spec from_iso8601!(string :: String.t()) :: t | no_return()
-  def from_iso8601!(string) when is_binary(string) do
-    # Mirror `from_iso8601/1` — no explicit calendar, so IXDTF
-    # `[u-ca=NAME]` wins when present.
-    case from_iso8601(string) do
-      {:ok, tempo} -> tempo
-      {:error, exception} -> raise exception
-    end
-  end
-
-  @spec from_iso8601!(string :: String.t(), options :: keyword()) :: t | no_return()
-  def from_iso8601!(string, options) when is_binary(string) and is_list(options) do
-    case from_iso8601(string, options) do
-      {:ok, tempo} -> tempo
-      {:error, exception} -> raise exception
-    end
-  end
-
-  @spec from_iso8601!(string :: String.t(), calendar :: Calendar.calendar()) :: t | no_return()
-  def from_iso8601!(string, calendar) when is_binary(string) do
-    case from_iso8601(string, calendar) do
-      {:ok, tempo} -> tempo
+  @spec from_iso8601!(String.t(), Calendar.calendar() | keyword()) ::
+          t() | Tempo.Interval.t() | Tempo.Duration.t() | Tempo.Set.t() | no_return()
+  def from_iso8601!(string, calendar_or_options \\ []) when is_binary(string) do
+    case from_iso8601(string, calendar_or_options) do
+      {:ok, value} -> value
       {:error, exception} -> raise exception
     end
   end
@@ -2156,27 +2115,9 @@ defmodule Tempo do
     |> unit_resolution()
   end
 
-  @doc """
-  Returns the maximum and minimum time units as a
-  2-tuple.
-
-  ### Arguments
-
-  * `tempo` is any `t:#{__MODULE__}.t/0`.
-
-  ### Returns
-
-  * `{max_unit, min_unit}`
-
-  ### Examples
-
-        iex> Tempo.unit_min_max ~o"2022Y1M2G3DU"
-        {:day, :year}
-
-        iex> Tempo.unit_min_max ~o"2022"
-        {:year, :year}
-
-  """
+  # The finest and coarsest units of a value, as `{finest, coarsest}`:
+  # `2022Y1M2G3DU` is `{:day, :year}`. The ISO 8601 parser calls it.
+  @doc false
   @spec unit_min_max(tempo :: t | token_list()) :: {time_unit(), time_unit()}
   def unit_min_max(%__MODULE__{time: units}) do
     unit_min_max(units)
@@ -2674,8 +2615,11 @@ defmodule Tempo do
     end
   end
 
+  # Merge `from`'s components into `base`, validated — the engine of
+  # `at/2` and `on/2`, which are the public way to combine two values.
   # Passes through any non-`{:ok, _}` from `Validation.validate/2`,
   # which dialyzer widens beyond the spec.
+  @doc false
   @dialyzer {:nowarn_function, merge: 2}
   @spec merge(t(), t()) :: t() | {:error, error_reason()}
   def merge(%__MODULE__{} = base, %Tempo{} = from) do
@@ -2843,19 +2787,29 @@ defmodule Tempo do
   end
 
   @doc """
-  Adds an extended enumeration to a Tempo.
+  Write a value as an enumeration of its next finer unit, covering the
+  same span.
 
-  This has the effect of increasing the
-  resolution of the the Tempo struct but
-  still covering the same interval.
+  `~o"2020"` becomes `~o"2020Y{1..12}M"` — the same year, written as its
+  twelve months — so the value's resolution rises while its span stays
+  the same.
 
-  ### Example
+  ### Arguments
 
-      iex> Tempo.extend(~o"2020")
-      {:ok, ~o"2020Y{1..12}M"}
+  * `tempo` is a `t:t/0`.
+
+  * `unit` is reserved and must be `nil`.
+
+  ### Returns
+
+  * `{:ok, tempo}` with the finer enumeration added.
+
+  * `{:error, reason}` when the result fails validation.
 
   ### Examples
 
+      iex> Tempo.extend(~o"2020")
+      {:ok, ~o"2020Y{1..12}M"}
 
       iex> Tempo.extend(~o"2026-06")
       {:ok, ~o"2026Y6M{1..30}D"}
@@ -2871,6 +2825,25 @@ defmodule Tempo do
     |> Validation.validate()
   end
 
+  @doc """
+  Bang variant of `extend/2`: the extended value, or a raised exception.
+
+  ### Arguments
+
+  * `tempo` is a `t:t/0`.
+
+  * `unit` is reserved and must be `nil`.
+
+  ### Returns
+
+  * The extended `t:t/0`.
+
+  ### Examples
+
+      iex> Tempo.extend!(~o"2020")
+      ~o"2020Y{1..12}M"
+
+  """
   @spec extend!(t(), nil) :: t()
   def extend!(%Tempo{} = tempo, unit \\ nil) do
     case extend(tempo, unit) do
@@ -2887,7 +2860,7 @@ defmodule Tempo do
   that every date/time value is a bounded interval on the time
   line at some resolution. See the
   [interop guide](interop.html) for what the resulting value
-  spans once materialised with `to_interval/1`.
+  spans once converted with `to_interval/1`.
 
   The intended resolution is either given explicitly via the
   `:resolution` option or inferred from the input:
@@ -4182,7 +4155,7 @@ defmodule Tempo do
   name, an event's summary).
 
   Every Tempo value carries a metadata map. It is not part of the value's
-  ISO 8601 form, and materialisation carries it along: a recurrence's metadata
+  ISO 8601 form, and conversion carries it along: a recurrence's metadata
   reaches every occurrence, and a recurrence set's tags each occurrence its
   members produce.
 
@@ -4994,15 +4967,15 @@ defmodule Tempo do
 
   Every Tempo value represents a bounded interval on the time
   line. `~o"2026-01"` *is* the interval `[2026-01-01, 2026-02-01)`
-  — `to_interval/1` materialises that implicit span as a pair of
+  — `to_interval/1` converts that implicit span to a pair of
   concrete endpoints under the half-open `[from, to)` convention
   (`from` inclusive, `to` exclusive). The span is one unit at the
   value's resolution: a day value becomes a one-day interval, a
   second value a one-second interval. This is the canonical
   representation used by the set-operations API (`union/2`,
   `intersection/2`, `coalesce/1`). See the
-  [interop guide](interop.html) for how converted Elixir
-  date/time values materialise.
+  [interop guide](interop.html) for the spans converted Elixir
+  date and time values cover.
 
   When the input expands to multiple disjoint spans — a set of
   explicit values, a range over a time unit, a stepped range —
@@ -5047,7 +5020,7 @@ defmodule Tempo do
 
   ### Returns
 
-  * `{:ok, interval}` when the value materialises to a single
+  * `{:ok, interval}` when the value converts to a single
     contiguous span.
 
   * `{:ok, interval_set}` when the value expands to multiple
@@ -5059,10 +5032,10 @@ defmodule Tempo do
     questions; `Tempo.IntervalSet.count/1` and `to_list/1` raise
     `Tempo.UnboundedSetError`.
 
-  * `{:error, reason}` when the input cannot be materialised — a
+  * `{:error, reason}` when the input cannot be converted — a
     bare `Tempo.Duration` (no start), a `Tempo` at a resolution
-    with no finer unit available to bound the span (microsecond
-    materialises to a one-microsecond span; only exotic selector
+    with no finer unit available to bound the span (a microsecond
+    converts to a one-microsecond span; only exotic selector
     resolutions have no span), a one-of `Tempo.Set` (epistemic
     disjunction is not an interval list; the user must pick one or
     handle the disjunction themselves), a recurrence with no end and
@@ -5090,7 +5063,7 @@ defmodule Tempo do
       {[year: 1560], [year: 1570]}
 
       iex> {:ok, duration} = Tempo.from_iso8601("P3M")
-      iex> {:error, %Tempo.MaterialisationError{reason: :bare_duration}} = Tempo.to_interval(duration)
+      iex> {:error, %Tempo.ConversionError{reason: :bare_duration}} = Tempo.to_interval(duration)
 
       iex> {:ok, election_day} = Tempo.from_iso8601("2024Y11MLLL1K1IN/P9DN2K1IN")
       iex> {:ok, dates} = Tempo.to_interval(election_day)
@@ -5484,7 +5457,7 @@ defmodule Tempo do
         {:error,
          IntervalEndpointsError.exception(
            interval: interval,
-           operation: "materialise a count-1 recurrence whose BY-rule selects no occurrence",
+           operation: "convert a count-1 recurrence whose BY-rule selects no occurrence",
            reason: :empty_selection
          )}
     end
@@ -5629,7 +5602,7 @@ defmodule Tempo do
         {:error,
          IntervalEndpointsError.exception(
            interval: interval,
-           operation: "materialise a recurrence that has no start",
+           operation: "convert a recurrence that has no start",
            reason: :open_start
          )}
 
@@ -5705,7 +5678,7 @@ defmodule Tempo do
   end
 
   defp materialise(%Tempo.Set{type: :one} = value, _opts) do
-    {:error, MaterialisationError.exception(value: value, reason: :one_of_set)}
+    {:error, ConversionError.exception(value: value, reason: :one_of_set)}
   end
 
   # A `%Tempo.Range{}` set member (`{2020Y..2030Y}`) is inclusive of both bounds,
@@ -5722,11 +5695,11 @@ defmodule Tempo do
   end
 
   defp materialise(%Tempo.Range{} = range, _opts) do
-    {:error, MaterialisationError.exception(value: range, reason: :open_range)}
+    {:error, ConversionError.exception(value: range, reason: :open_range)}
   end
 
   defp materialise(%Tempo.Duration{} = value, _opts) do
-    {:error, MaterialisationError.exception(value: value, reason: :bare_duration)}
+    {:error, ConversionError.exception(value: value, reason: :bare_duration)}
   end
 
   # A recurrence with no end is ended by the caller's `:within` window; with
@@ -6975,7 +6948,7 @@ defmodule Tempo do
         :ok
 
       [invalid | _] ->
-        {:error, MaterialisationError.exception(value: invalid, reason: :conditional_member)}
+        {:error, ConversionError.exception(value: invalid, reason: :conditional_member)}
     end
   end
 
@@ -7202,7 +7175,7 @@ defmodule Tempo do
   end
 
   defp recurrence_set_member(member, _opts) do
-    {:error, MaterialisationError.exception(value: member, reason: :recurrence_set_member)}
+    {:error, ConversionError.exception(value: member, reason: :recurrence_set_member)}
   end
 
   defp recurrence_set_occurrences(%Tempo.Interval{} = interval), do: [interval]
@@ -7325,13 +7298,13 @@ defmodule Tempo do
   The Tempo analogue of `Enum.map/2`: it walks any enumerable Tempo value
   (a `t:Tempo.IntervalSet.t/0`, a `t:Tempo.Set.t/0`, a plain list of
   values, …), applies `fun` to each element, and gathers the results into
-  an interval set instead of a list. Each result is materialised with
+  an interval set instead of a list. Each result is converted with
   `Tempo.to_interval/1`, so `fun` may return either a `t:t/0` — a day
   becomes its `[day, next_day)` span — or an interval. Members are kept
   distinct (no coalescing); apply `Tempo.IntervalSet.coalesce/1` afterward
   if you want touching spans merged.
 
-  Raises if a mapped value cannot be materialised into a bounded interval.
+  Raises if a mapped value cannot be converted to a bounded interval.
   Use `try_map/2` for the error-returning form.
 
   ### Arguments
@@ -7342,7 +7315,7 @@ defmodule Tempo do
 
   ### Returns
 
-  * a `t:Tempo.IntervalSet.t/0` of the mapped, materialised values.
+  * a `t:Tempo.IntervalSet.t/0` of the mapped, converted values.
 
   ### Examples
 
@@ -7368,13 +7341,13 @@ defmodule Tempo do
 
   @doc """
   Like `map/2`, but returns `{:ok, interval_set}` or halts at the first
-  value that cannot be materialised, returning its `{:error, reason}`.
+  value that cannot be converted, returning its `{:error, reason}`.
 
   This is the "traverse" form — map every element, or stop at the first
   failure and report it — analogous to Gleam's `list.try_map` or a Rust
   `collect::<Result<_, _>>()`. `fun` returns a plain Tempo value (exactly
   as for `map/2`); the error is the first result that `Tempo.to_interval/1`
-  rejects (an unbounded, unanchored, or otherwise un-materialisable
+  rejects (an unbounded, unanchored or otherwise unconvertible
   value), so a partially-resolvable set never yields a partial result.
 
   ### Arguments
@@ -7385,7 +7358,7 @@ defmodule Tempo do
 
   ### Returns
 
-  * `{:ok, interval_set}` when every mapped value materialises, or
+  * `{:ok, interval_set}` when every mapped value converts, or
 
   * `{:error, reason}` for the first that does not.
 
@@ -7416,7 +7389,7 @@ defmodule Tempo do
   end
 
   defp materialisation_error(tempo, reason) do
-    MaterialisationError.exception(value: tempo, reason: reason)
+    ConversionError.exception(value: tempo, reason: reason)
   end
 
   defp materialise_value(%Tempo{} = tempo) do
@@ -7643,12 +7616,12 @@ defmodule Tempo do
 
   ### Returns
 
-  * The materialised `t:Tempo.Interval.t/0` or
+  * The converted `t:Tempo.Interval.t/0` or
     `t:Tempo.IntervalSet.t/0`.
 
   ### Raises
 
-  * `ArgumentError` when the input cannot be materialised. See
+  * `ArgumentError` when the input cannot be converted. See
     `to_interval/1` for the error cases.
 
   ### Examples
@@ -8575,7 +8548,7 @@ defmodule Tempo do
 
   The result is a `t:Tempo.IntervalSet.t/0` on the lazy backend: each
   member is one weekend day's span, generated on demand and never
-  materialised in full. Use it wherever a walk suffices — most
+  built in full. Use it wherever a walk suffices — most
   naturally as a `Tempo.shift/3` `skipping:` busy set, with no
   `:within` window required:
 

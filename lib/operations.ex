@@ -29,10 +29,10 @@ defmodule Tempo.Operations do
   """
 
   alias Tempo.Compare
+  alias Tempo.ConversionError
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.Iso8601.Unit
-  alias Tempo.MaterialisationError
   alias Tempo.Math
   alias Tempo.ResolutionError
   alias Tempo.UnanchoredError
@@ -49,7 +49,7 @@ defmodule Tempo.Operations do
 
   ### Arguments
 
-  * `a` and `b` are any Tempo values that can be materialised to
+  * `a` and `b` are any Tempo values that can be converted to
     an interval set — `%Tempo{}`, `%Tempo.Interval{}`,
     `%Tempo.IntervalSet{}`, or `%Tempo.Set{type: :all}`.
 
@@ -77,7 +77,7 @@ defmodule Tempo.Operations do
       {1, 1}
 
       iex> Tempo.Operations.align(~o"P1D", ~o"2026-01")
-      {:error, %Tempo.MaterialisationError{value: ~o"P1D", reason: :bare_duration}}
+      {:error, %Tempo.ConversionError{value: ~o"P1D", reason: :bare_duration}}
 
   """
   @spec align(operand, operand, keyword()) ::
@@ -302,7 +302,7 @@ defmodule Tempo.Operations do
 
   defp validate_operand(%Tempo.Duration{} = value) do
     {:error,
-     MaterialisationError.exception(
+     ConversionError.exception(
        value: value,
        reason: :bare_duration
      )}
@@ -310,7 +310,7 @@ defmodule Tempo.Operations do
 
   defp validate_operand(%Tempo.Set{type: :one} = value) do
     {:error,
-     MaterialisationError.exception(
+     ConversionError.exception(
        value: value,
        reason: :one_of_set
      )}

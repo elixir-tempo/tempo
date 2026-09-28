@@ -62,7 +62,7 @@ end)
 
 ## Expressing fixed-rule holidays directly in ISO 8601
 
-Many holidays need no feed at all: the ones with a purely calendrical rule — "the third Monday in January" — are recurrences Tempo can express as a native ISO 8601 string. Each round-trips through `Tempo.from_iso8601/1` and materialises to concrete dates within a year's window. Here are the eight US federal holidays with a fixed rule, given as the **observed public holiday** (not the underlying event date — see the notes below):
+Many holidays need no feed at all: the ones with a purely calendrical rule — "the third Monday in January" — are recurrences Tempo can express as a native ISO 8601 string. Each round-trips through `Tempo.from_iso8601/1` and converts to concrete dates within a year's window. Here are the eight US federal holidays with a fixed rule, given as the **observed public holiday** (not the underlying event date — see the notes below):
 
 | Holiday | When it occurs (public holiday) | ISO 8601 expression |
 |---|---|---|
@@ -143,7 +143,7 @@ q3 = ~o"2026Y{7..9}M"
 
 All four produce the same 66-workday count when passed through `Tempo.select(q3, Tempo.workdays(:US))`. Pick whichever reads most naturally for your domain. The quarter designator is the shortest and most direct for calendar-quarter queries; the range form `~o"2026-07/2026-10"` is the best fit when your window doesn't align to a standard quarter.
 
-The same composition works for **seasons** (ISO 8601-2 codes 25–32, astronomical equinox/solstice bounded — e.g. `~o"2026Y26M"` for Northern summer), **month ranges** (`~o"2026Y{3..6}M"` for H1 minus Q1), and **archaeological masks** (`~o"156X"` for the 1560s). Each of these AST shapes materialises to concrete endpoints and flows cleanly through the workday selector and set operations.
+The same composition works for **seasons** (ISO 8601-2 codes 25–32, astronomical equinox/solstice bounded — e.g. `~o"2026Y26M"` for Northern summer), **month ranges** (`~o"2026Y{3..6}M"` for H1 minus Q1), and **archaeological masks** (`~o"156X"` for the 1560s). Each of these AST shapes converts to concrete endpoints and flows cleanly through the workday selector and set operations.
 
 ### 2. Which holidays will hit my project?
 

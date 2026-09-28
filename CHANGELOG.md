@@ -26,6 +26,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 | `Tempo.ICal.available_from_ical/2` | `Tempo.ICal.available/2`, given text |
 | `Tempo.JSCalendar.from_jscalendar/2` | `Tempo.JSCalendar.parse/2` |
 | `Tempo.to_rrule/1`, `to_rrule!/1` | `Tempo.RRule.to_string/1`, `to_string!/1` |
+| `Tempo.MaterialisationError` | `Tempo.ConversionError` |
+| `Tempo.RRule.Expander.expand/3` | `Tempo.RRule.parse/2`, then `Tempo.to_interval_set/2` |
 
 * `Tempo.duration/1` and `Tempo.IntervalSet.duration/1` measure the time a set covers, counting time its members share once; `IntervalSet.total_duration/1`, which did, is removed.
 
@@ -60,6 +62,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The Elixir conversions write "datetime" as one word, as Elixir does: `to_datetime/1`, `from_datetime/1`, `to_naive_datetime/1` and `from_naive_datetime/1`. The deprecated `to_calendar/1` is removed for `to_elixir/1`.
 
 * The format modules read with `parse`: `Tempo.ICal.parse/2` and `parse_file/2`, `ICal.available/2` given text or a parsed calendar, and `Tempo.JSCalendar.parse/2`. An RRULE is written with `Tempo.RRule.to_string/1`, the pair of `RRule.parse/2`.
+
+* `Tempo.ConversionError` replaces `MaterialisationError`, keeping its reasons, so `to_interval/2` and the other conversions share one error; the docs say "convert" and "occurrences" where they said "materialise".
 
 ### Added
 
@@ -104,6 +108,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * `Tempo.Interval.Relations` — narrowing and canonical order over *sets* of Allen relations (with `Tempo.Allen.inverse/1` and `compose/2`, which take sets too), for reasoning when the relation between two intervals is constrained but not known. `narrow/2` combines two sources of knowledge; it is not `Tempo.intersection/2`, which operates on time values.
 
 ### Changed
+
+* The engine moves to an Internals docs group — `Tempo.Compare`, the ISO 8601 tokenizer, `Interval.Steps`, `Microsecond`, `Network.Normalize` and the RRULE expander, rule and selection — and `Tempo.merge/2` and `unit_min_max/1` are hidden. Every documented module has a group, and `from_iso8601/2` and `from_iso8601!/2` are documented.
 
 * A fractional duration becomes whole units of the next smaller unit, truncated: `P1.5W` is 10 days, `P1.3D` 1 day 7 hours, and `P0.5M` half the days to one month later (ISO 8601-2 D.4.4). A shift by one raised `ArithmeticError` or returned `nil`.
 

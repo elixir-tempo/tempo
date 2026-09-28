@@ -25,6 +25,8 @@ Tempo 2.0 gives each word in its API one meaning, the one it has in everyday Eng
 | `Tempo.ICal.available_from_ical/2` | `Tempo.ICal.available/2`, given text |
 | `Tempo.JSCalendar.from_jscalendar/2` | `Tempo.JSCalendar.parse/2` |
 | `Tempo.to_rrule/1`, `to_rrule!/1` | `Tempo.RRule.to_string/1`, `to_string!/1` |
+| `Tempo.MaterialisationError` | `Tempo.ConversionError` |
+| `Tempo.RRule.Expander.expand/3` | `Tempo.RRule.parse/2`, then `Tempo.to_interval_set/2` |
 
 These keep their names and change their meaning:
 
@@ -59,7 +61,7 @@ end
 A search for the removed names finds the renames:
 
 ```bash
-grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(meets|during)\?|Interval\.(meets|during)\?|(Tempo|Interval)\.compose|Tempo\.anchor[(/]|(NonAnchored|RequiresAnchor)Error|:unanchored|grounded\?|GroundedTempoError|(to|from)_(naive_)?date_time|from_(ical|jscalendar)|available_from_ical|to_rrule' lib test
+grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(meets|during)\?|Interval\.(meets|during)\?|(Tempo|Interval)\.compose|Tempo\.anchor[(/]|(NonAnchored|RequiresAnchor)Error|:unanchored|grounded\?|GroundedTempoError|(to|from)_(naive_)?date_time|from_(ical|jscalendar)|available_from_ical|to_rrule|MaterialisationError|Expander.expand' lib test
 ```
 
 The changes of meaning need a read rather than a replace: every `before?`, `after?` and their `certainly_` and `possibly_` forms, every duration read as a count of seconds, every shift of a zoned value by hours, every `duration/1` of a set, every window, and every `:metadata` passed to `Tempo.new/1`.
@@ -311,7 +313,7 @@ iex> Tempo.to_iso8601(tagged)
 "2026Y6M15D[x-source=hr]"
 ```
 
-Materialising a value moves its metadata to the interval or intervals it becomes, so a holiday's name travels with its day through the set operations.
+Converting a value moves its metadata to the interval or intervals it becomes, so a holiday's name travels with its day through the set operations.
 
 ## A value without a year is placed with at and on
 
@@ -416,3 +418,16 @@ iex> Tempo.parse_date("15 June 2026", locale: :en)
 ```
 
 > *"A date field takes **15 June 2026** as readily as **2026-06-15**."*
+
+## One conversion error
+
+`Tempo.ConversionError` replaces `Tempo.MaterialisationError`, keeping its reasons (`:bare_duration`, `:one_of_set`, `:open_range`, …), so `to_interval/2` and the other conversions share one error. The engine behind them — `Tempo.Compare`, the ISO 8601 tokenizer, the RRULE expander — is documented under Internals, and an RRULE's occurrences come from `Tempo.RRule.parse/2` and `Tempo.to_interval_set/2` rather than the expander:
+
+```elixir
+iex> {:error, %Tempo.ConversionError{reason: :bare_duration}} = Tempo.to_interval(~o"P1D")
+
+iex> {:ok, mondays} = Tempo.RRule.parse("FREQ=WEEKLY;BYDAY=MO;COUNT=4", from: ~o"2026-06-01")
+iex> {:ok, occurrences} = Tempo.to_interval_set(mondays)
+iex> Tempo.IntervalSet.count(occurrences)
+4
+```

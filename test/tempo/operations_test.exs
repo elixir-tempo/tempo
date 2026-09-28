@@ -30,7 +30,7 @@ defmodule Tempo.Operations.Test do
     test "rejects Tempo.Duration" do
       {:ok, d} = Tempo.from_iso8601("P3M")
 
-      assert {:error, %Tempo.MaterialisationError{reason: :bare_duration} = e} =
+      assert {:error, %Tempo.ConversionError{reason: :bare_duration} = e} =
                Operations.align(~o"2022Y", d)
 
       assert Exception.message(e) =~ "Duration"
@@ -39,7 +39,7 @@ defmodule Tempo.Operations.Test do
     test "rejects one-of Tempo.Set" do
       {:ok, s} = Tempo.from_iso8601("[2020Y,2021Y,2022Y]")
 
-      assert {:error, %Tempo.MaterialisationError{reason: :one_of_set} = e} =
+      assert {:error, %Tempo.ConversionError{reason: :one_of_set} = e} =
                Operations.align(~o"2023Y", s)
 
       assert Exception.message(e) =~ "one-of"

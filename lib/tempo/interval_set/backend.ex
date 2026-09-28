@@ -45,7 +45,7 @@ defmodule Tempo.IntervalSet.Backend do
   `use` provides overridable `count/1`, `empty?/1`, and `first/1`
   derived from `to_list/1` and `walk/1`; override them when the
   representation can answer faster (a tree knows its size; any backend
-  can peek its first member without materialising).
+  can peek its first member without building the set).
 
   Construct a set on a specific backend with
   `Tempo.IntervalSet.new(intervals, backend: MyBackend)`. Set operations
@@ -86,7 +86,7 @@ defmodule Tempo.IntervalSet.Backend do
 
   @doc """
   Whether the member list is finite. Aggregate operations consult this
-  before materialising; `false` makes them refuse rather than hang.
+  before building the set; `false` makes them refuse rather than hang.
   """
   @callback bounded?(state()) :: boolean()
 

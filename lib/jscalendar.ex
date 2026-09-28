@@ -29,7 +29,7 @@ if Code.ensure_loaded?(JSCalendar) do
     event's own zone.
 
     An event with no `timeZone` is *floating* — the same wall clock
-    wherever it is read — and materialises as a zone-less `%Tempo{}`
+    wherever it is read — and converts to a zone-less `%Tempo{}`
     rather than being placed in the reader's zone.
 
     ## Where a local time is ambiguous
@@ -54,7 +54,7 @@ if Code.ensure_loaded?(JSCalendar) do
     RFC 8984 §4.3 builds a recurrence set in three steps: the rules
     generate, the excluded rules remove, and `recurrenceOverrides`
     adds, removes and varies. All three happen here, so a document
-    that cancels one week and moves another materialises what it
+    that cancels one week and moves another converts to what it
     says rather than its unmodified series.
 
     An override is keyed by *recurrence id* — the wall-clock moment

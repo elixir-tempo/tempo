@@ -27,11 +27,61 @@ defmodule Tempo.Iso8601.Tokenizer.Date do
   # can reference it cross-module via `parsec/1`.
   defcombinator :qualified_endpoint,
                 optional(qualification())
-                |> parsec({Tempo.Iso8601.Tokenizer, :datetime_or_date_or_time})
+                |> parsec({Tempo.Iso8601.Tokenizer.Date, :datetime_or_date_or_time})
                 |> optional(qualification())
                 |> optional(Extended.extended_suffix())
                 |> reduce(:merge_endpoint_qualification),
                 export_combinator: true
+
+  # The explicit date — the form selections and §12.10 windows take — is parsed
+  # once and then classified by what follows it: an explicit time of day makes
+  # it a datetime; otherwise it is a date, with the date path's fraction folding
+  # and validation. Trying `datetime_parser` and then `date_parser` parsed every
+  # explicit date twice (as a datetime prefix, then again as a date), which
+  # doubled at each level a selection or window nests. Hoisting it chooses what
+  # the original order did: an explicit date carries designator letters, which
+  # no extended or implicit datetime can continue into, and an explicit time
+  # shift starts with `Z`. Anything else falls through to the remaining
+  # alternatives in their original order, less the explicit date-time one, which
+  # could only re-parse the explicit date and fail again. `date_parser`'s
+  # explicit date stays, so an explicit date failing validation still fails
+  # exactly as it did. Exported for the grammar and the set parser; this module
+  # is hidden, so NimbleParsec's generated clauses stay out of the docs.
+  defcombinator :datetime_or_date_or_time,
+                choice([
+                  parsec({Tempo.Iso8601.Tokenizer.Date, :explicit_date_p})
+                  |> choice([
+                    parsec({Tempo.Iso8601.Tokenizer.Time, :explicit_time_of_day_p})
+                    |> optional(parsec({Tempo.Iso8601.Tokenizer.Time, :explicit_time_shift_p}))
+                    |> replace(empty(), :__explicit_datetime__),
+                    optional(parsec({Tempo.Iso8601.Tokenizer.Time, :explicit_time_shift_p}))
+                    |> replace(empty(), :__explicit_date__)
+                  ])
+                  |> post_traverse({:classify_explicit_date, []}),
+                  parsec({Tempo.Iso8601.Tokenizer.Date, :non_explicit_datetime_parser}),
+                  parsec({Tempo.Iso8601.Tokenizer.Date, :date_parser}),
+                  parsec({Tempo.Iso8601.Tokenizer.Time, :time_parser})
+                ])
+                |> label("datetime_or_date_or_time"),
+                export_combinator: true
+
+  # Finish an explicit date parsed once by `datetime_or_date_or_time`: with a time
+  # of day it is tagged `:datetime` exactly as `datetime_parser` does; without,
+  # it takes `date_parser`'s path — fold any fraction, validate the month and
+  # day, tag `:date`. The accumulator arrives reversed, the marker first.
+  @doc false
+  def classify_explicit_date(rest, [:__explicit_datetime__ | tokens], context, _line, _offset) do
+    {rest, [{:datetime, Enum.reverse(tokens)}], context}
+  end
+
+  def classify_explicit_date(rest, [:__explicit_date__ | tokens], context, line, offset) do
+    date = tokens |> Enum.reverse() |> apply_fraction()
+
+    case check_valid_date(rest, [date], context, line, offset) do
+      {rest, [date], context} -> {rest, [{:date, date}], context}
+      {:error, _reason} = error -> error
+    end
+  end
 
   # Date combinators
   defcombinator :implicit_date_p, implicit_date(), export_combinator: true

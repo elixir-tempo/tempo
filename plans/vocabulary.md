@@ -291,7 +291,7 @@ Each task is one commit, verified on both upstream branches, with its guides, RE
 
 * [x] **Floating, zoned and datetime** — `zoned?/1`, `ZonedTempoError`, the `datetime` conversions, `to_calendar/1` removed. 2026-09-28, `93e2e25`.
 
-* [ ] **Parsing and formats** — the typed parsers, `ICal.parse/2`, `JSCalendar.parse/2`, `RRule.to_string/1`.
+* [x] **Parsing and formats** — the typed parsers, `ICal.parse/2`, `JSCalendar.parse/2`, `RRule.to_string/1`. 2026-09-29, `acb9d33`.
 
 * [ ] **Occurrences and internals** — `ConversionError`, `RRule.Expander` internal, the Internals group, the undocumented functions.
 

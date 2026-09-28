@@ -111,7 +111,7 @@ defmodule Tempo.Select do
   `day_of_week: 7`. Calendar-dependent units (`:month`, `:week`,
   `:day`, `:day_of_year`) keep their negative value through parse
   and are resolved against the base context when `Tempo.select/2`
-  materialises them.
+  converts them.
 
   `~o"-1M"` is always "last month" (never "last minute") — use
   the `T` time designator (`~o"T-1M"`) to select minute-of-hour.
@@ -123,6 +123,7 @@ defmodule Tempo.Select do
   """
 
   alias Tempo.Compare
+  alias Tempo.ConversionError
   alias Tempo.Duration
   alias Tempo.Interval
   alias Tempo.Interval.Steps
@@ -130,7 +131,6 @@ defmodule Tempo.Select do
   alias Tempo.IntervalSet
   alias Tempo.InvalidDateError
   alias Tempo.Iso8601.Unit
-  alias Tempo.MaterialisationError
   alias Tempo.Math
   alias Tempo.Validation
 
@@ -168,13 +168,13 @@ defmodule Tempo.Select do
 
   ### Supported base shapes
 
-  `base` can be any Tempo value that materialises to an Interval
+  `base` can be any Tempo value that converts to an Interval
   or IntervalSet. Grouped and masked forms have their endpoints
   resolved to concrete values before the selector runs, so every
   ISO 8601-2 shape composes with every selector:
 
-  | Base shape | Example | Materialises to |
-  | ---------- | ------- | --------------- |
+  | Base shape | Example | Converts to |
+  |---|---|---|
   | Scalar `%Tempo{}` | `~o"2026-06"` | single Interval |
   | Explicit Interval | `~o"2026-07/2026-10"` | single Interval |
   | IntervalSet | output of `Tempo.union/2` etc. | IntervalSet (flat-mapped) |
@@ -465,7 +465,7 @@ defmodule Tempo.Select do
     case Unit.implicit_enumerator(base_unit, calendar) do
       nil ->
         {:error,
-         MaterialisationError.exception(
+         ConversionError.exception(
            value: source,
            reason:
              "Cannot select indices under #{inspect(base_unit)} — no finer unit is " <>

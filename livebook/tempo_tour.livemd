@@ -208,40 +208,32 @@ Tempo.IntervalSet.to_list(available)
 
 Tempo implements the full RFC 5545 RRULE vocabulary. Everything from `FREQ=DAILY;COUNT=10` to `"4th Thursday of November, every year"` goes through the same interpreter.
 
+Each example reads a rule with `Tempo.RRule.parse/2`, starting at its `DTSTART`, and lists its occurrences with `Tempo.to_interval_set/1`.
+
 ### Every Monday for 10 weeks
 
 ```elixir
-alias Tempo.RRule.{Rule, Expander}
+start_date = fn interval ->
+  start = Tempo.Interval.from(interval)
+  {Tempo.year(start), Tempo.month(start), Tempo.day(start)}
+end
 
-rule = %Rule{freq: :week, interval: 1, byday: [{nil, 1}], count: 10}
-{:ok, occurrences} = Expander.expand(rule, ~o"2026-06-01")
+{:ok, mondays} = Tempo.RRule.parse("FREQ=WEEKLY;BYDAY=MO;COUNT=10", from: ~o"2026-06-01")
+{:ok, occurrences} = Tempo.to_interval_set(mondays)
 
 occurrences
-|> Enum.map(fn iv ->
-  start = Tempo.Interval.from(iv)
-  {Tempo.year(start), Tempo.month(start), Tempo.day(start)}
-end)
+|> Tempo.IntervalSet.to_list()
+|> Enum.map(start_date)
 |> Kino.DataTable.new()
 ```
 
 ### Thanksgiving (4th Thursday of November)
 
 ```elixir
-rule = %Rule{
-  freq: :year,
-  interval: 1,
-  bymonth: [11],
-  byday: [{4, 4}],
-  count: 5
-}
+{:ok, rule} = Tempo.RRule.parse("FREQ=YEARLY;BYMONTH=11;BYDAY=4TH;COUNT=5", from: ~o"2022-11-24")
+{:ok, thanksgivings} = Tempo.to_interval_set(rule)
 
-{:ok, thanksgivings} = Expander.expand(rule, ~o"2022-11-24")
-
-thanksgivings
-|> Enum.map(fn iv ->
-  start = Tempo.Interval.from(iv)
-  {Tempo.year(start), Tempo.month(start), Tempo.day(start)}
-end)
+thanksgivings |> Tempo.IntervalSet.to_list() |> Enum.map(start_date)
 ```
 
 ### US Presidential Election Day
@@ -249,62 +241,34 @@ end)
 "Every four years, the first Tuesday after a Monday in November":
 
 ```elixir
-rule = %Rule{
-  freq: :year,
-  interval: 4,
-  bymonth: [11],
-  byday: [{nil, 2}],
-  bymonthday: [2, 3, 4, 5, 6, 7, 8],
-  count: 5
-}
+{:ok, rule} =
+  Tempo.RRule.parse("FREQ=YEARLY;INTERVAL=4;BYMONTH=11;BYDAY=TU;BYMONTHDAY=2,3,4,5,6,7,8;COUNT=5",
+    from: ~o"1996-11-05"
+  )
 
-{:ok, elections} = Expander.expand(rule, ~o"1996-11-05")
+{:ok, elections} = Tempo.to_interval_set(rule)
 
-elections
-|> Enum.map(fn iv ->
-  start = Tempo.Interval.from(iv)
-  {Tempo.year(start), Tempo.month(start), Tempo.day(start)}
-end)
+elections |> Tempo.IntervalSet.to_list() |> Enum.map(start_date)
 ```
 
 ### Every Friday the 13th
 
 ```elixir
-rule = %Rule{
-  freq: :month,
-  interval: 1,
-  byday: [{nil, 5}],
-  bymonthday: [13],
-  count: 10
-}
+{:ok, rule} = Tempo.RRule.parse("FREQ=MONTHLY;BYDAY=FR;BYMONTHDAY=13;COUNT=10", from: ~o"1998-02-13")
+{:ok, f13s} = Tempo.to_interval_set(rule)
 
-{:ok, f13s} = Expander.expand(rule, ~o"1998-02-13")
-
-f13s
-|> Enum.map(fn iv ->
-  start = Tempo.Interval.from(iv)
-  {Tempo.year(start), Tempo.month(start), Tempo.day(start)}
-end)
+f13s |> Tempo.IntervalSet.to_list() |> Enum.map(start_date)
 ```
 
 ### Last weekday of every month
 
 ```elixir
-rule = %Rule{
-  freq: :month,
-  interval: 1,
-  byday: [{nil, 1}, {nil, 2}, {nil, 3}, {nil, 4}, {nil, 5}],
-  bysetpos: [-1],
-  count: 6
-}
+{:ok, rule} =
+  Tempo.RRule.parse("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1;COUNT=6", from: ~o"2026-06-01")
 
-{:ok, last_weekdays} = Expander.expand(rule, ~o"2026-06-01")
+{:ok, last_weekdays} = Tempo.to_interval_set(rule)
 
-last_weekdays
-|> Enum.map(fn iv ->
-  start = Tempo.Interval.from(iv)
-  {Tempo.year(start), Tempo.month(start), Tempo.day(start)}
-end)
+last_weekdays |> Tempo.IntervalSet.to_list() |> Enum.map(start_date)
 ```
 
 BYSETPOS applies last, picking the Nth element of each month's candidate set.

@@ -55,7 +55,7 @@ if Code.ensure_loaded?(ICal) do
     |           | RFC-deprecated (RFC 2445 → 5545).                 |
     | Multiple  | RFC 5545 says SHOULD NOT; some exports do it      |
     | `RRULE`   | anyway. The `ical` library exposes only the       |
-    | per       | first `RRULE` on `event.rrule`, so we materialise |
+    | per       | first `RRULE` on `event.rrule`, so we expand      |
     | `VEVENT`  | that one and silently ignore the rest.            |
     | `DURATION`| Supported as the alternative to `DTEND`, on       |
     |           | `VEVENT`, `VAVAILABILITY` and `AVAILABLE` alike.  |
@@ -197,8 +197,8 @@ if Code.ensure_loaded?(ICal) do
     end
 
     @doc """
-    Materialise the *available* time an iCalendar's `VAVAILABILITY`
-    components declare, as a `%Tempo.IntervalSet{}`.
+    The *available* time an iCalendar's `VAVAILABILITY` components
+    declare, as a `%Tempo.IntervalSet{}`.
 
     Where `parse/2` reads `VEVENT`s — time that is **taken** —
     this reads [RFC 7953](https://www.rfc-editor.org/rfc/rfc7953.html)
@@ -212,8 +212,8 @@ if Code.ensure_loaded?(ICal) do
     end optional and unbounded when absent. Inside that period the
     default is busy, and each `AVAILABLE` subcomponent carves out free
     time, repeating under its own `RRULE`, `RDATE` and `EXDATE`. An
-    `AVAILABLE` is shaped exactly like a `VEVENT`, so it materialises
-    through the same expander — the occurrence span, the RDATE extras
+    `AVAILABLE` is shaped exactly like a `VEVENT`, so its occurrences
+    come from the same expander — the occurrence span, the RDATE extras
     and the EXDATE removals all behave identically.
 
     Outside every component's period nothing is asserted, so nothing
@@ -239,9 +239,9 @@ if Code.ensure_loaded?(ICal) do
     ### Options
 
     * `:within` is the query window, a `t:Tempo.Interval.t/0` or any
-      value `Tempo.to_interval/2` accepts. Required: an `AVAILABLE`
-      carrying an unbounded `RRULE` has no materialisation without
-      one.
+      value `Tempo.to_interval/2` accepts. Required: the occurrences
+      of an `AVAILABLE` carrying an unbounded `RRULE` never end
+      without one.
 
     ### Returns
 
@@ -322,8 +322,11 @@ if Code.ensure_loaded?(ICal) do
 
     defp query_window(options) do
       case Keyword.fetch(options, :within) do
-        {:ok, within} -> Tempo.to_interval(within)
-        :error -> {:error, ":within is required — an unbounded RRULE has no materialisation"}
+        {:ok, within} ->
+          Tempo.to_interval(within)
+
+        :error ->
+          {:error, ":within is required — the occurrences of an unbounded RRULE never end"}
       end
     end
 

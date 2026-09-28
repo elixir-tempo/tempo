@@ -6,7 +6,7 @@ defmodule Tempo.Cron do
 
   Lets Tempo consume any cron-configured schedule (Oban, Quantum,
   system crontab) without rewriting it in another vocabulary. Once
-  parsed, materialise it like any other recurrence — `Tempo.to_interval/2`
+  parsed, convert it to its occurrences like any other recurrence — `Tempo.to_interval/2`
   with a `:within` window — or supply `:from` to start the occurrences.
 
   ### Supported formats
@@ -143,7 +143,7 @@ defmodule Tempo.Cron do
 
   A cron schedule, an RFC 5545 RRULE, and a native ISO 8601 repeating
   interval all become the same kind of first-class Tempo value, so a
-  parsed cron entry composes and materialises exactly like any other
+  parsed cron entry composes and converts exactly like any other
   recurrence — no intermediate rule struct to manage.
 
   ### Arguments
@@ -153,12 +153,12 @@ defmodule Tempo.Cron do
   ### Options
 
   * `:from` — the recurrence's start, a `t:Tempo.t/0`. Optional;
-    supply it to enumerate or materialise concrete occurrences.
+    supply it to enumerate or list concrete occurrences.
 
   ### Returns
 
-  * `{:ok, interval}` — a recurring `t:Tempo.Interval.t/0`, materialised
-    with `Tempo.to_interval/2` given a `:within` window.
+  * `{:ok, interval}` — a recurring `t:Tempo.Interval.t/0`, converted to its
+    occurrences with `Tempo.to_interval/2` given a `:within` window.
 
   * `{:error, exception}` — typically a `t:Tempo.CronError.t/0`.
 

@@ -120,20 +120,27 @@ defmodule Tempo.MixProject do
 
   def groups_for_modules do
     [
-      Core: ~r/^Tempo(?:\.(Interval|IntervalSet|Duration|Set|RecurrenceSet))?$/,
+      Core:
+        ~r/^Tempo(?:\.(Interval|IntervalSet|Duration|Set|RecurrenceSet|RecurrenceSet\.Conditional))?$/,
       "Clock and current time": ~r/^Tempo\.Clock(\.|$)/,
       "Set algebra and comparison":
-        ~r/^Tempo\.(Operations|Compare|Allen|Select|Territory)$|^Tempo\.Interval\.(Relations|RelationNetwork)$/,
-      "Recurrence (RRULE)": ~r/^Tempo\.RRule(\.|$)/,
+        ~r/^Tempo\.(Operations|Allen|Select|Territory)$|^Tempo\.Interval\.(Relations|RelationNetwork)$/,
+      "Interval set backends": ~r/^Tempo\.IntervalSet\.Backend(\.|$)/,
+      "Recurrence rules": ~r/^Tempo\.(RRule|Cron)$/,
       "Computed events": ~r/^Tempo\.Event(\.|$)/,
-      "iCalendar integration": ~r/^Tempo\.ICal(\.|$)/,
+      "Calendar formats": ~r/^Tempo\.(ICal|JSCalendar)$/,
+      "Networks and scheduling":
+        ~r/^Tempo\.(Network|Schedule)$|^Tempo\.Network\.(Qualitative|Relation|Solver|TimePeriod)$|^Tempo\.Schedule\.Slot$/,
+      "Time zones and leap seconds": ~r/^Tempo\.(TimeZoneDatabase|LeapSeconds)$/,
       # `Tempo.Range` is the ISO 8601-2 set-member range element, not a
       # core algebra type — see its moduledoc.
-      "ISO 8601 and IXDTF": ~r/^Tempo\.Iso8601(\.|$)|^Tempo\.Range$/,
+      "ISO 8601 and IXDTF": ~r/^Tempo\.(Range|Sigils)$/,
       Enumeration: ~r/^Tempo\.Enumeration$|^Enumerable\.Tempo/,
-      "Explanation and inspection":
-        ~r/^Tempo\.(Explain|Explanation|Inspect|Format|Sigil|Validation)$/,
-      Exceptions: ~r/^Tempo\.\w+Error$/
+      "Explanation and inspection": ~r/^Tempo\.(Explain|Explanation|Inspect|Format|Validation)$/,
+      Exceptions: ~r/^Tempo\.\w+Error$/,
+      # The engine: documented for contributors, but not the API a caller uses.
+      Internals:
+        ~r/^Tempo\.(Compare|Microsecond|Interval\.Steps|Network\.Normalize|RRule\.(Expander|Rule|Selection)|Iso8601\.Tokenizer(\.\w+)?)$/
     ]
   end
 

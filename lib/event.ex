@@ -21,7 +21,7 @@ defmodule Tempo.Event do
   selection written `(name)e` (see the `e` designator in the
   [ISO 8601 conformance guide](iso8601-conformance.html)) and resolves it here,
   once per period, when a recurrence such as `~o"R/../P1Y/FL(easter)eN"` is
-  materialised into a bound. The primary public API is `date/2` (or `date/3`).
+  converted to its occurrences within a window. The primary public API is `date/2` (or `date/3`).
 
   A consumer application can add its own `(name)e` events — a fiscal calendar,
   a liturgical feast, any algorithm-fixed date — by implementing the

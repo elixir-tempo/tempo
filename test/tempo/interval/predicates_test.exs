@@ -3,9 +3,9 @@ defmodule Tempo.Interval.PredicatesTest do
   import Tempo.Sigils
 
   alias Tempo.Allen
+  alias Tempo.ConversionError
   alias Tempo.Interval
   alias Tempo.IntervalSet
-  alias Tempo.MaterialisationError
 
   describe "bounded?/1" do
     test "both endpoints concrete" do
@@ -474,10 +474,10 @@ defmodule Tempo.Interval.PredicatesTest do
     test "relation/2 refuses a recurring interval with a directing error" do
       {:ok, r5} = Tempo.from_iso8601("R5/2022-01-01/P1M")
 
-      assert {:error, %MaterialisationError{reason: :recurring_interval}} =
+      assert {:error, %ConversionError{reason: :recurring_interval}} =
                Interval.relation(r5, ~o"2022")
 
-      assert_raise MaterialisationError, ~r/set-level API/, fn ->
+      assert_raise ConversionError, ~r/set-level API/, fn ->
         Interval.before?(r5, ~o"2023")
       end
     end
@@ -488,7 +488,7 @@ defmodule Tempo.Interval.PredicatesTest do
       # was wrong for a finite recurrence.
       {:ok, r5} = Tempo.from_iso8601("R5/2022-01-01/P1M")
 
-      assert_raise MaterialisationError, ~r/IntervalSet.duration/, fn ->
+      assert_raise ConversionError, ~r/IntervalSet.duration/, fn ->
         Interval.duration(r5)
       end
 
@@ -534,10 +534,10 @@ defmodule Tempo.Interval.PredicatesTest do
     end
 
     test "the crisp API refuses a one-of set with a materialisation error" do
-      assert {:error, %MaterialisationError{reason: :one_of_set}} =
+      assert {:error, %ConversionError{reason: :one_of_set}} =
                Interval.relation(~o"[1984,1986]", ~o"1985")
 
-      assert_raise MaterialisationError, fn ->
+      assert_raise ConversionError, fn ->
         Interval.before?(~o"[1984,1986]", ~o"1985")
       end
     end

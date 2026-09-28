@@ -7,7 +7,7 @@ defmodule Tempo.RecurrenceSet.Conditional do
   Näfelser Fahrt moves to the next Thursday when it falls on an observance. A
   conditional member wraps an ordinary member — a recurrence, a concrete value
   or a nested set — with such a condition, and a `t:Tempo.RecurrenceSet.t/0`
-  resolves it when it materialises, against the occurrences of its other
+  resolves it when converted, against the occurrences of its other
   members. Build one with `Tempo.RecurrenceSet.keep_when/2` or
   `Tempo.RecurrenceSet.move_when/2`.
 

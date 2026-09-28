@@ -11,7 +11,7 @@ defmodule Tempo.Set do
   the user's intent.
 
   An all-of set may also carry **exclusion members** — written
-  `^x` in the set syntax — in `except`. Materialising the set
+  `^x` in the set syntax — in `except`. Converting the set
   subtracts them from its plain members, so `{2020..2030, ^2026}`
   is the range 2020–2030 with 2026 removed. `except` is empty for
   an ordinary set.

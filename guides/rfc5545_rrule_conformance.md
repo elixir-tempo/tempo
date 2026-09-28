@@ -1,8 +1,8 @@
 # RFC 5545 RRULE Conformance
 
-Tempo treats RFC 5545 RRULE as a first-class recurrence vocabulary. Every rule that [section 3.3.10 of the standard](https://datatracker.ietf.org/doc/html/rfc5545#section-3.3.10) defines can be parsed into a recurring `%Tempo.Interval{}` (modelled internally by Tempo's typed RRULE AST, `%Tempo.RRule.Rule{}`), materialised into a `%Tempo.IntervalSet{}` over any bounded window, and composed with the rest of Tempo's set algebra — `union`, `intersection`, `difference`, and friends. This guide catalogues precisely what that means, what's supported, and what isn't.
+Tempo treats RFC 5545 RRULE as a first-class recurrence vocabulary. Every rule that [section 3.3.10 of the standard](https://datatracker.ietf.org/doc/html/rfc5545#section-3.3.10) defines can be parsed into a recurring `%Tempo.Interval{}` (modelled internally by Tempo's typed RRULE AST, `%Tempo.RRule.Rule{}`), converted to a `%Tempo.IntervalSet{}` of occurrences within any window, and composed with the rest of Tempo's set algebra — `union`, `intersection`, `difference`, and friends. This guide catalogues precisely what that means, what's supported, and what isn't.
 
-Tempo's RRULE parsing is its own implementation; it does not delegate to a third-party library for the string-to-AST step. For full iCalendar (`.ics`) files with events, RDATEs, and EXDATEs, Tempo delegates to the excellent [`ical`](https://hex.pm/packages/ical) library and converts its `%ICal.Recurrence{}` into the same Tempo AST — giving you a single materialisation path regardless of whether the rule came from a hand-written string or a parsed iCalendar feed.
+Tempo's RRULE parsing is its own implementation; it does not delegate to a third-party library for the string-to-AST step. For full iCalendar (`.ics`) files with events, RDATEs, and EXDATEs, Tempo delegates to the excellent [`ical`](https://hex.pm/packages/ical) library and converts its `%ICal.Recurrence{}` into the same Tempo AST — giving you a single conversion path regardless of whether the rule came from a hand-written string or a parsed iCalendar feed.
 
 The reference is [RFC 5545 §3.3.10](https://datatracker.ietf.org/doc/html/rfc5545#section-3.3.10). A companion extension, RFC 7529 (RSCALE for alternative calendars), is **not** implemented as a named property — Tempo achieves the same outcome through its calendar-aware expansion pipeline (see below).
 
@@ -69,9 +69,9 @@ RFC 5545 is implicitly Gregorian. RFC 7529 defines a separate `RSCALE` property 
 
 Occurrence selection dispatches to the calendar module (`days_in_month/2`, `day_of_year/3`, `day_of_week/4`) and steps through Calendrical, so BYMONTH/BYMONTHDAY/BYYEARDAY respect calendar-specific month and year lengths, and BYWEEKNO numbers the weeks of the calendar's own year from `WKST`.
 
-## Unbounded rules require a bound
+## Unbounded rules require a window
 
-A rule with `FREQ` but no `COUNT`, no `UNTIL`, and no `:within` window is infinite — Tempo cannot materialise it. Attempting to do so returns:
+A rule with `FREQ` but no `COUNT`, no `UNTIL`, and no `:within` window is infinite — Tempo cannot list its occurrences. Attempting to do so returns:
 
 ```elixir
 {:error, %Tempo.UnboundedRecurrenceError{reason: ...}}
@@ -96,7 +96,7 @@ A small list of features outside Tempo's current RRULE scope:
 Tempo's RRULE conformance is covered by six test files:
 
 * `test/tempo/rrule_test.exs` — parse/round-trip behaviour at the string level.
-* `test/tempo/rrule/expander_test.exs` — AST materialisation across FREQ values.
+* `test/tempo/rrule/expander_test.exs` — AST expansion across FREQ values.
 * `test/tempo/rrule/selection_test.exs` — the RFC 5545 §3.8.5.3 worked examples (Thanksgiving, Election Day, Friday-the-13th, last-weekday-of-month, etc.).
 * `test/tempo/rrule/rfc5545_conformance_test.exs` — broad conformance suite.
 * `test/tempo/rrule/rdate_exdate_test.exs` — RDATE/EXDATE integration.
