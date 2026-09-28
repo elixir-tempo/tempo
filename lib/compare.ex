@@ -470,6 +470,14 @@ defmodule Tempo.Compare do
     wall - resolve_offset_seconds(extended, shift, wall)
   end
 
+  @doc false
+  # The wall-clock reading of an anchored value as gregorian seconds,
+  # before any offset: the reading a zone's periods are looked up by.
+  @spec to_wall_seconds(Tempo.t()) :: integer() | float()
+  def to_wall_seconds(%Tempo{time: time, calendar: calendar}) do
+    wall_seconds(time, Keyword.get(time, :year), effective_calendar(calendar))
+  end
+
   # The wall-clock instant as gregorian seconds (before any offset is
   # applied). Shared by `to_utc_seconds/1` and `validate_zone_offset/1`.
   # A non-Gregorian value's calendar components are converted to the

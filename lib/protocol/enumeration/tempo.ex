@@ -17,21 +17,27 @@ defimpl Enumerable, for: Tempo do
   # Values that don't materialise to a single interval — groups,
   # selections, ranges, sets, masks — return `{:error, __MODULE__}`,
   # so `Enum` falls back to the reduce-based traversal that handles
-  # them.
+  # them. So does a value whose interval has no fast path (a week,
+  # walked by its days): the fallback reduces the value itself, so the
+  # module it names must be this one, never the interval's.
 
   @impl Enumerable
   def count(%Tempo{} = tempo) do
-    case single_interval(tempo) do
-      {:ok, interval} -> Enumerable.count(interval)
-      :error -> {:error, __MODULE__}
+    with {:ok, interval} <- single_interval(tempo),
+         {:ok, _count} = counted <- Enumerable.count(interval) do
+      counted
+    else
+      _no_fast_path -> {:error, __MODULE__}
     end
   end
 
   @impl Enumerable
   def member?(%Tempo{} = tempo, %Tempo{} = element) do
-    case single_interval(tempo) do
-      {:ok, interval} -> Enumerable.member?(interval, element)
-      :error -> {:error, __MODULE__}
+    with {:ok, interval} <- single_interval(tempo),
+         {:ok, _member?} = answered <- Enumerable.member?(interval, element) do
+      answered
+    else
+      _no_fast_path -> {:error, __MODULE__}
     end
   end
 
@@ -41,9 +47,11 @@ defimpl Enumerable, for: Tempo do
 
   @impl Enumerable
   def slice(%Tempo{} = tempo) do
-    case single_interval(tempo) do
-      {:ok, interval} -> Enumerable.slice(interval)
-      :error -> {:error, __MODULE__}
+    with {:ok, interval} <- single_interval(tempo),
+         {:ok, _size, _slicer} = sliced <- Enumerable.slice(interval) do
+      sliced
+    else
+      _no_fast_path -> {:error, __MODULE__}
     end
   end
 

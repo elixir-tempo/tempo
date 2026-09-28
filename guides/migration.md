@@ -25,6 +25,8 @@ These keep their names and change their meaning:
 
 * **`duration/1` and `duration/2`** — counted in the unit the endpoints are written in, where 1.x counted seconds.
 
+* **`shift/2` on a zoned value** — hours, minutes and seconds are time on the time line, where 1.x added them to the wall clock.
+
 * **`duration/1` on a set** — the time the set covers, counting time its members share once.
 
 * **The `:within` window** — every occurrence that overlaps the window, for every kind of recurrence.
@@ -47,7 +49,7 @@ A search for the removed names finds the renames:
 grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(meets|during)\?|Interval\.(meets|during)\?|(Tempo|Interval)\.compose' lib test
 ```
 
-The changes of meaning need a read rather than a replace: every `before?`, `after?` and their `certainly_` and `possibly_` forms, every duration read as a count of seconds, every `duration/1` of a set, every window, and every `:metadata` passed to `Tempo.new/1`.
+The changes of meaning need a read rather than a replace: every `before?`, `after?` and their `certainly_` and `possibly_` forms, every duration read as a count of seconds, every shift of a zoned value by hours, every `duration/1` of a set, every window, and every `:metadata` passed to `Tempo.new/1`.
 
 ## A set's duration is the time it covers
 
@@ -98,6 +100,28 @@ iex> Tempo.Duration.to_unit(~o"P36D", :second)
 iex> Tempo.Duration.to_unit(~o"P3M", :day, relative_to: ~o"2026-01-01")
 {:ok, 90.0}
 ```
+
+## A zoned value's hours are time on the time line
+
+In 1.x `Tempo.shift/2` added every unit to a zoned value's wall clock, so five hours after 23:00 on the night New York springs forward was 04:00, four hours later. In 2.0 hours, minutes and seconds are time on the time line, and the result is the reading the clock shows then; years, months, weeks and days still step the calendar, so a day after noon is noon. An interval written as a start and a number of hours, an hour's own span and an hourly recurrence follow the same rule.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.x
+Tempo.shift(~o"2026-03-07T23[America/New_York]", hour: 5)
+#=> ~o"2026Y3M8DT4H[America/New_York]"
+```
+
+```elixir
+iex> Tempo.shift(~o"2026-03-07T23[America/New_York]", hour: 5)
+~o"2026Y3M8DT5H[America/New_York]"
+
+iex> Tempo.shift(~o"2026-03-07T12[America/New_York]", day: 1)
+~o"2026Y3M8DT12H[America/New_York]"
+```
+
+> *"Five hours after eleven at night is five in the morning, though the clocks went forward in between; a day after noon is noon."*
 
 ## The within window
 

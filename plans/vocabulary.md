@@ -283,7 +283,7 @@ Each task is one commit, verified on both upstream branches, with its guides, RE
 
 * [x] **Sets as tables** — `Table.Reader` for `Tempo.IntervalSet`, so Livebook shows a set's members and their metadata as a table. 2026-09-28, `c902247`.
 
-* [ ] **Durations at resolution** — `duration/1` and `duration/2` in their endpoints' unit, the finer where they differ: years to days on the calendar through `Calendrical.diff/3`, hours to fractions of a second as elapsed time, and a week against a month or a year in days. "Durations honour the resolution of the duration" (user).
+* [x] **Durations at resolution** — `duration/1` and `duration/2` in their endpoints' unit, the finer where they differ: years to days on the calendar through `Calendrical.diff/3`, hours to fractions of a second as elapsed time, and a week against a month or a year in days. 2026-09-28, `19eecb1`.
 
 * [ ] **Anchor** — one meaning, `UnanchoredError`, `anchor/2` folded into `at/2` and `on/2`.
 

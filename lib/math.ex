@@ -3,6 +3,7 @@ defmodule Tempo.Math do
 
   alias Tempo.Compare
   alias Tempo.Duration
+  alias Tempo.Enumeration.Zone
   alias Tempo.Interval
   alias Tempo.IntervalEndpointsError
   alias Tempo.IntervalSet
@@ -10,6 +11,7 @@ defmodule Tempo.Math do
   alias Tempo.Mask
   alias Tempo.NonAnchoredError
   alias Tempo.RequiresAnchorError
+  alias Tempo.TimeZoneDatabase
   alias Tempo.Validation
 
   @doc """
@@ -265,7 +267,18 @@ defmodule Tempo.Math do
     else
       time
       |> Keyword.replace!(:hour, 0)
-      |> add_unit(:day, calendar)
+      |> add_unit(day_unit(time), calendar)
+    end
+  end
+
+  # The day an hour carries into: the day of the month, or the day of the
+  # week or of the year that a value on those axes names.
+  defp day_unit(time) do
+    cond do
+      Keyword.has_key?(time, :day) -> :day
+      Keyword.has_key?(time, :day_of_week) -> :day_of_week
+      Keyword.has_key?(time, :day_of_year) -> :day_of_year
+      true -> :day
     end
   end
 
@@ -628,7 +641,7 @@ defmodule Tempo.Math do
     else
       time
       |> Keyword.replace!(:hour, 23)
-      |> subtract_unit(:day, calendar)
+      |> subtract_unit(day_unit(time), calendar)
     end
   end
 
@@ -726,6 +739,13 @@ defmodule Tempo.Math do
   Negative duration components subtract. `~o"P-100D"` added to
   `~o"2022Y1M10D"` yields a date 100 days earlier.
 
+  A value in a named zone reads a wall clock that daylight saving
+  moves. Years, months, weeks and days step that wall clock — a day
+  after noon is noon the next day — while hours, minutes and seconds
+  step the time line and land on the reading the wall clock shows
+  there: five hours after 23:00 on the night New York springs forward
+  is 05:00. Days go before hours (RFC 5545 §3.3.6).
+
   The input Tempo must carry every unit referenced by the
   duration. If the duration has a `:hour` component but the Tempo
   is at year resolution, the Tempo is extended via
@@ -760,7 +780,15 @@ defmodule Tempo.Math do
           | Tempo.Set.t()
           | Tempo.IntervalSet.t()
           | {:error, RequiresAnchorError.t() | :requires_anchor}
-  def add(%Tempo{} = tempo, %Tempo.Duration{time: duration_time} = duration) do
+  def add(%Tempo{} = tempo, %Tempo.Duration{} = duration) do
+    case wall_zone(tempo) do
+      nil -> add_wall(tempo, duration)
+      zone -> add_zoned(tempo, duration, zone)
+    end
+  end
+
+  # Arithmetic on the wall-clock fields alone, as a floating value takes it.
+  defp add_wall(%Tempo{} = tempo, %Tempo.Duration{time: duration_time} = duration) do
     case fast_add(tempo, duration_time) do
       {:ok, shifted} -> shifted
       :fallback -> unwrap_shift(add_general(tempo, duration))
@@ -773,6 +801,183 @@ defmodule Tempo.Math do
   defp unwrap_shift({:ok, value}), do: value
   defp unwrap_shift({:error, _reason} = error), do: error
   defp unwrap_shift(other), do: other
+
+  # ------------------------------------------------------------------
+  # A zoned value's wall clock
+  #
+  # Calendar units step the wall clock and clock units the time line
+  # (see `add/2`). A calendar step that lands in a spring-forward gap is
+  # read with the offset before the gap, so it moves on by the gap; one
+  # that lands on a reading the fall-back repeats is its first occurrence
+  # (RFC 5545 §3.3.5). A clock step that lands on a repeated reading
+  # carries its offset, as the enumeration's steps do, so it names its
+  # own side of the fold, and an offset the value carried is kept to the
+  # reading it lands on.
+
+  @clock_units [:hour, :minute, :second, :microsecond]
+
+  # UTC and the `Etc/GMT` zones keep one offset for ever, so their wall
+  # clock is the time line and needs no lookup.
+  @fixed_zones ["Etc/UTC", "UTC", "Etc/UCT", "UCT", "Etc/Universal", "Universal", "Etc/Zulu"]
+
+  defp wall_zone(%Tempo{extended: %{zone_id: zone}, time: time})
+       when is_binary(zone) and zone != "" and zone not in @fixed_zones do
+    if zoned_datetime?(time) and not String.starts_with?(zone, "Etc/GMT"), do: zone, else: nil
+  end
+
+  defp wall_zone(%Tempo{}), do: nil
+
+  defp zoned_datetime?([{:year, year}, {:month, month}, {:day, day} | clock])
+       when is_integer(year) and is_integer(month) and is_integer(day),
+       do: Enum.all?(clock, &clock_component?/1)
+
+  defp zoned_datetime?([{:year, year}, {:week, week}, {:day_of_week, day} | clock])
+       when is_integer(year) and is_integer(week) and is_integer(day),
+       do: Enum.all?(clock, &clock_component?/1)
+
+  defp zoned_datetime?(_time), do: false
+
+  defp clock_component?({unit, value}) when unit in [:hour, :minute, :second],
+    do: is_integer(value)
+
+  defp clock_component?({:microsecond, {value, precision}}),
+    do: is_integer(value) and is_integer(precision)
+
+  defp clock_component?(_component), do: false
+
+  defp add_zoned(%Tempo{shift: shift} = tempo, %Tempo.Duration{time: duration_time}, zone) do
+    {clock, calendar} =
+      duration_time
+      |> exact_fractions_to_next_unit()
+      |> Keyword.split(@clock_units)
+
+    with %Tempo{} = stepped <- step_wall(tempo, calendar, zone, shift) do
+      step_elapsed(stepped, clock, zone, shift)
+    end
+  end
+
+  defp step_wall(tempo, [], _zone, _shift), do: tempo
+
+  defp step_wall(tempo, calendar, zone, shift) do
+    case add_wall(tempo, %Tempo.Duration{time: calendar}) do
+      %Tempo{} = stepped -> settle(stepped, zone, shift)
+      other -> other
+    end
+  end
+
+  # A day, a month or a year names no reading of the clock; only a value
+  # with a time of day can land in a gap or a fold.
+  defp settle(%Tempo{time: time} = stepped, zone, shift) do
+    if Keyword.has_key?(time, :hour) do
+      reading = TimeZoneDatabase.period_at_wall(zone, wall_reading(stepped))
+      settle_reading(stepped, shift, reading)
+    else
+      stepped
+    end
+  end
+
+  defp settle_reading(stepped, shift, {:ok, period}),
+    do: keep_offset(stepped, total_offset(period), shift)
+
+  defp settle_reading(stepped, shift, {:ambiguous, first, second}) do
+    first_offset = total_offset(first)
+
+    cond do
+      is_nil(shift) -> stepped
+      Compare.offset_seconds(shift) in [first_offset, total_offset(second)] -> stepped
+      true -> %{stepped | shift: offset_as_written(first_offset, shift)}
+    end
+  end
+
+  # 02:30 on the night New York moves from 02:00 to 03:00 is 03:30.
+  defp settle_reading(stepped, shift, {:gap, {before, _before_limit}, {later, _later_limit}}) do
+    later_offset = total_offset(later)
+
+    stepped
+    |> move_wall(later_offset - total_offset(before))
+    |> keep_offset(later_offset, shift)
+  end
+
+  defp settle_reading(stepped, _shift, {:error, _reason}), do: stepped
+
+  defp step_elapsed(stepped, [], _zone, _shift), do: stepped
+
+  # The step's start reads its offset as its wall reading less its instant,
+  # the offset `Tempo.Compare.to_utc_seconds/1` resolved it with.
+  defp step_elapsed(stepped, clock, zone, shift) do
+    from_utc = trunc(Compare.to_utc_seconds(stepped))
+    before = wall_reading(stepped) - from_utc
+    to_utc = from_utc + clock_seconds(clock)
+    later = offset_at(zone, to_utc)
+
+    with %Tempo{} = walled <- add_wall(stepped, %Tempo.Duration{time: clock}),
+         %Tempo{} = moved <- move_wall(walled, later - before) do
+      mark_reading(moved, zone, to_utc + later, later, shift)
+    end
+  end
+
+  defp mark_reading(moved, zone, wall, offset, shift) do
+    case TimeZoneDatabase.period_at_wall(zone, wall) do
+      {:ambiguous, _first, _second} -> %{moved | shift: offset_as_written(offset, shift)}
+      _single_or_none -> keep_offset(moved, offset, shift)
+    end
+  end
+
+  defp keep_offset(%Tempo{} = tempo, _offset, nil), do: tempo
+
+  defp keep_offset(%Tempo{} = tempo, offset, shift),
+    do: %{tempo | shift: offset_as_written(offset, shift)}
+
+  defp keep_offset(other, _offset, _shift), do: other
+
+  # An offset in the shape the value wrote its own: one given as `-05:00`
+  # keeps its minutes when it becomes `-04:00`.
+  defp offset_as_written(offset, shift) do
+    written = Zone.offset_to_shift(offset)
+
+    if is_list(shift) and Keyword.has_key?(shift, :minute) and
+         not Keyword.has_key?(written, :minute),
+       do: written ++ [minute: 0],
+       else: written
+  end
+
+  # Moves the wall clock by whole offsets, in the coarsest clock unit that
+  # counts them whole, so an hour does not add minutes to a value that has
+  # none.
+  defp move_wall(tempo, 0), do: tempo
+  defp move_wall(tempo, seconds), do: add_wall(tempo, %Tempo.Duration{time: wall_units(seconds)})
+
+  defp wall_units(seconds) when rem(seconds, 3600) == 0, do: [hour: div(seconds, 3600)]
+  defp wall_units(seconds) when rem(seconds, 60) == 0, do: [minute: div(seconds, 60)]
+  defp wall_units(seconds), do: [second: seconds]
+
+  # The clock part's length in whole seconds; a fraction of a second never
+  # decides which side of a transition a step lands on.
+  defp clock_seconds(clock) do
+    Enum.reduce(clock, 0, fn
+      {:hour, hours}, total -> total + trunc(hours * 3600)
+      {:minute, minutes}, total -> total + trunc(minutes * 60)
+      {:second, seconds}, total -> total + trunc(seconds)
+      {:microsecond, _fraction}, total -> total
+    end)
+  end
+
+  defp offset_at(zone, utc_seconds) do
+    case TimeZoneDatabase.period_at_utc(zone, utc_seconds) do
+      {:ok, period} -> total_offset(period)
+      {:error, _reason} -> 0
+    end
+  end
+
+  defp wall_reading(tempo), do: trunc(Compare.to_wall_seconds(tempo))
+
+  # `TimeZoneDatabase.total_offset/1` is typed `number()`; an offset is a
+  # whole number of seconds.
+  defp total_offset(period) do
+    case TimeZoneDatabase.total_offset(period) do
+      offset when is_integer(offset) -> offset
+    end
+  end
 
   # Fast path for the overwhelmingly common shift: a single fixed-length
   # unit (day or finer) added to a plain crisp anchored datetime. Such a

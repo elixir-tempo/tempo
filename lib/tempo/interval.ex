@@ -875,8 +875,8 @@ defmodule Tempo.Interval do
       # 3) spans `[45.123, 45.124)`, i.e. +1000 µs; `45.123456`
       # (precision 6) spans a single microsecond.
       {:microsecond, {_value, _precision}} ->
-        with {:ok, upper_time} <- Math.add_unit(time, :microsecond, calendar) do
-          {:ok, build_bounds(tempo, time, upper_time), nil}
+        with {:ok, bounds} <- span_bounds(tempo, time, :microsecond, calendar) do
+          {:ok, bounds, nil}
         end
 
       # A second-resolution value is no longer the finest unit once
@@ -886,8 +886,8 @@ defmodule Tempo.Interval do
       # the upper is one second later, keeping both endpoints at
       # second resolution instead of drilling into microseconds.
       {:second, _value} ->
-        with {:ok, upper_time} <- Math.add_unit(time, :second, calendar) do
-          {:ok, build_bounds(tempo, time, upper_time), nil}
+        with {:ok, bounds} <- span_bounds(tempo, time, :second, calendar) do
+          {:ok, bounds, nil}
         end
 
       _ ->
@@ -908,10 +908,40 @@ defmodule Tempo.Interval do
   # unit is returned separately as the iteration granularity; the walk
   # fills the anchor to it at iteration time (`Steps.fill_to_unit/3`).
   defp implicit_span(tempo, time, unit, next_unit, calendar) do
-    with {:ok, upper_time} <- Math.add_unit(time, unit, calendar) do
-      {:ok, build_bounds(tempo, time, upper_time), next_unit}
+    with {:ok, bounds} <- span_bounds(tempo, time, unit, calendar) do
+      {:ok, bounds, next_unit}
     end
   end
+
+  # The span runs to one unit past the value. A clock unit of a value in
+  # a named zone is a unit of elapsed time, ending on the reading the wall
+  # clock shows then (`Tempo.Math.add/2`): the hour a fall-back repeats
+  # ends where its second occurrence begins, and the hour before a
+  # spring-forward gap ends on the gap's far side.
+  defp span_bounds(%Tempo{extended: %{zone_id: zone}} = tempo, time, unit, _calendar)
+       when is_binary(zone) and unit in [:hour, :minute, :second, :microsecond] do
+    lower = %{tempo | time: time}
+
+    case Math.add(lower, one_unit(unit, time)) do
+      %Tempo{} = upper -> {:ok, {lower, upper}}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp span_bounds(tempo, time, unit, calendar) do
+    with {:ok, upper_time} <- Math.add_unit(time, unit, calendar) do
+      {:ok, build_bounds(tempo, time, upper_time)}
+    end
+  end
+
+  # One unit in the last place: a microsecond value's unit is its
+  # precision's.
+  defp one_unit(:microsecond, time) do
+    {_value, precision} = Keyword.fetch!(time, :microsecond)
+    %Duration{time: [microsecond: {Integer.pow(10, 6 - precision), precision}]}
+  end
+
+  defp one_unit(unit, _time), do: %Duration{time: [{unit, 1}]}
 
   defp widened_span(tempo, prefix, unit, calendar) do
     with {:ok, upper_time} <- Math.add_unit(prefix, unit, calendar) do

@@ -32,6 +32,8 @@ defmodule Tempo.Iso8601.Unit do
     instance: 3
   }
 
+  # A day named as a day of the week (a week's members) or of the year is
+  # a day like any other, so its hours follow it.
   @unit_after %{
     year: {:month, 1..-1//-1},
     month: {:day, 1..-1//-1},
@@ -39,6 +41,8 @@ defmodule Tempo.Iso8601.Unit do
     week: {:day_of_week, 1..7},
     calendar_week: {:day_of_week, 1..7},
     day: {:hour, 0..23},
+    day_of_week: {:hour, 0..23},
+    day_of_year: {:hour, 0..23},
     hour: {:minute, 0..59},
     minute: {:second, 0..59}
   }

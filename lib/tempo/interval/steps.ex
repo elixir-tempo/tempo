@@ -107,11 +107,19 @@ defmodule Tempo.Interval.Steps do
   """
   @spec count_steps(Tempo.t(), Tempo.t(), atom(), module()) ::
           non_neg_integer() | :not_supported
-  def count_steps(%Tempo{time: from_time}, %Tempo{time: to_time}, :year, _calendar) do
+  def count_steps(%Tempo{time: from_time} = from, %Tempo{time: to_time} = to, unit, calendar) do
+    if date_axis?(from_time, unit) and date_axis?(to_time, unit) do
+      count_date_steps(from, to, unit, calendar)
+    else
+      :not_supported
+    end
+  end
+
+  defp count_date_steps(%Tempo{time: from_time}, %Tempo{time: to_time}, :year, _calendar) do
     fetch_integer!(to_time, :year) - fetch_integer!(from_time, :year)
   end
 
-  def count_steps(%Tempo{time: from_time}, %Tempo{time: to_time}, :month, calendar) do
+  defp count_date_steps(%Tempo{time: from_time}, %Tempo{time: to_time}, :month, calendar) do
     from_y = fetch_integer!(from_time, :year)
     from_m = fetch_integer!(from_time, :month)
     to_y = fetch_integer!(to_time, :year)
@@ -119,29 +127,40 @@ defmodule Tempo.Interval.Steps do
     months_between(from_y, from_m, to_y, to_m, calendar)
   end
 
-  def count_steps(%Tempo{time: from_time}, %Tempo{time: to_time}, :day, calendar) do
+  defp count_date_steps(%Tempo{time: from_time}, %Tempo{time: to_time}, :day, calendar) do
     Date.diff(date_of!(to_time, calendar), date_of!(from_time, calendar))
   end
 
-  def count_steps(%Tempo{} = from, %Tempo{} = to, :hour, calendar) do
+  defp count_date_steps(%Tempo{} = from, %Tempo{} = to, :hour, calendar) do
     div(elapsed_seconds(from, to, calendar), @seconds_per_hour)
   end
 
-  def count_steps(%Tempo{} = from, %Tempo{} = to, :minute, calendar) do
+  defp count_date_steps(%Tempo{} = from, %Tempo{} = to, :minute, calendar) do
     div(elapsed_seconds(from, to, calendar), @seconds_per_minute)
   end
 
-  def count_steps(%Tempo{} = from, %Tempo{} = to, :second, calendar) do
+  defp count_date_steps(%Tempo{} = from, %Tempo{} = to, :second, calendar) do
     elapsed_seconds(from, to, calendar)
   end
 
-  def count_steps(%Tempo{time: from_time} = from, %Tempo{} = to, :microsecond, calendar) do
+  defp count_date_steps(%Tempo{time: from_time} = from, %Tempo{} = to, :microsecond, calendar) do
     precision = microsecond_precision!(from_time)
     step = Integer.pow(10, @max_precision - precision)
     div(elapsed_microseconds(from, to, calendar), step)
   end
 
-  def count_steps(_from, _to, _unit, _calendar), do: :not_supported
+  defp count_date_steps(_from, _to, _unit, _calendar), do: :not_supported
+
+  # The closed forms step a calendar date — a year, a year and month, or
+  # a year, month and day beneath days and clock units — so a value on
+  # the week axis (a week's days) walks instead.
+  defp date_axis?(time, :year), do: Keyword.has_key?(time, :year)
+
+  defp date_axis?(time, :month),
+    do: Keyword.has_key?(time, :year) and Keyword.has_key?(time, :month)
+
+  defp date_axis?(time, _unit),
+    do: Keyword.has_key?(time, :month) and Keyword.has_key?(time, :day)
 
   @doc """
   Return the Tempo at step `n` from `from` at `unit` granularity.
@@ -175,12 +194,16 @@ defmodule Tempo.Interval.Steps do
   """
   @spec nth_step(Tempo.t(), non_neg_integer(), atom(), module()) ::
           Tempo.t() | :not_supported
-  def nth_step(%Tempo{time: time} = tempo, n, :year, _calendar) do
+  def nth_step(%Tempo{time: time} = tempo, n, unit, calendar) do
+    if date_axis?(time, unit), do: nth_date_step(tempo, n, unit, calendar), else: :not_supported
+  end
+
+  defp nth_date_step(%Tempo{time: time} = tempo, n, :year, _calendar) do
     year = Keyword.fetch!(time, :year)
     %{tempo | time: Keyword.replace(time, :year, year + n)}
   end
 
-  def nth_step(%Tempo{time: time} = tempo, n, :month, calendar) do
+  defp nth_date_step(%Tempo{time: time} = tempo, n, :month, calendar) do
     year = Keyword.fetch!(time, :year)
     month = Keyword.fetch!(time, :month)
     {new_year, new_month, _day} = calendar.plus(year, month, 1, :months, n)
@@ -194,7 +217,7 @@ defmodule Tempo.Interval.Steps do
     }
   end
 
-  def nth_step(%Tempo{time: time, calendar: calendar} = tempo, n, :day, calendar) do
+  defp nth_date_step(%Tempo{time: time, calendar: calendar} = tempo, n, :day, calendar) do
     date = date_of!(time, calendar)
     {y, m, d} = calendar.plus(date.year, date.month, date.day, :days, n)
 
@@ -208,19 +231,19 @@ defmodule Tempo.Interval.Steps do
     }
   end
 
-  def nth_step(%Tempo{calendar: calendar} = tempo, n, :hour, calendar) do
+  defp nth_date_step(%Tempo{calendar: calendar} = tempo, n, :hour, calendar) do
     nth_subday_step(tempo, n * @seconds_per_hour, calendar)
   end
 
-  def nth_step(%Tempo{calendar: calendar} = tempo, n, :minute, calendar) do
+  defp nth_date_step(%Tempo{calendar: calendar} = tempo, n, :minute, calendar) do
     nth_subday_step(tempo, n * @seconds_per_minute, calendar)
   end
 
-  def nth_step(%Tempo{calendar: calendar} = tempo, n, :second, calendar) do
+  defp nth_date_step(%Tempo{calendar: calendar} = tempo, n, :second, calendar) do
     nth_subday_step(tempo, n, calendar)
   end
 
-  def nth_step(%Tempo{time: time, calendar: calendar} = tempo, n, :microsecond, calendar) do
+  defp nth_date_step(%Tempo{time: time, calendar: calendar} = tempo, n, :microsecond, calendar) do
     {value, precision} = Keyword.fetch!(time, :microsecond)
     step = Integer.pow(10, @max_precision - precision)
     delta_micros = value + n * step
@@ -233,7 +256,7 @@ defmodule Tempo.Interval.Steps do
     %{shifted | time: Keyword.replace(shifted.time, :microsecond, {new_us_value, precision})}
   end
 
-  def nth_step(_from, _n, _unit, _calendar), do: :not_supported
+  defp nth_date_step(_from, _n, _unit, _calendar), do: :not_supported
 
   @doc """
   Return `true` when `element` falls on a `unit`-step boundary

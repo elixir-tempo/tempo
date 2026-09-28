@@ -20,6 +20,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * A duration is counted in the unit its endpoints are written in, where it was seconds: `~o"P36D"` between two days and `~o"PT8H"` between two hours, years to days on the calendar through `Calendrical.diff/3` and hours to fractions of a second as elapsed time.
 
+* A zoned value's hours, minutes and seconds are time on the time line in `Tempo.shift/2`, a start-and-duration interval, an hour's own span and an hourly recurrence, and its days stay calendar days: five hours after 23:00 on the night the clocks spring forward is 05:00, where it was 04:00.
+
 * `:within` replaces `:bound` on `Tempo.to_interval/2`, `to_interval_set/2`, the set operations, `complement/2`, `Tempo.ICal.from_ical/2`, `Tempo.JSCalendar.from_jscalendar/2` and the RRULE expander; a leftover `:bound` is an error naming it.
 
 * The `:within` window keeps every occurrence that overlaps it, for every recurrence: `R/2020-01-01/P1Y` within 2026 is 2026's occurrence alone, not every year since 2020, and iCalendar and JSCalendar return only the events that overlap the window.
@@ -105,6 +107,12 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * `Tempo.now/1` and `today/1` return `{:error, %Tempo.UnknownZoneError{}}` for a zone the time zone database does not know, where they raised.
 
 * `Tempo.to_date/1` returns a `Tempo.ConversionError` for a value whose year, month or day is a group or a range, where it raised `FunctionClauseError`.
+
+* An iCalendar or RRULE rule with `COUNT=1` occurs once for the event's length, where its occurrence spanned the rule's frequency (a week for `FREQ=WEEKLY`).
+
+* A day that enumerating a week gives (`2026Y40W1K`) materialises as a day and takes hours, carrying across days and weeks, and `Enum.at/2`, `count/1`, `slice/3` and `member?/2` read a week, where they raised.
+
+* A day added to a zoned time that lands in a spring-forward gap moves on by the gap (RFC 5545 §3.3.5), and an offset the value carries follows the reading it lands on, where the result named a time that does not exist.
 
 * A recurrence walks every period its `:within` window overlaps, however the window is aligned — `R/../P1Y/FL1M15DN` within September 2026 to March 2027 is 15 January 2027, where it was nothing — and an UNTIL holds every day a period's selection expands to.
 

@@ -4778,6 +4778,17 @@ defmodule Tempo do
   one month later (ISO 8601-2 D.4.4), so `2018-01-23` plus `P0.5M` is
   `2018-02-07`.
 
+  A value in a named zone gives the reading its wall clock shows. Years,
+  months, weeks and days step the calendar, so a day after noon is noon
+  however long the day, and hours, minutes and seconds are time on the
+  time line, so five hours after 23:00 is the reading the clock shows
+  five hours later — 05:00 on the night it springs forward. Days are
+  added before hours (RFC 5545 §3.3.6). A day that lands in the hour a
+  spring-forward skips moves on by that hour, one that lands on a
+  reading the fall-back repeats is its first occurrence (RFC 5545
+  §3.3.5), and an hour that lands on a repeated reading carries its
+  offset, so it names its own side of the fold.
+
   ### Arguments
 
   * `tempo` is any `t:t/0`.
@@ -4843,6 +4854,15 @@ defmodule Tempo do
 
       iex> match?({:error, %Tempo.RequiresAnchorError{}}, Tempo.shift(~o"1M31D", ~o"P1M"))
       true
+
+  On the night New York's clocks spring forward, five hours after 23:00
+  is 05:00, and a day after noon is noon:
+
+      iex> Tempo.shift(~o"2026-03-07T23[America/New_York]", hour: 5)
+      ~o"2026Y3M8DT5H[America/New_York]"
+
+      iex> Tempo.shift(~o"2026-03-07T12[America/New_York]", day: 1)
+      ~o"2026Y3M8DT12H[America/New_York]"
 
   One hour of working time from 09:30, skipping a 10:00–11:00 meeting,
   ends at 11:30 — the meeting hour costs nothing:
@@ -5538,6 +5558,33 @@ defmodule Tempo do
            reason: :empty_selection
          )}
     end
+  end
+
+  # A one-occurrence rule with no BY-rule (`FREQ=WEEKLY;COUNT=1`) steps
+  # nothing, so its occurrence spans the event it carries — the
+  # `occurrence_base_to` or `occurrence_duration` every occurrence of a
+  # longer rule spans — not its cadence, which is all `duration` holds.
+  defp materialise(
+         %Tempo.Interval{
+           recurrence: 1,
+           from: %Tempo{} = from,
+           duration: %Tempo.Duration{} = duration,
+           to: to,
+           metadata: metadata
+         } = interval,
+         _opts
+       )
+       when to in [nil, :undefined] and
+              (is_map_key(metadata, :occurrence_base_to) or
+                 is_map_key(metadata, :occurrence_duration)) do
+    occurrence_end = occurrence_end_fn(from, duration, interval)
+
+    {:ok,
+     %Tempo.Interval{
+       from: from,
+       to: occurrence_end.(from, 0),
+       metadata: strip_span_directives(metadata)
+     }}
   end
 
   # A `from + duration` interval (`1985-01/P3M`). Materialise to

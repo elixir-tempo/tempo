@@ -111,8 +111,43 @@ defmodule Tempo.CalendarWeekdayTest do
       assert Tempo.shift(~o"2026Y32W", day: 7).time == [year: 2026, week: 33, day_of_week: 1]
     end
 
-    test "a sub-day duration refuses with a resolution error" do
-      assert {:error, %Tempo.ResolutionError{}} = Tempo.shift(~o"2026Y32W", hour: 1)
+    test "a sub-day duration steps the week's hours, carrying across days and weeks" do
+      assert Tempo.shift(~o"2026Y32W", hour: 1).time ==
+               [year: 2026, week: 32, day_of_week: 1, hour: 1]
+
+      assert Tempo.shift(~o"2026Y32W", hour: 25).time ==
+               [year: 2026, week: 32, day_of_week: 2, hour: 1]
+
+      assert Tempo.shift(~o"2026Y32W", hour: -1).time ==
+               [year: 2026, week: 31, day_of_week: 7, hour: 23]
+    end
+  end
+
+  describe "a week read by its days" do
+    test "a day that enumerating a week gives is a one-day span of hours" do
+      [monday] = Enum.take(~o"2026-W40", 1)
+      {:ok, day} = Tempo.to_interval(monday)
+
+      assert Tempo.duration(day) == ~o"P1D"
+      assert Enum.count(monday) == 24
+    end
+
+    test "Enum counts, indexes, slices and searches a week's days" do
+      week = ~o"2026-W40"
+      [monday] = Enum.take(week, 1)
+
+      assert Enum.count(week) == 7
+      assert Enum.at(week, 3).time == [year: 2026, week: 40, day_of_week: 4]
+      assert week |> Enum.slice(5, 2) |> Enum.map(& &1.time[:day_of_week]) == [6, 7]
+      assert Enum.member?(week, monday)
+    end
+
+    test "a zoned week's day steps its hours on the time line" do
+      # New York springs forward in the early hours of Sunday 8 March 2026.
+      saturday = Tempo.from_iso8601!("2026-W10[America/New_York]") |> Enum.at(5)
+
+      assert Tempo.shift(saturday, hour: 28).time ==
+               [year: 2026, week: 10, day_of_week: 7, hour: 5]
     end
   end
 end

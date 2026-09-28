@@ -40,6 +40,16 @@ iex> Tempo.Interval.duration(iv)
 
 Spring forward in New York removes one hour from that calendar day — Tempo measures hours as elapsed time, so noon to noon is 23 of them, not 24. The calendar day itself is still one day: measured in days, `2024-03-10` is `~o"P1D"`.
 
+Shifting keeps the same two rules. A day later is the same time tomorrow; twenty-four hours later is the reading the clock shows when twenty-four hours have passed:
+
+```elixir
+iex> Tempo.shift(~o"2024-03-09T12[America/New_York]", day: 1)
+~o"2024Y3M10DT12H[America/New_York]"
+
+iex> Tempo.shift(~o"2024-03-09T12[America/New_York]", hour: 24)
+~o"2024Y3M10DT13H[America/New_York]"
+```
+
 ---
 
 ## 2. "Every wall-clock time exists once and only once"
