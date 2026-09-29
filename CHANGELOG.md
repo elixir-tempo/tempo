@@ -171,7 +171,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.parse/2`'s `:calendar` option is a calendar module, as Calendrical 1.4's is: a CLDR calendar name such as `:hebrew` returns an error.
 
-* A recurrence whose selection has a §12.10 window walks as many periods either side of its `:within` window as the window can move an occurrence, and a domain runs its adjacent periods as one recurrence.
+* A recurrence walks every period either side of its `:within` window whose occurrences a §12.10 window or their own span can carry into it, stepping in the recurrence's own calendar, and a domain runs its adjacent periods as one recurrence.
 
 * A recurrence selection that moves a candidate to several dates (weekday, month-day, week and window expansions) finds the candidate's own day numbers once, and a move onto its own date asks the calendar nothing — about a third fewer calendar calls for a lunisolar calendar.
 

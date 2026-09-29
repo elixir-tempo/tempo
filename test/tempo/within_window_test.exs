@@ -116,6 +116,45 @@ defmodule Tempo.WithinWindowTest do
       {:ok, from_2026} = Tempo.to_interval_set(before_new_year, within: ~o"2026/..")
       assert [first | _rest] = from_2026 |> IntervalSet.walk() |> Enum.take(2)
       assert Interval.from(first) == ~o"2025Y12M29D"
+
+      # A recurrence with a start of its own reaches as far past the window's end.
+      assert starts(Tempo.to_interval_set(~o"R/2020-01-01/P1Y/FLL1M3DN/-P5DN", within: ~o"2026")) ==
+               ["2025Y12M29D", "2026Y12M29D"]
+    end
+
+    test "a reach of many periods keeps every occurrence it carries into the window" do
+      # Two-day sittings every hour at half past: each of the 49 that started from
+      # 10:30 two days before is still running within the hour from 10:00.
+      sittings = spanned(~o"R/../PT1H/FLT30MN", ~o"P2D")
+      {:ok, set} = Tempo.to_interval_set(sittings, within: ~o"2027-01-02T10/2027-01-02T11")
+
+      assert IntervalSet.count(set) == 49
+      assert Interval.from(IntervalSet.first(set)) == ~o"2026Y12M31DT10H30M"
+    end
+
+    test "the reach steps through the recurrence's own calendar" do
+      # Fifteen days from the 25th of each Coptic month: the twelfth month's run
+      # through the five days of the thirteenth into the new year's first.
+      assert starts(
+               Tempo.to_interval_set(~o"R/../P1M/FLL25DN/P15DN[u-ca=coptic]",
+                 within: ~o"2026-09-11/2026-09-12"
+               )
+             ) == ["1742Y12M25D[u-ca=coptic]"]
+
+      # A month from the 25th of every other Coptic month keeps the phase the
+      # window's own month sets, as the same rule without a window does: the
+      # first month's run, from 5 October.
+      early_october = ~o"2026-10-01/2026-10-20"
+
+      assert starts(
+               Tempo.to_interval_set(~o"R/../P2M/FLL25DN/P1MN[u-ca=coptic]",
+                 within: early_october
+               )
+             ) == ["1743Y1M25D[u-ca=coptic]"]
+
+      assert starts(
+               Tempo.to_interval_set(~o"R/../P2M/FL25DN[u-ca=coptic]", within: early_october)
+             ) == ["1743Y1M25D[u-ca=coptic]"]
     end
 
     test "a cadence finer than a day reaches as far as its occurrences do" do

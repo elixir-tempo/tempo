@@ -5518,7 +5518,7 @@ defmodule Tempo do
   # nth period, phased from the domain's first stated value.
   defp materialise(%Tempo.Interval{from: %Tempo.Set{set: [_ | _]} = domain} = interval, opts) do
     with {:ok, window} <- within_window(opts),
-         reach = domain_reach_window(window, interval),
+         {:ok, reach} <- domain_reach_window(window, interval),
          {:ok, closed_domain} <- close_domain_ranges(domain, reach),
          {:ok, domain_set} <- to_interval(closed_domain) do
       domain_set
@@ -5679,7 +5679,9 @@ defmodule Tempo do
   end
 
   # A recurrence with no end is ended by the caller's `:within` window; with
-  # none it cannot be materialised.
+  # none it cannot be materialised. A window running back from each anchor
+  # carries occurrences into the window from periods after it, so the walk goes
+  # on to the last of those.
   defp materialise_unending(interval, nil, _opts),
     do: {:error, UnboundedRecurrenceError.exception(interval: interval)}
 
@@ -5689,13 +5691,15 @@ defmodule Tempo do
          opts
        ) do
     with {:ok, window_to} <- bound_upper(within),
+         {_forward, backward} = window_reach(interval),
+         {:ok, walk_to} <- reach_end(window_to, interval, backward),
          {from, interval} = fill_selection_start(from, interval),
          intervals =
            iterate_recurrence(
              from,
              duration,
              occurrence_end_fn(from, duration, interval),
-             &under_bound?(&1, window_to),
+             &under_bound?(&1, walk_to),
              selection_fn(interval, duration),
              interval.metadata
            ),
@@ -5827,109 +5831,61 @@ defmodule Tempo do
   # §12.10 window can move an occurrence off the period whose selection produced
   # it — a Saturday 1 January observed the previous Friday lands in the year
   # before, a Saturday 31 December observed the following Monday in the year
-  # after — so a windowed recurrence also walks as many periods either side of
-  # the window as the §12.10 window can reach across, and keeps the occurrences
-  # that overlap the window.
+  # after — and an occurrence's own span can run on past its period, so a
+  # recurrence that reaches out of its periods walks from the first period
+  # whose occurrences can reach the window, and keeps those that overlap it.
   defp materialise_from_bound(interval, start, within, opts) do
-    case window_periods(interval) do
-      {0, 0} ->
+    case window_reach(interval) do
+      {[], []} ->
         %{interval | from: start_in_repeat_calendar(start, interval)}
         |> to_interval(opts)
         |> filter_to_bound_window(interval, within)
 
-      periods ->
-        materialise_windowed(interval, start, within, periods, opts)
+      reach ->
+        materialise_reaching(interval, start, reach, opts)
     end
   end
 
-  defp materialise_windowed(
-         %Tempo.Interval{duration: cadence} = interval,
-         start,
-         within,
-         {periods_before, periods_after},
-         opts
-       ) do
-    with {:ok, window_to} <- bound_upper(within) do
-      # A window reaching back places a period's occurrence before the period
-      # starts, and the walk keeps none that starts before the walk does, so it
-      # starts as many periods earlier again.
-      widened_from =
-        add_n_durations(start, negate_duration(cadence), periods_before + periods_after)
-
-      widened_to = add_n_durations(window_to, cadence, periods_after)
-      widened = %Tempo.Interval{from: widened_from, to: widened_to}
-
-      %{interval | from: start_in_repeat_calendar(widened_from, interval)}
-      |> to_interval(Keyword.put(opts, :within, widened))
-      |> keep_occurrences_in_window({bound_lower(within), window_to})
+  # A window reaching back places a period's occurrence before the period
+  # starts, and the walk keeps none that starts before the walk does, so the
+  # walk starts that much earlier again. The walk's end reaches on in
+  # `materialise_unending/3`.
+  defp materialise_reaching(interval, start, {forward, backward}, opts) do
+    with {:ok, %Tempo{} = reach_from} <- reach_start(start, interval, forward),
+         %Tempo{} = walk_from <- carried(reach_from, backward, :back) do
+      to_interval(%{interval | from: start_in_repeat_calendar(walk_from, interval)}, opts)
     end
   end
 
-  # How many cadence periods before and after a bound an occurrence can reach
-  # into it from: a §12.10 window running forward from an earlier period, or back
-  # from a later one, and an occurrence's own span (`:occurrence_duration`)
-  # running on from an earlier period, as a December–January school break does.
-  # Each direction's durations are summed (a nested window adds its own) over the
-  # shortest the cadence period can be, plus one for the period itself; none when
-  # nothing reaches that way. A cadence of a day or more is measured in days, a
-  # finer one (an hourly rule whose occurrences last ninety minutes) in seconds.
-  defp window_periods(%Tempo.Interval{
+  # How far an occurrence can reach outside the period that selects it, as the
+  # durations that carry it there, `{forward, backward}`: a §12.10 window
+  # running on from its anchor or back from it, a nested window adding its own,
+  # and an occurrence's own span (`:occurrence_duration`) running on, as a
+  # December–January school break does.
+  defp window_reach(%Tempo.Interval{
          repeat_rule: %Tempo{time: [selection: selection]},
-         duration: %Tempo.Duration{} = cadence,
+         duration: %Tempo.Duration{},
          metadata: metadata
        }) do
     durations = window_durations(selection)
 
-    {reach_periods(durations ++ spanned_durations(metadata), :forward, cadence),
-     reach_periods(durations, :backward, cadence)}
+    {reaching(durations ++ spanned_durations(metadata), &(&1 > 0)),
+     reaching(durations, &(&1 < 0))}
   end
 
-  defp window_periods(_interval), do: {0, 0}
+  defp window_reach(_interval), do: {[], []}
 
   defp spanned_durations(%{occurrence_duration: %Tempo.Duration{} = span}), do: [span]
   defp spanned_durations(_metadata), do: []
 
-  defp reach_periods(durations, direction, cadence) do
-    case cadence_days_floor(cadence) do
-      0 -> periods_reaching(reach_seconds(durations, direction), cadence_seconds_floor(cadence))
-      floor -> periods_reaching(reach_days(durations, direction), floor)
-    end
-  end
-
-  # The most seconds the durations can span one way, a day at most the 25 hours
-  # of the day daylight saving ends on.
-  defp reach_seconds(durations, direction) do
+  # The parts of each duration that run one way, as a duration of that way's
+  # length: a window of `P-3D` reaches three days back.
+  defp reaching(durations, direction?) do
     for %Tempo.Duration{time: time} <- durations,
-        {unit, amount} <- time,
-        reaches?(amount, direction),
-        reduce: 0 do
-      total -> total + Kernel.ceil(abs(amount) * max_seconds_per(unit))
-    end
+        parts = for({unit, amount} <- time, direction?.(amount), do: {unit, abs(amount)}),
+        parts != [],
+        do: %Tempo.Duration{time: parts}
   end
-
-  defp max_seconds_per(:year), do: 366 * 90_000
-  defp max_seconds_per(:month), do: 31 * 90_000
-  defp max_seconds_per(:week), do: 7 * 90_000
-  defp max_seconds_per(:day), do: 90_000
-  defp max_seconds_per(:hour), do: 3_600
-  defp max_seconds_per(:minute), do: 60
-  defp max_seconds_per(_second), do: 1
-
-  # The fewest seconds a cadence finer than a day spans.
-  defp cadence_seconds_floor(%Tempo.Duration{time: time}) do
-    Enum.reduce(time, 0, fn {unit, amount}, total ->
-      total + Kernel.trunc(abs(amount) * min_seconds_per(unit))
-    end)
-  end
-
-  defp min_seconds_per(:hour), do: 3_600
-  defp min_seconds_per(:minute), do: 60
-  defp min_seconds_per(:second), do: 1
-  defp min_seconds_per(_unit), do: 0
-
-  defp periods_reaching(0, _floor), do: 0
-  defp periods_reaching(_reach, 0), do: 0
-  defp periods_reaching(reach, floor), do: 1 + div(reach, floor)
 
   defp window_durations(selection) when is_list(selection) do
     Enum.flat_map(selection, fn
@@ -5945,38 +5901,120 @@ defmodule Tempo do
   defp window_inner_selection(%Tempo{time: time}) when is_list(time), do: time
   defp window_inner_selection(_inner), do: []
 
-  # The most days the windows' durations can span one way (a year is at most
-  # 366 days, a month 31); any time-of-day part counts as a whole day.
-  defp reach_days(durations, direction) do
-    for %Tempo.Duration{time: time} <- durations,
-        {unit, amount} <- time,
-        reaches?(amount, direction),
-        reduce: 0 do
-      total -> total + Kernel.ceil(abs(amount) * max_days_per(unit))
+  # The start of the first period whose occurrences can reach forward into a
+  # window opening at `window_from`: back from the period holding the window's
+  # start, whole cadences at a time so a multi-period cadence keeps its phase,
+  # while the period ending there, carried on by the reach, still runs past the
+  # window's start. Periods and reach are both stepped with the recurrence
+  # calendar's own arithmetic, so a month is that calendar's month and a year
+  # that calendar's year.
+  defp reach_start(window_from, _interval, []), do: {:ok, window_from}
+
+  defp reach_start(%Tempo{} = window_from, %Tempo.Interval{duration: cadence} = interval, forward) do
+    with {:ok, first} <- period_holding(window_from, interval) do
+      period_not_reaching(
+        first,
+        negate_duration(cadence),
+        &reaches_forward?(&1, forward, window_from)
+      )
     end
   end
 
-  defp reaches?(amount, :forward), do: amount > 0
-  defp reaches?(amount, :backward), do: amount < 0
+  defp reach_start(window_from, _interval, _forward), do: {:ok, window_from}
 
-  defp max_days_per(:year), do: 366
-  defp max_days_per(:month), do: 31
-  defp max_days_per(:week), do: 7
-  defp max_days_per(_unit), do: 1
+  # Where a walk that must meet every occurrence reaching back into a window
+  # closing at `window_to` can stop: the start of the first period, on from the
+  # one holding the window's end, whose occurrences cannot. A period's start,
+  # carried back by the reach, falls at or after the window's end.
+  defp reach_end(window_to, _interval, []), do: {:ok, window_to}
 
-  # The fewest days a cadence period spans (a year is at least 365, a month 28);
-  # zero for a cadence finer than a day.
-  defp cadence_days_floor(%Tempo.Duration{time: time}) do
-    Enum.reduce(time, 0, fn {unit, amount}, total ->
-      total + Kernel.trunc(abs(amount) * min_days_per(unit))
+  defp reach_end(%Tempo{} = window_to, %Tempo.Interval{duration: cadence} = interval, backward) do
+    with {:ok, last} <- period_holding(window_to, interval) do
+      period_not_reaching(last, cadence, &reaches_back?(&1, backward, window_to))
+    end
+  end
+
+  defp reach_end(window_to, _interval, _backward), do: {:ok, window_to}
+
+  # The period `count` steps from `period` for the least `count` at which
+  # `reaching?` no longer holds. The count doubles until it fails, then halves
+  # back to the first that does, so a reach of many periods takes few steps.
+  # Each period is `period + count × step`, so a month-end start never drifts.
+  defp period_not_reaching(period, step, reaching?) do
+    reached? = fn count -> reaching?.(add_n_durations(period, step, count)) end
+    count = if reached?.(0), do: first_unreached(reached?, 0, 1), else: 0
+
+    case add_n_durations(period, step, count) do
+      %Tempo{} = unreached -> {:ok, unreached}
+      error -> error
+    end
+  end
+
+  # A reach past this many periods is a malformed rule, not a reason to search
+  # for ever.
+  @most_periods_reaching 1_048_576
+
+  defp first_unreached(reached?, reached, count) do
+    cond do
+      count > @most_periods_reaching -> count
+      reached?.(count) -> first_unreached(reached?, count, count * 2)
+      true -> narrow_unreached(reached?, reached, count)
+    end
+  end
+
+  defp narrow_unreached(_reached?, reached, unreached) when unreached - reached <= 1,
+    do: unreached
+
+  defp narrow_unreached(reached?, reached, unreached) do
+    middle = div(reached + unreached, 2)
+
+    if reached?.(middle),
+      do: narrow_unreached(reached?, middle, unreached),
+      else: narrow_unreached(reached?, reached, middle)
+  end
+
+  # Whether the period ending at `period_end` has occurrences that can run past
+  # `window_from`: its anchors fall before `period_end`, and run on as far as
+  # the reach carries them.
+  defp reaches_forward?(period_end, forward, window_from) do
+    case carried(period_end, forward, :on) do
+      %Tempo{} = reach -> under_bound?(window_from, reach)
+      _error -> false
+    end
+  end
+
+  # Whether the period starting at `period_start` has occurrences that can
+  # start before `window_to`: its anchors fall at or after `period_start`, and
+  # start as far back as the reach carries them.
+  defp reaches_back?(period_start, backward, window_to) do
+    case carried(period_start, backward, :back) do
+      %Tempo{} = reach -> under_bound?(reach, window_to)
+      _error -> false
+    end
+  end
+
+  # A value carried on or back by each duration in turn, with its calendar's
+  # own arithmetic. A step the calendar cannot take is returned as it is.
+  defp carried(%Tempo{} = value, durations, direction) do
+    Enum.reduce_while(durations, value, fn duration, carried ->
+      case Math.add(carried, oriented(duration, direction)) do
+        %Tempo{} = next -> {:cont, next}
+        other -> {:halt, other}
+      end
     end)
   end
 
-  defp min_days_per(:year), do: 365
-  defp min_days_per(:month), do: 28
-  defp min_days_per(:week), do: 7
-  defp min_days_per(:day), do: 1
-  defp min_days_per(_unit), do: 0
+  defp carried(error, _durations, _direction), do: error
+
+  defp oriented(duration, :on), do: duration
+  defp oriented(duration, :back), do: negate_duration(duration)
+
+  # The start of the cadence period `edge` falls in, at the grain the
+  # recurrence starts at and in the calendar it selects in.
+  defp period_holding(edge, interval) do
+    with {:ok, start} <- start_at_unit(edge, start_unit(interval)),
+         do: {:ok, start_in_repeat_calendar(start, interval)}
+  end
 
   # Apply a duration N times as a single scalar-multiplied step:
   # `tempo + (n × duration)` in one call, not `n` successive
@@ -6744,27 +6782,22 @@ defmodule Tempo do
   end
 
   # A domain period is materialised when an occurrence it yields can overlap
-  # the window: the periods the window overlaps, and as many either side as a
-  # §12.10 window can reach across (a December–January break yielded by 2025
+  # the window: the periods the window overlaps, and those either side whose
+  # occurrences can reach it (a December–January break yielded by 2025
   # overlaps a window in January 2026). The rest are skipped.
   defp domain_period_in_window?(_period, :none), do: true
 
   defp domain_period_in_window?(%Tempo.Interval{} = period, {window_from, window_to}),
     do: overlaps_window?(period, window_from, window_to)
 
-  defp domain_reach_window(:none, _interval), do: :none
+  defp domain_reach_window(:none, _interval), do: {:ok, :none}
 
-  defp domain_reach_window({window_from, window_to} = window, %Tempo.Interval{} = interval) do
-    case window_periods(interval) do
-      {0, 0} ->
-        window
+  defp domain_reach_window({window_from, window_to}, %Tempo.Interval{} = interval) do
+    {forward, backward} = window_reach(interval)
 
-      {periods_before, periods_after} ->
-        cadence = interval.duration
-
-        {window_from && add_n_durations(window_from, negate_duration(cadence), periods_before),
-         window_to && add_n_durations(window_to, cadence, periods_after)}
-    end
+    with {:ok, reach_from} <- reach_start(window_from, interval, forward),
+         {:ok, reach_to} <- reach_end(window_to, interval, backward),
+         do: {:ok, {reach_from, reach_to}}
   end
 
   defp keep_occurrences_in_window(result, :none), do: result

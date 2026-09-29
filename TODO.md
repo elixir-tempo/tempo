@@ -4,7 +4,11 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ## Open
 
-* [ ] **The `:within` reach measures units with Gregorian constants** — `window_periods/1` in `lib/tempo.ex` bounds a year at 365–366 days, a month at 28–31 and a day at 25 hours (`min_days_per/1`, `max_days_per/1`, `min_seconds_per/1`, `max_seconds_per/1`), which is calendar arithmetic in Tempo and too narrow for a 385-day Hebrew year or a 5-day Coptic month. Widen the window by shifting its ends through Calendrical, or take each calendar's bounds from Calendrical (asked 2026-09-29); `Network.Normalize` (365.2425 days a year) and `Format` (seconds a month and a year) want the same review.
+* [ ] **A domain run drops an occurrence a backward window moves out of it** — `R/{2020Y..2030Y}/P1Y/FLL1M3DN/-P5DN` within 2026 misses 2026's own run from 29 December 2025, which the open-start form keeps: a run keeps the occurrences that start in it, not those its periods yield.
+
+* [ ] **`to_interval/2` raises with an open-ended window** — `Tempo.to_interval(~o"R/../P1Y/FLL1M3DN/-P5DN", within: ~o"2026/..")` raises `UnboundedSetError` from `IntervalSet.members/1`, where `to_interval_set/2` returns the lazy set; return the set or an error.
+
+* [ ] **Gregorian constants outside the `:within` reach** — `Network.Normalize` puts a year at 365.2425 days and a month at 30.436875 to place undated periods on one axis, and `Format` a month and a year in seconds to choose a relative-time unit. Review whether each belongs in Calendrical, as the reach did.
 
 * [ ] **An anchored terminal window loses its selection** — `R/2026/P1Y/FLL3K4IN/P5DN` gives each year's first five days (`2026Y/1M6D`), where `R/../P1Y/FLL3K4IN/P5DN` gives the five days from the fourth Wednesday (`2026Y1M28D/2M2D`).
 
@@ -73,6 +77,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **A domain gating by a window's anchor** — a domain admits the occurrences that start in its periods; date-holidays gates on the year of a window's anchor instead. They differ only when a window crosses a gated boundary year, which no tempo_holidays rule does; reviving it needs anchor tracking through `Tempo.RRule.Selection`.
 
 ## Done
+
+* [x] **The `:within` reach steps through Calendrical** — a walk's periods and an occurrence's reach step in the recurrence's own calendar, with no Gregorian day counts; an anchored recurrence reaches past the window's end too, and a Coptic two-month rule keeps its phase. 2026-09-29.
 
 * [x] **Seven API gaps the NSW school holidays found** — holidays in `workdays/2` (`:except`, `Tempo.Workdays`); the duration predicates and `duration/1` on sets and values; `Interval.from/1` and `to/1` on a value, and `new/1`'s `:through`; `select/2` with an ISO 8601-2 selection; `at/2` and `on/2` with an interval or a selection; `:skipping` stepping days; `RecurrenceSet.filter/2`. 2026-09-29.
 
