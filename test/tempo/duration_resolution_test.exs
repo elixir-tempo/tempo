@@ -154,4 +154,80 @@ defmodule Tempo.DurationResolutionTest do
       assert {:error, %Tempo.ConversionError{}} = Tempo.to_date(~o"2022Y1M2G3DU")
     end
   end
+
+  describe "an endpoint that names a span is read from where its span starts" do
+    test "a century, a masked month and a selection that picks one day" do
+      assert Interval.duration(~o"20C/2100") == ~o"P100Y"
+      assert measure(~o"2000", ~o"21C") == ~o"P100Y"
+      assert Interval.duration(~o"1985-XX/1986") == ~o"P1Y"
+
+      # Easter Sunday 2027 is 28 March.
+      assert measure(~o"2027YL(easter)eN", ~o"2027-12") == ~o"P248D"
+      assert Tempo.duration(~o"20C/2100") == ~o"P100Y"
+    end
+
+    test "an endpoint that names several spans is an error" do
+      assert {:error, %ArgumentError{message: message}} = measure(~o"{2026,2027}Y", ~o"2028")
+      assert message =~ "several spans"
+    end
+  end
+
+  describe "what duration/2 cannot measure is an error, not a raise" do
+    test "an endpoint without a year" do
+      for interval <- [
+            ~o"T09/T17",
+            ~o"6M/8M",
+            ~o"T09/PT2H",
+            %Interval{from: ~o"2026-06-15", to: ~o"6M20D"}
+          ] do
+        assert {:error, %Tempo.UnanchoredError{operation: :duration}} =
+                 Interval.duration(interval)
+      end
+    end
+
+    test "a finite recurrence, endpoints in different calendars, or one that is not a value" do
+      {:ok, hebrew} = Tempo.from_iso8601("5786-09-30[u-ca=hebrew]")
+
+      assert {:error, %Tempo.ConversionError{reason: :recurring_duration}} =
+               Interval.duration(~o"R5/2022-01-01/P1M")
+
+      assert {:error, %ArgumentError{}} = measure(hebrew, ~o"2026-06-15")
+      assert {:error, %ArgumentError{}} = measure("2026", ~o"2027")
+    end
+
+    test "a value that is not an interval, or an option it does not take" do
+      for value <- [nil, "", :"", 42, ~o"2026-06"] do
+        assert {:error, %ArgumentError{}} = Interval.duration(value)
+      end
+
+      week = %Interval{from: ~o"2026-06-15", to: ~o"2026-06-22"}
+
+      for options <- [:leap_seconds, [leap_seconds: "yes"], [leap_second: true], [1, 2]] do
+        assert {:error, %ArgumentError{}} = Interval.duration(week, options)
+      end
+    end
+
+    test "a set whose member has no length gives that member's error" do
+      {:ok, set} = IntervalSet.new([~o"T09/T11", ~o"T10/T12"])
+
+      assert {:error, %Tempo.UnanchoredError{}} = IntervalSet.duration(set)
+      assert {:error, %Tempo.UnanchoredError{}} = Tempo.duration(set)
+    end
+
+    test "leap_seconds_spanned/1 and duration/2 counting leap seconds" do
+      {:ok, hebrew} = Tempo.from_iso8601("5786-09-30[u-ca=hebrew]")
+      across_calendars = %Interval{from: hebrew, to: ~o"2026-06-15"}
+
+      assert {:error, %ArgumentError{}} = Interval.leap_seconds_spanned(across_calendars)
+
+      assert {:error, %Tempo.UnanchoredError{operation: :leap_seconds_spanned}} =
+               Interval.leap_seconds_spanned(~o"T09/T17")
+
+      assert {:error, %ArgumentError{}} = Interval.leap_seconds_spanned(nil)
+      assert {:error, %ArgumentError{}} = Interval.duration(across_calendars, leap_seconds: true)
+
+      # A predicate has only true and false to give.
+      assert_raise ArgumentError, fn -> Interval.spans_leap_second?(across_calendars) end
+    end
+  end
 end

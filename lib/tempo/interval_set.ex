@@ -554,6 +554,10 @@ defmodule Tempo.IntervalSet do
   ### Returns
 
   * A `t:Tempo.Duration.t/0` holding the total in its members' units.
+
+  * `{:error, reason}` when a member has no length to measure, as
+    `Tempo.Interval.duration/2` returns it: a member without a year,
+    say.
     The empty set has a duration of zero seconds.
 
   ### Examples
@@ -571,11 +575,19 @@ defmodule Tempo.IntervalSet do
       ~o"P2D"
 
   """
-  @spec duration(t()) :: Duration.t()
+  @spec duration(t()) :: Duration.t() | {:error, Exception.t()}
   def duration(%__MODULE__{} = set) do
     case set |> coalesce() |> members() do
       [] -> %Duration{time: [second: 0]}
-      members -> members |> Enum.map(&Interval.duration/1) |> Duration.sum()
+      members -> members |> Enum.map(&Interval.duration/1) |> summed()
+    end
+  end
+
+  # The members' lengths added up, or the first error a member gives.
+  defp summed(durations) do
+    case Enum.find(durations, &match?({:error, _reason}, &1)) do
+      nil -> Duration.sum(durations)
+      error -> error
     end
   end
 

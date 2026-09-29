@@ -1681,7 +1681,9 @@ defmodule Tempo.Interval do
 
   * `interval` is a `t:t/0`. One written as a start and a duration, or
     a duration and an end, is measured between the endpoints it
-    resolves to.
+    resolves to. An endpoint that names a span — a century, a masked
+    month, a selection that picks one day — is read from where its
+    span starts, so `20C/2100` is a hundred years.
 
   ### Options
 
@@ -1699,6 +1701,14 @@ defmodule Tempo.Interval do
     inverted interval has a duration of zero in that unit.
 
   * `:infinity` when one or both endpoints are `:undefined`.
+
+  * `{:error, reason}` — a `Tempo.ConversionError` for a finite
+    recurrence, whose length is its occurrences' (the
+    `Tempo.IntervalSet.duration/1` of its interval set); a
+    `Tempo.UnanchoredError` for an endpoint without a year; an
+    `ArgumentError` for endpoints in different calendars, an endpoint
+    naming several spans, a value that is not an interval, or an
+    option this does not take.
 
   ### Examples
 
@@ -1722,6 +1732,12 @@ defmodule Tempo.Interval do
       iex> Tempo.Interval.duration(%Tempo.Interval{from: ~o"2026-06-15", to: :undefined})
       :infinity
 
+      iex> Tempo.Interval.duration(~o"20C/2100")
+      ~o"P100Y"
+
+      iex> match?({:error, %Tempo.UnanchoredError{}}, Tempo.Interval.duration(~o"T09/T17"))
+      true
+
       iex> iv = %Tempo.Interval{from: ~o"2016-12-31T23:59:00Z", to: ~o"2017-01-01T00:01:00Z"}
       iex> Tempo.Interval.duration(iv)
       ~o"PT120S"
@@ -1729,36 +1745,142 @@ defmodule Tempo.Interval do
       ~o"PT121S"
 
   """
-  @spec duration(t(), keyword()) :: Duration.t() | :infinity
-  def duration(interval, opts \\ []), do: resolved_duration(resolve_duration_form(interval), opts)
+  @spec duration(t(), keyword()) :: Duration.t() | :infinity | {:error, Exception.t()}
+  def duration(interval, options \\ [])
+
+  def duration(%__MODULE__{} = interval, options) do
+    with {:ok, leap_seconds?} <- leap_seconds_option(options) do
+      interval
+      |> resolve_duration_form()
+      |> resolved_duration(leap_seconds?)
+    end
+  end
+
+  def duration(value, _options) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.Interval.duration/2 measures an interval, not #{inspect(value)}: " <>
+         "Tempo.duration/1 measures the span a value names."
+     )}
+  end
+
+  defp leap_seconds_option(options) do
+    with true <- Keyword.keyword?(options),
+         {:ok, [leap_seconds: leap_seconds?]} when is_boolean(leap_seconds?) <-
+           Keyword.validate(options, leap_seconds: false) do
+      {:ok, leap_seconds?}
+    else
+      _invalid ->
+        {:error,
+         ArgumentError.exception(
+           "Tempo.Interval.duration/2 takes one option, :leap_seconds, true or false, " <>
+             "not #{inspect(options)}."
+         )}
+    end
+  end
 
   # A finite recurring interval's duration is the total across its
   # occurrences, which only the materialised set can report — reading
   # the base span (or the open `to` as infinity) would be wrong on
   # both counts. Unbounded recurrences fall through to `:infinity`,
   # which is their true total extent.
-  defp resolved_duration(%__MODULE__{recurrence: recurrence} = interval, _opts)
-       when is_integer(recurrence) and recurrence > 1 do
-    raise ConversionError.exception(value: interval, reason: :recurring_duration)
-  end
+  defp resolved_duration(%__MODULE__{recurrence: recurrence} = interval, _leap_seconds?)
+       when is_integer(recurrence) and recurrence > 1,
+       do: {:error, ConversionError.exception(value: interval, reason: :recurring_duration)}
 
-  defp resolved_duration(%__MODULE__{from: :undefined}, _opts), do: :infinity
-  defp resolved_duration(%__MODULE__{to: :undefined}, _opts), do: :infinity
-  defp resolved_duration(%__MODULE__{from: nil}, _opts), do: :infinity
-  defp resolved_duration(%__MODULE__{to: nil}, _opts), do: :infinity
+  defp resolved_duration(%__MODULE__{from: from, to: to}, _leap_seconds?)
+       when from in [nil, :undefined] or to in [nil, :undefined],
+       do: :infinity
 
-  defp resolved_duration(%__MODULE__{from: %Tempo{} = from, to: %Tempo{} = to} = iv, opts) do
-    :ok = require_same_calendar(from, to, "Tempo.Interval.duration/1")
-    unit = common_unit(endpoint_unit(from), endpoint_unit(to))
+  defp resolved_duration(%__MODULE__{from: %Tempo{}, to: %Tempo{}} = interval, leap_seconds?) do
+    with {:ok, %__MODULE__{from: from, to: to} = measured} <-
+           measured_interval(interval, :duration) do
+      unit = common_unit(endpoint_unit(from), endpoint_unit(to))
 
-    if empty?(iv) do
       # Degenerate (from == to) and inverted (from > to) intervals
       # contain no real instants under `[from, to)`. Duration is
       # zero rather than a negative count.
-      %Duration{time: zero_parts(unit)}
-    else
-      %Duration{time: measure(from, to, unit, spanned_leap_seconds(iv, opts))}
+      if empty?(measured),
+        do: %Duration{time: zero_parts(unit)},
+        else: measured_duration(measured, unit, leap_seconds?)
     end
+  end
+
+  defp resolved_duration(%__MODULE__{from: from, to: to}, _leap_seconds?) do
+    endpoint = if is_struct(from, Tempo), do: to, else: from
+
+    {:error,
+     ArgumentError.exception(
+       "An interval's endpoints are Tempo values, and #{inspect(endpoint)} is not one, " <>
+         "so the interval has no length."
+     )}
+  end
+
+  defp measured_duration(%__MODULE__{from: from, to: to} = measured, unit, leap_seconds?) do
+    with {:ok, leap} <- spanned_leap_seconds(measured, leap_seconds?),
+         do: %Duration{time: measure(from, to, unit, leap)}
+  end
+
+  # An interval's endpoints as points on the time line. An endpoint that
+  # names one point is that point, and one that names a span — a century, a
+  # masked month, a selection that picks one day — is where its span starts,
+  # as a half-open interval runs from its start's start to its end's start.
+  # Both must have a year and share a calendar.
+  defp measured_interval(%__MODULE__{from: from, to: to} = interval, operation) do
+    with %Tempo{} = from <- span_start(from),
+         %Tempo{} = to <- span_start(to),
+         :ok <- measurable(interval, from, to, operation) do
+      {:ok, %{interval | from: from, to: to}}
+    else
+      {:error, _reason} = error ->
+        error
+
+      _open ->
+        {:error,
+         ArgumentError.exception("#{inspect(interval)} has an endpoint whose span has no start.")}
+    end
+  end
+
+  defp span_start(%Tempo{time: time} = endpoint) do
+    if Enum.all?(time, &single_value?/1), do: endpoint, else: from(endpoint)
+  end
+
+  # A unit's value names one point: a number, or a number with its
+  # precision or margin. A group, a mask, a list or a selection names a
+  # span, or several.
+  defp single_value?({_unit, value}) when is_integer(value), do: true
+
+  defp single_value?({_unit, {value, precision_or_margin}})
+       when is_integer(value) and
+              (is_integer(precision_or_margin) or is_list(precision_or_margin)),
+       do: true
+
+  defp single_value?(_component), do: false
+
+  defp measurable(interval, %Tempo{} = from, %Tempo{} = to, operation) do
+    cond do
+      not (Tempo.anchored?(from) and Tempo.anchored?(to)) ->
+        {:error, UnanchoredError.exception(operation: operation, value: interval)}
+
+      from.calendar != to.calendar ->
+        {:error, different_calendars_error(from, to, operation)}
+
+      true ->
+        :ok
+    end
+  end
+
+  # Cross-calendar endpoints produce nonsense arithmetic — the Gregorian
+  # seconds of Hebrew 5786 and Gregorian 2026 measure from different epochs —
+  # so they are refused, with how to fix it.
+  defp different_calendars_error(from, to, operation) do
+    ArgumentError.exception(
+      "`Tempo.Interval.#{operation}` requires both endpoints in the same calendar. " <>
+        "Got #{inspect(from.calendar)} and #{inspect(to.calendar)}. " <>
+        "Convert one endpoint first — set operations such as " <>
+        "`Tempo.intersection/2` and `Tempo.difference/2` handle " <>
+        "cross-calendar inputs automatically."
+    )
   end
 
   @calendar_units [:year, :month, :week, :day]
@@ -1787,14 +1909,14 @@ defmodule Tempo.Interval do
   defp zero_parts(:microsecond), do: [second: 0]
   defp zero_parts(unit), do: [{unit, 0}]
 
-  defp spanned_leap_seconds(iv, opts) do
-    if Keyword.get(opts, :leap_seconds, false) do
-      # Positive insertions add a second; negative removals
-      # (reserved, none yet used) would subtract one.
-      length(leap_second_insertions_spanned(iv)) - length(leap_second_removals_spanned(iv))
-    else
-      0
-    end
+  # Positive insertions add a second; negative removals (reserved, none
+  # yet used) would subtract one.
+  defp spanned_leap_seconds(_measured, false), do: {:ok, 0}
+
+  defp spanned_leap_seconds(measured, true) do
+    {:ok,
+     length(leap_seconds_in(measured, LeapSeconds.dates())) -
+       length(leap_seconds_in(measured, LeapSeconds.removals()))}
   end
 
   # A fraction of a second is elapsed time too, kept to the precision
@@ -1963,12 +2085,15 @@ defmodule Tempo.Interval do
 
   """
   @spec spans_leap_second?(t()) :: boolean()
-  def spans_leap_second?(%__MODULE__{from: %Tempo{}, to: %Tempo{}} = iv) do
-    leap_second_insertions_spanned(iv) != [] or
-      leap_second_removals_spanned(iv) != []
+  def spans_leap_second?(%__MODULE__{} = interval) do
+    # A predicate has only true and false to give, so an interval it
+    # cannot measure raises.
+    case leap_seconds_spanned(interval) do
+      [] -> false
+      [_ | _] -> true
+      {:error, exception} -> raise exception
+    end
   end
-
-  def spans_leap_second?(%__MODULE__{}), do: false
 
   @doc """
   Return the list of IERS leap-second dates that fall inside
@@ -1985,6 +2110,9 @@ defmodule Tempo.Interval do
     falls inside the span, or when either endpoint is
     `:undefined`.
 
+  * `{:error, reason}` for an interval whose endpoints have no year or
+    are in different calendars, or for a value that is not an interval.
+
   ### Examples
 
       iex> iv = %Tempo.Interval{from: ~o"2015-01-01", to: ~o"2017-12-31"}
@@ -1992,34 +2120,34 @@ defmodule Tempo.Interval do
       [{2015, 6, 30}, {2016, 12, 31}]
 
   """
-  @spec leap_seconds_spanned(t()) :: [{integer(), 1..12, 1..31}]
-  def leap_seconds_spanned(%__MODULE__{from: %Tempo{}, to: %Tempo{}} = iv) do
+  @spec leap_seconds_spanned(t()) :: [{integer(), 1..12, 1..31}] | {:error, Exception.t()}
+  def leap_seconds_spanned(%__MODULE__{from: %Tempo{}, to: %Tempo{}} = interval) do
     # Union of positive insertions and (reserved) negative
     # removals, in chronological order.
-    (leap_second_insertions_spanned(iv) ++ leap_second_removals_spanned(iv))
-    |> Enum.sort()
+    with {:ok, measured} <- measured_interval(interval, :leap_seconds_spanned) do
+      Enum.sort(
+        leap_seconds_in(measured, LeapSeconds.dates()) ++
+          leap_seconds_in(measured, LeapSeconds.removals())
+      )
+    end
   end
 
   def leap_seconds_spanned(%__MODULE__{}), do: []
 
-  defp leap_second_insertions_spanned(%__MODULE__{from: %Tempo{} = from, to: %Tempo{} = to}) do
-    :ok = require_same_calendar(from, to, "Tempo.Interval.leap_seconds_spanned/1")
-    from_s = Compare.to_utc_seconds(from)
-    to_s = Compare.to_utc_seconds(to)
-
-    for {y, m, d} <- LeapSeconds.dates(),
-        leap_second_in_interval?(y, m, d, from_s, to_s),
-        do: {y, m, d}
+  def leap_seconds_spanned(value) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.Interval.leap_seconds_spanned/1 reads an interval, not #{inspect(value)}."
+     )}
   end
 
-  defp leap_second_removals_spanned(%__MODULE__{from: %Tempo{} = from, to: %Tempo{} = to}) do
-    :ok = require_same_calendar(from, to, "Tempo.Interval.leap_seconds_spanned/1")
+  # The leap-second dates among `dates` that fall within an interval whose
+  # endpoints `measured_interval/2` has checked.
+  defp leap_seconds_in(%__MODULE__{from: from, to: to}, dates) do
     from_s = Compare.to_utc_seconds(from)
     to_s = Compare.to_utc_seconds(to)
 
-    for {y, m, d} <- LeapSeconds.removals(),
-        leap_second_in_interval?(y, m, d, from_s, to_s),
-        do: {y, m, d}
+    for {y, m, d} <- dates, leap_second_in_interval?(y, m, d, from_s, to_s), do: {y, m, d}
   end
 
   # A leap second is inserted at 23:59:60 UTC on day (y,m,d) —
@@ -2036,35 +2164,6 @@ defmodule Tempo.Interval do
   defp leap_second_in_interval?(year, month, day, from_s, to_s) do
     n = :calendar.datetime_to_gregorian_seconds({{year, month, day}, {23, 59, 59}})
     from_s <= n and to_s > n
-  end
-
-  # Cross-calendar endpoints produce nonsense arithmetic — the
-  # Gregorian seconds of Hebrew 5786 and Gregorian 2026 measure
-  # from different epochs and subtracting them yields a garbage
-  # duration. Refuse explicitly and tell the caller how to fix it.
-  defp require_same_calendar(
-         %Tempo{calendar: cal, time: from_time},
-         %Tempo{calendar: cal, time: to_time},
-         _context
-       ) do
-    # Unanchored endpoints (no year) share the time-of-day axis
-    # across any calendar — no conversion needed.
-    _ = from_time
-    _ = to_time
-    :ok
-  end
-
-  defp require_same_calendar(%Tempo{} = from, %Tempo{} = to, context) do
-    if not Tempo.anchored?(from) or not Tempo.anchored?(to) do
-      :ok
-    else
-      raise ArgumentError,
-            "#{context} requires both endpoints in the same calendar. " <>
-              "Got #{inspect(from.calendar)} and #{inspect(to.calendar)}. " <>
-              "Convert one endpoint first — set operations such as " <>
-              "`Tempo.intersection/2` and `Tempo.difference/2` handle " <>
-              "cross-calendar inputs automatically via `Date.convert!/2`."
-    end
   end
 
   @doc """

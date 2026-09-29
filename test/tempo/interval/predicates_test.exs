@@ -319,28 +319,22 @@ defmodule Tempo.Interval.PredicatesTest do
     # `to_utc_seconds/1` projects each via its own epoch. Refuse
     # explicitly rather than silently compute garbage.
 
-    test "raises when from and to are in different calendars" do
+    test "is an error when from and to are in different calendars" do
       {:ok, hebrew} = Tempo.from_iso8601("5786-09-30[u-ca=hebrew]")
       gregorian = ~o"2026-06-15"
       iv = %Interval{from: hebrew, to: gregorian}
 
-      assert_raise ArgumentError, ~r/same calendar/, fn ->
-        Interval.duration(iv)
-      end
+      assert {:error, %ArgumentError{message: message}} = Interval.duration(iv)
+      assert message =~ "same calendar"
     end
 
     test "error message points at set operations as the cross-calendar path" do
       {:ok, hebrew} = Tempo.from_iso8601("5786-09-30[u-ca=hebrew]")
       iv = %Interval{from: hebrew, to: ~o"2026-06-15"}
 
-      try do
-        Interval.duration(iv)
-        flunk("expected ArgumentError")
-      rescue
-        e in ArgumentError ->
-          assert Exception.message(e) =~ "Tempo.intersection/2"
-          assert Exception.message(e) =~ "Tempo.difference/2"
-      end
+      assert {:error, %ArgumentError{message: message}} = Interval.duration(iv)
+      assert message =~ "Tempo.intersection/2"
+      assert message =~ "Tempo.difference/2"
     end
 
     test "same-calendar intervals still compute duration normally" do
@@ -488,9 +482,10 @@ defmodule Tempo.Interval.PredicatesTest do
       # was wrong for a finite recurrence.
       {:ok, r5} = Tempo.from_iso8601("R5/2022-01-01/P1M")
 
-      assert_raise ConversionError, ~r/IntervalSet.duration/, fn ->
-        Interval.duration(r5)
-      end
+      assert {:error, %ConversionError{reason: :recurring_duration} = error} =
+               Interval.duration(r5)
+
+      assert Exception.message(error) =~ "IntervalSet.duration"
 
       # The materialised path reports the true total.
       {:ok, set} = Tempo.to_interval(r5)

@@ -8011,32 +8011,12 @@ defmodule Tempo do
     end
   end
 
-  def duration(%Interval{} = interval) do
-    case unmeasurable(interval) do
-      nil -> Interval.duration(interval)
-      exception -> {:error, exception}
-    end
-  end
+  def duration(%Interval{} = interval), do: Interval.duration(interval)
 
   def duration(value) do
     {:error,
      ArgumentError.exception("Tempo.duration/1 takes a Tempo value, got #{inspect(value)}")}
   end
-
-  # Why an interval has no length to measure: a finite recurrence's length
-  # is its occurrences', and an endpoint without a year has no place on the
-  # time line.
-  defp unmeasurable(%Interval{recurrence: recurrence} = interval)
-       when is_integer(recurrence) and recurrence > 1,
-       do: ConversionError.exception(value: interval, reason: :recurring_duration)
-
-  defp unmeasurable(%Interval{from: from, to: to} = interval) do
-    if Enum.any?([from, to], &unanchored_endpoint?/1),
-      do: UnanchoredError.exception(operation: :duration, value: interval)
-  end
-
-  defp unanchored_endpoint?(%__MODULE__{} = endpoint), do: not anchored?(endpoint)
-  defp unanchored_endpoint?(_open_or_absent), do: false
 
   @doc """
   Return the duration between two endpoints as a `%Tempo.Duration{}`.
@@ -8102,9 +8082,18 @@ defmodule Tempo do
         {:error, FloatingTempoError.exception(operation: :measure, value: floating)}
 
       true ->
-        with {:ok, interval} <- Interval.new(from, to) do
-          {:ok, Interval.duration(interval)}
-        end
+        measured_between(from, to)
+    end
+  end
+
+  # The interval from `from` to `to`, measured as `Interval.duration/2`
+  # measures it.
+  defp measured_between(from, to) do
+    with {:ok, interval} <- Interval.new(from, to) do
+      case Interval.duration(interval) do
+        %Duration{} = duration -> {:ok, duration}
+        {:error, _reason} = error -> error
+      end
     end
   end
 
@@ -8317,7 +8306,13 @@ defmodule Tempo do
   defp covered_length_order(nil, _set, duration), do: zero_length_order(duration)
 
   defp covered_length_order(%Interval{} = first, set, duration) do
-    Duration.compare(IntervalSet.duration(set), duration, relative_to: Interval.from(first))
+    case IntervalSet.duration(set) do
+      %Duration{} = covered ->
+        Duration.compare(covered, duration, relative_to: Interval.from(first))
+
+      {:error, exception} ->
+        raise exception
+    end
   end
 
   # Nothing against `duration`: the signs of its components decide, as they

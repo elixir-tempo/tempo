@@ -271,7 +271,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.at/2` and `on/2` place an interval endpoint by endpoint and keep a selection after the units it selects in (`4ML1K1IN` on 2027 is `2027Y4ML1K1IN`), where they raised.
 
-* `Tempo.duration/1` returns an error for a value or interval without a year, a finite recurrence or a value that is not Tempo's, where it raised.
+* `Tempo.duration/1`, `Tempo.Interval.duration/2`, `Tempo.IntervalSet.duration/1` and `Interval.leap_seconds_spanned/1` return an error where they raised: for an endpoint without a year, a finite recurrence, endpoints in different calendars or a value that is not an interval. An endpoint naming a span is read from where its span starts, so `20C/2100` is a hundred years, where it measured none.
 
 * `Tempo.from_iso8601/2` reads a computed event or a week start (`q`) in a value's selection, so `2027YL(easter)eN` is Easter 2027, where it raised `KeyError`.
 

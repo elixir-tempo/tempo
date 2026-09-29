@@ -46,8 +46,6 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **Conditional first pass walks whole periods** — it widens the bound by the conditions' reach, and the walk covers every period the widened bound touches, so a ±1-day bridge crossing both year ends materialises three years: Japan's holiday set takes 55 ms a year with its bridge, 25 ms without. Widen only where a condition reaches past the bound (the bridge's days, a move's search back from the bound's start).
 
-* [ ] **`Interval.duration/1` raises** — a multi-occurrence recurrence raises `ConversionError` and differing endpoint calendars fail an `:ok =` match; return `{:error, _}` instead. `Tempo.duration/1` returns an error for a recurrence or an unanchored interval since 2026-09-29; `Interval.duration/1,2` called directly still raise. Predicates (`anchored?/1`, the relation and certainty predicates) may raise on invalid input, as Elixir's naming conventions expect (user, 2026-09-27).
-
 * [ ] **An impossible date's error names too little** — `Tempo.on(~o"2M29D", ~o"2027")` returns an `InvalidDateError` with only its reason ("29 is not valid. The valid values are 1..28"), naming no year, month or calendar.
 
 * [ ] **An open-start window's error** — `within: ~o"../2027"` returns an `IntervalEndpointsError` about including an open interval in a set: correct, but it should say that a window needs a start.
@@ -71,6 +69,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **A domain gating by a window's anchor** — a domain admits the occurrences that start in its periods; date-holidays gates on the year of a window's anchor instead. They differ only when a window crosses a gated boundary year, which no tempo_holidays rule does; reviving it needs anchor tracking through `Tempo.RRule.Selection`.
 
 ## Done
+
+* [x] **`Interval.duration/2` raises no more** — it, `IntervalSet.duration/1` and `leap_seconds_spanned/1` return an error for an endpoint without a year, a finite recurrence, endpoints in different calendars, a value that is not an interval or a bad option; an endpoint naming a span is read from where its span starts. 2026-09-30.
 
 * [x] **A §12.10 window from a year anchor** — a recurrence whose start names only a year walks a window that ends its selection from a day, where `R1/2026/P1Y/FLL12M19DN/P40DN` raised and `R/2026/P1Y/FLL3K4IN/P5DN` gave each year's first five days. 2026-09-30.
 
