@@ -18,6 +18,11 @@ defmodule Tempo.WithinWindowTest do
   defp starts({:ok, %IntervalSet{} = set}),
     do: set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601(Interval.from(&1)))
 
+  # A recurrence whose every occurrence spans `duration` from its start, as an
+  # iCalendar DTEND and a multi-day holiday carry it.
+  defp spanned(recurrence, duration),
+    do: %{recurrence | metadata: Map.put(recurrence.metadata, :occurrence_duration, duration)}
+
   defp ics(events) do
     """
     BEGIN:VCALENDAR
@@ -66,6 +71,35 @@ defmodule Tempo.WithinWindowTest do
       assert starts(
                Tempo.to_interval(~o"R/../P1Y/FLL12M21DN/P16DN", within: ~o"2027-01-04/2027-01-11")
              ) == ["2026Y12M21D"]
+    end
+
+    test "an occurrence whose span runs into the window from the period before is kept" do
+      # A 40-day summer break from 19 December is among 2027's holidays, whether
+      # its recurrence has an open start, a domain or an open-ended window.
+      summer = spanned(~o"R/../P1Y/FL12M19DN", ~o"P40D")
+
+      assert starts(Tempo.to_interval_set(summer, within: ~o"2027")) ==
+               ["2026Y12M19D", "2027Y12M19D"]
+
+      assert starts(
+               Tempo.to_interval_set(spanned(~o"R/{2026Y}/P1Y/FL12M19DN", ~o"P40D"),
+                 within: ~o"2027"
+               )
+             ) == ["2026Y12M19D"]
+
+      {:ok, from_2027} = Tempo.to_interval_set(summer, within: ~o"2027/..")
+      assert [first | _rest] = from_2027 |> IntervalSet.walk() |> Enum.take(2)
+      assert Interval.from(first) == ~o"2026Y12M19D"
+
+      # A monthly one reaches back as many months as its span does, and one that
+      # ends before the window opens stays out of it.
+      assert starts(
+               Tempo.to_interval_set(spanned(~o"R/../P1M/FL20DN", ~o"P40D"), within: ~o"2027-02")
+             ) == ["2027Y1M20D", "2027Y2M20D"]
+
+      assert starts(
+               Tempo.to_interval_set(spanned(~o"R/../P1Y/FL12M19DN", ~o"P10D"), within: ~o"2027")
+             ) == ["2027Y12M19D"]
     end
 
     test "a recurrence set's one-off member outside the window is not among its occurrences" do

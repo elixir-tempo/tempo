@@ -5710,24 +5710,29 @@ defmodule Tempo do
     end
   end
 
-  # How many cadence periods before and after a bound a §12.10 window can reach
-  # into it from: a window running forward from an earlier period, or back from
-  # a later one. Each direction's durations are summed (a nested window adds its
-  # own) over the shortest the cadence period can be, plus one for the period
-  # itself; none when the selection has no window that way, or the cadence is
-  # finer than a day.
+  # How many cadence periods before and after a bound an occurrence can reach
+  # into it from: a §12.10 window running forward from an earlier period, or back
+  # from a later one, and an occurrence's own span (`:occurrence_duration`)
+  # running on from an earlier period, as a December–January school break does.
+  # Each direction's durations are summed (a nested window adds its own) over the
+  # shortest the cadence period can be, plus one for the period itself; none when
+  # nothing reaches that way, or the cadence is finer than a day.
   defp window_periods(%Tempo.Interval{
          repeat_rule: %Tempo{time: [selection: selection]},
-         duration: %Tempo.Duration{} = cadence
+         duration: %Tempo.Duration{} = cadence,
+         metadata: metadata
        }) do
     durations = window_durations(selection)
     floor = cadence_days_floor(cadence)
 
-    {periods_reaching(reach_days(durations, :forward), floor),
+    {periods_reaching(reach_days(durations ++ spanned_durations(metadata), :forward), floor),
      periods_reaching(reach_days(durations, :backward), floor)}
   end
 
   defp window_periods(_interval), do: {0, 0}
+
+  defp spanned_durations(%{occurrence_duration: %Tempo.Duration{} = span}), do: [span]
+  defp spanned_durations(_metadata), do: []
 
   defp periods_reaching(0, _floor), do: 0
   defp periods_reaching(_reach, 0), do: 0

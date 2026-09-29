@@ -8,6 +8,12 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **`to_iso8601/1` raises on sub-second endpoints** — an interval whose endpoints differ only in a fraction of a second (`Tempo.to_interval(~o"2026-06-15T10:00:00.123")`) raises `FunctionClauseError`, and so `inspect` does too: the abbreviated end starts at `:microsecond`, which `Tempo.Inspect.inspect_value/1` has no clause for.
 
+* [ ] **`to_iso8601/1` raises on a recurrence set** — `Tempo.to_iso8601/1` given a `Tempo.RecurrenceSet` raises `FunctionClauseError` in `Tempo.Inspect.inspect_value/1`. ISO 8601 has no set syntax: decide between rendering the members and an error.
+
+* [ ] **A time-of-day selection's span** — `R/../P1D/FLT22HN` carrying an `:occurrence_duration` of `PT4H` gives `2027Y1M1DT22H/T4H`: the span is added to the start of the day, not to the 22:00 occurrence. A day selection's span (`FL12M19DN` with `P40D`) is right.
+
+* [ ] **The overlap rule under a cadence finer than a day** — an hourly selection recurrence whose span runs into a `:within` window from the hour before loses that occurrence: `window_periods/1` reaches back only for a cadence of a day or more, for spans and §12.10 windows alike.
+
 * [ ] **A grouped endpoint raises when compared** — a hand-built interval whose endpoint holds a group (`~o"20C"`, `~o"2022Y1M2G3DU"`) raises in `Compare.to_utc_seconds/1` when measured or compared; `to_interval/1` converts such values first, the other entry points do not.
 
 * [ ] **`rescue` in the library** — `lib/ical.ex` (`parse/2`, `available/2`, errors from the `ical` parser), `lib/inspect.ex`, `lib/protocol/inspect.ex` and `lib/iso8601/parser.ex` rescue exceptions where the rest of Tempo passes tagged tuples.
@@ -47,6 +53,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **Three §12 selection parses** — `2018Y9MTLT8H20MN3I` does not parse, `FL1KT10H0M0S1IN` misreads `0S1`, and `{1,3}K1I` merges where ISO 8601-2 §12.11.3 example 2 distributes.
 
 * [ ] **`ClockTest` timing** — "process-local override does not leak to peer processes" failed once under load (passing in isolation and on re-runs): `assert_receive`'s default 100 ms timeout is short on a busy machine.
+
+* [ ] **Move the Localize lock to `main`** — Localize `main` (`53519d19`) gives MF2's `:date`, `:time` and `:datetime` TR35's options, has semantic skeletons take the locale's own widths, and numbers its next release 1.4.0; Tempo locks `ff1c9b5`. Tempo `64c2e3b` passes all 4,793 tests, format, credo --strict and release docs against it (a scratch copy, 2026-09-29; dialyzer not run), so `mix deps.update localize` should be the whole change.
 
 ## In progress
 
