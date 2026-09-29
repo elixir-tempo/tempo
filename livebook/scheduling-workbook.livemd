@@ -59,20 +59,21 @@ Tempo.shift(~o"2026-06-15T09:30", ~o"PT1H", skipping: meeting)
 
 > *"One hour of work starting **09:30**, skipping the **10:00 meeting**, finishes at **11:30** — thirty minutes before, thirty after."*
 
-The busy set can be unbounded. `Tempo.weekends/1` is a lazy, territory-aware stream of weekend days, and the walk consumes only as much of it as the shift needs:
+The busy set can be unbounded. The weekend days of a span with no end are a lazy, territory-aware set, and the walk consumes only as much of it as the shift needs:
 
 ```elixir
-Tempo.shift(~o"2026-06-18T16:00", ~o"P3D", skipping: Tempo.weekends(from: ~o"2026-06-18"))
+{:ok, weekends} = Tempo.select(~o"2026-06-18/..", Tempo.weekends(:US))
+Tempo.shift(~o"2026-06-18T16:00", ~o"P3D", skipping: weekends)
 ```
 
 > *"Three days of processing starting **Thursday 16:00**, skipping **every weekend**, finishes **Tuesday 16:00**."*
 
-## Working days
+## Workdays
 
 Business-day arithmetic is the same idea with the calendar's own vocabulary. Which days count as the weekend is territory-aware CLDR data — Saudi Arabia weekends on Friday–Saturday:
 
 ```elixir
-{Tempo.add_working_days(~o"2026-06-18", 3), Tempo.working_days_in(Tempo.to_interval!(~o"2026-06"), :US)}
+{Tempo.add_workdays(~o"2026-06-18", 3), Tempo.count_workdays(~o"2026-06", :US)}
 ```
 
 June 19 2026 is a Friday — a workday in the United States, the weekend in Saudi Arabia:

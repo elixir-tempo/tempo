@@ -1,6 +1,6 @@
 # Vocabulary
 
-**Status:** in progress, 2026-09-28
+**Status:** in progress, 2026-09-29
 
 A review of the words Tempo and tempo_holidays use in their public API — the names of functions, options, modules and errors, and the prose that explains them — against three tests: each word is familiar, each word means one thing, and each thing has one word. The precedent is `select/2`, chosen over the more exact `project/2`. The changes ship as Tempo 2.0.
 
@@ -161,6 +161,8 @@ Two words name one idea: `workday?/2` and `workdays/1`, but `add_working_days/3`
 
 Selectors are plural nouns: "the workdays of June" is `Tempo.select(~o"2026-06", Tempo.workdays(:AU))`. The lazy weekend days from a date become `Tempo.select(~o"2026-06-15/..", Tempo.weekends(:AU))`, which needs `select/2` to return a lazy set for an open-ended span; `shift/3`'s `:skipping` takes it as it takes the lazy set today.
 
+* **Found while implementing (2026-09-29)** — `select/2` selected only in a span's first period (`~o"2026/2029"` held 2026's Christmas alone), so the open span's period-by-period walk is every span's. The workday functions return `{:error, reason}`, as `shift/2` does, where they raised.
+
 ## Sets
 
 | Today | Decided |
@@ -293,7 +295,7 @@ Each task is one commit, verified on both upstream branches, with its guides, RE
 
 * [x] **Parsing and formats** — the typed parsers, `ICal.parse/2`, `JSCalendar.parse/2`, `RRule.to_string/1`. 2026-09-29, `acb9d33`.
 
-* [ ] **Occurrences and internals** — `ConversionError`, `RRule.Expander` internal, the Internals group, the undocumented functions.
+* [x] **Occurrences and internals** — `ConversionError`, `RRule.Expander` internal, the Internals group, the undocumented functions. 2026-09-29, `3b2167a`.
 
 * [ ] **Workdays** — the renames, plural selectors, and `select/2` over an open span.
 

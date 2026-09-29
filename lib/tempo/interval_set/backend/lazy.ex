@@ -13,9 +13,10 @@ defmodule Tempo.IntervalSet.Backend.Lazy do
   algebra) raises `Tempo.UnboundedSetError` instead of walking forever.
 
   Build one from your own generator with
-  `Tempo.IntervalSet.from_stream/2`, or use a built-in source such as
-  `Tempo.weekends/1`, or a recurrence's occurrences from an open-ended
-  `:within` window (`Tempo.to_interval_set/2`). The **generator contract** is the caller's
+  `Tempo.IntervalSet.from_stream/2`, or use a built-in source: a
+  selection across an open-ended span (`Tempo.select/2`), or a
+  recurrence's occurrences from an open-ended `:within` window
+  (`Tempo.to_interval_set/2`). The **generator contract** is the caller's
   responsibility — members in time order, non-overlapping, anchored,
   bounded — because an infinite stream cannot be validated up front;
   each member is checked as it is consumed.

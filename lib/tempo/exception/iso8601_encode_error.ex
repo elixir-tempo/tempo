@@ -7,7 +7,7 @@ defmodule Tempo.Iso8601EncodeError do
   day-of-month modifier (`15W`, `LW`), parsed by `Tempo.Cron` into a
   `:nearest_weekday` token — has no ISO 8601 designator and, unlike RFC 5545
   `BYSETPOS`/`WKST`, no project-specific one (the equivalent day-level
-  operation is `Tempo.nearest_working_day/2`); it round-trips only through its
+  operation is `Tempo.nearest_workday/2`); it round-trips only through its
   cron string. An **ordinal BYDAY across distinct weekdays** (`BYDAY=2MO,2WE`)
   has no ISO form either — the §12.9 position designator `I` applies to one
   resolved set, so interleaved weekday/position cannot be written — and
@@ -31,7 +31,7 @@ defmodule Tempo.Iso8601EncodeError do
   def message(%__MODULE__{construct: :nearest_weekday}) do
     "Cannot encode a nearest-weekday recurrence (cron `W`, e.g. `15W`) as " <>
       "ISO 8601 — it has no ISO 8601 designator. It is expressible only as a " <>
-      "cron string; for the day-level operation use `Tempo.nearest_working_day/2`."
+      "cron string; for the day-level operation use `Tempo.nearest_workday/2`."
   end
 
   def message(%__MODULE__{construct: :byday}) do

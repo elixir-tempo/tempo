@@ -3,7 +3,7 @@ defmodule Tempo.Territory do
   Territory resolution — the bridge between the CLDR/BCP 47
   territory world (`:US`, `:SA`, `:GB`) and Tempo's
   locale-dependent constructors (`Tempo.workdays/1`,
-  `Tempo.weekend/1`, and future holiday helpers).
+  `Tempo.weekends/1`, and future holiday helpers).
 
   A *territory* is CLDR's key for locale-dependent data —
   weekday arithmetic, first-day-of-week, weekend definition,

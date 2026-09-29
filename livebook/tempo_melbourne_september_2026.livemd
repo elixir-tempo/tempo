@@ -204,7 +204,7 @@ anzac_day = fn year ->
   day = Tempo.new!(year: year, month: 4, day: 25)
 
   if Tempo.weekend?(day, :AU) do
-    Tempo.next_working_day(day, :AU)
+    Tempo.next_workday(day, :AU)
   else
     day
   end
@@ -213,7 +213,7 @@ end
 Enum.map(2026..2032, anzac_day)
 ```
 
-* *"ANZAC Day is the 25th of April. If that lands on a **weekend** in **Australia**, the holiday is the **next working day**."*
+* *"ANZAC Day is the 25th of April. If that lands on a **weekend** in **Australia**, the holiday is the **next workday**."*
 
 * Four lines, and every noun in the sentence is a function. `weekend?` is territory-aware — Australia weekends Saturday and Sunday, Saudi Arabia Friday and Saturday — so the same rule expresses any jurisdiction's substitution without a `case` on country codes.
 

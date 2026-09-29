@@ -29,6 +29,11 @@ defmodule Tempo.IntervalEndpointsError do
   @impl true
   def message(%__MODULE__{reason: reason}) when is_binary(reason), do: reason
 
+  def message(%__MODULE__{operation: :select, reason: :open_start}) do
+    "`Tempo.select/2` selects forward from a span's start, and a span with an open " <>
+      "start has none. Give the span a start."
+  end
+
   def message(%__MODULE__{reason: :open_start}) do
     "A recurrence with an open start has no first occurrence to count from. " <>
       "Give `Tempo.to_interval/2` a `:within` window, or give the rule a start."

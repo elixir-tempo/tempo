@@ -147,9 +147,9 @@ Two free intervals: 09:00-12:00 and 13:00-17:00.
 
 ## Selecting sub-spans — `Tempo.select/2`
 
-`Tempo.select/2` is a composition primitive: it narrows a base span by a **selector** and returns the matched sub-spans as an `IntervalSet`. The selector vocabulary covers territory-aware queries (via `Tempo.workdays/1` and `Tempo.weekend/1`), integer indices applied at the next-finer unit, projection of a Tempo or Interval onto a larger base, and arbitrary functions.
+`Tempo.select/2` is a composition primitive: it narrows a base span by a **selector** and returns the matched sub-spans as an `IntervalSet`. The selector vocabulary covers territory-aware queries (via `Tempo.workdays/1` and `Tempo.weekends/1`), integer indices applied at the next-finer unit, projection of a Tempo or Interval onto a larger base, and arbitrary functions.
 
-`Tempo.select/2` is a **pure function**. Locale-dependent constraints are constructed by `Tempo.workdays/1` and `Tempo.weekend/1` and composed in at the call site.
+`Tempo.select/2` is a **pure function**. Locale-dependent constraints are constructed by `Tempo.workdays/1` and `Tempo.weekends/1` and composed in at the call site.
 
 ### Workdays of a month
 
@@ -181,8 +181,8 @@ Tempo.IntervalSet.map(holidays, &{Tempo.month(&1), Tempo.day(&1)})
 ### Different territory, different weekend
 
 ```elixir
-{:ok, us}    = Tempo.select(~o"2026-02", Tempo.weekend(:US))
-{:ok, saudi} = Tempo.select(~o"2026-02", Tempo.weekend(:SA))
+{:ok, us}    = Tempo.select(~o"2026-02", Tempo.weekends(:US))
+{:ok, saudi} = Tempo.select(~o"2026-02", Tempo.weekends(:SA))
 
 {
   Tempo.IntervalSet.map(us, &Tempo.day/1),
@@ -190,7 +190,7 @@ Tempo.IntervalSet.map(holidays, &{Tempo.month(&1), Tempo.day(&1)})
 }
 ```
 
-> The US weekend is Sat+Sun, the Saudi weekend is Fri+Sat. `Tempo.weekend/1` and `Tempo.workdays/1` accept a territory atom, a territory string, a locale string (`"ar-SA"`), or a `%Localize.LanguageTag{}`. With no argument they walk the ambient chain: `Application.get_env(:ex_tempo, :default_territory)` → `Localize.get_locale()`.
+> The US weekend is Sat+Sun, the Saudi weekend is Fri+Sat. `Tempo.weekends/1` and `Tempo.workdays/1` accept a territory atom, a territory string, a locale string (`"ar-SA"`), or a `%Localize.LanguageTag{}`. With no argument they walk the ambient chain: `Application.get_env(:ex_tempo, :default_territory)` → `Localize.get_locale()`.
 
 ### Compose with set operations
 

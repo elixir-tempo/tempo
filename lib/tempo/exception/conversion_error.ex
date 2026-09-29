@@ -123,6 +123,14 @@ defmodule Tempo.ConversionError do
 
   def message(%__MODULE__{}), do: "Conversion failed"
 
-  defp describe_target(atom) when is_atom(atom), do: Atom.to_string(atom)
+  # A module target reads as the module (`Date`), a plain atom as its
+  # name (`rrule`).
+  defp describe_target(atom) when is_atom(atom) do
+    case Atom.to_string(atom) do
+      "Elixir." <> module -> module
+      name -> name
+    end
+  end
+
   defp describe_target(other), do: inspect(other)
 end

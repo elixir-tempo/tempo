@@ -28,6 +28,12 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 | `Tempo.to_rrule/1`, `to_rrule!/1` | `Tempo.RRule.to_string/1`, `to_string!/1` |
 | `Tempo.MaterialisationError` | `Tempo.ConversionError` |
 | `Tempo.RRule.Expander.expand/3` | `Tempo.RRule.parse/2`, then `Tempo.to_interval_set/2` |
+| `Tempo.add_working_days/3` | `Tempo.add_workdays/3` |
+| `Tempo.next_working_day/2`, `previous_working_day/2` | `Tempo.next_workday/2`, `previous_workday/2` |
+| `Tempo.nearest_working_day/2` | `Tempo.nearest_workday/2` |
+| `Tempo.working_days_in/2` | `Tempo.count_workdays/2` |
+| `Tempo.weekend/1` | `Tempo.weekends/1` |
+| `Tempo.weekends(from: date)`, a lazy set | `Tempo.select/2` over a span with no end |
 
 * `Tempo.duration/1` and `Tempo.IntervalSet.duration/1` measure the time a set covers, counting time its members share once; `IntervalSet.total_duration/1`, which did, is removed.
 
@@ -65,11 +71,19 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.ConversionError` replaces `MaterialisationError`, keeping its reasons, so `to_interval/2` and the other conversions share one error; the docs say "convert" and "occurrences" where they said "materialise".
 
+* The workday functions say "workday": `add_workdays/3`, `next_workday/2`, `previous_workday/2`, `nearest_workday/2` and `count_workdays/2`, which counts the days of any value `select/2` takes. They return `{:error, reason}` for a value that is not a day, where they raised.
+
+* `Tempo.weekends/1` is the weekend selector, plural as `workdays/1` is, and both return an error for a territory they cannot resolve, which `select/2` returns as it is. 1.x's lazy `weekends/1` is `Tempo.select(~o"2026-06-15/..", Tempo.weekends())`.
+
+* `Tempo.select/2` selects in every period of a span, at its start's resolution, where it selected in the first alone: `~o"2026/2029"` holds three Christmases. A selection starts in its period, so `Tempo.select(~o"2026-06", ~o"07-01")` is empty.
+
 ### Added
 
 * A `Tempo.IntervalSet` is tabular data (`Table.Reader`) when the optional `table` package is present: a row per member with its `from`, `to` and metadata, so `Kino.DataTable.new/1` shows a set of holidays with their names.
 
 * An open-ended `:within` window (`~o"2026-09-28/.."`) gives a recurrence's occurrences from its start on as a lazy set, so `Tempo.IntervalSet.first/1` is the next one. Set operations, `complement/2` and the calendar formats return an error for one.
+
+* `Tempo.select/2` over an open-ended span (`~o"2026-06-15/.."`) gives a lazy set, selected period by period as it is walked, and a selection across a lazy set is lazy too. A span with an open start returns `IntervalEndpointsError` with `reason: :open_start`.
 
 * `Tempo.RecurrenceSet.keep_when/2` and `move_when/2` — a member kept only when days around it fall on the other members' occurrences (a bridge day), or moved `:to_next` a selected day when it falls on one, resolved in a second pass. `:falls_on` matches the other members' metadata, or names a recurrence set to read.
 
@@ -125,13 +139,19 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * Traditional lunisolar months resolve through Calendrical's `ordinal_month_from_traditional/2`, dates validate and convert through `Calendrical.iso_days/4`, and a day that fits every month of a calendar skips the per-year month length. The lunisolar holiday workload runs in 1.3 s instead of 2.1 s, with identical results.
 
-* Recurrence selections converge on the ISO 8601-2 §12.9 position designator `I` — applied last over the resolved set and written weekday-then-position (`1K2I` = the 2nd Monday) — and the invented `V` set-position designator is retired. An ordinal `BYDAY` across distinct weekdays (`2MO,2WE`) has no ISO form and round-trips only through `Tempo.to_rrule/1`.
+* Recurrence selections converge on the ISO 8601-2 §12.9 position designator `I` — applied last over the resolved set and written weekday-then-position (`1K2I` = the 2nd Monday) — and the invented `V` set-position designator is retired. An ordinal `BYDAY` across distinct weekdays (`2MO,2WE`) has no ISO form and round-trips only through `Tempo.RRule.to_string/1`.
 
 ### Deprecated
 
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* An integer index a period does not have selects nothing, where `Tempo.select(~o"2026-02", [30])` made a 30 February; a negative index counts from the end, so `[-1]` on a year is December.
+
+* `Tempo.select/2` returns an error for an open-start span, a quarter with integer indices or a list holding a non-selector, where it raised, and converts a duration-form interval or a recurrence, where it refused them.
+
+* `Tempo.to_interval/2` and `to_interval_set/2` return a `Tempo.ConversionError` for a value that is not a Tempo value, where they raised `FunctionClauseError`, and the error names a module target as `Date`, not `Elixir.Date`.
 
 * `Tempo.now/1` and `today/1` return `{:error, %Tempo.UnknownZoneError{}}` for a zone the time zone database does not know, where they raised.
 

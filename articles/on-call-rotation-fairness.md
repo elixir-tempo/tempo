@@ -18,7 +18,7 @@ bob   = ~o"{2026-01-05/2026-01-12,2026-01-26/2026-02-02,2026-02-16/2026-02-23,20
 carol = ~o"{2026-01-12/2026-01-19,2026-02-02/2026-02-09,2026-02-23/2026-03-02,2026-03-16/2026-03-23}"
 
 for {name, rota} <- [alice: alice, bob: bob, carol: carol] do
-  {:ok, weekend_days} = Tempo.select(rota, Tempo.weekend(:US))
+  {:ok, weekend_days} = Tempo.select(rota, Tempo.weekends(:US))
   {name, Tempo.IntervalSet.count(weekend_days)}
 end
 *#=> [alice: 10, bob: 8, carol: 8]*
@@ -36,18 +36,18 @@ Two Tempo ideas do the work: a `{a/b,c/d,…}` sigil is a *set of intervals* (Al
 # value. No structs, no lists, no loop.
 iex> alice = ~o"{2025-12-29/2026-01-05,2026-01-19/2026-01-26,2026-02-09/2026-02-16,2026-03-02/2026-03-09,2026-03-23/2026-03-30}"
 
-# `Tempo.weekend/1` derives the weekend for a territory from CLDR
+# `Tempo.weekends/1` derives the weekend for a territory from CLDR
 # data, the same way `Tempo.workdays/1` does — Saturday and Sunday
 # for :US, Friday and Saturday for :SA, and so on.
-iex> Tempo.weekend(:US)
+iex> Tempo.weekends(:US)
 ~o"{6,7}K"
 
 # `select` materialises the rota and picks, from every member week,
 # the days matching the selector. Alice's five weeks flatten to ten
 # weekend days:
-iex> {:ok, weekend_days} = Tempo.select(alice, Tempo.weekend(:US))
+iex> {:ok, weekend_days} = Tempo.select(alice, Tempo.weekends(:US))
 iex> weekend_days
-#Tempo.IntervalSet<[~o"2026Y1M3D/2026Y1M4D", ~o"2026Y1M4D/2026Y1M5D", ~o"2026Y1M24D/2026Y1M25D", ~o"2026Y1M25D/2026Y1M26D", …]>
+#Tempo.IntervalSet<[~o"2026Y1M3D/4D", ~o"2026Y1M4D/5D", ~o"2026Y1M24D/25D", ~o"2026Y1M25D/26D", …]>
 
 # Each member is exactly one day, so counting members is counting
 # weekend days on call.
@@ -55,7 +55,7 @@ iex> Tempo.IntervalSet.count(weekend_days)
 10
 ```
 
-From here the variations are one-liners: swap `Tempo.weekend(:US)` for a list of night hours to audit night burden; `Tempo.members_outside(rota, holidays)` to see who kept getting the public-holiday weeks (the same move as the [Business/252 recipe](https://ex-tempo.hexdocs.pm/cookbook.html#business-252-brazil-s-business-day-year-fraction)); or `Tempo.intersection/2` between two engineers' rotations to prove a handover overlap.
+From here the variations are one-liners: swap `Tempo.weekends(:US)` for a list of night hours to audit night burden; `Tempo.members_outside(rota, holidays)` to see who kept getting the public-holiday weeks (the same move as the [Business/252 recipe](https://ex-tempo.hexdocs.pm/cookbook.html#business-252-brazil-s-business-day-year-fraction)); or `Tempo.intersection/2` between two engineers' rotations to prove a handover overlap.
 
 ### Trying this at home
 

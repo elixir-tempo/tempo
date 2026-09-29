@@ -117,18 +117,19 @@ true
 June 19 is a Friday — a workday for the London studio, the weekend for a Riyadh branch. Business-day arithmetic rides on the same data:
 
 ```elixir
-iex> Tempo.add_working_days(~o"2026-06-18", 3)
+iex> Tempo.add_workdays(~o"2026-06-18", 3)
 ~o"2026Y6M23D"
 ```
 
-Three working days from Thursday lands on Tuesday — the weekend doesn't count.
+Three workdays from Thursday lands on Tuesday — the weekend doesn't count.
 
 ## Step 7 — "When will it be done?"
 
-A client drops off a 72-hour tape restoration on Thursday at 16:00. The machine only runs while the studio is staffed — weekends don't count. `Tempo.shift/3` with `skipping:` consumes the duration from free time only, and `Tempo.weekends/1` supplies the weekend as an *unbounded lazy set* — no end date required, the walk takes only what it needs:
+A client drops off a 72-hour tape restoration on Thursday at 16:00. The machine only runs while the studio is staffed — weekends don't count. `Tempo.shift/3` with `skipping:` consumes the duration from free time only, and the weekends of a span with no end (`~o"2026-06-18/.."`) are an *unbounded lazy set* — no end date required, the walk takes only what it needs:
 
 ```elixir
-iex> Tempo.shift(~o"2026-06-18T16:00", ~o"P3D", skipping: Tempo.weekends(from: ~o"2026-06-18"))
+iex> {:ok, weekends} = Tempo.select(~o"2026-06-18/..", Tempo.weekends())
+iex> Tempo.shift(~o"2026-06-18T16:00", ~o"P3D", skipping: weekends)
 ~o"2026Y6M23DT16H0M0S"
 ```
 
@@ -168,7 +169,7 @@ Sydney 20:00 is 10:00 UTC — squarely inside the Velvet Static tracking session
 
 ## What you built
 
-Ten values and eight operations: opening hours and an iCal feed became free time (`difference`), bookable slots (`slots` + `at_least?`), multi-resource windows (`intersection`), territory-aware estimates (`weekend?`, `add_working_days`, `shift` with `skipping:`), a recurring block (`RRule.parse` + `to_interval`), and a cross-timezone collision check (`overlaps?`). Every step was a sentence first and code second.
+Ten values and eight operations: opening hours and an iCal feed became free time (`difference`), bookable slots (`slots` + `at_least?`), multi-resource windows (`intersection`), territory-aware estimates (`weekend?`, `add_workdays`, `shift` with `skipping:`), a recurring block (`RRule.parse` + `to_interval`), and a cross-timezone collision check (`overlaps?`). Every step was a sentence first and code second.
 
 ## Where next
 

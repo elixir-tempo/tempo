@@ -135,6 +135,7 @@ defmodule Tempo do
   alias Tempo.TimeZoneDatabase
   alias Tempo.UnanchoredError
   alias Tempo.UnboundedRecurrenceError
+  alias Tempo.UnboundedSetError
   alias Tempo.UnknownZoneError
   alias Tempo.Validation
   alias Tempo.ZonedTempoError
@@ -5702,6 +5703,10 @@ defmodule Tempo do
     {:error, ConversionError.exception(value: value, reason: :bare_duration)}
   end
 
+  defp materialise(value, _opts) do
+    {:error, ConversionError.exception(value: value, target: Tempo.Interval)}
+  end
+
   # A recurrence with no end is ended by the caller's `:within` window; with
   # none it cannot be materialised.
   defp materialise_unending(interval, nil, _opts),
@@ -7320,7 +7325,7 @@ defmodule Tempo do
   ### Examples
 
       iex> [~o"2025-07-04", ~o"2026-07-04", ~o"2027-07-04"]
-      ...> |> Tempo.map(&Tempo.nearest_working_day(&1, :US))
+      ...> |> Tempo.map(&Tempo.nearest_workday(&1, :US))
       ...> |> Tempo.IntervalSet.count()
       3
 
@@ -7364,7 +7369,7 @@ defmodule Tempo do
 
   ### Examples
 
-      iex> {:ok, set} = Tempo.try_map([~o"2025-07-04", ~o"2026-07-04"], &Tempo.nearest_working_day(&1, :US))
+      iex> {:ok, set} = Tempo.try_map([~o"2025-07-04", ~o"2026-07-04"], &Tempo.nearest_workday(&1, :US))
       iex> Tempo.IntervalSet.count(set)
       2
 
@@ -8364,10 +8369,13 @@ defmodule Tempo do
 
   `Tempo.select/2` is a **pure function**: the selector is a value,
   not an ambient configuration. Locale-dependent constraints are
-  constructed by `Tempo.workdays/1` and `Tempo.weekend/1` and
+  constructed by `Tempo.workdays/1` and `Tempo.weekends/1` and
   composed in at the call site.
 
-  See `Tempo.Select` for the full vocabulary.
+  A span is selected period by period at its start's resolution, so
+  the Christmases of `~o"2026/2029"` are three. An open-ended span
+  (`~o"2026-06-15/.."`) gives a lazy set, walked as far as it is
+  taken. See `Tempo.Select` for the full vocabulary.
 
   ### Examples
 
@@ -8414,75 +8422,96 @@ defmodule Tempo do
   end
 
   @doc """
-  Return a selector that matches the workdays of a territory —
-  the days of week that are *not* in that territory's weekend.
+  Return a selector for the workdays of a territory: the days of the
+  week outside its weekend.
 
-  Together, `workdays/1` and `weekend/1` partition the seven days
-  of the week: `workdays(:US) ++ weekend(:US)` spans Monday..Sunday.
+  Together `workdays/1` and `weekends/1` partition the week. In the
+  United States the workdays are Monday to Friday and the weekends
+  Saturday and Sunday; in Saudi Arabia the workdays are Sunday to
+  Thursday.
 
   ### Arguments
 
   * `territory` is an atom, string, locale, or `%Localize.LanguageTag{}`
-    resolved through `Tempo.Territory.resolve/1`. Defaults to `nil`,
-    which walks the territory-resolution chain (app config, then
-    ambient locale).
+    resolved through `Tempo.Territory.resolve/1`. The default, `nil`,
+    walks the territory-resolution chain (app config, then ambient
+    locale).
 
   ### Returns
 
-  * A `t:Tempo.t/0` value carrying a `day_of_week` list. Composable
-    directly with `Tempo.select/2`.
+  * A `t:Tempo.t/0` value naming the workdays by day of week, to pass
+    to `Tempo.select/2`.
+
+  * `{:error, reason}` when the territory cannot be resolved.
+    `Tempo.select/2` returns such an error as it is, so a pipeline
+    reports it.
 
   ### Examples
 
-      iex> {:ok, set} = Tempo.select(~o"2026-02", Tempo.workdays(:US))
-      iex> Tempo.IntervalSet.count(set)
+      iex> {:ok, workdays} = Tempo.select(~o"2026-02", Tempo.workdays(:US))
+      iex> Tempo.IntervalSet.count(workdays)
       20
 
-      iex> Tempo.workdays(:US).time
-      [day_of_week: [1, 2, 3, 4, 5]]
+      iex> {:ok, workdays} = Tempo.select(~o"2026-06-15/2026-06-22", Tempo.workdays(:SA))
+      iex> workdays |> Tempo.IntervalSet.to_list() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      [15, 16, 17, 18, 21]
 
   """
-  @spec workdays(Tempo.Territory.input()) :: Tempo.t()
+  @spec workdays(Tempo.Territory.input()) :: t() | {:error, error_reason()}
   def workdays(territory \\ nil) do
-    {:ok, resolved} = Territory.resolve(territory)
-    day_of_week_tempo(Localize.Calendar.weekdays(resolved))
+    with {:ok, resolved} <- Territory.resolve(territory) do
+      day_of_week_tempo(Localize.Calendar.weekdays(resolved))
+    end
   end
 
   @doc """
-  Return a selector that matches the weekend days of a territory.
+  Return a selector for the weekends of a territory.
 
-  Different territories weekend on different days: the United
-  States is `[Saturday, Sunday]`, Saudi Arabia is `[Friday,
-  Saturday]`, India is `[Sunday]`. `Tempo.weekend/1` reads that
-  definition from CLDR via Localize and returns it as a
-  composable selector.
+  Territories take their weekend on different days: the United States
+  on Saturday and Sunday, Saudi Arabia on Friday and Saturday, India on
+  Sunday. `weekends/1` reads a territory's weekend from CLDR through
+  Localize and returns it as a selector for `Tempo.select/2`.
 
   ### Arguments
 
   * `territory` is an atom, string, locale, or `%Localize.LanguageTag{}`
-    resolved through `Tempo.Territory.resolve/1`. Defaults to `nil`,
-    which walks the territory-resolution chain.
+    resolved through `Tempo.Territory.resolve/1`. The default, `nil`,
+    walks the territory-resolution chain.
 
   ### Returns
 
-  * A `t:Tempo.t/0` value carrying a `day_of_week` list. Composable
-    directly with `Tempo.select/2`.
+  * A `t:Tempo.t/0` value naming the weekend by day of week, to pass to
+    `Tempo.select/2`.
+
+  * `{:error, reason}` when the territory cannot be resolved.
+    `Tempo.select/2` returns such an error as it is.
 
   ### Examples
 
-      iex> {:ok, us} = Tempo.select(~o"2026-02", Tempo.weekend(:US))
-      iex> us |> Tempo.IntervalSet.to_list() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      iex> {:ok, weekends} = Tempo.select(~o"2026-02", Tempo.weekends(:US))
+      iex> weekends |> Tempo.IntervalSet.to_list() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [1, 7, 8, 14, 15, 21, 22, 28]
 
-      iex> {:ok, sa} = Tempo.select(~o"2026-02", Tempo.weekend(:SA))
-      iex> sa |> Tempo.IntervalSet.to_list() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      iex> {:ok, weekends} = Tempo.select(~o"2026-02", Tempo.weekends(:SA))
+      iex> weekends |> Tempo.IntervalSet.to_list() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [6, 7, 13, 14, 20, 21, 27, 28]
 
+  From a date on, the weekends are a lazy set that walks only as far as
+  it is taken. Three days of machine time from Thursday at 16:00, with
+  the weekends skipped, run to Tuesday at 16:00:
+
+      iex> {:ok, weekends} = Tempo.select(~o"2026-06-18/..", Tempo.weekends(:US))
+      iex> weekends |> Tempo.IntervalSet.walk() |> Enum.take(3) |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      [20, 21, 27]
+      iex> Tempo.shift(~o"2026-06-18T16:00", ~o"P3D", skipping: weekends)
+      ~o"2026Y6M23DT16H0M0S"
+
   """
-  @spec weekend(Tempo.Territory.input()) :: Tempo.t()
-  def weekend(territory \\ nil) do
-    {:ok, resolved} = Territory.resolve(territory)
-    day_of_week_tempo(Localize.Calendar.weekend(resolved))
+  @spec weekends(Tempo.Territory.input()) :: t() | {:error, error_reason()}
+  def weekends(territory \\ nil) do
+    with {:ok, resolved} <- Territory.resolve(territory) do
+      day_of_week_tempo(Localize.Calendar.weekend(resolved))
+    end
   end
 
   defp day_of_week_tempo(days) when is_list(days) do
@@ -8518,8 +8547,10 @@ defmodule Tempo do
   * `true` when the value's day of week is one of the territory's
     weekend days, `false` otherwise.
 
-  * Raises `ArgumentError` when `tempo` does not denote a day (for
-    example a year- or month-resolution value).
+  * Raises when `tempo` does not denote a day (a year or a month, or a
+    value without a year) or the territory cannot be resolved. The
+    workday functions, such as `add_workdays/3`, return these errors
+    instead.
 
   ### Examples
 
@@ -8537,66 +8568,7 @@ defmodule Tempo do
 
   """
   @spec weekend?(t(), Tempo.Territory.input()) :: boolean()
-  def weekend?(%Tempo{} = tempo, territory \\ nil) do
-    {:ok, resolved} = Territory.resolve(territory)
-    day_of_week_iso(tempo, :weekend?) in Localize.Calendar.weekend(resolved)
-  end
-
-  @doc """
-  An unbounded lazy set of weekend days, walking forward from a start
-  date.
-
-  The result is a `t:Tempo.IntervalSet.t/0` on the lazy backend: each
-  member is one weekend day's span, generated on demand and never
-  built in full. Use it wherever a walk suffices — most
-  naturally as a `Tempo.shift/3` `skipping:` busy set, with no
-  `:within` window required:
-
-      Tempo.shift(start, ~o"P3D", skipping: Tempo.weekends(from: start))
-
-  Aggregate operations (`Tempo.IntervalSet.to_list/1`, `count/1`, set
-  algebra) raise `Tempo.UnboundedSetError` — take the members you need
-  from `Tempo.IntervalSet.walk/1` instead.
-
-  ### Arguments
-
-  * `options` is a keyword list of options.
-
-  ### Options
-
-  * `:from` is the day the walk starts at (inclusive). The default is
-    `Tempo.today/0`.
-
-  * `:territory` selects whose weekend applies, resolved through
-    `Tempo.Territory.resolve/1` as for `weekend?/2` — `:SA` weekends
-    on Friday–Saturday, `:IN` on Sunday only.
-
-  ### Returns
-
-  * A `t:Tempo.IntervalSet.t/0` on the lazy backend.
-
-  ### Examples
-
-      iex> weekends = Tempo.weekends(from: ~o"2026-06-15")
-      iex> weekends |> Tempo.IntervalSet.walk() |> Enum.take(2) |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
-      [20, 21]
-
-      iex> saudi = Tempo.weekends(from: ~o"2026-06-15", territory: :SA)
-      iex> saudi |> Tempo.IntervalSet.walk() |> Enum.take(2) |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
-      [19, 20]
-
-  """
-  @spec weekends(keyword()) :: Tempo.IntervalSet.t()
-  def weekends(options \\ []) do
-    from = Keyword.get_lazy(options, :from, &today/0)
-    territory = Keyword.get(options, :territory)
-
-    from
-    |> Stream.iterate(&shift(&1, day: 1))
-    |> Stream.filter(&weekend?(&1, territory))
-    |> Stream.map(&to_interval!/1)
-    |> IntervalSet.from_stream()
-  end
+  def weekend?(%Tempo{} = tempo, territory \\ nil), do: on_weekend?(tempo, territory, :weekend?)
 
   @doc """
   Return `true` when `tempo` falls on a workday — a day that is *not*
@@ -8618,6 +8590,8 @@ defmodule Tempo do
   * `true` when the value's day of week is not a weekend day in the
     territory, `false` otherwise.
 
+  * Raises as `weekend?/2` does.
+
   ### Examples
 
       iex> Tempo.workday?(~o"2026-06-15", :US)
@@ -8628,201 +8602,290 @@ defmodule Tempo do
 
   """
   @spec workday?(t(), Tempo.Territory.input()) :: boolean()
-  def workday?(%Tempo{} = tempo, territory \\ nil) do
-    not weekend?(tempo, territory)
+  def workday?(%Tempo{} = tempo, territory \\ nil),
+    do: not on_weekend?(tempo, territory, :workday?)
+
+  # Whether `tempo` falls on the territory's weekend. A predicate has
+  # only true and false to give, so a question with no answer raises.
+  defp on_weekend?(tempo, territory, function) do
+    case weekday_and_weekend(tempo, territory, function) do
+      {:ok, day_of_week, weekend} -> day_of_week in weekend
+      {:error, exception} when is_exception(exception) -> raise exception
+      {:error, reason} -> raise ArgumentError, inspect(reason)
+    end
   end
 
   @doc """
-  Shift `tempo` by `count` working days, skipping the territory's
+  Shift `tempo` by `count` workdays, stepping over the territory's
   weekend.
 
-  A positive `count` moves forward, a negative `count` backward, and
-  `0` returns the value unchanged. Each counted step lands on a working
-  day, so adding one working day to a Friday returns the following
-  Monday (in a Saturday/Sunday-weekend territory). The time of day,
-  calendar, and zone are preserved.
+  A positive `count` moves forward, a negative one backward, and `0`
+  returns the value unchanged. Each step lands on a workday, so one
+  workday after a Friday is the following Monday where the weekend is
+  Saturday and Sunday. The time of day, calendar and zone are kept.
+  This steps over the weekend only: subtract a holiday set with the set
+  operations to step over holidays too.
 
   ### Arguments
 
-  * `tempo` is a `t:t/0` that denotes a single day (a date or
-    datetime).
+  * `tempo` is a `t:t/0` that denotes a day: a date or a datetime.
 
-  * `count` is the integer number of working days to add — negative to
-    subtract.
+  * `count` is the number of workdays to add, negative to go back.
 
   * `territory` is resolved through `Tempo.Territory.resolve/1`, as for
     `weekend?/2`.
 
   ### Returns
 
-  * a `t:t/0` that is `count` working days from `tempo`.
+  * The `t:t/0` that is `count` workdays from `tempo`.
+
+  * `{:error, reason}` when `tempo` does not denote a day (a
+    `Tempo.ResolutionError` for a year or a month, a
+    `Tempo.UnanchoredError` for a value without a year) or the territory
+    cannot be resolved.
 
   ### Examples
 
-      iex> Tempo.add_working_days(~o"2026-06-12", 1, :US)
+      iex> Tempo.add_workdays(~o"2026-06-12", 1, :US)
       ~o"2026Y6M15D"
 
-      iex> Tempo.add_working_days(~o"2026-06-15", -1, :US)
+      iex> Tempo.add_workdays(~o"2026-06-15", -1, :US)
       ~o"2026Y6M12D"
 
-      iex> # Five working days on from a Monday is the next Monday.
-      iex> Tempo.add_working_days(~o"2026-06-15", 5, :US)
+      iex> # Five workdays on from a Monday is the next Monday.
+      iex> Tempo.add_workdays(~o"2026-06-15", 5, :US)
       ~o"2026Y6M22D"
 
-      iex> # The weekend differs by territory (Saudi Arabia: Friday/Saturday).
-      iex> Tempo.add_working_days(~o"2026-06-11", 1, :SA)
+      iex> # The weekend differs by territory (Saudi Arabia: Friday and Saturday).
+      iex> Tempo.add_workdays(~o"2026-06-11", 1, :SA)
       ~o"2026Y6M14D"
 
   """
-  @spec add_working_days(t(), integer(), Tempo.Territory.input()) :: t()
-  def add_working_days(%Tempo{} = tempo, count, territory \\ nil) when is_integer(count) do
-    # weekend?/2 validates that the value denotes a day and resolves the
-    # territory, so a coarse value or bad territory fails up front.
-    _ = weekend?(tempo, territory)
-    step = if count < 0, do: -1, else: 1
-
-    Enum.reduce(1..abs(count)//1, tempo, fn _, day ->
-      advance_to_working_day(day, step, territory)
-    end)
+  @spec add_workdays(t(), integer(), Tempo.Territory.input()) :: t() | {:error, error_reason()}
+  def add_workdays(tempo, count, territory \\ nil) do
+    workdays_from(tempo, count, territory, :add_workdays)
   end
 
   @doc """
-  The next working day strictly after `tempo` in the territory.
+  The next workday after `tempo` in the territory.
 
-  Equivalent to `add_working_days(tempo, 1, territory)`.
-
-  ### Examples
-
-      iex> Tempo.next_working_day(~o"2026-06-12", :US)
-      ~o"2026Y6M15D"
-
-  """
-  @spec next_working_day(t(), Tempo.Territory.input()) :: t()
-  def next_working_day(%Tempo{} = tempo, territory \\ nil) do
-    add_working_days(tempo, 1, territory)
-  end
-
-  @doc """
-  The working day immediately before `tempo` in the territory.
-
-  Equivalent to `add_working_days(tempo, -1, territory)`.
-
-  ### Examples
-
-      iex> Tempo.previous_working_day(~o"2026-06-15", :US)
-      ~o"2026Y6M12D"
-
-  """
-  @spec previous_working_day(t(), Tempo.Territory.input()) :: t()
-  def previous_working_day(%Tempo{} = tempo, territory \\ nil) do
-    add_working_days(tempo, -1, territory)
-  end
-
-  @doc """
-  The nearest working day to `tempo` in the territory — `tempo` itself
-  when it already is a working day, otherwise the closest day that is not
-  in the territory's weekend.
-
-  Distance is measured outward in both directions and the nearer working
-  day wins, ties broken toward the preceding day. For the usual two-day
-  weekend this reproduces the common "observed holiday" rule — a Saturday
-  rolls back to Friday, a Sunday forward to Monday — which is how a
-  fixed-date public holiday such as US Independence Day is observed when
-  it lands on a weekend.
-
-  Like the rest of the working-day family this is weekend-aware but not
-  holiday-aware: the weekend is the territory's (via `Localize`). Subtract
-  a holiday `t:Tempo.IntervalSet.t/0` with set operations if you also need
-  to step over holidays.
+  The same as `add_workdays(tempo, 1, territory)`.
 
   ### Arguments
 
-  * `tempo` is a `t:t/0` that denotes a single day; a coarser or
-    unanchored value raises `ArgumentError`.
-
-  * `territory` is resolved through `Tempo.Territory.resolve/1` and sets
-    which days are the weekend.
-
-  ### Returns
-
-  * `tempo` unchanged when it already is a working day, otherwise the
-    nearest working day.
-
-  ### Examples
-
-      iex> Tempo.nearest_working_day(~o"2026-07-04", :US)
-      ~o"2026Y7M3D"
-
-      iex> Tempo.nearest_working_day(~o"2027-07-04", :US)
-      ~o"2027Y7M5D"
-
-      iex> Tempo.nearest_working_day(~o"2025-07-04", :US)
-      ~o"2025Y7M4D"
-
-  """
-  @spec nearest_working_day(t(), Tempo.Territory.input()) :: t()
-  def nearest_working_day(%Tempo{} = tempo, territory \\ nil) do
-    # weekend?/2 validates day resolution and resolves the territory, so a
-    # coarse value or bad territory fails up front.
-    if weekend?(tempo, territory) do
-      find_nearest_working_day(tempo, territory, 1)
-    else
-      tempo
-    end
-  end
-
-  defp find_nearest_working_day(tempo, territory, distance) when distance <= 7 do
-    preceding = shift(tempo, day: -distance)
-    following = shift(tempo, day: distance)
-
-    cond do
-      not weekend?(preceding, territory) -> preceding
-      not weekend?(following, territory) -> following
-      true -> find_nearest_working_day(tempo, territory, distance + 1)
-    end
-  end
-
-  defp find_nearest_working_day(tempo, _territory, _distance) do
-    # Unreachable for any real territory — weekends are one or two days —
-    # but guard against a pathological all-weekend calendar rather than
-    # recurse without end.
-    raise ArgumentError, "no working day found within a week of #{inspect(tempo)}"
-  end
-
-  @doc """
-  Count the working days within an interval, excluding the territory's
-  weekend.
-
-  The interval is half-open `[from, to)`, so the result is the number
-  of working days from its start up to but not including its end. Any
-  day-yielding value works the same way through `Enum` —
-  `Enum.count(value, &Tempo.workday?(&1, territory))`.
-
-  ### Arguments
-
-  * `interval` is a `t:Tempo.Interval.t/0` whose boundaries denote days.
+  * `tempo` is a `t:t/0` that denotes a day.
 
   * `territory` is resolved through `Tempo.Territory.resolve/1`.
 
   ### Returns
 
-  * the count of working days in the interval.
+  * The next workday, or `{:error, reason}` as for `add_workdays/3`.
 
   ### Examples
 
-      iex> {:ok, june} = Tempo.Interval.new(from: ~o"2026-06-01", to: ~o"2026-07-01")
-      iex> Tempo.working_days_in(june, :US)
-      22
+      iex> Tempo.next_workday(~o"2026-06-12", :US)
+      ~o"2026Y6M15D"
 
   """
-  @spec working_days_in(Tempo.Interval.t(), Tempo.Territory.input()) :: non_neg_integer()
-  def working_days_in(%Tempo.Interval{} = interval, territory \\ nil) do
-    Enum.count(interval, &workday?(&1, territory))
+  @spec next_workday(t(), Tempo.Territory.input()) :: t() | {:error, error_reason()}
+  def next_workday(tempo, territory \\ nil) do
+    workdays_from(tempo, 1, territory, :next_workday)
   end
 
-  defp advance_to_working_day(%Tempo{} = tempo, step, territory) do
+  @doc """
+  The workday before `tempo` in the territory.
+
+  The same as `add_workdays(tempo, -1, territory)`.
+
+  ### Arguments
+
+  * `tempo` is a `t:t/0` that denotes a day.
+
+  * `territory` is resolved through `Tempo.Territory.resolve/1`.
+
+  ### Returns
+
+  * The previous workday, or `{:error, reason}` as for `add_workdays/3`.
+
+  ### Examples
+
+      iex> Tempo.previous_workday(~o"2026-06-15", :US)
+      ~o"2026Y6M12D"
+
+  """
+  @spec previous_workday(t(), Tempo.Territory.input()) :: t() | {:error, error_reason()}
+  def previous_workday(tempo, territory \\ nil) do
+    workdays_from(tempo, -1, territory, :previous_workday)
+  end
+
+  @doc """
+  The workday nearest to `tempo` in the territory: `tempo` itself when
+  it is a workday, otherwise the closest day outside the territory's
+  weekend.
+
+  The nearer workday wins, and a tie goes to the day before. For a
+  two-day weekend this is the common observed-holiday rule — a Saturday
+  moves back to Friday, a Sunday forward to Monday — which is how a
+  fixed-date holiday such as US Independence Day is observed when it
+  falls on a weekend.
+
+  Like the other workday functions this knows the weekend, not the
+  holidays: subtract a holiday `t:Tempo.IntervalSet.t/0` with the set
+  operations to step over holidays too.
+
+  ### Arguments
+
+  * `tempo` is a `t:t/0` that denotes a day.
+
+  * `territory` is resolved through `Tempo.Territory.resolve/1` and
+    sets which days are the weekend.
+
+  ### Returns
+
+  * `tempo` when it is a workday, otherwise the nearest workday.
+
+  * `{:error, reason}` as for `add_workdays/3`.
+
+  ### Examples
+
+      iex> Tempo.nearest_workday(~o"2026-07-04", :US)
+      ~o"2026Y7M3D"
+
+      iex> Tempo.nearest_workday(~o"2027-07-04", :US)
+      ~o"2027Y7M5D"
+
+      iex> Tempo.nearest_workday(~o"2025-07-04", :US)
+      ~o"2025Y7M4D"
+
+  """
+  @spec nearest_workday(t(), Tempo.Territory.input()) :: t() | {:error, error_reason()}
+  def nearest_workday(tempo, territory \\ nil)
+
+  def nearest_workday(%Tempo{} = tempo, territory) do
+    with {:ok, day_of_week, weekend} <- weekday_and_weekend(tempo, territory, :nearest_workday) do
+      if day_of_week in weekend, do: nearest_workday_from(tempo, weekend, 1), else: tempo
+    end
+  end
+
+  def nearest_workday(value, _territory), do: {:error, not_a_day(value, :nearest_workday)}
+
+  @doc """
+  Count the workdays of a span: its days outside the territory's
+  weekend.
+
+  The span is half-open, so the day it ends on is not counted. This
+  counts the weekend only: subtract a holiday set with the set
+  operations to leave the holidays out too.
+
+  ### Arguments
+
+  * `value` is anything `Tempo.select/2` selects from: a `t:t/0`, a
+    `t:Tempo.Interval.t/0` or a `t:Tempo.IntervalSet.t/0`.
+
+  * `territory` is resolved through `Tempo.Territory.resolve/1`.
+
+  ### Returns
+
+  * The number of workdays in `value`.
+
+  * `{:error, reason}` when the territory cannot be resolved, `value`
+    cannot be selected from, or it has no end to count to (a
+    `Tempo.UnboundedSetError`).
+
+  ### Examples
+
+      iex> Tempo.count_workdays(~o"2026-06", :US)
+      22
+
+      iex> Tempo.count_workdays(~o"2026-06-15/2026-06-22", :SA)
+      5
+
+  """
+  @spec count_workdays(
+          t() | Tempo.Interval.t() | IntervalSet.t(),
+          Tempo.Territory.input()
+        ) :: non_neg_integer() | {:error, error_reason()}
+  def count_workdays(value, territory \\ nil) do
+    with %Tempo{} = workdays <- workdays(territory),
+         {:ok, %IntervalSet{} = selected} <- select(value, workdays) do
+      count_selected(selected)
+    end
+  end
+
+  defp count_selected(selected) do
+    if IntervalSet.bounded?(selected) do
+      IntervalSet.count(selected)
+    else
+      {:error, UnboundedSetError.exception(operation: "Tempo.count_workdays/2", set: selected)}
+    end
+  end
+
+  defp workdays_from(%Tempo{} = tempo, count, territory, function) when is_integer(count) do
+    with {:ok, _day_of_week, weekend} <- weekday_and_weekend(tempo, territory, function) do
+      step_workdays(tempo, count, weekend, function)
+    end
+  end
+
+  defp workdays_from(%Tempo{}, count, _territory, function) do
+    {:error,
+     ArgumentError.exception("`#{function}` counts whole workdays, not #{inspect(count)}.")}
+  end
+
+  defp workdays_from(value, _count, _territory, function),
+    do: {:error, not_a_day(value, function)}
+
+  # Step `count` workdays from `tempo`, one day at a time.
+  defp step_workdays(tempo, 0, _weekend, _function), do: tempo
+
+  defp step_workdays(tempo, count, weekend, function) do
+    step = if count < 0, do: -1, else: 1
+
+    Enum.reduce_while(1..abs(count), tempo, fn _workday, day ->
+      case workday_after(day, step, weekend, function) do
+        %Tempo{} = next -> {:cont, next}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  # The first workday `step` days on from `tempo` (a step of -1 goes back).
+  defp workday_after(tempo, step, weekend, function) do
     next = shift(tempo, day: step)
-    if weekend?(next, territory), do: advance_to_working_day(next, step, territory), else: next
+
+    with {:ok, day_of_week} <- iso_day_of_week(next, function) do
+      if day_of_week in weekend, do: workday_after(next, step, weekend, function), else: next
+    end
+  end
+
+  # The workday `distance` days before `tempo`, else the one `distance`
+  # days after, else one day further out each way.
+  defp nearest_workday_from(tempo, weekend, distance) when distance <= 7 do
+    preceding = shift(tempo, day: -distance)
+    following = shift(tempo, day: distance)
+
+    with {:ok, preceding_day} <- iso_day_of_week(preceding, :nearest_workday),
+         {:ok, following_day} <- iso_day_of_week(following, :nearest_workday) do
+      cond do
+        preceding_day not in weekend -> preceding
+        following_day not in weekend -> following
+        true -> nearest_workday_from(tempo, weekend, distance + 1)
+      end
+    end
+  end
+
+  # Every territory's weekend is shorter than a week; the bound ends
+  # the search rather than trusting that.
+  defp nearest_workday_from(tempo, _weekend, _distance) do
+    {:error, ArgumentError.exception("No workday falls within a week of #{inspect(tempo)}.")}
+  end
+
+  # The ISO day of week (1 = Monday … 7 = Sunday) of the day `tempo`
+  # denotes, and the ISO days of the territory's weekend.
+  defp weekday_and_weekend(tempo, territory, function) do
+    with {:ok, resolved} <- Territory.resolve(territory),
+         {:ok, day_of_week} <- iso_day_of_week(tempo, function) do
+      {:ok, day_of_week, Localize.Calendar.weekend(resolved)}
+    end
   end
 
   # ISO day of week (1 = Monday … 7 = Sunday) of the day a value
@@ -8832,33 +8895,49 @@ defmodule Tempo do
   # before reading `Date.day_of_week/1` — ISO's default numbering is a
   # stable Monday-based 1..7, whereas a Calendrical calendar's own
   # `day_of_week` may use a different week start or only support the
-  # `:default` ordering. The date-with-time case is covered here (its
-  # date part is the year/month/day); the ordinal (day-of-year) and ISO
-  # week-date forms are Gregorian/ISO only and resolve through
-  # `to_date/1`, which already returns a `Calendar.ISO` date.
-  defp day_of_week_iso(%Tempo{time: time} = tempo, function) do
-    year = Keyword.get(time, :year)
-    month = Keyword.get(time, :month)
-    day = Keyword.get(time, :day)
-
-    iso_date =
-      if is_integer(year) and is_integer(month) and is_integer(day) do
-        with {:ok, date} <- Date.new(year, month, day, calendar_of(tempo)) do
-          {:ok, Date.convert!(date, Calendar.ISO)}
-        end
-      else
-        to_date(tempo)
-      end
-
-    case iso_date do
-      {:ok, %Date{} = date} ->
-        Date.day_of_week(date)
-
-      _ ->
-        raise ArgumentError,
-              "Tempo.#{function}/2 requires a value that denotes a day. " <>
-                "Got: #{inspect(tempo)}"
+  # `:default` ordering. The ordinal (day-of-year) and ISO week-date
+  # forms resolve through `to_date/1`.
+  defp iso_day_of_week(%Tempo{} = tempo, function) do
+    with {:ok, date} <- day_date(tempo),
+         {:ok, iso_date} <- Date.convert(date, Calendar.ISO) do
+      {:ok, Date.day_of_week(iso_date)}
+    else
+      _no_single_day -> {:error, not_a_day(tempo, function)}
     end
+  end
+
+  defp iso_day_of_week({:error, _reason} = error, _function), do: error
+  defp iso_day_of_week(value, function), do: {:error, not_a_day(value, function)}
+
+  defp day_date(%Tempo{time: time} = tempo) do
+    case {Keyword.get(time, :year), Keyword.get(time, :month), Keyword.get(time, :day)} do
+      {year, month, day} when is_integer(year) and is_integer(month) and is_integer(day) ->
+        Date.new(year, month, day, calendar_of(tempo))
+
+      _ordinal_or_week_date ->
+        to_date(tempo)
+    end
+  end
+
+  defp not_a_day(%Tempo{} = tempo, function) do
+    if anchored?(tempo) do
+      ResolutionError.exception(
+        operation: function,
+        current: tempo |> resolution() |> elem(0),
+        target: :day,
+        reason:
+          "`#{function}` needs a value that denotes a day, such as a date or a datetime; " <>
+            "#{inspect(tempo)} does not."
+      )
+    else
+      UnanchoredError.exception(operation: function, value: tempo)
+    end
+  end
+
+  defp not_a_day(value, function) do
+    ArgumentError.exception(
+      "`#{function}` needs a Tempo value that denotes a day, not #{inspect(value)}."
+    )
   end
 
   @doc """

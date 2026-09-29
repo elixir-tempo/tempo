@@ -354,9 +354,9 @@ iex> {:ok, set} = Tempo.symmetric_difference(a, b)
 
 ## 6. Selecting sub-spans with `Tempo.select/2`
 
-`Tempo.select/2` narrows a base span (a Tempo, an Interval, or an IntervalSet) by a **selector** and returns the matched spans as a `{:ok, %Tempo.IntervalSet{}}` tuple. The same vocabulary covers territory-aware queries (via `Tempo.workdays/1` and `Tempo.weekend/1`), integer indices at the next-finer unit, and projection of a Tempo or Interval onto a larger base.
+`Tempo.select/2` narrows a base span (a Tempo, an Interval, or an IntervalSet) by a **selector** and returns the matched spans as a `{:ok, %Tempo.IntervalSet{}}` tuple. The same vocabulary covers territory-aware queries (via `Tempo.workdays/1` and `Tempo.weekends/1`), integer indices at the next-finer unit, and projection of a Tempo or Interval onto a larger base.
 
-`Tempo.select/2` is a **pure function** — no ambient territory, no hidden options. Locale-dependent constraints are constructed by `Tempo.workdays/1` and `Tempo.weekend/1` (which resolve the territory once at construction time) and composed in at the call site.
+`Tempo.select/2` is a **pure function** — no ambient territory, no hidden options. Locale-dependent constraints are constructed by `Tempo.workdays/1` and `Tempo.weekends/1` (which resolve the territory once at construction time) and composed in at the call site. A span is selected period by period at its start's resolution, so `Tempo.select(~o"2026/2029", ~o"12-25")` is three Christmases.
 
 ### How do I select the workdays of a month?
 
@@ -392,20 +392,30 @@ iex> {Tempo.year(xmas), Tempo.month(xmas), Tempo.day(xmas)}
 ### How do I select a different territory's weekend?
 
 ```elixir
-iex> {:ok, sa_weekend} = Tempo.select(~o"2026-02", Tempo.weekend(:SA))
+iex> {:ok, sa_weekend} = Tempo.select(~o"2026-02", Tempo.weekends(:SA))
 iex> Tempo.IntervalSet.map(sa_weekend, &Tempo.day/1)
 [6, 7, 13, 14, 20, 21, 27, 28]
 ```
 
-> Saudi Arabia's **weekend** is **Friday + Saturday**. `Tempo.weekend/1` and `Tempo.workdays/1` accept a territory atom (`:SA`), a territory string (`"SA"`, `"sazzzz"`), a locale string (`"ar-SA"`), or a `%Localize.LanguageTag{}`. With no argument they use the ambient resolution chain: `Application.get_env(:ex_tempo, :default_territory)` → `Localize.get_locale()`.
+> Saudi Arabia's **weekend** is **Friday + Saturday**. `Tempo.weekends/1` and `Tempo.workdays/1` accept a territory atom (`:SA`), a territory string (`"SA"`, `"sazzzz"`), a locale string (`"ar-SA"`), or a `%Localize.LanguageTag{}`. With no argument they use the ambient resolution chain: `Application.get_env(:ex_tempo, :default_territory)` → `Localize.get_locale()`.
 
 Pass a full locale when you have one rather than the territory:
 
 ```elixir
-iex> {:ok, sa_weekend} = Tempo.select(~o"2026-02", Tempo.weekend("ar-SA"))
+iex> {:ok, sa_weekend} = Tempo.select(~o"2026-02", Tempo.weekends("ar-SA"))
 iex> Tempo.IntervalSet.map(sa_weekend, &Tempo.day/1)
 [6, 7, 13, 14, 20, 21, 27, 28]
 ```
+
+### How do I select from a date on, with no end?
+
+```elixir
+iex> {:ok, weekends} = Tempo.select(~o"2026-06-15/..", Tempo.weekends(:SA))
+iex> weekends |> Tempo.IntervalSet.walk() |> Enum.take(3) |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+[19, 20, 26]
+```
+
+> The **weekend days** of **Saudi Arabia** from **the 15th of June on**. A span with no end gives a lazy set, walked only as far as it is taken — here, the first three. The same set is busy time for `Tempo.shift/3` to skip, and `Tempo.select(~o"2026/..", ~o"12-25")` is every Christmas from this year on.
 
 ### How do I compose select with the set operations?
 
@@ -657,7 +667,7 @@ iex> Tempo.IntervalSet.count(workdays)
 66
 ```
 
-> *"The first quarter of Australian financial year 2027 has **66 working days**"* — including the quarter's final day, which a hand-written `range.first`-to-`range.last` interval silently drops (the inclusive/half-open off-by-one this conversion exists to prevent). The literal alternative, `~o"2026-07-01/2026-10-01"`, encodes the fiscal boundary by hand — right when written, wrong the year the rules change; the calendar itself says which days it is.
+> *"The first quarter of Australian financial year 2027 has **66 workdays**"* — including the quarter's final day, which a hand-written `range.first`-to-`range.last` interval silently drops (the inclusive/half-open off-by-one this conversion exists to prevent). The literal alternative, `~o"2026-07-01/2026-10-01"`, encodes the fiscal boundary by hand — right when written, wrong the year the rules change; the calendar itself says which days it is.
 
 Fiscal values compose with Gregorian ones directly — `Tempo.relation(Tempo.Interval.from(quarter), ~o"2026-07-01")` is `:equals` — so nothing needs converting before the set algebra. A stepped or descending `Date.Range` is refused rather than guessed: it enumerates a set of days, not a span.
 
@@ -1015,7 +1025,7 @@ bob   = ~o"{2026-01-05/2026-01-12,2026-01-26/2026-02-02,2026-02-16/2026-02-23,20
 carol = ~o"{2026-01-12/2026-01-19,2026-02-02/2026-02-09,2026-02-23/2026-03-02,2026-03-16/2026-03-23}"
 
 for {name, rota} <- [alice: alice, bob: bob, carol: carol] do
-  {:ok, weekend_days} = Tempo.select(rota, Tempo.weekend(:US))
+  {:ok, weekend_days} = Tempo.select(rota, Tempo.weekends(:US))
   {name, Tempo.IntervalSet.count(weekend_days)}
 end
 #=> [alice: 10, bob: 8, carol: 8]   (240 vs 192 vs 192 weekend hours)
@@ -1180,11 +1190,17 @@ iex> Tempo.relation(~o"2022-06", ~o"2023-06")
 ## Related reading
 
 * [When to use Tempo](./when-to-use-tempo.md) — a short decision guide on choosing between Tempo and the Elixir standard library.
+
 * [Scheduling](./scheduling.md) — bounded enumeration, wall-clock-vs-UTC authority, floating vs zoned events, and how future dates survive zone-rule changes.
+
 * [Working with workdays and weekends](./workdays-and-weekends.md) — business-day queries (N days from today, next workday, workdays between two dates) built from `Tempo.workdays/1` and set algebra.
+
 * [Holidays — planning with a real holiday calendar](./holidays.md) — fetch an ICS holiday feed, parse it with `Tempo.ICal.parse/1`, and compose it with `Tempo.workdays/1` for territory-aware scheduling.
+
 * [Falsehoods programmers believe about time](./falsehoods.md) — the ten most impactful wrong assumptions, each with the Tempo idiom that makes the right behaviour automatic.
+
 * [ISO 8601 conformance](./iso8601-conformance.md) — what's supported from the standard.
+
 * [Enumeration semantics](./enumeration-semantics.md) — how iteration works across Tempo values.
 * [Set operations](./set-operations.md) — union, intersection, complement, difference.
 * [iCalendar integration](./ical-integration.md) — full `.ics` import with RRULE/RDATE/EXDATE.

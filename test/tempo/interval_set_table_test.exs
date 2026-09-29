@@ -45,6 +45,7 @@ defmodule Tempo.IntervalSetTableTest do
   end
 
   test "a lazy set is not tabular" do
-    assert Reader.init(Tempo.weekends()) == :none
+    {:ok, weekends} = Tempo.select(~o"2026-06-15/..", Tempo.weekends())
+    assert Reader.init(weekends) == :none
   end
 end

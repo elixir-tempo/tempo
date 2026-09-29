@@ -51,7 +51,7 @@ A weekday plus a position: `nK` picks the weekday, `nI` the occurrence within th
 | Nth weekday | US Labor Day — 1st Monday in September | `~o"R/../P1Y/FL9M1K1IN"` | `FREQ=YEARLY;BYMONTH=9;BYDAY=1MO` |
 | Nth weekday | Canadian Thanksgiving / Columbus Day — 2nd Monday in October | `~o"R/../P1Y/FL10M1K2IN"` | `FREQ=YEARLY;BYMONTH=10;BYDAY=2MO` |
 | Nth weekday | US Thanksgiving — 4th Thursday in November | `~o"R/../P1Y/FL11M4K4IN"` | `FREQ=YEARLY;BYMONTH=11;BYDAY=4TH` |
-| Last weekday of month | Last working day of every month (payroll) — the last Mon–Fri | `~o"R/../P1M/FL{1..5}K-1IN"` | `FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1` |
+| Last weekday of month | Last workday of every month (payroll) — the last Mon–Fri | `~o"R/../P1M/FL{1..5}K-1IN"` | `FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1` |
 
 ## A weekday relative to another day
 
@@ -123,21 +123,21 @@ A holiday defined in another calendar starts on a date **in that calendar** and 
 
 ## Observed-date substitution (a transform over a holiday)
 
-Many holidays are *observed* on a nearby working day when they land on a weekend — "if January 1 is a Saturday or Sunday, it is observed the following Monday". This is not a new selection but a **map** over the base recurrence, using the territory-aware working-day helpers:
+Many holidays are *observed* on a nearby workday when they land on a weekend — "if January 1 is a Saturday or Sunday, it is observed the following Monday". This is not a new selection but a **map** over the base recurrence, using the territory-aware workday helpers:
 
 ```elixir
 new_years  = ~o"R/../P1Y/FL1M1DN"
 {:ok, set} = Tempo.to_interval(new_years, within: ~o"{2028..2033}Y")
 
-# The observed date of each occurrence — the nearest US working day.
+# The observed date of each occurrence — the nearest US workday.
 # `IntervalSet.map/2` returns the list of whatever the function yields:
 observed = Tempo.IntervalSet.map(set, fn iv ->
-  Tempo.nearest_working_day(Tempo.Interval.from(iv), :US)
+  Tempo.nearest_workday(Tempo.Interval.from(iv), :US)
 end)
 #   2028-01-01 is a Saturday, so it is observed on Friday 2027-12-31; and so on.
 ```
 
-> *"New Year's Day is January 1, observed on the nearest working day."* `Tempo.next_working_day/2`, `previous_working_day/2` and `add_working_days/3` cover the "next Monday" and "N working days later" variants; all take a territory so the weekend and the holiday set are the right ones.
+> *"New Year's Day is January 1, observed on the nearest workday."* `Tempo.next_workday/2`, `previous_workday/2` and `add_workdays/3` cover the "next Monday" and "N workdays later" variants; all take a territory so the weekend and the holiday set are the right ones.
 
 ## Year gates — the recurrence domain (`{…}` and `^`)
 

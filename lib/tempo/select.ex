@@ -6,7 +6,8 @@ defmodule Tempo.Select do
 
   ```elixir
   Tempo.select(~o"2026-06", Tempo.workdays(:US))  # workdays of June — locale-aware
-  Tempo.select(~o"2026-06", Tempo.weekend(:US))   # weekend days of June
+  Tempo.select(~o"2026-06", Tempo.weekends(:US))  # weekend days of June
+  Tempo.select(~o"2026-06-15/..", Tempo.weekends(:US))  # weekend days from the 15th on, lazily
   Tempo.select(~o"2026", [1, 15])
   Tempo.select(~o"2026", ~o"12-25")
   Tempo.select(~o"2026", ~o"10O")     # ISO 8601-2 ordinal day — the 10th day of 2026
@@ -24,8 +25,8 @@ defmodule Tempo.Select do
   `Tempo.select/2` is a **pure function**. It has no `opts`, no
   ambient locale read, no implicit territory resolution. Every
   input that can affect the result is a value on the selector.
-  Locale-dependent constraints like "workdays" or "weekend" are
-  constructed by `Tempo.workdays/1` and `Tempo.weekend/1` (which
+  Locale-dependent constraints like "workdays" or "weekends" are
+  constructed by `Tempo.workdays/1` and `Tempo.weekends/1` (which
   read the locale once at construction time) and composed in:
 
       interval
@@ -34,7 +35,8 @@ defmodule Tempo.Select do
   That means the `workdays(:US)` call is where territory
   resolution happens — **not** inside `select/2` — and the
   resulting value is safe to capture anywhere, including
-  module attributes.
+  module attributes. A territory that cannot be resolved gives an
+  `{:error, reason}` selector, which `select/2` returns as it is.
 
   ## Selector shapes
 
@@ -48,11 +50,37 @@ defmodule Tempo.Select do
   | Negative components | `Tempo.select(y, ~o"-1M")` | ISO 8601-2 §4.4.1 — count from the end of the containing unit |
   | `%Tempo.Interval{}` or list | `Tempo.select(days, ~o"T09/T17")` | Project as a **span** — coarser units from the base, finer from each endpoint, half-open `[from, to)` |
   | Interval duration form | `Tempo.select(days, ~o"T09/PT7H36M")` | Span from the projected start plus the duration |
-  | Function | `Tempo.select(y, &fn/1)` | The function returns any of the above; evaluated against the base |
+  | Function | `Tempo.select(y, &fn/1)` | The function returns any of the above; evaluated against each period of the base |
 
   Base can be a `t:Tempo.t/0`, `t:Tempo.Interval.t/0`, or
   `t:Tempo.IntervalSet.t/0`. IntervalSet bases flat-map the
-  selector across each member and collect the results.
+  selector across each member and collect the results; a lazy
+  set's members are selected as the walk reaches them.
+
+  ## Spans — period by period
+
+  A span is selected one period at a time, at the resolution of its
+  start: `~o"2026/2029"` is the years 2026, 2027 and 2028, so it holds
+  three Christmases, and `~o"2026-06/2026-09"` holds three 15ths. Each
+  selection starts in the period it was selected from, so nothing is
+  selected twice or outside the span. A day-of-week selector keeps the
+  matching days of the whole span.
+
+  An open-ended span gives a lazy set, selected period by period as it
+  is walked:
+
+  ```elixir
+  {:ok, weekends}    = Tempo.select(~o"2026-06-15/..", Tempo.weekends(:AU))
+  {:ok, christmases} = Tempo.select(~o"2026/..", ~o"12-25")
+  ```
+
+  > *"The weekend days from the 15th of June on. Every Christmas from this year on."*
+
+  Take the members you need from `Tempo.IntervalSet.walk/1`, or pass
+  the set to `Tempo.shift/3` as a `:skipping` busy set. The walk ends
+  once it passes the last year a selector names, or a thousand years
+  with nothing selected. A span with an open start has no first period
+  to walk from, so it returns a `Tempo.IntervalEndpointsError`.
 
   ## Time-of-day windows — interval selectors project as spans
 
@@ -120,6 +148,10 @@ defmodule Tempo.Select do
   8601-2 expanded year form) — they're not flipped to "last
   year" because a time line has no "end" to count from.
 
+  A negative integer index counts from the end in the same way:
+  `Tempo.select(~o"2026", [-1])` is December. An index the period
+  does not have, such as `[30]` on February, selects nothing there.
+
   """
 
   alias Tempo.Compare
@@ -132,6 +164,7 @@ defmodule Tempo.Select do
   alias Tempo.InvalidDateError
   alias Tempo.Iso8601.Unit
   alias Tempo.Math
+  alias Tempo.UnboundedSetError
   alias Tempo.Validation
 
   @type selector ::
@@ -184,6 +217,11 @@ defmodule Tempo.Select do
   | Stepped range | `~o"2026Y{1..-1//3}M"` | IntervalSet of disjoint members |
   | Set of intervals | `~o"{2026-01-05/2026-01-12,2026-02-02/2026-02-09}"` | IntervalSet (flat-mapped) |
   | Archaeological mask | `~o"156X"` | decade-long Interval |
+  | Open-ended span | `~o"2026-06-15/.."` | lazy IntervalSet, selected as it is walked |
+  | Duration form or recurrence | `~o"2026-06-15/P14D"` | the span or occurrences it converts to |
+
+  A span is selected period by period at its start's resolution, so
+  the quarter `~o"2026Y3Q"` selects in July, August and September.
 
   Example with a quarter base:
 
@@ -215,161 +253,435 @@ defmodule Tempo.Select do
       iex> Tempo.IntervalSet.count(set)
       20
 
+      iex> {:ok, set} = Tempo.Select.select(~o"2026/2029", ~o"12-25")
+      iex> set |> Tempo.IntervalSet.to_list() |> Enum.map(&Tempo.year(Tempo.Interval.from(&1)))
+      [2026, 2027, 2028]
+
+      iex> {:ok, weekends} = Tempo.Select.select(~o"2026-06-15/..", Tempo.weekends(:US))
+      iex> weekends |> Tempo.IntervalSet.walk() |> Enum.take(2) |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      [20, 21]
+
   """
-  @spec select(base(), selector()) ::
+  @spec select(base(), selector() | {:error, term()}) ::
           {:ok, IntervalSet.t()} | {:error, term()}
 
-  # ---- IntervalSet base: flat-map then reassemble ----
+  # ---- A selector that is an error: returned as it is ----
+  #
+  # `Tempo.workdays/1` and `Tempo.weekends/1` return an error for a
+  # territory they cannot resolve, so a pipeline reports that error.
+
+  def select(_base, {:error, _reason} = error), do: error
+
+  def select(base, %Range{} = range), do: select(base, Enum.to_list(range))
+
+  # ---- IntervalSet base: select within each member ----
 
   def select(%IntervalSet{} = set, selector) do
-    set
-    |> IntervalSet.to_list()
-    |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
-      case select(member, selector) do
-        {:ok, %IntervalSet{} = set} -> {:cont, {:ok, acc ++ IntervalSet.to_list(set)}}
-        {:error, _} = err -> {:halt, err}
-      end
-    end)
-    |> case do
-      {:ok, all} -> IntervalSet.new(all, coalesce: false)
-      err -> err
+    if IntervalSet.bounded?(set) do
+      set
+      |> IntervalSet.to_list()
+      |> collect(&member_selection(&1, selector))
+      |> selection_set()
+    else
+      set
+      |> IntervalSet.walk()
+      |> Stream.map(&{:ok, &1})
+      |> select_lazily(selector, &member_selection/2)
     end
   end
 
-  # ---- Tempo base: materialise to interval, recurse ----
-  #
-  # For integer-index selectors we need the ORIGINAL resolution
-  # (before `to_interval` fills lower-bound units), so route
-  # integer / range selectors through a dedicated path.
+  # ---- Tempo and Tempo.Set bases: select across the span they
+  # convert to ----
 
-  def select(%Tempo{} = tempo, %Range{} = range) do
-    select(tempo, Enum.to_list(range))
-  end
+  def select(%Tempo{} = tempo, selector), do: select_converted(tempo, selector)
+  def select(%Tempo.Set{} = set, selector), do: select_converted(set, selector)
 
-  def select(%Tempo{} = tempo, [head | _] = indices) when is_integer(head) do
-    select_indices_on_tempo(tempo, indices)
-  end
+  # ---- Interval base: select period by period ----
 
-  def select(%Tempo{} = tempo, selector) do
-    case Tempo.to_interval(tempo) do
-      {:ok, %Interval{} = iv} -> select(resolve_grouped_endpoints(iv), selector)
-      {:ok, %IntervalSet{} = set} -> select(set, selector)
-      {:error, _} = err -> err
+  def select(%Interval{} = interval, selector) do
+    case span(interval) do
+      {:closed, span} -> select_closed(span, selector)
+      {:open_end, span} -> select_open_end(span, selector)
+      {:set, set} -> select(set, selector)
+      {:error, _reason} = error -> error
     end
-  end
-
-  # ---- Tempo.Set base (e.g. a set-of-intervals sigil): materialise,
-  # recurse. Keeps the moduledoc's promise that any Tempo value which
-  # materialises to an Interval or IntervalSet can be a base.
-
-  def select(%Tempo.Set{} = set, selector) do
-    case Tempo.to_interval(set) do
-      {:ok, %Interval{} = iv} -> select(resolve_grouped_endpoints(iv), selector)
-      {:ok, %IntervalSet{} = materialised} -> select(materialised, selector)
-      {:error, _} = err -> err
-    end
-  end
-
-  # ---- Empty selector list — explicit short-circuit ----
-
-  def select(%Interval{} = _base, []) do
-    IntervalSet.new([], coalesce: false)
-  end
-
-  # ---- Range: expand to integer list ----
-
-  def select(%Interval{} = base, %Range{} = range) do
-    select(base, Enum.to_list(range))
-  end
-
-  # ---- Integer list: indices at next-finer unit ----
-
-  def select(%Interval{} = base, [head | _] = indices) when is_integer(head) do
-    select_indices(base, indices)
-  end
-
-  # ---- Tempo / Interval projection (single or list) ----
-
-  def select(%Interval{} = base, %Tempo{} = tempo) do
-    select(base, [tempo])
-  end
-
-  def select(%Interval{} = base, %Interval{} = iv) do
-    select(base, [iv])
-  end
-
-  def select(%Interval{} = base, [%Tempo{} | _] = tempos) do
-    select_projections(base, tempos)
-  end
-
-  def select(%Interval{} = base, [%Interval{} | _] = intervals) do
-    select_projections(base, intervals)
-  end
-
-  # ---- Function: evaluate, recurse on the result ----
-
-  def select(%Interval{} = base, fun) when is_function(fun, 1) do
-    select(base, fun.(base))
   end
 
   # ---- Catch-all: clearer error ----
 
-  def select(base, selector) do
+  def select(base, _selector) do
     {:error,
      ArgumentError.exception(
-       "Tempo.Select.select/2 does not recognise selector #{inspect(selector)} " <>
-         "for base #{inspect(base)}. See `Tempo.Select` moduledoc for the " <>
-         "selector vocabulary."
+       "Tempo.select/2 cannot select from #{inspect(base)}: the base is a Tempo value, " <>
+         "an interval or an interval set."
      )}
   end
 
-  ## -----------------------------------------------------------
-  ## Weekday filter — consumed by the day-of-week-only projection
-  ## path (see `project_onto_base/2` below)
-  ## -----------------------------------------------------------
-
-  # Walk `base` day-by-day, keeping dates whose ISO day-of-week
-  # (Monday=1) is in the requested set. Returns an IntervalSet of
-  # day-resolution intervals.
-  defp filter_by_weekdays(%Interval{from: %Tempo{} = from, to: %Tempo{} = to}, weekdays) do
-    calendar = from.calendar
-
-    intervals =
-      stream_days(from, to, calendar)
-      |> Stream.filter(fn {y, m, d} ->
-        dow_of(calendar, y, m, d) in weekdays
-      end)
-      |> Enum.map(fn {y, m, d} -> day_interval(calendar, y, m, d, from) end)
-
-    IntervalSet.new(intervals, coalesce: false)
+  defp select_converted(value, selector) do
+    case Tempo.to_interval(value) do
+      {:ok, %Interval{} = interval} -> select(resolve_grouped_endpoints(interval), selector)
+      {:ok, %IntervalSet{} = set} -> select(set, selector)
+      {:error, _reason} = error -> error
+    end
   end
 
-  defp filter_by_weekdays(%Interval{} = interval, _weekdays) do
+  # What a base interval spans: a closed span, one open at its end, or,
+  # for a duration-form interval or a recurrence, what
+  # `Tempo.to_interval/1` converts it to. A span with an open start has
+  # no first period to select from.
+  defp span(%Interval{from: :undefined, duration: nil} = interval) do
     {:error,
-     IntervalEndpointsError.exception(
-       interval: interval,
-       operation: :select_weekdays,
-       reason: "Cannot select weekdays across an open-ended interval."
-     )}
+     IntervalEndpointsError.exception(interval: interval, operation: :select, reason: :open_start)}
   end
 
-  # The days from `from` up to, not including, `to`, each the day
-  # Calendrical gives after the one before.
+  defp span(%Interval{from: %Tempo{}, to: %Tempo{}, recurrence: 1} = interval),
+    do: {:closed, interval}
+
+  defp span(%Interval{from: %Tempo{}, to: :undefined, duration: nil, recurrence: 1} = interval),
+    do: {:open_end, interval}
+
+  defp span(%Interval{} = interval) do
+    case Tempo.to_interval(interval) do
+      {:ok, %Interval{from: %Tempo{}, to: %Tempo{}} = converted} ->
+        {:closed, converted}
+
+      {:ok, %IntervalSet{} = set} ->
+        {:set, set}
+
+      {:ok, _unconverted} ->
+        {:error, IntervalEndpointsError.exception(interval: interval, operation: :select)}
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  # A closed span's selection. A day-of-week selector keeps the span's
+  # matching days; any other applies to each period of the span in turn.
+  defp select_closed(_span, []), do: IntervalSet.new([], coalesce: false)
+
+  defp select_closed(span, selector) do
+    case weekday_selector(selector) do
+      {:ok, weekdays} ->
+        span |> weekdays_in(weekdays) |> Enum.to_list() |> IntervalSet.new(coalesce: false)
+
+      :no ->
+        span |> periods() |> collect(&period_selection(&1, selector)) |> selection_set()
+    end
+  end
+
+  # An open-ended span's selection, as a lazy set: a day-of-week
+  # selector's days from the span's first day on, or any other selector
+  # applied to each period as the walk reaches it.
+  defp select_open_end(_span, []), do: IntervalSet.new([], coalesce: false)
+
+  defp select_open_end(span, selector) do
+    case weekday_selector(selector) do
+      {:ok, weekdays} -> lazy_weekdays(span, weekdays)
+      :no -> span |> periods() |> select_lazily(selector, &select_in_period/2)
+    end
+  end
+
+  # While one day of the week matches, the matching days never run out,
+  # so their walk needs no horizon. A selector that matches no day of
+  # the week, or a span that starts on no day, selects nothing.
+  defp lazy_weekdays(%Interval{from: %Tempo{calendar: calendar} = from} = span, weekdays) do
+    with [_ | _] = matching <- Enum.filter(weekdays, &(&1 in 1..7)),
+         {:ok, _first_day} <- tempo_to_date(from, calendar) do
+      {:ok, span |> weekdays_in(matching) |> IntervalSet.from_stream()}
+    else
+      _nothing_to_select -> IntervalSet.new([], coalesce: false)
+    end
+  end
+
+  # A selector that names only days of the week (`Tempo.workdays/1`,
+  # `Tempo.weekends/1`, `~o"5K"`, or a list of them), and the ISO days
+  # it names.
+  defp weekday_selector(%Tempo{time: time}), do: day_of_week_only(time)
+
+  defp weekday_selector([_ | _] = selectors),
+    do: Enum.reduce_while(selectors, {:ok, []}, &add_weekdays/2)
+
+  defp weekday_selector(_selector), do: :no
+
+  defp add_weekdays(%Tempo{time: time}, {:ok, weekdays}) do
+    case day_of_week_only(time) do
+      {:ok, more} -> {:cont, {:ok, weekdays ++ more}}
+      :no -> {:halt, :no}
+    end
+  end
+
+  defp add_weekdays(_selector, _weekdays), do: {:halt, :no}
+
+  # The periods of a span at its start's resolution, as a stream of
+  # `{:ok, period}`: the days of `~o"2026-06-15/.."`, the months of
+  # `~o"2026-06/2026-09"`. Each period is the span of one value
+  # (`Tempo.to_interval/1`), the next begins where it ends, and the
+  # last is cut at the span's end. A period that cannot be formed ends
+  # the stream with its error.
+  defp periods(%Interval{from: from, to: to}) do
+    Stream.unfold({:from, from}, &next_period(&1, to))
+  end
+
+  defp next_period(:done, _to), do: nil
+
+  defp next_period({:from, start}, to) do
+    if starts_before?(start, to), do: period_at(start, to), else: nil
+  end
+
+  defp period_at(start, to) do
+    case period_of(start) do
+      {:ok, %Interval{to: period_end} = period} -> {{:ok, cut(period, to)}, {:from, period_end}}
+      {:error, _reason} = error -> {error, :done}
+    end
+  end
+
+  defp period_of(start) do
+    with {:ok, %Interval{to: %Tempo{} = period_end} = period} <- Tempo.to_interval(start),
+         :later <- Compare.compare_endpoints(period_end, start) do
+      {:ok, period}
+    else
+      {:error, _reason} = error -> error
+      _not_one_span -> {:error, not_one_span(start)}
+    end
+  end
+
+  defp not_one_span(start) do
+    ConversionError.exception(
+      value: start,
+      target: Interval,
+      reason:
+        "`Tempo.select/2` walks a span from its start, and #{inspect(start)} is not one span."
+    )
+  end
+
+  defp starts_before?(_start, :undefined), do: true
+  defp starts_before?(start, to), do: Compare.compare_endpoints(start, to) == :earlier
+
+  defp cut(period, :undefined), do: period
+
+  defp cut(%Interval{to: period_end} = period, to) do
+    if Compare.compare_endpoints(period_end, to) == :later, do: %{period | to: to}, else: period
+  end
+
+  # Each item's selection in turn, concatenated, stopping at the first
+  # error.
+  defp collect(items, select_one) do
+    items
+    |> Enum.reduce_while({:ok, []}, fn item, {:ok, selected} ->
+      case select_one.(item) do
+        {:ok, more} -> {:cont, {:ok, [more | selected]}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+    |> concatenated()
+  end
+
+  defp concatenated({:ok, selected}), do: {:ok, selected |> Enum.reverse() |> Enum.concat()}
+  defp concatenated({:error, _reason} = error), do: error
+
+  defp selection_set({:ok, selected}), do: IntervalSet.new(selected, coalesce: false)
+  defp selection_set({:error, _reason} = error), do: error
+
+  defp period_selection({:ok, period}, selector), do: select_in_period(period, selector)
+  defp period_selection({:error, _reason} = error, _selector), do: error
+
+  # The selection in one period: the selector applied to the period,
+  # keeping what starts in it, so no two periods select the same span
+  # and nothing outside the span is selected.
+  defp select_in_period(period, selector) do
+    with {:ok, %IntervalSet{} = selected} <- select_period(period, selector) do
+      {:ok, selected |> IntervalSet.to_list() |> Enum.filter(&starts_in?(&1, period))}
+    end
+  end
+
+  defp starts_in?(%Interval{from: %Tempo{} = from}, %Interval{from: period_from, to: period_to}) do
+    Compare.compare_endpoints(from, period_from) != :earlier and
+      Compare.compare_endpoints(from, period_to) == :earlier
+  end
+
+  defp starts_in?(_selected, _period), do: false
+
+  # A member's selection, as a list. A lazy set's members are checked as
+  # the walk reaches them, so one that is not a closed span stops it.
+  defp member_selection(member, selector) do
+    case select(member, selector) do
+      {:ok, %IntervalSet{} = selected} -> members_of(selected)
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp members_of(set) do
+    if IntervalSet.bounded?(set) do
+      {:ok, IntervalSet.to_list(set)}
+    else
+      {:error, UnboundedSetError.exception(operation: "Tempo.select/2", set: set)}
+    end
+  end
+
+  # How far a lazy selection walks without selecting anything before it
+  # ends. A calendar rule repeats within its calendar's cycle — 400
+  # years in the Gregorian — so a selector that selects nothing in a
+  # thousand years has nothing to select.
+  @horizon %Duration{time: [year: 1_000]}
+
+  # A lazy selection: each base in turn (a period of an open-ended
+  # span, or a member of a lazy set) selected as the walk reaches it.
+  # The first base's error is returned; a later one ends the walk, as
+  # does passing the end of the last year the selector names, or a
+  # thousand years passing with nothing selected.
+  defp select_lazily(bases, selector, select_one) do
+    case Enum.take(bases, 1) do
+      [] -> IntervalSet.new([], coalesce: false)
+      [{:ok, first}] -> lazy_selection(first, bases, selector, select_one)
+      [{:error, _reason} = error] -> error
+    end
+  end
+
+  defp lazy_selection(%Interval{from: from} = first, bases, selector, select_one) do
+    with {:ok, found} <- select_one.(first, selector) do
+      limits = {horizon_after(Math.add(from, @horizon), found), year_limit(selector, from)}
+
+      later =
+        bases
+        |> Stream.drop(1)
+        |> Stream.transform(limits, &walk_base(&1, &2, selector, select_one))
+
+      {:ok, IntervalSet.from_stream(Stream.concat(found, later))}
+    end
+  end
+
+  defp walk_base(
+         {:ok, %Interval{from: from} = base},
+         {horizon, last} = limits,
+         selector,
+         select_one
+       ) do
+    if passed?(from, horizon) or passed?(from, last) do
+      {:halt, limits}
+    else
+      base |> select_one.(selector) |> walked(limits)
+    end
+  end
+
+  defp walk_base(_error, limits, _selector, _select_one), do: {:halt, limits}
+
+  defp walked({:ok, found}, {horizon, last}), do: {found, {horizon_after(horizon, found), last}}
+  defp walked({:error, _reason}, limits), do: {:halt, limits}
+
+  # The walk ends a thousand years after the last selection.
+  defp horizon_after(horizon, []), do: horizon
+  defp horizon_after(_horizon, found), do: found |> List.last() |> horizon_from()
+
+  defp horizon_from(%Interval{from: from}), do: Math.add(from, @horizon)
+
+  defp passed?(_from, :none), do: false
+
+  defp passed?(%Tempo{} = from, %Tempo{} = limit),
+    do: Compare.compare_endpoints(from, limit) != :earlier
+
+  # A horizon beyond the calendar's range ends the walk.
+  defp passed?(_from, _no_horizon), do: true
+
+  # The start of the year after the last one the selector names, when
+  # every constraint in it names a year: nothing is selected after it.
+  defp year_limit(selector, %Tempo{} = from) do
+    case named_years(selector) do
+      [_ | _] = years -> %Tempo{from | time: [year: Enum.max(years) + 1]}
+      _no_year -> :none
+    end
+  end
+
+  defp named_years(%Tempo{time: time}) do
+    case Keyword.get(time, :year) do
+      year when is_integer(year) -> [year]
+      _no_year -> :none
+    end
+  end
+
+  defp named_years(%Interval{from: %Tempo{} = from}), do: named_years(from)
+
+  defp named_years([_ | _] = constraints) do
+    years = Enum.map(constraints, &named_years/1)
+    if :none in years, do: :none, else: Enum.concat(years)
+  end
+
+  defp named_years(_selector), do: :none
+
+  # The selection in one period, by the selector's shape.
+  defp select_period(period, %Range{} = range), do: select_period(period, Enum.to_list(range))
+  defp select_period(_period, []), do: IntervalSet.new([], coalesce: false)
+
+  defp select_period(period, [head | _] = indices) when is_integer(head),
+    do: select_indices(period, indices)
+
+  defp select_period(period, %Tempo{} = constraint), do: select_projections(period, [constraint])
+
+  defp select_period(period, %Interval{} = constraint),
+    do: select_projections(period, [constraint])
+
+  defp select_period(period, [%Tempo{} | _] = constraints),
+    do: select_projections(period, constraints)
+
+  defp select_period(period, [%Interval{} | _] = constraints),
+    do: select_projections(period, constraints)
+
+  defp select_period(period, fun) when is_function(fun, 1),
+    do: select_period(period, fun.(period))
+
+  defp select_period(_period, {:error, _reason} = error), do: error
+  defp select_period(_period, selector), do: {:error, unrecognised_selector(selector)}
+
+  defp unrecognised_selector(selector) do
+    ArgumentError.exception(
+      "Tempo.select/2 does not recognise selector #{inspect(selector)}. See `Tempo.Select` " <>
+        "for the selector vocabulary."
+    )
+  end
+
+  ## -----------------------------------------------------------
+  ## Weekday filter — a day-of-week selector across a span, and a
+  ## day-of-week constraint within a period (`project_onto_base/2`)
+  ## -----------------------------------------------------------
+
+  # The days of a span whose ISO day of week (Monday = 1) is one of
+  # `weekdays`, as a stream of day intervals: the whole days from the
+  # day the span starts on up to, not including, the day it ends on,
+  # and without end for an open-ended span.
+  defp weekdays_in(%Interval{from: %Tempo{calendar: calendar} = from, to: to}, weekdays) do
+    from
+    |> stream_days(to, calendar)
+    |> Stream.filter(fn {year, month, day} -> dow_of(calendar, year, month, day) in weekdays end)
+    |> Stream.map(fn {year, month, day} -> day_interval(calendar, year, month, day, from) end)
+  end
+
+  # The days from `from` up to, not including, `to` (without end when
+  # `to` is `:undefined`), each the day Calendrical gives after the one
+  # before.
   defp stream_days(from, to, calendar) do
     with {:ok, start_date} <- tempo_to_date(from, calendar),
-         {:ok, end_date} <- tempo_to_date(to, calendar) do
+         {:ok, end_date} <- end_date(to, calendar) do
       Stream.unfold(start_date, &next_day(&1, end_date))
     else
       _ -> []
     end
   end
 
-  defp next_day(date, end_date) do
+  defp end_date(:undefined, _calendar), do: {:ok, :undefined}
+  defp end_date(to, calendar), do: tempo_to_date(to, calendar)
+
+  defp next_day(%Date{} = date, :undefined),
+    do: {{date.year, date.month, date.day}, Calendrical.next(date, :day)}
+
+  defp next_day(%Date{} = date, end_date) do
     case Date.compare(date, end_date) do
       :lt -> {{date.year, date.month, date.day}, Calendrical.next(date, :day)}
       _on_or_after_the_end -> nil
     end
   end
+
+  # Past the last day the calendar can express.
+  defp next_day(_no_date, _end_date), do: nil
 
   defp tempo_to_date(%Tempo{time: time, calendar: calendar}, calendar) do
     if Keyword.has_key?(time, :week) do
@@ -378,6 +690,9 @@ defmodule Tempo.Select do
       month_time_to_date(time, calendar)
     end
   end
+
+  # An endpoint in another calendar than the span's start.
+  defp tempo_to_date(_endpoint, _calendar), do: :error
 
   defp month_time_to_date(time, calendar) do
     with year when is_integer(year) <- Keyword.get(time, :year),
@@ -456,11 +771,6 @@ defmodule Tempo.Select do
     select_indices_at(from, truncated_time, base_unit, indices)
   end
 
-  defp select_indices_on_tempo(%Tempo{} = tempo, indices) do
-    {base_unit, _} = Tempo.resolution(tempo)
-    select_indices_at(tempo, tempo.time, base_unit, indices)
-  end
-
   defp select_indices_at(%Tempo{calendar: calendar} = source, base_time, base_unit, indices) do
     case Unit.implicit_enumerator(base_unit, calendar) do
       nil ->
@@ -482,14 +792,19 @@ defmodule Tempo.Select do
     end
   end
 
+  # An index names a component nothing has checked, so one the period
+  # does not have (30 February, month 13) selects nothing, as a
+  # projection that cannot land does, and a negative index counts from
+  # the end (ISO 8601-2 §4.4.1): `-1` on a year is December.
   defp project_index(%Tempo{} = source, base_time, unit, idx) do
-    new_time = base_time ++ [{unit, idx}]
-    new_tempo = %Tempo{source | time: new_time}
+    indexed = %Tempo{source | time: base_time ++ [{unit, idx}]}
 
-    case Tempo.to_interval(new_tempo) do
-      {:ok, %Interval{} = iv} -> iv
-      {:ok, %IntervalSet{} = set} -> IntervalSet.first(set)
-      _ -> nil
+    with %Tempo{} = valid <- validated_projection(indexed) do
+      case Tempo.to_interval(valid) do
+        {:ok, %Interval{} = iv} -> iv
+        {:ok, %IntervalSet{} = set} -> IntervalSet.first(set)
+        _ -> nil
+      end
     end
   end
 
@@ -527,7 +842,8 @@ defmodule Tempo.Select do
 
   # Merge a constraint Tempo's time units onto base's from-endpoint
   # — units specified on the constraint take precedence; others
-  # inherit from base. Then materialise and intersect with base.
+  # inherit from base. Then materialise; the walk keeps what starts in
+  # the period.
   #
   # A day-of-week-only constraint (`~o"5K"` for "Friday", or
   # `Tempo.workdays(:US)` — `day_of_week: [1, 2, 3, 4, 5]`) is
@@ -536,14 +852,8 @@ defmodule Tempo.Select do
   # path.
   defp project_onto_base(%Interval{} = base, %Tempo{time: c_time}) do
     case day_of_week_only(c_time) do
-      {:ok, weekdays} ->
-        case filter_by_weekdays(base, weekdays) do
-          {:ok, %IntervalSet{} = set} -> IntervalSet.to_list(set)
-          {:error, _} = err -> err
-        end
-
-      :no ->
-        project_merge(base, c_time)
+      {:ok, weekdays} -> base |> weekdays_in(weekdays) |> Enum.to_list()
+      :no -> project_merge(base, c_time)
     end
   end
 
@@ -563,6 +873,8 @@ defmodule Tempo.Select do
       :point -> project_onto_base(base, c_from)
     end
   end
+
+  defp project_onto_base(_base, constraint), do: {:error, unrecognised_selector(constraint)}
 
   defp span_endpoint(%Interval{recurrence: recurrence}) when recurrence != 1, do: :point
   defp span_endpoint(%Interval{to: %Tempo{} = to}), do: {:to, to}
@@ -635,7 +947,7 @@ defmodule Tempo.Select do
 
   defp project_merge(%Interval{} = base, c_time) do
     with %Tempo{} = merged <- merged_constraint_tempo(base, c_time) do
-      materialise_projection(merged, base, c_time)
+      materialise_projection(merged, c_time)
     end
   end
 
@@ -659,15 +971,15 @@ defmodule Tempo.Select do
     end
   end
 
-  defp materialise_projection(merged, base, c_time) do
+  defp materialise_projection(merged, c_time) do
     case Tempo.to_interval(merged) do
       {:ok, %Interval{} = iv} ->
-        intersect_with_base(trim_iv_to_constraint(iv, c_time), base)
+        trim_iv_to_constraint(iv, c_time)
 
       {:ok, %IntervalSet{} = set} ->
         set
         |> IntervalSet.to_list()
-        |> Enum.map(&intersect_with_base(trim_iv_to_constraint(&1, c_time), base))
+        |> Enum.map(&trim_iv_to_constraint(&1, c_time))
 
       _ ->
         nil
@@ -962,24 +1274,6 @@ defmodule Tempo.Select do
         end
     end
   end
-
-  defp intersect_with_base(%Interval{from: %Tempo{} = from} = iv, %Interval{
-         from: %Tempo{} = bf,
-         to: %Tempo{} = bt
-       }) do
-    case Compare.compare_endpoints(from, bf) do
-      :earlier ->
-        nil
-
-      _ ->
-        case Compare.compare_endpoints(from, bt) do
-          r when r in [:earlier, :same] -> iv
-          _ -> nil
-        end
-    end
-  end
-
-  defp intersect_with_base(_, _), do: nil
 
   ## ---------------------------------------------------------
   ## Grouped-endpoint resolution

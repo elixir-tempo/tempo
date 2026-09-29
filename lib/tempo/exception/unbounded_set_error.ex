@@ -2,7 +2,7 @@ defmodule Tempo.UnboundedSetError do
   @moduledoc """
   Exception raised when an aggregate operation needs every member of
   an interval set whose backend is unbounded (a lazy generator such as
-  `Tempo.weekends/1`).
+  a selection across an open-ended span with `Tempo.select/2`).
 
   Unbounded sets support the walking operations — `Enum.take/2`,
   `Tempo.IntervalSet.walk/1`, `covered?/2`, `first/1`, and use as a

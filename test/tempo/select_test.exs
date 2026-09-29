@@ -12,7 +12,7 @@ defmodule Tempo.Select.Test do
   # an `{:ok, %Tempo.IntervalSet{}}` tuple. The tests below cover
   # every selector shape, every base shape (Tempo / Interval /
   # IntervalSet), and every rung of the territory-resolution chain
-  # inside `Tempo.workdays/1` / `Tempo.weekend/1`.
+  # inside `Tempo.workdays/1` / `Tempo.weekends/1`.
   #
   # This suite is `async: false` because a couple of tests mutate
   # `Application.put_env(:ex_tempo, :default_territory, _)` to exercise
@@ -83,7 +83,7 @@ defmodule Tempo.Select.Test do
     end
   end
 
-  describe "Tempo.workdays/1 and Tempo.weekend/1 as selectors" do
+  describe "Tempo.workdays/1 and Tempo.weekends/1 as selectors" do
     # The default Localize locale is `en` which resolves to `:US`,
     # where weekdays = [1..5] (Mon..Fri) and weekend = [6, 7] (Sat,
     # Sun). The test month (Feb 2026) starts on a Sunday.
@@ -95,8 +95,8 @@ defmodule Tempo.Select.Test do
       assert count == 20
     end
 
-    test "Tempo.weekend(:US) on Feb 2026 returns Saturday..Sunday" do
-      {:ok, set} = Tempo.select(~o"2026-02", Tempo.weekend(:US))
+    test "Tempo.weekends(:US) on Feb 2026 returns Saturday..Sunday" do
+      {:ok, set} = Tempo.select(~o"2026-02", Tempo.weekends(:US))
       days = set |> IntervalSet.to_list() |> Enum.map(& &1.from.time[:day])
       # Sundays: 1, 8, 15, 22. Saturdays: 7, 14, 21, 28.
       assert days == [1, 7, 8, 14, 15, 21, 22, 28]
@@ -114,19 +114,19 @@ defmodule Tempo.Select.Test do
     test "workdays and weekend partition the seven days of the week" do
       assert Enum.sort(
                Tempo.workdays(:US).time[:day_of_week] ++
-                 Tempo.weekend(:US).time[:day_of_week]
+                 Tempo.weekends(:US).time[:day_of_week]
              ) == [1, 2, 3, 4, 5, 6, 7]
 
       assert Enum.sort(
                Tempo.workdays(:SA).time[:day_of_week] ++
-                 Tempo.weekend(:SA).time[:day_of_week]
+                 Tempo.weekends(:SA).time[:day_of_week]
              ) == [1, 2, 3, 4, 5, 6, 7]
     end
 
     test "weekend selection over a week-axis base (regression: was silently empty)" do
       # Each ISO week contains exactly one Saturday and one Sunday,
       # so 13 weeks yield 26 weekend days.
-      {:ok, set} = Tempo.select(~o"2026Y{1..13}W", Tempo.weekend(:US))
+      {:ok, set} = Tempo.select(~o"2026Y{1..13}W", Tempo.weekends(:US))
 
       days = IntervalSet.to_list(set)
       assert length(days) == 26
@@ -139,14 +139,14 @@ defmodule Tempo.Select.Test do
     end
 
     test "weekend selection over a single week-resolution base" do
-      {:ok, set} = Tempo.select(~o"2026Y1W", Tempo.weekend(:US))
+      {:ok, set} = Tempo.select(~o"2026Y1W", Tempo.weekends(:US))
 
       days = IntervalSet.to_list(set)
       assert Enum.map(days, & &1.from.time[:day]) == [3, 4]
     end
   end
 
-  describe "territory resolution inside Tempo.workdays/1 and Tempo.weekend/1" do
+  describe "territory resolution inside Tempo.workdays/1 and Tempo.weekends/1" do
     # Saudi Arabia has weekend = [5, 6] (Fri, Sat) vs US [6, 7]
     # (Sat, Sun). Feb 2026 Friday/Saturday pattern differs from
     # Saturday/Sunday, so a correctly-applied SA override produces
@@ -156,13 +156,13 @@ defmodule Tempo.Select.Test do
     @us_feb_weekend [1, 7, 8, 14, 15, 21, 22, 28]
 
     test "explicit territory argument" do
-      {:ok, set} = Tempo.select(~o"2026-02", Tempo.weekend(:SA))
+      {:ok, set} = Tempo.select(~o"2026-02", Tempo.weekends(:SA))
       days = set |> IntervalSet.to_list() |> Enum.map(& &1.from.time[:day])
       assert days == @sa_feb_weekend
     end
 
     test "locale string resolves via Localize.Territory" do
-      {:ok, set} = Tempo.select(~o"2026-02", Tempo.weekend("ar-SA"))
+      {:ok, set} = Tempo.select(~o"2026-02", Tempo.weekends("ar-SA"))
       days = set |> IntervalSet.to_list() |> Enum.map(& &1.from.time[:day])
       assert days == @sa_feb_weekend
     end
@@ -171,7 +171,7 @@ defmodule Tempo.Select.Test do
       {:ok, tag} = Localize.validate_locale("ar-SA")
 
       for value <- ["ar-SA", :"ar-SA", tag] do
-        {:ok, set} = Tempo.select(~o"2026-02", Tempo.weekend(value))
+        {:ok, set} = Tempo.select(~o"2026-02", Tempo.weekends(value))
         days = set |> IntervalSet.to_list() |> Enum.map(& &1.from.time[:day])
         assert days == @sa_feb_weekend, "value=#{inspect(value)} did not resolve to SA"
       end
@@ -179,7 +179,7 @@ defmodule Tempo.Select.Test do
 
     test "territory strings in 'XX', 'xx', 'xx-zzzz' forms all resolve" do
       for territory <- [:SA, "SA", "sa", "sazzzz"] do
-        {:ok, set} = Tempo.select(~o"2026-02", Tempo.weekend(territory))
+        {:ok, set} = Tempo.select(~o"2026-02", Tempo.weekends(territory))
         days = set |> IntervalSet.to_list() |> Enum.map(& &1.from.time[:day])
         assert days == @sa_feb_weekend, "territory=#{inspect(territory)} did not resolve to SA"
       end
@@ -189,7 +189,7 @@ defmodule Tempo.Select.Test do
       Application.put_env(:ex_tempo, :default_territory, :SA)
 
       try do
-        {:ok, set} = Tempo.select(~o"2026-02", Tempo.weekend())
+        {:ok, set} = Tempo.select(~o"2026-02", Tempo.weekends())
         days = set |> IntervalSet.to_list() |> Enum.map(& &1.from.time[:day])
         assert days == @sa_feb_weekend
       after
@@ -198,7 +198,7 @@ defmodule Tempo.Select.Test do
     end
 
     test "default fallback uses the Localize locale (en → US)" do
-      {:ok, set} = Tempo.select(~o"2026-02", Tempo.weekend())
+      {:ok, set} = Tempo.select(~o"2026-02", Tempo.weekends())
       days = set |> IntervalSet.to_list() |> Enum.map(& &1.from.time[:day])
       assert days == @us_feb_weekend
     end
@@ -595,13 +595,197 @@ defmodule Tempo.Select.Test do
       assert Exception.message(message) =~ "selector vocabulary"
     end
 
-    test "workdays on an open-ended interval returns an error" do
-      {:ok, open} = Tempo.from_iso8601("2026-02/..")
+    test "an unrecognised constraint in a list returns an error tuple" do
+      assert {:error, %ArgumentError{} = error} = Tempo.select(~o"2026", [~o"12-25", 5])
+      assert Exception.message(error) =~ "does not recognise selector 5"
+    end
 
-      assert {:error, %Tempo.IntervalEndpointsError{} = e} =
-               Tempo.select(open, Tempo.workdays(:US))
+    test "a base select/2 cannot select from returns an error tuple" do
+      for base <- [nil, "", :"", "2026-06", 42, %{}, [1, 2]] do
+        assert {:error, %ArgumentError{} = error} = Tempo.select(base, Tempo.workdays(:US))
+        assert Exception.message(error) =~ "cannot select from"
+      end
+    end
 
-      assert Exception.message(e) =~ "open-ended"
+    test "an error selector is returned as it is" do
+      assert {:error, %ArgumentError{}} = Tempo.select(~o"2026-02", Tempo.workdays(:""))
+      assert {:error, %ArgumentError{}} = Tempo.select(~o"2026-02", Tempo.weekends(42))
+      assert {:error, :reason} = Tempo.select(~o"2026-02", {:error, :reason})
+    end
+
+    test "a span with an open start has no first period to select from" do
+      for base <- [~o"../2026-06-15", ~o"../.."] do
+        assert {:error, %Tempo.IntervalEndpointsError{reason: :open_start} = error} =
+                 Tempo.select(base, Tempo.workdays(:US))
+
+        assert Exception.message(error) =~ "selects forward from a span's start"
+      end
+
+      assert {:error, %Tempo.IntervalEndpointsError{reason: :open_start}} =
+               Tempo.select(~o"../2026", ~o"12-25")
+    end
+  end
+
+  describe "a span is selected period by period" do
+    test "every year of a span of years" do
+      {:ok, set} = Tempo.select(~o"2026/2029", ~o"12-25")
+
+      assert set |> IntervalSet.members() |> Enum.map(&Interval.from/1) ==
+               [~o"2026Y12M25D", ~o"2027Y12M25D", ~o"2028Y12M25D"]
+    end
+
+    test "every month of a span of months" do
+      {:ok, set} = Tempo.select(~o"2026-06/2026-09", [1, 15])
+
+      assert set |> IntervalSet.members() |> Enum.map(&Interval.from/1) ==
+               [
+                 ~o"2026Y6M1D",
+                 ~o"2026Y6M15D",
+                 ~o"2026Y7M1D",
+                 ~o"2026Y7M15D",
+                 ~o"2026Y8M1D",
+                 ~o"2026Y8M15D"
+               ]
+    end
+
+    test "every day of a span of days" do
+      {:ok, set} = Tempo.select(~o"2026-06-15/2026-06-18", ~o"T09/T17")
+      assert IntervalSet.count(set) == 3
+    end
+
+    test "the last day of each month" do
+      {:ok, set} = Tempo.select(~o"2026-06/2026-09", ~o"-1D")
+
+      assert set |> IntervalSet.members() |> Enum.map(&Interval.from/1) ==
+               [~o"2026Y6M30D", ~o"2026Y7M31D", ~o"2026Y8M31D"]
+    end
+
+    test "a quarter is selected in each of its months" do
+      {:ok, set} = Tempo.select(~o"2026Y3Q", [1, 15])
+      assert IntervalSet.count(set) == 6
+    end
+
+    test "a span that ends mid-period keeps what starts before its end" do
+      {:ok, set} = Tempo.select(~o"2026-06/2026-09-15", [1, 15])
+      assert set |> IntervalSet.members() |> List.last() |> Interval.from() == ~o"2026Y9M1D"
+    end
+
+    test "a selection starts in its period, so nothing past the span's end is selected" do
+      {:ok, set} = Tempo.select(~o"2026-06", ~o"07-01")
+      assert IntervalSet.count(set) == 0
+
+      {:ok, set} = Tempo.select(~o"2026-06", ~o"7M")
+      assert IntervalSet.count(set) == 0
+    end
+
+    test "business hours land on every day of a coalesced run of workdays" do
+      {:ok, workdays} = Tempo.select(~o"2026-06-15/2026-06-22", Tempo.workdays(:US))
+      run = IntervalSet.coalesce(workdays)
+      assert IntervalSet.count(run) == 1
+
+      {:ok, open} = Tempo.select(run, ~o"T09/T17")
+      assert IntervalSet.count(open) == 5
+    end
+
+    test "a duration-form interval and a recurrence are converted first" do
+      {:ok, fortnight} = Tempo.select(~o"2026-06-15/P14D", Tempo.weekends(:US))
+      assert IntervalSet.count(fortnight) == 4
+
+      {:ok, weeks} = Tempo.select(~o"R3/2026-06-15/P1W", Tempo.weekends(:US))
+      assert IntervalSet.count(weeks) == 6
+    end
+  end
+
+  describe "an integer index the period does not have" do
+    test "selects nothing there" do
+      {:ok, set} = Tempo.select(~o"2026-02", [28, 29, 30, 31])
+      assert set |> IntervalSet.members() |> Enum.map(&Interval.from/1) == [~o"2026Y2M28D"]
+
+      {:ok, set} = Tempo.select(~o"2026", [13])
+      assert IntervalSet.count(set) == 0
+    end
+
+    test "is kept in the periods that have it" do
+      {:ok, set} = Tempo.select(~o"2026-01/2026-05", [31])
+
+      assert set |> IntervalSet.members() |> Enum.map(&Interval.from/1) ==
+               [~o"2026Y1M31D", ~o"2026Y3M31D"]
+    end
+
+    test "a negative index counts from the end" do
+      {:ok, set} = Tempo.select(~o"2026", [-1])
+      assert set |> IntervalSet.members() |> Enum.map(&Interval.from/1) == [~o"2026Y12M"]
+    end
+  end
+
+  describe "an open-ended span gives a lazy set" do
+    defp first_days(set, count) do
+      set
+      |> IntervalSet.walk()
+      |> Enum.take(count)
+      |> Enum.map(&Tempo.day(Interval.from(&1)))
+    end
+
+    test "the weekend days from a date on" do
+      {:ok, weekends} = Tempo.select(~o"2026-06-15/..", Tempo.weekends(:US))
+      refute IntervalSet.bounded?(weekends)
+      assert first_days(weekends, 4) == [20, 21, 27, 28]
+
+      {:ok, saudi} = Tempo.select(~o"2026-06-15/..", Tempo.weekends(:SA))
+      assert first_days(saudi, 4) == [19, 20, 26, 27]
+    end
+
+    test "the weekend days serve as a busy set for shift/3" do
+      {:ok, weekends} = Tempo.select(~o"2026-06-18/..", Tempo.weekends(:US))
+
+      assert Tempo.shift(~o"2026-06-18T16:00", ~o"P3D", skipping: weekends) ==
+               ~o"2026-06-23T16:00:00"
+    end
+
+    test "a projection selects in each period as the walk reaches it" do
+      {:ok, christmases} = Tempo.select(~o"2026-06-15/..", ~o"12-25")
+
+      assert christmases |> IntervalSet.walk() |> Enum.take(3) |> Enum.map(&Interval.from/1) ==
+               [~o"2026Y12M25D", ~o"2027Y12M25D", ~o"2028Y12M25D"]
+    end
+
+    test "indices and time windows apply to each period" do
+      {:ok, fifteenths} = Tempo.select(~o"2026-06/..", [15])
+
+      assert fifteenths |> IntervalSet.walk() |> Enum.take(3) |> Enum.map(&Interval.from/1) ==
+               [~o"2026Y6M15D", ~o"2026Y7M15D", ~o"2026Y8M15D"]
+
+      {:ok, hours} = Tempo.select(~o"2026-06-15/..", ~o"T09/T17")
+      assert first_days(hours, 2) == [15, 16]
+    end
+
+    test "a selection across a lazy set is lazy too" do
+      {:ok, workdays} = Tempo.select(~o"2026-06-19/..", Tempo.workdays(:US))
+      {:ok, hours} = Tempo.select(workdays, ~o"T09/T17")
+      refute IntervalSet.bounded?(hours)
+      assert first_days(hours, 2) == [19, 22]
+    end
+
+    test "the walk ends after the last year a selector names" do
+      {:ok, christmas} = Tempo.select(~o"2026-06-15/..", ~o"2026-12-25")
+
+      assert christmas |> IntervalSet.walk() |> Enum.to_list() |> Enum.map(&Interval.from/1) ==
+               [~o"2026Y12M25D"]
+    end
+
+    test "a selector that names no day of the week selects nothing" do
+      no_days = %Tempo{time: [day_of_week: []], calendar: Calendrical.Gregorian}
+      assert {:ok, set} = Tempo.select(~o"2026-06-15/..", no_days)
+      assert IntervalSet.count(set) == 0
+    end
+
+    test "an empty selector selects nothing" do
+      assert {:ok, set} = Tempo.select(~o"2026-06-15/..", [])
+      assert IntervalSet.count(set) == 0
+    end
+
+    test "an unrecognised selector is the first period's error" do
+      assert {:error, %ArgumentError{}} = Tempo.select(~o"2026-06-15/..", :banana)
     end
   end
 
@@ -633,7 +817,7 @@ defmodule Tempo.Select.Test do
       # Two one-week on-call stints; the weekend days within them.
       rota = ~o"{2025-12-29/2026-01-05,2026-01-19/2026-01-26}"
 
-      {:ok, weekend_days} = Tempo.select(rota, Tempo.weekend(:US))
+      {:ok, weekend_days} = Tempo.select(rota, Tempo.weekends(:US))
 
       days =
         weekend_days

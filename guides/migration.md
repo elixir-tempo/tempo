@@ -27,6 +27,12 @@ Tempo 2.0 gives each word in its API one meaning, the one it has in everyday Eng
 | `Tempo.to_rrule/1`, `to_rrule!/1` | `Tempo.RRule.to_string/1`, `to_string!/1` |
 | `Tempo.MaterialisationError` | `Tempo.ConversionError` |
 | `Tempo.RRule.Expander.expand/3` | `Tempo.RRule.parse/2`, then `Tempo.to_interval_set/2` |
+| `Tempo.add_working_days/3` | `Tempo.add_workdays/3` |
+| `Tempo.next_working_day/2`, `previous_working_day/2` | `Tempo.next_workday/2`, `previous_workday/2` |
+| `Tempo.nearest_working_day/2` | `Tempo.nearest_workday/2` |
+| `Tempo.working_days_in/2` | `Tempo.count_workdays/2` |
+| `Tempo.weekend/1` | `Tempo.weekends/1` |
+| `Tempo.weekends(from: date)`, a lazy set | `Tempo.select/2` over a span with no end |
 
 These keep their names and change their meaning:
 
@@ -48,6 +54,8 @@ These keep their names and change their meaning:
 
 * **`parse/2` and the typed parsers** — ISO 8601 first, then the locale's words, where `parse/2` read only words and the typed parsers only ISO 8601.
 
+* **`select/2` across a span** — selects in every period of the span, where 1.x selected in its first period alone.
+
 ## Updating the dependency
 
 ```elixir
@@ -61,10 +69,10 @@ end
 A search for the removed names finds the renames:
 
 ```bash
-grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(meets|during)\?|Interval\.(meets|during)\?|(Tempo|Interval)\.compose|Tempo\.anchor[(/]|(NonAnchored|RequiresAnchor)Error|:unanchored|grounded\?|GroundedTempoError|(to|from)_(naive_)?date_time|from_(ical|jscalendar)|available_from_ical|to_rrule|MaterialisationError|Expander.expand' lib test
+grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(meets|during)\?|Interval\.(meets|during)\?|(Tempo|Interval)\.compose|Tempo\.anchor[(/]|(NonAnchored|RequiresAnchor)Error|:unanchored|grounded\?|GroundedTempoError|(to|from)_(naive_)?date_time|from_(ical|jscalendar)|available_from_ical|to_rrule|MaterialisationError|Expander.expand|working_days?|Tempo\.weekend\(|weekends\(from' lib test
 ```
 
-The changes of meaning need a read rather than a replace: every `before?`, `after?` and their `certainly_` and `possibly_` forms, every duration read as a count of seconds, every shift of a zoned value by hours, every `duration/1` of a set, every window, and every `:metadata` passed to `Tempo.new/1`.
+The changes of meaning need a read rather than a replace: every `before?`, `after?` and their `certainly_` and `possibly_` forms, every duration read as a count of seconds, every shift of a zoned value by hours, every `duration/1` of a set, every window, every `:metadata` passed to `Tempo.new/1`, and every `select/2` across a span longer than one period.
 
 ## A set's duration is the time it covers
 
@@ -430,4 +438,42 @@ iex> {:ok, mondays} = Tempo.RRule.parse("FREQ=WEEKLY;BYDAY=MO;COUNT=4", from: ~o
 iex> {:ok, occurrences} = Tempo.to_interval_set(mondays)
 iex> Tempo.IntervalSet.count(occurrences)
 4
+```
+
+## Workdays
+
+The workday functions are named for the workday, and the weekend selector is plural, as `workdays/1` is: the workdays of June are `Tempo.select(~o"2026-06", Tempo.workdays(:AU))`, and `Tempo.weekends(:AU)` selects the weekends. `count_workdays/2` counts the workdays of any value `select/2` selects from. The functions return `{:error, reason}` for a value that is not a day or a territory they cannot resolve, where 1.x raised.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.x
+Tempo.add_working_days(~o"2026-06-12", 1, :US)
+Tempo.working_days_in(june, :US)
+Tempo.shift(start, ~o"P3D", skipping: Tempo.weekends(from: start))
+```
+
+```elixir
+iex> Tempo.add_workdays(~o"2026-06-12", 1, :US)
+~o"2026Y6M15D"
+iex> Tempo.count_workdays(~o"2026-06", :US)
+22
+```
+
+The weekend days from a date on, the lazy set 1.x's `weekends/1` built, are the weekends of a span with no end: `select/2` over an open-ended span selects period by period, only as far as the walk goes.
+
+```elixir
+iex> {:ok, weekends} = Tempo.select(~o"2026-06-18/..", Tempo.weekends(:US))
+iex> Tempo.shift(~o"2026-06-18T16:00", ~o"P3D", skipping: weekends)
+~o"2026Y6M23DT16H0M0S"
+```
+
+> *"Three days of work from Thursday at four, skipping the weekends, finish on Tuesday at four."*
+
+A span is selected in each of its periods at its start's resolution, where 1.x selected in its first period alone: the Christmases of `~o"2026/2029"` are three, where 1.x found 2026's.
+
+```elixir
+iex> {:ok, christmases} = Tempo.select(~o"2026/2029", ~o"12-25")
+iex> Tempo.IntervalSet.count(christmases)
+3
 ```

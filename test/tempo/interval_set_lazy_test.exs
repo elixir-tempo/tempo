@@ -88,21 +88,21 @@ defmodule Tempo.IntervalSetLazyTest do
   describe "an unbounded busy set drives shift/3 skipping:" do
     test "three free days from Thursday afternoon skip the weekend, no bound needed" do
       start = ~o"2026-06-18T16:00"
-      weekends = Tempo.weekends(from: ~o"2026-06-18")
+      {:ok, weekends} = Tempo.select(~o"2026-06-18/..", Tempo.weekends())
 
       assert Tempo.shift(start, ~o"P3D", skipping: weekends) == ~o"2026-06-23T16:00:00"
     end
 
     test "a Saudi weekend skips Friday and Saturday instead" do
       start = ~o"2026-06-18T16:00"
-      weekends = Tempo.weekends(from: ~o"2026-06-18", territory: :SA)
+      {:ok, weekends} = Tempo.select(~o"2026-06-18/..", Tempo.weekends(:SA))
 
       assert Tempo.shift(start, ~o"P2D", skipping: weekends) == ~o"2026-06-22T16:00:00"
     end
 
     test "a backward shift materialises only the finite prefix" do
       arrived = ~o"2026-06-23T16:00"
-      weekends = Tempo.weekends(from: ~o"2026-06-15")
+      {:ok, weekends} = Tempo.select(~o"2026-06-15/..", Tempo.weekends())
 
       assert Tempo.shift(arrived, [second: -3 * 86_400], skipping: weekends) ==
                ~o"2026-06-18T16:00:00"

@@ -2,7 +2,7 @@
 
 The [workdays-and-weekends guide](./workdays-and-weekends.md) showed how `Tempo.select(interval, Tempo.workdays(:US))` filters out weekends. Holidays are the other half of "when is the office closed?" — they're territory-specific, year-specific, and maintained by people who care about them. Tempo doesn't ship holiday data; instead, it consumes standard iCalendar (`.ics`) feeds through `Tempo.ICal.parse/1` and lets set operations do the rest.
 
-This guide walks through fetching a real holiday calendar from [officeholidays.com](https://www.officeholidays.com/subscribe), parsing it into a `%Tempo.IntervalSet{}`, and using it to answer three scheduling questions: "how many working days are actually in Q3?", "which holidays will hit my project?", and "what's five business days from today if we skip holidays?".
+This guide walks through fetching a real holiday calendar from [officeholidays.com](https://www.officeholidays.com/subscribe), parsing it into a `%Tempo.IntervalSet{}`, and using it to answer three scheduling questions: "how many workdays are actually in Q3?", "which holidays will hit my project?", and "what's five business days from today if we skip holidays?".
 
 ## Setup — required for every example
 
@@ -83,30 +83,30 @@ Many holidays need no feed at all: the ones with a purely calendrical rule — "
 
 ### Computing the observed day yourself
 
-You don't have to defer to the feed for the weekend shift — `Tempo.nearest_working_day/2` applies exactly the federal in-lieu rule (a Saturday rolls back to Friday, a Sunday forward to Monday), territory-aware for which days are the weekend:
+You don't have to defer to the feed for the weekend shift — `Tempo.nearest_workday/2` applies exactly the federal in-lieu rule (a Saturday rolls back to Friday, a Sunday forward to Monday), territory-aware for which days are the weekend:
 
 ```elixir
 # 4 July 2026 is a Saturday
-Tempo.nearest_working_day(~o"2026-07-04", :US)
+Tempo.nearest_workday(~o"2026-07-04", :US)
 #=> ~o"2026Y7M3D"    (observed Friday, 3 July)
 ```
 
-It is a single-day transform, so map it over as many years as you like — the working-day family is weekend-aware, not holiday-aware, which is precisely right here because the in-lieu rule only cares about weekends:
+It is a single-day transform, so map it over as many years as you like — the workday family is weekend-aware, not holiday-aware, which is precisely right here because the in-lieu rule only cares about weekends:
 
 ```elixir
 [2025, 2026, 2027]
-|> Enum.map(&Tempo.nearest_working_day(Tempo.from_iso8601!("#{&1}-07-04"), :US))
+|> Enum.map(&Tempo.nearest_workday(Tempo.from_iso8601!("#{&1}-07-04"), :US))
 #=> [~o"2025Y7M4D", ~o"2026Y7M3D", ~o"2027Y7M5D"]
 #     Fri 4 (weekday)  Fri 3 (from Sat)  Mon 5 (from Sun)
 ```
 
-`nearest_working_day/2` requires a value that denotes a day and raises otherwise; its siblings `next_working_day/2` and `previous_working_day/2` move by a fixed number of working days instead of snapping to the closest.
+`nearest_workday/2` needs a value that denotes a day and returns `{:error, reason}` for one that does not; its siblings `next_workday/2` and `previous_workday/2` move by a fixed number of workdays instead of snapping to the closest.
 
 ## Three planning questions
 
 Assume the calendar has been fetched and parsed into `holidays`.
 
-### 1. How many working days are actually in Q3 2026?
+### 1. How many workdays are actually in Q3 2026?
 
 Pure set algebra: workdays minus holidays.
 
@@ -122,7 +122,7 @@ Tempo.IntervalSet.count(net_workdays)
 #=> 64    (66 workdays − 2 federal holidays in Q3)
 ```
 
-Read aloud: *"Workdays in Q3 are the Monday-through-Friday days inside July-September. Net working days are those workday members that don't overlap any holiday."*
+Read aloud: *"Workdays in Q3 are the Monday-through-Friday days inside July-September. Net workdays are those workday members that don't overlap any holiday."*
 
 `Tempo.members_outside/2` is the **member-preserving** companion to `Tempo.difference/2`: each workday that survives the filter is kept as a distinct member, with its own day-level endpoints. This is the natural shape for "count the days" and "list the days" queries — no trimming, no fragmentation. (`Tempo.difference/2` would produce the same numeric result here, since each workday is either fully a holiday or fully not, but `members_outside` is the right name for an event-list question.)
 
@@ -230,7 +230,7 @@ For teams across multiple territories, **union the holiday sets before differenc
 {:ok, all_closed} = Tempo.union(all_closed, de_holidays)
 ```
 
-Then compute "working days for the global team" as `Tempo.members_outside(workdays, all_closed)`. Each member interval still carries the territory/name metadata — so the July 3 entry stays labelled as US in the global union, and you can render conflicts with full attribution.
+Then compute "workdays for the global team" as `Tempo.members_outside(workdays, all_closed)`. Each member interval still carries the territory/name metadata — so the July 3 entry stays labelled as US in the global union, and you can render conflicts with full attribution.
 
 ## Scheduling a training week
 
@@ -258,7 +258,7 @@ Read aloud: *"Take the open workdays of Q3, group them by week, keep only the we
 
 ## Related reading
 
-* [Working with workdays and weekends](./workdays-and-weekends.md) — `Tempo.workdays/1`, `Tempo.weekend/1`, territory-aware weekend conventions, and the primitive patterns this guide builds on.
+* [Working with workdays and weekends](./workdays-and-weekends.md) — `Tempo.workdays/1`, `Tempo.weekends/1`, territory-aware weekend conventions, and the primitive patterns this guide builds on.
 
 * [Set operations](./set-operations.md) — union, intersection, difference, the instant-level vs member-preserving distinction, and companions like `members_overlapping`/`members_outside`.
 

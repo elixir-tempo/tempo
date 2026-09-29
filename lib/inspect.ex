@@ -812,7 +812,7 @@ defmodule Tempo.Inspect do
   # A nearest-weekday selection (cron `W`, parsed to `:nearest_weekday`) has
   # no ISO 8601 designator and — unlike the `q` week-start above — was
   # deliberately not given a project-specific one (the day-level operation is
-  # `Tempo.nearest_working_day/2`). Raise a clear error instead of a
+  # `Tempo.nearest_workday/2`). Raise a clear error instead of a
   # `FunctionClauseError`; the Inspect protocol catches it and falls back.
   defp inspect_value({:nearest_weekday, _targets}) do
     raise Iso8601EncodeError.exception(construct: :nearest_weekday)

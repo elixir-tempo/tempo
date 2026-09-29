@@ -42,7 +42,7 @@ defmodule Tempo.CoreCoverageTest do
     end
   end
 
-  describe "working-day helpers in their default-territory form" do
+  describe "workday helpers in their default-territory form" do
     test "workdays/0 returns Monday–Friday" do
       assert inspect(Tempo.workdays()) == ~s|~o"{1,2,3,4,5}K"|
     end
@@ -53,13 +53,18 @@ defmodule Tempo.CoreCoverageTest do
     end
 
     test "arithmetic skips the weekend" do
-      assert Tempo.add_working_days(~o"2026-06-12", 1) == ~o"2026-06-15"
-      assert Tempo.next_working_day(~o"2026-06-12") == ~o"2026-06-15"
-      assert Tempo.previous_working_day(~o"2026-06-15") == ~o"2026-06-12"
+      assert Tempo.add_workdays(~o"2026-06-12", 1) == ~o"2026-06-15"
+      assert Tempo.next_workday(~o"2026-06-12") == ~o"2026-06-15"
+      assert Tempo.previous_workday(~o"2026-06-15") == ~o"2026-06-12"
+      assert Tempo.nearest_workday(~o"2026-06-13") == ~o"2026-06-12"
     end
 
-    test "working_days_in counts business days in an interval" do
-      assert Tempo.working_days_in(~o"2026-06-15/2026-06-20") == 5
+    test "count_workdays counts business days in an interval" do
+      assert Tempo.count_workdays(~o"2026-06-15/2026-06-20") == 5
+    end
+
+    test "weekends/0 returns Saturday and Sunday" do
+      assert inspect(Tempo.weekends()) == ~s|~o"{6,7}K"|
     end
   end
 
@@ -73,14 +78,14 @@ defmodule Tempo.CoreCoverageTest do
     end
 
     test "map returns an IntervalSet, one member per element" do
-      observed = Tempo.map(@july4, &Tempo.nearest_working_day(&1, :US))
+      observed = Tempo.map(@july4, &Tempo.nearest_workday(&1, :US))
       assert %IntervalSet{} = observed
       # July 4 stays (Fri), rolls to Fri 3 (from Sat), Mon 5 (from Sun).
       assert member_dates(observed) == [{7, 4}, {7, 3}, {7, 5}]
     end
 
     test "try_map returns {:ok, set} when every element resolves" do
-      assert {:ok, set} = Tempo.try_map(@july4, &Tempo.nearest_working_day(&1, :US))
+      assert {:ok, set} = Tempo.try_map(@july4, &Tempo.nearest_workday(&1, :US))
       assert member_dates(set) == [{7, 4}, {7, 3}, {7, 5}]
     end
 

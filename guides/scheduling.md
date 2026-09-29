@@ -275,10 +275,11 @@ The weekend comes from the calendar's own vocabulary — `Tempo.weekend?/1` is t
 
 The rules at the edges: an origin already inside a busy span first moves to its end (a shift of `PT0S` from inside a meeting lands at the meeting's end); a negative duration walks backward symmetrically; and the duration must be exact — `~o"P1M"` of free time has no fixed length, so `:year`/`:month` components return `{:error, %Tempo.InvalidUnitError{}}`.
 
-When the only busy time *is* the weekend, skip the window arithmetic entirely: `Tempo.weekends/1` is an unbounded lazy busy set, and the walk consumes only as much of it as the shift needs — no `:within` required.
+When the only busy time *is* the weekend, skip the window arithmetic entirely: the weekend days of a span with no end are an unbounded lazy busy set, and the walk consumes only as much of it as the shift needs — no `:within` required.
 
 ```elixir
-Tempo.shift(~o"2026-06-18T16:00", ~o"P3D", skipping: Tempo.weekends(from: ~o"2026-06-18"))
+{:ok, weekends} = Tempo.select(~o"2026-06-18/..", Tempo.weekends(:US))
+Tempo.shift(~o"2026-06-18T16:00", ~o"P3D", skipping: weekends)
 #=> ~o"2026Y6M23DT16H0M0S"
 ```
 
