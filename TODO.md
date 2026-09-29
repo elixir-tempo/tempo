@@ -78,6 +78,10 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ## Done
 
+* [x] **`select/2` keeps metadata** — each selected member carries the metadata of the base member it came from, lazily for an open-ended span, and a set's own metadata stays with the result (user). 2026-09-29.
+
+* [x] **Three defects the NSW school terms found** — `Interval.from/1`, `to/1` and `:through` read the day a selection picks; `shift/3` and `Math.add/2` return an error for a selection shifted by a unit it does not carry, and for arguments that are not a value and a duration, where they raised. 2026-09-29.
+
 * [x] **The `:within` reach steps through Calendrical** — a walk's periods and an occurrence's reach step in the recurrence's own calendar, with no Gregorian day counts; an anchored recurrence reaches past the window's end too, and a Coptic two-month rule keeps its phase. 2026-09-29.
 
 * [x] **Seven API gaps the NSW school holidays found** — holidays in `workdays/2` (`:except`, `Tempo.Workdays`); the duration predicates and `duration/1` on sets and values; `Interval.from/1` and `to/1` on a value, and `new/1`'s `:through`; `select/2` with an ISO 8601-2 selection; `at/2` and `on/2` with an interval or a selection; `:skipping` stepping days; `RecurrenceSet.filter/2`. 2026-09-29.

@@ -4704,6 +4704,12 @@ defmodule Tempo do
     `~o"1M31D"`), but `~o"1M31D"` plus one month lands on an unresolvable
     "Feb 31" and `~o"2M28D"` plus one day (Feb 29 or Mar 1?) both error.
 
+  * `{:error, reason}` when the value holds a selection and the shift
+    steps a unit it does not carry: a month on `~o"2027Y4ML1K1IN"`, the
+    first Monday of April 2027, is the first Monday of May, but it has no
+    day to add a day to. Also when the arguments are not a Tempo value
+    and a shift.
+
   ### Examples
 
       iex> Tempo.shift(~o"2026-06-15", month: 1, day: -5)
@@ -4796,6 +4802,14 @@ defmodule Tempo do
     # out before the rest becomes a duration.
     {skip_options, units} = Keyword.split(units, [:skipping])
     shift(tempo, Duration.build(units), Keyword.merge(skip_options, options))
+  end
+
+  def shift(tempo, shift, _options) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.shift/3 shifts a Tempo value by a duration or by keyword units, not " <>
+         "#{inspect(tempo)} by #{inspect(shift)}."
+     )}
   end
 
   ## ---------------------------------------------------------
@@ -8602,7 +8616,8 @@ defmodule Tempo do
   A span is selected period by period at its start's resolution, so
   the Christmases of `~o"2026/2029"` are three. An open-ended span
   (`~o"2026-06-15/.."`) gives a lazy set, walked as far as it is
-  taken. See `Tempo.Select` for the full vocabulary.
+  taken. What is selected keeps the metadata of what it is selected
+  from. See `Tempo.Select` for the full vocabulary.
 
   ### Examples
 
@@ -8615,6 +8630,13 @@ defmodule Tempo do
       iex> from = Tempo.Interval.from(xmas)
       iex> {Tempo.year(from), Tempo.month(from), Tempo.day(from)}
       {2026, 12, 25}
+
+  The school days of a term are tagged with the term:
+
+      iex> {:ok, term} = Tempo.Interval.new(from: ~o"2027-07-19", to: ~o"2027-07-21", metadata: %{term: 3})
+      iex> {:ok, days} = Tempo.select(term, Tempo.workdays(:AU))
+      iex> days |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.metadata/1)
+      [%{term: 3}, %{term: 3}]
 
   """
   defdelegate select(base, selector), to: Tempo.Select

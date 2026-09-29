@@ -1424,7 +1424,8 @@ defmodule Tempo.Interval do
   ### Arguments
 
   * `interval` is a `t:t/0`, or a `t:Tempo.t/0`, which is the span it
-    names: `~o"2026-06"` is June.
+    names: `~o"2026-06"` is June, and a selection that picks one day
+    is that day.
 
   ### Returns
 
@@ -1432,7 +1433,8 @@ defmodule Tempo.Interval do
     open-ended intervals.
 
   * `{:error, reason}` for a value naming no single span, such as a set
-    of values or 29 February without a year.
+    of values, a selection picking several days or none, or 29 February
+    without a year.
 
   ### Examples
 
@@ -1442,6 +1444,11 @@ defmodule Tempo.Interval do
 
       iex> Tempo.Interval.from(~o"2026-06")
       ~o"2026Y6M"
+
+  The Friday that falls 7–13 April 2027 is the ninth:
+
+      iex> Tempo.Interval.from(~o"2027YLLL4M7DN/P7DN5K1IN")
+      ~o"2027Y4M9D"
 
   """
   @spec from(t() | Tempo.t()) :: Tempo.t() | :undefined | {:error, Exception.t()}
@@ -1467,7 +1474,8 @@ defmodule Tempo.Interval do
     open-ended intervals.
 
   * `{:error, reason}` for a value naming no single span, such as a set
-    of values or 29 February without a year.
+    of values, a selection picking several days or none, or 29 February
+    without a year.
 
   ### Examples
 
@@ -1483,14 +1491,27 @@ defmodule Tempo.Interval do
   def to(%__MODULE__{} = interval), do: resolve_duration_form(interval).to
   def to(%Tempo{} = value), do: with_span(value, &to/1)
 
-  # A value is the span it names, read through `Tempo.to_interval/1`; one
-  # that names several spans has no single start or end.
+  # A value is the span it names, read through `Tempo.to_interval/1`: a
+  # selection that picks one day is that day. One that names several spans,
+  # or none, has no single start or end.
   defp with_span(%Tempo{} = value, endpoint) do
     case Tempo.to_interval(value) do
       {:ok, %__MODULE__{} = span} -> endpoint.(span)
-      {:ok, %IntervalSet{}} -> {:error, several_spans_error(value)}
+      {:ok, %IntervalSet{} = spans} -> only_span(spans, value, endpoint)
       {:error, _reason} = error -> error
     end
+  end
+
+  defp only_span(spans, value, endpoint) do
+    case IntervalSet.bounded?(spans) and IntervalSet.members(spans) do
+      [span] -> endpoint.(span)
+      [] -> {:error, no_span_error(value)}
+      _several -> {:error, several_spans_error(value)}
+    end
+  end
+
+  defp no_span_error(value) do
+    ArgumentError.exception("#{inspect(value)} names no span: its selection picks nothing.")
   end
 
   defp several_spans_error(value) do

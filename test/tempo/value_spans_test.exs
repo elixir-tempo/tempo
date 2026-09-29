@@ -81,6 +81,23 @@ defmodule Tempo.ValueSpansTest do
       assert Interval.to(~o"4M9D") == ~o"4M10D"
     end
 
+    test "read the one day a selection names" do
+      # The Friday that falls 7–13 April 2027, and Good Friday 2027.
+      assert Interval.from(~o"2027YLLL4M7DN/P7DN5K1IN") == ~o"2027Y4M9D"
+      assert Interval.to(~o"2027YLLL4M7DN/P7DN5K1IN") == ~o"2027Y4M10D"
+      assert Interval.from(~o"2027YLLL(easter)eN/P-3DN5K1IN") == ~o"2027Y3M26D"
+
+      assert Interval.new(from: ~o"2027-01-28", through: ~o"2027YLLL4M7DN/P7DN5K1IN") ==
+               {:ok, ~o"2027Y1M28D/4M10D"}
+    end
+
+    test "are an error for a selection picking several days or none" do
+      # Every Friday of 2027, and the Thursday that falls 17–21 December
+      # 2027, of which there is none.
+      assert {:error, %ArgumentError{}} = Interval.from(~o"2027YL5KN")
+      assert {:error, %ArgumentError{}} = Interval.to(~o"2027YLLL12M17DN/P5DN4K1IN")
+    end
+
     test "are an error for a value naming no single span" do
       assert {:error, %Tempo.UnanchoredError{}} = Interval.to(~o"2M28D")
       assert {:error, %ArgumentError{}} = Interval.to(~o"{2026,2027}Y")

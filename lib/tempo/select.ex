@@ -226,6 +226,10 @@ defmodule Tempo.Select do
   A span is selected period by period at its start's resolution, so
   the quarter `~o"2026Y3Q"` selects in July, August and September.
 
+  What is selected keeps the metadata of what it is selected from:
+  each school day of a term tagged `%{term: 3}` is tagged `%{term: 3}`
+  too, and a set's own metadata stays with the set.
+
   Example with a quarter base:
 
       Tempo.select(~o"2026Y3Q", Tempo.workdays(:US))
@@ -280,17 +284,9 @@ defmodule Tempo.Select do
   # ---- IntervalSet base: select within each member ----
 
   def select(%IntervalSet{} = set, selector) do
-    if IntervalSet.bounded?(set) do
-      set
-      |> IntervalSet.members()
-      |> collect(&member_selection(&1, selector))
-      |> selection_set()
-    else
-      set
-      |> IntervalSet.walk()
-      |> Stream.map(&{:ok, &1})
-      |> select_lazily(selector, &member_selection/2)
-    end
+    set
+    |> select_members(selector)
+    |> with_set_metadata(IntervalSet.metadata(set))
   end
 
   # ---- Workdays less holidays: the weekdays, then those no holiday
@@ -312,13 +308,10 @@ defmodule Tempo.Select do
 
   # ---- Interval base: select period by period ----
 
-  def select(%Interval{} = interval, selector) do
-    case span(interval) do
-      {:closed, span} -> select_closed(span, selector)
-      {:open_end, span} -> select_open_end(span, selector)
-      {:set, set} -> select(set, selector)
-      {:error, _reason} = error -> error
-    end
+  def select(%Interval{metadata: metadata} = interval, selector) do
+    interval
+    |> select_span(selector)
+    |> with_base_metadata(metadata)
   end
 
   # ---- Catch-all: clearer error ----
@@ -330,6 +323,59 @@ defmodule Tempo.Select do
          "an interval or an interval set."
      )}
   end
+
+  defp select_members(set, selector) do
+    if IntervalSet.bounded?(set) do
+      set
+      |> IntervalSet.members()
+      |> collect(&member_selection(&1, selector))
+      |> selection_set()
+    else
+      set
+      |> IntervalSet.walk()
+      |> Stream.map(&{:ok, &1})
+      |> select_lazily(selector, &member_selection/2)
+    end
+  end
+
+  defp select_span(interval, selector) do
+    case span(interval) do
+      {:closed, span} -> select_closed(span, selector)
+      {:open_end, span} -> select_open_end(span, selector)
+      {:set, set} -> select(set, selector)
+      {:error, _reason} = error -> error
+    end
+  end
+
+  # What is selected from a base keeps the base's metadata — the school days
+  # of a term are tagged with the term — and a selected member's own
+  # metadata wins where the two share a key.
+  defp with_base_metadata(selected, metadata) when map_size(metadata) == 0, do: selected
+
+  defp with_base_metadata({:ok, %IntervalSet{} = set}, metadata) do
+    tagged = &%{&1 | metadata: Map.merge(metadata, &1.metadata)}
+
+    if IntervalSet.bounded?(set) do
+      set
+      |> IntervalSet.members()
+      |> Enum.map(tagged)
+      |> IntervalSet.new(coalesce: false, metadata: IntervalSet.metadata(set))
+    else
+      {:ok,
+       set
+       |> IntervalSet.walk()
+       |> Stream.map(tagged)
+       |> IntervalSet.from_stream(metadata: IntervalSet.metadata(set))}
+    end
+  end
+
+  defp with_base_metadata(error, _metadata), do: error
+
+  # A set's selection keeps the set's own metadata.
+  defp with_set_metadata({:ok, %IntervalSet{} = selected}, metadata),
+    do: {:ok, %{selected | metadata: metadata}}
+
+  defp with_set_metadata(error, _metadata), do: error
 
   defp day_of_week_selector(weekdays),
     do: %Tempo{time: [day_of_week: weekdays], calendar: Calendrical.Gregorian}

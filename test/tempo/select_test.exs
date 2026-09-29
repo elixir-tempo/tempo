@@ -915,4 +915,55 @@ defmodule Tempo.Select.Test do
                ["2026Y4M5D/6D", "2027Y3M28D/29D"]
     end
   end
+
+  describe "the metadata of what is selected" do
+    defp metadata_of(set), do: set |> IntervalSet.members() |> Enum.map(&Tempo.metadata/1)
+
+    test "each day selected from a base keeps the base's metadata" do
+      {:ok, term} = Interval.new(from: ~o"2027-07-19", to: ~o"2027-07-24", metadata: %{term: 3})
+
+      {:ok, workdays} = Tempo.select(term, Tempo.workdays(:AU))
+      assert metadata_of(workdays) == List.duplicate(%{term: 3}, 5)
+
+      {:ok, school_days} = Tempo.select(term, Tempo.workdays(:AU, except: ~o"2027-07-20"))
+      assert metadata_of(school_days) == List.duplicate(%{term: 3}, 4)
+
+      {:ok, fridays} = Tempo.select(term, ~o"5K")
+      assert metadata_of(fridays) == [%{term: 3}]
+    end
+
+    test "each member of a set tags its own days, and the set keeps its own metadata" do
+      {:ok, term_1} = Interval.new(from: ~o"2027-01-28", to: ~o"2027-01-30", metadata: %{term: 1})
+      {:ok, term_2} = Interval.new(from: ~o"2027-04-27", to: ~o"2027-04-29", metadata: %{term: 2})
+      {:ok, terms} = IntervalSet.new([term_1, term_2], metadata: %{division: :eastern})
+
+      {:ok, days} = Tempo.select(terms, Tempo.workdays(:AU))
+
+      assert Enum.map(metadata_of(days), & &1.term) == [1, 1, 2, 2]
+      assert IntervalSet.metadata(days) == %{division: :eastern}
+    end
+
+    test "a value's metadata, through an ISO 8601-2 selection and a projection" do
+      year = Tempo.put_metadata(~o"2027", %{calendar_year: true})
+
+      {:ok, easter} = Tempo.select(year, ~o"L(easter)eN")
+      assert metadata_of(easter) == [%{calendar_year: true}]
+
+      {:ok, christmas} = Tempo.select(year, ~o"12-25")
+      assert metadata_of(christmas) == [%{calendar_year: true}]
+    end
+
+    test "an open-ended span's days, as the walk reaches them" do
+      {:ok, booking} = Interval.new(from: ~o"2027-06-15", metadata: %{booking: 42})
+      {:ok, weekends} = Tempo.select(booking, Tempo.weekends(:AU))
+
+      assert weekends |> IntervalSet.walk() |> Enum.take(3) |> Enum.map(&Tempo.metadata/1) ==
+               List.duplicate(%{booking: 42}, 3)
+    end
+
+    test "a base without metadata selects days without it" do
+      {:ok, days} = Tempo.select(~o"2027-07-19/2027-07-21", Tempo.workdays(:AU))
+      assert metadata_of(days) == [%{}, %{}]
+    end
+  end
 end

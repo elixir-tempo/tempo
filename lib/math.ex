@@ -8,6 +8,7 @@ defmodule Tempo.Math do
   alias Tempo.IntervalEndpointsError
   alias Tempo.IntervalSet
   alias Tempo.InvalidUnitError
+  alias Tempo.Iso8601.Unit
   alias Tempo.Mask
   alias Tempo.TimeZoneDatabase
   alias Tempo.UnanchoredError
@@ -760,7 +761,16 @@ defmodule Tempo.Math do
 
   * A new `t:Tempo.t/0` with the duration applied.
 
+  * `{:error, reason}` when the value holds a selection and the duration
+    steps a unit it does not carry: a month on `~o"2027Y4ML1K1IN"`, the
+    first Monday of April 2027, is the first Monday of May, but it has no
+    day to add a day to. Also when the arguments are not a Tempo value and
+    a duration.
+
   ### Examples
+
+      iex> Tempo.Math.add(~o"2027Y4ML1K1IN", ~o"P1M")
+      ~o"2027Y5ML1K1IN"
 
       iex> Tempo.Math.add(~o"2022Y1M1D", ~o"P1M")
       ~o"2022Y2M1D"
@@ -779,12 +789,53 @@ defmodule Tempo.Math do
           Tempo.t()
           | Tempo.Set.t()
           | Tempo.IntervalSet.t()
-          | {:error, UnanchoredError.t() | :unanchored}
-  def add(%Tempo{} = tempo, %Tempo.Duration{} = duration) do
+          | {:error, Exception.t() | :unanchored}
+  def add(%Tempo{time: time} = tempo, %Tempo.Duration{time: duration_time} = duration) do
+    case unit_the_rule_lacks(time, duration_time) do
+      nil -> add_to_value(tempo, duration)
+      unit -> {:error, rule_unit_error(tempo, unit)}
+    end
+  end
+
+  def add(tempo, duration) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.Math.add/2 adds a Tempo.Duration to a Tempo value, not " <>
+         "#{inspect(duration)} to #{inspect(tempo)}."
+     )}
+  end
+
+  defp add_to_value(tempo, duration) do
     case wall_zone(tempo) do
       nil -> add_wall(tempo, duration)
       zone -> add_zoned(tempo, duration, zone)
     end
+  end
+
+  # A value holding a selection is a rule — `2027Y4ML1K1IN`, the first Monday
+  # of April 2027 — and a duration steps the units it carries: a month on is
+  # the first Monday of May. A unit it does not carry, and that is not coarser
+  # than every unit it does, has nothing to step; the day after the Monday it
+  # names is the day `Tempo.Interval.from/1` gives, shifted.
+  defp unit_the_rule_lacks(time, duration_time) do
+    if List.keymember?(time, :selection, 0) do
+      carried = for entry <- time, elem(entry, 0) != :selection, do: elem(entry, 0)
+      Enum.find_value(duration_time, &lacked_unit(&1, carried))
+    end
+  end
+
+  defp lacked_unit({unit, _amount}, carried) do
+    stepped = if unit == :week, do: :day, else: unit
+
+    if stepped not in carried and not Enum.all?(carried, &(Unit.compare(stepped, &1) == :gt)),
+      do: unit
+  end
+
+  defp rule_unit_error(tempo, unit) do
+    ArgumentError.exception(
+      "#{inspect(tempo)} is a rule that selects within the units it carries, and has no " <>
+        "#{unit} to step: shift the span it names, Tempo.Interval.from/1 of it, instead."
+    )
   end
 
   # Arithmetic on the wall-clock fields alone, as a floating value takes it.
@@ -1361,6 +1412,8 @@ defmodule Tempo.Math do
 
   * A new `t:Tempo.t/0` with the duration subtracted.
 
+  * `{:error, reason}` as for `add/2`.
+
   ### Examples
 
       iex> Tempo.Math.subtract(~o"2022Y3M1D", ~o"P1M")
@@ -1377,7 +1430,7 @@ defmodule Tempo.Math do
           Tempo.t()
           | Tempo.Set.t()
           | Tempo.IntervalSet.t()
-          | {:error, UnanchoredError.t()}
+          | {:error, Exception.t() | :unanchored}
   def subtract(%Tempo{} = tempo, %Tempo.Duration{time: duration_time}) do
     negated =
       Enum.map(duration_time, fn
@@ -1389,6 +1442,14 @@ defmodule Tempo.Math do
       end)
 
     add(tempo, %Tempo.Duration{time: negated})
+  end
+
+  def subtract(tempo, duration) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.Math.subtract/2 takes a Tempo.Duration from a Tempo value, not " <>
+         "#{inspect(duration)} from #{inspect(tempo)}."
+     )}
   end
 
   # Weeks in a duration are whole days, as `Calendrical.weeks_to_days/1`

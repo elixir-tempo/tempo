@@ -153,13 +153,15 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.workdays/2`'s `:except` leaves holidays out of a territory's workdays, as a `Tempo.Workdays` that `select/2` and every workday function take in place of a territory, so `Tempo.next_workday(day, Tempo.workdays(:AU, except: holidays))` steps over the holidays.
 
-* `Tempo.Interval.new/1` takes `:through`, ending an interval where a value's span ends so a published range's last day is inside it, and `Interval.from/1` and `to/1` read the span a value names.
+* `Tempo.Interval.new/1` takes `:through`, ending an interval where a value's span ends so a published range's last day is inside it, and `Interval.from/1` and `to/1` read the span a value names, the day a selection picks included: `~o"2027YLLL4M7DN/P7DN5K1IN"` is 9 April 2027.
 
 * `Tempo.RecurrenceSet.filter/2` keeps the members a function keeps, as `IntervalSet.filter/2` does.
 
 ### Changed
 
 * The duration predicates (`at_least?/2`, `at_most?/2`, `exactly?/2`, `longer_than?/2`, `shorter_than?/2`) measure an interval set by the time it covers and a value by the span it names, and `duration/1` measures a value's span.
+
+* `Tempo.select/2` keeps the metadata of what it selects from: each school day of a term tagged `%{term: 3}` is tagged `%{term: 3}` too, and a set's own metadata stays with the set.
 
 * The engine moves to an Internals docs group — `Tempo.Compare`, the ISO 8601 tokenizer, `Interval.Steps`, `Microsecond`, `Network.Normalize` and the RRULE expander, rule and selection — and `Tempo.merge/2` and `unit_min_max/1` are hidden. Every documented module has a group, and `from_iso8601/2` and `from_iso8601!/2` are documented.
 
@@ -272,6 +274,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * `Tempo.duration/1` returns an error for a value or interval without a year, a finite recurrence or a value that is not Tempo's, where it raised.
 
 * `Tempo.from_iso8601/2` reads a computed event or a week start (`q`) in a value's selection, so `2027YL(easter)eN` is Easter 2027, where it raised `KeyError`.
+
+* `Tempo.shift/3` returns an error for a value holding a selection shifted by a unit it does not carry, a day on `2027Y4ML1K1IN`, where it raised or ignored the unit, and for arguments that are not a Tempo value and a duration, where it raised.
 
 * A time-of-day selection moves an event's whole span: an iCalendar event from 09:00 to 10:00 with `BYHOUR=9,17` is also 17:00–18:00, where it ran from 17:00 back to 10:00, and `BYMINUTE` and `BYSECOND` likewise.
 

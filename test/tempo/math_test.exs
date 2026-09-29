@@ -2,6 +2,7 @@ defmodule Tempo.Math.Test do
   use ExUnit.Case, async: true
   import Tempo.Sigils
 
+  alias Tempo.Interval
   alias Tempo.Math
 
   # `Tempo.Math`'s examples were not executed by anything, so the
@@ -253,6 +254,46 @@ defmodule Tempo.Math.Test do
       assert length(intervals) == 10
       assert inspect(hd(intervals)) =~ "1991Y6M1D"
       assert inspect(List.last(intervals)) =~ "2000Y6M1D"
+    end
+  end
+
+  describe "a value holding a selection" do
+    test "steps the units it carries, as a rule" do
+      # The first Monday of April 2027, a month and a year on.
+      assert Math.add(~o"2027Y4ML1K1IN", ~o"P1M") == ~o"2027Y5ML1K1IN"
+      assert Math.add(~o"2027Y4ML1K1IN", ~o"P1Y") == ~o"2028Y4ML1K1IN"
+      assert Math.add(~o"2027Y4M9DLT22HN", ~o"P1W") == ~o"2027Y4M16DLT22HN"
+    end
+
+    test "is an error, not a raise or a no-op, for a unit it does not carry" do
+      for {rule, duration} <- [
+            {~o"2027YLLL4M7DN/P7DN5K1IN", ~o"P1D"},
+            {~o"2027YLLL4M7DN/P7DN5K1IN", ~o"P1M"},
+            {~o"2027Y4ML1K1IN", ~o"P1W"},
+            {~o"2027Y4M9DLT22HN", ~o"PT1H"},
+            {~o"2027YL(easter)eN", ~o"PT1H"}
+          ] do
+        assert {:error, %ArgumentError{}} = Math.add(rule, duration)
+        assert {:error, %ArgumentError{}} = Math.subtract(rule, duration)
+        assert {:error, %ArgumentError{}} = Tempo.shift(rule, duration)
+      end
+    end
+
+    test "a day it names is shifted as a day" do
+      {:ok, good_friday} = Tempo.on(~o"LLL(easter)eN/P-3DN5K1IN", ~o"2027")
+
+      assert good_friday |> Interval.from() |> Tempo.shift(~o"-P1D") == ~o"2027Y3M25D"
+    end
+  end
+
+  describe "arguments that are not a value and a duration" do
+    test "are an error, not a raise" do
+      assert {:error, %ArgumentError{}} = Math.add({:error, :unanchored}, ~o"P1D")
+      assert {:error, %ArgumentError{}} = Math.add(~o"2027", "P1D")
+      assert {:error, %ArgumentError{}} = Math.subtract(nil, ~o"P1D")
+      assert {:error, %ArgumentError{}} = Tempo.shift({:error, :unanchored}, ~o"P1D")
+      assert {:error, %ArgumentError{}} = Tempo.shift(~o"2027", 42)
+      assert {:error, %ArgumentError{}} = Tempo.shift(~o"2027", ~o"P1D", :skipping)
     end
   end
 end
