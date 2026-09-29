@@ -124,7 +124,7 @@ defmodule Tempo.MixProject do
         ~r/^Tempo(?:\.(Interval|IntervalSet|Duration|Set|RecurrenceSet|RecurrenceSet\.Conditional))?$/,
       "Clock and current time": ~r/^Tempo\.Clock(\.|$)/,
       "Set algebra and comparison":
-        ~r/^Tempo\.(Operations|Allen|Select|Territory)$|^Tempo\.Interval\.(Relations|RelationNetwork)$/,
+        ~r/^Tempo\.(Operations|Allen|Select|Territory|Workdays)$|^Tempo\.Interval\.(Relations|RelationNetwork)$/,
       "Interval set backends": ~r/^Tempo\.IntervalSet\.Backend(\.|$)/,
       "Recurrence rules": ~r/^Tempo\.(RRule|Cron)$/,
       "Computed events": ~r/^Tempo\.Event(\.|$)/,

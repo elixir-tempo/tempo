@@ -42,7 +42,7 @@ Tempo.count_workdays(~o"2026-06", :US)         #=> 22
 
 The territory argument resolves through `Tempo.Territory.resolve/1` — an atom (`:US`), a string (`"US"`), a locale (`"en-GB"`), or `nil` to walk the configured/ambient chain. `add_workdays/3` preserves the time of day, calendar, and zone, and `0` is a no-op. A value that does not denote a day, or a territory that cannot be resolved, returns `{:error, reason}` rather than raising.
 
-These functions know about **weekends only**. For a holiday-aware calendar, see [Extending with holidays](#extending-with-holidays) at the end of this guide. The rest of the guide shows the `Tempo.select/2` selectors the built-ins compose with — reach for them when a workday filter is one step inside a larger query.
+Given a territory, these functions know its weekend; given the workdays `Tempo.workdays/2` makes with `:except`, they step over holidays too — see [Holidays](#holidays) at the end of this guide. The rest of the guide shows the `Tempo.select/2` selectors the built-ins compose with — reach for them when a workday filter is one step inside a larger query.
 
 ## The three primitives
 
@@ -192,87 +192,38 @@ Because the result is an `IntervalSet`, set operations compose naturally and pre
 
 See the [set operations guide](./set-operations.md) for the distinction between the **instant-level** defaults (`intersection`, `difference`, `symmetric_difference`, `complement`) and the **member-preserving** companions (`union`, `members_overlapping`, `members_outside`, `members_in_exactly_one`) — the former for covered-time questions, the latter for event-list questions.
 
-## Extending with holidays
+## Holidays
 
-The built-in functions handle weekends; **holidays are a domain concern** Tempo deliberately leaves to your app — which territory's holidays, which year's calendar, whether fiscal-quarter-end adjustments apply, are all choices the library can't make for you. The shape is to compose the built-ins (or the selector) with your own holiday set. Skipping weekends *and* holidays:
-
-```elixir
-defmodule MyApp.BusinessDays do
-  @moduledoc "Business-day arithmetic that also skips MyApp's holidays."
-
-  # `holidays` is a MapSet of day-resolution Tempo values, e.g. loaded
-  # from an ICS feed (see the Holidays guide).
-  def add(from, n, holidays, territory \\ :US) when n > 0 do
-    Enum.reduce(1..n, from, fn _, day -> next_business_day(day, holidays, territory) end)
-  end
-
-  defp next_business_day(day, holidays, territory) do
-    candidate = Tempo.next_workday(day, territory)
-    if MapSet.member?(holidays, candidate), do: next_business_day(candidate, holidays, territory), else: candidate
-  end
-
-  def business_day?(tempo, holidays, territory \\ :US) do
-    Tempo.workday?(tempo, territory) and not MapSet.member?(holidays, tempo)
-  end
-end
-```
-
-The weekend logic is `Tempo.next_workday/2` and `Tempo.workday?/2`; your module adds only the holiday filter. See the [Holidays guide](./holidays.md) for loading a real holiday calendar from an ICS feed.
-
-If for some reason you need the lower-level selector form of the built-ins — for example to fold a workday filter into a larger `Tempo.select/2` pipeline — the same patterns expressed over `Tempo.workdays/1` are:
+Which days are holidays is your application's to say: which territory's, which year's, whether a fiscal quarter-end counts. Tempo's part is to leave them out. `Tempo.workdays/2` with `:except` makes the workdays less a set of holidays, and `Tempo.select/2` and every workday function take that in place of a territory:
 
 ```elixir
-defmodule MyApp.BusinessDays do
-  @moduledoc """
-  Business-day arithmetic for MyApp's booking logic.
+# Independence Day, and Friday 3 July 2026, the day it is observed.
+holidays = Tempo.RecurrenceSet.new!([~o"R/../P1Y/FL7M4DN", ~o"2026-07-03"])
+business_days = Tempo.workdays(:US, except: holidays)
 
-  Territory defaults to :US; callers pass a different territory
-  for locale-specific behaviour.
-  """
+Tempo.add_workdays(~o"2026-06-30", 5, business_days)
+#=> ~o"2026Y7M8D"
 
-  @doc """
-  Add `n` business days to `from`.
+Tempo.workday?(~o"2026-07-03", business_days)
+#=> false
 
-  Today is day zero; `add(today, 1)` is tomorrow-if-workday else
-  the next workday.
-  """
-  @spec add(Tempo.t(), pos_integer(), Tempo.Territory.input()) ::
-          {:ok, Tempo.t()} | {:error, term()}
-  def add(from, n, territory \\ :US) when n > 0 do
-    from_today_on = Tempo.Interval.new!(from: from)
-
-    with {:ok, workdays} <- Tempo.select(from_today_on, Tempo.workdays(territory)) do
-      {:ok, workdays |> Tempo.IntervalSet.walk() |> Enum.at(n) |> Tempo.Interval.from()}
-    end
-  end
-
-  @doc "Is `tempo` a business day in the given territory?"
-  @spec business_day?(Tempo.t(), Tempo.Territory.input()) :: boolean()
-  def business_day?(tempo, territory \\ :US) do
-    case Tempo.select(tempo, Tempo.workdays(territory)) do
-      {:ok, set} -> Tempo.IntervalSet.count(set) > 0
-      _ -> false
-    end
-  end
-
-  @doc "Count business days in `[from, to)`."
-  @spec count_between(Tempo.t(), Tempo.t(), Tempo.Territory.input()) ::
-          {:ok, non_neg_integer()} | {:error, term()}
-  def count_between(from, to, territory \\ :US) do
-    window = Tempo.Interval.new!(from: from, to: to)
-
-    with {:ok, workdays} <- Tempo.select(window, Tempo.workdays(territory)) do
-      {:ok, Tempo.IntervalSet.count(workdays)}
-    end
-  end
-end
+Tempo.count_workdays(~o"2026-07", business_days)
+#=> 22
 ```
 
-These three selector-form helpers are exactly what `Tempo.add_workdays/3`, `Tempo.workday?/2`, and `Tempo.count_workdays/2` do for you — shown here so the mechanism underneath the built-ins is legible. Reach for the selector form only when a workday filter is one step inside a larger `Tempo.select/2` pipeline; otherwise prefer the built-ins. What stays in your app is the part Tempo can't decide for you — *which* days are holidays, and any fiscal-calendar adjustments — composed on top as shown above.
+> *"Business days are the US workdays except Independence Day and the day it is observed. Five business days after 30 June is 8 July, 3 July is not a business day, and July has 22 of them."*
+
+The holidays are anything `Tempo.to_interval_set/2` converts: a set of recurring holidays (a `Tempo.RecurrenceSet`, as the `tempo_holidays` package returns), an interval set read from an ICS feed (see the [Holidays guide](./holidays.md)), or a single day. A recurring set needs no window of its own: the holidays are converted around the days a question asks about.
+
+The same value folds a business-day filter into a larger `Tempo.select/2` pipeline, as the weekday selector does:
+
+```elixir
+{:ok, open_days} = Tempo.select(~o"2026Y3Q", business_days)
+```
 
 ## Related reading
 
-* [Holidays — planning with a real holiday calendar](./holidays.md) — fetch an ICS holiday feed, compose it with `Tempo.workdays/1` for territory-aware scheduling.
+* [Holidays — planning with a real holiday calendar](./holidays.md) — fetch an ICS holiday feed and leave its holidays out of the workdays.
 
 * [Cookbook](./cookbook.md) — recipe-format examples for more scheduling patterns.
 

@@ -1852,8 +1852,25 @@ defmodule Tempo.Math do
          {:ok, busy_set} <- normalize_busy(busy),
          :ok <- validate_busy_members(busy_set) do
       Interval.reject_mixed_frame!(origin, busy_set)
-      walk_skipping(origin, seconds, busy_set)
+
+      case free_days(origin, duration) do
+        {:ok, days} -> walk_days(origin, days, busy_set)
+        :error -> walk_skipping(origin, seconds, busy_set)
+      end
     end
+  end
+
+  # A day shifted by days steps from free day to free day, a calendar day at
+  # a time, and lands on a day. Anything finer walks free time.
+  defp free_days(origin, %Tempo.Duration{time: [day: days]}) when is_integer(days) do
+    if day_resolution?(origin), do: {:ok, days}, else: :error
+  end
+
+  defp free_days(_origin, _duration), do: :error
+
+  defp day_resolution?(origin) do
+    {unit, _precision} = Tempo.resolution(origin)
+    unit in [:day, :day_of_week, :day_of_year]
   end
 
   defp validate_anchored_origin(origin) do
@@ -1966,6 +1983,51 @@ defmodule Tempo.Math do
 
       walk_backward(origin, origin_s, -seconds, prefix)
     end
+  end
+
+  # Days of free time from a day, as free time is walked: a busy origin first
+  # moves out of its busy time, so a day forward from a busy day is the second
+  # free day after it and a day back the first free day before it. Each step
+  # is the calendar's next or previous day; a day busy time covers is passed.
+  defp walk_days(origin, days, %IntervalSet{} = busy_set) do
+    spans = busy_set |> IntervalSet.walk() |> Stream.map(&span_payload/1)
+    step = if days < 0, do: -1, else: 1
+
+    free_steps =
+      cond do
+        not busy_day?(origin, spans) -> abs(days)
+        step == 1 -> days + 1
+        true -> max(-days, 1)
+      end
+
+    nth_free_day(origin, free_steps, step, spans)
+  end
+
+  defp nth_free_day(day, 0, _step, _spans), do: day
+
+  defp nth_free_day(day, count, step, spans) do
+    case free_day_from(add(day, Duration.build(day: step)), step, spans) do
+      %Tempo{} = free_day -> nth_free_day(free_day, count - 1, step, spans)
+      error -> error
+    end
+  end
+
+  defp free_day_from(%Tempo{} = day, step, spans) do
+    if busy_day?(day, spans),
+      do: free_day_from(add(day, Duration.build(day: step)), step, spans),
+      else: day
+  end
+
+  defp free_day_from(error, _step, _spans), do: error
+
+  # A day is busy when busy time covers the whole of it.
+  defp busy_day?(day, spans) do
+    day_from = Compare.to_utc_seconds(day)
+    day_to = day |> Interval.to() |> Compare.to_utc_seconds()
+
+    spans
+    |> Stream.take_while(fn {from_s, _to_s, _from, _to} -> from_s <= day_from end)
+    |> Enum.any?(fn {_from_s, to_s, _from, _to} -> day_to <= to_s end)
   end
 
   # A bounded busy set was validated up front; a lazy one is checked

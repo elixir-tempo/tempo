@@ -91,7 +91,7 @@ Tempo.nearest_workday(~o"2026-07-04", :US)
 #=> ~o"2026Y7M3D"    (observed Friday, 3 July)
 ```
 
-It is a single-day transform, so map it over as many years as you like — the workday family is weekend-aware, not holiday-aware, which is precisely right here because the in-lieu rule only cares about weekends:
+It is a single-day transform, so map it over as many years as you like — given a territory the workday family knows only the weekend, which is precisely right here because the in-lieu rule only cares about weekends:
 
 ```elixir
 [2025, 2026, 2027]
@@ -171,27 +171,20 @@ Because `Tempo.members_overlapping/2` keeps surviving members whole — with the
 
 ### 3. What's five business days from today, skipping holidays?
 
-Four composed set operations. The whole pipeline is set-algebra; no list-level filtering required.
+The workdays less the holidays are one value, and the workday functions step over both:
 
 <!-- guides:skip -->
 
 ```elixir
-today  = ~o"2026-06-30"
-window = Tempo.Interval.new!(from: today, to: Tempo.shift(today, week: 3))
+business_days = Tempo.workdays(:US, except: holidays)
 
-{:ok, workdays}  = Tempo.select(window, Tempo.workdays(:US))
-{:ok, open_days} = Tempo.members_outside(workdays, holidays)
-
-target =
-  open_days
-  |> Tempo.IntervalSet.members()
-  |> Enum.at(5)
-#=> %Tempo.Interval{from: ~o"2026Y7M8D", ...}
+Tempo.add_workdays(~o"2026-06-30", 5, business_days)
+#=> ~o"2026Y7M8D"
 ```
 
-Read aloud: *"Starting today, build a three-week window. Keep the workdays inside it. Subtract the holidays. The sixth survivor is the answer for 'five business days from today' under the banking convention where today is day zero."*
+Read aloud: *"Business days are the US workdays except the holidays. Five business days after 30 June is 8 July."*
 
-(`Enum.at(5)` picks the sixth element. If your convention counts today as day one, use `Enum.at(n - 1)`.)
+The same value counts, checks and selects: `Tempo.count_workdays(q3, business_days)` answers question 1 in one call, `Tempo.workday?(day, business_days)` asks about one day, and `Tempo.select(window, business_days)` gives the days themselves.
 
 ## Territory-aware planning
 

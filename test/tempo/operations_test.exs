@@ -673,6 +673,47 @@ defmodule Tempo.Operations.Test do
     end
   end
 
+  describe "on/2 and at/2 with an interval or a selection" do
+    test "an interval is placed endpoint by endpoint" do
+      assert Tempo.on(~o"4M2D/4M16D", ~o"2027") == {:ok, ~o"2027Y4M2D/16D"}
+      assert Tempo.on(~o"2027", ~o"4M2D/4M16D") == {:ok, ~o"2027Y4M2D/16D"}
+      assert Tempo.on(~o"T09/T17", ~o"2026-06-15") == {:ok, ~o"2026Y6M15DT9H/T17H"}
+      assert Tempo.at(~o"2026-06-15", ~o"T09/T17") == {:ok, ~o"2026Y6M15DT9H/T17H"}
+      assert Tempo.on!(~o"4M2D/4M16D", ~o"2027") == ~o"2027Y4M2D/16D"
+    end
+
+    test "an open end, or one a duration gives, stays as it is" do
+      assert Tempo.on(~o"4M2D/..", ~o"2027") == {:ok, ~o"2027Y4M2D/.."}
+      assert Tempo.on(~o"4M2D/P14D", ~o"2027") == {:ok, ~o"2027Y4M2D/P14D"}
+    end
+
+    test "a placed interval must still start before it ends" do
+      assert {:error, %Tempo.IntervalEndpointsError{}} = Tempo.on(~o"12M20D/1M5D", ~o"2027")
+      assert {:error, %Tempo.InvalidDateError{}} = Tempo.on(~o"2M29D/3M2D", ~o"2026")
+    end
+
+    test "a selection stays after the units it selects in" do
+      assert Tempo.on(~o"4ML1K1IN", ~o"2027") == {:ok, ~o"2027Y4ML1K1IN"}
+      assert Tempo.on(~o"L(easter)eN", ~o"2027") == {:ok, ~o"2027YL(easter)eN"}
+      assert Tempo.at(~o"2027Y4ML1K1IN", ~o"T09") == {:ok, ~o"2027Y4ML1K1INT9H"}
+
+      {:ok, first_monday} = Tempo.on(~o"4ML1K1IN", ~o"2027")
+      {:ok, set} = Tempo.to_interval_set(first_monday)
+      assert IntervalSet.members(set) == [~o"2027Y4M5D/6D"]
+    end
+
+    test "what cannot be placed is an error, not a raise" do
+      assert {:error, %ArgumentError{}} = Tempo.on(~o"L1K1IN", ~o"L(easter)eN")
+      assert {:error, %ArgumentError{}} = Tempo.on(~o"4M2D/4M16D", ~o"2027/2028")
+      assert {:error, %ArgumentError{}} = Tempo.on(~o"2026-04-02/2026-04-16", ~o"2027")
+
+      for value <- [nil, "", :"", 42] do
+        assert {:error, %ArgumentError{}} = Tempo.on(value, ~o"2027")
+        assert {:error, %ArgumentError{}} = Tempo.at(~o"2027", value)
+      end
+    end
+  end
+
   describe "cross-calendar operations" do
     test "Hebrew ∩ Gregorian (members_overlapping) — A's calendar is preserved on the surviving A member" do
       # Gregorian 2022-06-15 corresponds to Hebrew 5782-10-16.

@@ -954,6 +954,19 @@ defmodule Tempo.RRule.SelectionTest do
   describe "a selection within a value (ISO 8601-2 §12.11)" do
     # The units before a selection are its context; each period of the
     # context resolves the selection once.
+    test "a computed event within a value is its day that year" do
+      assert selection_dates("2027YL(easter)eN") == ["2027-03-28"]
+      # Easter 2027 is in March, so April holds none.
+      assert selection_dates("2027Y4ML(easter)eN") == []
+    end
+
+    test "a week start (q) within a value is context, not the finest unit" do
+      assert selection_dates("2026Y6ML1K7qN") == selection_dates("2026Y6ML1KN")
+
+      assert selection_dates("2026Y6ML1K7qN") ==
+               ["2026-06-01", "2026-06-08", "2026-06-15", "2026-06-22", "2026-06-29"]
+    end
+
     test "a selection in a stated year and month is that month's date" do
       # §12.11.1 Example 1: the first Monday of March 2018
       assert selection_dates("2018Y3ML1K1IN") == ["2018-03-05"]

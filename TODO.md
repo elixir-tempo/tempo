@@ -4,6 +4,16 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ## Open
 
+* [ ] **The `:within` reach measures units with Gregorian constants** — `window_periods/1` in `lib/tempo.ex` bounds a year at 365–366 days, a month at 28–31 and a day at 25 hours (`min_days_per/1`, `max_days_per/1`, `min_seconds_per/1`, `max_seconds_per/1`), which is calendar arithmetic in Tempo and too narrow for a 385-day Hebrew year or a 5-day Coptic month. Widen the window by shifting its ends through Calendrical, or take each calendar's bounds from Calendrical (asked 2026-09-29); `Network.Normalize` (365.2425 days a year) and `Format` (seconds a month and a year) want the same review.
+
+* [ ] **An anchored terminal window loses its selection** — `R/2026/P1Y/FLL3K4IN/P5DN` gives each year's first five days (`2026Y/1M6D`), where `R/../P1Y/FLL3K4IN/P5DN` gives the five days from the fourth Wednesday (`2026Y1M28D/2M2D`).
+
+* [ ] **A windowed selection in a one-occurrence recurrence raises** — `R1/2026/P1Y/FLL12M19DN/P40DN` raises `FunctionClauseError` from `Calendrical.Base.Month.days_in_month(2026, nil)`, which `Tempo.RRule.Selection.expand_candidate_days/2` calls with no month; `R/../P1Y/FLL12M19DN/P40DN` works.
+
+* [ ] **A terminal window within a value does not parse** — `2027YLL(easter)eN/-P2DN`, the two days before Easter 2027, returns a `ParseError` (":year is less than the selection min of :interval") where the recurrence form parses.
+
+* [ ] **A week of free time under `:skipping`** — a day shifted by days steps from free day to free day (2026-09-29), but shifted by weeks it still counts free seconds and returns an instant: `P1W` from Friday 23 April 2027 is `2027Y5M5DT0H0M0S`. Decide what a week of free time from a day is, and return a day for it.
+
 * [ ] **Livebooks install 2.0 at the release** — `getting-started`, `tempo_tour`, `scheduling-workbook` and `uncertain-dates-workbook` install `{:ex_tempo, "~> 1.6"}` and the Melbourne deck `~> 1.6.3`, while their code uses the 2.0 names: at the 2.0.0 release each installs `~> 2.0`, as `everyday-holidays` already does.
 
 * [ ] **`to_relative_string/2` raises** — `Tempo.Format.render_relative/2` raises `UnanchoredError` for a value without a year and `IntervalEndpointsError` for an open interval, where the library returns `{:error, reason}`; its spec says it returns a string.
@@ -38,7 +48,7 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **Conditional first pass walks whole periods** — it widens the bound by the conditions' reach, and the walk covers every period the widened bound touches, so a ±1-day bridge crossing both year ends materialises three years: Japan's holiday set takes 55 ms a year with its bridge, 25 ms without. Widen only where a condition reaches past the bound (the bridge's days, a move's search back from the bound's start).
 
-* [ ] **`Interval.duration/1` raises** — a multi-occurrence recurrence raises `ConversionError` and differing endpoint calendars fail an `:ok =` match; return `{:error, _}` instead. Predicates (`anchored?/1`, the relation and certainty predicates) may raise on invalid input, as Elixir's naming conventions expect (user, 2026-09-27).
+* [ ] **`Interval.duration/1` raises** — a multi-occurrence recurrence raises `ConversionError` and differing endpoint calendars fail an `:ok =` match; return `{:error, _}` instead. `Tempo.duration/1` returns an error for a recurrence or an unanchored interval since 2026-09-29; `Interval.duration/1,2` called directly still raise. Predicates (`anchored?/1`, the relation and certainty predicates) may raise on invalid input, as Elixir's naming conventions expect (user, 2026-09-27).
 
 * [ ] **An impossible date's error names too little** — `Tempo.on(~o"2M29D", ~o"2027")` returns an `InvalidDateError` with only its reason ("29 is not valid. The valid values are 1..28"), naming no year, month or calendar.
 
@@ -63,6 +73,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **A domain gating by a window's anchor** — a domain admits the occurrences that start in its periods; date-holidays gates on the year of a window's anchor instead. They differ only when a window crosses a gated boundary year, which no tempo_holidays rule does; reviving it needs anchor tracking through `Tempo.RRule.Selection`.
 
 ## Done
+
+* [x] **Seven API gaps the NSW school holidays found** — holidays in `workdays/2` (`:except`, `Tempo.Workdays`); the duration predicates and `duration/1` on sets and values; `Interval.from/1` and `to/1` on a value, and `new/1`'s `:through`; `select/2` with an ISO 8601-2 selection; `at/2` and `on/2` with an interval or a selection; `:skipping` stepping days; `RecurrenceSet.filter/2`. 2026-09-29.
 
 * [x] **`to_iso8601/1` returns a tuple, and the span and reach defects** — `{:ok, string}` or an `Iso8601EncodeError`, with `to_iso8601!/1`; sub-second ends encode; a time-of-day selection keeps its span, in iCalendar and as a §12.10 window of hours; `:within` keeps an occurrence that runs into it under a sub-day cadence or a backward window. 2026-09-29.
 

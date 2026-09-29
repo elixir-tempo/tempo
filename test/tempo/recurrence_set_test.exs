@@ -468,4 +468,32 @@ defmodule Tempo.RecurrenceSetTest do
       assert Interval.metadata(interval)[:name] == "Christmas"
     end
   end
+
+  describe "filter/2" do
+    test "keeps the members the function keeps, in order, with the set's metadata" do
+      christmas = Tempo.put_metadata(~o"R/../P1Y/FL12M25DN", %{name: "Christmas Day"})
+      boxing_day = Tempo.put_metadata(~o"R/../P1Y/FL12M26DN", %{name: "Boxing Day"})
+      new_year = Tempo.put_metadata(~o"R/../P1Y/FL1M1DN", %{name: "New Year's Day"})
+
+      holidays =
+        RecurrenceSet.new!([christmas, boxing_day, new_year], metadata: %{territory: :GB})
+
+      kept = RecurrenceSet.filter(holidays, &(Tempo.metadata(&1).name != "Boxing Day"))
+
+      assert RecurrenceSet.members(kept) == [christmas, new_year]
+      assert RecurrenceSet.metadata(kept) == %{territory: :GB}
+      assert RecurrenceSet.members(RecurrenceSet.filter(holidays, fn _member -> false end)) == []
+    end
+
+    test "a conditional member is given to the function as it is" do
+      bridge =
+        RecurrenceSet.keep_when(~o"R/../P1Y/FL9M22DN", at: [~o"-P1D"], falls_on: %{type: :public})
+
+      holidays = RecurrenceSet.new!([~o"R/../P1Y/FL9M21DN", bridge])
+
+      conditionals = RecurrenceSet.filter(holidays, &match?(%RecurrenceSet.Conditional{}, &1))
+
+      assert RecurrenceSet.members(conditionals) == [bridge]
+    end
+  end
 end

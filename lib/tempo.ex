@@ -2183,23 +2183,33 @@ defmodule Tempo do
     {min, max}
   end
 
-  defp unit_resolution(time_unit) do
-    case time_unit do
-      {:selection, selection} -> unit_min_max(selection)
-      {unit, {:group, first..last//_}} -> {unit, last - first + 1}
-      # A materialised group is `{unit, {:group, members}, size}` — the
-      # third element is the group's own size, which is its resolution.
-      {unit, {:group, _members}, size} when is_integer(size) -> {unit, size}
-      {unit, %Range{last: last}} -> {unit, last}
-      # A microsecond component is `{value, precision}`; the precision
-      # (digit count) is its resolution scale — `{:microsecond, 3}` is
-      # millisecond resolution.
-      {:microsecond, {_value, precision}} when is_integer(precision) -> {:microsecond, precision}
-      {unit, {_value, meta}} when is_list(meta) -> {unit, Keyword.get(meta, :margin_of_error, 1)}
-      {unit, {_value, continuation}} when is_function(continuation) -> {unit, 1}
-      {unit, _value} -> {unit, 1}
-    end
-  end
+  defp unit_resolution({:selection, selection}), do: unit_min_max(selection)
+
+  # A computed event names a day, and the week start (`q`) is context at
+  # the scale of the day of the week, as `Tempo.Iso8601.Unit.ordered?/1`
+  # reads them.
+  defp unit_resolution({:event, _name}), do: {:day, 1}
+  defp unit_resolution({:wkst, _day}), do: {:day_of_week, 1}
+  defp unit_resolution({unit, {:group, first..last//_}}), do: {unit, last - first + 1}
+
+  # A materialised group is `{unit, {:group, members}, size}` — the
+  # third element is the group's own size, which is its resolution.
+  defp unit_resolution({unit, {:group, _members}, size}) when is_integer(size), do: {unit, size}
+  defp unit_resolution({unit, %Range{last: last}}), do: {unit, last}
+
+  # A microsecond component is `{value, precision}`; the precision
+  # (digit count) is its resolution scale — `{:microsecond, 3}` is
+  # millisecond resolution.
+  defp unit_resolution({:microsecond, {_value, precision}}) when is_integer(precision),
+    do: {:microsecond, precision}
+
+  defp unit_resolution({unit, {_value, meta}}) when is_list(meta),
+    do: {unit, Keyword.get(meta, :margin_of_error, 1)}
+
+  defp unit_resolution({unit, {_value, continuation}}) when is_function(continuation),
+    do: {unit, 1}
+
+  defp unit_resolution({unit, _value}), do: {unit, 1}
 
   # Order of units from coarsest to finest. Used by the component
   # accessors (`year/1`, `month/1`, `day/1`, `hour/1`, `minute/1`,
@@ -2713,17 +2723,24 @@ defmodule Tempo do
   `~o"2026-02" |> Tempo.on(~o"29D")` is an error: 2026 is not a leap
   year.
 
+  An interval is placed endpoint by endpoint, so nine to five on 15
+  June, or 2–15 April in 2027, is one call; an open end, or one its
+  duration gives, stays as it is.
+
   ### Arguments
 
   * `value` and `other` are `t:#{__MODULE__}.t/0` values, at most one
-    of them with a year.
+    of them with a year, or one of them a `t:Tempo.Interval.t/0` whose
+    endpoints are placed on the other.
 
   ### Returns
 
-  * `{:ok, tempo}` with the one value placed on the other.
+  * `{:ok, tempo}` with the one value placed on the other, or
+    `{:ok, interval}` with an interval's endpoints placed.
 
-  * `{:error, reason}` when both values have a year, or when the
-    result is not a date in its calendar.
+  * `{:error, reason}` when both values have a year, when the result is
+    not a date in its calendar or an interval whose start is before its
+    end, or when either argument is not a Tempo value or interval.
 
   ### Examples
 
@@ -2736,13 +2753,47 @@ defmodule Tempo do
       iex> Tempo.at(~o"3M", ~o"2D")
       {:ok, ~o"3M2D"}
 
+      iex> Tempo.at(~o"2026-06-15", ~o"T09/T17")
+      {:ok, ~o"2026Y6M15DT9H/T17H"}
+
   """
   @dialyzer {:nowarn_function, at: 2}
 
-  @spec at(t(), t()) :: {:ok, t()} | {:error, error_reason()}
+  @spec at(t() | Interval.t(), t() | Interval.t()) ::
+          {:ok, t() | Interval.t()} | {:error, error_reason()}
   def at(%__MODULE__{} = value, %__MODULE__{} = other) do
     place(value, other, anchored?(value), anchored?(other))
   end
+
+  def at(%Interval{} = interval, %__MODULE__{} = other), do: place_interval(interval, other)
+  def at(%__MODULE__{} = value, %Interval{} = interval), do: place_interval(interval, value)
+
+  def at(value, other) do
+    {:error,
+     ArgumentError.exception(
+       "at/2 and on/2 place a Tempo value on a value or an interval, not " <>
+         "#{inspect(value)} on #{inspect(other)}."
+     )}
+  end
+
+  # An interval is placed endpoint by endpoint; an open end, or one its
+  # duration gives, has nothing to place.
+  defp place_interval(%Interval{from: from, to: to} = interval, other) do
+    with {:ok, placed_from} <- place_endpoint(from, other),
+         {:ok, placed_to} <- place_endpoint(to, other),
+         :ok <- in_order(placed_from, placed_to) do
+      {:ok, %{interval | from: placed_from, to: placed_to}}
+    end
+  end
+
+  defp place_endpoint(%__MODULE__{} = endpoint, other), do: at(endpoint, other)
+  defp place_endpoint(open_or_derived, _other), do: {:ok, open_or_derived}
+
+  defp in_order(%__MODULE__{} = from, %__MODULE__{} = to) do
+    with {:ok, _interval} <- Interval.new(from, to), do: :ok
+  end
+
+  defp in_order(_from, _to), do: :ok
 
   defp place(value, other, true = _year, true = _other_year) do
     {:error,
@@ -2783,8 +2834,8 @@ defmodule Tempo do
       ~o"2026Y6M15DT17H"
 
   """
-  @spec at!(t(), t()) :: t()
-  def at!(%__MODULE__{} = value, %__MODULE__{} = other) do
+  @spec at!(t() | Interval.t(), t() | Interval.t()) :: t() | Interval.t()
+  def at!(value, other) do
     case at(value, other) do
       {:ok, tempo} -> tempo
       {:error, exception} when is_exception(exception) -> raise exception
@@ -2818,9 +2869,13 @@ defmodule Tempo do
       iex> Tempo.on(~o"3M", ~o"2D")
       {:ok, ~o"3M2D"}
 
+      iex> Tempo.on(~o"4M2D/4M16D", ~o"2027")
+      {:ok, ~o"2027Y4M2D/16D"}
+
   """
-  @spec on(t(), t()) :: {:ok, t()} | {:error, error_reason()}
-  def on(%__MODULE__{} = value, %__MODULE__{} = other), do: at(value, other)
+  @spec on(t() | Interval.t(), t() | Interval.t()) ::
+          {:ok, t() | Interval.t()} | {:error, error_reason()}
+  def on(value, other), do: at(value, other)
 
   @doc """
   Bang variant of `on/2` — returns the placed value or raises. See
@@ -2832,8 +2887,8 @@ defmodule Tempo do
       ~o"3M2D"
 
   """
-  @spec on!(t(), t()) :: t()
-  def on!(%__MODULE__{} = value, %__MODULE__{} = other), do: at!(value, other)
+  @spec on!(t() | Interval.t(), t() | Interval.t()) :: t() | Interval.t()
+  def on!(value, other), do: at!(value, other)
 
   # Compose two values along the resolution axis: keep `high_source`'s
   # components strictly coarser than `low_value`'s coarsest, then graft
@@ -2841,14 +2896,53 @@ defmodule Tempo do
   # coarser value) is the high source. Reusing `merge/2` keeps a single
   # validated path; pre-trimming `high_source` is what makes it a clean
   # replace rather than a leaky overlay.
-  defp graft(%__MODULE__{} = high_source, %__MODULE__{time: []} = low_value),
+  #
+  # A selection is not a unit to place: it stays after the units it selects
+  # in (ISO 8601-2 §12.11). The first Monday of April placed on 2027 is
+  # `2027Y4ML1K1IN`, and 09:00 placed on that is each Monday it selects at
+  # 09:00, `2027Y4ML1K1INT9H`.
+  defp graft(%__MODULE__{} = high_source, %__MODULE__{} = low_value) do
+    case {split_at_selection(high_source.time), split_at_selection(low_value.time)} do
+      {{_units, []}, {_low_units, []}} ->
+        graft_units(high_source, low_value)
+
+      {{_units, []}, {low_units, selection}} ->
+        high_source |> graft_units(%{low_value | time: low_units}) |> with_units_after(selection)
+
+      {{_units, _selection}, {low_units, []}} ->
+        with_units_after(high_source, low_units)
+
+      _both_select ->
+        {:error,
+         ArgumentError.exception(
+           "at/2 and on/2 place one selection, and #{inspect(high_source)} and " <>
+             "#{inspect(low_value)} both hold one."
+         )}
+    end
+  end
+
+  defp graft_units(%__MODULE__{} = high_source, %__MODULE__{time: []} = low_value),
     do: merge(high_source, low_value)
 
-  defp graft(%__MODULE__{} = high_source, %__MODULE__{time: [{unit, _value} | _]} = low_value) do
+  defp graft_units(
+         %__MODULE__{} = high_source,
+         %__MODULE__{time: [{unit, _value} | _]} = low_value
+       ) do
     cutoff = Unit.sort_key(unit)
     trimmed = Enum.filter(high_source.time, fn {other, _v} -> Unit.sort_key(other) > cutoff end)
     merge(%{high_source | time: trimmed}, low_value)
   end
+
+  defp split_at_selection(time), do: Enum.split_while(time, &(not match?({:selection, _}, &1)))
+
+  defp with_units_after(%__MODULE__{time: time} = tempo, units) do
+    case Validation.validate(%{tempo | time: time ++ units}) do
+      {:ok, placed} -> placed
+      other -> other
+    end
+  end
+
+  defp with_units_after(error, _units), do: error
 
   @doc """
   Write a value as an enumeration of its next finer unit, covering the
@@ -4592,6 +4686,9 @@ defmodule Tempo do
     return `{:error, %Tempo.InvalidUnitError{}}`. Busy spans must be
     anchored and bounded. In the keyword-units form `:skipping` may
     ride in the same list: `Tempo.shift(t, hour: -1, skipping: busy)`.
+    A day shifted by days steps from free day to free day, a calendar
+    day at a time, and lands on a day: one day of free time after a
+    Friday before a long weekend is the Tuesday.
 
   ### Returns
 
@@ -6323,11 +6420,14 @@ defmodule Tempo do
   defp start_unit(%Tempo.Interval{repeat_rule: %Tempo{time: [selection: selection]}})
        when selection != [] do
     # The finest unit is the last selection component (they are written
-    # coarse-to-fine). Read it straight from the AST rather than through
-    # `resolution/1`, whose declared `time_unit()` return elides the
-    # selection-only keys (`:byday`, `:day_of_week`) this must normalise.
-    {finest_unit, _value} = List.last(selection)
-    calendar_start_unit(finest_unit)
+    # coarse-to-fine), the week start (`q`) aside: it is context, not a unit.
+    # Read it straight from the AST rather than through `resolution/1`, whose
+    # declared `time_unit()` return elides the selection-only keys (`:byday`,
+    # `:day_of_week`) this must normalise.
+    case selection |> Enum.reject(&match?({:wkst, _day}, &1)) |> List.last() do
+      {finest_unit, _value} -> calendar_start_unit(finest_unit)
+      nil -> :day
+    end
   end
 
   defp start_unit(%Tempo.Interval{}), do: :day
@@ -7811,30 +7911,39 @@ defmodule Tempo do
   defdelegate compare(a, b, options \\ []), to: Tempo.Compare
 
   @doc """
-  Return the length of an interval, or the time an interval set
-  covers, as a `%Tempo.Duration{}`.
+  Return the length of an interval or of the span a value names, or
+  the time an interval set covers, as a `%Tempo.Duration{}`.
 
   A length is counted in the unit its endpoints are written in: two
   days are a number of days apart, two times of day a number of hours
-  or minutes — see `Tempo.Interval.duration/1`. A set's duration
-  counts time that two members share once — see
-  `Tempo.IntervalSet.duration/1`.
+  or minutes — see `Tempo.Interval.duration/1`. A value is the span it
+  names, so June is a month long. A set's duration counts time that
+  two members share once — see `Tempo.IntervalSet.duration/1`.
 
   ### Arguments
 
-  * `value` is a `t:Tempo.Interval.t/0` or a `t:Tempo.IntervalSet.t/0`.
+  * `value` is a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`,
+    or a `t:Tempo.t/0`, measured as the span it names.
 
   ### Returns
 
   * A `t:Tempo.Duration.t/0` in the endpoints' unit, or `:infinity`
     for an interval with an open end.
 
+  * `{:error, %Tempo.UnanchoredError{}}` for a value or an interval
+    without a year, which has no place on the time line to measure.
+
+  * `{:error, %Tempo.ConversionError{}}` for a recurrence, whose
+    length is its occurrences' (convert it with `to_interval_set/2`
+    first), and `{:error, reason}` for a value that is not a Tempo
+    value.
+
   ### Examples
 
-      iex> Tempo.duration(Tempo.to_interval!(~o"2026-06-15T09:00/2026-06-15T10:30"))
+      iex> Tempo.duration(~o"2026-06-15T09:00/2026-06-15T10:30")
       ~o"PT90M"
 
-      iex> Tempo.duration(Tempo.to_interval!(~o"2026-06"))
+      iex> Tempo.duration(~o"2026-06")
       ~o"P1M"
 
       iex> bookings = Tempo.IntervalSet.new!([~o"2026-06-15T09/2026-06-15T11", ~o"2026-06-15T10/2026-06-15T12"])
@@ -7842,8 +7951,44 @@ defmodule Tempo do
       ~o"PT3H"
 
   """
+  @spec duration(t() | Interval.t() | IntervalSet.t()) ::
+          Duration.t() | :infinity | {:error, Exception.t()}
   def duration(%IntervalSet{} = set), do: IntervalSet.duration(set)
-  def duration(interval), do: Interval.duration(interval)
+
+  def duration(%__MODULE__{} = value) do
+    if anchored?(value) do
+      with {:ok, span} <- to_interval(value), do: duration(span)
+    else
+      {:error, UnanchoredError.exception(operation: :duration, value: value)}
+    end
+  end
+
+  def duration(%Interval{} = interval) do
+    case unmeasurable(interval) do
+      nil -> Interval.duration(interval)
+      exception -> {:error, exception}
+    end
+  end
+
+  def duration(value) do
+    {:error,
+     ArgumentError.exception("Tempo.duration/1 takes a Tempo value, got #{inspect(value)}")}
+  end
+
+  # Why an interval has no length to measure: a finite recurrence's length
+  # is its occurrences', and an endpoint without a year has no place on the
+  # time line.
+  defp unmeasurable(%Interval{recurrence: recurrence} = interval)
+       when is_integer(recurrence) and recurrence > 1,
+       do: ConversionError.exception(value: interval, reason: :recurring_duration)
+
+  defp unmeasurable(%Interval{from: from, to: to} = interval) do
+    if Enum.any?([from, to], &unanchored_endpoint?/1),
+      do: UnanchoredError.exception(operation: :duration, value: interval)
+  end
+
+  defp unanchored_endpoint?(%__MODULE__{} = endpoint), do: not anchored?(endpoint)
+  defp unanchored_endpoint?(_open_or_absent), do: false
 
   @doc """
   Return the duration between two endpoints as a `%Tempo.Duration{}`.
@@ -7935,8 +8080,25 @@ defmodule Tempo do
   end
 
   @doc """
-  `true` when the interval is at least as long as the given
-  duration. See `Tempo.Interval.at_least?/2`.
+  `true` when a value is at least as long as the given duration.
+
+  An interval, or the span a value names, is measured between its
+  endpoints (see `Tempo.Interval.at_least?/2`); an interval set by the
+  time it covers, from its first instant, as `duration/1` measures it.
+  An unbounded interval or set is longer than any duration.
+
+  ### Arguments
+
+  * `value` is a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0` or
+    a `t:t/0`.
+
+  * `duration` is a `t:Tempo.Duration.t/0`.
+
+  ### Returns
+
+  * `true` or `false`. A value `to_interval/1` cannot give a span raises
+    its error.
+
   ### Examples
 
       iex> meeting = ~o"2026-06-15T09:00/2026-06-15T10:30"
@@ -7945,12 +8107,31 @@ defmodule Tempo do
       iex> Tempo.at_least?(meeting, ~o"PT2H")
       false
 
+      iex> {:ok, weekends} = Tempo.select(~o"2026-06", Tempo.weekends(:AU))
+      iex> Tempo.at_least?(weekends, ~o"P8D")
+      true
+
   """
-  defdelegate at_least?(interval, duration), to: Tempo.Interval
+  @spec at_least?(t() | Interval.t() | IntervalSet.t(), Duration.t()) :: boolean()
+  def at_least?(value, duration),
+    do: length_holds?(value, duration, &Interval.at_least?/2, [:gt, :eq])
 
   @doc """
-  `true` when the interval is at most as long as the given
-  duration. See `Tempo.Interval.at_most?/2`.
+  `true` when a value is at most as long as the given duration,
+  measured as `at_least?/2` measures it.
+
+  ### Arguments
+
+  * `value` is a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0` or
+    a `t:t/0`.
+
+  * `duration` is a `t:Tempo.Duration.t/0`.
+
+  ### Returns
+
+  * `true` or `false`. A value `to_interval/1` cannot give a span raises
+    its error.
+
   ### Examples
 
       iex> meeting = ~o"2026-06-15T09:00/2026-06-15T10:30"
@@ -7960,11 +8141,26 @@ defmodule Tempo do
       false
 
   """
-  defdelegate at_most?(interval, duration), to: Tempo.Interval
+  @spec at_most?(t() | Interval.t() | IntervalSet.t(), Duration.t()) :: boolean()
+  def at_most?(value, duration),
+    do: length_holds?(value, duration, &Interval.at_most?/2, [:lt, :eq])
 
   @doc """
-  `true` when the interval's length equals the given duration.
-  See `Tempo.Interval.exactly?/2`.
+  `true` when a value's length equals the given duration, measured as
+  `at_least?/2` measures it.
+
+  ### Arguments
+
+  * `value` is a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0` or
+    a `t:t/0`.
+
+  * `duration` is a `t:Tempo.Duration.t/0`.
+
+  ### Returns
+
+  * `true` or `false`. A value `to_interval/1` cannot give a span raises
+    its error.
+
   ### Examples
 
       iex> meeting = ~o"2026-06-15T09:00/2026-06-15T10:30"
@@ -7973,12 +8169,30 @@ defmodule Tempo do
       iex> Tempo.exactly?(meeting, ~o"PT1H")
       false
 
+      iex> Tempo.exactly?(~o"2026-02", ~o"P28D")
+      true
+
   """
-  defdelegate exactly?(interval, duration), to: Tempo.Interval
+  @spec exactly?(t() | Interval.t() | IntervalSet.t(), Duration.t()) :: boolean()
+  def exactly?(value, duration),
+    do: length_holds?(value, duration, &Interval.exactly?/2, [:eq])
 
   @doc """
-  `true` when the interval is strictly longer than the given
-  duration. See `Tempo.Interval.longer_than?/2`.
+  `true` when a value is strictly longer than the given duration,
+  measured as `at_least?/2` measures it.
+
+  ### Arguments
+
+  * `value` is a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0` or
+    a `t:t/0`.
+
+  * `duration` is a `t:Tempo.Duration.t/0`.
+
+  ### Returns
+
+  * `true` or `false`. A value `to_interval/1` cannot give a span raises
+    its error.
+
   ### Examples
 
       iex> meeting = ~o"2026-06-15T09:00/2026-06-15T10:30"
@@ -7988,11 +8202,26 @@ defmodule Tempo do
       false
 
   """
-  defdelegate longer_than?(interval, duration), to: Tempo.Interval
+  @spec longer_than?(t() | Interval.t() | IntervalSet.t(), Duration.t()) :: boolean()
+  def longer_than?(value, duration),
+    do: length_holds?(value, duration, &Interval.longer_than?/2, [:gt])
 
   @doc """
-  `true` when the interval is strictly shorter than the given
-  duration. See `Tempo.Interval.shorter_than?/2`.
+  `true` when a value is strictly shorter than the given duration,
+  measured as `at_least?/2` measures it.
+
+  ### Arguments
+
+  * `value` is a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0` or
+    a `t:t/0`.
+
+  * `duration` is a `t:Tempo.Duration.t/0`.
+
+  ### Returns
+
+  * `true` or `false`. A value `to_interval/1` cannot give a span raises
+    its error.
+
   ### Examples
 
       iex> meeting = ~o"2026-06-15T09:00/2026-06-15T10:30"
@@ -8001,8 +8230,65 @@ defmodule Tempo do
       iex> Tempo.shorter_than?(meeting, ~o"PT90M")
       false
 
+  A week of workdays is shorter than a week:
+
+      iex> {:ok, workdays} = Tempo.select(~o"2026-06-15/2026-06-22", Tempo.workdays(:AU))
+      iex> Tempo.shorter_than?(workdays, ~o"P1W")
+      true
+
   """
-  defdelegate shorter_than?(interval, duration), to: Tempo.Interval
+  @spec shorter_than?(t() | Interval.t() | IntervalSet.t(), Duration.t()) :: boolean()
+  def shorter_than?(value, duration),
+    do: length_holds?(value, duration, &Interval.shorter_than?/2, [:lt])
+
+  # Whether a value's length stands in one of `orders` to `duration`. An
+  # interval set's length is the time it covers, compared from its first
+  # instant; an unbounded set is longer than any duration and an empty one
+  # has none. A value's length is that of the span it names, and an
+  # interval's is measured between its endpoints by `interval_predicate`.
+  defp length_holds?(%IntervalSet{} = set, duration, _interval_predicate, orders),
+    do: set_length_order(set, duration) in orders
+
+  defp length_holds?(%__MODULE__{} = value, duration, interval_predicate, orders) do
+    case to_interval(value) do
+      {:ok, span} -> length_holds?(span, duration, interval_predicate, orders)
+      {:error, exception} when is_exception(exception) -> raise exception
+      {:error, reason} -> raise ArgumentError, "#{inspect(value)} has no span: #{inspect(reason)}"
+    end
+  end
+
+  defp length_holds?(interval, duration, interval_predicate, _orders),
+    do: interval_predicate.(interval, duration)
+
+  defp set_length_order(set, duration) do
+    if IntervalSet.bounded?(set),
+      do: covered_length_order(IntervalSet.first(set), set, duration),
+      else: :gt
+  end
+
+  defp covered_length_order(nil, _set, duration), do: zero_length_order(duration)
+
+  defp covered_length_order(%Interval{} = first, set, duration) do
+    Duration.compare(IntervalSet.duration(set), duration, relative_to: Interval.from(first))
+  end
+
+  # Nothing against `duration`: the signs of its components decide, as they
+  # agree in a duration as it is written.
+  defp zero_length_order(%Duration{time: time} = duration) do
+    case time |> Enum.map(&component_sign/1) |> Enum.uniq() |> List.delete(0) do
+      [] -> :eq
+      [1] -> :lt
+      [-1] -> :gt
+      _mixed -> Duration.compare(%Duration{time: [second: 0]}, duration)
+    end
+  end
+
+  defp component_sign({_unit, {value, _precision}}), do: amount_sign(value)
+  defp component_sign({_unit, value}), do: amount_sign(value)
+
+  defp amount_sign(value) when value > 0, do: 1
+  defp amount_sign(value) when value < 0, do: -1
+  defp amount_sign(_zero), do: 0
 
   @doc """
   `true` when both endpoints of the interval are concrete
@@ -8331,12 +8617,14 @@ defmodule Tempo do
 
   @doc """
   Return a selector for the workdays of a territory: the days of the
-  week outside its weekend.
+  week outside its weekend, less any holidays.
 
   Together `workdays/1` and `weekends/1` partition the week. In the
   United States the workdays are Monday to Friday and the weekends
   Saturday and Sunday; in Saudi Arabia the workdays are Sunday to
-  Thursday.
+  Thursday. With `:except`, the workdays leave out a set of holidays
+  too: a territory's public holidays make its business days, a
+  school's its school days.
 
   ### Arguments
 
@@ -8345,14 +8633,28 @@ defmodule Tempo do
     walks the territory-resolution chain (app config, then ambient
     locale).
 
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:except` is the holidays the workdays leave out: anything
+    `Tempo.to_interval_set/2` converts, such as a
+    `t:Tempo.RecurrenceSet.t/0` of recurring holidays, an interval set
+    or a single day.
+
   ### Returns
 
   * A `t:Tempo.t/0` value naming the workdays by day of week, to pass
     to `Tempo.select/2`.
 
-  * `{:error, reason}` when the territory cannot be resolved.
-    `Tempo.select/2` returns such an error as it is, so a pipeline
-    reports it.
+  * With `:except`, a `t:Tempo.Workdays.t/0`, which `Tempo.select/2`
+    and the workday functions (`add_workdays/3`, `next_workday/2`,
+    `previous_workday/2`, `nearest_workday/2`, `count_workdays/2`,
+    `workday?/2`) take in place of a territory.
+
+  * `{:error, reason}` when the territory cannot be resolved or an
+    option is not one this takes. `Tempo.select/2` returns such an
+    error as it is, so a pipeline reports it.
 
   ### Examples
 
@@ -8364,13 +8666,56 @@ defmodule Tempo do
       iex> workdays |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [15, 16, 17, 18, 21]
 
+  Leaving out the King's Birthday, June 2026 has 21 Australian
+  workdays, one fewer than its weekdays:
+
+      iex> business_days = Tempo.workdays(:AU, except: ~o"2026-06-08")
+      iex> Tempo.count_workdays(~o"2026-06", business_days)
+      21
+
   """
-  @spec workdays(Tempo.Territory.input()) :: t() | {:error, error_reason()}
-  def workdays(territory \\ nil) do
-    with {:ok, resolved} <- Territory.resolve(territory) do
-      day_of_week_tempo(Localize.Calendar.weekdays(resolved))
+  @spec workdays(Tempo.Territory.input(), keyword()) ::
+          t() | Tempo.Workdays.t() | {:error, error_reason()}
+  def workdays(territory \\ nil, options \\ []) do
+    with {:ok, resolved} <- Territory.resolve(territory),
+         {:ok, except} <- workdays_except(options) do
+      workdays_of(resolved, except)
     end
   end
+
+  defp workdays_of(resolved, nil), do: day_of_week_tempo(Localize.Calendar.weekdays(resolved))
+
+  defp workdays_of(resolved, except) do
+    %Tempo.Workdays{
+      weekdays: Localize.Calendar.weekdays(resolved),
+      weekend: Localize.Calendar.weekend(resolved),
+      except: except
+    }
+  end
+
+  defp workdays_except(options) do
+    with true <- Keyword.keyword?(options),
+         [] <- Keyword.keys(options) -- [:except],
+         except = Keyword.get(options, :except),
+         true <- holiday_set?(except) do
+      {:ok, except}
+    else
+      _invalid ->
+        {:error,
+         ArgumentError.exception(
+           "Tempo.workdays/2 takes one option, :except, a Tempo value, interval, " <>
+             "interval set or recurrence set, not #{inspect(options)}."
+         )}
+    end
+  end
+
+  defp holiday_set?(nil), do: true
+
+  defp holiday_set?(%struct{})
+       when struct in [__MODULE__, Interval, IntervalSet, Tempo.RecurrenceSet],
+       do: true
+
+  defp holiday_set?(_other), do: false
 
   @doc """
   Return a selector for the weekends of a territory.
@@ -8475,23 +8820,23 @@ defmodule Tempo do
       false
 
   """
-  @spec weekend?(t(), Tempo.Territory.input()) :: boolean()
+  @spec weekend?(t(), Tempo.Territory.input() | Tempo.Workdays.t()) :: boolean()
   def weekend?(%Tempo{} = tempo, territory \\ nil), do: on_weekend?(tempo, territory, :weekend?)
 
   @doc """
   Return `true` when `tempo` falls on a workday — a day that is *not*
-  in the territory's weekend.
+  in the territory's weekend, nor one of the holidays of the workdays
+  `workdays/2` builds with `:except`.
 
-  The complement of `weekend?/2`; together they partition the week.
-  This is the weekend/weekday distinction only — it does not consult
-  public-holiday calendars.
+  Given a territory, the complement of `weekend?/2`: together they
+  partition the week.
 
   ### Arguments
 
   * `tempo` is a `t:t/0` that denotes a single day.
 
   * `territory` is resolved through `Tempo.Territory.resolve/1`, as for
-    `weekend?/2`.
+    `weekend?/2`, or is a `t:Tempo.Workdays.t/0` from `workdays/2`.
 
   ### Returns
 
@@ -8509,19 +8854,26 @@ defmodule Tempo do
       false
 
   """
-  @spec workday?(t(), Tempo.Territory.input()) :: boolean()
-  def workday?(%Tempo{} = tempo, territory \\ nil),
-    do: not on_weekend?(tempo, territory, :workday?)
-
-  # Whether `tempo` falls on the territory's weekend. A predicate has
-  # only true and false to give, so a question with no answer raises.
-  defp on_weekend?(tempo, territory, function) do
-    case weekday_and_weekend(tempo, territory, function) do
-      {:ok, day_of_week, weekend} -> day_of_week in weekend
-      {:error, exception} when is_exception(exception) -> raise exception
-      {:error, reason} -> raise ArgumentError, inspect(reason)
-    end
+  @spec workday?(t(), Tempo.Territory.input() | Tempo.Workdays.t()) :: boolean()
+  def workday?(%Tempo{} = tempo, territory \\ nil) do
+    answer = with {:ok, days_off} <- days_off(territory), do: day_off?(tempo, days_off, :workday?)
+    not predicate_answer!(answer)
   end
+
+  # Whether `tempo` falls on the territory's weekend.
+  defp on_weekend?(tempo, territory, function) do
+    answer =
+      with {:ok, day_of_week, weekend} <- weekday_and_weekend(tempo, territory, function),
+           do: {:ok, day_of_week in weekend}
+
+    predicate_answer!(answer)
+  end
+
+  # A predicate has only true and false to give, so a question with no
+  # answer raises.
+  defp predicate_answer!({:ok, answer}), do: answer
+  defp predicate_answer!({:error, exception}) when is_exception(exception), do: raise(exception)
+  defp predicate_answer!({:error, reason}), do: raise(ArgumentError, inspect(reason))
 
   @doc """
   Shift `tempo` by `count` workdays, stepping over the territory's
@@ -8531,8 +8883,8 @@ defmodule Tempo do
   returns the value unchanged. Each step lands on a workday, so one
   workday after a Friday is the following Monday where the weekend is
   Saturday and Sunday. The time of day, calendar and zone are kept.
-  This steps over the weekend only: subtract a holiday set with the set
-  operations to step over holidays too.
+  Given the workdays `workdays/2` builds with `:except`, it steps over
+  their holidays too.
 
   ### Arguments
 
@@ -8541,7 +8893,7 @@ defmodule Tempo do
   * `count` is the number of workdays to add, negative to go back.
 
   * `territory` is resolved through `Tempo.Territory.resolve/1`, as for
-    `weekend?/2`.
+    `weekend?/2`, or is a `t:Tempo.Workdays.t/0` from `workdays/2`.
 
   ### Returns
 
@@ -8549,8 +8901,9 @@ defmodule Tempo do
 
   * `{:error, reason}` when `tempo` does not denote a day (a
     `Tempo.ResolutionError` for a year or a month, a
-    `Tempo.UnanchoredError` for a value without a year) or the territory
-    cannot be resolved.
+    `Tempo.UnanchoredError` for a value without a year), the territory
+    cannot be resolved, the holidays cannot be converted around a day,
+    or more than a thousand days off fall in a row.
 
   ### Examples
 
@@ -8569,7 +8922,8 @@ defmodule Tempo do
       ~o"2026Y6M14D"
 
   """
-  @spec add_workdays(t(), integer(), Tempo.Territory.input()) :: t() | {:error, error_reason()}
+  @spec add_workdays(t(), integer(), Tempo.Territory.input() | Tempo.Workdays.t()) ::
+          t() | {:error, error_reason()}
   def add_workdays(tempo, count, territory \\ nil) do
     workdays_from(tempo, count, territory, :add_workdays)
   end
@@ -8583,7 +8937,8 @@ defmodule Tempo do
 
   * `tempo` is a `t:t/0` that denotes a day.
 
-  * `territory` is resolved through `Tempo.Territory.resolve/1`.
+  * `territory` is resolved through `Tempo.Territory.resolve/1`, or is a
+    `t:Tempo.Workdays.t/0` from `workdays/2`.
 
   ### Returns
 
@@ -8594,8 +8949,16 @@ defmodule Tempo do
       iex> Tempo.next_workday(~o"2026-06-12", :US)
       ~o"2026Y6M15D"
 
+  With Monday 26 April a holiday, the next workday after Friday 23 April
+  2027 is the Tuesday:
+
+      iex> business_days = Tempo.workdays(:AU, except: ~o"2027-04-26")
+      iex> Tempo.next_workday(~o"2027-04-23", business_days)
+      ~o"2027Y4M27D"
+
   """
-  @spec next_workday(t(), Tempo.Territory.input()) :: t() | {:error, error_reason()}
+  @spec next_workday(t(), Tempo.Territory.input() | Tempo.Workdays.t()) ::
+          t() | {:error, error_reason()}
   def next_workday(tempo, territory \\ nil) do
     workdays_from(tempo, 1, territory, :next_workday)
   end
@@ -8609,7 +8972,8 @@ defmodule Tempo do
 
   * `tempo` is a `t:t/0` that denotes a day.
 
-  * `territory` is resolved through `Tempo.Territory.resolve/1`.
+  * `territory` is resolved through `Tempo.Territory.resolve/1`, or is a
+    `t:Tempo.Workdays.t/0` from `workdays/2`.
 
   ### Returns
 
@@ -8621,7 +8985,8 @@ defmodule Tempo do
       ~o"2026Y6M12D"
 
   """
-  @spec previous_workday(t(), Tempo.Territory.input()) :: t() | {:error, error_reason()}
+  @spec previous_workday(t(), Tempo.Territory.input() | Tempo.Workdays.t()) ::
+          t() | {:error, error_reason()}
   def previous_workday(tempo, territory \\ nil) do
     workdays_from(tempo, -1, territory, :previous_workday)
   end
@@ -8637,16 +9002,17 @@ defmodule Tempo do
   fixed-date holiday such as US Independence Day is observed when it
   falls on a weekend.
 
-  Like the other workday functions this knows the weekend, not the
-  holidays: subtract a holiday `t:Tempo.IntervalSet.t/0` with the set
-  operations to step over holidays too.
+  Given the workdays `workdays/2` builds with `:except`, a holiday is
+  stepped over too, so Good Friday's nearest school day is the Thursday,
+  and a day in the school holidays finds the nearer end of the break.
 
   ### Arguments
 
   * `tempo` is a `t:t/0` that denotes a day.
 
   * `territory` is resolved through `Tempo.Territory.resolve/1` and
-    sets which days are the weekend.
+    sets which days are the weekend, or is a `t:Tempo.Workdays.t/0`
+    from `workdays/2`.
 
   ### Returns
 
@@ -8666,12 +9032,14 @@ defmodule Tempo do
       ~o"2025Y7M4D"
 
   """
-  @spec nearest_workday(t(), Tempo.Territory.input()) :: t() | {:error, error_reason()}
+  @spec nearest_workday(t(), Tempo.Territory.input() | Tempo.Workdays.t()) ::
+          t() | {:error, error_reason()}
   def nearest_workday(tempo, territory \\ nil)
 
   def nearest_workday(%Tempo{} = tempo, territory) do
-    with {:ok, day_of_week, weekend} <- weekday_and_weekend(tempo, territory, :nearest_workday) do
-      if day_of_week in weekend, do: nearest_workday_from(tempo, weekend, 1), else: tempo
+    with {:ok, days_off} <- days_off(territory),
+         {:ok, off?} <- day_off?(tempo, days_off, :nearest_workday) do
+      if off?, do: nearest_workday_from(tempo, days_off, 1), else: tempo
     end
   end
 
@@ -8681,16 +9049,17 @@ defmodule Tempo do
   Count the workdays of a span: its days outside the territory's
   weekend.
 
-  The span is half-open, so the day it ends on is not counted. This
-  counts the weekend only: subtract a holiday set with the set
-  operations to leave the holidays out too.
+  The span is half-open, so the day it ends on is not counted. Given
+  the workdays `workdays/2` builds with `:except`, their holidays are
+  left out too.
 
   ### Arguments
 
   * `value` is anything `Tempo.select/2` selects from: a `t:t/0`, a
     `t:Tempo.Interval.t/0` or a `t:Tempo.IntervalSet.t/0`.
 
-  * `territory` is resolved through `Tempo.Territory.resolve/1`.
+  * `territory` is resolved through `Tempo.Territory.resolve/1`, or is a
+    `t:Tempo.Workdays.t/0` from `workdays/2`.
 
   ### Returns
 
@@ -8711,12 +9080,21 @@ defmodule Tempo do
   """
   @spec count_workdays(
           t() | Tempo.Interval.t() | IntervalSet.t(),
-          Tempo.Territory.input()
+          Tempo.Territory.input() | Tempo.Workdays.t()
         ) :: non_neg_integer() | {:error, error_reason()}
   def count_workdays(value, territory \\ nil) do
-    with %Tempo{} = workdays <- workdays(territory),
-         {:ok, %IntervalSet{} = selected} <- select(value, workdays) do
+    with {:ok, selector} <- workday_selector(territory),
+         {:ok, %IntervalSet{} = selected} <- select(value, selector) do
       count_selected(selected)
+    end
+  end
+
+  defp workday_selector(%Tempo.Workdays{} = workdays), do: {:ok, workdays}
+
+  defp workday_selector(territory) do
+    case workdays(territory) do
+      %Tempo{} = selector -> {:ok, selector}
+      {:error, _reason} = error -> error
     end
   end
 
@@ -8729,8 +9107,9 @@ defmodule Tempo do
   end
 
   defp workdays_from(%Tempo{} = tempo, count, territory, function) when is_integer(count) do
-    with {:ok, _day_of_week, weekend} <- weekday_and_weekend(tempo, territory, function) do
-      step_workdays(tempo, count, weekend, function)
+    with {:ok, days_off} <- days_off(territory),
+         {:ok, _day_of_week} <- iso_day_of_week(tempo, function) do
+      step_workdays(tempo, count, days_off, function)
     end
   end
 
@@ -8743,57 +9122,97 @@ defmodule Tempo do
     do: {:error, not_a_day(value, function)}
 
   # Step `count` workdays from `tempo`, one day at a time.
-  defp step_workdays(tempo, 0, _weekend, _function), do: tempo
+  defp step_workdays(tempo, 0, _days_off, _function), do: tempo
 
-  defp step_workdays(tempo, count, weekend, function) do
+  defp step_workdays(tempo, count, days_off, function) do
     step = if count < 0, do: -1, else: 1
 
     Enum.reduce_while(1..abs(count), tempo, fn _workday, day ->
-      case workday_after(day, step, weekend, function) do
+      case workday_after(day, step, days_off, function, 1) do
         %Tempo{} = next -> {:cont, next}
         {:error, _reason} = error -> {:halt, error}
       end
     end)
   end
 
+  # The most days off in a row a step passes before it gives up, so a
+  # holiday set that never ends cannot hold it forever.
+  @most_days_off_in_a_row 1_000
+
   # The first workday `step` days on from `tempo` (a step of -1 goes back).
-  defp workday_after(tempo, step, weekend, function) do
+  defp workday_after(tempo, _step, _days_off, _function, run)
+       when run > @most_days_off_in_a_row do
+    {:error,
+     ArgumentError.exception(
+       "No workday follows #{inspect(tempo)} within #{@most_days_off_in_a_row} days off."
+     )}
+  end
+
+  defp workday_after(tempo, step, days_off, function, run) do
     next = shift(tempo, day: step)
 
-    with {:ok, day_of_week} <- iso_day_of_week(next, function) do
-      if day_of_week in weekend, do: workday_after(next, step, weekend, function), else: next
+    with {:ok, off?} <- day_off?(next, days_off, function) do
+      if off?, do: workday_after(next, step, days_off, function, run + 1), else: next
     end
   end
 
   # The workday `distance` days before `tempo`, else the one `distance`
   # days after, else one day further out each way.
-  defp nearest_workday_from(tempo, weekend, distance) when distance <= 7 do
+  defp nearest_workday_from(tempo, days_off, distance)
+       when distance <= @most_days_off_in_a_row do
     preceding = shift(tempo, day: -distance)
     following = shift(tempo, day: distance)
 
-    with {:ok, preceding_day} <- iso_day_of_week(preceding, :nearest_workday),
-         {:ok, following_day} <- iso_day_of_week(following, :nearest_workday) do
+    with {:ok, preceding_off?} <- day_off?(preceding, days_off, :nearest_workday),
+         {:ok, following_off?} <- day_off?(following, days_off, :nearest_workday) do
       cond do
-        preceding_day not in weekend -> preceding
-        following_day not in weekend -> following
-        true -> nearest_workday_from(tempo, weekend, distance + 1)
+        not preceding_off? -> preceding
+        not following_off? -> following
+        true -> nearest_workday_from(tempo, days_off, distance + 1)
       end
     end
   end
 
-  # Every territory's weekend is shorter than a week; the bound ends
-  # the search rather than trusting that.
-  defp nearest_workday_from(tempo, _weekend, _distance) do
-    {:error, ArgumentError.exception("No workday falls within a week of #{inspect(tempo)}.")}
+  defp nearest_workday_from(tempo, _days_off, _distance) do
+    {:error,
+     ArgumentError.exception(
+       "No workday falls within #{@most_days_off_in_a_row} days of #{inspect(tempo)}."
+     )}
   end
 
   # The ISO day of week (1 = Monday … 7 = Sunday) of the day `tempo`
   # denotes, and the ISO days of the territory's weekend.
   defp weekday_and_weekend(tempo, territory, function) do
-    with {:ok, resolved} <- Territory.resolve(territory),
+    with {:ok, {weekend, _except}} <- days_off(territory),
          {:ok, day_of_week} <- iso_day_of_week(tempo, function) do
-      {:ok, day_of_week, Localize.Calendar.weekend(resolved)}
+      {:ok, day_of_week, weekend}
     end
+  end
+
+  # The days a territory, or a `Tempo.Workdays`, has off: its weekend and
+  # any holidays.
+  defp days_off(%Tempo.Workdays{weekend: weekend, except: except}), do: {:ok, {weekend, except}}
+
+  defp days_off(territory) do
+    with {:ok, resolved} <- Territory.resolve(territory),
+         do: {:ok, {Localize.Calendar.weekend(resolved), nil}}
+  end
+
+  # Whether a day is off: on the weekend or on a holiday.
+  defp day_off?(day, {weekend, except}, function) do
+    with {:ok, day_of_week} <- iso_day_of_week(day, function) do
+      if day_of_week in weekend, do: {:ok, true}, else: on_holiday?(day, except)
+    end
+  end
+
+  defp on_holiday?(_day, nil), do: {:ok, false}
+
+  # The holidays converted around the day, as a recurrence needs a window;
+  # a concrete holiday is what it is, so the day asks which overlap it.
+  defp on_holiday?(day, except) do
+    with {:ok, %IntervalSet{} = holidays} <- to_interval_set(except, within: day),
+         {:ok, %IntervalSet{} = on_the_day} <- members_overlapping(holidays, day),
+         do: {:ok, IntervalSet.count(on_the_day) > 0}
   end
 
   # ISO day of week (1 = Monday … 7 = Sunday) of the day a value

@@ -109,7 +109,16 @@ defmodule Tempo.Interval do
             unit: nil,
             metadata: %{}
 
-  @public_new_options [:from, :to, :duration, :recurrence, :repeat_rule, :unit, :metadata]
+  @public_new_options [
+    :from,
+    :to,
+    :through,
+    :duration,
+    :recurrence,
+    :repeat_rule,
+    :unit,
+    :metadata
+  ]
 
   # Units a caller may request as iteration granularity via `new/1` —
   # the month-based calendar/clock chain the walk-time fill can reach.
@@ -141,6 +150,10 @@ defmodule Tempo.Interval do
 
   * `:to` is a `t:Tempo.t/0` or the atom `:undefined`
     (open end).
+
+  * `:through` is a `t:Tempo.t/0` or a `t:t/0` whose span the interval
+    runs to the end of, so the last day a published range names is
+    inside it. It takes the place of `:to` and `:duration`.
 
   * `:duration` is a `t:Tempo.Duration.t/0`. When combined with
     `:from`, the `:to` endpoint is derived lazily by
@@ -178,10 +191,17 @@ defmodule Tempo.Interval do
       iex> iv.to
       :undefined
 
+  A term that runs from Thursday 28 January through Friday 9 April
+  ends where Saturday 10 April begins:
+
+      iex> Tempo.Interval.new(from: ~o"2027-01-28", through: ~o"2027-04-09")
+      {:ok, ~o"2027Y1M28D/4M10D"}
+
   """
   @spec new(keyword()) :: {:ok, t()} | {:error, Exception.t()}
   def new(options) when is_list(options) do
     with :ok <- ensure_keyword_options(options),
+         {:ok, options} <- resolve_through(options),
          :ok <- ensure_describes_span(options),
          from <- Keyword.get(options, :from),
          to <- Keyword.get(options, :to),
@@ -205,6 +225,40 @@ defmodule Tempo.Interval do
          metadata: metadata
        }}
     end
+  end
+
+  # `through:` closes the interval at the end of a value's span, so the
+  # last day named is inside it.
+  defp resolve_through(options) do
+    case Keyword.pop(options, :through) do
+      {nil, options} -> {:ok, options}
+      {last, options} -> close_through(last, options)
+    end
+  end
+
+  defp close_through(last, options) do
+    if Keyword.has_key?(options, :to) or Keyword.has_key?(options, :duration) do
+      {:error,
+       ArgumentError.exception(
+         "Tempo.Interval.new/1 takes one of :to, :through and :duration to close an interval."
+       )}
+    else
+      with {:ok, end_of_last} <- span_end(last), do: {:ok, Keyword.put(options, :to, end_of_last)}
+    end
+  end
+
+  defp span_end(%struct{} = last) when struct in [Tempo, __MODULE__] do
+    case to(last) do
+      {:error, _reason} = error -> error
+      end_of_last -> {:ok, end_of_last}
+    end
+  end
+
+  defp span_end(last) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.Interval.new/1's :through is a Tempo value or interval, not #{inspect(last)}."
+     )}
   end
 
   # The closing endpoint of an interval. When a `:duration` is supplied
@@ -1360,7 +1414,8 @@ defmodule Tempo.Interval do
   ## ----------------------------------------------------------
 
   @doc """
-  Return the interval's `from` endpoint.
+  Return the interval's `from` endpoint, or where the span a value
+  names begins.
 
   A named helper so callers never have to reach into the struct
   fields in user-facing code. Compose with `Tempo.day/1`, `Tempo.year/1`,
@@ -1368,12 +1423,16 @@ defmodule Tempo.Interval do
 
   ### Arguments
 
-  * `interval` is a `t:t/0`.
+  * `interval` is a `t:t/0`, or a `t:Tempo.t/0`, which is the span it
+    names: `~o"2026-06"` is June.
 
   ### Returns
 
   * The `from` endpoint as a `t:Tempo.t/0` or `:undefined` for
     open-ended intervals.
+
+  * `{:error, reason}` for a value naming no single span, such as a set
+    of values or 29 February without a year.
 
   ### Examples
 
@@ -1381,24 +1440,34 @@ defmodule Tempo.Interval do
       iex> Tempo.Interval.from(iv) |> Tempo.day()
       15
 
+      iex> Tempo.Interval.from(~o"2026-06")
+      ~o"2026Y6M"
+
   """
-  @spec from(t()) :: Tempo.t() | :undefined
+  @spec from(t() | Tempo.t()) :: Tempo.t() | :undefined | {:error, Exception.t()}
   def from(%__MODULE__{} = interval), do: resolve_duration_form(interval).from
+  def from(%Tempo{} = value), do: with_span(value, &from/1)
 
   @doc """
-  Return the interval's `to` endpoint.
+  Return the interval's `to` endpoint, or where the span a value
+  names ends.
 
   Under half-open `[from, to)` semantics, this is the exclusive
-  upper bound — the first instant **outside** the span.
+  upper bound — the first instant **outside** the span. A day ends
+  where the next begins.
 
   ### Arguments
 
-  * `interval` is a `t:t/0`.
+  * `interval` is a `t:t/0`, or a `t:Tempo.t/0`, which is the span it
+    names: `~o"2026-06-15"` is that day.
 
   ### Returns
 
   * The `to` endpoint as a `t:Tempo.t/0` or `:undefined` for
     open-ended intervals.
+
+  * `{:error, reason}` for a value naming no single span, such as a set
+    of values or 29 February without a year.
 
   ### Examples
 
@@ -1406,9 +1475,30 @@ defmodule Tempo.Interval do
       iex> Tempo.Interval.to(iv) |> Tempo.day()
       20
 
+      iex> Tempo.Interval.to(~o"2027-04-09")
+      ~o"2027Y4M10D"
+
   """
-  @spec to(t()) :: Tempo.t() | :undefined
+  @spec to(t() | Tempo.t()) :: Tempo.t() | :undefined | {:error, Exception.t()}
   def to(%__MODULE__{} = interval), do: resolve_duration_form(interval).to
+  def to(%Tempo{} = value), do: with_span(value, &to/1)
+
+  # A value is the span it names, read through `Tempo.to_interval/1`; one
+  # that names several spans has no single start or end.
+  defp with_span(%Tempo{} = value, endpoint) do
+    case Tempo.to_interval(value) do
+      {:ok, %__MODULE__{} = span} -> endpoint.(span)
+      {:ok, %IntervalSet{}} -> {:error, several_spans_error(value)}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp several_spans_error(value) do
+    ArgumentError.exception(
+      "#{inspect(value)} names several spans, so it has no single start or end: " <>
+        "take them from its interval set with Tempo.to_interval_set/1."
+    )
+  end
 
   @doc """
   Return the interval's endpoints as a `{from, to}` tuple.

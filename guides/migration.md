@@ -64,6 +64,8 @@ These keep their names and change their meaning:
 
 * **`select/2` across a span** — selects in every period of the span, where 1.x selected in its first period alone.
 
+* **`shift/3`'s `:skipping` on a day shifted by days** — steps from free day to free day and returns a day, where 1.x counted days of free time and returned the instant they ran out.
+
 * **`Tempo.RecurrenceSet.new/2`** — returns `{:ok, set}` and checks its members, where 1.x returned the struct; `new!/2` returns the struct.
 
 * **`Tempo.Network.TimePeriod.new/2`** — returns `{:ok, period}`, where 1.x returned the struct; `new!/2` returns the struct.
@@ -88,7 +90,7 @@ A search for the removed names finds the renames:
 grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(meets|during)\?|Interval\.(meets|during)\?|(Tempo|Interval)\.compose|Tempo\.anchor[(/]|(NonAnchored|RequiresAnchor)Error|:unanchored|grounded\?|GroundedTempoError|(to|from)_(naive_)?date_time|from_(ical|jscalendar)|available_from_ical|to_rrule|MaterialisationError|Expander.expand|working_days?|Tempo\.weekend\(|weekends\(from|IntervalSet\.(to_list|overlapping)|RecurrenceSet\.new\(|Tempo\.to_iso8601[(/]|beginning_of_|end_of_(day|month)|tighten\(|Schedule\.Slot|earliest:|(add_period|TimePeriod\.new)\([^)]*(start|end):' lib test
 ```
 
-The changes of meaning need a read rather than a replace: every `before?`, `after?` and their `certainly_` and `possibly_` forms, every duration read as a count of seconds, every shift of a zoned value by hours, every `duration/1` of a set, every window, every `:metadata` passed to `Tempo.new/1`, every `select/2` across a span longer than one period, and every `RecurrenceSet.new/2` and `to_iso8601/1`, which the search finds.
+The changes of meaning need a read rather than a replace: every `before?`, `after?` and their `certainly_` and `possibly_` forms, every duration read as a count of seconds, every shift of a zoned value by hours, every `duration/1` of a set, every window, every `:metadata` passed to `Tempo.new/1`, every `select/2` across a span longer than one period, every `:skipping` shift of a day by days, and every `RecurrenceSet.new/2` and `to_iso8601/1`, which the search finds.
 
 ## A set's duration is the time it covers
 
@@ -485,6 +487,24 @@ iex> Tempo.shift(~o"2026-06-18T16:00", ~o"P3D", skipping: weekends)
 ```
 
 > *"Three days of work from Thursday at four, skipping the weekends, finish on Tuesday at four."*
+
+A day shifted by days steps from free day to free day and lands on a day, as a day shifted by a day is the next day. 1.x counted days of free time and returned the instant they ran out, which for one day from a Friday was midnight on the Saturday.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.x
+Tempo.shift(~o"2026-06-12", ~o"P1D", skipping: Tempo.weekends(from: ~o"2026-06-12"))
+#=> ~o"2026Y6M13DT0H0M0S"
+```
+
+```elixir
+iex> {:ok, weekends} = Tempo.select(~o"2026-06-12/..", Tempo.weekends(:US))
+iex> Tempo.shift(~o"2026-06-12", ~o"P1D", skipping: weekends)
+~o"2026Y6M15D"
+```
+
+> *"The next free day after Friday 12 June, skipping the weekend, is Monday 15 June."*
 
 A span is selected in each of its periods at its start's resolution, where 1.x selected in its first period alone: the Christmases of `~o"2026/2029"` are three, where 1.x found 2026's.
 

@@ -863,4 +863,56 @@ defmodule Tempo.Select.Test do
                [~o"2026Y4M3D", ~o"2027Y4M3D", ~o"2028Y4M3D"]
     end
   end
+
+  describe "an ISO 8601-2 selection" do
+    defp selected(base, selector) do
+      {:ok, set} = Tempo.select(base, selector)
+      set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
+    end
+
+    test "a computed event selects its day in each period" do
+      assert selected(~o"2027", ~o"L(easter)eN") == ["2027Y3M28D/29D"]
+
+      assert selected(~o"2026/2029", ~o"L(easter)eN") ==
+               ["2026Y4M5D/6D", "2027Y3M28D/29D", "2028Y4M16D/17D"]
+    end
+
+    test "a §12.10 window selects within it, or nothing" do
+      # The Friday that falls 7–13 April, and the Thursday that falls
+      # 17–21 December, of which 2027 has none.
+      assert selected(~o"2027", ~o"LLL4M7DN/P7DN5K1IN") == ["2027Y4M9D/10D"]
+      assert selected(~o"2027", ~o"LLL12M17DN/P5DN4K1IN") == []
+
+      # The five days from the fourth Wednesday.
+      assert selected(~o"2026", ~o"LL3K4IN/P5DN") == ["2026Y1M28D/2M2D"]
+    end
+
+    test "a selection applies at the period's own cadence" do
+      assert selected(~o"2027-04", ~o"L1K1IN") == ["2027Y4M5D/6D"]
+
+      assert selected(~o"2027-04/2027-07", ~o"L1K1IN") ==
+               ["2027Y4M5D/6D", "2027Y5M3D/4D", "2027Y6M7D/8D"]
+
+      assert selected(~o"2027-04-09", ~o"LT22HN") == ["2027Y4M9DT22H/T23H"]
+    end
+
+    test "units before a selection narrow the period first" do
+      assert selected(~o"2027", ~o"4ML1K1IN") == ["2027Y4M5D/6D"]
+      assert selected(~o"2026/2028", ~o"4ML1K1IN") == ["2026Y4M6D/7D", "2027Y4M5D/6D"]
+      assert selected(~o"2027", ~o"2027YL12M25DN") == ["2027Y12M25D/26D"]
+      assert selected(~o"2026", ~o"2027YL12M25DN") == []
+    end
+
+    test "a list mixes selections with values" do
+      assert selected(~o"2027", [~o"L(easter)eN", ~o"L12M25DN"]) ==
+               ["2027Y3M28D/29D", "2027Y12M25D/26D"]
+    end
+
+    test "an open-ended span selects lazily" do
+      {:ok, easters} = Tempo.select(~o"2026/..", ~o"L(easter)eN")
+
+      assert easters |> IntervalSet.walk() |> Enum.take(2) |> Enum.map(&Tempo.to_iso8601!/1) ==
+               ["2026Y4M5D/6D", "2027Y3M28D/29D"]
+    end
+  end
 end

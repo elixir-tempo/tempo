@@ -137,7 +137,7 @@ end)
 #   2028-01-01 is a Saturday, so it is observed on Friday 2027-12-31; and so on.
 ```
 
-> *"New Year's Day is January 1, observed on the nearest workday."* `Tempo.next_workday/2`, `previous_workday/2` and `add_workdays/3` cover the "next Monday" and "N workdays later" variants; all take a territory so the weekend and the holiday set are the right ones.
+> *"New Year's Day is January 1, observed on the nearest workday."* `Tempo.next_workday/2`, `previous_workday/2` and `add_workdays/3` cover the "next Monday" and "N workdays later" variants; all take a territory, or the workdays `Tempo.workdays/2` makes with `:except`, so the weekend and the holidays are the right ones.
 
 ## Year gates — the recurrence domain (`{…}` and `^`)
 

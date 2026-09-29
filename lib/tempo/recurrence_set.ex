@@ -190,6 +190,38 @@ defmodule Tempo.RecurrenceSet do
   def members(%__MODULE__{members: members}), do: members
 
   @doc """
+  Keeps only the members for which `fun` returns a truthy value, as
+  `Tempo.IntervalSet.filter/2` does for an interval set's members.
+
+  ### Arguments
+
+  * `set` is a `t:t/0`.
+
+  * `fun` is a 1-arity function applied to each member: a recurrence or a
+    concrete interval, a `t:Tempo.t/0`, a nested set or a conditional member.
+
+  ### Returns
+
+  * A new `t:t/0` holding the members `fun` keeps, in their order, with the
+    set's metadata.
+
+  ### Examples
+
+      iex> christmas = Tempo.put_metadata(~o"R/../P1Y/FL12M25DN", %{name: "Christmas Day"})
+      iex> boxing_day = Tempo.put_metadata(~o"R/../P1Y/FL12M26DN", %{name: "Boxing Day"})
+      iex> {:ok, holidays} = Tempo.RecurrenceSet.new([christmas, boxing_day])
+      iex> holidays
+      ...> |> Tempo.RecurrenceSet.filter(&(Tempo.metadata(&1).name == "Boxing Day"))
+      ...> |> Tempo.RecurrenceSet.members()
+      [boxing_day]
+
+  """
+  @spec filter(t(), (member() -> as_boolean(any()))) :: t()
+  def filter(%__MODULE__{members: members} = set, fun) when is_function(fun, 1) do
+    %{set | members: Enum.filter(members, fun)}
+  end
+
+  @doc """
   Builds a member kept only when days around each occurrence fall on
   occurrences of the set's other members — a bridge day between two holidays.
 

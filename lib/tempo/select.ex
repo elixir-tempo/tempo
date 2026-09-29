@@ -46,6 +46,8 @@ defmodule Tempo.Select do
   | `%Tempo{}` or list | `Tempo.select(y, ~o"12-25")` | Project the constraint's specified units onto the base |
   | `%Tempo{day_of_week: …}` | `Tempo.select(m, ~o"5K")` | Day-of-week pattern — every matching weekday in the base (ISO 8601-2 `K` suffix) |
   | `%Tempo{day_of_week: [...]}` | `Tempo.select(m, Tempo.workdays(:US))` | Day-of-week list — every matching weekday in the base |
+  | `t:Tempo.Workdays.t/0` | `Tempo.select(m, Tempo.workdays(:AU, except: holidays))` | The workdays no holiday falls on |
+  | ISO 8601-2 selection | `Tempo.select(y, ~o"L(easter)eN")` | A computed event, a §12.10 window or any `L…N`, applied in each period at the period's own cadence; units before it narrow the period first (`~o"4ML1K1IN"`) |
   | `%Tempo{day: N}` (ordinal) | `Tempo.select(y, ~o"10O")` | Ordinal day in the year — the Nth day (ISO 8601-2 `O` suffix) |
   | Negative components | `Tempo.select(y, ~o"-1M")` | ISO 8601-2 §4.4.1 — count from the end of the containing unit |
   | `%Tempo.Interval{}` or list | `Tempo.select(days, ~o"T09/T17")` | Project as a **span** — coarser units from the base, finer from each endpoint, half-open `[from, to)` |
@@ -172,6 +174,7 @@ defmodule Tempo.Select do
           | Range.t()
           | Tempo.t()
           | Interval.t()
+          | Tempo.Workdays.t()
           | [Tempo.t() | Interval.t()]
           | (base() -> selector())
 
@@ -290,6 +293,17 @@ defmodule Tempo.Select do
     end
   end
 
+  # ---- Workdays less holidays: the weekdays, then those no holiday
+  # falls on ----
+
+  def select(base, %Tempo.Workdays{weekdays: weekdays, except: except}) do
+    with {:ok, %IntervalSet{} = days} <- select(base, day_of_week_selector(weekdays)) do
+      if IntervalSet.bounded?(days),
+        do: without_holidays(days, except, base),
+        else: lazily_without_holidays(days, except)
+    end
+  end
+
   # ---- Tempo and Tempo.Set bases: select across the span they
   # convert to ----
 
@@ -315,6 +329,41 @@ defmodule Tempo.Select do
        "Tempo.select/2 cannot select from #{inspect(base)}: the base is a Tempo value, " <>
          "an interval or an interval set."
      )}
+  end
+
+  defp day_of_week_selector(weekdays),
+    do: %Tempo{time: [day_of_week: weekdays], calendar: Calendrical.Gregorian}
+
+  # The days no holiday falls on, the holidays converted within the base.
+  defp without_holidays(days, except, base) do
+    with {:ok, %IntervalSet{} = holidays} <- Tempo.to_interval_set(except, within: base) do
+      Tempo.members_outside(days, holidays)
+    end
+  end
+
+  # An open-ended base's days, each kept when no holiday falls on it, the
+  # holidays converted around each day as the walk reaches it.
+  defp lazily_without_holidays(days, except) do
+    with %Interval{} = first <- IntervalSet.first(days),
+         {:ok, _holidays} <- Tempo.to_interval_set(except, within: first) do
+      {:ok,
+       days
+       |> IntervalSet.walk()
+       |> Stream.reject(&holiday?(&1, except))
+       |> IntervalSet.from_stream()}
+    else
+      nil -> {:ok, days}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp holiday?(day, except) do
+    with {:ok, %IntervalSet{} = holidays} <- Tempo.to_interval_set(except, within: day),
+         {:ok, %IntervalSet{} = on_the_day} <- Tempo.members_overlapping(holidays, day) do
+      IntervalSet.count(on_the_day) > 0
+    else
+      _no_holidays -> false
+    end
   end
 
   defp select_converted(value, selector) do
@@ -615,13 +664,23 @@ defmodule Tempo.Select do
   defp select_period(period, [head | _] = indices) when is_integer(head),
     do: select_indices(period, indices)
 
-  defp select_period(period, %Tempo{} = constraint), do: select_projections(period, [constraint])
+  defp select_period(period, %Tempo{time: time} = constraint) do
+    case selection_parts(time) do
+      :none -> select_projections(period, [constraint])
+      {[], selection} -> select_by_rule(period, %{constraint | time: [selection: selection]})
+      {units, selection} -> select_narrowed(period, constraint, units, selection)
+      :unreadable -> {:error, unrecognised_selector(constraint)}
+    end
+  end
 
   defp select_period(period, %Interval{} = constraint),
     do: select_projections(period, [constraint])
 
-  defp select_period(period, [%Tempo{} | _] = constraints),
-    do: select_projections(period, constraints)
+  defp select_period(period, [%Tempo{} | _] = constraints) do
+    if Enum.any?(constraints, &holds_selection?/1),
+      do: constraints |> collect(&selected_members(period, &1)) |> selection_set(),
+      else: select_projections(period, constraints)
+  end
 
   defp select_period(period, [%Interval{} | _] = constraints),
     do: select_projections(period, constraints)
@@ -631,6 +690,62 @@ defmodule Tempo.Select do
 
   defp select_period(_period, {:error, _reason} = error), do: error
   defp select_period(_period, selector), do: {:error, unrecognised_selector(selector)}
+
+  # An ISO 8601-2 selection — a computed event, a §12.10 window, any
+  # `L…N` — is a recurrence's rule, and what it selects in a period is that
+  # recurrence's occurrences there at the period's own cadence: Easter in
+  # a year, the first Monday in a month.
+  defp select_by_rule(%Interval{from: %Tempo{} = from} = period, rule) do
+    {unit, _precision} = Tempo.resolution(from)
+    cadence = %Duration{time: [{cadence_unit(unit), 1}]}
+    recurrence = %Interval{recurrence: :infinity, duration: cadence, repeat_rule: rule}
+
+    Tempo.to_interval_set(recurrence, within: period)
+  end
+
+  defp cadence_unit(unit) when unit in [:day_of_year, :day_of_week], do: :day
+  defp cadence_unit(unit), do: unit
+
+  # Units before a selection narrow the period first, and the selection
+  # applies within what they select: `4ML1K1IN` is the first Monday of
+  # April.
+  defp select_narrowed(period, constraint, units, selection) do
+    rule = %{constraint | time: [selection: selection]}
+
+    with {:ok, %IntervalSet{} = narrowed} <-
+           select_projections(period, [%{constraint | time: units}]) do
+      narrowed
+      |> IntervalSet.members()
+      |> collect(&rule_members(&1, rule))
+      |> selection_set()
+    end
+  end
+
+  defp rule_members(period, rule) do
+    with {:ok, %IntervalSet{} = selected} <- select_by_rule(period, rule),
+         do: {:ok, IntervalSet.members(selected)}
+  end
+
+  defp selected_members(period, selector) do
+    with {:ok, %IntervalSet{} = selected} <- select_period(period, selector),
+         do: {:ok, IntervalSet.members(selected)}
+  end
+
+  # A value's units and its ISO 8601-2 selection: the units before the
+  # selection, `:none` without one, and `:unreadable` when units follow it.
+  defp selection_parts(time) do
+    case Enum.split_while(time, &(not selection_unit?(&1))) do
+      {_units, []} -> :none
+      {units, [{:selection, selection}]} -> {units, selection}
+      {_units, _selection_and_more} -> :unreadable
+    end
+  end
+
+  defp holds_selection?(%Tempo{time: time}), do: Enum.any?(time, &selection_unit?/1)
+  defp holds_selection?(_constraint), do: false
+
+  defp selection_unit?({:selection, _selection}), do: true
+  defp selection_unit?(_unit), do: false
 
   defp unrecognised_selector(selector) do
     ArgumentError.exception(

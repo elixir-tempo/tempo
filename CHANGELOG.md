@@ -103,6 +103,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.to_iso8601/1` returns `{:ok, string}`, or a `Tempo.Iso8601EncodeError` for a value with no ISO 8601 form — a set, a conditional member, a cron nearest weekday or a value that is not Tempo's — where it raised. `to_iso8601!/1` returns the string.
 
+* `Tempo.shift/3` with `:skipping` steps a day shifted by days from free day to free day and returns a day: one day of free time after a Friday before a long weekend is the Tuesday, where it was midnight on the Saturday.
+
 ### Added
 
 * A `Tempo.IntervalSet` is tabular data (`Table.Reader`) when the optional `table` package is present: a row per member with its `from`, `to` and metadata, so `Kino.DataTable.new/1` shows a set of holidays with their names.
@@ -149,7 +151,15 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.Interval.Relations` — narrowing and canonical order over *sets* of Allen relations (with `Tempo.Allen.inverse/1` and `compose/2`, which take sets too), for reasoning when the relation between two intervals is constrained but not known. `narrow/2` combines two sources of knowledge; it is not `Tempo.intersection/2`, which operates on time values.
 
+* `Tempo.workdays/2`'s `:except` leaves holidays out of a territory's workdays, as a `Tempo.Workdays` that `select/2` and every workday function take in place of a territory, so `Tempo.next_workday(day, Tempo.workdays(:AU, except: holidays))` steps over the holidays.
+
+* `Tempo.Interval.new/1` takes `:through`, ending an interval where a value's span ends so a published range's last day is inside it, and `Interval.from/1` and `to/1` read the span a value names.
+
+* `Tempo.RecurrenceSet.filter/2` keeps the members a function keeps, as `IntervalSet.filter/2` does.
+
 ### Changed
+
+* The duration predicates (`at_least?/2`, `at_most?/2`, `exactly?/2`, `longer_than?/2`, `shorter_than?/2`) measure an interval set by the time it covers and a value by the span it names, and `duration/1` measures a value's span.
 
 * The engine moves to an Internals docs group — `Tempo.Compare`, the ISO 8601 tokenizer, `Interval.Steps`, `Microsecond`, `Network.Normalize` and the RRULE expander, rule and selection — and `Tempo.merge/2` and `unit_min_max/1` are hidden. Every documented module has a group, and `from_iso8601/2` and `from_iso8601!/2` are documented.
 
@@ -254,6 +264,14 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * `Tempo.Network.Relation.from_allen/1` preserves direction for `:overlapped_by`, which previously mapped to `:overlaps` and silently reversed the operands. Every Allen relation now round-trips through `to_allen/1`.
 
 * A recurrence with an open start materialises within a `:within` window alone: `Tempo.to_interval(~o"R/../P1Y/FL6M1K2IN", within: ~o"2026")` is the second Monday of June 2026. Each occurrence takes the resolution its selection names — `FL6MN` a month, `FL12M25DN` a day.
+
+* `Tempo.select/2` selects with an ISO 8601-2 selection — a computed event, a §12.10 window, any `L…N` — in each period, units before it narrowing the period first, where it silently selected nothing.
+
+* `Tempo.at/2` and `on/2` place an interval endpoint by endpoint and keep a selection after the units it selects in (`4ML1K1IN` on 2027 is `2027Y4ML1K1IN`), where they raised.
+
+* `Tempo.duration/1` returns an error for a value or interval without a year, a finite recurrence or a value that is not Tempo's, where it raised.
+
+* `Tempo.from_iso8601/2` reads a computed event or a week start (`q`) in a value's selection, so `2027YL(easter)eN` is Easter 2027, where it raised `KeyError`.
 
 * A time-of-day selection moves an event's whole span: an iCalendar event from 09:00 to 10:00 with `BYHOUR=9,17` is also 17:00–18:00, where it ran from 17:00 back to 10:00, and `BYMINUTE` and `BYSECOND` likewise.
 
