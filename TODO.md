@@ -6,13 +6,7 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **A domain run drops an occurrence a backward window moves out of it** — `R/{2020Y..2030Y}/P1Y/FLL1M3DN/-P5DN` within 2026 misses 2026's own run from 29 December 2025, which the open-start form keeps: a run keeps the occurrences that start in it, not those its periods yield.
 
-* [ ] **`to_interval/2` raises with an open-ended window** — `Tempo.to_interval(~o"R/../P1Y/FLL1M3DN/-P5DN", within: ~o"2026/..")` raises `UnboundedSetError` from `IntervalSet.members/1`, where `to_interval_set/2` returns the lazy set; return the set or an error.
-
 * [ ] **Gregorian constants outside the `:within` reach** — `Network.Normalize` puts a year at 365.2425 days and a month at 30.436875 to place undated periods on one axis, and `Format` a month and a year in seconds to choose a relative-time unit. Review whether each belongs in Calendrical, as the reach did.
-
-* [ ] **An anchored terminal window loses its selection** — `R/2026/P1Y/FLL3K4IN/P5DN` gives each year's first five days (`2026Y/1M6D`), where `R/../P1Y/FLL3K4IN/P5DN` gives the five days from the fourth Wednesday (`2026Y1M28D/2M2D`).
-
-* [ ] **A windowed selection in a one-occurrence recurrence raises** — `R1/2026/P1Y/FLL12M19DN/P40DN` raises `FunctionClauseError` from `Calendrical.Base.Month.days_in_month(2026, nil)`, which `Tempo.RRule.Selection.expand_candidate_days/2` calls with no month; `R/../P1Y/FLL12M19DN/P40DN` works.
 
 * [ ] **A terminal window within a value does not parse** — `2027YLL(easter)eN/-P2DN`, the two days before Easter 2027, returns a `ParseError` (":year is less than the selection min of :interval") where the recurrence form parses.
 
@@ -77,6 +71,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **A domain gating by a window's anchor** — a domain admits the occurrences that start in its periods; date-holidays gates on the year of a window's anchor instead. They differ only when a window crosses a gated boundary year, which no tempo_holidays rule does; reviving it needs anchor tracking through `Tempo.RRule.Selection`.
 
 ## Done
+
+* [x] **A §12.10 window from a year anchor** — a recurrence whose start names only a year walks a window that ends its selection from a day, where `R1/2026/P1Y/FLL12M19DN/P40DN` raised and `R/2026/P1Y/FLL3K4IN/P5DN` gave each year's first five days. 2026-09-30.
 
 * [x] **`select/2` keeps metadata** — each selected member carries the metadata of the base member it came from, lazily for an open-ended span, and a set's own metadata stays with the result (user). 2026-09-29.
 

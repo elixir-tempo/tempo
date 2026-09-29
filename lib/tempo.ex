@@ -6467,8 +6467,9 @@ defmodule Tempo do
 
   # The grain a recurrence starts at: the finest unit its selection
   # names, mapped onto the calendar axis (a weekday or ordinal selects a
-  # *day*). With no selection, the day floor keeps a plain cadence
-  # (`R/../P1D`) walking days.
+  # *day*, and a §12.10 window ending the selection runs from a day). With
+  # no selection, the day floor keeps a plain cadence (`R/../P1D`) walking
+  # days.
   defp start_unit(%Tempo.Interval{repeat_rule: %Tempo{time: [selection: selection]}})
        when selection != [] do
     # The finest unit is the last selection component (they are written
@@ -6493,7 +6494,7 @@ defmodule Tempo do
   defp calendar_start_unit(week) when week in [:week, :calendar_week], do: :year
 
   defp calendar_start_unit(unit)
-       when unit in [:byday, :day_of_week, :day_of_year, :instance, :event],
+       when unit in [:byday, :day_of_week, :day_of_year, :instance, :event, :interval],
        do: :day
 
   defp calendar_start_unit(unit), do: unit

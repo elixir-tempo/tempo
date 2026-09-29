@@ -840,6 +840,46 @@ defmodule Tempo.RRule.SelectionTest do
       assert Enum.map(IntervalSet.members(set), &Tempo.to_iso8601!(Interval.from(&1))) ==
                ["2020Y6M15D", "2021Y6M15D", "2022Y6M15D"]
     end
+
+    test "a year anchor walks a §12.10 window that ends its selection from a day" do
+      # Forty days from 19 December, the five days before 3 January, the five
+      # days from the fourth Wednesday, ten days from each 25th, and four hours
+      # from each 22:00: from a year as from its first day.
+      for rule <- [
+            "P1Y/FLL12M19DN/P40DN",
+            "P1Y/FLL1M3DN/-P5DN",
+            "P1Y/FLL3K4IN/P5DN",
+            "P1M/FLL25DN/P10DN",
+            "P1D/FLLT22HN/PT4HN"
+          ] do
+        assert window_occurrences("R/2026Y/" <> rule) ==
+                 window_occurrences("R/2026-01-01/" <> rule),
+               rule
+      end
+
+      # The five days from the fourth Wednesday, not the year's first five.
+      assert window_occurrences("R/2026Y/P1Y/FLL3K4IN/P5DN") ==
+               ["2026Y1M28D/2M2D", "2027Y1M27D/2M1D"]
+    end
+
+    test "a counted recurrence from a year anchor, with a §12.10 window" do
+      {:ok, first} = Tempo.from_iso8601("R1/2026Y/P1Y/FLL12M19DN/P40DN")
+      assert {:ok, occurrence} = Tempo.to_interval(first)
+      assert Tempo.to_iso8601!(occurrence) == "2026Y12M19D/2027Y1M28D"
+
+      {:ok, three} = Tempo.from_iso8601("R3/2026Y/P1Y/FLL3K4IN/P5DN")
+      {:ok, set} = Tempo.to_interval(three)
+
+      assert Enum.map(IntervalSet.members(set), &Tempo.to_iso8601!/1) ==
+               ["2026Y1M28D/2M2D", "2027Y1M27D/2M1D", "2028Y1M26D/31D"]
+    end
+  end
+
+  # A recurrence's occurrences within 2026 and 2027, in ISO 8601.
+  defp window_occurrences(iso) do
+    {:ok, rule} = Tempo.from_iso8601(iso)
+    {:ok, set} = Tempo.to_interval_set(rule, within: ~o"2026/2028")
+    Enum.map(IntervalSet.members(set), &Tempo.to_iso8601!/1)
   end
 
   # Parse a selection recurrence and list the ISO dates it yields inside a bound
