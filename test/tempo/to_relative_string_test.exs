@@ -114,6 +114,21 @@ defmodule Tempo.ToRelativeStringTest do
       assert Tempo.to_relative_string(~o"2026-06-15T13:00:00Z", from: now, unit: :minute) ==
                "in 60 minutes"
     end
+
+    test ":unit scales as Localize does, rounding, as without a unit" do
+      # 50 days is about 1.6 months
+      from = Tempo.from_iso8601!("2026-07-01T00:00:00Z")
+      value = ~o"2026-08-20T00:00:00Z"
+
+      assert Tempo.to_relative_string(value, from: from, unit: :month) == "in 2 months"
+      assert Tempo.to_relative_string(value, from: from) == "in 2 months"
+
+      # 18 months is about 1.5 years
+      assert Tempo.to_relative_string(~o"2028-01-01T00:00:00Z", from: from, unit: :year) ==
+               "in 2 years"
+
+      assert Tempo.to_relative_string(~o"2028-01-01T00:00:00Z", from: from) == "in 2 years"
+    end
   end
 
   describe "default :from reads Tempo.Clock" do

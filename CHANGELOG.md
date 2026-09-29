@@ -187,6 +187,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.to_relative_string/2` with `:unit` leaves the scaling to Localize, as it did without one: 50 days in months is "in 2 months", where it was "next month".
+
 * `Tempo.Schedule.span/1` returns an error for a plan with no tasks or no fixed start, where it raised.
 
 * An integer index a period does not have selects nothing, where `Tempo.select(~o"2026-02", [30])` made a 30 February; a negative index counts from the end, so `[-1]` on a year is December.

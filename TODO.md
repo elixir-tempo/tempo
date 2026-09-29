@@ -4,7 +4,7 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ## Open
 
-* [ ] **Gregorian constants outside the `:within` reach** — reviewed 2026-09-30, decisions needed: `Network.Normalize` needs a mean year and month for undated durations, which Calendrical does not provide, so a Hebrew or Islamic network counts Gregorian ones. `Format` duplicates `Localize.DateTime.Relative`'s unit scaling with other constants and truncation (`unit: :month` makes 50 days "next month", no unit "in 2 months"), and both scale `:quarter` by one second ("in 7,948,800 quarters").
+* [ ] **`Network.Normalize` counts Gregorian years** — it places undated durations on one axis with a mean Gregorian year and month (365.2425 and 30.436875 days), so a Hebrew or Islamic network counts Gregorian ones. Calendrical has no per-calendar mean length; decide whether it should (reviewed 2026-09-30).
 
 * [ ] **A sub-day cadence's first selected occurrence is a whole day** — `R/../PT1H/FL1KN` within Monday 5 January 2026 (and `R/2026-01-05/PT1H/FL1KN`) starts from the day the weekday names, so its first occurrence is `2026Y1M5D/6D` and the rest are hours; without the selection the first is `2026Y1M5D/T1H`.
 
@@ -58,15 +58,19 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **Vocabulary for 2.0** — one meaning per word and one word per meaning across Tempo and tempo_holidays: `:within` for `:bound`, "anchor" in one sense, no public "materialise", `Tempo.Allen` beside everyday predicates, `datetime`, "workday". Every decision is taken; the tasks are in [plans/vocabulary.md](plans/vocabulary.md). Fifteen of its sixteen tasks have landed, through tempo_holidays and the real-world livebook (`livebook/everyday-holidays.livemd`, and its tempo_holidays copy); `tempo_sql`'s move to `~> 2.0` remains, once 2.0.0 is on hex.
 
+## Blocked
+
+* [ ] **A quarter in `to_relative_string/2`** — `unit: :quarter` formats the difference in seconds as quarters ("in 7,948,800 quarters"), as do the weekday units. Blocked on `Localize.DateTime.Relative` scaling them, written up for Localize 2026-09-30; Tempo then needs only a test.
+
 ## Deferred
 
 * [ ] **Set algebra over open-ended windows** — a research project for later (user, 2026-09-28): how far union, intersection, difference, complement and the predicates go on the lazy sets an open-ended window gives, a test of the whole algebra. Questions in [plans/open-ended-set-algebra.md](plans/open-ended-set-algebra.md).
 
-* [ ] **A domain gating by a window's anchor** — a domain admits the occurrences that start in its periods; date-holidays gates on the year of a window's anchor instead. They differ only when a window crosses a gated boundary year, which no tempo_holidays rule does; reviving it needs anchor tracking through `Tempo.RRule.Selection`.
-
 ## Done
 
-* [x] **A domain keeps what its years select** — a run keeps every occurrence its periods select, wherever a window moves it, and a count counts from the domain's first period, where `R1/{…}` raised; a year in a selection limits the periods as a domain's years do (2026's week 1 Monday is 29 December 2025); the `:within` reach covers numbered weeks and a weekly period's weekdays. 2026-09-30.
+* [x] **`to_relative_string/2` scales through Localize** — Tempo passes Localize the two instants and the `:unit`, and drops its own seconds per month and year, so a unit rounds as the unit Localize chooses does. 2026-09-30.
+
+* [x] **A domain keeps what its years select** — a run keeps every occurrence its periods select, wherever a window moves it, so a window's anchor year gates it as in date-holidays, and a count counts from the domain's first period, where `R1/{…}` raised; a year in a selection limits the periods as a domain's years do (2026's week 1 Monday is 29 December 2025); the `:within` reach covers numbered weeks and a weekly period's weekdays. 2026-09-30.
 
 * [x] **A terminal window within a value** — `2027YLL(easter)eN/-P2DN`, the two days before Easter 2027, parses and resolves as the recurrence form does. 2026-09-30.
 

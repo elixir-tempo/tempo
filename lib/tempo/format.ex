@@ -166,41 +166,25 @@ defmodule Tempo.Format do
     end
 
     {from_tempo, options} = Keyword.pop_lazy(options, :from, &Tempo.utc_now/0)
-    delta_seconds = Compare.to_utc_seconds(tempo) - Compare.to_utc_seconds(from_tempo)
 
-    # Localize's `:unit` option tells it what unit the integer
-    # is *in* (not the output unit). If the caller supplied a
-    # unit, convert our seconds delta into that unit first.
-    relative_value =
-      case Keyword.get(options, :unit) do
-        nil -> delta_seconds
-        unit -> scale_to_unit(delta_seconds, unit)
-      end
+    # Localize measures the difference between the two instants, and
+    # scales it to the `:unit` asked for or to one it chooses.
+    options = Keyword.put(options, :relative_to, utc_instant(from_tempo))
 
-    case Relative.to_string(relative_value, options) do
+    case Relative.to_string(utc_instant(tempo), options) do
       {:ok, string} -> string
       {:error, exception} -> raise exception
     end
   end
 
-  @seconds_per_unit %{
-    second: 1,
-    minute: 60,
-    hour: 3600,
-    day: 86_400,
-    week: 604_800,
-    # Calendar-month approximation (30.44 days) matches Localize's
-    # internal constant.
-    month: 2_629_744,
-    # Gregorian mean year (365.2425 days).
-    year: 31_556_952
-  }
-
-  defp scale_to_unit(seconds, unit) when is_map_key(@seconds_per_unit, unit) do
-    div(seconds, @seconds_per_unit[unit])
+  # A value as the instant Localize measures a relative time from: its UTC
+  # seconds, a floating value read as UTC, to the whole second.
+  defp utc_instant(%Tempo{} = tempo) do
+    tempo
+    |> Compare.to_utc_seconds()
+    |> floor()
+    |> DateTime.from_gregorian_seconds({0, 0}, Calendrical.Gregorian)
   end
-
-  defp scale_to_unit(seconds, _other), do: seconds
 
   ## ---------------------------------------------------------
   ## Closed-interval expansion for year/month Tempo values

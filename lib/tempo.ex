@@ -4916,9 +4916,10 @@ defmodule Tempo do
   * `:from` is a `t:t/0` — the reference point the output is
     relative to. Defaults to `Tempo.utc_now/0`.
 
-  * `:unit` forces the output unit (`:second`, `:minute`,
-    `:hour`, `:day`, `:week`, `:month`, `:year`). Omit to let
-    Localize auto-derive.
+  * `:unit` is the unit to express the difference in (`:second`,
+    `:minute`, `:hour`, `:day`, `:week`, `:month`, `:year`).
+    Localize scales the difference to it and rounds, as it does to
+    the unit it chooses when `:unit` is omitted.
 
   * `:format` is `:standard`, `:narrow`, or `:short`. Defaults to
     `:standard`.
@@ -4943,6 +4944,10 @@ defmodule Tempo do
       iex> now = Tempo.from_iso8601!("2026-06-15T12:00:00Z")
       iex> Tempo.to_relative_string(~o"2026-06-10T12:00:00Z", from: now)
       "5 days ago"
+
+      iex> now = Tempo.from_iso8601!("2026-07-01T00:00:00Z")
+      iex> Tempo.to_relative_string(~o"2026-08-20T00:00:00Z", from: now, unit: :month)
+      "in 2 months"
 
   """
   @spec to_relative_string(t() | Tempo.Interval.t(), keyword()) :: String.t()
