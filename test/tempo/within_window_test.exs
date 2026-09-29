@@ -180,6 +180,37 @@ defmodule Tempo.WithinWindowTest do
                ["2027Y1M2DT9H0M", "2027Y1M2DT10H0M"]
     end
 
+    test "a week a year numbers reaches into the years either side" do
+      # ISO 8601 week 1 of 2026 starts on Monday 29 December 2025, and week 53
+      # of 2026 ends on Sunday 3 January 2027.
+      december = ~o"2025Y12M"
+
+      for recurrence <- [
+            ~o"R/../P1Y/FL1W1KN",
+            ~o"R/2020-01-01/P1Y/FL1W1KN",
+            ~o"R/{2020Y..2030Y}/P1Y/FL1W1KN"
+          ] do
+        assert starts(Tempo.to_interval_set(recurrence, within: december)) == ["2025Y12M29D"]
+      end
+
+      assert starts(Tempo.to_interval_set(~o"R/../P1Y/FL53W7KN", within: ~o"2027Y1M")) ==
+               ["2027Y1M3D"]
+
+      # A whole week is still a week
+      {:ok, weeks} = Tempo.to_interval_set(~o"R/../P1Y/FL1WN", within: december)
+      assert Enum.map(IntervalSet.members(weeks), &Tempo.to_iso8601!/1) == ["2026Y1W/2W"]
+    end
+
+    test "a weekday in a weekly period reaches back to its week's start" do
+      # Weekly from Thursday 1 January 2026, on Mondays: the period from
+      # Thursday 15 January selects Monday 12 January.
+      assert starts(
+               Tempo.to_interval_set(~o"R/2026-01-01/P1W/FL1KN",
+                 within: ~o"2026-01-01/2026-01-13"
+               )
+             ) == ["2026Y1M5D", "2026Y1M12D"]
+    end
+
     test "an occurrence's span runs from the time of day its selection picks" do
       # Every night from 22:00 for four hours, the first of them already running
       # when the window opens.

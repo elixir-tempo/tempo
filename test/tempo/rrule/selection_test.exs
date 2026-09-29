@@ -742,15 +742,34 @@ defmodule Tempo.RRule.SelectionTest do
       assert holiday_dates("R/../P1Y/FLLL1M3DN/-P5DN2K-1IN") == ["2026-12-29"]
     end
 
-    test "a window keeps what starts in its domain's years, across and between them" do
+    test "a window keeps what its domain's years select, across and between them" do
       window = "/P1Y/FLLL12M30DN/P5DN5K1IN"
 
+      # 3 January 2025 is 2024's, which is outside the domain
       assert holiday_dates("R/{2025Y..2027Y}" <> window, ~o"2020Y/2030Y") ==
-               ["2025-01-03", "2026-01-02", "2027-01-01", "2027-12-31"]
+               ["2026-01-02", "2027-01-01", "2027-12-31"]
 
-      # 2026 is outside the domain, so 2 January 2026 is not kept
+      # 2 January 2026 is 2025's, and 1 January 2027 is 2026's, which is not
+      # in the domain
       assert holiday_dates("R/{2025Y,2027Y}" <> window, ~o"2020Y/2030Y") ==
-               ["2025-01-03", "2027-01-01", "2027-12-31"]
+               ["2026-01-02", "2027-12-31"]
+    end
+
+    test "a domain's year keeps what a window moves out of it" do
+      # The five days before 3 January: 2027's run from 29 December 2026, and
+      # 2026's from 29 December 2025, as the open-start form gives them.
+      assert occurrence_spans("R/{2027Y}/P1Y/FLL1M3DN/-P5DN", ~o"2026Y") ==
+               ["2026Y12M29D/2027Y1M3D"]
+
+      assert occurrence_spans("R/{2020Y..2030Y}/P1Y/FLL1M3DN/-P5DN", ~o"2026Y") ==
+               occurrence_spans("R/../P1Y/FLL1M3DN/-P5DN", ~o"2026Y")
+
+      assert occurrence_spans("R/../P1Y/FLL1M3DN/-P5DN", ~o"2026Y") ==
+               ["2025Y12M29D/2026Y1M3D", "2026Y12M29D/2027Y1M3D"]
+
+      # The last Tuesday in those days, 29 December 2026, is 2027's
+      assert holiday_dates("R/{2027Y}/P1Y/FLLL1M3DN/-P5DN2K-1IN") == ["2026-12-29"]
+      assert holiday_dates("R/{2026Y}/P1Y/FLLL1M3DN/-P5DN2K-1IN") == []
     end
 
     test "a terminal window is one interval spanning its duration" do
@@ -944,7 +963,7 @@ defmodule Tempo.RRule.SelectionTest do
 
   describe "a year in a recurrence selection" do
     # ISO 8601-2 §12.2 has no year selection rule. A year in a recurrence's
-    # selection limits it to the occurrences that start in a listed year, as
+    # selection limits it to the occurrences a listed year's period selects, as
     # a recurrence domain does.
     test "a year limits a yearly recurrence to its occurrence in that year" do
       assert holiday_dates("R/2026-01-01/P1Y/FL2027Y1M1DN", ~o"2026Y/2030Y") == ["2027-01-01"]
@@ -975,13 +994,12 @@ defmodule Tempo.RRule.SelectionTest do
       assert List.last(dates) == "2027-12-15"
     end
 
-    test "an occurrence counts in the year it starts in, as a domain's does" do
+    test "an occurrence belongs to the year that selects it, as a domain's does" do
       # ISO 8601 week 1 of 2026 starts on Monday 29 December 2025
       bound = ~o"2025Y/2028Y"
 
-      assert holiday_dates("R/2025-01-01/P1Y/FL2026Y1W1KN", bound) ==
-               holiday_dates("R/{2026Y}/P1Y/FL1W1KN", bound)
-
+      assert holiday_dates("R/2025-01-01/P1Y/FL2026Y1W1KN", bound) == ["2025-12-29"]
+      assert holiday_dates("R/{2026Y}/P1Y/FL1W1KN", bound) == ["2025-12-29"]
       assert holiday_dates("R/2025-01-01/P1Y/FL2027Y1W1KN", bound) == ["2027-01-04"]
     end
 
@@ -994,6 +1012,22 @@ defmodule Tempo.RRule.SelectionTest do
   describe "a selection within a value (ISO 8601-2 §12.11)" do
     # The units before a selection are its context; each period of the
     # context resolves the selection once.
+    test "a §12.10 window that ends a value's selection" do
+      # The two days before Easter 2027, the five days from 2026's fourth
+      # Wednesday, ten days from 25 December, and four hours from 22:00.
+      for {iso, expected} <- [
+            {"2027YLL(easter)eN/-P2DN", ["2027Y3M26D/28D"]},
+            {"2026YLL3K4IN/P5DN", ["2026Y1M28D/2M2D"]},
+            {"2026Y12MLL25DN/P10DN", ["2026Y12M25D/2027Y1M4D"]},
+            {"2026Y1M1DLLT22HN/PT4HN", ["2026Y1M1DT22H/2DT2H"]},
+            {"{2026,2027}YLL3K4IN/P5DN", ["2026Y1M28D/2M2D", "2027Y1M27D/2M1D"]}
+          ] do
+        {:ok, value} = Tempo.from_iso8601(iso)
+        {:ok, set} = Tempo.to_interval_set(value)
+        assert Enum.map(IntervalSet.members(set), &Tempo.to_iso8601!/1) == expected, iso
+      end
+    end
+
     test "a computed event within a value is its day that year" do
       assert selection_dates("2027YL(easter)eN") == ["2027-03-28"]
       # Easter 2027 is in March, so April holds none.

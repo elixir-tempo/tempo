@@ -137,6 +137,20 @@ defmodule Tempo.ExclusionDomainTest do
       {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
       assert Date.convert!(date, Calendar.ISO) == ~D[2026-02-17]
     end
+
+    test "a domain's years gate a recurrence in another calendar by when it falls" do
+      # Rosh Hashanah 5786 fell on 23 September 2025, before the domain's
+      # years; 5787's and 5788's fall in 2026 and 2027.
+      {:ok, set} = Tempo.to_interval(~o"R/{2026Y..2027Y}/P1Y/FL1M1DN[u-ca=hebrew]")
+
+      dates =
+        for interval <- IntervalSet.members(set) do
+          {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
+          Date.convert!(date, Calendar.ISO)
+        end
+
+      assert dates == [~D[2026-09-12], ~D[2027-10-02]]
+    end
   end
 
   describe "an open-ended domain takes its missing end from the window" do
@@ -211,6 +225,27 @@ defmodule Tempo.ExclusionDomainTest do
         Tempo.to_interval(~o"R/{2000Y..2040Y,^2024Y}/P4Y/FL11M3DN", within: ~o"{2019..2030}Y")
 
       assert years(set) == [2020, 2028]
+    end
+  end
+
+  describe "a counted domain" do
+    test "keeps its first occurrences, across the domain's runs" do
+      {:ok, set} = Tempo.to_interval(~o"R3/{2020Y..2022Y,2025Y..2027Y}/P1Y/FL12M25DN")
+      assert years(set) == [2020, 2021, 2022]
+
+      {:ok, set} = Tempo.to_interval(~o"R4/{2020Y..2022Y,2025Y..2027Y}/P1Y/FL12M25DN")
+      assert years(set) == [2020, 2021, 2022, 2025]
+
+      {:ok, set} = Tempo.to_interval(~o"R1/{2020Y..2030Y}/P1Y/FL12M25DN")
+      assert years(set) == [2020]
+    end
+
+    test "counts from the domain's first period, not the window's" do
+      {:ok, set} = Tempo.to_interval(~o"R3/{2020Y..2030Y}/P1Y/FL12M25DN", within: ~o"2021Y")
+      assert years(set) == [2021]
+
+      {:ok, set} = Tempo.to_interval(~o"R3/{2020Y..2030Y}/P1Y/FL12M25DN", within: ~o"2025Y")
+      assert years(set) == []
     end
   end
 

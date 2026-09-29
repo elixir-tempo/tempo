@@ -103,7 +103,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.to_iso8601/1` returns `{:ok, string}`, or a `Tempo.Iso8601EncodeError` for a value with no ISO 8601 form — a set, a conditional member, a cron nearest weekday or a value that is not Tempo's — where it raised. `to_iso8601!/1` returns the string.
 
-* `Tempo.shift/3` with `:skipping` steps a day shifted by days from free day to free day and returns a day: one day of free time after a Friday before a long weekend is the Tuesday, where it was midnight on the Saturday.
+* `Tempo.shift/3` with `:skipping` steps a day shifted by days or weeks from free day to free day and returns a day: one day of free time after a Friday before a long weekend is the Tuesday, where it was midnight on the Saturday.
 
 ### Added
 
@@ -173,7 +173,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.parse/2`'s `:calendar` option is a calendar module, as Calendrical 1.4's is: a CLDR calendar name such as `:hebrew` returns an error.
 
-* A recurrence walks every period either side of its `:within` window whose occurrences a §12.10 window or their own span can carry into it, stepping in the recurrence's own calendar, and a domain runs its adjacent periods as one recurrence.
+* A recurrence walks every period either side of its `:within` window whose occurrences a §12.10 window, a numbered week or their own span can carry into it, stepping in the recurrence's own calendar. A domain runs its adjacent periods as one recurrence and keeps every occurrence they select; a count (`R3/{…}/…`) counts them from the domain's first period.
 
 * A recurrence selection that moves a candidate to several dates (weekday, month-day, week and window expansions) finds the candidate's own day numbers once, and a move onto its own date asks the calendar nothing — about a third fewer calendar calls for a lunisolar calendar.
 
@@ -221,7 +221,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * A year mask with a digit set (`XXX{0,2,4,6,8}Y`) no longer raises `FunctionClauseError`: `Tempo.Mask` bounds and matches a digit set.
 
-* A year in a recurrence's selection limits it to the occurrences that start in the listed years, as a domain does: `R/2026-01-01/P1Y/FL2027Y1M1DN` is 1 January 2027 alone, where the year was ignored. A set, range or mask of years, or `X*Y`, works too.
+* A year in a recurrence's selection limits it to the occurrences its listed years select, as a domain does: `R/2026-01-01/P1Y/FL2027Y1M1DN` is 1 January 2027 alone, where the year was ignored. A set, range or mask of years, or `X*Y`, works too.
 
 * `Tempo.RRule.to_string/1` returns a `Tempo.ConversionError` naming any selection RRULE cannot express — a traditional month (`m`), a computed event (`e`), a year, a selection window, and cron's nearest weekday and day-of-month-or-weekday — where it silently dropped them.
 

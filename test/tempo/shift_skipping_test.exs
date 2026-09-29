@@ -177,6 +177,21 @@ defmodule Tempo.ShiftSkippingTest do
       assert Tempo.shift(~o"2027-04-24", ~o"P1D", skipping: days_off()) == ~o"2027Y4M28D"
     end
 
+    test "a week of free time is seven free days" do
+      # From Friday 23 April 2027 the free days skip Anzac Day's Monday.
+      assert Tempo.shift(~o"2027-04-23", ~o"P1W", skipping: days_off()) == ~o"2027Y5M5D"
+
+      assert Tempo.shift(~o"2027-04-23", ~o"P1W", skipping: days_off()) ==
+               Tempo.shift(~o"2027-04-23", ~o"P7D", skipping: days_off())
+
+      assert Tempo.shift(~o"2027-04-23", ~o"P1W2D", skipping: days_off()) == ~o"2027Y5M7D"
+      assert Tempo.shift(~o"2027-04-30", ~o"-P1W", skipping: days_off()) == ~o"2027Y4M20D"
+
+      # A week with a time of day, or from a time of day, walks free time.
+      assert Tempo.shift(~o"2027-04-23", ~o"P1WT2H", skipping: days_off()) ==
+               ~o"2027Y5M5DT2H0M0S"
+    end
+
     test "backward, as free time is walked back" do
       assert Tempo.shift(~o"2027-03-25", ~o"-P1D", skipping: days_off()) == ~o"2027Y3M24D"
       assert Tempo.shift(~o"2027-03-22", ~o"-P1D", skipping: days_off()) == ~o"2027Y3M19D"

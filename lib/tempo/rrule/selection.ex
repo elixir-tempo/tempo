@@ -34,10 +34,12 @@ defmodule Tempo.RRule.Selection do
   does, in the weeks the calendar numbers itself.
 
   A year (`Y`), which RFC 5545 has no part for and ISO 8601-2 §12.2 no
-  selection rule, LIMITs at every frequency: an occurrence is kept when
-  it starts in a listed year, as a recurrence domain (`R/{2027Y}/…`)
-  admits it. It applies after the expansions and before the position
-  (`I`), so a position picks among the occurrences in those years.
+  selection rule, limits the periods a selection resolves in, as a
+  recurrence domain's years (`R/{2027Y}/…`) do: a period that starts in
+  a listed year keeps every occurrence it selects, and a period in any
+  other year selects nothing. The Monday of ISO 8601 week 1 of 2026 is
+  2026's occurrence although it falls on 29 December 2025, and a
+  position (`I`) picks among a listed year's occurrences.
 
   Tokens this module doesn't interpret pass through unchanged
   so partial support is correct for the partial inputs.
@@ -161,14 +163,32 @@ defmodule Tempo.RRule.Selection do
         apply_windowed_selection(candidate, scope, window, within, freq, wkst)
 
       :none ->
-        selection
-        |> Enum.sort_by(&application_order_key/1)
-        |> Enum.reduce({[candidate], freq}, fn entry, {candidates, scope} ->
-          {apply_entry(entry, candidates, scope, selection, wkst), scope_after(entry, scope)}
-        end)
-        |> elem(0)
+        resolve_in_period(candidate, selection, freq, wkst)
     end
   end
+
+  # A year (`Y`) limits the periods a selection resolves in, as a recurrence
+  # domain's years do: a period that starts in a listed year keeps every date
+  # it selects, wherever a week or a window carries it, and a period in any
+  # other year selects nothing. (A year among a window's own selectors keeps
+  # the window's days in that year instead.)
+  defp resolve_in_period(candidate, selection, freq, wkst) do
+    {years, selection} = Keyword.pop(selection, :year)
+
+    if period_selected?(candidate, years) do
+      selection
+      |> Enum.sort_by(&application_order_key/1)
+      |> Enum.reduce({[candidate], freq}, fn entry, {candidates, scope} ->
+        {apply_entry(entry, candidates, scope, selection, wkst), scope_after(entry, scope)}
+      end)
+      |> elem(0)
+    else
+      []
+    end
+  end
+
+  defp period_selected?(_candidate, nil), do: true
+  defp period_selected?(candidate, years), do: year_selected?(year_of(candidate), years)
 
   # Once BYWEEKNO has expanded a YEARLY candidate into the days of its
   # weeks, the parts after it select among those days as they would for a
@@ -559,9 +579,9 @@ defmodule Tempo.RRule.Selection do
     expand_or_limit_time(candidates, :second, List.wrap(values), freq, keep_span?(selection))
   end
 
-  # A year (`Y`) — LIMIT at every frequency: keep the occurrences that start
-  # in a listed year (a year number, a mask such as `202XY`, or `X*Y` for
-  # any year).
+  # A year (`Y`) among a window's selectors — LIMIT: keep the window's days
+  # in a listed year (a year number, a mask such as `202XY`, or `X*Y` for any
+  # year). Anywhere else a year limits the period (`resolve_in_period/4`).
   defp apply_entry({:year, years}, candidates, _freq, _selection, _wkst) do
     Enum.filter(candidates, &year_selected?(year_of(&1), years))
   end

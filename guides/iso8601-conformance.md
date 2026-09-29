@@ -310,6 +310,8 @@ ISO 8601 numbers weeks one way: each starts on a Monday, and week 1 is the one h
 
 In a **concrete date** a `w` week resolves to its dates, so the lowercase marker never survives a round-trip, as `m` does not. In a **selection** it survives and resolves per year: `R/../P1Y/FL10wN` is the calendar's week 10 of each year and `FL10w3KN` its Wednesday. A week-based calendar's own weeks are its `W` weeks, and every other calendar's are the weeks Calendrical numbers (`Calendrical.Interval.week/3`). A calendar that numbers its weeks within its own year (Hebrew, Islamic, Julian, …) cuts week 1 and the last week short, so `5787Y1w[u-ca=hebrew]` is 1 Tishri alone, a Saturday; the day of the week `K` is ISO 8601's, and a short week holds only its own days (`5787Y1w1K` is not a date). RFC 5545's `BYWEEKNO` counts ISO 8601 weeks (from `WKST`), so `Tempo.RRule.to_string/1` cannot express `w`.
 
+Either week can hold days of the year before or after it, and they belong to the year that numbers the week wherever they land: `Tempo.to_interval(~o"R/../P1Y/FL1W1KN", within: ~o"2025Y12M")` is Monday 29 December 2025, the first day of 2026's week 1.
+
 ### Exclusions and the recurrence domain — the `^` marker and `e`/`o`/`l`/`c` filters
 
 ISO 8601 can say "every year" (`R/../P1Y/…`) but not "every year **except** these" or "only even years". Tempo adds two set-level extensions for exactly that.
@@ -322,7 +324,7 @@ Tempo.to_interval(~o"{2024Y,2026Y,2028Y,^2026Y}")
 #   → 2024, 2028
 ```
 
-**The recurrence domain.** A `{…}` set placed in the interval slot of a recurrence — `R/{…}/P…/…` — is the recurrence's **domain**: the set of periods it may occur in. A range gives the window and `^` members punch holes in it, so a holiday that lapsed for a year, or a rule that skips a year, stays one declarative expression:
+**The recurrence domain.** A `{…}` set placed in the interval slot of a recurrence — `R/{…}/P…/…` — is the recurrence's **domain**: the set of periods it recurs in, each keeping every occurrence its selection gives, even one a §12.10 window or a week carries into the year beside it. A range gives the window and `^` members punch holes in it, so a holiday that lapsed for a year, or a rule that skips a year, stays one declarative expression:
 
 ```elixir
 # Christmas every year from 2020 to 2024, but not 2022
@@ -346,7 +348,7 @@ Tempo.to_interval(~o"R/{2020Y..2026Y}e/P1Y/FL1M1DN")
 #   → 2020, 2022, 2024, 2026
 ```
 
-Leap (`l`) and common (`c`) ask the domain year's calendar `leap_year?/1`, so they are calendar-correct rather than a `rem/2` guess: 2100 is a common year. A domain's years are Gregorian years, as a holiday's year gates are, even when the selection is in another calendar. All four are Tempo extensions with no ISO or RFC 5545 form, so they round-trip through `inspect/1`/`to_iso8601/1` but not through `Tempo.RRule.to_string/1`.
+Leap (`l`) and common (`c`) ask the domain year's calendar `leap_year?/1`, so they are calendar-correct rather than a `rem/2` guess: 2100 is a common year. A domain's years are Gregorian years, as a holiday's year gates are, even when the selection is in another calendar; such a recurrence, whose own years straddle them, keeps the occurrences that fall in them. All four are Tempo extensions with no ISO or RFC 5545 form, so they round-trip through `inspect/1`/`to_iso8601/1` but not through `Tempo.RRule.to_string/1`.
 
 **Open-ended ranges.** A domain range may be open at either end, as an ISO 8601-2 set range may: `{2017Y..}` is 2017 on, `{..2016Y}` up to 2016, and `{..2019Y,2021Y..}` every year but 2020. An open domain has no window of its own, so it takes its missing end from a `:within`:
 
@@ -364,7 +366,15 @@ Tempo.to_interval(~o"R/{1848Y..}/P4Y/FLLL11M1K1IN/P7DN2K-1IN", within: ~o"{2019.
 #   → 2020-11-03, 2024-11-05, 2028-11-07
 ```
 
-**A year in the selection.** ISO 8601-2 has no year selection rule (§12.2), but Tempo accepts a year inside a recurrence's selection and reads it as a domain: an occurrence is kept when it starts in a listed year. A year, a set or range of years, a mask (`202XY`, `XXX{0,2,4,6,8}Y`) or `X*Y` for any year can be written there:
+**A count.** A count counts the domain's occurrences from its first period, as a count from a start does, and a `:within` window then keeps those that overlap it:
+
+```elixir
+# The domain's first three Christmases
+Tempo.to_interval(~o"R3/{2020Y..2022Y,2025Y..2027Y}/P1Y/FL12M25DN")
+#   → 2020, 2021, 2022
+```
+
+**A year in the selection.** ISO 8601-2 has no year selection rule (§12.2), but Tempo accepts a year inside a recurrence's selection and reads it as a domain: a listed year's period keeps every occurrence it selects, and any other year's selects nothing. A year, a set or range of years, a mask (`202XY`, `XXX{0,2,4,6,8}Y`) or `X*Y` for any year can be written there:
 
 ```elixir
 # New Year's Day in 2026 and 2028 only
@@ -372,7 +382,7 @@ Tempo.to_interval(~o"R/2026-01-01/P1Y/FL{2026,2028}Y1M1DN", within: ~o"2026Y/203
 #   → 2026, 2028
 ```
 
-As with a domain, an occurrence belongs to the year it starts in, so `R/2025-01-01/P1Y/FL2026Y1W1KN` has none: ISO 8601 week 1 of 2026 starts on 29 December 2025. RFC 5545 has no `BYYEAR`, so `Tempo.RRule.to_string/1` cannot express it.
+As with a domain, an occurrence belongs to the year that selects it, so `R/2025-01-01/P1Y/FL2026Y1W1KN` is Monday 29 December 2025, the first day of ISO 8601 week 1 of 2026. RFC 5545 has no `BYYEAR`, so `Tempo.RRule.to_string/1` cannot express it.
 
 ### Selection with a time interval (ISO 8601-2 §12.10)
 

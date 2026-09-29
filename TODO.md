@@ -4,13 +4,9 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ## Open
 
-* [ ] **A domain run drops an occurrence a backward window moves out of it** — `R/{2020Y..2030Y}/P1Y/FLL1M3DN/-P5DN` within 2026 misses 2026's own run from 29 December 2025, which the open-start form keeps: a run keeps the occurrences that start in it, not those its periods yield.
+* [ ] **Gregorian constants outside the `:within` reach** — reviewed 2026-09-30, decisions needed: `Network.Normalize` needs a mean year and month for undated durations, which Calendrical does not provide, so a Hebrew or Islamic network counts Gregorian ones. `Format` duplicates `Localize.DateTime.Relative`'s unit scaling with other constants and truncation (`unit: :month` makes 50 days "next month", no unit "in 2 months"), and both scale `:quarter` by one second ("in 7,948,800 quarters").
 
-* [ ] **Gregorian constants outside the `:within` reach** — `Network.Normalize` puts a year at 365.2425 days and a month at 30.436875 to place undated periods on one axis, and `Format` a month and a year in seconds to choose a relative-time unit. Review whether each belongs in Calendrical, as the reach did.
-
-* [ ] **A terminal window within a value does not parse** — `2027YLL(easter)eN/-P2DN`, the two days before Easter 2027, returns a `ParseError` (":year is less than the selection min of :interval") where the recurrence form parses.
-
-* [ ] **A week of free time under `:skipping`** — a day shifted by days steps from free day to free day (2026-09-29), but shifted by weeks it still counts free seconds and returns an instant: `P1W` from Friday 23 April 2027 is `2027Y5M5DT0H0M0S`. Decide what a week of free time from a day is, and return a day for it.
+* [ ] **A sub-day cadence's first selected occurrence is a whole day** — `R/../PT1H/FL1KN` within Monday 5 January 2026 (and `R/2026-01-05/PT1H/FL1KN`) starts from the day the weekday names, so its first occurrence is `2026Y1M5D/6D` and the rest are hours; without the selection the first is `2026Y1M5D/T1H`.
 
 * [ ] **Livebooks install 2.0 at the release** — `getting-started`, `tempo_tour`, `scheduling-workbook` and `uncertain-dates-workbook` install `{:ex_tempo, "~> 1.6"}` and the Melbourne deck `~> 1.6.3`, while their code uses the 2.0 names: at the 2.0.0 release each installs `~> 2.0`, as `everyday-holidays` already does.
 
@@ -69,6 +65,12 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **A domain gating by a window's anchor** — a domain admits the occurrences that start in its periods; date-holidays gates on the year of a window's anchor instead. They differ only when a window crosses a gated boundary year, which no tempo_holidays rule does; reviving it needs anchor tracking through `Tempo.RRule.Selection`.
 
 ## Done
+
+* [x] **A domain keeps what its years select** — a run keeps every occurrence its periods select, wherever a window moves it, and a count counts from the domain's first period, where `R1/{…}` raised; a year in a selection limits the periods as a domain's years do (2026's week 1 Monday is 29 December 2025); the `:within` reach covers numbered weeks and a weekly period's weekdays. 2026-09-30.
+
+* [x] **A terminal window within a value** — `2027YLL(easter)eN/-P2DN`, the two days before Easter 2027, parses and resolves as the recurrence form does. 2026-09-30.
+
+* [x] **A week of free time under `:skipping`** — a day shifted by weeks steps free day by free day as it does by days, the weeks counted by `Calendrical.weeks_to_days/1`: `P1W` from Friday 23 April 2027 is Wednesday 5 May. 2026-09-30.
 
 * [x] **`Interval.duration/2` raises no more** — it, `IntervalSet.duration/1` and `leap_seconds_spanned/1` return an error for an endpoint without a year, a finite recurrence, endpoints in different calendars, a value that is not an interval or a bad option; an endpoint naming a span is read from where its span starts. 2026-09-30.
 

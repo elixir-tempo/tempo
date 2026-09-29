@@ -1921,13 +1921,18 @@ defmodule Tempo.Math do
     end
   end
 
-  # A day shifted by days steps from free day to free day, a calendar day at
-  # a time, and lands on a day. Anything finer walks free time.
-  defp free_days(origin, %Tempo.Duration{time: [day: days]}) when is_integer(days) do
-    if day_resolution?(origin), do: {:ok, days}, else: :error
-  end
+  # A day shifted by days, or by weeks of the days `Calendrical.weeks_to_days/1`
+  # counts, steps from free day to free day, a calendar day at a time, and
+  # lands on a day. Anything finer walks free time.
+  defp free_days(origin, %Tempo.Duration{time: time}) do
+    case normalise_duration(time) do
+      [day: days] when is_integer(days) ->
+        if day_resolution?(origin), do: {:ok, days}, else: :error
 
-  defp free_days(_origin, _duration), do: :error
+      _finer_units ->
+        :error
+    end
+  end
 
   defp day_resolution?(origin) do
     {unit, _precision} = Tempo.resolution(origin)

@@ -2185,10 +2185,11 @@ defmodule Tempo do
 
   defp unit_resolution({:selection, selection}), do: unit_min_max(selection)
 
-  # A computed event names a day, and the week start (`q`) is context at
-  # the scale of the day of the week, as `Tempo.Iso8601.Unit.ordered?/1`
-  # reads them.
+  # A computed event names a day, the week start (`q`) is context at the
+  # scale of the day of the week, as `Tempo.Iso8601.Unit.ordered?/1` reads
+  # them, and a §12.10 window runs from a day.
   defp unit_resolution({:event, _name}), do: {:day, 1}
+  defp unit_resolution({:interval, _window}), do: {:day, 1}
   defp unit_resolution({:wkst, _day}), do: {:day_of_week, 1}
   defp unit_resolution({unit, {:group, first..last//_}}), do: {unit, last - first + 1}
 
@@ -4686,9 +4687,10 @@ defmodule Tempo do
     return `{:error, %Tempo.InvalidUnitError{}}`. Busy spans must be
     anchored and bounded. In the keyword-units form `:skipping` may
     ride in the same list: `Tempo.shift(t, hour: -1, skipping: busy)`.
-    A day shifted by days steps from free day to free day, a calendar
-    day at a time, and lands on a day: one day of free time after a
-    Friday before a long weekend is the Tuesday.
+    A day shifted by days or weeks steps from free day to free day, a
+    calendar day at a time, and lands on a day: one day of free time
+    after a Friday before a long weekend is the Tuesday, and a week of
+    it seven free days on.
 
   ### Returns
 
@@ -5539,8 +5541,9 @@ defmodule Tempo do
       |> IntervalSet.members()
       |> filter_domain_years(domain.filter)
       |> step_domain_periods(domain, interval.duration)
-      |> Enum.filter(&domain_period_in_window?(&1, reach))
+      |> domain_periods_to_walk(interval, reach)
       |> reduce_domain_occurrences(interval, opts)
+      |> first_occurrences(interval)
       |> keep_occurrences_in_window(window)
     end
   end
@@ -5845,7 +5848,8 @@ defmodule Tempo do
   # §12.10 window can move an occurrence off the period whose selection produced
   # it — a Saturday 1 January observed the previous Friday lands in the year
   # before, a Saturday 31 December observed the following Monday in the year
-  # after — and an occurrence's own span can run on past its period, so a
+  # after — a week a year numbers can hold days of the year beside it, and an
+  # occurrence's own span can run on past its period, so a
   # recurrence that reaches out of its periods walks from the first period
   # whose occurrences can reach the window, and keeps those that overlap it.
   defp materialise_from_bound(interval, start, within, opts) do
@@ -5866,25 +5870,41 @@ defmodule Tempo do
   # `materialise_unending/3`.
   defp materialise_reaching(interval, start, {forward, backward}, opts) do
     with {:ok, %Tempo{} = reach_from} <- reach_start(start, interval, forward),
-         %Tempo{} = walk_from <- carried(reach_from, backward, :back) do
+         %Tempo{} = carried_from <- carried(reach_from, backward, :back),
+         %Tempo{} = walk_from <- at_start_resolution(carried_from, start, interval) do
       to_interval(%{interval | from: start_in_repeat_calendar(walk_from, interval)}, opts)
     end
+  end
+
+  # The walk's start at the resolution the start it reaches from has, so an
+  # occurrence keeps the shape it has without a reach (a week selected from a
+  # year is the week, not its days), unless that resolution cannot hold the
+  # cadence's periods (a day, for an hourly cadence): then the carried start
+  # stands as it is.
+  defp at_start_resolution(carried_from, start, %Tempo.Interval{duration: cadence}) do
+    {unit, _span} = resolution(start)
+
+    if coarser_unit?(unit, freq_of(cadence)),
+      do: carried_from,
+      else: at_resolution(carried_from, unit)
   end
 
   # How far an occurrence can reach outside the period that selects it, as the
   # durations that carry it there, `{forward, backward}`: a §12.10 window
   # running on from its anchor or back from it, a nested window adding its own,
-  # and an occurrence's own span (`:occurrence_duration`) running on, as a
-  # December–January school break does.
+  # an occurrence's own span (`:occurrence_duration`) running on, as a
+  # December–January school break does, and a week reaching past the period's
+  # edges.
   defp window_reach(%Tempo.Interval{
          repeat_rule: %Tempo{time: [selection: selection]},
-         duration: %Tempo.Duration{},
+         duration: %Tempo.Duration{} = cadence,
          metadata: metadata
        }) do
     durations = window_durations(selection)
+    {forward_weeks, backward_weeks} = week_reach(selection, cadence)
 
-    {reaching(durations ++ spanned_durations(metadata), &(&1 > 0)),
-     reaching(durations, &(&1 < 0))}
+    {reaching(durations ++ spanned_durations(metadata), &(&1 > 0)) ++ forward_weeks,
+     reaching(durations, &(&1 < 0)) ++ backward_weeks}
   end
 
   defp window_reach(_interval), do: {[], []}
@@ -5914,6 +5934,39 @@ defmodule Tempo do
   defp window_inner_selection(%Tempo{time: [selection: selection]}), do: selection
   defp window_inner_selection(%Tempo{time: time}) when is_list(time), do: time
   defp window_inner_selection(_inner), do: []
+
+  # A week reaches past the period it is selected in: a week a year numbers
+  # (`W`, or the calendar's own `w`) can hold days of the year either side,
+  # and a weekday in a weekly period comes from the week holding the period's
+  # start, which can begin before it. Either lies within a week of the period.
+  defp week_reach(selection, cadence) do
+    week = %Tempo.Duration{time: [week: 1]}
+
+    cond do
+      selects_any?(selection, [:week, :calendar_week]) ->
+        {[week], [week]}
+
+      freq_of(cadence) == :week and selects_any?(selection, [:day_of_week, :byday]) ->
+        {[], [week]}
+
+      true ->
+        {[], []}
+    end
+  end
+
+  # Whether a selection, or a window's anchor in it, names one of `units`.
+  defp selects_any?(selection, units) do
+    Enum.any?(selection, fn
+      {:interval, %Tempo.Interval{from: inner}} ->
+        selects_any?(window_inner_selection(inner), units)
+
+      {unit, _value} ->
+        unit in units
+
+      _other ->
+        false
+    end)
+  end
 
   # The start of the first period whose occurrences can reach forward into a
   # window opening at `window_from`: back from the period holding the window's
@@ -6121,10 +6174,7 @@ defmodule Tempo do
        )
        when is_function(start_predicate, 1) and is_function(selection_fn, 1) do
     from
-    |> recurrence_candidates(cadence, occurrence_end, metadata)
-    |> Stream.take_while(fn {start, _} -> start_predicate.(start) end)
-    |> Stream.take(@recurrence_safety_cap)
-    |> Stream.flat_map(fn {_start, candidate} -> selection_fn.(candidate) end)
+    |> period_occurrences(cadence, occurrence_end, start_predicate, selection_fn, metadata)
     # DTSTART floor — per RFC 5545, DTSTART is always the first
     # occurrence. BY-rule EXPAND can legitimately produce dates
     # earlier in the DTSTART-containing period (e.g.
@@ -6133,6 +6183,16 @@ defmodule Tempo do
     |> Stream.reject(fn %Tempo.Interval{from: f} -> before_dtstart?(f, from) end)
     |> Stream.take(output_limit)
     |> Enum.to_list()
+  end
+
+  # Every occurrence the periods from `from` select, walking while a
+  # period's start satisfies `start_predicate`.
+  defp period_occurrences(from, cadence, occurrence_end, start_predicate, selection_fn, metadata) do
+    from
+    |> recurrence_candidates(cadence, occurrence_end, metadata)
+    |> Stream.take_while(fn {start, _} -> start_predicate.(start) end)
+    |> Stream.take(@recurrence_safety_cap)
+    |> Stream.flat_map(fn {_start, candidate} -> selection_fn.(candidate) end)
   end
 
   # Contiguous fast path: walk the starts once and pair each with the
@@ -6337,11 +6397,6 @@ defmodule Tempo do
 
   defp at_or_after_bound?(%Tempo{} = from, %Tempo{} = bound_from) do
     Compare.compare_endpoints(from, bound_from) in [:same, :later]
-  end
-
-  # A start lies in the half-open span `[span_from, span_to)`.
-  defp in_bound_window?(%Tempo{} = from, %Tempo{} = span_from, %Tempo{} = span_to) do
-    at_or_after_bound?(from, span_from) and under_bound?(from, span_to)
   end
 
   # Compute the upper endpoint of a `:within` window. Accepts any
@@ -6696,33 +6751,17 @@ defmodule Tempo do
     end
   end
 
-  # Materialise a recurrence's selection once per year of its domain (each an
-  # interval from the domain set), unioning the occurrences. The domain year is
-  # passed as the `:within` window, so the open-start materialisation projects
-  # the selection onto it.
-  # Adjacent domain periods — each starting where the one before ends, as the
-  # years of `{2020Y..2024Y}` do — run as one recurrence across them, so the
-  # periods a §12.10 window must look into beyond the run are looked into once
-  # per run rather than once per period. A run keeps the occurrences that start
-  # within it — exactly those its periods would each keep — so a neighbouring
-  # year outside the domain contributes none.
+  # Materialise a recurrence's selection over its domain's periods (each an
+  # interval from the domain set), unioning the occurrences. Adjacent domain
+  # periods — each starting where the one before ends, as the years of
+  # `{2020Y..2024Y}` do — run as one recurrence across them.
   defp reduce_domain_occurrences(domain_intervals, %Tempo.Interval{} = interval, opts) do
     domain_intervals
     |> adjacent_periods()
     |> Enum.reduce_while({:ok, []}, fn {first, last}, {:ok, acc} ->
-      run_from = Interval.from(first)
-      run_to = Interval.to(last)
-      run = %Tempo.Interval{from: run_from, to: run_to}
-
-      case to_interval(%{interval | from: nil}, Keyword.put(opts, :within, run)) do
-        {:ok, %Tempo.IntervalSet{} = set} ->
-          own =
-            set |> IntervalSet.members() |> Enum.filter(&starts_in_window?(&1, run_from, run_to))
-
-          {:cont, {:ok, acc ++ own}}
-
-        {:error, _} = err ->
-          {:halt, err}
+      case run_occurrences(interval, Interval.from(first), Interval.to(last), opts) do
+        {:ok, own} -> {:cont, {:ok, acc ++ own}}
+        {:error, _reason} = error -> {:halt, error}
       end
     end)
     |> case do
@@ -6730,6 +6769,77 @@ defmodule Tempo do
       {:error, _} = err -> err
     end
   end
+
+  # The occurrences a run's periods select. In the calendar the domain counts
+  # its years in, the run's periods are the recurrence's own: a walk from the
+  # period the run starts in, at the grain the recurrence starts at, while a
+  # period starts before the run ends, keeps all they give, wherever a §12.10
+  # window, a week or an occurrence's span carries them. A recurrence in
+  # another calendar has periods that straddle the domain's years, which gate
+  # it instead: it keeps the occurrences that start in the run.
+  defp run_occurrences(%Tempo.Interval{} = interval, run_from, run_to, opts) do
+    with {:ok, %Tempo{calendar: run_calendar} = start} <-
+           start_at_unit(run_from, start_unit(interval)) do
+      case start_in_repeat_calendar(start, interval) do
+        %Tempo{calendar: ^run_calendar} = first_period ->
+          {:ok, walk_run(first_period, interval, run_to)}
+
+        _other_calendar ->
+          gated_run_occurrences(interval, run_from, run_to, opts)
+      end
+    end
+  end
+
+  defp walk_run(first_period, %Tempo.Interval{duration: cadence} = interval, run_to) do
+    {from, interval} = fill_selection_start(first_period, %{interval | from: first_period})
+
+    from
+    |> period_occurrences(
+      cadence,
+      occurrence_end_fn(from, cadence, interval),
+      &under_bound?(&1, run_to),
+      selection_fn(interval, cadence),
+      interval.metadata
+    )
+    |> Enum.to_list()
+  end
+
+  defp gated_run_occurrences(interval, run_from, run_to, opts) do
+    run = %Tempo.Interval{from: run_from, to: run_to}
+    open_start = %{interval | from: nil, recurrence: :infinity}
+
+    case to_interval(open_start, Keyword.put(opts, :within, run)) do
+      {:ok, %Tempo.IntervalSet{} = set} ->
+        {:ok, set |> IntervalSet.members() |> Enum.filter(&starts_in_run?(&1, run_from, run_to))}
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  # Whether an occurrence starts in the half-open run `[run_from, run_to)`.
+  defp starts_in_run?(%Tempo.Interval{from: %Tempo{} = from}, run_from, run_to),
+    do: at_or_after_bound?(from, run_from) and under_bound?(from, run_to)
+
+  defp starts_in_run?(_occurrence, _run_from, _run_to), do: true
+
+  # A counted recurrence (`R3/{…}/…`) counts its occurrences from the
+  # domain's first period, so it walks them all; any other walks the periods
+  # whose occurrences can reach the window.
+  defp domain_periods_to_walk(periods, %Tempo.Interval{recurrence: count}, _reach)
+       when is_integer(count),
+       do: periods
+
+  defp domain_periods_to_walk(periods, _interval, reach),
+    do: Enum.filter(periods, &domain_period_in_window?(&1, reach))
+
+  # A counted recurrence keeps its domain's first occurrences, as one from a
+  # start keeps its first.
+  defp first_occurrences({:ok, %Tempo.IntervalSet{} = set}, %Tempo.Interval{recurrence: count})
+       when is_integer(count),
+       do: set |> IntervalSet.members() |> Enum.take(count) |> IntervalSet.new()
+
+  defp first_occurrences(result, _interval), do: result
 
   # The runs of periods each starting where the one before ends, as
   # `{first_period, last_period}` pairs in order.
@@ -6844,13 +6954,6 @@ defmodule Tempo do
 
   defp ends_after?(_to, nil), do: true
   defp ends_after?(to, window_from), do: under_bound?(window_from, to)
-
-  # A domain run keeps the occurrences its own periods yield: those that start
-  # within the run's span. (The caller's window then keeps those that overlap it.)
-  defp starts_in_window?(%Tempo.Interval{from: %Tempo{} = from}, window_from, window_to),
-    do: in_bound_window?(from, window_from, window_to)
-
-  defp starts_in_window?(_occurrence, _window_from, _window_to), do: true
 
   # Close an open-ended domain range against the bound's window: a missing upper
   # end becomes the bound's end and a missing lower end the bound's start, each
