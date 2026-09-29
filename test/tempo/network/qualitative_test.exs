@@ -18,8 +18,8 @@ defmodule Tempo.Network.QualitativeTest do
 
   defp dated_network do
     Network.new()
-    |> Network.add_period(:a, start: ~o"2000", end: ~o"2005")
-    |> Network.add_period(:b, start: ~o"2010", end: ~o"2015")
+    |> Network.add_period(:a, from: ~o"2000", to: ~o"2005")
+    |> Network.add_period(:b, from: ~o"2010", to: ~o"2015")
     |> Network.add_period(:c, [])
     |> Network.add_relation(:before, :b, :c)
   end
@@ -106,8 +106,8 @@ defmodule Tempo.Network.QualitativeTest do
     test "reports a metric network that has no solution" do
       network =
         Network.new()
-        |> Network.add_period(:a, start: ~o"2010", end: ~o"2015")
-        |> Network.add_period(:b, start: ~o"2000", end: ~o"2005")
+        |> Network.add_period(:a, from: ~o"2010", to: ~o"2015")
+        |> Network.add_period(:b, from: ~o"2000", to: ~o"2005")
         |> Network.add_relation(:before, :a, :b)
 
       assert Qualitative.refine(network) == {:error, :inconsistent}
@@ -115,9 +115,9 @@ defmodule Tempo.Network.QualitativeTest do
 
     test "preserves the tightened bounds the metric solver reports" do
       network = dated_network()
-      {:ok, before} = Solver.tighten(network)
+      {:ok, before} = Solver.propagate(network)
       {:ok, refined} = Qualitative.refine(network)
-      {:ok, after_refine} = Solver.tighten(refined)
+      {:ok, after_refine} = Solver.propagate(refined)
 
       # Refinement may only narrow — never widen — what the solver knows.
       assert map_size(after_refine) == map_size(before)

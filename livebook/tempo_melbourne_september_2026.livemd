@@ -519,13 +519,13 @@ alias Tempo.Network
 
 network =
   Network.new()
-  |> Network.add_period(:cfp, name: "Call for papers", start: {:not_before, ~o"2026-06-01"}, duration: {:at_most, ~o"P8W"})
+  |> Network.add_period(:cfp, name: "Call for papers", from: {:not_before, ~o"2026-06-01"}, duration: {:at_most, ~o"P8W"})
   |> Network.add_period(:review, name: "Review", duration: {:at_least, ~o"P2W"})
-  |> Network.add_period(:conference, name: "Conference", end: {:not_after, ~o"2026-12-01"})
+  |> Network.add_period(:conference, name: "Conference", to: {:not_after, ~o"2026-12-01"})
   |> Network.add_relation(:before, :cfp, :review)
   |> Network.add_relation(:before, :review, :conference)
 
-{:ok, solved} = Network.Solver.tighten(network)
+{:ok, solved} = Network.Solver.propagate(network)
 review = solved.periods[:review]
 %{earliest_start: review.earliest_start, latest_end: review.latest_end}
 ```

@@ -112,12 +112,12 @@ Tempo.relation_certainty(hearth, wall, :precedes)      #=> :certain
   |> Tempo.Schedule.task(:ship,   duration: ~o"P2D", after: [:build, :docs], deadline: ~o"2026-06-08")
   |> Tempo.Schedule.solve()
 
-plan[:ship].start                    #=> ~o"2026Y6M6D"
+plan[:ship].early                    #=> ~o"2026Y6M6D/8D"
 plan[:docs].critical?                #=> false   (docs has slack)
 Tempo.Schedule.critical_path(plan)   #=> [:design, :build, :ship]
 ```
 
-> *"Design, then build and docs in parallel, then ship — due the 8th. Ship starts on the 6th; docs has slack; the critical path is design → build → ship."*
+> *"Design, then build and docs in parallel, then ship — due the 8th. Ship runs from the 6th to the 8th; docs has slack; the critical path is design → build → ship."*
 
 ---
 
@@ -128,16 +128,16 @@ alias Tempo.Network
 
 net =
   Network.new()
-  |> Network.add_period(:k1, start: {:not_before, ~o"1200Y"}, duration: {:at_most, ~o"P10Y"})
-  |> Network.add_period(:k2, end: {:not_after, ~o"1300Y"}, duration: {:at_least, ~o"P35Y"})
+  |> Network.add_period(:k1, from: {:not_before, ~o"1200Y"}, duration: {:at_most, ~o"P10Y"})
+  |> Network.add_period(:k2, to: {:not_after, ~o"1300Y"}, duration: {:at_least, ~o"P35Y"})
   |> Network.add_period(:s1, duration: {~o"P20Y", ~o"P100Y"})
   |> Network.add_sequence([:k1, :k2])
   |> Network.add_relation(:starts_during, :s1, :k1)
 
 Tempo.Network.Solver.consistent?(net)               #=> true
 Tempo.Network.Solver.contemporaneity(net, :k1, :s1) #=> :certain  (S1 starts during K1's reign)
-{:ok, solved} = Tempo.Network.Solver.tighten(net)
+{:ok, solved} = Tempo.Network.Solver.propagate(net)
 solved.periods[:s1].earliest_start                  #=> a derived Tempo value
 ```
 
-> *"The kings reign in succession; stratum S1 starts during King K1. Do they overlap, is it jointly possible, and what does it pin down?"* `contemporaneity/3` answers "could these two have coexisted?" three-valued — `:certain`, `:possible`, or `:impossible` — read in constant time from the tightened network; `tighten/1` derives the narrowest start/end/duration for every period, even ones given no dates at all.
+> *"The kings reign in succession; stratum S1 starts during King K1. Do they overlap, is it jointly possible, and what does it pin down?"* `contemporaneity/3` answers "could these two have coexisted?" three-valued — `:certain`, `:possible`, or `:impossible` — read in constant time from the propagated network; `propagate/1` derives the narrowest start/end/duration for every period, even ones given no dates at all.

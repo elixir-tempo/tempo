@@ -29,22 +29,22 @@ alias Tempo.Network
 network =
   Network.new()
   # "King K1's reign began no earlier than 1200 and lasted at most 10 years."
-  |> Network.add_period(:k1, name: "King K1", start: {:not_before, ~o"1200Y"}, duration: {:at_most, ~o"P10Y"})
+  |> Network.add_period(:k1, name: "King K1", from: {:not_before, ~o"1200Y"}, duration: {:at_most, ~o"P10Y"})
   # "King K2's reign ended by 1300 and lasted at least 35 years."
-  |> Network.add_period(:k2, name: "King K2", end: {:not_after, ~o"1300Y"}, duration: {:at_least, ~o"P35Y"})
+  |> Network.add_period(:k2, name: "King K2", to: {:not_after, ~o"1300Y"}, duration: {:at_least, ~o"P35Y"})
 ```
 
 The vocabulary mirrors how an archaeologist actually speaks:
 
 | You want to say | You write |
 |---|---|
-| "exactly 664 BCE" | `start: ~o"-664Y"` |
-| "no earlier than 1200" | `start: {:not_before, ~o"1200Y"}` |
-| "no later than 1300" | `end: {:not_after, ~o"1300Y"}` |
-| "between 1200 and 1250" | `start: {~o"1200Y", ~o"1250Y"}` |
+| "began in exactly 664 BCE" | `from: ~o"-664Y"` |
+| "began no earlier than 1200" | `from: {:not_before, ~o"1200Y"}` |
+| "ended no later than 1300" | `to: {:not_after, ~o"1300Y"}` |
+| "began between 1200 and 1250" | `from: {~o"1200Y", ~o"1250Y"}` |
 | "lasted at least 20 years" | `duration: {:at_least, ~o"P20Y"}` |
 | "lasted 20 to 100 years" | `duration: {~o"P20Y", ~o"P100Y"}` |
-| "circa 720 (`~720`)" | `start: ~o"~720Y"` *(the `~` is kept as a note; it does not move the date)* |
+| "began circa 720 (`~720`)" | `from: ~o"~720Y"` *(the `~` is kept as a note; it does not move the date)* |
 
 A bare integer year (`1200`, `-664`) and an ISO 8601 string are also accepted as shorthands for year-grained work, but the `~o` form is the idiom — and it is what every bound is stored and returned as.
 
@@ -62,8 +62,8 @@ alias Tempo.Network
 
 chronoland =
   Network.new()
-  |> Network.add_period(:k1, name: "King K1", start: {:not_before, ~o"1200Y"}, duration: {:at_most, ~o"P10Y"})
-  |> Network.add_period(:k2, name: "King K2", end: {:not_after, ~o"1300Y"}, duration: {:at_least, ~o"P35Y"})
+  |> Network.add_period(:k1, name: "King K1", from: {:not_before, ~o"1200Y"}, duration: {:at_most, ~o"P10Y"})
+  |> Network.add_period(:k2, name: "King K2", to: {:not_after, ~o"1300Y"}, duration: {:at_least, ~o"P35Y"})
   |> Network.add_period(:s1, name: "Stratum S1", duration: {~o"P20Y", ~o"P100Y"})
   |> Network.add_period(:s2, name: "Stratum S2", duration: {~o"P20Y", ~o"P100Y"})
   |> Network.add_sequence([:k1, :k2])
@@ -83,10 +83,10 @@ Tempo.Network.Solver.consistent?(chronoland)
 
 ## 4. Reading the answer
 
-**Tightening** computes, for every period, the narrowest start, end, and duration the network allows. Anything outside those bounds would break a constraint; anything inside is still possible.
+**Propagating** the constraints computes, for every period, the narrowest start, end, and duration the network allows. Anything outside those bounds would break a constraint; anything inside is still possible.
 
 ```elixir
-{:ok, solved} = Tempo.Network.Solver.tighten(chronoland)
+{:ok, solved} = Tempo.Network.Solver.propagate(chronoland)
 
 solved.periods[:k2].earliest_end
 #=> ~o"1240Y"
@@ -168,7 +168,7 @@ Tempo.Network.Solver.relation_certainty(chronoland, :k1, :s2, :precedes)
 #=> :certain
 ```
 
-Like `contemporaneity/3`, both read straight off the tightened network's shortest-path weights — no extra solve, and no qualitative disjunction enters, so the query stays polynomial.
+Like `contemporaneity/3`, both read straight off the propagated network's shortest-path weights — no extra solve, and no qualitative disjunction enters, so the query stays polynomial.
 
 ## 6. When you don't need a network
 
@@ -250,13 +250,13 @@ dynasty =
   |> Network.add_period("Psammetichus III", duration: ~o"P1Y")
   |> Network.add_sequence(["Psammetichus I", "Necho II", "Psammetichus II", "Apries", "Amasis", "Psammetichus III"])
   # The Persian conquest, 525 BCE, ends Psammetichus III's reign.
-  |> Network.add_period("Persian conquest", start: ~o"-525Y", end: ~o"-525Y", duration: ~o"P0Y")
+  |> Network.add_period("Persian conquest", from: ~o"-525Y", to: ~o"-525Y", duration: ~o"P0Y")
   |> Network.add_relation(:synchronous_end, "Persian conquest", "Psammetichus III")
   # Apis bull III was installed exactly 52 years into Psammetichus I's reign.
   |> Network.add_period("Apis Bull III", duration: ~o"P17Y")
   |> Network.add_relation({:delay, :start, :start, :exactly, ~o"P52Y"}, "Psammetichus I", "Apis Bull III")
 
-{:ok, solved} = Solver.tighten(dynasty)
+{:ok, solved} = Solver.propagate(dynasty)
 solved.periods["Psammetichus I"].latest_start
 #=> ~o"-664Y"
 ```

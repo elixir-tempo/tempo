@@ -25,8 +25,8 @@ defmodule Tempo.Network.SolverTest do
   # Two grounded periods a = [a1, a2) and b = [b1, b2) as integer years.
   defp ground(a1, a2, b1, b2) do
     Network.new()
-    |> Network.add_period(:a, start: a1, end: a2)
-    |> Network.add_period(:b, start: b1, end: b2)
+    |> Network.add_period(:a, from: a1, to: a2)
+    |> Network.add_period(:b, from: b1, to: b2)
   end
 
   # The same two intervals compared by the core point algebra, for agreement.
@@ -40,13 +40,13 @@ defmodule Tempo.Network.SolverTest do
   describe "consistency" do
     test "a single well-formed period is consistent" do
       assert Network.new()
-             |> Network.add_period(:k, start: 1200, duration: {:at_least, 10})
+             |> Network.add_period(:k, from: 1200, duration: {:at_least, 10})
              |> Solver.consistent?()
     end
 
     test "an end before a start is inconsistent" do
       refute Network.new()
-             |> Network.add_period(:k, start: 1200, end: 1180)
+             |> Network.add_period(:k, from: 1200, to: 1180)
              |> Solver.consistent?()
     end
 
@@ -55,9 +55,9 @@ defmodule Tempo.Network.SolverTest do
       # k1 lasts at least 30 years from a start no earlier than 1200.
       refute Network.new()
              |> Network.add_period(:k1,
-               start: {:not_before, 1200},
+               from: {:not_before, 1200},
                duration: {:at_least, 30},
-               end: {:not_after, 1210}
+               to: {:not_after, 1210}
              )
              |> Network.add_period(:k2, [])
              |> Network.add_sequence([:k1, :k2])
@@ -79,10 +79,10 @@ defmodule Tempo.Network.SolverTest do
     setup do
       {:ok, tightened} =
         Network.new()
-        |> Network.add_period(:k1, start: {1200, 1210}, duration: {20, 30})
+        |> Network.add_period(:k1, from: {1200, 1210}, duration: {20, 30})
         |> Network.add_period(:k2, duration: {35, 50})
         |> Network.add_sequence([:k1, :k2])
-        |> Solver.tighten()
+        |> Solver.propagate()
 
       %{network: tightened}
     end
@@ -111,10 +111,10 @@ defmodule Tempo.Network.SolverTest do
     test "inclusion nests one period inside another" do
       {:ok, network} =
         Network.new()
-        |> Network.add_period(:k, start: {1200, 1200}, end: {1260, 1260})
+        |> Network.add_period(:k, from: {1200, 1200}, to: {1260, 1260})
         |> Network.add_period(:s, duration: {:at_least, 10})
         |> Network.add_relation(:included_in, :s, :k)
-        |> Solver.tighten()
+        |> Solver.propagate()
 
       # s sits within k = [1200, 1260]: its start ≥ 1200, end ≤ 1260,
       # and (start ≤ end − 10) so start ≤ 1250 and end ≥ 1210.
@@ -130,10 +130,10 @@ defmodule Tempo.Network.SolverTest do
       # start(a) is at least 40 before start(b).
       {:ok, network} =
         Network.new()
-        |> Network.add_period(:a, start: {1000, 1000})
+        |> Network.add_period(:a, from: {1000, 1000})
         |> Network.add_period(:b, [])
         |> Network.add_relation({:delay, :start, :start, :at_least, ~o"P40Y"}, :a, :b)
-        |> Solver.tighten()
+        |> Solver.propagate()
 
       assert TimePeriod.year(network.periods[:b].earliest_start) == 1040
     end
@@ -142,10 +142,10 @@ defmodule Tempo.Network.SolverTest do
       # a ends by 1100; b is contemporary with a, so b starts by 1100.
       {:ok, network} =
         Network.new()
-        |> Network.add_period(:a, end: {:not_after, 1100})
-        |> Network.add_period(:b, start: {:not_before, 1050})
+        |> Network.add_period(:a, to: {:not_after, 1100})
+        |> Network.add_period(:b, from: {:not_before, 1050})
         |> Network.add_relation(:contemporary, :a, :b)
-        |> Solver.tighten()
+        |> Solver.propagate()
 
       assert TimePeriod.year(network.periods[:b].latest_start) == 1100
     end
@@ -155,8 +155,8 @@ defmodule Tempo.Network.SolverTest do
     test "returns an error tuple" do
       assert {:error, :inconsistent} =
                Network.new()
-               |> Network.add_period(:k, start: 1200, end: 1180)
-               |> Solver.tighten()
+               |> Network.add_period(:k, from: 1200, to: 1180)
+               |> Solver.propagate()
     end
   end
 
@@ -164,7 +164,7 @@ defmodule Tempo.Network.SolverTest do
     test "explains an earliest bound as a chain of named constraints" do
       {:ok, trace} =
         Network.new()
-        |> Network.add_period(:k1, start: {:not_before, 1200}, duration: {:at_least, 20})
+        |> Network.add_period(:k1, from: {:not_before, 1200}, duration: {:at_least, 20})
         |> Network.add_period(:k2, duration: {:at_least, 35})
         |> Network.add_sequence([:k1, :k2])
         |> Solver.trace({:end, :k2})
@@ -184,7 +184,7 @@ defmodule Tempo.Network.SolverTest do
     test "an inconsistent network returns {:error, :inconsistent}" do
       assert {:error, :inconsistent} =
                Network.new()
-               |> Network.add_period(:k, start: 1200, end: 1180)
+               |> Network.add_period(:k, from: 1200, to: 1180)
                |> Solver.trace({:start, :k})
     end
   end
@@ -234,8 +234,8 @@ defmodule Tempo.Network.SolverTest do
       # (:overlapped_by) — but never precede or meet a.
       relations =
         Network.new()
-        |> Network.add_period(:a, start: {1200, 1200}, end: {1260, 1260})
-        |> Network.add_period(:b, start: {1210, 1210}, duration: {:at_least, 5})
+        |> Network.add_period(:a, from: {1200, 1200}, to: {1260, 1260})
+        |> Network.add_period(:b, from: {1210, 1210}, duration: {:at_least, 5})
         |> Solver.relation(:b, :a)
 
       assert is_list(relations)
@@ -249,8 +249,8 @@ defmodule Tempo.Network.SolverTest do
     test "an inconsistent network returns {:error, :inconsistent}" do
       assert {:error, :inconsistent} =
                Network.new()
-               |> Network.add_period(:a, start: 1200, end: 1180)
-               |> Network.add_period(:b, start: 1000, end: 1100)
+               |> Network.add_period(:a, from: 1200, to: 1180)
+               |> Network.add_period(:b, from: 1000, to: 1100)
                |> Solver.relation(:a, :b)
     end
 

@@ -5,7 +5,9 @@ defmodule Tempo.ScheduleTest do
 
   doctest Tempo.Schedule
 
+  alias Tempo.Interval
   alias Tempo.Schedule
+  alias Tempo.Schedule.ScheduledTask
 
   # design(2d) → build(3d), design → docs(1d), build+docs → ship(2d),
   # anchored at 2026-06-01, ship due 2026-06-08.
@@ -24,21 +26,19 @@ defmodule Tempo.ScheduleTest do
   describe "solve/1 — the schedule" do
     test "each task is placed at its earliest feasible position" do
       plan = plan()
-      assert plan[:design].start == ~o"2026-06-01"
-      assert plan[:design].finish == ~o"2026-06-03"
-      assert plan[:build].start == ~o"2026-06-03"
-      assert plan[:build].finish == ~o"2026-06-06"
-      assert plan[:docs].start == ~o"2026-06-03"
-      assert plan[:ship].start == ~o"2026-06-06"
-      assert plan[:ship].finish == ~o"2026-06-08"
+      assert %ScheduledTask{id: :design} = plan[:design]
+      assert Interval.endpoints(plan[:design].early) == {~o"2026-06-01", ~o"2026-06-03"}
+      assert Interval.endpoints(plan[:build].early) == {~o"2026-06-03", ~o"2026-06-06"}
+      assert Interval.from(plan[:docs].early) == ~o"2026-06-03"
+      assert Interval.endpoints(plan[:ship].early) == {~o"2026-06-06", ~o"2026-06-08"}
     end
 
     test "a finish-to-start dependency may leave a gap, not just abut" do
       # docs (1 day) finishes 06-04 but ship can't start until build
       # finishes 06-06 — a two-day gap after docs.
       plan = plan()
-      assert plan[:docs].finish == ~o"2026-06-04"
-      assert plan[:ship].start == ~o"2026-06-06"
+      assert Interval.to(plan[:docs].early) == ~o"2026-06-04"
+      assert Interval.from(plan[:ship].early) == ~o"2026-06-06"
     end
   end
 
@@ -52,22 +52,35 @@ defmodule Tempo.ScheduleTest do
       refute docs.critical?
       # docs can start as late as 06-05 (so it still finishes by the
       # time ship needs it) yet schedules early at 06-03.
-      assert docs.start == ~o"2026-06-03"
-      assert docs.latest_start == ~o"2026-06-05"
+      assert Interval.from(docs.early) == ~o"2026-06-03"
+      assert Interval.endpoints(docs.late) == {~o"2026-06-05", ~o"2026-06-06"}
     end
 
-    test "critical tasks have coincident early and late starts" do
+    test "critical tasks have coincident early and late schedules" do
       build = plan()[:build]
       assert build.critical?
-      assert build.start == build.latest_start
+      assert build.early == build.late
     end
   end
 
   describe "span/1" do
     test "covers the whole project from earliest start to latest finish" do
       span = Schedule.span(plan())
-      assert span.from == ~o"2026-06-01"
-      assert span.to == ~o"2026-06-08"
+      assert Interval.endpoints(span) == {~o"2026-06-01", ~o"2026-06-08"}
+    end
+
+    test "a plan with no tasks, or none placed on the calendar, has no span" do
+      assert {:error, %Tempo.IntervalEndpointsError{}} = Schedule.span(%{})
+
+      {:ok, relative} =
+        Schedule.new()
+        |> Schedule.task(:a, duration: ~o"P2D")
+        |> Schedule.task(:b, duration: ~o"P2D", after: :a)
+        |> Schedule.solve()
+
+      assert relative[:a].early == nil
+      assert {:error, %Tempo.IntervalEndpointsError{} = error} = Schedule.span(relative)
+      assert Exception.message(error) =~ "no fixed start or :not_before date"
     end
   end
 
@@ -81,13 +94,13 @@ defmodule Tempo.ScheduleTest do
       assert result == {:error, :infeasible}
     end
 
-    test ":earliest holds a task back" do
+    test ":not_before holds a task back" do
       {:ok, plan} =
         Schedule.new()
-        |> Schedule.task(:a, duration: ~o"P1D", earliest: ~o"2026-06-10")
+        |> Schedule.task(:a, duration: ~o"P1D", not_before: ~o"2026-06-10")
         |> Schedule.solve()
 
-      assert plan[:a].start == ~o"2026-06-10"
+      assert Interval.from(plan[:a].early) == ~o"2026-06-10"
     end
 
     test ":within bounds both ends" do
@@ -96,8 +109,8 @@ defmodule Tempo.ScheduleTest do
         |> Schedule.task(:a, duration: ~o"P2D", within: {~o"2026-06-01", ~o"2026-06-10"})
         |> Schedule.solve()
 
-      assert plan[:a].start == ~o"2026-06-01"
-      assert plan[:a].latest_finish == ~o"2026-06-10"
+      assert Interval.from(plan[:a].early) == ~o"2026-06-01"
+      assert Interval.to(plan[:a].late) == ~o"2026-06-10"
     end
 
     test "an anchored task is critical (pinned); a downstream task with no deadline is undetermined" do
@@ -111,6 +124,7 @@ defmodule Tempo.ScheduleTest do
 
       assert plan[:a].critical? == true
       assert plan[:b].critical? == nil
+      assert plan[:b].late == nil
       assert Schedule.critical_path(plan) == [:a]
     end
 
@@ -124,7 +138,7 @@ defmodule Tempo.ScheduleTest do
         |> Schedule.task(:c, duration: ~o"P2D", after: :b)
         |> Schedule.solve()
 
-      assert plan[:c].finish == ~o"2026-06-07"
+      assert Interval.to(plan[:c].early) == ~o"2026-06-07"
     end
 
     test "a cyclic dependency is infeasible" do
@@ -135,6 +149,40 @@ defmodule Tempo.ScheduleTest do
         |> Schedule.solve()
 
       assert result == {:error, :infeasible}
+    end
+  end
+
+  describe "an option task/3 cannot read is an error from solve/1, not a raise" do
+    defp solve_with(options) do
+      Schedule.new()
+      |> Schedule.task(:a, [{:duration, ~o"P1D"} | options])
+      |> Schedule.solve()
+    end
+
+    test "a 1.x :earliest names :not_before" do
+      assert {:error, %ArgumentError{} = error} = solve_with(earliest: ~o"2026-06-10")
+      assert Exception.message(error) =~ "takes :not_before where 1.x took :earliest"
+    end
+
+    test "an option it does not take, or options that are not a keyword list" do
+      assert {:error, %ArgumentError{} = error} = solve_with(finish: ~o"2026-06-10")
+      assert Exception.message(error) =~ "does not take :finish"
+
+      assert {:error, %ArgumentError{}} =
+               Schedule.new() |> Schedule.task(:a, :duration) |> Schedule.solve()
+    end
+
+    test "a :within that is not a pair of dates" do
+      assert {:error, %ArgumentError{} = error} = solve_with(within: ~o"2026-06")
+      assert Exception.message(error) =~ "takes :within as a {from, to} pair of dates"
+    end
+
+    test "a date or a duration it cannot read" do
+      assert {:error, %ArgumentError{}} = solve_with(start: "not a date")
+      assert {:error, %ArgumentError{}} = solve_with(deadline: :tomorrow)
+
+      assert {:error, %ArgumentError{}} =
+               Schedule.new() |> Schedule.task(:a, duration: "two days") |> Schedule.solve()
     end
   end
 end

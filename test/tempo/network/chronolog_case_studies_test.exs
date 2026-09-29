@@ -77,7 +77,7 @@ defmodule Tempo.Network.ChronoLogCaseStudiesTest do
 
   describe "Egyptian 26th dynasty (Levy et al. Fig. 2a)" do
     setup do
-      {:ok, tightened} = Solver.tighten(load("Egyptian-Dyn-26-CLOG3.clog"))
+      {:ok, tightened} = Solver.propagate(load("Egyptian-Dyn-26-CLOG3.clog"))
       %{network: tightened}
     end
 
@@ -128,7 +128,7 @@ defmodule Tempo.Network.ChronoLogCaseStudiesTest do
   describe "Mediterranean Late Bronze Age synchronisms" do
     setup do
       {:ok, tightened} =
-        Solver.tighten(load("case-study-mediterranean-LB-for-final-paper-CLOG3.clog"))
+        Solver.propagate(load("case-study-mediterranean-LB-for-final-paper-CLOG3.clog"))
 
       %{network: tightened}
     end
@@ -155,8 +155,8 @@ defmodule Tempo.Network.ChronoLogCaseStudiesTest do
       # each contained stratum inside it.
       {:ok, network} =
         load("RDC-2022-model-2-Aegean-LH-to-PG-CLOG3.clog")
-        |> Network.add_period("Late LH IIIB", start: ~o"-1250Y", end: ~o"-1200Y")
-        |> Solver.tighten()
+        |> Network.add_period("Late LH IIIB", from: ~o"-1250Y", to: ~o"-1200Y")
+        |> Solver.propagate()
 
       for stratum <- ["Megiddo K8", "Megiddo K7", "Maroni", "Shean VII"] do
         period = network.periods[stratum]

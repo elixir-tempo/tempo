@@ -2486,9 +2486,19 @@ defmodule Tempo do
   # its week begins on is a perfectly good Gregorian value — and it is
   # what "the week containing this" means when the calendar has no week
   # granule to name. Day resolution, matching `trunc(tempo, :day)`.
+  #
+  # The week starts where the value's own calendar starts its weeks:
+  # `Calendrical.Gregorian` begins on Monday, so a Sunday belongs to the
+  # week before it, while a calendar configured to begin on Sunday puts
+  # the same Sunday first in its week.
   defp week_of(%__MODULE__{} = tempo) do
-    with %__MODULE__{} = start <- beginning_of_week(tempo) do
-      take_units(start, :day)
+    with %__MODULE__{} = day <- trunc(tempo, :day),
+         {:ok, date} <- to_date(day) do
+      date
+      |> Date.beginning_of_week(:default)
+      |> from_date()
+      |> then(&%{&1 | shift: tempo.shift, extended: tempo.extended})
+      |> take_units(:day)
     end
   end
 
@@ -4468,195 +4478,6 @@ defmodule Tempo do
     day = Keyword.get(time, :day, default_day)
     {year, month, day}
   end
-
-  ## ---------------------------------------------------------
-  ## Day and month boundary helpers
-  ## ---------------------------------------------------------
-
-  @doc """
-  Return a second-resolution `t:t/0` at the start (`00:00:00`) of
-  the day that contains `tempo`.
-
-  Preserves the input's calendar, shift, and zone metadata so that
-  beginning-of-day in `[Europe/Paris]` still names midnight Paris
-  time, not midnight UTC.
-
-  ### Arguments
-
-  * `tempo` is a `t:t/0` with at least year/month/day components.
-
-  ### Returns
-
-  * A second-resolution `t:t/0`.
-
-  ### Examples
-
-      iex> Tempo.beginning_of_day(~o"2026-06-15T14:30:00")
-      ~o"2026Y6M15DT0H0M0S"
-
-      iex> Tempo.beginning_of_day(~o"2026-06-15")
-      ~o"2026Y6M15DT0H0M0S"
-
-  """
-  @spec beginning_of_day(t()) :: t() | {:error, error_reason()}
-  def beginning_of_day(%Tempo{} = tempo) do
-    tempo
-    |> trunc(:day)
-    |> extend_to_second()
-  end
-
-  @doc """
-  Return a second-resolution `t:t/0` at the start of `tempo`'s week.
-
-  **The week starts where the value's own calendar starts its weeks.**
-  `Calendrical.Gregorian` begins on Monday, so a Sunday belongs to the
-  week that preceded it; a calendar configured `day_of_week:
-  Calendrical.sunday()` begins on Sunday, so the same Sunday begins a
-  week of its own. Reading the convention off the value rather than
-  assuming ISO is what keeps a weekly total counting the seven days
-  its holder actually keeps.
-
-  Completes the family with `beginning_of_day/1` and
-  `beginning_of_month/1`.
-
-  ### Arguments
-
-  * `tempo` is a `t:t/0` with at least year/month/day components.
-
-  ### Returns
-
-  * A second-resolution `t:t/0`; or
-
-  * `{:error, reason}` when the value has no day to place, or its
-    calendar defines no week.
-
-  ### Examples
-
-      iex> Tempo.beginning_of_week(~o"2026-06-17T14:30:00")
-      ~o"2026Y6M15DT0H0M0S"
-
-  A Sunday belongs to the preceding week under an ISO calendar:
-
-      iex> Tempo.beginning_of_week(~o"2026-08-16")
-      ~o"2026Y8M10DT0H0M0S"
-
-  """
-  @spec beginning_of_week(t()) :: t() | {:error, error_reason()}
-  def beginning_of_week(%Tempo{} = tempo) do
-    with %Tempo{} = day <- trunc(tempo, :day),
-         {:ok, date} <- to_date(day) do
-      date
-      |> Date.beginning_of_week(:default)
-      |> from_date()
-      |> then(&%{&1 | shift: tempo.shift, extended: tempo.extended})
-      |> extend_to_second()
-    end
-  end
-
-  @doc """
-  Return a second-resolution `t:t/0` at the **exclusive** end of
-  the day that contains `tempo` — i.e. `00:00:00` of the following
-  day.
-
-  Tempo follows the half-open `[from, to)` convention everywhere,
-  so `end_of_day/1` returns the upper bound at which the day ends
-  and the next day begins. This is the right argument for
-  interval construction — pairing `beginning_of_day/1` and
-  `end_of_day/1` gives you the 24-hour (or DST-adjusted) window.
-
-  ### Arguments
-
-  * `tempo` is a `t:t/0` with at least year/month/day components.
-
-  ### Returns
-
-  * A second-resolution `t:t/0`.
-
-  ### Examples
-
-      iex> Tempo.end_of_day(~o"2026-06-15T14:30:00")
-      ~o"2026Y6M16DT0H0M0S"
-
-      iex> Tempo.end_of_day(~o"2026-12-31")
-      ~o"2027Y1M1DT0H0M0S"
-
-  """
-  @spec end_of_day(t()) :: t() | {:error, error_reason()}
-  def end_of_day(%Tempo{} = tempo) do
-    case beginning_of_day(tempo) do
-      {:error, _} = err -> err
-      %Tempo{} = start -> Math.add(start, Duration.build(day: 1))
-    end
-  end
-
-  @doc """
-  Return a second-resolution `t:t/0` at the start of the month
-  (`YYYY-MM-01T00:00:00`) that contains `tempo`.
-
-  ### Arguments
-
-  * `tempo` is a `t:t/0` with at least year/month components.
-
-  ### Returns
-
-  * A second-resolution `t:t/0`.
-
-  ### Examples
-
-      iex> Tempo.beginning_of_month(~o"2026-06-15T14:30:00")
-      ~o"2026Y6M1DT0H0M0S"
-
-      iex> Tempo.beginning_of_month(~o"2026-06")
-      ~o"2026Y6M1DT0H0M0S"
-
-  """
-  @spec beginning_of_month(t()) :: t() | {:error, error_reason()}
-  def beginning_of_month(%Tempo{} = tempo) do
-    tempo
-    |> trunc(:month)
-    |> extend_to_second()
-  end
-
-  @doc """
-  Return a second-resolution `t:t/0` at the **exclusive** end of
-  the month that contains `tempo` — i.e. the first day of the
-  following month at `00:00:00`.
-
-  Half-open by design; see `end_of_day/1` for the rationale.
-
-  ### Arguments
-
-  * `tempo` is a `t:t/0` with at least year/month components.
-
-  ### Returns
-
-  * A second-resolution `t:t/0`.
-
-  ### Examples
-
-      iex> Tempo.end_of_month(~o"2026-06-15")
-      ~o"2026Y7M1DT0H0M0S"
-
-      iex> Tempo.end_of_month(~o"2026-12")
-      ~o"2027Y1M1DT0H0M0S"
-
-  """
-  @spec end_of_month(t()) :: t() | {:error, error_reason()}
-  def end_of_month(%Tempo{} = tempo) do
-    case beginning_of_month(tempo) do
-      {:error, _} = err -> err
-      %Tempo{} = start -> Math.add(start, Duration.build(month: 1))
-    end
-  end
-
-  # Pad to second resolution. `extend_resolution/2` handles the
-  # general case; this helper just threads the {:error, _} case
-  # through so the boundary helpers degrade gracefully.
-  defp extend_to_second(%Tempo{} = tempo) do
-    extend_resolution(tempo, :second)
-  end
-
-  defp extend_to_second({:error, _} = err), do: err
 
   ## ---------------------------------------------------------
   ## shift/2 — ergonomic keyword-list arithmetic

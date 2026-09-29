@@ -195,11 +195,15 @@ Selectors are plural nouns: "the workdays of June" is `Tempo.select(~o"2026-06",
 
 The five are `beginning_of_day/1`, `beginning_of_week/1`, `beginning_of_month/1`, `end_of_day/1` and `end_of_month/1`. They return instants, and instants are not what Tempo is about; `Tempo.end_of_month/1` also answers 1 July where Elixir's `Date.end_of_month/1` answers 30 June. In Tempo the month containing a value is `Tempo.trunc(value, :month)`, a span whose ends are `Interval.from/1` and `Interval.to/1`.
 
+* **Decided while implementing (2026-09-29, user)** — only `TimePeriod.new/2`'s options take `:from` and `:to`; ChronoLog's own boundary vocabulary (`{:start, id}`, `:starts_during`, `earliest_start`) stays. The builders never raise: `TimePeriod.new/2` returns `{:ok, period}`, and an option or value `add_period/3`, `add_sequence/2`, `add_relation/5` or `Schedule.task/3` cannot read is recorded on the network and returned by the solver, so a leftover `start:` or `earliest:` is an error naming its 2.0 option.
+
 ## Specialist modules
 
 * **Schedule** — `Schedule.task/3`'s `:earliest` becomes `:not_before`, since it does not say earliest what; `:deadline` and `:within` stay. `Schedule.Slot`, a solved task, takes another name so "slot" means only a bookable piece of time (`IntervalSet.slots/3`).
 
 * **Constraint networks** — `Interval.RelationNetwork.propagate/1` and `Network.Solver.tighten/1` do the same job for a qualitative and a metric network; one verb, `propagate/1`.
+
+* **Decided while implementing (2026-09-29, user)** — `Schedule.Slot` becomes `Tempo.Schedule.ScheduledTask`, holding `early` and `late` intervals and `critical?`.
 
 ## Out of the public API
 
@@ -301,7 +305,7 @@ Each task is one commit, verified on both upstream branches, with its guides, RE
 
 * [x] **Workdays** — the renames, plural selectors, and `select/2` over an open span. 2026-09-29, `3e5467a`.
 
-* [ ] **Sets** — `members/1`, `covered/2`, `RecurrenceSet.new/2`.
+* [x] **Sets** — `members/1`, `covered/2`, `RecurrenceSet.new/2`. 2026-09-29, `4ebfbcb`.
 
 * [ ] **Span ends and specialist modules** — `:from`/`:to`, `Schedule.Slot`, the deleted instant helpers, `:not_before`, `propagate/1`.
 

@@ -1,18 +1,24 @@
 # TODO
 
-Open work on Tempo. The analysis behind each item, and the record of every
-decision taken on the way to 1.0, is in
-[plans/design-notes.md](plans/design-notes.md).
+Open work on Tempo. The analysis behind each item, and the record of every decision taken on the way to 1.0, is in [plans/design-notes.md](plans/design-notes.md).
 
 ## Open
+
+* [ ] **`to_relative_string/2` raises** — `Tempo.Format.render_relative/2` raises `UnanchoredError` for a value without a year and `IntervalEndpointsError` for an open interval, where the library returns `{:error, reason}`; its spec says it returns a string.
+
+* [ ] **`to_iso8601/1` raises on sub-second endpoints** — an interval whose endpoints differ only in a fraction of a second (`Tempo.to_interval(~o"2026-06-15T10:00:00.123")`) raises `FunctionClauseError`, and so `inspect` does too: the abbreviated end starts at `:microsecond`, which `Tempo.Inspect.inspect_value/1` has no clause for.
+
+* [ ] **A grouped endpoint raises when compared** — a hand-built interval whose endpoint holds a group (`~o"20C"`, `~o"2022Y1M2G3DU"`) raises in `Compare.to_utc_seconds/1` when measured or compared; `to_interval/1` converts such values first, the other entry points do not.
+
+* [ ] **`rescue` in the library** — `lib/ical.ex` (`parse/2`, `available/2`, errors from the `ical` parser), `lib/inspect.ex`, `lib/protocol/inspect.ex` and `lib/iso8601/parser.ex` rescue exceptions where the rest of Tempo passes tagged tuples.
+
+* [ ] **A never-matching selector walks the whole horizon** — `Tempo.select/2` over an open-ended span walks a thousand years of periods before a selector that never matches ends: 30 ms of years, 0.2 s of months, about 10 s of days, minutes of hours. An index selector on a fixed-range unit could end after its first empty period, a daylight-saving gap day aside.
 
 * [ ] **Create a glossary guide** — a guide that tables every term Tempo uses (span, window, occurrence, resolution, floating, zoned, anchored, …) and defines it, so it doubles as the reference future development checks its vocabulary against (user, 2026-09-28). The decisions in [plans/vocabulary.md](plans/vocabulary.md) are its starting point.
 
 * [ ] **A zone on a recurrence is dropped** — `R/../P1Y/FL3M20DN[+09:00]` and a domain recurrence's `[zone]` suffix parse and vanish (the start value's suffix, `R/2026-03-20[+09:00]/P1Y`, is kept). Carry it as zoned occurrences, as the suffix means elsewhere, or refuse it.
 
 * [ ] **§12.10 window shorter than a day** — `FL11MLL1K1IN/PT12HN1K1IN` (and `/P0DN…`) walks `[lo, lo - 1]`, the anchor and the day before, as `Date.range/2` infers for a reversed range (with a runtime deprecation warning before the day-number walk replaced it). Decide the semantics — no day, or the anchor day whose start the window contains — and test it.
-
-* [ ] **Recurrence sets** — a `%Tempo.RecurrenceSet{}` value for a collection of recurrence rules (a territory's holidays, a calendar's events) that materialises as one `IntervalSet` against a window, so it composes with a diary through set algebra (`intersection(diary, Holidays.recurrence_set(:AU))`). Completes the Interval → RecurrenceSet → IntervalSet triad and generalises `ICal.from_ical/2`. Plan in [plans/recurrence-set.md](plans/recurrence-set.md).
 
 * [ ] **Week-of-month selections, and calendar-aware RRULE `BYWEEKNO`** — parse `2026Y6M2W` ("2nd week of June", a positional `W` after a month) and materialise it via `Calendrical.week_of_month/3`; and replace the hard-coded ISO week walk still used by RRULE `BYWEEKNO` with Calendrical's calendar-aware functions. Month and native week-of-year selections are done. Plan in [plans/recurrence-selection-resolution.md](plans/recurrence-selection-resolution.md).
 
@@ -30,11 +36,21 @@ decision taken on the way to 1.0, is in
 
 * [ ] **Conditional first pass walks whole periods** — it widens the bound by the conditions' reach, and the walk covers every period the widened bound touches, so a ±1-day bridge crossing both year ends materialises three years: Japan's holiday set takes 55 ms a year with its bridge, 25 ms without. Widen only where a condition reaches past the bound (the bridge's days, a move's search back from the bound's start).
 
-* [ ] **`Interval.duration/1` raises** — a multi-occurrence recurrence raises `MaterialisationError` and differing endpoint calendars fail an `:ok =` match; return `{:error, _}` instead. Predicates (`anchored?/1`, the relation and certainty predicates) may raise on invalid input, as Elixir's naming conventions expect (user, 2026-09-27).
+* [ ] **`Interval.duration/1` raises** — a multi-occurrence recurrence raises `ConversionError` and differing endpoint calendars fail an `:ok =` match; return `{:error, _}` instead. Predicates (`anchored?/1`, the relation and certainty predicates) may raise on invalid input, as Elixir's naming conventions expect (user, 2026-09-27).
+
+* [ ] **An impossible date's error names too little** — `Tempo.on(~o"2M29D", ~o"2027")` returns an `InvalidDateError` with only its reason ("29 is not valid. The valid values are 1..28"), naming no year, month or calendar.
+
+* [ ] **An open-start window's error** — `within: ~o"../2027"` returns an `IntervalEndpointsError` about including an open interval in a set: correct, but it should say that a window needs a start.
+
+* [ ] **`Schedule.task/3`'s `:within` is a pair** — it takes a `{from, to}` tuple, where every other `:within` takes a Tempo value or an interval.
+
+* [ ] **Three §12 selection parses** — `2018Y9MTLT8H20MN3I` does not parse, `FL1KT10H0M0S1IN` misreads `0S1`, and `{1,3}K1I` merges where ISO 8601-2 §12.11.3 example 2 distributes.
+
+* [ ] **`ClockTest` timing** — "process-local override does not leak to peer processes" failed once under load (passing in isolation and on re-runs): `assert_receive`'s default 100 ms timeout is short on a busy machine.
 
 ## In progress
 
-* [ ] **Vocabulary for 2.0** — one meaning per word and one word per meaning across Tempo and tempo_holidays: `:within` for `:bound`, "anchor" in one sense, no public "materialise", `Tempo.Allen` beside everyday predicates, `datetime`, "workday". Every decision is taken; the work is eleven commits, listed in [plans/vocabulary.md](plans/vocabulary.md).
+* [ ] **Vocabulary for 2.0** — one meaning per word and one word per meaning across Tempo and tempo_holidays: `:within` for `:bound`, "anchor" in one sense, no public "materialise", `Tempo.Allen` beside everyday predicates, `datetime`, "workday". Every decision is taken; the tasks are in [plans/vocabulary.md](plans/vocabulary.md). Thirteen of its sixteen tasks have landed, through span ends and the specialist modules; tempo_holidays, the real-world livebook and the downstream libraries remain.
 
 ## Deferred
 
@@ -57,6 +73,8 @@ decision taken on the way to 1.0, is in
 * [x] **Each shared grammar prefix parsed once** — a §12.10 window parses in ~3.5 ms (was ~1.2 s), a nested window in ~60 ms (was minutes), a selection recurrence in ~0.4 ms (was ~15 ms), bare dates ~2.4× faster. 2026-09-24.
 
 * [x] **A supplied `:bound` narrows a self-bounding recurrence domain** — `R/{2020Y..2049Y}/P1Y/…` with `bound: ~o"2029Y"` yields 2029 only (it yielded all thirty years), using the same `[bound_from, bound_to)` start rule as any unanchored recurrence; domain periods outside the bound are skipped. 2026-09-24.
+
+* [x] **Recurrence sets** — `Tempo.RecurrenceSet`, a collection of recurrence rules that converts to one `IntervalSet` against a window and composes with a diary through set algebra. Plan in [plans/recurrence-set.md](plans/recurrence-set.md). 2026-09-23.
 
 * [x] **Consumer-extensible computed events** — `Tempo.Event.Resolver`, a behaviour registered via `config :ex_tempo, :event_resolvers`; consumer `(name)E` events resolve beside the built-ins and appear in `Tempo.Event.known/0`, unknown names yield zero occurrences. Plan in [plans/consumer-events.md](plans/consumer-events.md). 2026-09-23.
 

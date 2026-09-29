@@ -9,7 +9,7 @@ defmodule Tempo.Schedule do
   **critical path**. This is the classic project-scheduling / critical
   path method, expressed as the Simple Temporal Problem `Tempo.Network`
   already solves: tasks are time-periods, dependencies are boundary
-  relations, and the solver's tightening is the forward/backward pass.
+  relations, and the solver's propagation is the forward/backward pass.
 
   ## Example
 
@@ -21,15 +21,15 @@ defmodule Tempo.Schedule do
       ...>   |> Tempo.Schedule.task(:docs, duration: ~o"P1D", after: :design)
       ...>   |> Tempo.Schedule.task(:ship, duration: ~o"P2D", after: [:build, :docs], deadline: ~o"2026-06-08")
       ...>   |> Tempo.Schedule.solve()
-      iex> plan[:ship].start
-      ~o"2026Y6M6D"
+      iex> plan[:ship].early
+      ~o"2026Y6M6D/8D"
       iex> plan[:docs].critical?
       false
 
   Here *design* → *build*/​*docs* → *ship*, with *ship* due by the 8th.
-  The solver schedules *ship* to start on the 6th, and finds *docs* has
-  slack (it is not on the critical path) while *design*, *build*, and
-  *ship* are.
+  The solver schedules *ship* for the 6th to the 8th, and finds *docs*
+  has slack (it is not on the critical path) while *design*, *build*,
+  and *ship* are.
 
   ## What it does not do
 
@@ -45,9 +45,10 @@ defmodule Tempo.Schedule do
 
   alias Tempo.Compare
   alias Tempo.Interval
+  alias Tempo.IntervalEndpointsError
   alias Tempo.Network
   alias Tempo.Network.Solver
-  alias Tempo.Schedule.Slot
+  alias Tempo.Schedule.ScheduledTask
 
   @typedoc "A schedule under construction."
   @type t :: %__MODULE__{network: Network.t()}
@@ -57,6 +58,8 @@ defmodule Tempo.Schedule do
   # A dependency is finish-to-start: the successor starts no earlier
   # than the predecessor finishes (gaps allowed).
   @finish_to_start {:boundary, :start, :at_or_after, :end}
+
+  @task_options [:duration, :after, :start, :not_before, :deadline, :within]
 
   @doc """
   An empty schedule.
@@ -78,11 +81,16 @@ defmodule Tempo.Schedule do
   @doc """
   Add a task to the schedule.
 
+  An option `task/3` does not take, or a value it cannot read, is
+  recorded on the schedule rather than raised, and `solve/1` returns it.
+
   ### Arguments
 
   * `schedule` is the schedule to extend.
 
   * `id` is any term uniquely identifying the task.
+
+  * `options` is a keyword list of options.
 
   ### Options
 
@@ -94,16 +102,16 @@ defmodule Tempo.Schedule do
 
   * `:start` fixes the task's start on an exact date.
 
-  * `:earliest` requires the task to start on or after a date.
+  * `:not_before` requires the task to start on or after a date.
 
   * `:deadline` requires the task to finish on or before a date.
 
-  * `:within` is a `{earliest_start, latest_finish}` window the task
-    must fall inside.
+  * `:within` is a `{from, to}` pair of dates: the task must start on or
+    after `from` and finish on or before `to`.
 
   ### Returns
 
-  * the schedule with the task added.
+  * the schedule with the task added, or with an error recorded.
 
   ### Examples
 
@@ -115,16 +123,11 @@ defmodule Tempo.Schedule do
   """
   @spec task(t(), term(), keyword()) :: t()
   def task(%__MODULE__{network: network} = schedule, id, options \\ []) do
-    network =
-      network
-      |> Network.add_period(id, period_options(options))
-      |> add_dependencies(id, Keyword.get(options, :after, []))
-
-    %{schedule | network: network}
+    %{schedule | network: add_task(network, id, options, task_options(options))}
   end
 
   @doc """
-  Solve the schedule, finding each task's early and late position.
+  Solve the schedule, finding each task's early and late schedule.
 
   ### Arguments
 
@@ -132,11 +135,13 @@ defmodule Tempo.Schedule do
 
   ### Returns
 
-  * `{:ok, plan}` where `plan` is a map of `id => t:Tempo.Schedule.Slot.t/0`;
-    or
+  * `{:ok, plan}` where `plan` is a map of
+    `id => t:Tempo.Schedule.ScheduledTask.t/0`;
 
   * `{:error, :infeasible}` when the dependencies, durations, and bounds
-    cannot all be satisfied.
+    cannot all be satisfied; or
+
+  * `{:error, reason}` for an option or a value `task/3` could not read.
 
   ### Examples
 
@@ -146,18 +151,31 @@ defmodule Tempo.Schedule do
       ...>   |> Tempo.Schedule.task(:a, duration: ~o"P2D", start: ~o"2026-06-01")
       ...>   |> Tempo.Schedule.task(:b, duration: ~o"P3D", after: :a)
       ...>   |> Tempo.Schedule.solve()
-      iex> {plan[:a].start, plan[:b].start}
-      {~o"2026Y6M1D", ~o"2026Y6M3D"}
+      iex> {plan[:a].early, plan[:b].early}
+      {~o"2026Y6M1D/3D", ~o"2026Y6M3D/6D"}
+
+      iex> import Tempo.Sigils
+      iex> {:error, %ArgumentError{} = error} =
+      ...>   Tempo.Schedule.new()
+      ...>   |> Tempo.Schedule.task(:a, duration: ~o"P2D", earliest: ~o"2026-06-01")
+      ...>   |> Tempo.Schedule.solve()
+      iex> Exception.message(error)
+      "Tempo.Schedule.task/3 takes :not_before where 1.x took :earliest."
 
   """
-  @spec solve(t()) :: {:ok, %{optional(term()) => Slot.t()}} | {:error, :infeasible}
+  @spec solve(t()) ::
+          {:ok, %{optional(term()) => ScheduledTask.t()}}
+          | {:error, :infeasible | Exception.t()}
   def solve(%__MODULE__{network: network}) do
-    case Solver.tighten(network) do
-      {:ok, tightened} ->
-        {:ok, Map.new(tightened.periods, fn {id, period} -> {id, to_slot(id, period)} end)}
+    case Solver.propagate(network) do
+      {:ok, propagated} ->
+        {:ok, Map.new(propagated.periods, fn {id, period} -> {id, scheduled(id, period)} end)}
 
       {:error, :inconsistent} ->
         {:error, :infeasible}
+
+      {:error, _reason} = error ->
+        error
     end
   end
 
@@ -165,8 +183,8 @@ defmodule Tempo.Schedule do
   The critical path of a solved plan — the task ids with no slack, in
   start order.
 
-  A task is critical when its earliest and latest starts coincide, so
-  any delay to it delays the whole project. Requires a plan with a
+  A task is critical when its early and late schedules start together,
+  so any delay to it delays the whole project. Requires a plan with a
   deadline; without one no task is critical and the list is empty.
 
   ### Arguments
@@ -189,12 +207,12 @@ defmodule Tempo.Schedule do
       [:a, :b]
 
   """
-  @spec critical_path(%{optional(term()) => Slot.t()}) :: [term()]
+  @spec critical_path(%{optional(term()) => ScheduledTask.t()}) :: [term()]
   def critical_path(plan) when is_map(plan) do
     plan
     |> Map.values()
     |> Enum.filter(& &1.critical?)
-    |> Enum.sort_by(& &1.start, &start_not_after?/2)
+    |> Enum.sort_by(&Interval.from(&1.early), &start_not_after?/2)
     |> Enum.map(& &1.id)
   end
 
@@ -208,7 +226,10 @@ defmodule Tempo.Schedule do
 
   ### Returns
 
-  * a `t:Tempo.Interval.t/0` covering the whole project.
+  * a `t:Tempo.Interval.t/0` covering the whole project; or
+
+  * `{:error, reason}` when the plan has no tasks, or no fixed start or
+    `:not_before` date to place them by.
 
   ### Examples
 
@@ -223,51 +244,106 @@ defmodule Tempo.Schedule do
       {~o"2026Y6M1D", ~o"2026Y6M6D"}
 
   """
-  @spec span(%{optional(term()) => Slot.t()}) :: Tempo.Interval.t()
+  @spec span(%{optional(term()) => ScheduledTask.t()}) ::
+          Tempo.Interval.t() | {:error, Exception.t()}
   def span(plan) when is_map(plan) do
-    slots = Map.values(plan)
-    from = slots |> Enum.map(& &1.start) |> Enum.min_by(&Compare.to_utc_seconds/1)
-    to = slots |> Enum.map(& &1.finish) |> Enum.max_by(&Compare.to_utc_seconds/1)
-    Interval.new!(from: from, to: to)
+    case plan |> Map.values() |> Enum.map(& &1.early) do
+      [_ | _] = schedules -> span_of(schedules)
+      [] -> {:error, no_span("A plan with no tasks has no span.")}
+    end
   end
 
+  defp span_of(schedules) do
+    if Enum.all?(schedules, &match?(%Interval{}, &1)) do
+      from = schedules |> Enum.map(&Interval.from/1) |> Enum.min_by(&Compare.to_utc_seconds/1)
+      to = schedules |> Enum.map(&Interval.to/1) |> Enum.max_by(&Compare.to_utc_seconds/1)
+      Interval.new!(from: from, to: to)
+    else
+      {:error,
+       no_span(
+         "A plan with no fixed start or :not_before date has no span: its tasks are " <>
+           "placed only relative to each other."
+       )}
+    end
+  end
+
+  defp no_span(reason), do: IntervalEndpointsError.exception(operation: :span, reason: reason)
+
   # --- task options → period bounds ------------------------------
+
+  defp add_task(network, id, options, :ok) do
+    network
+    |> Network.add_period(id, period_options(options))
+    |> add_dependencies(id, Keyword.get(options, :after, []))
+  end
+
+  defp add_task(network, _id, _options, {:error, exception}),
+    do: Network.record_error(network, exception)
+
+  defp task_options(options) do
+    if Keyword.keyword?(options) do
+      options
+      |> Keyword.keys()
+      |> Enum.find(&(&1 not in @task_options))
+      |> unknown_task_option(options)
+    else
+      {:error, invalid("takes a keyword list of options, not #{inspect(options)}")}
+    end
+  end
+
+  defp unknown_task_option(nil, options), do: within_option(Keyword.get(options, :within))
+
+  defp unknown_task_option(:earliest, _options),
+    do: {:error, invalid("takes :not_before where 1.x took :earliest")}
+
+  defp unknown_task_option(key, _options),
+    do:
+      {:error,
+       invalid("does not take #{inspect(key)}; its options are #{inspect(@task_options)}")}
+
+  defp within_option(nil), do: :ok
+  defp within_option({_from, _to}), do: :ok
+
+  defp within_option(within),
+    do: {:error, invalid("takes :within as a {from, to} pair of dates, not #{inspect(within)}")}
+
+  defp invalid(phrase), do: ArgumentError.exception("Tempo.Schedule.task/3 #{phrase}.")
 
   defp period_options(options) do
     []
     |> put_duration(Keyword.get(options, :duration))
-    |> put_start(options)
-    |> put_end(options)
+    |> put_from(options)
+    |> put_to(options)
   end
 
   defp put_duration(opts, nil), do: opts
   defp put_duration(opts, duration), do: Keyword.put(opts, :duration, duration)
 
-  defp put_start(opts, options) do
+  defp put_from(opts, options) do
     cond do
       Keyword.has_key?(options, :start) ->
-        Keyword.put(opts, :start, Keyword.fetch!(options, :start))
+        Keyword.put(opts, :from, Keyword.fetch!(options, :start))
 
-      Keyword.has_key?(options, :earliest) ->
-        Keyword.put(opts, :start, {:not_before, Keyword.fetch!(options, :earliest)})
+      Keyword.has_key?(options, :not_before) ->
+        Keyword.put(opts, :from, {:not_before, Keyword.fetch!(options, :not_before)})
 
       match?({_, _}, Keyword.get(options, :within)) ->
         {earliest, _latest} = Keyword.fetch!(options, :within)
-        Keyword.put(opts, :start, {:not_before, earliest})
+        Keyword.put(opts, :from, {:not_before, earliest})
 
       true ->
         opts
     end
   end
 
-  defp put_end(opts, options) do
+  defp put_to(opts, options) do
     cond do
       Keyword.has_key?(options, :deadline) ->
-        Keyword.put(opts, :end, {:not_after, Keyword.fetch!(options, :deadline)})
+        Keyword.put(opts, :to, {:not_after, Keyword.fetch!(options, :deadline)})
 
       match?({_, _}, Keyword.get(options, :within)) ->
         {_earliest, latest} = Keyword.fetch!(options, :within)
-        Keyword.put(opts, :end, {:not_after, latest})
+        Keyword.put(opts, :to, {:not_after, latest})
 
       true ->
         opts
@@ -284,18 +360,22 @@ defmodule Tempo.Schedule do
     add_dependencies(network, id, [dependency])
   end
 
-  # --- tightened period → slot -----------------------------------
+  # --- propagated period → scheduled task ------------------------
 
-  defp to_slot(id, period) do
-    %Slot{
+  defp scheduled(id, period) do
+    %ScheduledTask{
       id: id,
-      start: period.earliest_start,
-      finish: period.earliest_end,
-      latest_start: period.latest_start,
-      latest_finish: period.latest_end,
+      early: schedule_interval(period.earliest_start, period.earliest_end),
+      late: schedule_interval(period.latest_start, period.latest_end),
       critical?: critical?(period.earliest_start, period.latest_start)
     }
   end
+
+  # A schedule is known when both its ends are: the early one when the
+  # plan is placed by a fixed start or :not_before date, the late one
+  # when something bounds how late the task can run.
+  defp schedule_interval(%Tempo{} = from, %Tempo{} = to), do: %Interval{from: from, to: to}
+  defp schedule_interval(_from, _to), do: nil
 
   # Critical when the early and late starts coincide (no slack). When
   # there is no deadline the late start is unbounded (`nil`) and

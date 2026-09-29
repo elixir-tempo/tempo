@@ -103,7 +103,7 @@ defmodule Tempo.Network.ChronoLog do
   defp add_events(network, events) do
     Enum.reduce(events, network, fn event, network ->
       window = {event["dateLB"], event["dateUB"]}
-      Network.add_period(network, event["name"], start: window, end: window, duration: @zero)
+      Network.add_period(network, event["name"], from: window, to: window, duration: @zero)
     end)
   end
 

@@ -1,6 +1,6 @@
 defmodule Tempo.Network.Solver do
   @moduledoc """
-  Consistency checking and bound tightening for a chronological
+  Consistency checking and constraint propagation for a chronological
   network, by solving its Simple Temporal Problem.
 
   The network normalises (`Tempo.Network.Normalize`) to a directed
@@ -12,8 +12,8 @@ defmodule Tempo.Network.Solver do
 
   * `consistent?/1` — does any valid assignment of dates exist?
 
-  * `tighten/1` — the narrowest start, end, and duration each period can
-    take given every constraint together.
+  * `propagate/1` — the narrowest start, end, and duration each period
+    can take given every constraint together.
 
   * `contemporaneity/3` — whether two periods can, must, or cannot overlap.
 
@@ -22,6 +22,10 @@ defmodule Tempo.Network.Solver do
 
   These all run in O(n³) on the boundary count (Floyd–Warshall), which is
   interactive for the hundreds of periods these chronologies contain.
+
+  A network whose builders recorded an error (see `Tempo.Network`)
+  returns that error from every function here, and the predicates
+  raise it.
 
   """
 
@@ -41,23 +45,26 @@ defmodule Tempo.Network.Solver do
   * `true` when consistent, `false` when the constraints contradict
     (the graph has a negative cycle).
 
+  * Raises the first error the network's builders recorded.
+
   ### Examples
 
       iex> Tempo.Network.new()
-      ...> |> Tempo.Network.add_period(:k, start: ~o"1200Y", end: ~o"1180Y")
+      ...> |> Tempo.Network.add_period(:k, from: ~o"1200Y", to: ~o"1180Y")
       ...> |> Tempo.Network.Solver.consistent?()
       false
 
   """
   @spec consistent?(Network.t()) :: boolean()
   def consistent?(%Network{} = network) do
+    check!(network)
     %{dist: distances} = network |> Normalize.normalize() |> shortest_paths()
     not negative_cycle?(distances)
   end
 
   @doc """
-  Tighten every period's start, end, and duration to the narrowest
-  bounds the network implies.
+  Propagate the network's constraints to every period's narrowest
+  start, end, and duration.
 
   ### Arguments
 
@@ -69,22 +76,30 @@ defmodule Tempo.Network.Solver do
     tightest bounds (a bound that the constraints leave unbounded
     becomes `nil`); or
 
-  * `{:error, :inconsistent}` when no valid assignment exists.
+  * `{:error, :inconsistent}` when no valid assignment exists; or
+
+  * `{:error, reason}` for an error the network's builders recorded.
 
   ### Examples
 
-      iex> {:ok, tightened} =
+      iex> {:ok, propagated} =
       ...>   Tempo.Network.new()
-      ...>   |> Tempo.Network.add_period(:k1, start: ~o"1200Y", duration: {:at_least, ~o"P20Y"})
+      ...>   |> Tempo.Network.add_period(:k1, from: ~o"1200Y", duration: {:at_least, ~o"P20Y"})
       ...>   |> Tempo.Network.add_period(:k2, duration: {:at_least, ~o"P35Y"})
       ...>   |> Tempo.Network.add_sequence([:k1, :k2])
-      ...>   |> Tempo.Network.Solver.tighten()
-      iex> tightened.periods[:k2].earliest_end
+      ...>   |> Tempo.Network.Solver.propagate()
+      iex> propagated.periods[:k2].earliest_end
       ~o"1255Y"
 
   """
-  @spec tighten(Network.t()) :: {:ok, Network.t()} | {:error, :inconsistent}
-  def tighten(%Network{} = network) do
+  @spec propagate(Network.t()) :: {:ok, Network.t()} | {:error, :inconsistent | Exception.t()}
+  def propagate(%Network{} = network) do
+    with :ok <- Network.check(network) do
+      propagated(network)
+    end
+  end
+
+  defp propagated(network) do
     normalized = Normalize.normalize(network)
     %{dist: distances} = shortest_paths(normalized)
 
@@ -105,7 +120,7 @@ defmodule Tempo.Network.Solver do
 
   Returns `:certain` when the constraints force the periods to be
   contemporary, `:possible` when they merely allow it, and `:impossible`
-  when they forbid it. The verdict is read from the minimal (tightened)
+  when they forbid it. The verdict is read from the minimal (propagated)
   network, so it accounts for every constraint — not just the two
   periods' own bounds — in the spirit of Geeraerts, Levy & Pluquet,
   *Models and Algorithms for Chronology* (TIME 2017), Props. 7 and 10.
@@ -126,16 +141,19 @@ defmodule Tempo.Network.Solver do
 
   * `:possible` when some but not all valid chronologies do;
 
-  * `:impossible` when none do; or
+  * `:impossible` when none do;
 
-  * `{:error, :inconsistent}` when the network has no valid chronology.
+  * `{:error, :inconsistent}` when the network has no valid chronology;
+    or
+
+  * `{:error, reason}` for an error the network's builders recorded.
 
   ### Examples
 
       iex> network =
       ...>   Tempo.Network.new()
-      ...>   |> Tempo.Network.add_period(:k1, start: {:not_before, 1200}, duration: {:at_most, 15})
-      ...>   |> Tempo.Network.add_period(:k2, end: {:not_after, 1300}, duration: {30, 100})
+      ...>   |> Tempo.Network.add_period(:k1, from: {:not_before, 1200}, duration: {:at_most, 15})
+      ...>   |> Tempo.Network.add_period(:k2, to: {:not_after, 1300}, duration: {30, 100})
       ...>   |> Tempo.Network.add_period(:s1, duration: {20, 100})
       ...>   |> Tempo.Network.add_period(:s2, duration: {20, 100})
       ...>   |> Tempo.Network.add_sequence([:k1, :k2])
@@ -147,15 +165,17 @@ defmodule Tempo.Network.Solver do
 
   """
   @spec contemporaneity(Network.t(), term(), term()) ::
-          :certain | :possible | :impossible | {:error, :inconsistent}
+          :certain | :possible | :impossible | {:error, :inconsistent | Exception.t()}
   def contemporaneity(%Network{} = network, p1, p2) do
-    %{dist: distances} = network |> Normalize.normalize() |> shortest_paths()
+    with :ok <- Network.check(network) do
+      %{dist: distances} = network |> Normalize.normalize() |> shortest_paths()
 
-    cond do
-      negative_cycle?(distances) -> {:error, :inconsistent}
-      sure_overlap?(distances, p1, p2) -> :certain
-      possible_overlap?(distances, p1, p2) -> :possible
-      true -> :impossible
+      cond do
+        negative_cycle?(distances) -> {:error, :inconsistent}
+        sure_overlap?(distances, p1, p2) -> :certain
+        possible_overlap?(distances, p1, p2) -> :possible
+        true -> :impossible
+      end
     end
   end
 
@@ -164,16 +184,29 @@ defmodule Tempo.Network.Solver do
   every valid chronology has them overlapping. See `contemporaneity/3`.
   """
   @spec certainly_contemporary?(Network.t(), term(), term()) :: boolean()
-  def certainly_contemporary?(%Network{} = network, p1, p2),
-    do: contemporaneity(network, p1, p2) == :certain
+  def certainly_contemporary?(%Network{} = network, p1, p2) do
+    check!(network)
+    contemporaneity(network, p1, p2) == :certain
+  end
 
   @doc """
   Whether two periods are *possibly* contemporary — true when at least
   one valid chronology has them overlapping. See `contemporaneity/3`.
   """
   @spec possibly_contemporary?(Network.t(), term(), term()) :: boolean()
-  def possibly_contemporary?(%Network{} = network, p1, p2),
-    do: contemporaneity(network, p1, p2) in [:certain, :possible]
+  def possibly_contemporary?(%Network{} = network, p1, p2) do
+    check!(network)
+    contemporaneity(network, p1, p2) in [:certain, :possible]
+  end
+
+  # A predicate has only true and false to give, so an error the network's
+  # builders recorded raises.
+  defp check!(network) do
+    case Network.check(network) do
+      :ok -> :ok
+      {:error, exception} -> raise exception
+    end
+  end
 
   # Prop. 7 — overlap is entailed iff both synchronism inequalities
   # beg(p₁) ≤ end(p₂) and beg(p₂) ≤ end(p₁) are already implied, i.e. the
@@ -224,7 +257,7 @@ defmodule Tempo.Network.Solver do
   Generalises `contemporaneity/3` from the single overlap question to the full
   relational answer, in the same vocabulary `Tempo.relation/2` uses for
   grounded values. It reads off the **minimal network** — the same solved
-  shortest-path distances `contemporaneity/3` and `tighten/1` use — so it costs
+  shortest-path distances `contemporaneity/3` and `propagate/1` use — so it costs
   no extra solve: a relation is possible iff adding its endpoint constraints to
   the solved network stays consistent (no negative cycle). No qualitative
   disjunction enters, so it remains polynomial.
@@ -249,14 +282,15 @@ defmodule Tempo.Network.Solver do
   * A list of atoms (in Allen's canonical order) when several remain possible —
     the tightest qualitative statement the constraints support.
 
-  * `{:error, :inconsistent}` when the network has no valid assignment, or
-    `{:error, :unknown_period}` when an id is not in the network.
+  * `{:error, :inconsistent}` when the network has no valid assignment,
+    `{:error, :unknown_period}` when an id is not in the network, or
+    `{:error, reason}` for an error the network's builders recorded.
 
   ### Examples
 
       iex> Tempo.Network.new()
-      ...> |> Tempo.Network.add_period(:a, start: ~o"1200Y", end: ~o"1250Y")
-      ...> |> Tempo.Network.add_period(:b, start: ~o"1230Y", end: ~o"1280Y")
+      ...> |> Tempo.Network.add_period(:a, from: ~o"1200Y", to: ~o"1250Y")
+      ...> |> Tempo.Network.add_period(:b, from: ~o"1230Y", to: ~o"1280Y")
       ...> |> Tempo.Network.Solver.relation(:a, :b)
       :overlaps
 
@@ -269,9 +303,10 @@ defmodule Tempo.Network.Solver do
 
   """
   @spec relation(Network.t(), term(), term()) ::
-          atom() | [atom()] | {:error, :inconsistent | :unknown_period}
+          atom() | [atom()] | {:error, :inconsistent | :unknown_period | Exception.t()}
   def relation(%Network{} = network, p1, p2) do
-    with :ok <- known_period(network, p1),
+    with :ok <- Network.check(network),
+         :ok <- known_period(network, p1),
          :ok <- known_period(network, p2) do
       %{dist: distances} = network |> Normalize.normalize() |> shortest_paths()
 
@@ -307,8 +342,8 @@ defmodule Tempo.Network.Solver do
 
       iex> net =
       ...>   Tempo.Network.new()
-      ...>   |> Tempo.Network.add_period(:a, start: ~o"1200Y", end: ~o"1250Y")
-      ...>   |> Tempo.Network.add_period(:b, start: ~o"1230Y", end: ~o"1280Y")
+      ...>   |> Tempo.Network.add_period(:a, from: ~o"1200Y", to: ~o"1250Y")
+      ...>   |> Tempo.Network.add_period(:b, from: ~o"1230Y", to: ~o"1280Y")
       iex> Tempo.Network.Solver.relation_certainty(net, :a, :b, :overlaps)
       :certain
       iex> Tempo.Network.Solver.relation_certainty(net, :a, :b, :during)
@@ -316,7 +351,10 @@ defmodule Tempo.Network.Solver do
 
   """
   @spec relation_certainty(Network.t(), term(), term(), atom()) ::
-          :certain | :possible | :impossible | {:error, :inconsistent | :unknown_period}
+          :certain
+          | :possible
+          | :impossible
+          | {:error, :inconsistent | :unknown_period | Exception.t()}
   def relation_certainty(%Network{} = network, p1, p2, relation) do
     case relation(network, p1, p2) do
       {:error, _reason} = error ->
@@ -405,7 +443,7 @@ defmodule Tempo.Network.Solver do
   defp negative?(weight), do: weight < 0
 
   @doc """
-  Explain a tightened bound as a trace — the chain of constraints that
+  Explain a propagated bound as a trace — the chain of constraints that
   forces it.
 
   Reconstructs the shortest path in the constraint graph that produces
@@ -420,6 +458,8 @@ defmodule Tempo.Network.Solver do
 
   * `boundary` is `{:start, period_id}` or `{:end, period_id}`.
 
+  * `options` is a keyword list of options.
+
   ### Options
 
   * `:bound` is `:earliest` (the default) or `:latest`.
@@ -429,15 +469,19 @@ defmodule Tempo.Network.Solver do
   * `{:ok, %{value: t:Tempo.t/0, steps: list, prose: String.t()}}`;
 
   * `{:error, :unbounded}` when the constraints leave the bound open;
+
+  * `{:error, :inconsistent}` when the network has no valid assignment;
     or
 
-  * `{:error, :inconsistent}` when the network has no valid assignment.
+  * `{:error, reason}` for an error the network's builders recorded, a
+    boundary that is not `{:start, id}` or `{:end, id}`, or an option
+    `trace/3` does not take.
 
   ### Examples
 
       iex> {:ok, trace} =
       ...>   Tempo.Network.new()
-      ...>   |> Tempo.Network.add_period(:k1, start: {:not_before, ~o"1200Y"}, duration: {:at_least, ~o"P20Y"})
+      ...>   |> Tempo.Network.add_period(:k1, from: {:not_before, ~o"1200Y"}, duration: {:at_least, ~o"P20Y"})
       ...>   |> Tempo.Network.add_period(:k2, duration: {:at_least, ~o"P35Y"})
       ...>   |> Tempo.Network.add_sequence([:k1, :k2])
       ...>   |> Tempo.Network.Solver.trace({:end, :k2})
@@ -446,21 +490,46 @@ defmodule Tempo.Network.Solver do
 
   """
   @spec trace(Network.t(), {:start | :end, term()}, keyword()) ::
-          {:ok, map()} | {:error, :unbounded | :inconsistent}
-  def trace(%Network{} = network, {edge, _id} = boundary, options \\ [])
-      when edge in [:start, :end] do
-    bound = Keyword.get(options, :bound, :earliest)
+          {:ok, map()} | {:error, :unbounded | :inconsistent | Exception.t()}
+  def trace(network, boundary, options \\ [])
+
+  def trace(%Network{} = network, {edge, _id} = boundary, options) when edge in [:start, :end] do
+    with :ok <- Network.check(network),
+         {:ok, bound} <- trace_bound(options) do
+      traced(network, boundary, bound)
+    end
+  end
+
+  def trace(%Network{}, boundary, _options) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.Network.Solver.trace/3 takes {:start, id} or {:end, id}, not #{inspect(boundary)}."
+     )}
+  end
+
+  defp trace_bound(options) do
+    with true <- Keyword.keyword?(options),
+         [] <- Keyword.keys(options) -- [:bound],
+         bound when bound in [:earliest, :latest] <- Keyword.get(options, :bound, :earliest) do
+      {:ok, bound}
+    else
+      _invalid ->
+        {:error,
+         ArgumentError.exception(
+           "Tempo.Network.Solver.trace/3 takes one option, :bound, :earliest or :latest, " <>
+             "not #{inspect(options)}."
+         )}
+    end
+  end
+
+  defp traced(network, boundary, bound) do
     normalized = Normalize.normalize(network)
     %{dist: distances, next: next} = shortest_paths(normalized)
 
     if negative_cycle?(distances) do
       {:error, :inconsistent}
     else
-      {from_node, to_node} =
-        case bound do
-          :earliest -> {:origin, boundary}
-          :latest -> {boundary, :origin}
-        end
+      {from_node, to_node} = trace_nodes(boundary, bound)
 
       case get(distances, from_node, to_node) do
         :inf ->
@@ -482,6 +551,9 @@ defmodule Tempo.Network.Solver do
       end
     end
   end
+
+  defp trace_nodes(boundary, :earliest), do: {:origin, boundary}
+  defp trace_nodes(boundary, :latest), do: {boundary, :origin}
 
   # --- bound extraction ------------------------------------------
 

@@ -122,32 +122,6 @@ defmodule TempoTest do
       day_of_week: Calendrical.sunday()
   end
 
-  describe "beginning_of_week/1" do
-    test "an ISO calendar puts a Sunday in the week that preceded it" do
-      assert Tempo.beginning_of_week(~o"2026-08-16") == ~o"2026Y8M10DT0H0M0S"
-    end
-
-    test "a Sunday-start calendar begins its week on that Sunday" do
-      sunday = Tempo.from_iso8601!("2026-08-16", SundayStart)
-
-      assert Tempo.to_iso8601(Tempo.beginning_of_week(sunday)) == "2026Y8M16DT0H0M0S"
-    end
-
-    test "a time of day is truncated away, as beginning_of_day/1 does" do
-      assert Tempo.beginning_of_week(~o"2026-06-17T14:30:00") == ~o"2026Y6M15DT0H0M0S"
-    end
-
-    test "every day of one ISO week shares a beginning" do
-      week = Enum.map(15..21, &Tempo.beginning_of_week(Tempo.from_iso8601!("2026-06-#{&1}")))
-
-      assert Enum.uniq(week) == [~o"2026Y6M15DT0H0M0S"]
-    end
-
-    test "a value with no day cannot be placed in a week" do
-      assert {:error, _reason} = Tempo.beginning_of_week(~o"2026-06")
-    end
-  end
-
   describe "trunc/2 refuses to cross calendar axes" do
     test ":week names the day that week begins on, not the month" do
       # It used to answer `~o"2026Y8M"` — `trunc` walked past `:day`,
@@ -172,10 +146,8 @@ defmodule TempoTest do
       assert %Tempo{} = Tempo.trunc(~o"2026-08-16T10:00:00", :week)
     end
 
-    test "agrees with beginning_of_week/1 on the day it names" do
-      value = ~o"2026-08-16T10:00:00"
-
-      assert Tempo.trunc(value, :week) == Tempo.trunc(Tempo.beginning_of_week(value), :day)
+    test "a value with no day cannot be placed in a week" do
+      assert {:error, _reason} = Tempo.trunc(~o"2026-06", :week)
     end
 
     test ":day_of_year on a Gregorian value is refused too" do

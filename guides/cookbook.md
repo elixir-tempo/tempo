@@ -755,10 +755,10 @@ Each endpoint carries its own `:qualification` in addition to any expression-lev
 ```elixir
 iex> network =
 ...>   Tempo.Network.new()
-...>   |> Tempo.Network.add_period(:reign, start: {:not_before, ~o"1200Y"}, duration: {:at_most, ~o"P10Y"})
+...>   |> Tempo.Network.add_period(:reign, from: {:not_before, ~o"1200Y"}, duration: {:at_most, ~o"P10Y"})
 ...>   |> Tempo.Network.add_period(:stratum, duration: {:at_least, ~o"P20Y"})
 ...>   |> Tempo.Network.add_relation(:starts_during, :stratum, :reign)
-iex> {:ok, solved} = Tempo.Network.Solver.tighten(network)
+iex> {:ok, solved} = Tempo.Network.Solver.propagate(network)
 iex> solved.periods[:stratum].earliest_end
 ~o"1220Y"
 ```
@@ -769,7 +769,7 @@ The stratum has no dates of its own, but *"it began during a reign that started 
 
 ```elixir
 iex> Tempo.Network.new()
-...> |> Tempo.Network.add_period(:k, start: ~o"1200Y", end: ~o"1180Y")
+...> |> Tempo.Network.add_period(:k, from: ~o"1200Y", to: ~o"1180Y")
 ...> |> Tempo.Network.Solver.consistent?()
 false
 ```
@@ -783,13 +783,13 @@ Two pottery phases dated only to overlapping windows — nothing forces them tog
 ```elixir
 iex> network =
 ...>   Tempo.Network.new()
-...>   |> Tempo.Network.add_period(:phase_a, start: {:not_before, ~o"1200Y"}, end: {:not_after, ~o"1260Y"})
-...>   |> Tempo.Network.add_period(:phase_b, start: {:not_before, ~o"1250Y"}, end: {:not_after, ~o"1300Y"})
+...>   |> Tempo.Network.add_period(:phase_a, from: {:not_before, ~o"1200Y"}, to: {:not_after, ~o"1260Y"})
+...>   |> Tempo.Network.add_period(:phase_b, from: {:not_before, ~o"1250Y"}, to: {:not_after, ~o"1300Y"})
 iex> Tempo.Network.Solver.contemporaneity(network, :phase_a, :phase_b)
 :possible
 ```
 
-`contemporaneity/3` reads the tightened network and answers three ways — `:certain` (every consistent chronology has them overlapping), `:possible` (some do, some don't), or `:impossible` (none do) — so *"could these two phases have been in use at the same time?"* gets a graded answer, not a guess. `certainly_contemporary?/3` and `possibly_contemporary?/3` are the boolean shortcuts.
+`contemporaneity/3` reads the propagated network and answers three ways — `:certain` (every consistent chronology has them overlapping), `:possible` (some do, some don't), or `:impossible` (none do) — so *"could these two phases have been in use at the same time?"* gets a graded answer, not a guess. `certainly_contemporary?/3` and `possibly_contemporary?/3` are the boolean shortcuts.
 
 ---
 
@@ -807,8 +807,8 @@ iex> {:ok, plan} =
 ...>   |> Tempo.Schedule.task(:docs,   duration: ~o"P1D", after: :design)
 ...>   |> Tempo.Schedule.task(:ship,   duration: ~o"P2D", after: [:build, :docs])
 ...>   |> Tempo.Schedule.solve()
-iex> plan[:ship].start
-~o"2026Y6M6D"
+iex> plan[:ship].early
+~o"2026Y6M6D/8D"
 ```
 
 Each task lands at its earliest feasible position. `ship` waits for both `build` and `docs`, so it can't begin until `build` finishes on the 6th — even though `docs` was done on the 4th.

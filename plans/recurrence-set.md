@@ -1,6 +1,8 @@
 # Recurrence sets
 
-**Status:** planning, 2026-09-23 — representation settled: option 2, a thin `%Tempo.RecurrenceSet{members, metadata}` whose members are `%Tempo.Interval{}` recurrences-with-metadata (agreed 2026-09-23). Exceptions resolved: the recurrence's domain sits in its interval slot with `^` exclusion members (`R/^2026/P1Y/…`, or `R/{2020..2030,^2026}/P1Y/…`), applied via existing set algebra — no new `%Tempo.Interval{}` field. **Status → in progress (2026-09-23):** `^` is a general set-exclusion member (decided); Q2 accepted — conditionals/lunisolar pre-materialised, simple transforms + exclusions ride on the member. Implementing in stages: **(a)** `%Tempo.Set{}` exclusion members + `^` grammar + interval-slot domain; **(b)** `%Tempo.RecurrenceSet{}` + `to_interval_set` + `align` window-derivation; **(c)** tempo_holidays emit-as-recurrence-with-metadata (last, near release).
+**Status:** implemented (v2.0.0), 2026-09-29
+
+`Tempo.RecurrenceSet` landed on 2026-09-23 and ships with 2.0.0. The representation is option 2, a thin `%Tempo.RecurrenceSet{members, metadata}` whose members are `%Tempo.Interval{}` recurrences with metadata (agreed 2026-09-23). Exceptions are the recurrence's domain in its interval slot, with `^` exclusion members (`R/^2026/P1Y/…`, `R/{2020..2030,^2026}/P1Y/…`), applied through the existing set algebra rather than a new `%Tempo.Interval{}` field; `^` is a general set-exclusion member, and conditional and lunisolar rules resolve before the set, with simple transforms and exclusions riding on the member. It was built in three stages: `%Tempo.Set{}` exclusion members with the `^` grammar and the interval-slot domain; `%Tempo.RecurrenceSet{}` with `to_interval_set/2` and window derivation in `align`; and tempo_holidays emitting recurrences with metadata.
 
 ## Problem
 

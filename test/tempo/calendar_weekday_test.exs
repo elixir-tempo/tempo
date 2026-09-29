@@ -4,7 +4,7 @@ defmodule Tempo.CalendarWeekdayTest do
   numbers days of the week per each calendar's own tradition (Hebrew
   and Islamic weeks run Sunday–Saturday, Persian Saturday–Friday).
   Tempo's weekend/workday classification converts to `Calendar.ISO`
-  first, so it is immune to the native numbering; `beginning_of_week/1`
+  first, so it is immune to the native numbering; `trunc(value, :week)`
   deliberately follows the value's own calendar.
   """
   use ExUnit.Case, async: true
@@ -35,15 +35,15 @@ defmodule Tempo.CalendarWeekdayTest do
     end
   end
 
-  describe "beginning_of_week follows the value's own calendar" do
+  describe "the week a value truncates to follows its own calendar" do
     test "a Hebrew week begins on Sunday, a Gregorian week on Monday" do
       {:ok, hebrew_wednesday} = Tempo.to_calendar(~o"2026-08-26", Calendrical.Hebrew)
 
       # Gregorian: back to Monday 2026-08-24.
-      assert Tempo.day(Tempo.beginning_of_week(~o"2026-08-26")) == 24
+      assert Tempo.day(Tempo.trunc(~o"2026-08-26", :week)) == 24
 
       # Hebrew: 13 Elul 5786 rolls back to Sunday 10 Elul.
-      hebrew_sunday = Tempo.beginning_of_week(hebrew_wednesday)
+      hebrew_sunday = Tempo.trunc(hebrew_wednesday, :week)
       assert Tempo.day(hebrew_sunday) == 10
       assert hebrew_sunday.calendar == Calendrical.Hebrew
     end

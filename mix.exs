@@ -130,7 +130,7 @@ defmodule Tempo.MixProject do
       "Computed events": ~r/^Tempo\.Event(\.|$)/,
       "Calendar formats": ~r/^Tempo\.(ICal|JSCalendar)$/,
       "Networks and scheduling":
-        ~r/^Tempo\.(Network|Schedule)$|^Tempo\.Network\.(Qualitative|Relation|Solver|TimePeriod)$|^Tempo\.Schedule\.Slot$/,
+        ~r/^Tempo\.(Network|Schedule)$|^Tempo\.Network\.(Qualitative|Relation|Solver|TimePeriod)$|^Tempo\.Schedule\.ScheduledTask$/,
       "Time zones and leap seconds": ~r/^Tempo\.(TimeZoneDatabase|LeapSeconds)$/,
       # `Tempo.Range` is the ISO 8601-2 set-member range element, not a
       # core algebra type — see its moduledoc.

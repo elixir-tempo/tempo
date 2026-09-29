@@ -150,6 +150,49 @@ defmodule Tempo.Network.Relation do
     }
   end
 
+  @qualitative [
+    :contemporary,
+    :includes,
+    :included_in,
+    :overlaps,
+    :overlapped_by,
+    :starts_during,
+    :includes_start,
+    :ends_during,
+    :includes_end,
+    :before,
+    :after,
+    :immediately_precedes,
+    :immediately_follows,
+    :synchronous_start,
+    :synchronous_end,
+    :starts,
+    :started_by,
+    :finishes,
+    :finished_by,
+    :strictly_contemporary,
+    :equals
+  ]
+
+  @edges [:start, :end]
+  @comparisons [:exactly, :at_least, :at_most]
+  @boundary_comparisons [:before, :at_or_before, :coincident, :at_or_after, :after]
+
+  @doc false
+  # Whether `to_atomic/1` reads a relation of this type.
+  @spec valid_type?(term()) :: boolean()
+  def valid_type?(type) when type in @qualitative, do: true
+
+  def valid_type?({:delay, edge_a, edge_b, comparison, %Tempo.Duration{}})
+      when edge_a in @edges and edge_b in @edges and comparison in @comparisons,
+      do: true
+
+  def valid_type?({:boundary, edge_a, comparison, edge_b})
+      when edge_a in @edges and edge_b in @edges and comparison in @boundary_comparisons,
+      do: true
+
+  def valid_type?(_type), do: false
+
   @typedoc """
   A boundary variable in the constraint graph: the start or end of a
   period, or the network origin `z₀`.
@@ -199,9 +242,6 @@ defmodule Tempo.Network.Relation do
 
   """
   @spec to_atomic(t()) :: [atomic()]
-  # A flat dispatch over the relation vocabulary — its cyclomatic
-  # complexity is the number of relation types, not branching logic.
-  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   def to_atomic(%__MODULE__{type: type, from: a, to: b}), do: atomic_for(type, a, b)
 
   # end(A) ≥ start(B) ∧ end(B) ≥ start(A) — non-empty overlap.

@@ -20,18 +20,18 @@ defmodule Tempo.Network.ColdstreamTest do
     Network.new()
     |> Network.add_period(:lpg,
       name: "LPG",
-      start: {~o"-910Y", ~o"-890Y"},
-      end: {~o"-885Y", ~o"-865Y"}
+      from: {~o"-910Y", ~o"-890Y"},
+      to: {~o"-885Y", ~o"-865Y"}
     )
     |> Network.add_period(:eg,
       name: "EG",
-      start: {~o"-885Y", ~o"-865Y"},
-      end: {:not_before, ~o"-825Y"}
+      from: {~o"-885Y", ~o"-865Y"},
+      to: {:not_before, ~o"-825Y"}
     )
     |> Network.add_period(:mg1,
       name: "MG I",
-      start: {:not_before, ~o"-840Y"},
-      end: {~o"-810Y", ~o"-790Y"}
+      from: {:not_before, ~o"-840Y"},
+      to: {~o"-810Y", ~o"-790Y"}
     )
     |> Network.add_sequence([:lpg, :eg])
     |> Network.add_relation(:overlaps, :eg, :mg1)
@@ -50,7 +50,7 @@ defmodule Tempo.Network.ColdstreamTest do
 
   describe "tightening propagates the overlap across the styles" do
     setup do
-      {:ok, solved} = Solver.tighten(corinthian())
+      {:ok, solved} = Solver.propagate(corinthian())
       %{network: solved}
     end
 

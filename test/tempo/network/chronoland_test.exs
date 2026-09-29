@@ -19,8 +19,8 @@ defmodule Tempo.Network.ChronoLandTest do
 
   defp chronoland do
     Network.new()
-    |> Network.add_period(:k1, start: {:not_before, 1200}, duration: {:at_most, 10})
-    |> Network.add_period(:k2, end: {:not_after, 1300}, duration: {:at_least, 35})
+    |> Network.add_period(:k1, from: {:not_before, 1200}, duration: {:at_most, 10})
+    |> Network.add_period(:k2, to: {:not_after, 1300}, duration: {:at_least, 35})
     |> Network.add_period(:s1, duration: {20, 100})
     |> Network.add_period(:s2, duration: {20, 100})
     |> Network.add_sequence([:k1, :k2])
@@ -46,7 +46,7 @@ defmodule Tempo.Network.ChronoLandTest do
 
   describe "tightening reproduces the paper's Fig. 6b bounds" do
     setup do
-      {:ok, tightened} = Solver.tighten(chronoland())
+      {:ok, tightened} = Solver.propagate(chronoland())
       %{network: tightened}
     end
 
@@ -112,8 +112,8 @@ defmodule Tempo.Network.ChronoLandTest do
     # contain them.
     network =
       Network.new()
-      |> Network.add_period(:k1, start: {:not_before, 1200}, duration: {:at_most, 10})
-      |> Network.add_period(:k2, end: {:not_after, 1300}, duration: {:at_most, 25})
+      |> Network.add_period(:k1, from: {:not_before, 1200}, duration: {:at_most, 10})
+      |> Network.add_period(:k2, to: {:not_after, 1300}, duration: {:at_most, 25})
       |> Network.add_period(:s1, duration: {20, 100})
       |> Network.add_period(:s2, duration: {20, 100})
       |> Network.add_sequence([:k1, :k2])
@@ -122,7 +122,7 @@ defmodule Tempo.Network.ChronoLandTest do
       |> Network.add_relation(:ends_during, :s2, :k2)
 
     refute Solver.consistent?(network)
-    assert {:error, :inconsistent} = Solver.tighten(network)
+    assert {:error, :inconsistent} = Solver.propagate(network)
   end
 
   # ── Dagstuhl TIME 2017 variant ──────────────────────────────────
@@ -137,8 +137,8 @@ defmodule Tempo.Network.ChronoLandTest do
 
   defp chronoland_time2017 do
     Network.new()
-    |> Network.add_period(:k1, start: {:not_before, 1200}, duration: {:at_most, 15})
-    |> Network.add_period(:k2, end: {:not_after, 1300}, duration: {30, 100})
+    |> Network.add_period(:k1, from: {:not_before, 1200}, duration: {:at_most, 15})
+    |> Network.add_period(:k2, to: {:not_after, 1300}, duration: {30, 100})
     |> Network.add_period(:s1, duration: {20, 100})
     |> Network.add_period(:s2, duration: {20, 100})
     |> Network.add_sequence([:k1, :k2])
@@ -153,7 +153,7 @@ defmodule Tempo.Network.ChronoLandTest do
 
   describe "tightening reproduces the TIME 2017 Fig. 2 optimal bounds" do
     setup do
-      {:ok, tightened} = Solver.tighten(chronoland_time2017())
+      {:ok, tightened} = Solver.propagate(chronoland_time2017())
       %{network: tightened}
     end
 

@@ -28,7 +28,7 @@ defmodule Tempo.Network.EgyptianDynastyTest do
 
     network
     # Anchor the dynasty at Psammetichus I's accession, 664 BCE.
-    |> Network.add_period(:psammetichus_i, start: -664, duration: 54)
+    |> Network.add_period(:psammetichus_i, from: -664, duration: 54)
     |> Network.add_sequence(Enum.map(@reigns, &elem(&1, 0)))
   end
 
@@ -37,7 +37,7 @@ defmodule Tempo.Network.EgyptianDynastyTest do
   end
 
   test "tightening derives every reign's absolute dates (Fig. 2a)" do
-    {:ok, network} = Solver.tighten(dynasty())
+    {:ok, network} = Solver.propagate(dynasty())
 
     spans =
       Map.new(network.periods, fn {id, period} ->
@@ -55,7 +55,7 @@ defmodule Tempo.Network.EgyptianDynastyTest do
   end
 
   test "the derived dates are exact (earliest equals latest)" do
-    {:ok, network} = Solver.tighten(dynasty())
+    {:ok, network} = Solver.propagate(dynasty())
     amasis = network.periods[:amasis_ii]
 
     assert TimePeriod.year(amasis.earliest_start) == TimePeriod.year(amasis.latest_start)

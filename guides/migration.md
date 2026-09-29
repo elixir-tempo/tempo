@@ -35,6 +35,12 @@ Tempo 2.0 gives each word in its API one meaning, the one it has in everyday Eng
 | `Tempo.weekends(from: date)`, a lazy set | `Tempo.select/2` over a span with no end |
 | `Tempo.IntervalSet.to_list/1` | `Tempo.IntervalSet.members/1` |
 | `Tempo.IntervalSet.overlapping/2` | `Tempo.IntervalSet.covered/2` |
+| `Tempo.beginning_of_day/1`, `beginning_of_week/1`, `beginning_of_month/1` | `Tempo.trunc/2` to `:day`, `:week` or `:month` |
+| `Tempo.end_of_day/1`, `end_of_month/1` | `Tempo.Interval.to/1` of the day or month `Tempo.trunc/2` gives |
+| `Tempo.Network.TimePeriod.new/2`'s `:start`, `:end` | `:from`, `:to` |
+| `Tempo.Network.Solver.tighten/1` | `Tempo.Network.Solver.propagate/1` |
+| `Tempo.Schedule.Slot` | `Tempo.Schedule.ScheduledTask` |
+| `Tempo.Schedule.task/3`'s `:earliest` | `:not_before` |
 
 These keep their names and change their meaning:
 
@@ -60,6 +66,10 @@ These keep their names and change their meaning:
 
 * **`Tempo.RecurrenceSet.new/2`** — returns `{:ok, set}` and checks its members, where 1.x returned the struct; `new!/2` returns the struct.
 
+* **`Tempo.Network.TimePeriod.new/2`** — returns `{:ok, period}`, where 1.x returned the struct; `new!/2` returns the struct.
+
+* **The network and schedule builders** — record an option or a value they cannot read, which the solver then returns, where 1.x ignored an unknown option and raised on a bad value.
+
 ## Updating the dependency
 
 ```elixir
@@ -73,7 +83,7 @@ end
 A search for the removed names finds the renames:
 
 ```bash
-grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(meets|during)\?|Interval\.(meets|during)\?|(Tempo|Interval)\.compose|Tempo\.anchor[(/]|(NonAnchored|RequiresAnchor)Error|:unanchored|grounded\?|GroundedTempoError|(to|from)_(naive_)?date_time|from_(ical|jscalendar)|available_from_ical|to_rrule|MaterialisationError|Expander.expand|working_days?|Tempo\.weekend\(|weekends\(from|IntervalSet\.(to_list|overlapping)|RecurrenceSet\.new\(' lib test
+grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(meets|during)\?|Interval\.(meets|during)\?|(Tempo|Interval)\.compose|Tempo\.anchor[(/]|(NonAnchored|RequiresAnchor)Error|:unanchored|grounded\?|GroundedTempoError|(to|from)_(naive_)?date_time|from_(ical|jscalendar)|available_from_ical|to_rrule|MaterialisationError|Expander.expand|working_days?|Tempo\.weekend\(|weekends\(from|IntervalSet\.(to_list|overlapping)|RecurrenceSet\.new\(|beginning_of_|end_of_(day|month)|tighten\(|Schedule\.Slot|earliest:|(add_period|TimePeriod\.new)\([^)]*(start|end):' lib test
 ```
 
 The changes of meaning need a read rather than a replace: every `before?`, `after?` and their `certainly_` and `possibly_` forms, every duration read as a count of seconds, every shift of a zoned value by hours, every `duration/1` of a set, every window, every `:metadata` passed to `Tempo.new/1`, every `select/2` across a span longer than one period, and every `RecurrenceSet.new/2`, which the search finds.
@@ -510,3 +520,39 @@ iex> Tempo.IntervalSet.count(occurrences)
 ```
 
 > *"The double-booked time is the time covered by at least two bookings."*
+
+## Span ends and the specialist modules
+
+A period in a network names its ends `:from` and `:to`, as an interval does. A scheduled task's early and late schedules are intervals, where 1.x had four dates, and `Schedule.task/3`'s `:earliest` says what it bounds, `:not_before`. The network solver's `propagate/1` shares its verb with `Tempo.Interval.RelationNetwork`. The builders report what they cannot read rather than ignoring or raising it, so a leftover 1.x option comes back from the solver as an error that names the 2.0 option.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.x
+Network.add_period(network, :k1, start: {:not_before, ~o"1200Y"}, end: {:not_after, ~o"1300Y"})
+Tempo.Network.Solver.tighten(network)
+Tempo.Schedule.task(schedule, :a, duration: ~o"P2D", earliest: ~o"2026-06-10")
+{plan[:b].start, plan[:b].finish, plan[:b].latest_start, plan[:b].latest_finish}
+```
+
+```elixir
+iex> {:ok, plan} =
+...>   Tempo.Schedule.new()
+...>   |> Tempo.Schedule.task(:a, duration: ~o"P2D", not_before: ~o"2026-06-10")
+...>   |> Tempo.Schedule.task(:b, duration: ~o"P3D", after: :a, deadline: ~o"2026-06-20")
+...>   |> Tempo.Schedule.solve()
+iex> {plan[:b].early, plan[:b].late}
+{~o"2026Y6M12D/15D", ~o"2026Y6M17D/20D"}
+```
+
+> *"B can run from the 12th to the 15th at the earliest, and from the 17th to the 20th at the latest."*
+
+The instant helpers are gone. The day, week or month containing a value is `Tempo.trunc/2`, at its own resolution, and where it ends is the `to` of its span — under the half-open convention the start of the next one, as `end_of_month/1` answered:
+
+```elixir
+iex> Tempo.trunc(~o"2026-06-15T14:30", :month)
+~o"2026Y6M"
+iex> {:ok, june} = Tempo.to_interval(~o"2026Y6M")
+iex> Tempo.Interval.to(june)
+~o"2026Y7M"
+```

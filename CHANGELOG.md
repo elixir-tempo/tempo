@@ -36,6 +36,12 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 | `Tempo.weekends(from: date)`, a lazy set | `Tempo.select/2` over a span with no end |
 | `Tempo.IntervalSet.to_list/1` | `Tempo.IntervalSet.members/1` |
 | `Tempo.IntervalSet.overlapping/2` | `Tempo.IntervalSet.covered/2` |
+| `Tempo.beginning_of_day/1`, `beginning_of_week/1`, `beginning_of_month/1` | `Tempo.trunc/2` to `:day`, `:week` or `:month` |
+| `Tempo.end_of_day/1`, `end_of_month/1` | `Tempo.Interval.to/1` of the day or month `Tempo.trunc/2` gives |
+| `Tempo.Network.TimePeriod.new/2`'s `:start`, `:end` | `:from`, `:to` |
+| `Tempo.Network.Solver.tighten/1` | `Tempo.Network.Solver.propagate/1` |
+| `Tempo.Schedule.Slot` | `Tempo.Schedule.ScheduledTask` |
+| `Tempo.Schedule.task/3`'s `:earliest` | `:not_before` |
 
 * `Tempo.duration/1` and `Tempo.IntervalSet.duration/1` measure the time a set covers, counting time its members share once; `IntervalSet.total_duration/1`, which did, is removed.
 
@@ -84,6 +90,16 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * `Tempo.IntervalSet.covered/2` is `overlapping/2` renamed: the time covered by at least `:at_least` members, one by default. It returns `{:ok, set}`, and an error for a bad option or a lazy set, where it raised.
 
 * `Tempo.RecurrenceSet.new/2` returns `{:ok, set}` and checks its members and options, with `new!/2` for the struct; a bad member failed only when the set was converted.
+
+* The instant helpers `beginning_of_day/1`, `beginning_of_week/1`, `beginning_of_month/1`, `end_of_day/1` and `end_of_month/1` are removed: the day, week or month containing a value is `Tempo.trunc/2`, a span whose end is `Interval.to/1`.
+
+* `Tempo.Network.TimePeriod.new/2` names a period's ends `:from` and `:to`, as `Interval.new/1` does, and returns `{:ok, period}`, with `new!/2`; a 1.x `:start` or `:end` is an error naming the new option.
+
+* The network and schedule builders never raise: what they cannot read is recorded on the network, and every `Tempo.Network.Solver` function and `Schedule.solve/1` returns it, its predicates raising it.
+
+* `Tempo.Network.Solver.tighten/1` is `propagate/1`, the verb `Interval.RelationNetwork` uses for the same job.
+
+* `Tempo.Schedule.ScheduledTask` replaces `Schedule.Slot`: its `early` and `late` schedules are intervals, where `start`, `finish`, `latest_start` and `latest_finish` were four dates. `Schedule.task/3` takes `:not_before` for `:earliest`.
 
 ### Added
 
@@ -154,6 +170,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* `Tempo.Schedule.span/1` returns an error for a plan with no tasks or no fixed start, where it raised.
 
 * An integer index a period does not have selects nothing, where `Tempo.select(~o"2026-02", [30])` made a 30 February; a negative index counts from the end, so `[-1]` on a year is December.
 

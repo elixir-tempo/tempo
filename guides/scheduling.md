@@ -304,15 +304,15 @@ The sections above schedule *recurrences* — a rule repeated over a window. A d
   |> Tempo.Schedule.task(:ship, duration: ~o"P2D", after: [:build, :docs], deadline: ~o"2026-06-08")
   |> Tempo.Schedule.solve()
 
-plan[:ship].start                 #=> ~o"2026Y6M6D"
+plan[:ship].early                 #=> ~o"2026Y6M6D/8D"
 plan[:docs].critical?             #=> false   (docs has slack)
 Tempo.Schedule.critical_path(plan) #=> [:design, :build, :ship]
 Tempo.Schedule.span(plan)          #=> the project interval, 06-01 .. 06-08
 ```
 
-> *"Design, then build and docs in parallel, then ship — due the 8th. Ship starts on the 6th; docs has slack and isn't on the critical path; the project runs design → build → ship."*
+> *"Design, then build and docs in parallel, then ship — due the 8th. Ship runs from the 6th to the 8th; docs has slack and isn't on the critical path; the project runs design → build → ship."*
 
-Each task carries a `:duration` (exact or a `{min, max}` range) and optional `:after` dependencies (finish-to-start — a successor starts no earlier than its predecessors finish). Bounds come from `:start` (an exact start date), `:earliest`, `:deadline`, or a `:within` window. `solve/1` returns a `%Tempo.Schedule.Slot{}` per task with its early and late positions; `critical?` is true when a task has zero slack. An over-tight deadline or a dependency cycle returns `{:error, :infeasible}`.
+Each task carries a `:duration` (exact or a `{min, max}` range) and optional `:after` dependencies (finish-to-start — a successor starts no earlier than its predecessors finish). Bounds come from `:start` (an exact start date), `:not_before`, `:deadline`, or a `:within` pair of dates. `solve/1` returns a `%Tempo.Schedule.ScheduledTask{}` per task: its `early` schedule, the interval from the earliest it can start to the earliest it can finish, its `late` schedule, and `critical?`, true when a task has zero slack. An over-tight deadline or a dependency cycle returns `{:error, :infeasible}`, and an option `task/3` cannot read, such as 1.x's `:earliest`, comes back from `solve/1` as an error naming it.
 
 ### What this is not
 

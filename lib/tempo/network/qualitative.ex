@@ -34,8 +34,8 @@ defmodule Tempo.Network.Qualitative do
       iex> alias Tempo.Network.Qualitative
       iex> network =
       ...>   Network.new()
-      ...>   |> Network.add_period("dig", earliest_start: ~o"2020", latest_end: ~o"2030")
-      ...>   |> Network.add_period("survey", earliest_start: ~o"2020", latest_end: ~o"2030")
+      ...>   |> Network.add_period("dig", from: {:not_before, ~o"2020"}, to: {:not_after, ~o"2030"})
+      ...>   |> Network.add_period("survey", from: {:not_before, ~o"2020"}, to: {:not_after, ~o"2030"})
       iex> qualitative = Qualitative.from_network(network)
       iex> is_struct(qualitative, Tempo.Interval.RelationNetwork)
       true
@@ -65,10 +65,18 @@ defmodule Tempo.Network.Qualitative do
   * `{:error, :inconsistent}` when the metric network has no solution, so
     there are no relations to read.
 
+  * `{:error, reason}` for an error the network's builders recorded.
+
   """
   @spec from_network(Network.t()) ::
-          RelationNetwork.t() | {:error, :inconsistent}
+          RelationNetwork.t() | {:error, :inconsistent | Exception.t()}
   def from_network(%Network{} = network) do
+    with :ok <- Network.check(network) do
+      read_relations(network)
+    end
+  end
+
+  defp read_relations(network) do
     ids = Network.period_ids(network)
 
     Enum.reduce_while(pairs(ids), RelationNetwork.new(ids), fn {a, b}, qualitative ->
@@ -133,9 +141,12 @@ defmodule Tempo.Network.Qualitative do
   * `{:error, {:inconsistent, pair}}` when qualitative propagation finds
     a contradiction the metric solver did not.
 
+  * `{:error, reason}` for an error the network's builders recorded.
+
   """
   @spec refine(Network.t()) ::
-          {:ok, Network.t()} | {:error, :inconsistent | {:inconsistent, {term(), term()}}}
+          {:ok, Network.t()}
+          | {:error, :inconsistent | {:inconsistent, {term(), term()}} | Exception.t()}
   def refine(%Network{} = network) do
     with %RelationNetwork{} = qualitative <- from_network(network),
          {:ok, propagated} <- RelationNetwork.propagate(qualitative) do

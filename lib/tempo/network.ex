@@ -5,8 +5,8 @@ defmodule Tempo.Network do
 
   This is the top-level model of the ChronoLog scheme (Levy et al.
   2020). A network is built incrementally and then handed to
-  `Tempo.Network.Solver` to check consistency or to tighten every
-  period's bounds to the narrowest the constraints allow.
+  `Tempo.Network.Solver` to check consistency or to propagate the
+  constraints to every period's narrowest bounds.
 
   A network holds:
 
@@ -16,10 +16,15 @@ defmodule Tempo.Network do
     consecutive members (`end(pᵢ) = start(pᵢ₊₁)`);
 
   * `relations` — `t:Tempo.Network.Relation.t/0` constraints between
-    pairs of periods.
+    pairs of periods;
+
+  * `errors` — what the builders could not add, in order.
 
   The primary public API is `new/0`, `add_period/2,3`, `add_sequence/2`,
-  and `add_relation/4,5`.
+  and `add_relation/4,5`. The builders never raise: an option they do
+  not take, or a value they cannot read, is recorded in `errors`, and
+  every `Tempo.Network.Solver` function returns the first of them as
+  `{:error, reason}` (its predicates raise it).
 
   """
 
@@ -28,10 +33,11 @@ defmodule Tempo.Network do
   @type t :: %__MODULE__{
           periods: %{optional(term()) => TimePeriod.t()},
           sequences: [[term()]],
-          relations: [Relation.t()]
+          relations: [Relation.t()],
+          errors: [Exception.t()]
         }
 
-  defstruct periods: %{}, sequences: [], relations: []
+  defstruct periods: %{}, sequences: [], relations: [], errors: []
 
   @doc """
   An empty network.
@@ -61,11 +67,11 @@ defmodule Tempo.Network do
   ### Returns
 
   * the network with `period` added (replacing any period of the same
-    id).
+    id), or with an error recorded when `period` is not a time-period.
 
   ### Examples
 
-      iex> period = Tempo.Network.TimePeriod.new(:k1, name: "King 1")
+      iex> {:ok, period} = Tempo.Network.TimePeriod.new(:k1, name: "King 1")
       iex> network = Tempo.Network.new() |> Tempo.Network.add_period(period)
       iex> Map.keys(network.periods)
       [:k1]
@@ -76,27 +82,50 @@ defmodule Tempo.Network do
     %{network | periods: Map.put(network.periods, id, period)}
   end
 
+  def add_period(%__MODULE__{} = network, period) do
+    record(
+      network,
+      "Tempo.Network.add_period/2 takes a Tempo.Network.TimePeriod, not #{inspect(period)}."
+    )
+  end
+
   @doc """
   Build a time-period from `id` and `options` and add it to the network.
 
   A convenience wrapping `Tempo.Network.TimePeriod.new/2` and
-  `add_period/2`; `options` are exactly those of
-  `Tempo.Network.TimePeriod.new/2`.
+  `add_period/2`.
+
+  ### Arguments
+
+  * `network` is the network to extend.
+
+  * `id` is any term uniquely identifying the period.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * The options of `Tempo.Network.TimePeriod.new/2`: `:name`, `:from`,
+    `:to`, `:duration` and `:metadata`.
 
   ### Returns
 
-  * the network with the new period added.
+  * the network with the new period added, or with the error
+    `Tempo.Network.TimePeriod.new/2` returns recorded.
 
   ### Examples
 
-      iex> network = Tempo.Network.new() |> Tempo.Network.add_period(:k1, start: {:not_before, ~o"1200Y"})
+      iex> network = Tempo.Network.new() |> Tempo.Network.add_period(:k1, from: {:not_before, ~o"1200Y"})
       iex> network.periods[:k1].earliest_start
       ~o"1200Y"
 
   """
   @spec add_period(t(), term(), keyword()) :: t()
-  def add_period(%__MODULE__{} = network, id, options) when is_list(options) do
-    add_period(network, TimePeriod.new(id, options))
+  def add_period(%__MODULE__{} = network, id, options) do
+    case TimePeriod.new(id, options) do
+      {:ok, period} -> add_period(network, period)
+      {:error, exception} -> record_error(network, exception)
+    end
   end
 
   @doc """
@@ -115,7 +144,8 @@ defmodule Tempo.Network do
 
   ### Returns
 
-  * the network with the sequence recorded.
+  * the network with the sequence recorded, or with an error recorded
+    when `period_ids` is not a list.
 
   ### Examples
 
@@ -127,6 +157,13 @@ defmodule Tempo.Network do
   @spec add_sequence(t(), [term()]) :: t()
   def add_sequence(%__MODULE__{} = network, period_ids) when is_list(period_ids) do
     %{network | sequences: network.sequences ++ [period_ids]}
+  end
+
+  def add_sequence(%__MODULE__{} = network, period_ids) do
+    record(
+      network,
+      "Tempo.Network.add_sequence/2 takes a list of period ids, not #{inspect(period_ids)}."
+    )
   end
 
   @doc """
@@ -141,13 +178,17 @@ defmodule Tempo.Network do
   * `from` and `to` are the ids of the related periods, read as
     "`from` *type* `to`".
 
+  * `options` is a keyword list of options.
+
   ### Options
 
   * `:metadata` is an arbitrary map carried with the relation.
 
   ### Returns
 
-  * the network with the relation added.
+  * the network with the relation added, or with an error recorded for
+    a type `Tempo.Network.Relation` does not define or an option it
+    does not take.
 
   ### Examples
 
@@ -159,8 +200,28 @@ defmodule Tempo.Network do
   """
   @spec add_relation(t(), Relation.relation_type(), term(), term(), keyword()) :: t()
   def add_relation(%__MODULE__{} = network, type, from, to, options \\ []) do
-    relation = Relation.new(type, from, to, options)
-    %{network | relations: network.relations ++ [relation]}
+    cond do
+      not Relation.valid_type?(type) ->
+        record(
+          network,
+          "Tempo.Network.add_relation/5 does not know the relation #{inspect(type)}."
+        )
+
+      not relation_options?(options) ->
+        record(
+          network,
+          "Tempo.Network.add_relation/5 takes one option, :metadata, a map, not " <>
+            "#{inspect(options)}."
+        )
+
+      true ->
+        %{network | relations: network.relations ++ [Relation.new(type, from, to, options)]}
+    end
+  end
+
+  defp relation_options?(options) do
+    Keyword.keyword?(options) and Keyword.keys(options) -- [:metadata] == [] and
+      is_map(Keyword.get(options, :metadata, %{}))
   end
 
   @doc """
@@ -187,4 +248,26 @@ defmodule Tempo.Network do
     (from_periods ++ from_sequences ++ from_relations)
     |> Enum.uniq()
   end
+
+  @doc false
+  # The first thing the builders could not add, or a relation of a type
+  # the solver cannot read in a network built without them.
+  @spec check(t()) :: :ok | {:error, Exception.t()}
+  def check(%__MODULE__{errors: [error | _rest]}), do: {:error, error}
+
+  def check(%__MODULE__{relations: relations}) do
+    case Enum.find(relations, &(not Relation.valid_type?(&1.type))) do
+      nil -> :ok
+      relation -> {:error, ArgumentError.exception("Unknown relation #{inspect(relation.type)}.")}
+    end
+  end
+
+  @doc false
+  # Record an error a builder met, for the solver to return.
+  @spec record_error(t(), Exception.t()) :: t()
+  def record_error(%__MODULE__{} = network, exception) do
+    %{network | errors: network.errors ++ [exception]}
+  end
+
+  defp record(network, message), do: record_error(network, ArgumentError.exception(message))
 end

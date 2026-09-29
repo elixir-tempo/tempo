@@ -90,8 +90,8 @@ defmodule Tempo.CalendarIndependenceTest do
     test "a nil-calendar bound is placed correctly in a network" do
       network =
         Network.new()
-        |> Network.add_period(:a, start: %Tempo{time: [year: 2026]}, end: ~o"2026-06")
-        |> Network.add_period(:b, start: ~o"2026-07", end: ~o"2027")
+        |> Network.add_period(:a, from: %Tempo{time: [year: 2026]}, to: ~o"2026-06")
+        |> Network.add_period(:b, from: ~o"2026-07", to: ~o"2027")
 
       assert Solver.relation(network, :a, :b) == :precedes
     end
@@ -149,10 +149,10 @@ defmodule Tempo.CalendarIndependenceTest do
     test "a network relation across calendars reads true instants" do
       network =
         Network.new()
-        |> Network.add_period(:gregorian, start: ~o"2025-09-01", end: ~o"2025-10-01")
+        |> Network.add_period(:gregorian, from: ~o"2025-09-01", to: ~o"2025-10-01")
         |> Network.add_period(:hebrew,
-          start: cal("5786-01-01", "hebrew"),
-          end: cal("5786-02-01", "hebrew")
+          from: cal("5786-01-01", "hebrew"),
+          to: cal("5786-02-01", "hebrew")
         )
 
       # Hebrew Tishri 5786 (Sep 23 – Oct 22, 2025) overlaps Gregorian September.
