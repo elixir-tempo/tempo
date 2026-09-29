@@ -105,6 +105,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * A `Tempo.IntervalSet` is tabular data (`Table.Reader`) when the optional `table` package is present: a row per member with its `from`, `to` and metadata, so `Kino.DataTable.new/1` shows a set of holidays with their names.
 
+* The livebook `everyday-holidays.livemd` answers everyday holiday questions — the next school holidays, the days until Election Day, a year's holidays and those two countries share — with each holiday written as its ISO 8601 rule.
+
 * An open-ended `:within` window (`~o"2026-09-28/.."`) gives a recurrence's occurrences from its start on as a lazy set, so `Tempo.IntervalSet.first/1` is the next one. Set operations, `complement/2` and the calendar formats return an error for one.
 
 * `Tempo.select/2` over an open-ended span (`~o"2026-06-15/.."`) gives a lazy set, selected period by period as it is walked, and a selection across a lazy set is lazy too. A span with an open start returns `IntervalEndpointsError` with `reason: :open_start`.

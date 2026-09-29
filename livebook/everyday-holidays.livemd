@@ -1,0 +1,188 @@
+# Everyday holiday questions
+
+```elixir
+Mix.install([
+  {:ex_tempo, "~> 2.0"},
+  {:tz, "~> 0.28"},
+  {:kino, "~> 0.14"}
+])
+
+Calendar.put_time_zone_database(Tz.TimeZoneDatabase)
+import Tempo.Sigils
+```
+
+## The questions
+
+A calendar is asked the same everyday questions again and again: when are the next school holidays, how many days until Election Day, how many public holidays does England have this year, and which of them does it share with Australia. Each answer here is a short sentence of Tempo — a window, a set operation, a count — over the holidays themselves.
+
+The holidays are written as the rules their laws give them: each is an ISO 8601 recurrence beside a description of the holiday, so the answers hold for any year, not only this one. [tempo_holidays](https://github.com/elixir-tempo/tempo_holidays) carries these rules for every territory, compiled from the [date-holidays](https://github.com/commenthol/date-holidays) dataset, and asks the same questions of them in its own copy of this notebook.
+
+## Today
+
+Every question starts from today, and today depends on where it is asked: at breakfast in Melbourne it is still yesterday in London. `Tempo.today/1` gives the date in a zone, as a date with no zone of its own, so it compares with a holiday — which has none either.
+
+```elixir
+today = Tempo.today("Australia/Melbourne")
+```
+
+The holidays ahead of today are those that overlap the window from today on — an open-ended window, which has a start and no end.
+
+```elixir
+from_today = Tempo.Interval.new!(from: today)
+```
+
+## When are the next Victorian school holidays?
+
+Victoria's school holidays are the breaks between its four school terms, published a year or two ahead as dated periods. The summer break runs over the new year.
+
+* **Term 1 holidays** — 17 days from 3 April 2026, and from 26 March 2027.
+
+* **Term 2 holidays** — 16 days from 27 June 2026, and from 26 June 2027.
+
+* **Term 3 holidays** — 16 days from 19 September 2026, and from 18 September 2027.
+
+* **Term 4 holidays** — the summer break, 40 days from 19 December 2026 and 41 from 18 December 2027.
+
+```elixir
+school_holidays =
+  Tempo.RecurrenceSet.new!([
+    Tempo.put_metadata(~o"2026-04-03/P17D", %{name: "Term 1 holidays"}),
+    Tempo.put_metadata(~o"2026-06-27/P16D", %{name: "Term 2 holidays"}),
+    Tempo.put_metadata(~o"2026-09-19/P16D", %{name: "Term 3 holidays"}),
+    Tempo.put_metadata(~o"2026-12-19/P40D", %{name: "Term 4 holidays"}),
+    Tempo.put_metadata(~o"2027-03-26/P17D", %{name: "Term 1 holidays"}),
+    Tempo.put_metadata(~o"2027-06-26/P16D", %{name: "Term 2 holidays"}),
+    Tempo.put_metadata(~o"2027-09-18/P16D", %{name: "Term 3 holidays"}),
+    Tempo.put_metadata(~o"2027-12-18/P41D", %{name: "Term 4 holidays"})
+  ])
+
+{:ok, holidays_ahead} = Tempo.to_interval_set(school_holidays, within: from_today)
+next_break = Tempo.IntervalSet.first(holidays_ahead)
+```
+
+> *"The school holidays **ahead** are those in the window from today on; the **next break** is the first of them — the one under way, when today falls in one."*
+
+```elixir
+Tempo.metadata(next_break).name
+```
+
+## How many days until the next US Election Day?
+
+US federal elections are held on Election Day: the Tuesday after the first Monday in November, in even-numbered years. As a rule, that is every even year (`..e`), the week that starts on the first Monday of November (`FLLL11M1K1IN/P7DN`), and the last Tuesday in it (`2K-1I`) — the Tuesday after the Monday.
+
+```elixir
+election_day = ~o"R/..e/P1Y/FLLL11M1K1IN/P7DN2K-1IN"
+
+{:ok, elections_ahead} = Tempo.to_interval_set(election_day, within: from_today)
+next_election = Tempo.IntervalSet.first(elections_ahead)
+
+{:ok, days_to_go} = Tempo.duration(today, Tempo.Interval.from(next_election))
+```
+
+> *"The **next election** is the first Election Day from today on, and **days to go** is how long it is from today until then — counted in days, because both are days."*
+
+## How many public holidays does England have this year?
+
+England's bank holidays, as the law gives them. When a holiday's own date falls on a weekend it is observed on a substitute day, and each rule below gives the day it is observed on: its own date on a weekday, or the substitute day when the date falls on a weekend.
+
+* **New Year's Day** — 1 January, or the Monday after it when it falls on a weekend.
+
+* **Good Friday** and **Easter Monday** — the Friday before Easter Sunday and the Monday after it.
+
+* **Early May**, **Spring** and **Summer bank holidays** — the first Monday in May, the last Monday in May and the last Monday in August.
+
+* **Christmas Day** and **Boxing Day** — 25 and 26 December. On a weekend each moves to the Monday or Tuesday after, so the two never share a day: Christmas on a Saturday is observed the Monday after and Boxing Day the Tuesday, and Christmas on a Sunday the Tuesday.
+
+A one-off day — a jubilee, a coronation — is a date of its own, added in the year it falls; these are the rules every year keeps.
+
+```elixir
+england =
+  Tempo.RecurrenceSet.new!([
+    # 1 January on a weekday, or the Monday after a weekend 1 January
+    Tempo.put_metadata(~o"R/../P1Y/FL1M1D{1..5}KN", %{name: "New Year's Day"}),
+    Tempo.put_metadata(~o"R/../P1Y/FLLL1M1D{6..7}KN/P8DN1K-1IN", %{name: "New Year's Day", substitute: true}),
+    # The Friday in the three days before Easter Sunday, the Monday in the two days after it
+    Tempo.put_metadata(~o"R/../P1Y/FLLL(easter)eN/P-3DN5K1IN", %{name: "Good Friday"}),
+    Tempo.put_metadata(~o"R/../P1Y/FLLL(easter)eN/P2DN1K-1IN", %{name: "Easter Monday"}),
+    # The first Monday in May, and the Monday in the week before 1 June and 1 September
+    Tempo.put_metadata(~o"R/../P1Y/FL5M1K1IN", %{name: "Early May bank holiday"}),
+    Tempo.put_metadata(~o"R/../P1Y/FLLL6M1DN/P-7DN1K1IN", %{name: "Spring bank holiday"}),
+    Tempo.put_metadata(~o"R/../P1Y/FLLL9M1DN/P-7DN1K1IN", %{name: "Summer bank holiday"}),
+    # 25 December on a weekday; the Monday after a Saturday, the Tuesday after a Sunday
+    Tempo.put_metadata(~o"R/../P1Y/FL12M25D{1..5}KN", %{name: "Christmas Day"}),
+    Tempo.put_metadata(~o"R/../P1Y/FLLL12M25D6KN/P8DN1K-1IN", %{name: "Christmas Day", substitute: true}),
+    Tempo.put_metadata(~o"R/../P1Y/FLLL12M25D7KN/P8DN2K-1IN", %{name: "Christmas Day", substitute: true}),
+    # 26 December on a weekday; the Monday after a Saturday, the Tuesday after a Sunday
+    Tempo.put_metadata(~o"R/../P1Y/FL12M26D{1..5}KN", %{name: "Boxing Day"}),
+    Tempo.put_metadata(~o"R/../P1Y/FLLL12M26D6KN/P8DN1K-1IN", %{name: "Boxing Day", substitute: true}),
+    Tempo.put_metadata(~o"R/../P1Y/FLLL12M26D7KN/P8DN2K-1IN", %{name: "Boxing Day", substitute: true})
+  ])
+
+this_year = Tempo.trunc(today, :year)
+
+{:ok, england_this_year} = Tempo.to_interval_set(england, within: this_year)
+Tempo.IntervalSet.count(england_this_year)
+```
+
+> *"England's **holidays this year** are its rules within this year, and there are this many of them: a holiday on a weekend is counted once, on the day it is observed."*
+
+```elixir
+Kino.DataTable.new(england_this_year)
+```
+
+## Which of them does England share with Australia?
+
+Australia's national public holidays, the same way. Most states add their own — Victoria its King's Birthday and its Melbourne Cup Day — but these are the country's.
+
+* **New Year's Day** and **Australia Day** — 1 and 26 January, or the Monday after when they fall on a weekend.
+
+* **Good Friday**, **Easter Saturday**, **Easter Sunday** and **Easter Monday** — the four days of Easter.
+
+* **Anzac Day** — 25 April, whatever the day of the week.
+
+* **Christmas Day** and **Boxing Day** — as in England.
+
+```elixir
+australia =
+  Tempo.RecurrenceSet.new!([
+    # 1 January on a weekday, or the Monday after a weekend 1 January
+    Tempo.put_metadata(~o"R/../P1Y/FL1M1D{1..5}KN", %{name: "New Year's Day"}),
+    Tempo.put_metadata(~o"R/../P1Y/FLLL1M1D{6..7}KN/P8DN1K-1IN", %{name: "New Year's Day", substitute: true}),
+    # 26 January on a weekday, or the Monday after a weekend 26 January
+    Tempo.put_metadata(~o"R/../P1Y/FL1M26D{1..5}KN", %{name: "Australia Day"}),
+    Tempo.put_metadata(~o"R/../P1Y/FLLL1M26D{6..7}KN/P8DN1K-1IN", %{name: "Australia Day", substitute: true}),
+    # The Friday, Saturday, Sunday and Monday of Easter
+    Tempo.put_metadata(~o"R/../P1Y/FLLL(easter)eN/P-3DN5K1IN", %{name: "Good Friday"}),
+    Tempo.put_metadata(~o"R/../P1Y/FLLL(easter)eN/P-2DN6K1IN", %{name: "Easter Saturday"}),
+    Tempo.put_metadata(~o"R/../P1Y/FL(easter)eN", %{name: "Easter Sunday"}),
+    Tempo.put_metadata(~o"R/../P1Y/FLLL(easter)eN/P2DN1K-1IN", %{name: "Easter Monday"}),
+    # 25 April
+    Tempo.put_metadata(~o"R/../P1Y/FL4M25DN", %{name: "Anzac Day"}),
+    # 25 and 26 December, as in England
+    Tempo.put_metadata(~o"R/../P1Y/FL12M25D{1..5}KN", %{name: "Christmas Day"}),
+    Tempo.put_metadata(~o"R/../P1Y/FLLL12M25D6KN/P8DN1K-1IN", %{name: "Christmas Day", substitute: true}),
+    Tempo.put_metadata(~o"R/../P1Y/FLLL12M25D7KN/P8DN2K-1IN", %{name: "Christmas Day", substitute: true}),
+    Tempo.put_metadata(~o"R/../P1Y/FL12M26D{1..5}KN", %{name: "Boxing Day"}),
+    Tempo.put_metadata(~o"R/../P1Y/FLLL12M26D6KN/P8DN1K-1IN", %{name: "Boxing Day", substitute: true}),
+    Tempo.put_metadata(~o"R/../P1Y/FLLL12M26D7KN/P8DN2K-1IN", %{name: "Boxing Day", substitute: true})
+  ])
+
+{:ok, australia_this_year} = Tempo.to_interval_set(australia, within: this_year)
+{:ok, shared} = Tempo.intersection(england_this_year, australia_this_year, metadata: :merge)
+
+Kino.DataTable.new(shared)
+```
+
+> *"The holidays England **shares** with Australia are the days both have off: the **intersection** of England's holidays this year and Australia's."*
+
+## Any other year
+
+The rules are the holidays, not a list of dates, so the same questions answer for any other year: England's holidays in 2027 are its rules within 2027, and the days it shares with Australia then are the intersection of the two. In 2027 Christmas falls on a Saturday, so both countries observe it on the Monday and Boxing Day on the Tuesday.
+
+```elixir
+{:ok, england_2027} = Tempo.to_interval_set(england, within: ~o"2027")
+{:ok, australia_2027} = Tempo.to_interval_set(australia, within: ~o"2027")
+{:ok, shared_2027} = Tempo.intersection(england_2027, australia_2027, metadata: :merge)
+
+Kino.DataTable.new(shared_2027)
+```

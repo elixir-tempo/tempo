@@ -279,6 +279,8 @@ Taken by the user on 2026-09-28:
 
 * **The real-world gaps** — decided as "Real-world questions" describes: an open-ended window for "next", the floating `today/1`, durations at their endpoints' resolution, and a holiday on its substitute day by default, its gazetted date or both on request. The livebook uses Victoria's school holidays.
 
+* **The real-world livebook** (2026-09-29) — in Tempo, with no tempo_holidays: each holiday is written as its ISO 8601 rule beside a description of it. tempo_holidays carries the same livebook, asking the same questions through its API.
+
 ## Tasks
 
 Each task is one commit, verified on both upstream branches, with its guides, README, cookbook and livebook examples updated in the same commit, and its section of the migration guide written in it.
@@ -309,7 +311,7 @@ Each task is one commit, verified on both upstream branches, with its guides, RE
 
 * [x] **Span ends and specialist modules** — `:from`/`:to`, `Schedule.Slot`, the deleted instant helpers, `:not_before`, `propagate/1`. 2026-09-29, `64c2e3b`.
 
-* [ ] **tempo_holidays** — `materialise/3` removed, `within:`, the year-end merge in `holidays/2`, `day_start/2`, `{:sunset, location}`, and its publish comment at `~> 2.0`. Its per-year checks compare by start year, date-holidays' convention: under the overlap rule a year's window also holds a holiday still running from December (Hanukkah 2005–06, Eid al-Adha 2006–07), which made 6 rules and 3 Hebrew conformance dates differ when measured against task 2. Also a dated period's length, one `:subdivision` option with an unknown one an error, and `dates: :substitute | :gazetted | :both`.
+* [x] **tempo_holidays** — `materialise/3` removed, `within:`, the year-end merge in `holidays/2`, `day_start/2`, `{:sunset, location}`, and its publish comment at `~> 2.0`. Its per-year checks compare by start year, date-holidays' convention: under the overlap rule a year's window also holds a holiday still running from December (Hanukkah 2005–06, Eid al-Adha 2006–07), which made 6 rules and 3 Hebrew conformance dates differ when measured against task 2. Also a dated period's length, one `:subdivision` option with an unknown one an error, and `dates: :substitute | :gazetted | :both`. 2026-09-29, tempo_holidays `173379a`, with Tempo's `f3746b1` (an occurrence's span reaching into a `:within` window).
 
 * [ ] **Real-world livebook** — the next Victorian school holidays, the days until the next US Election Day, the UK's public holidays, and those the UK shares with Australia, each read as prose.
 

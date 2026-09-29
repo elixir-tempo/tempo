@@ -4,6 +4,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ## Open
 
+* [ ] **Livebooks install 2.0 at the release** — `getting-started`, `tempo_tour`, `scheduling-workbook` and `uncertain-dates-workbook` install `{:ex_tempo, "~> 1.6"}` and the Melbourne deck `~> 1.6.3`, while their code uses the 2.0 names: at the 2.0.0 release each installs `~> 2.0`, as `everyday-holidays` already does.
+
 * [ ] **`to_relative_string/2` raises** — `Tempo.Format.render_relative/2` raises `UnanchoredError` for a value without a year and `IntervalEndpointsError` for an open interval, where the library returns `{:error, reason}`; its spec says it returns a string.
 
 * [ ] **`to_iso8601/1` raises on sub-second endpoints** — an interval whose endpoints differ only in a fraction of a second (`Tempo.to_interval(~o"2026-06-15T10:00:00.123")`) raises `FunctionClauseError`, and so `inspect` does too: the abbreviated end starts at `:microsecond`, which `Tempo.Inspect.inspect_value/1` has no clause for.
@@ -58,7 +60,7 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ## In progress
 
-* [ ] **Vocabulary for 2.0** — one meaning per word and one word per meaning across Tempo and tempo_holidays: `:within` for `:bound`, "anchor" in one sense, no public "materialise", `Tempo.Allen` beside everyday predicates, `datetime`, "workday". Every decision is taken; the tasks are in [plans/vocabulary.md](plans/vocabulary.md). Thirteen of its sixteen tasks have landed, through span ends and the specialist modules; tempo_holidays, the real-world livebook and the downstream libraries remain.
+* [ ] **Vocabulary for 2.0** — one meaning per word and one word per meaning across Tempo and tempo_holidays: `:within` for `:bound`, "anchor" in one sense, no public "materialise", `Tempo.Allen` beside everyday predicates, `datetime`, "workday". Every decision is taken; the tasks are in [plans/vocabulary.md](plans/vocabulary.md). Fifteen of its sixteen tasks have landed, through tempo_holidays and the real-world livebook (`livebook/everyday-holidays.livemd`, and its tempo_holidays copy); `tempo_sql`'s move to `~> 2.0` remains, once 2.0.0 is on hex.
 
 ## Deferred
 

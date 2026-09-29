@@ -156,7 +156,8 @@ defmodule Tempo.MixProject do
         "livebook/getting-started.livemd",
         "livebook/tempo_tour.livemd",
         "livebook/scheduling-workbook.livemd",
-        "livebook/uncertain-dates-workbook.livemd"
+        "livebook/uncertain-dates-workbook.livemd",
+        "livebook/everyday-holidays.livemd"
       ],
       Cookbooks: [
         "guides/cookbook.md",
