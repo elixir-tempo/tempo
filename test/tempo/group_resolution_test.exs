@@ -162,7 +162,7 @@ defmodule Tempo.GroupResolution.Test do
     test "renders as it was declared" do
       for iso8601 <- ["T16H1GT15MU", "2026Y10M3DT3GT8HU", "2018Y2M3G11DU", "2026Y2G13WU"] do
         {:ok, tempo} = Tempo.from_iso8601(iso8601)
-        assert Tempo.to_iso8601(tempo) == iso8601
+        assert Tempo.to_iso8601!(tempo) == iso8601
       end
     end
 

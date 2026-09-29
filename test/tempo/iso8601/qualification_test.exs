@@ -165,18 +165,18 @@ defmodule Tempo.Iso8601.Qualification.Test do
                day: :uncertain_and_approximate
              }
 
-      assert Tempo.to_iso8601(tempo) == "2004Y6M11D%"
+      assert Tempo.to_iso8601!(tempo) == "2004Y6M11D%"
     end
 
     test "a partially-qualified date keeps per-component qualifiers" do
       {:ok, tempo} = Tempo.from_iso8601("2004-06~-11")
       # year + month approximate, day unqualified → no collapse.
-      assert Tempo.to_iso8601(tempo) == "2004~Y6~M11D"
+      assert Tempo.to_iso8601!(tempo) == "2004~Y6~M11D"
     end
 
     test "mixed qualifiers stay per-component" do
       {:ok, tempo} = Tempo.from_iso8601("2022?-?06-%15")
-      assert Tempo.to_iso8601(tempo) == "2022?Y6?M15%D"
+      assert Tempo.to_iso8601!(tempo) == "2022?Y6?M15%D"
     end
   end
 

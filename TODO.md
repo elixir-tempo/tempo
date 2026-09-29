@@ -8,17 +8,9 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **`to_relative_string/2` raises** — `Tempo.Format.render_relative/2` raises `UnanchoredError` for a value without a year and `IntervalEndpointsError` for an open interval, where the library returns `{:error, reason}`; its spec says it returns a string.
 
-* [ ] **`to_iso8601/1` raises on sub-second endpoints** — an interval whose endpoints differ only in a fraction of a second (`Tempo.to_interval(~o"2026-06-15T10:00:00.123")`) raises `FunctionClauseError`, and so `inspect` does too: the abbreviated end starts at `:microsecond`, which `Tempo.Inspect.inspect_value/1` has no clause for.
-
-* [ ] **`to_iso8601/1` raises on a recurrence set** — `Tempo.to_iso8601/1` given a `Tempo.RecurrenceSet` raises `FunctionClauseError` in `Tempo.Inspect.inspect_value/1`. ISO 8601 has no set syntax: decide between rendering the members and an error.
-
-* [ ] **A time-of-day selection's span** — `R/../P1D/FLT22HN` carrying an `:occurrence_duration` of `PT4H` gives `2027Y1M1DT22H/T4H`: the span is added to the start of the day, not to the 22:00 occurrence. A day selection's span (`FL12M19DN` with `P40D`) is right.
-
-* [ ] **The overlap rule under a cadence finer than a day** — an hourly selection recurrence whose span runs into a `:within` window from the hour before loses that occurrence: `window_periods/1` reaches back only for a cadence of a day or more, for spans and §12.10 windows alike.
-
 * [ ] **A grouped endpoint raises when compared** — a hand-built interval whose endpoint holds a group (`~o"20C"`, `~o"2022Y1M2G3DU"`) raises in `Compare.to_utc_seconds/1` when measured or compared; `to_interval/1` converts such values first, the other entry points do not.
 
-* [ ] **`rescue` in the library** — `lib/ical.ex` (`parse/2`, `available/2`, errors from the `ical` parser), `lib/inspect.ex`, `lib/protocol/inspect.ex` and `lib/iso8601/parser.ex` rescue exceptions where the rest of Tempo passes tagged tuples.
+* [ ] **`rescue` in the library** — `lib/ical.ex` (`parse/2`, `available/2`, errors from the `ical` parser), `lib/inspect.ex` (Localize's calendar encoding) and `lib/iso8601/parser.ex` rescue exceptions where the rest of Tempo passes tagged tuples.
 
 * [ ] **A never-matching selector walks the whole horizon** — `Tempo.select/2` over an open-ended span walks a thousand years of periods before a selector that never matches ends: 30 ms of years, 0.2 s of months, about 10 s of days, minutes of hours. An index selector on a fixed-range unit could end after its first empty period, a daylight-saving gap day aside.
 
@@ -27,6 +19,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **A zone on a recurrence is dropped** — `R/../P1Y/FL3M20DN[+09:00]` and a domain recurrence's `[zone]` suffix parse and vanish (the start value's suffix, `R/2026-03-20[+09:00]/P1Y`, is kept). Carry it as zoned occurrences, as the suffix means elsewhere, or refuse it.
 
 * [ ] **§12.10 window shorter than a day** — `FL11MLL1K1IN/PT12HN1K1IN` (and `/P0DN…`) walks `[lo, lo - 1]`, the anchor and the day before, as `Date.range/2` infers for a reversed range (with a runtime deprecation warning before the day-number walk replaced it). Decide the semantics — no day, or the anchor day whose start the window contains — and test it.
+
+* [ ] **`explain/1` words a window of hours in ISO 8601** — `Tempo.explain(~o"R/2027-01-01/P1D/FLLT22HN/PT4HN")` says "the PT4H window from at 22:00" where it means the four hours from 22:00: `window_phrase/2` in `lib/explain.ex` words only a window of days or weeks, and a time-of-day selection's noun carries its "at".
 
 * [ ] **Week-of-month selections, and calendar-aware RRULE `BYWEEKNO`** — parse `2026Y6M2W` ("2nd week of June", a positional `W` after a month) and materialise it via `Calendrical.week_of_month/3`; and replace the hard-coded ISO week walk still used by RRULE `BYWEEKNO` with Calendrical's calendar-aware functions. Month and native week-of-year selections are done. Plan in [plans/recurrence-selection-resolution.md](plans/recurrence-selection-resolution.md).
 
@@ -69,6 +63,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **A domain gating by a window's anchor** — a domain admits the occurrences that start in its periods; date-holidays gates on the year of a window's anchor instead. They differ only when a window crosses a gated boundary year, which no tempo_holidays rule does; reviving it needs anchor tracking through `Tempo.RRule.Selection`.
 
 ## Done
+
+* [x] **`to_iso8601/1` returns a tuple, and the span and reach defects** — `{:ok, string}` or an `Iso8601EncodeError`, with `to_iso8601!/1`; sub-second ends encode; a time-of-day selection keeps its span, in iCalendar and as a §12.10 window of hours; `:within` keeps an occurrence that runs into it under a sub-day cadence or a backward window. 2026-09-29.
 
 * [x] **Interval/recurrence unification** — `RecurrenceSet` (the definition) and `IntervalSet` (its occurrences) stay two types, the gaps closed: opaque metadata on `%Tempo{}` (`:metadata` repurposed, `:tags` for IXDTF), nested members, a set's metadata through materialisation, the duration forms in every single-interval function. 2026-09-27.
 

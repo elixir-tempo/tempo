@@ -101,6 +101,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.Schedule.ScheduledTask` replaces `Schedule.Slot`: its `early` and `late` schedules are intervals, where `start`, `finish`, `latest_start` and `latest_finish` were four dates. `Schedule.task/3` takes `:not_before` for `:earliest`.
 
+* `Tempo.to_iso8601/1` returns `{:ok, string}`, or a `Tempo.Iso8601EncodeError` for a value with no ISO 8601 form — a set, a conditional member, a cron nearest weekday or a value that is not Tempo's — where it raised. `to_iso8601!/1` returns the string.
+
 ### Added
 
 * A `Tempo.IntervalSet` is tabular data (`Table.Reader`) when the optional `table` package is present: a row per member with its `from`, `to` and metadata, so `Kino.DataTable.new/1` shows a set of holidays with their names.
@@ -159,7 +161,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.parse/2`'s `:calendar` option is a calendar module, as Calendrical 1.4's is: a CLDR calendar name such as `:hebrew` returns an error.
 
-* A recurrence whose selection has a §12.10 window looks into the period before its `:within` window only for a forward §12.10 window, and the one after only for a backward one, and a domain runs its adjacent periods as one recurrence. Results are unchanged.
+* A recurrence whose selection has a §12.10 window walks as many periods either side of its `:within` window as the window can move an occurrence, and a domain runs its adjacent periods as one recurrence.
 
 * A recurrence selection that moves a candidate to several dates (weekday, month-day, week and window expansions) finds the candidate's own day numbers once, and a move onto its own date asks the calendar nothing — about a third fewer calendar calls for a lunisolar calendar.
 
@@ -252,6 +254,10 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * `Tempo.Network.Relation.from_allen/1` preserves direction for `:overlapped_by`, which previously mapped to `:overlaps` and silently reversed the operands. Every Allen relation now round-trips through `to_allen/1`.
 
 * A recurrence with an open start materialises within a `:within` window alone: `Tempo.to_interval(~o"R/../P1Y/FL6M1K2IN", within: ~o"2026")` is the second Monday of June 2026. Each occurrence takes the resolution its selection names — `FL6MN` a month, `FL12M25DN` a day.
+
+* A time-of-day selection moves an event's whole span: an iCalendar event from 09:00 to 10:00 with `BYHOUR=9,17` is also 17:00–18:00, where it ran from 17:00 back to 10:00, and `BYMINUTE` and `BYSECOND` likewise.
+
+* `Tempo.to_iso8601/1` and `inspect/1` write an interval whose ends differ only in a fraction of a second, `2026Y6M15DT10H0M0.123S/T0.124S`, where they raised `FunctionClauseError`.
 
 ## [v1.6.4] — 2026-09-03
 

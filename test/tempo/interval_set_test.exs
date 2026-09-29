@@ -353,7 +353,7 @@ defmodule Tempo.IntervalSet.Test do
     end
 
     defp spans({:ok, set}), do: spans(set)
-    defp spans(set), do: set |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.to_iso8601/1)
+    defp spans(set), do: set |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
 
     test "the default, at_least: 1, is the time the set covers" do
       set = Tempo.IntervalSet.new!([at("09", "11"), at("10", "12")])

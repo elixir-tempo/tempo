@@ -224,7 +224,7 @@ Every period boundary is an ordinary Tempo value, so it round-trips through ISO 
 
 ```elixir
 Tempo.to_iso8601(solved.periods["Psammetichus I"].earliest_start)
-#=> "-664Y"
+#=> {:ok, "-664Y"}
 ```
 
 ## 9. Validated against ChronoLog

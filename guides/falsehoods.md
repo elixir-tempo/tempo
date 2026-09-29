@@ -105,7 +105,7 @@ No UTC is stored on the struct. Comparison and conversion consult the configured
 
 ```elixir
 iex> Tempo.to_iso8601(event)
-"2030-03-01T08:00:00[Europe/Paris]"
+{:ok, "2030Y3M1DT8H0M0S[Europe/Paris]"}
 ```
 
 ---

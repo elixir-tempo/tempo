@@ -128,7 +128,7 @@ defmodule Tempo.RRuleByMonthExpansionTest do
 
       set
       |> IntervalSet.members()
-      |> Enum.map(&Tempo.to_iso8601(Interval.from(&1)))
+      |> Enum.map(&Tempo.to_iso8601!(Interval.from(&1)))
     end
 
     test "a day-30 DTSTART clamps to each year's own month length" do

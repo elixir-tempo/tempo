@@ -87,16 +87,16 @@ defmodule Tempo.EventTest do
             "R/../P1Y/FL(june-solstice@America/Santiago)eN"
           ] do
         {:ok, value} = Tempo.from_iso8601(iso)
-        assert Tempo.to_iso8601(value) == iso
+        assert Tempo.to_iso8601!(value) == iso
       end
     end
 
     test "a hyphenated event name round-trips through to_iso8601/1 and inspect/1" do
       {:ok, value} = Tempo.from_iso8601("R/../P1Y/FL(march-equinox)eN")
 
-      assert Tempo.to_iso8601(value) == "R/../P1Y/FL(march-equinox)eN"
+      assert Tempo.to_iso8601!(value) == "R/../P1Y/FL(march-equinox)eN"
       assert inspect(value) == ~s|~o"R/../P1Y/FL(march-equinox)eN"|
-      assert Tempo.from_iso8601(Tempo.to_iso8601(value)) == {:ok, value}
+      assert Tempo.from_iso8601(Tempo.to_iso8601!(value)) == {:ok, value}
     end
   end
 
@@ -142,7 +142,7 @@ defmodule Tempo.EventTest do
   describe "a weekday limit on a computed event" do
     test "parses and round-trips rather than raising" do
       assert {:ok, value} = Tempo.from_iso8601("R/../P1Y/FL(qingming)e7KN")
-      assert Tempo.to_iso8601(value) == "R/../P1Y/FL(qingming)e7KN"
+      assert Tempo.to_iso8601!(value) == "R/../P1Y/FL(qingming)e7KN"
     end
 
     test "keeps the event only in the years it falls on the weekday" do

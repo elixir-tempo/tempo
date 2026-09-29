@@ -155,7 +155,7 @@ An interval's ISO 8601 string carries its **extent** only. The iteration granula
 Enum.count(day)
 #=> 24    # walks hours — unit: :hour travels on the struct
 
-reparsed = Tempo.from_iso8601!(Tempo.to_iso8601(day))
+reparsed = Tempo.from_iso8601!(Tempo.to_iso8601!(day))
 Enum.count(reparsed)
 #=> 1     # walks at day resolution — the string carried only the extent
 ```

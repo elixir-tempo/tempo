@@ -83,14 +83,14 @@ defmodule Tempo.CalendarTest do
       # mid-string spelling still parses (below), canonicalising to this form.
       iso = "R/2025Y12M25D/P1Y[u-ca=julian]"
       {:ok, tempo} = Tempo.from_iso8601(iso)
-      assert Tempo.to_iso8601(tempo) == iso
+      assert Tempo.to_iso8601!(tempo) == iso
       assert {:ok, ^tempo} = Tempo.from_iso8601("R/2025Y12M25D[u-ca=julian]/P1Y")
     end
 
     test "[u-ca=iso8601] is the Gregorian calendar with ISO 8601's weeks" do
       {:ok, tempo} = Tempo.from_iso8601("2026-05-15[u-ca=iso8601]")
       assert tempo.calendar == Calendrical.ISO
-      assert Tempo.to_iso8601(tempo) == "2026Y5M15D[u-ca=iso8601]"
+      assert Tempo.to_iso8601!(tempo) == "2026Y5M15D[u-ca=iso8601]"
 
       # Its own weeks are ISO 8601's, so a calendar week (w) is an ISO week (W).
       assert Tempo.from_iso8601!("2027Y1w1K[u-ca=iso8601]") ==
@@ -102,7 +102,7 @@ defmodule Tempo.CalendarTest do
       # `chinese` observed from Hanoi, which Calendrical registers apart.
       {:ok, tempo} = Tempo.from_iso8601("4663-01-01[u-ca=vietnamese]")
       assert tempo.calendar == Calendrical.Vietnamese
-      assert Tempo.to_iso8601(tempo) == "4663Y1M1D[u-ca=vietnamese]"
+      assert Tempo.to_iso8601!(tempo) == "4663Y1M1D[u-ca=vietnamese]"
     end
 
     test "every calendar Calendrical registers apart round-trips through its [u-ca=…] identifier" do
@@ -111,7 +111,7 @@ defmodule Tempo.CalendarTest do
         {:ok, tempo} = Tempo.from_iso8601("2026" <> suffix)
 
         assert tempo.calendar == calendar
-        assert Tempo.to_iso8601(tempo) == "2026Y" <> suffix
+        assert Tempo.to_iso8601!(tempo) == "2026Y" <> suffix
       end
     end
 
@@ -198,13 +198,13 @@ defmodule Tempo.CalendarTest do
             "R/../P1Y/FL1M1DN[u-ca=persian]"
           ] do
         {:ok, recurrence} = Tempo.from_iso8601(iso)
-        assert Tempo.to_iso8601(recurrence) == iso
+        assert Tempo.to_iso8601!(recurrence) == iso
       end
     end
 
     test "a Gregorian recurrence is unaffected — no suffix, its own day" do
       {:ok, christmas} = Tempo.from_iso8601("R/../P1Y/FL12M25DN")
-      assert Tempo.to_iso8601(christmas) == "R/../P1Y/FL12M25DN"
+      assert Tempo.to_iso8601!(christmas) == "R/../P1Y/FL12M25DN"
 
       {:ok, set} = Tempo.to_interval(christmas, within: Tempo.from_iso8601!("2026Y"))
       assert gregorian_days(set) == ["2026-12-25"]
@@ -221,32 +221,32 @@ defmodule Tempo.CalendarTest do
       # Chinese year 4662 carries a leap month 6 (閏6月) at ordinal position 7.
       {:ok, tempo} = Tempo.from_iso8601("4662Y6+m1D[u-ca=chinese]")
       assert tempo.time[:month] == 7
-      assert Tempo.to_iso8601(tempo) == "4662Y7M1D[u-ca=chinese]"
+      assert Tempo.to_iso8601!(tempo) == "4662Y7M1D[u-ca=chinese]"
     end
 
     test "a traditional month resolves to its ordinal past a leap month" do
       # In 4662 the leap month sits at ordinal 7, so traditional 8 is ordinal 9.
       {:ok, tempo} = Tempo.from_iso8601("4662Y8m1D[u-ca=chinese]")
       assert tempo.time[:month] == 9
-      assert Tempo.to_iso8601(tempo) == "4662Y9M1D[u-ca=chinese]"
+      assert Tempo.to_iso8601!(tempo) == "4662Y9M1D[u-ca=chinese]"
     end
 
     test "a traditional month before the leap month equals its ordinal" do
       {:ok, tempo} = Tempo.from_iso8601("4662Y5m1D[u-ca=chinese]")
       assert tempo.time[:month] == 5
-      assert Tempo.to_iso8601(tempo) == "4662Y5M1D[u-ca=chinese]"
+      assert Tempo.to_iso8601!(tempo) == "4662Y5M1D[u-ca=chinese]"
     end
 
     test "on a non-lunisolar calendar `m` is identical to `M`" do
       {:ok, tempo} = Tempo.from_iso8601("2026Y8m1D")
       assert tempo.time[:month] == 8
-      assert Tempo.to_iso8601(tempo) == "2026Y8M1D"
+      assert Tempo.to_iso8601!(tempo) == "2026Y8M1D"
     end
 
     test "an ordinal month is unaffected" do
       {:ok, tempo} = Tempo.from_iso8601("4662Y6M1D[u-ca=chinese]")
       assert tempo.time[:month] == 6
-      assert Tempo.to_iso8601(tempo) == "4662Y6M1D[u-ca=chinese]"
+      assert Tempo.to_iso8601!(tempo) == "4662Y6M1D[u-ca=chinese]"
     end
 
     test "a year with no such leap month is rejected" do
@@ -286,7 +286,7 @@ defmodule Tempo.CalendarTest do
             "R/../P1Y/FL6+m1DN[u-ca=chinese]"
           ] do
         {:ok, tempo} = Tempo.from_iso8601(iso)
-        assert Tempo.to_iso8601(tempo) == iso
+        assert Tempo.to_iso8601!(tempo) == iso
       end
     end
 
@@ -323,15 +323,15 @@ defmodule Tempo.CalendarTest do
   # 5786 is an ordinary year and 5787 a leap year.
   describe "the `<n>m` / `<n>+m` Hebrew traditional month" do
     test "Nisan is traditional month 7, the 7th month of an ordinary year and the 8th of a leap year" do
-      assert Tempo.to_iso8601(Tempo.from_iso8601!("5786Y7m15D[u-ca=hebrew]")) ==
+      assert Tempo.to_iso8601!(Tempo.from_iso8601!("5786Y7m15D[u-ca=hebrew]")) ==
                "5786Y7M15D[u-ca=hebrew]"
 
-      assert Tempo.to_iso8601(Tempo.from_iso8601!("5787Y7m15D[u-ca=hebrew]")) ==
+      assert Tempo.to_iso8601!(Tempo.from_iso8601!("5787Y7m15D[u-ca=hebrew]")) ==
                "5787Y8M15D[u-ca=hebrew]"
     end
 
     test "Adar I is the leap month following traditional month 5" do
-      assert Tempo.to_iso8601(Tempo.from_iso8601!("5787Y5+m1D[u-ca=hebrew]")) ==
+      assert Tempo.to_iso8601!(Tempo.from_iso8601!("5787Y5+m1D[u-ca=hebrew]")) ==
                "5787Y6M1D[u-ca=hebrew]"
 
       assert {:error, _} = Tempo.from_iso8601("5786Y5+m1D[u-ca=hebrew]")
@@ -339,10 +339,10 @@ defmodule Tempo.CalendarTest do
     end
 
     test "traditional month 6 is the Adar of Purim, Adar II in a leap year" do
-      assert Tempo.to_iso8601(Tempo.from_iso8601!("5786Y6m14D[u-ca=hebrew]")) ==
+      assert Tempo.to_iso8601!(Tempo.from_iso8601!("5786Y6m14D[u-ca=hebrew]")) ==
                "5786Y6M14D[u-ca=hebrew]"
 
-      assert Tempo.to_iso8601(Tempo.from_iso8601!("5787Y6m14D[u-ca=hebrew]")) ==
+      assert Tempo.to_iso8601!(Tempo.from_iso8601!("5787Y6m14D[u-ca=hebrew]")) ==
                "5787Y7M14D[u-ca=hebrew]"
     end
 
@@ -365,10 +365,10 @@ defmodule Tempo.CalendarTest do
     end
 
     test "the months of an ordinary and a leap year" do
-      assert Tempo.to_iso8601(Tempo.from_iso8601!("5786Y{1..-1}M[u-ca=hebrew]")) ==
+      assert Tempo.to_iso8601!(Tempo.from_iso8601!("5786Y{1..-1}M[u-ca=hebrew]")) ==
                "5786Y{1..12}M[u-ca=hebrew]"
 
-      assert Tempo.to_iso8601(Tempo.from_iso8601!("5787Y{1..-1}M[u-ca=hebrew]")) ==
+      assert Tempo.to_iso8601!(Tempo.from_iso8601!("5787Y{1..-1}M[u-ca=hebrew]")) ==
                "5787Y{1..13}M[u-ca=hebrew]"
     end
   end
@@ -410,7 +410,7 @@ defmodule Tempo.CalendarTest do
       starts =
         set
         |> IntervalSet.members()
-        |> Enum.map(&Tempo.to_iso8601(Interval.from(&1)))
+        |> Enum.map(&Tempo.to_iso8601!(Interval.from(&1)))
 
       assert starts == [
                "5786Y7M15D[u-ca=hebrew]",
@@ -454,18 +454,18 @@ defmodule Tempo.CalendarTest do
     test "generation always uses `=` and the preferred identifier" do
       # Parsed via the hyphen + deprecated alias, emitted as canonical `=`.
       {:ok, tempo} = Tempo.from_iso8601("2020-06-15[u-ca-islamicc]")
-      assert Tempo.to_iso8601(tempo) == "2020Y6M15D[u-ca=islamic-civil]"
+      assert Tempo.to_iso8601!(tempo) == "2020Y6M15D[u-ca=islamic-civil]"
 
       # `:gregorian` encodes to the preferred `gregory`, not a naive spelling.
       {:ok, gregory} = Tempo.from_iso8601("2020-06-15[u-ca=gregorian]")
       {:ok, hebrew} = Tempo.from_iso8601("2020-06-15[u-ca-hebrew]")
-      assert Tempo.to_iso8601(hebrew) == "2020Y6M15D[u-ca=hebrew]"
+      assert Tempo.to_iso8601!(hebrew) == "2020Y6M15D[u-ca=hebrew]"
       assert gregory.calendar == Calendrical.Gregorian
     end
 
     test "the hyphen form round-trips through generation" do
       {:ok, tempo} = Tempo.from_iso8601("2020-06-15[u-ca-hebrew]")
-      {:ok, reparsed} = Tempo.from_iso8601(Tempo.to_iso8601(tempo))
+      {:ok, reparsed} = Tempo.from_iso8601(Tempo.to_iso8601!(tempo))
       assert reparsed.calendar == Calendrical.Hebrew
     end
   end

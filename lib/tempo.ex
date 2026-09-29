@@ -123,6 +123,7 @@ defmodule Tempo do
   alias Tempo.Iso8601.Parser
   alias Tempo.Iso8601.Tokenizer
   alias Tempo.Iso8601.Unit
+  alias Tempo.Iso8601EncodeError
   alias Tempo.Mask
   alias Tempo.Math
   alias Tempo.ParseError
@@ -1716,10 +1717,59 @@ defmodule Tempo do
   uncertainty qualifiers, unspecified digits) are preserved in
   their explicit form.
 
-  IXDTF suffixes (`[Europe/Paris]`, `[u-ca=hebrew]`) are **not**
-  emitted by this function — the `:extended` field is currently
-  ignored. Round-trip of IXDTF-enriched values is a future
-  extension.
+  IXDTF suffixes follow the value they belong to: a zone
+  (`2026Y6M15DT10H0M[Europe/Paris]`), a calendar
+  (`2026Y6M15D[u-ca=hebrew]`) and tags (`2026Y6M15D[name=x]`), so
+  a zoned or calendar-tagged value round-trips too. An interval's
+  `:unit` and `:metadata` have no ISO 8601 form and are not written.
+
+  ### Arguments
+
+  * `value` is a `t:Tempo.t/0`, `t:Tempo.Interval.t/0`,
+    `t:Tempo.Duration.t/0`, or `t:Tempo.Set.t/0`.
+
+  ### Returns
+
+  * `{:ok, iso8601}` — an ISO 8601-2 binary that parses back to the
+    same AST.
+
+  * `{:error, %Tempo.Iso8601EncodeError{}}` for a value with no ISO 8601
+    form: an interval set, a recurrence set, a conditional member, anything
+    that is not a Tempo value, or a value holding a cron nearest-weekday or
+    an ordinal BYDAY across distinct weekdays.
+
+  ### Examples
+
+      iex> Tempo.from_iso8601!("2022-11-20") |> Tempo.to_iso8601()
+      {:ok, "2022Y11M20D"}
+
+      iex> Tempo.from_iso8601!("R5/2022-01-01/P1M") |> Tempo.to_iso8601()
+      {:ok, "R5/2022Y1M1D/P1M"}
+
+      iex> {:ok, i} = Tempo.from_iso8601("1984?/2004~")
+      iex> Tempo.to_iso8601(i)
+      {:ok, "1984Y?/2004Y~"}
+
+      iex> holidays = Tempo.RecurrenceSet.new!([~o"R/../P1Y/FL12M25DN", ~o"R/../P1Y/FL1M1DN"])
+      iex> {:error, error} = Tempo.to_iso8601(holidays)
+      iex> Exception.message(error) =~ "no form for a set of recurrences"
+      true
+
+  """
+  @spec to_iso8601(term()) :: {:ok, String.t()} | {:error, Iso8601EncodeError.t()}
+  def to_iso8601(%struct{} = value) when struct in [Tempo, Interval, Duration, Tempo.Set] do
+    case Tempo.Inspect.unencodable(value) do
+      nil -> {:ok, value |> Tempo.Inspect.to_iodata() |> IO.iodata_to_binary()}
+      construct -> {:error, Iso8601EncodeError.exception(construct: construct, value: value)}
+    end
+  end
+
+  def to_iso8601(value),
+    do: {:error, Iso8601EncodeError.exception(construct: unencodable_type(value), value: value)}
+
+  @doc """
+  Encode a Tempo value back into an ISO 8601-2 string, raising for a value
+  with no ISO 8601 form.
 
   ### Arguments
 
@@ -1730,26 +1780,29 @@ defmodule Tempo do
 
   * An ISO 8601-2 binary that parses back to the same AST.
 
+  ### Raises
+
+  * `Tempo.Iso8601EncodeError` for a value `to_iso8601/1` returns it for.
+
   ### Examples
 
-      iex> Tempo.from_iso8601!("2022-11-20") |> Tempo.to_iso8601()
+      iex> Tempo.to_iso8601!(~o"2022-11-20")
       "2022Y11M20D"
 
-      iex> Tempo.from_iso8601!("R5/2022-01-01/P1M") |> Tempo.to_iso8601()
-      "R5/2022Y1M1D/P1M"
-
-      iex> {:ok, i} = Tempo.from_iso8601("1984?/2004~")
-      iex> Tempo.to_iso8601(i)
-      "1984Y?/2004Y~"
-
   """
-  @spec to_iso8601(Tempo.t() | Tempo.Interval.t() | Tempo.Duration.t() | Tempo.Set.t()) ::
+  @spec to_iso8601!(Tempo.t() | Tempo.Interval.t() | Tempo.Duration.t() | Tempo.Set.t()) ::
           String.t()
-  def to_iso8601(value) do
-    value
-    |> Tempo.Inspect.to_iodata()
-    |> IO.iodata_to_binary()
+  def to_iso8601!(value) do
+    case to_iso8601(value) do
+      {:ok, iso8601} -> iso8601
+      {:error, exception} -> raise exception
+    end
   end
+
+  defp unencodable_type(%Tempo.RecurrenceSet{}), do: :recurrence_set
+  defp unencodable_type(%IntervalSet{}), do: :interval_set
+  defp unencodable_type(%Conditional{}), do: :conditional
+  defp unencodable_type(_value), do: :value
 
   @doc """
   Creates a `t:Tempo.t/0` struct from a `t:Date.t/0`.
@@ -3505,14 +3558,14 @@ defmodule Tempo do
       iex> {:ok, calendar} = Calendrical.FiscalYear.calendar_for(:AU)
       iex> {:ok, quarter} = Tempo.from_elixir(calendar.quarter(2027, 1))
       iex> {:ok, gregorian} = Tempo.to_calendar(quarter, Calendrical.Gregorian)
-      iex> Tempo.to_iso8601(gregorian)
+      iex> Tempo.to_iso8601!(gregorian)
       "2026Y7M1D/10M1D"
 
   An interval set converts member by member:
 
       iex> {:ok, set} = Tempo.IntervalSet.new([~o"2026-06-15/2026-06-16"])
       iex> {:ok, hebrew} = Tempo.to_calendar(set, Calendrical.Hebrew)
-      iex> hebrew |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.to_iso8601/1)
+      iex> hebrew |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
       ["5786Y9M30D/10M1D"]
 
   """
@@ -5700,7 +5753,12 @@ defmodule Tempo do
          opts
        ) do
     with {:ok, window_to} <- bound_upper(within) do
-      widened_from = add_n_durations(start, negate_duration(cadence), periods_before)
+      # A window reaching back places a period's occurrence before the period
+      # starts, and the walk keeps none that starts before the walk does, so it
+      # starts as many periods earlier again.
+      widened_from =
+        add_n_durations(start, negate_duration(cadence), periods_before + periods_after)
+
       widened_to = add_n_durations(window_to, cadence, periods_after)
       widened = %Tempo.Interval{from: widened_from, to: widened_to}
 
@@ -5716,23 +5774,61 @@ defmodule Tempo do
   # running on from an earlier period, as a December–January school break does.
   # Each direction's durations are summed (a nested window adds its own) over the
   # shortest the cadence period can be, plus one for the period itself; none when
-  # nothing reaches that way, or the cadence is finer than a day.
+  # nothing reaches that way. A cadence of a day or more is measured in days, a
+  # finer one (an hourly rule whose occurrences last ninety minutes) in seconds.
   defp window_periods(%Tempo.Interval{
          repeat_rule: %Tempo{time: [selection: selection]},
          duration: %Tempo.Duration{} = cadence,
          metadata: metadata
        }) do
     durations = window_durations(selection)
-    floor = cadence_days_floor(cadence)
 
-    {periods_reaching(reach_days(durations ++ spanned_durations(metadata), :forward), floor),
-     periods_reaching(reach_days(durations, :backward), floor)}
+    {reach_periods(durations ++ spanned_durations(metadata), :forward, cadence),
+     reach_periods(durations, :backward, cadence)}
   end
 
   defp window_periods(_interval), do: {0, 0}
 
   defp spanned_durations(%{occurrence_duration: %Tempo.Duration{} = span}), do: [span]
   defp spanned_durations(_metadata), do: []
+
+  defp reach_periods(durations, direction, cadence) do
+    case cadence_days_floor(cadence) do
+      0 -> periods_reaching(reach_seconds(durations, direction), cadence_seconds_floor(cadence))
+      floor -> periods_reaching(reach_days(durations, direction), floor)
+    end
+  end
+
+  # The most seconds the durations can span one way, a day at most the 25 hours
+  # of the day daylight saving ends on.
+  defp reach_seconds(durations, direction) do
+    for %Tempo.Duration{time: time} <- durations,
+        {unit, amount} <- time,
+        reaches?(amount, direction),
+        reduce: 0 do
+      total -> total + Kernel.ceil(abs(amount) * max_seconds_per(unit))
+    end
+  end
+
+  defp max_seconds_per(:year), do: 366 * 90_000
+  defp max_seconds_per(:month), do: 31 * 90_000
+  defp max_seconds_per(:week), do: 7 * 90_000
+  defp max_seconds_per(:day), do: 90_000
+  defp max_seconds_per(:hour), do: 3_600
+  defp max_seconds_per(:minute), do: 60
+  defp max_seconds_per(_second), do: 1
+
+  # The fewest seconds a cadence finer than a day spans.
+  defp cadence_seconds_floor(%Tempo.Duration{time: time}) do
+    Enum.reduce(time, 0, fn {unit, amount}, total ->
+      total + Kernel.trunc(abs(amount) * min_seconds_per(unit))
+    end)
+  end
+
+  defp min_seconds_per(:hour), do: 3_600
+  defp min_seconds_per(:minute), do: 60
+  defp min_seconds_per(:second), do: 1
+  defp min_seconds_per(_unit), do: 0
 
   defp periods_reaching(0, _floor), do: 0
   defp periods_reaching(_reach, 0), do: 0
@@ -5958,7 +6054,7 @@ defmodule Tempo do
 
     fn candidate ->
       candidate
-      |> Selection.apply(rule, freq, origin_day: origin_day)
+      |> Selection.apply(rule, freq, origin_day: origin_day, keep_span: not resize?)
       |> resize_selected_occurrences(resize?)
     end
   end

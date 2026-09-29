@@ -28,6 +28,30 @@ defmodule Tempo.Inspect do
   @spec to_iodata(term()) :: iodata()
   def to_iodata(value), do: inspect_value(value)
 
+  @doc """
+  The construct in a Tempo value that has no ISO 8601 form, found before
+  the value is encoded: an ordinal BYDAY across distinct weekdays
+  (`:byday`) or a cron nearest-weekday (`:nearest_weekday`), anywhere in
+  its selections. `nil` when the value has neither.
+  """
+  @spec unencodable(term()) :: :byday | :nearest_weekday | nil
+  def unencodable(%Tempo{time: time}), do: unencodable_in(time)
+
+  def unencodable(%Tempo.Interval{} = interval),
+    do: Enum.find_value([interval.from, interval.to, interval.repeat_rule], &unencodable/1)
+
+  def unencodable(%Tempo.Set{set: members}), do: Enum.find_value(members, &unencodable/1)
+  def unencodable(_value), do: nil
+
+  defp unencodable_in({construct, _value}) when construct in [:byday, :nearest_weekday],
+    do: construct
+
+  defp unencodable_in({_key, value}), do: unencodable_in(value)
+  defp unencodable_in(list) when is_list(list), do: Enum.find_value(list, &unencodable_in/1)
+  defp unencodable_in(%Tempo.Interval{} = interval), do: unencodable(interval)
+  defp unencodable_in(%Tempo{} = tempo), do: unencodable(tempo)
+  defp unencodable_in(_value), do: nil
+
   # Inspect wraps `Tempo.to_iso8601/1` in sigil syntax. Keeping
   # encoding in one place — `Tempo.to_iso8601/1` — means the
   # Inspect output is guaranteed to round-trip through
@@ -45,37 +69,46 @@ defmodule Tempo.Inspect do
   def inspect(%Tempo{calendar: Calendrical.Gregorian} = tempo) do
     # `to_iso8601/1` (via `inspect_value/1`) already appends the
     # IXDTF extended trailer; don't add it again here.
-    @sigil_o <> Tempo.to_iso8601(tempo) <> "\""
+    encoded(tempo, "Tempo", &(@sigil_o <> &1 <> "\""))
   end
 
   def inspect(%Tempo{calendar: Calendrical.ISOWeek} = tempo) do
-    @sigil_o <> Tempo.to_iso8601(tempo) <> "\"W"
+    encoded(tempo, "Tempo", &(@sigil_o <> &1 <> "\"W"))
   end
 
   def inspect(%Tempo{calendar: calendar} = tempo) do
     # `to_iso8601/1` (via `inspect_value/1`) already appends the
     # IXDTF extended trailer for any zone / calendar / tags present
     # on the Tempo, so we don't add it again here.
-    @from_iso8601 <>
-      Tempo.to_iso8601(tempo) <>
-      "\", " <> Kernel.inspect(calendar) <> ")"
+    encoded(tempo, "Tempo", &(@from_iso8601 <> &1 <> "\", " <> Kernel.inspect(calendar) <> ")"))
   end
 
   def inspect(%Tempo.Interval{} = interval) do
-    body = @sigil_o <> Tempo.to_iso8601(interval) <> "\""
+    encoded(interval, "Tempo.Interval", fn iso8601 ->
+      body = @sigil_o <> iso8601 <> "\""
 
-    case interval_tags(interval) do
-      "" -> body
-      tags -> "#Tempo.Interval<" <> body <> " " <> tags <> ">"
-    end
+      case interval_tags(interval) do
+        "" -> body
+        tags -> "#Tempo.Interval<" <> body <> " " <> tags <> ">"
+      end
+    end)
   end
 
   def inspect(%Tempo.Duration{} = duration) do
-    @sigil_o <> Tempo.to_iso8601(duration) <> "\""
+    encoded(duration, "Tempo.Duration", &(@sigil_o <> &1 <> "\""))
   end
 
   def inspect(%Tempo.Set{} = set) do
-    @sigil_o <> Tempo.to_iso8601(set) <> "\""
+    encoded(set, "Tempo.Set", &(@sigil_o <> &1 <> "\""))
+  end
+
+  # A value with no ISO 8601 form (a cron nearest-weekday recurrence) cannot be
+  # rendered as a sigil that parses back, so it shows as a labelled struct view.
+  defp encoded(value, tag, render) do
+    case Tempo.to_iso8601(value) do
+      {:ok, iso8601} -> render.(iso8601)
+      {:error, _reason} -> "#" <> tag <> "<not ISO 8601 expressible>"
+    end
   end
 
   # Non-syntactic interval state renders as a decoration outside the
@@ -993,10 +1026,17 @@ defmodule Tempo.Inspect do
   # by the start. Anything that changes how a component is *read* has
   # to match too: a different zone, calendar or qualification on the
   # end is not implied by the start and would be lost.
+  #
+  # A fraction of a second belongs to its second, so the two are compared
+  # as one component: the shared prefix never ends between them, and an
+  # end that differs only in the fraction is written from its second
+  # (`…T10H0M0.123S/T0.456S`).
   defp abbreviate(%Tempo{time: to_units} = to, %Tempo{time: from_units} = from)
        when is_list(to_units) and is_list(from_units) do
+    to_units = fold_microsecond(to_units)
+
     if implied_by?(to, from) do
-      case shared_prefix(to_units, from_units) do
+      case shared_prefix(to_units, fold_microsecond(from_units)) do
         # Identical endpoints, or nothing in common: there is no
         # shorter form that still says the same thing.
         [] -> to

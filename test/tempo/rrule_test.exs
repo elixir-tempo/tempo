@@ -227,7 +227,7 @@ defmodule Tempo.RRuleTest do
       rrule = RRule.parse!("FREQ=WEEKLY;BYDAY=FR;BYHOUR=17;BYMINUTE=0", from: ~o"2025-01-03")
 
       assert rrule.repeat_rule.time == [selection: [day_of_week: 5, hour: 17, minute: 0]]
-      assert Tempo.from_iso8601(Tempo.to_iso8601(rrule)) == {:ok, rrule}
+      assert Tempo.from_iso8601(Tempo.to_iso8601!(rrule)) == {:ok, rrule}
     end
 
     test "BYYEARDAY, BYSETPOS, WKST and consecutive runs round-trip via to_iso8601/1" do
@@ -247,7 +247,7 @@ defmodule Tempo.RRuleTest do
 
       for rule <- rules do
         rrule = RRule.parse!(rule, from: ~o"2025-01-01")
-        assert Tempo.from_iso8601(Tempo.to_iso8601(rrule)) == {:ok, rrule}
+        assert Tempo.from_iso8601(Tempo.to_iso8601!(rrule)) == {:ok, rrule}
       end
     end
   end

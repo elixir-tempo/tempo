@@ -138,7 +138,7 @@ defmodule Tempo.Iso8601.InspectTest do
       once = Tempo.from_iso8601!("2011-12-29T12:00:00/2011-12-31T12:00:00[Pacific/Apia]")
 
       assert both == once
-      assert Tempo.from_iso8601!(Tempo.to_iso8601(both)) == both
+      assert Tempo.from_iso8601!(Tempo.to_iso8601!(both)) == both
     end
 
     test "Interval with mixed zones shows each endpoint's zone" do
@@ -176,7 +176,7 @@ defmodule Tempo.Iso8601.InspectTest do
 
       assert iv.from.calendar == Calendrical.Islamic.Civil
       assert iv.to.calendar == Calendrical.Gregorian
-      assert Tempo.to_iso8601(iv) =~ "[u-ca=islamic-civil]/"
+      assert Tempo.to_iso8601!(iv) =~ "[u-ca=islamic-civil]/"
     end
 
     test "Interval with no extended info renders cleanly (no empty brackets)" do

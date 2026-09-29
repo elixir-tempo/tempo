@@ -45,9 +45,11 @@ defmodule Tempo.RRule.Selection do
   """
 
   alias Calendrical.Kday
+  alias Tempo.Compare
   alias Tempo.Event
   alias Tempo.Interval
   alias Tempo.Mask
+  alias Tempo.Math
   alias Tempo.Validation
 
   # ISO 8601's weeks, and RFC 5545's by default, start on a Monday, weekday 1.
@@ -70,6 +72,20 @@ defmodule Tempo.RRule.Selection do
     EXPAND-vs-LIMIT dispatch for rules whose role depends on
     the enclosing frequency.
 
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:origin_day` is the day of the month the recurrence started on,
+    which an expansion that moves the month clamps from. The default
+    is `nil`.
+
+  * `:keep_span` is `true` when the occurrences carry an explicit span
+    (an iCalendar `DTEND`, an `:occurrence_duration`), which an hour,
+    minute or second expansion keeps by moving the candidate's `to` with
+    its `from`. The default is `false`: each occurrence is resized to its
+    own resolution afterwards.
+
   ### Returns
 
   * A list of `t:Tempo.Interval.t/0` occurrences — `[]` on LIMIT
@@ -89,7 +105,7 @@ defmodule Tempo.RRule.Selection do
       []
 
   """
-  @spec apply(Interval.t(), Tempo.t() | nil, atom()) :: [Interval.t()]
+  @spec apply(Interval.t(), Tempo.t() | nil, atom(), keyword()) :: [Interval.t()]
   def apply(candidate, repeat_rule, freq, options \\ [])
 
   def apply(%Interval{} = candidate, nil, _freq, _options), do: [candidate]
@@ -99,21 +115,27 @@ defmodule Tempo.RRule.Selection do
     # entry: cadence stepping clamps the candidate's day (Feb 29 →
     # Feb 28 in a common year), and an expansion that repositions the
     # month must clamp from the day the rule started on, per
-    # occurrence — not from an intermediate clamp. Handlers that
-    # don't consume the tag pass it through.
-    selection =
-      case Keyword.get(options, :origin_day) do
-        day when is_integer(day) -> selection ++ [origin_day: day]
-        _other -> selection
-      end
-
-    apply_selection(candidate, selection, freq)
+    # occurrence — not from an intermediate clamp. Whether the
+    # occurrences carry an explicit span rides along the same way.
+    # Handlers that don't consume the tags pass them through.
+    apply_selection(candidate, selection ++ selection_context(options), freq)
   end
 
   # No selection shape we recognise — pass through rather than
   # crash. Future phases replace this catch-all with a specific
   # error once every shape is accounted for.
   def apply(%Interval{} = candidate, _, _freq, _options), do: [candidate]
+
+  defp selection_context(options) do
+    origin_day =
+      case Keyword.get(options, :origin_day) do
+        day when is_integer(day) -> [origin_day: day]
+        _other -> []
+      end
+
+    keep_span = if Keyword.get(options, :keep_span) == true, do: [keep_span: true], else: []
+    origin_day ++ keep_span
+  end
 
   ## ------------------------------------------------------------
   ## Selection dispatch
@@ -186,9 +208,9 @@ defmodule Tempo.RRule.Selection do
     inner_selection = scope ++ inner_selection(inner)
     starts = apply_selection(candidate, inner_selection, freq)
 
-    # `:origin_day`/`:wkst` are passthrough context, not selectors, so they do
-    # not make a window non-terminal.
-    case Enum.reject(within, fn {key, _value} -> key in [:origin_day, :wkst] end) do
+    # `:origin_day`/`:keep_span`/`:wkst` are passthrough context, not
+    # selectors, so they do not make a window non-terminal.
+    case Enum.reject(within, fn {key, _value} -> key in [:origin_day, :keep_span, :wkst] end) do
       [] ->
         # A terminal window (no inner selectors) is itself the occurrence: the
         # interval from the window's start for the given duration (§12.11.3 Example 1).
@@ -265,30 +287,28 @@ defmodule Tempo.RRule.Selection do
     end
   end
 
-  # The window `[start, start + duration)` as a single interval occurrence.
-  defp window_interval(
-         %Interval{from: %Tempo{calendar: calendar, time: time} = from} = start,
-         %Tempo.Duration{} = duration
-       ) do
-    with {:ok, %Date{} = start_date} <- date_of(time, calendar),
-         %Tempo{time: shifted_time} <- Tempo.shift(from, duration),
-         {:ok, %Date{} = shifted_date} <- date_of(shifted_time, calendar) do
-      {lo, hi} = window_bounds(start_date, shifted_date)
-      # Mark it windowed so the recurrence keeps its multi-day span instead of
-      # resizing the occurrence down to one resolution unit.
-      %{
+  # The window `[start, start + duration)` as a single interval occurrence,
+  # ordered so a backward duration gives `[start - duration, start)`. Its ends
+  # are exact, so the four hours from 22:00 (`LT22HN/PT4H`) end at 02:00 the
+  # next day.
+  defp window_interval(%Interval{from: %Tempo{} = from} = start, %Tempo.Duration{} = duration) do
+    case Tempo.shift(from, duration) do
+      %Tempo{} = shifted ->
+        {lo, hi} = window_ends(from, shifted)
+
+        # Mark it windowed so the recurrence keeps its span instead of
+        # resizing the occurrence down to one resolution unit.
+        %{start | from: lo, to: hi, metadata: Map.put(start.metadata, :windowed, true)}
+
+      _error ->
         start
-        | from: tempo_at_date(from, lo),
-          to: tempo_at_date(from, hi),
-          metadata: Map.put(start.metadata, :windowed, true)
-      }
-    else
-      _ -> start
     end
   end
 
-  defp tempo_at_date(%Tempo{time: time} = tempo, %Date{} = date) do
-    %{tempo | time: replace_unit_values(time, year: date.year, month: date.month, day: date.day)}
+  defp window_ends(%Tempo{time: from_time} = from, %Tempo{time: shifted_time} = shifted) do
+    if Compare.compare_time(from_time, shifted_time) == :gt,
+      do: {shifted, from},
+      else: {from, shifted}
   end
 
   # A `{2..8}` set in the ISO 8601-2 sigil grammar parses to a `Range`
@@ -527,16 +547,16 @@ defmodule Tempo.RRule.Selection do
 
   # BYHOUR / BYMINUTE / BYSECOND — EXPAND when FREQ is coarser
   # than the unit, LIMIT when FREQ is the same unit or finer.
-  defp apply_entry({:hour, values}, candidates, freq, _selection, _wkst) do
-    expand_or_limit_time(candidates, :hour, List.wrap(values), freq)
+  defp apply_entry({:hour, values}, candidates, freq, selection, _wkst) do
+    expand_or_limit_time(candidates, :hour, List.wrap(values), freq, keep_span?(selection))
   end
 
-  defp apply_entry({:minute, values}, candidates, freq, _selection, _wkst) do
-    expand_or_limit_time(candidates, :minute, List.wrap(values), freq)
+  defp apply_entry({:minute, values}, candidates, freq, selection, _wkst) do
+    expand_or_limit_time(candidates, :minute, List.wrap(values), freq, keep_span?(selection))
   end
 
-  defp apply_entry({:second, values}, candidates, freq, _selection, _wkst) do
-    expand_or_limit_time(candidates, :second, List.wrap(values), freq)
+  defp apply_entry({:second, values}, candidates, freq, selection, _wkst) do
+    expand_or_limit_time(candidates, :second, List.wrap(values), freq, keep_span?(selection))
   end
 
   # A year (`Y`) — LIMIT at every frequency: keep the occurrences that start
@@ -556,6 +576,8 @@ defmodule Tempo.RRule.Selection do
 
   # Unknown tokens pass through unchanged.
   defp apply_entry(_entry, candidates, _freq, _selection, _wkst), do: candidates
+
+  defp keep_span?(selection), do: Keyword.get(selection, :keep_span, false)
 
   # BYDAY-no-ordinal role dispatcher (RFC §3.3.10 notes).
   defp day_determined_by_later_part?(selection) do
@@ -1524,17 +1546,17 @@ defmodule Tempo.RRule.Selection do
     second: 7
   }
 
-  defp expand_or_limit_time(candidates, unit, values, freq) do
+  defp expand_or_limit_time(candidates, unit, values, freq, keep_span?) do
     if Map.get(@unit_weight, freq, 0) < Map.get(@unit_weight, unit, 0) do
-      expand_time(candidates, unit, values)
+      expand_time(candidates, unit, values, keep_span?)
     else
       limit_time(candidates, unit, values)
     end
   end
 
-  defp expand_time(candidates, unit, values) do
+  defp expand_time(candidates, unit, values, keep_span?) do
     Enum.flat_map(candidates, fn candidate ->
-      Enum.map(values, fn value -> set_time_unit(candidate, unit, value) end)
+      Enum.map(values, fn value -> set_time_unit(candidate, unit, value, keep_span?) end)
     end)
   end
 
@@ -1547,10 +1569,42 @@ defmodule Tempo.RRule.Selection do
 
   defp get_time_unit(%Interval{from: %Tempo{time: time}}, unit), do: Keyword.get(time, unit)
 
-  defp set_time_unit(%Interval{from: %Tempo{time: time} = tempo} = candidate, unit, value) do
-    new_time = upsert_unit(time, unit, value)
-    %{candidate | from: %{tempo | time: new_time}}
+  # A candidate moved to another hour, minute or second. With an explicit
+  # span, `to` moves by as much as `from`, so a 09:00–10:00 event expanded
+  # to 17:00 is 17:00–18:00, as a span moved to another date keeps its days
+  # (`swap_into/3`). Without one, the occurrence is resized to its own
+  # resolution afterwards, so `to` is left for that.
+  defp set_time_unit(%Interval{from: %Tempo{time: time} = tempo} = candidate, unit, value, false) do
+    %{candidate | from: %{tempo | time: upsert_unit(time, unit, value)}}
   end
+
+  defp set_time_unit(
+         %Interval{from: %Tempo{time: time} = tempo, to: to} = candidate,
+         unit,
+         value,
+         true
+       ) do
+    shift = value - time_unit_value(time, unit)
+
+    %{
+      candidate
+      | from: %{tempo | time: upsert_unit(time, unit, value)},
+        to: shift_time(to, unit, shift)
+    }
+  end
+
+  # A unit the start leaves out is at its start: hour, minute or second 0.
+  defp time_unit_value(time, unit) do
+    case Keyword.get(time, unit) do
+      value when is_integer(value) -> value
+      _absent -> 0
+    end
+  end
+
+  defp shift_time(%Tempo{} = to, unit, shift) when shift != 0,
+    do: Math.add(to, %Tempo.Duration{time: [{unit, shift}]})
+
+  defp shift_time(to, _unit, _shift), do: to
 
   # Update a unit in an ordered `time` list. If the unit is
   # already present, replace its value in place. Otherwise

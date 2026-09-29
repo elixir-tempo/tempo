@@ -217,21 +217,21 @@ defmodule Tempo.ExclusionDomainTest do
   describe "round-trip" do
     test "a domain recurrence with ^ round-trips faithfully" do
       value = ~o"R/{2020Y..2030Y,^2026Y}/P1Y/FL12M25DN"
-      iso = Tempo.to_iso8601(value)
+      iso = Tempo.to_iso8601!(value)
       assert iso == "R/{2020Y..2030Y,^2026Y}/P1Y/FL12M25DN"
       assert {:ok, ^value} = Tempo.from_iso8601(iso)
     end
 
     test "a standalone set with ^ round-trips" do
-      assert Tempo.to_iso8601(~o"{2020Y..2030Y,^2026Y}") == "{2020Y..2030Y,^2026Y}"
+      assert Tempo.to_iso8601!(~o"{2020Y..2030Y,^2026Y}") == "{2020Y..2030Y,^2026Y}"
     end
 
     test "an exclusions-only set renders with braces" do
-      assert Tempo.to_iso8601(~o"{^2026Y}") == "{^2026Y}"
+      assert Tempo.to_iso8601!(~o"{^2026Y}") == "{^2026Y}"
     end
 
     test "the bare ^ form canonicalises to braces" do
-      assert Tempo.to_iso8601(~o"R/^2026Y/P1Y/FL12M25DN") == "R/{^2026Y}/P1Y/FL12M25DN"
+      assert Tempo.to_iso8601!(~o"R/^2026Y/P1Y/FL12M25DN") == "R/{^2026Y}/P1Y/FL12M25DN"
     end
   end
 end

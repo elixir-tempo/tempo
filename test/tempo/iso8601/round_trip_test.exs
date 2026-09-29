@@ -114,17 +114,17 @@ defmodule Tempo.Iso8601.RoundTripTest do
     {:ok, from_lower} = Tempo.from_iso8601("R/2025-01-01/P1W/FL1K7qN")
 
     assert from_upper == from_lower
-    assert Tempo.to_iso8601(from_upper) == "R/2025Y1M1D/P1W/FL1K7qN"
+    assert Tempo.to_iso8601!(from_upper) == "R/2025Y1M1D/P1W/FL1K7qN"
   end
 
   test "inspect renders the canonical ISO 8601 form as a ~o sigil expression" do
     # Ties the round-trip above to the `~o"…"` form: for the default calendar,
-    # `inspect/1` is exactly the canonical `Tempo.to_iso8601/1` string wrapped
+    # `inspect/1` is exactly the canonical `Tempo.to_iso8601!/1` string wrapped
     # in the sigil, and re-parsing that inner string restores the value.
     {:ok, value} = Tempo.from_iso8601("2022-06-15")
 
     assert inspect(value) == ~s(~o"2022Y6M15D")
-    assert inspect(value) == ~s(~o") <> Tempo.to_iso8601(value) <> ~s(")
+    assert inspect(value) == ~s(~o") <> Tempo.to_iso8601!(value) <> ~s(")
   end
 
   # Re-parse the ISO 8601 string `inspect/1` renders — inside `~o"…"` for the

@@ -123,8 +123,8 @@ defmodule Tempo.ZoneValidationTest do
 
       # Inspect form encodes the disambiguating shift; re-parsing
       # yields a Tempo with the same shift.
-      round_a = Tempo.from_iso8601!(Tempo.to_iso8601(two_a))
-      round_b = Tempo.from_iso8601!(Tempo.to_iso8601(two_b))
+      round_a = Tempo.from_iso8601!(Tempo.to_iso8601!(two_a))
+      round_b = Tempo.from_iso8601!(Tempo.to_iso8601!(two_b))
       assert round_a.shift == two_a.shift
       assert round_b.shift == two_b.shift
     end

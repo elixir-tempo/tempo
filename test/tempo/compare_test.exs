@@ -61,7 +61,7 @@ defmodule Tempo.CompareTest do
     test "Enum.sort/2 takes Tempo directly" do
       sorted = Enum.sort([~o"2026-06-16", ~o"2026-06-15", ~o"2026-06-17"], Tempo)
 
-      assert Enum.map(sorted, &Tempo.to_iso8601/1) ==
+      assert Enum.map(sorted, &Tempo.to_iso8601!/1) ==
                ["2026Y6M15D", "2026Y6M16D", "2026Y6M17D"]
     end
 
@@ -69,14 +69,14 @@ defmodule Tempo.CompareTest do
       sessions = [%{at: ~o"2026-06-16"}, %{at: ~o"2026-06-15"}]
 
       assert [%{at: first} | _] = Enum.sort_by(sessions, & &1.at, Tempo)
-      assert Tempo.to_iso8601(first) == "2026Y6M15D"
+      assert Tempo.to_iso8601!(first) == "2026Y6M15D"
     end
 
     test "Enum.min/2 and Enum.max/2 take Tempo directly" do
       days = [~o"2026-06-15", ~o"2026-06-17", ~o"2026-06-16"]
 
-      assert Tempo.to_iso8601(Enum.min(days, Tempo)) == "2026Y6M15D"
-      assert Tempo.to_iso8601(Enum.max(days, Tempo)) == "2026Y6M17D"
+      assert Tempo.to_iso8601!(Enum.min(days, Tempo)) == "2026Y6M15D"
+      assert Tempo.to_iso8601!(Enum.max(days, Tempo)) == "2026Y6M17D"
     end
 
     test "sorting is stable against Erlang term order" do

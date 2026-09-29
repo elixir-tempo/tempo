@@ -492,8 +492,8 @@ meetups
   with {:ok, opening_utc} <- Tempo.shift_zone(opening, "Etc/UTC"),
        {:ok, closing_utc} <- Tempo.shift_zone(closing, "Etc/UTC") do
     %{
-      melbourne: Tempo.to_iso8601(opening),
-      utc: Tempo.to_iso8601(opening_utc) <> " → " <> Tempo.to_iso8601(closing_utc)
+      melbourne: Tempo.to_iso8601!(opening),
+      utc: Tempo.to_iso8601!(opening_utc) <> " → " <> Tempo.to_iso8601!(closing_utc)
     }
   end
 end)

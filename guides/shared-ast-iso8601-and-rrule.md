@@ -106,19 +106,27 @@ RRULE lets a rule override the week start (`WKST=SU`), which shifts `BYWEEKNO`/`
 
 Because ISO 8601 can describe more than RRULE, and RRULE needs specific features ISO 8601 doesn't model at the AST level, round-tripping isn't always lossless.
 
-### `Tempo.to_iso8601/1` is lossy for
+### `Tempo.to_iso8601/1` returns `{:error, %Tempo.Iso8601EncodeError{}}` for
 
-**Component-level qualification.** `2022-?06-15` parses with `qualifications: %{month: :uncertain}`, but the encoder emits explicit-form output (`2022Y6M15D`) which has no inline qualifier syntax. The qualification is dropped on encode. Expression-level qualification (`2022?`, `1984?/2004~`) does round-trip cleanly.
+* An ordinal spread across distinct weekdays (`BYDAY=2MO,2WE`), which a single `I` cannot express.
 
-This is documented as a known limitation; the test suite at `test/tempo/round_trip_test.exs` exercises it explicitly. A future encoder could emit extended form (`2022-06-15`) when qualifications are present, preserving them. Tracked as future work.
+* A cron nearest weekday (`15W`).
+
+* A set of intervals or of recurrences, or a conditional member of one: ISO 8601 has no syntax for a set of values, so encode its members one by one.
+
+`Tempo.to_iso8601!/1` raises the same error. Everything else round-trips, component qualifications included (`2022-?06-15` encodes as `2022Y6?M15D`), except an interval's `:unit` and `:metadata`, which have no ISO 8601 spelling and are not written.
 
 ### `Tempo.RRule.to_string/1` returns `{:error, %Tempo.ConversionError{}}` for
 
-* A `%Tempo{}` that is not a `%Tempo.Interval{}` (no recurrence to describe)
-* An interval without a `:duration` (no FREQ available)
-* A duration with multiple units (`P1Y6M` → RRULE has no "year-and-six-months" unit)
-* A duration with a unit RRULE doesn't support (`P1C` century, group unit, etc.)
-* A `:repeat_rule` whose shape isn't a flat `:selection` keyword list
+* A `%Tempo{}` that is not a `%Tempo.Interval{}` (no recurrence to describe).
+
+* An interval without a `:duration` (no FREQ available).
+
+* A duration with multiple units (`P1Y6M` → RRULE has no "year-and-six-months" unit).
+
+* A duration with a unit RRULE doesn't support (`P1C` century, group unit, etc.).
+
+* A `:repeat_rule` whose shape isn't a flat `:selection` keyword list.
 
 * A selection with no RRULE `BY*` part: a calendar week (`w`), a traditional month (`m`), a computed event (`e`), a year, a selection window (ISO 8601-2 §12.10), or a cron nearest weekday or day-of-month-or-weekday. The error names each one rather than dropping it.
 
@@ -142,13 +150,14 @@ Three practical benefits:
 {:ok, ast} = Tempo.RRule.parse("FREQ=DAILY;COUNT=10")
 
 # Encoders
-iso_string = Tempo.to_iso8601(ast)              # always succeeds
+{:ok, iso_string} = Tempo.to_iso8601(ast)              # succeeds or returns Iso8601EncodeError
+iso_string = Tempo.to_iso8601!(ast)                    # raises on failure
 {:ok, rrule_string} = Tempo.RRule.to_string(ast)       # succeeds or returns ConversionError
 rrule_string = Tempo.RRule.to_string!(ast)             # raises on failure
 
 # Round-trip pattern
 {:ok, ast_1} = Tempo.from_iso8601(iso)
-iso_1 = Tempo.to_iso8601(ast_1)
+{:ok, iso_1} = Tempo.to_iso8601(ast_1)
 {:ok, ast_2} = Tempo.from_iso8601(iso_1)
 assert ast_1 == ast_2           # fixed-point property
 ```

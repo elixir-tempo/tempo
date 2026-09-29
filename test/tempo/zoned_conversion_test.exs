@@ -52,7 +52,7 @@ defmodule Tempo.ZonedConversionTest do
       tempo = Tempo.from_datetime(date_time)
 
       assert tempo.shift == [hour: -3, minute: 30]
-      assert {:ok, round_trip} = tempo |> Tempo.to_iso8601() |> Tempo.from_iso8601()
+      assert {:ok, round_trip} = tempo |> Tempo.to_iso8601!() |> Tempo.from_iso8601()
       assert Tempo.equal?(round_trip, ~o"2026-01-15T13:30:00Z")
     end
 

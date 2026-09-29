@@ -148,7 +148,7 @@ Rendering goes the other way — `inspect/1` and `to_iso8601/1` drop the shared 
 
 ```elixir
 iex> Tempo.to_iso8601(Tempo.from_iso8601!("2026-06-15/2026-06-16"))
-"2026Y6M15D/16D"
+{:ok, "2026Y6M15D/16D"}
 ```
 
 **The "unambiguous" proviso is load-bearing.** §5.2.2.2 makes a bare two-digit date component a *century*, so `2022-02-15/04` is century 04 — years 400–499 — not April, and nothing is inherited into it. Omit a component only where a designator or a separator keeps the reading clear: `/02-20` is a month and a day, `/04` is not.

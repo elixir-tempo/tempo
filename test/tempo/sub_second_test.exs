@@ -90,7 +90,7 @@ defmodule Tempo.SubSecondTest do
   describe "materialisation to an interval" do
     defp endpoints(iso) do
       {:ok, iv} = Tempo.to_interval(Tempo.from_iso8601!(iso))
-      {Tempo.to_iso8601(iv.from), Tempo.to_iso8601(iv.to)}
+      {Tempo.to_iso8601!(iv.from), Tempo.to_iso8601!(iv.to)}
     end
 
     test "the span is [value, value + one ulp) at the value's precision" do
@@ -239,7 +239,7 @@ defmodule Tempo.SubSecondTest do
           Tempo.from_iso8601!("PT0.2S")
         )
 
-      assert Tempo.to_iso8601(result) == "2026Y6M15DT10H30M46.100S"
+      assert Tempo.to_iso8601!(result) == "2026Y6M15DT10H30M46.100S"
     end
 
     test "subtracting a sub-second duration borrows from the second" do
@@ -249,7 +249,7 @@ defmodule Tempo.SubSecondTest do
           Tempo.from_iso8601!("PT0.2S")
         )
 
-      assert Tempo.to_iso8601(result) == "2026Y6M15DT10H30M45.900S"
+      assert Tempo.to_iso8601!(result) == "2026Y6M15DT10H30M45.900S"
     end
 
     test "adding a sub-second duration to a second-resolution value introduces sub-second" do
@@ -259,7 +259,7 @@ defmodule Tempo.SubSecondTest do
           Tempo.from_iso8601!("PT0.5S")
         )
 
-      assert Tempo.to_iso8601(result) == "2026Y6M15DT10H30M45.500000S"
+      assert Tempo.to_iso8601!(result) == "2026Y6M15DT10H30M45.500000S"
     end
   end
 
@@ -293,7 +293,7 @@ defmodule Tempo.SubSecondTest do
     test "an explicit sub-second interval steps by one ulp at its resolution" do
       iv = Tempo.from_iso8601!("2026-06-15T10:30:45.000/2026-06-15T10:30:45.003")
 
-      assert Enum.map(iv, &Tempo.to_iso8601/1) == [
+      assert Enum.map(iv, &Tempo.to_iso8601!/1) == [
                "2026Y6M15DT10H30M45.000S",
                "2026Y6M15DT10H30M45.001S",
                "2026Y6M15DT10H30M45.002S"
@@ -306,8 +306,8 @@ defmodule Tempo.SubSecondTest do
       # precision, matching the year→month, day→hour pattern.
       values = Enum.to_list(~o"2026Y6M15DT10H30M45.5S")
       assert length(values) == 10
-      assert Tempo.to_iso8601(hd(values)) == "2026Y6M15DT10H30M45.50S"
-      assert Tempo.to_iso8601(List.last(values)) == "2026Y6M15DT10H30M45.59S"
+      assert Tempo.to_iso8601!(hd(values)) == "2026Y6M15DT10H30M45.50S"
+      assert Tempo.to_iso8601!(List.last(values)) == "2026Y6M15DT10H30M45.59S"
     end
 
     test "a microsecond-precision-6 point value cannot be enumerated (finest ulp)" do
@@ -334,6 +334,26 @@ defmodule Tempo.SubSecondTest do
 
     test "the sigil parses the same fractional value" do
       assert ~o"2026Y6M15DT10H30M45.123S".time[:microsecond] == {123_000, 3}
+    end
+
+    test "an interval whose ends differ in the fraction writes its end from the second" do
+      {:ok, interval} = Tempo.to_interval(~o"2026-06-15T10:00:00.123")
+      assert Tempo.to_iso8601(interval) == {:ok, "2026Y6M15DT10H0M0.123S/T0.124S"}
+      assert inspect(interval) =~ "2026Y6M15DT10H0M0.123S/T0.124S"
+    end
+
+    test "a sub-second interval round-trips through to_iso8601/1" do
+      for iso <- [
+            "2026-06-15T10:00:00.123/2026-06-15T10:00:00.456",
+            "2026-06-15T10:00:00/2026-06-15T10:00:00.5",
+            "2026-06-15T10:00:00.5/2026-06-15T10:00:01",
+            "2026-06-15T10:00:59.123/2026-06-15T10:01:00.5",
+            "R3/2026-06-15T10:00:00.5/2026-06-15T10:00:00.75"
+          ] do
+        {:ok, value} = Tempo.from_iso8601(iso)
+        {:ok, encoded} = Tempo.to_iso8601(value)
+        assert Tempo.from_iso8601(encoded) == {:ok, value}
+      end
     end
   end
 end

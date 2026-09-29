@@ -993,10 +993,17 @@ defmodule Tempo.Explain do
 
   defp window_phrase(%Tempo.Duration{time: time} = duration, inner_noun) do
     cond do
-      not only_day_or_week?(time) -> "the #{Tempo.to_iso8601(duration)} window from #{inner_noun}"
-      offset_in_days(time) < 0 -> "the #{day_count(-offset_in_days(time))} before #{inner_noun}"
-      offset_in_days(time) > 0 -> "the #{day_count(offset_in_days(time))} from #{inner_noun}"
-      true -> inner_noun
+      not only_day_or_week?(time) ->
+        "the #{Tempo.to_iso8601!(duration)} window from #{inner_noun}"
+
+      offset_in_days(time) < 0 ->
+        "the #{day_count(-offset_in_days(time))} before #{inner_noun}"
+
+      offset_in_days(time) > 0 ->
+        "the #{day_count(offset_in_days(time))} from #{inner_noun}"
+
+      true ->
+        inner_noun
     end
   end
 

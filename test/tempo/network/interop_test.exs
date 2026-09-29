@@ -27,7 +27,7 @@ defmodule Tempo.Network.InteropTest do
       |> Network.add_sequence([:k1, :k2])
       |> Solver.propagate()
 
-    assert Tempo.to_iso8601(solved.periods[:k2].earliest_end) == "1255Y"
+    assert Tempo.to_iso8601!(solved.periods[:k2].earliest_end) == "1255Y"
   end
 
   test "a day-resolution boundary round-trips" do
@@ -40,8 +40,8 @@ defmodule Tempo.Network.InteropTest do
 
     # 1200-06-15 + 100 days = 1200-09-23.
     boundary = solved.periods[:b].earliest_start
-    assert Tempo.to_iso8601(boundary) == "1200Y9M23D"
-    assert {:ok, ^boundary} = Tempo.from_iso8601(Tempo.to_iso8601(boundary))
+    assert Tempo.to_iso8601!(boundary) == "1200Y9M23D"
+    assert {:ok, ^boundary} = Tempo.from_iso8601(Tempo.to_iso8601!(boundary))
   end
 
   test "an EDTF uncertainty qualifier is carried as metadata, not arithmetic" do

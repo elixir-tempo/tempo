@@ -363,6 +363,54 @@ defmodule Tempo.RRule.SelectionTest do
     end
   end
 
+  describe "a time-of-day selection keeps each occurrence's span" do
+    # An event's span (its DTEND) runs from the time BYHOUR, BYMINUTE or
+    # BYSECOND picks, not from the time its DTSTART names.
+    test "BYHOUR, BYMINUTE and BYSECOND move the whole occurrence" do
+      assert event_spans("FREQ=DAILY;BYHOUR=9,17;COUNT=4", "20260105T090000", "20260105T100000") ==
+               [
+                 "2026Y1M5DT9H0M0S/T10H0M0S",
+                 "2026Y1M5DT17H0M0S/T18H0M0S",
+                 "2026Y1M6DT9H0M0S/T10H0M0S",
+                 "2026Y1M6DT17H0M0S/T18H0M0S"
+               ]
+
+      assert event_spans(
+               "FREQ=HOURLY;BYMINUTE=0,30;COUNT=4",
+               "20260105T090000",
+               "20260105T091500"
+             ) ==
+               [
+                 "2026Y1M5DT9H0M0S/T15M0S",
+                 "2026Y1M5DT9H30M0S/T45M0S",
+                 "2026Y1M5DT10H0M0S/T15M0S",
+                 "2026Y1M5DT10H30M0S/T45M0S"
+               ]
+
+      assert event_spans(
+               "FREQ=MINUTELY;BYSECOND=0,30;COUNT=4",
+               "20260105T090000",
+               "20260105T090005"
+             ) ==
+               [
+                 "2026Y1M5DT9H0M0S/T5S",
+                 "2026Y1M5DT9H0M30S/T35S",
+                 "2026Y1M5DT9H1M0S/T5S",
+                 "2026Y1M5DT9H1M30S/T35S"
+               ]
+    end
+
+    test "a span that runs past midnight ends the next day" do
+      assert event_spans("FREQ=DAILY;BYHOUR=9,22;COUNT=4", "20260105T090000", "20260105T130000") ==
+               [
+                 "2026Y1M5DT9H0M0S/T13H0M0S",
+                 "2026Y1M5DT22H0M0S/6DT2H0M0S",
+                 "2026Y1M6DT9H0M0S/T13H0M0S",
+                 "2026Y1M6DT22H0M0S/7DT2H0M0S"
+               ]
+    end
+  end
+
   describe "end-to-end — BYMONTH through Tempo.ICal.parse/2" do
     test "FREQ=MONTHLY;BYMONTH=6,7,8;COUNT=6 no longer falls back to first-only" do
       ics = """
@@ -715,6 +763,20 @@ defmodule Tempo.RRule.SelectionTest do
       assert Interval.to(occurrence) == ~o"2026Y2M2D"
     end
 
+    test "a terminal window of hours runs from the time of day it starts at" do
+      # Every night, the four hours from 22:00 and the four hours before it.
+      nights = ~o"2027-01-01/2027-01-03"
+
+      assert occurrence_spans("R/2027-01-01/P1D/FLLT22HN/PT4HN", nights) ==
+               ["2027Y1M1DT22H/2DT2H", "2027Y1M2DT22H/3DT2H"]
+
+      assert occurrence_spans("R/2027-01-01/P1D/FLLT22HN/-PT4HN", nights) ==
+               ["2027Y1M1DT18H/T22H", "2027Y1M2DT18H/T22H"]
+
+      # The twelve hours from the 4th Wednesday start at its midnight.
+      assert occurrence_spans("R/../P1Y/FLL3K4IN/PT12HN", ~o"2026Y") == ["2026Y1M28D/T12H"]
+    end
+
     test "a window moving an occurrence into the previous year lands there" do
       # 1 January 2022 is a Saturday: "the previous Friday" is 31 December 2021,
       # which belongs to 2021's bound, not 2022's.
@@ -746,7 +808,7 @@ defmodule Tempo.RRule.SelectionTest do
             "R/../P1Y/FLLL(easter)eN/-P7DN5K-1IN"
           ] do
         {:ok, value} = Tempo.from_iso8601(iso)
-        assert Tempo.from_iso8601(Tempo.to_iso8601(value)) == {:ok, value}
+        assert Tempo.from_iso8601(Tempo.to_iso8601!(value)) == {:ok, value}
       end
     end
 
@@ -767,7 +829,7 @@ defmodule Tempo.RRule.SelectionTest do
       {:ok, rule} = Tempo.from_iso8601("R/2020Y/P4Y/FL11M3DN")
       {:ok, set} = Tempo.to_interval(rule, within: ~o"{2019..2028}Y")
 
-      assert Enum.map(IntervalSet.members(set), &Tempo.to_iso8601(Interval.from(&1))) ==
+      assert Enum.map(IntervalSet.members(set), &Tempo.to_iso8601!(Interval.from(&1))) ==
                ["2020Y11M3D", "2024Y11M3D", "2028Y11M3D"]
     end
 
@@ -775,7 +837,7 @@ defmodule Tempo.RRule.SelectionTest do
       {:ok, rule} = Tempo.from_iso8601("R3/2020Y/P1Y/FL6M15DN")
       {:ok, set} = Tempo.to_interval(rule)
 
-      assert Enum.map(IntervalSet.members(set), &Tempo.to_iso8601(Interval.from(&1))) ==
+      assert Enum.map(IntervalSet.members(set), &Tempo.to_iso8601!(Interval.from(&1))) ==
                ["2020Y6M15D", "2021Y6M15D", "2022Y6M15D"]
     end
   end
@@ -956,6 +1018,32 @@ defmodule Tempo.RRule.SelectionTest do
       {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
       Date.to_iso8601(date)
     end)
+  end
+
+  # Materialise a recurrence within `within` and list its occurrences.
+  defp occurrence_spans(iso, within) do
+    {:ok, set} = iso |> Tempo.from_iso8601!() |> Tempo.to_interval(within: within)
+    set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
+  end
+
+  # Parse one iCalendar event recurring by `rule` and list its occurrences.
+  defp event_spans(rule, dtstart, dtend) do
+    {:ok, set} =
+      ICal.parse("""
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      PRODID:-//Test//EN
+      BEGIN:VEVENT
+      UID:event-spans
+      DTSTAMP:20260101T000000Z
+      DTSTART:#{dtstart}
+      DTEND:#{dtend}
+      RRULE:#{rule}
+      END:VEVENT
+      END:VCALENDAR
+      """)
+
+    set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
   end
 
   # Expand an RRULE from `dtstart` and list the ISO dates of its occurrences.

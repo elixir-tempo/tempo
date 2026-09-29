@@ -19,19 +19,19 @@ defmodule Tempo.IntervalRenderTest do
     test "a single duration-first interval" do
       {:ok, interval} = Tempo.from_iso8601("P1D/2022-01-01")
 
-      assert Tempo.to_iso8601(interval) == "P1D/2022Y1M1D"
+      assert Tempo.to_iso8601!(interval) == "P1D/2022Y1M1D"
     end
 
     test "a counted recurrence of one" do
       {:ok, interval} = Tempo.from_iso8601("R3/P1D/2022-01-01")
 
-      assert Tempo.to_iso8601(interval) == "R3/P1D/2022Y1M1D"
+      assert Tempo.to_iso8601!(interval) == "R3/P1D/2022Y1M1D"
     end
 
     test "an unbounded recurrence" do
       {:ok, interval} = Tempo.from_iso8601("R/P1D/2022-01-01")
 
-      assert Tempo.to_iso8601(interval) == "R/P1D/2022Y1M1D"
+      assert Tempo.to_iso8601!(interval) == "R/P1D/2022Y1M1D"
     end
 
     test "inspecting one does not raise" do
@@ -47,14 +47,14 @@ defmodule Tempo.IntervalRenderTest do
       # duration, so `to: :undefined` and `to: nil` say the same thing.
       {:ok, recurring} = Tempo.from_iso8601("R5/2022-01-01/P1M")
 
-      assert Tempo.to_iso8601(%{recurring | to: :undefined}) ==
-               Tempo.to_iso8601(recurring)
+      assert Tempo.to_iso8601!(%{recurring | to: :undefined}) ==
+               Tempo.to_iso8601!(recurring)
     end
 
     test "the same holds without a recurrence" do
       {:ok, single} = Tempo.from_iso8601("2022-01-01/P1M")
 
-      assert Tempo.to_iso8601(%{single | to: :undefined}) == Tempo.to_iso8601(single)
+      assert Tempo.to_iso8601!(%{single | to: :undefined}) == Tempo.to_iso8601!(single)
     end
   end
 
@@ -69,10 +69,10 @@ defmodule Tempo.IntervalRenderTest do
             "2022-01-01/2022-02-01"
           ] do
         {:ok, parsed} = Tempo.from_iso8601(iso)
-        rendered = Tempo.to_iso8601(parsed)
+        rendered = Tempo.to_iso8601!(parsed)
 
         assert {:ok, reparsed} = Tempo.from_iso8601(rendered)
-        assert Tempo.to_iso8601(reparsed) == rendered
+        assert Tempo.to_iso8601!(reparsed) == rendered
       end
     end
   end

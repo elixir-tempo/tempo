@@ -98,7 +98,7 @@ defmodule Tempo.DomainFilterTest do
             "R/..c/P1Y/FL12M25DN"
           ] do
         {:ok, value} = Tempo.from_iso8601(iso)
-        assert Tempo.to_iso8601(value) == iso
+        assert Tempo.to_iso8601!(value) == iso
       end
     end
   end

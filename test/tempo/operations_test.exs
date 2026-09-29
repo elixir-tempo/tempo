@@ -747,11 +747,11 @@ defmodule Tempo.Operations.Test do
     defp assert_round_trips(%IntervalSet{} = set) do
       for interval <- IntervalSet.members(set) do
         for endpoint <- [interval.from, interval.to] do
-          assert {:ok, reparsed} = Tempo.from_iso8601(Tempo.to_iso8601(endpoint))
+          assert {:ok, reparsed} = Tempo.from_iso8601(Tempo.to_iso8601!(endpoint))
           assert Tempo.relation(endpoint, reparsed) == :equals
         end
 
-        assert {:ok, reparsed} = Tempo.from_iso8601(Tempo.to_iso8601(interval))
+        assert {:ok, reparsed} = Tempo.from_iso8601(Tempo.to_iso8601!(interval))
         assert Tempo.relation(interval, reparsed) == :equals
       end
     end
@@ -762,7 +762,7 @@ defmodule Tempo.Operations.Test do
       [interval] = IntervalSet.members(result)
       assert interval.from.calendar == Calendrical.Gregorian
       assert interval.from.extended == nil
-      refute Tempo.to_iso8601(interval) =~ "u-ca"
+      refute Tempo.to_iso8601!(interval) =~ "u-ca"
 
       assert_round_trips(result)
     end
@@ -775,7 +775,7 @@ defmodule Tempo.Operations.Test do
       [interval] = IntervalSet.members(result)
       assert interval.from.calendar == Calendrical.Islamic.Civil
       assert interval.from.extended.calendar == :islamic_civil
-      assert Tempo.to_iso8601(interval.from) =~ "[u-ca=islamic-civil]"
+      assert Tempo.to_iso8601!(interval.from) =~ "[u-ca=islamic-civil]"
 
       assert_round_trips(result)
     end

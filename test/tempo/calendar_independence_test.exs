@@ -116,7 +116,7 @@ defmodule Tempo.CalendarIndependenceTest do
     test "multi-word calendar identifiers round-trip through to_iso8601" do
       for calendar <- ["islamic-civil", "islamic-umalqura", "hebrew", "persian", "japanese"] do
         value = cal("1447-01-15", calendar)
-        serialised = Tempo.to_iso8601(value)
+        serialised = Tempo.to_iso8601!(value)
         assert String.contains?(serialised, "[u-ca=#{calendar}]")
         assert {:ok, reparsed} = Tempo.from_iso8601(serialised)
         assert reparsed.calendar == value.calendar

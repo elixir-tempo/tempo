@@ -116,7 +116,7 @@ defmodule Tempo.OpenStartRecurrenceTest do
 
   describe "the window is half-open, [from, to)" do
     defp starts(set),
-      do: set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601(Interval.from(&1)))
+      do: set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!(Interval.from(&1)))
 
     test "an occurrence starting at the window's end is outside it" do
       assert {:ok, set} =

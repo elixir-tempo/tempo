@@ -66,7 +66,7 @@ defmodule Tempo.DurationAddTest do
   describe "negative fractional seconds round-trip" do
     test "negate renders with a single leading sign" do
       assert inspect(Duration.negate(~o"PT1.5S")) == ~s(~o"PT-1.5S")
-      assert Tempo.to_iso8601(Duration.negate(~o"PT1.5S")) == "PT-1.5S"
+      assert Tempo.to_iso8601!(Duration.negate(~o"PT1.5S")) == "PT-1.5S"
     end
 
     test "PT-1.5S means minus one and a half seconds" do
@@ -76,7 +76,7 @@ defmodule Tempo.DurationAddTest do
 
     test "a sub-second negative keeps its sign through the round-trip" do
       assert ~o"PT-0.2S".time == [second: 0, microsecond: {-200_000, 1}]
-      assert Tempo.to_iso8601(~o"PT-0.2S") == "PT-0.2S"
+      assert Tempo.to_iso8601!(~o"PT-0.2S") == "PT-0.2S"
     end
 
     test "a leading direction sign negates every component including the fraction" do
@@ -85,11 +85,11 @@ defmodule Tempo.DurationAddTest do
     end
 
     test "fraction precision survives the round-trip" do
-      assert Tempo.to_iso8601(~o"PT1.250S") == "PT1.250S"
+      assert Tempo.to_iso8601!(~o"PT1.250S") == "PT1.250S"
     end
 
     test "the zero duration renders as PT0S and re-parses" do
-      assert Tempo.to_iso8601(Duration.sum([])) == "PT0S"
+      assert Tempo.to_iso8601!(Duration.sum([])) == "PT0S"
       assert inspect(Duration.sum([])) == ~s(~o"PT0S")
       assert {:ok, _zero} = Tempo.from_iso8601("PT0S")
     end

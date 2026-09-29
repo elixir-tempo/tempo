@@ -140,7 +140,7 @@ defmodule Tempo.NewTest do
 
       assert Tempo.metadata(t) == %{source: "form", name: "Christmas Day"}
       assert t.extended == nil
-      assert Tempo.to_iso8601(t) == "2026Y"
+      assert Tempo.to_iso8601!(t) == "2026Y"
     end
 
     test "a value with metadata inspects as its sigil plus a decoration" do
@@ -157,7 +157,7 @@ defmodule Tempo.NewTest do
 
       assert t.extended.tags == %{"source" => ["form"], "x-kind" => ["a1", "b2"]}
       assert Tempo.metadata(t) == %{}
-      assert {:ok, ^t} = t |> Tempo.to_iso8601() |> Tempo.from_iso8601()
+      assert {:ok, ^t} = t |> Tempo.to_iso8601!() |> Tempo.from_iso8601()
     end
 
     test "a tag IXDTF cannot write is an error, never a crash in to_iso8601/1" do
@@ -434,7 +434,7 @@ defmodule Tempo.NewTest do
     test "a lone microsecond gains second: 0 so it renders (regression)" do
       {:ok, d} = Duration.new(microsecond: {500_000, 1})
       assert d.time == [second: 0, microsecond: {500_000, 1}]
-      assert Tempo.to_iso8601(d) == "PT0.5S"
+      assert Tempo.to_iso8601!(d) == "PT0.5S"
     end
 
     test "negative components (reverse-direction duration)" do

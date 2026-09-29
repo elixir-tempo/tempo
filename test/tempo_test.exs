@@ -138,7 +138,7 @@ defmodule TempoTest do
     test "and the day comes from the value's own calendar" do
       sunday = Tempo.from_iso8601!("2026-08-16T10:00:00", SundayStart)
 
-      assert Tempo.to_iso8601(Tempo.trunc(sunday, :week)) == "2026Y8M16D"
+      assert Tempo.to_iso8601!(Tempo.trunc(sunday, :week)) == "2026Y8M16D"
       assert Tempo.trunc(~o"2026-08-16T10:00:00", :week) == ~o"2026Y8M10D"
     end
 

@@ -283,7 +283,7 @@ defmodule Tempo.Iso8601.Extended.Test do
 
     test "the critical flag round-trips through to_iso8601/1" do
       assert {:ok, tempo} = Tempo.from_iso8601("2022-01-01T00:00:00-05:00[!America/New_York]")
-      assert Tempo.to_iso8601(tempo) =~ "[!America/New_York]"
+      assert Tempo.to_iso8601!(tempo) =~ "[!America/New_York]"
     end
   end
 
@@ -405,7 +405,7 @@ defmodule Tempo.Iso8601.Extended.Test do
       refute Tempo.floating?(interval.to)
       assert interval.to.shift == interval.from.shift
 
-      assert {:ok, reparsed} = interval |> Tempo.to_iso8601() |> Tempo.from_iso8601()
+      assert {:ok, reparsed} = interval |> Tempo.to_iso8601!() |> Tempo.from_iso8601()
       assert reparsed == interval
     end
 
@@ -429,7 +429,7 @@ defmodule Tempo.Iso8601.Extended.Test do
 
       assert built.from.extended.zone_id == "Europe/Paris"
 
-      {:ok, reparsed} = Tempo.from_iso8601(Tempo.to_iso8601(built))
+      {:ok, reparsed} = Tempo.from_iso8601(Tempo.to_iso8601!(built))
       assert reparsed.from.extended == built.from.extended
       assert reparsed.to.extended == built.to.extended
     end

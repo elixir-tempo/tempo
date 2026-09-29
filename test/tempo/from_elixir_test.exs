@@ -267,7 +267,7 @@ defmodule Tempo.FromElixir.Test do
         {:ok, elixir} = Tempo.to_elixir(tempo)
         round_tripped = Tempo.from_elixir(elixir)
 
-        assert Tempo.to_iso8601(round_tripped) == Tempo.to_iso8601(tempo),
+        assert Tempo.to_iso8601!(round_tripped) == Tempo.to_iso8601!(tempo),
                "round-trip failed for #{iso}"
       end
     end
@@ -300,7 +300,7 @@ defmodule Tempo.FromElixir.Test do
       {:ok, converted} =
         Tempo.to_calendar(~o"2026-06-15/2026-06-16", Calendrical.Hebrew)
 
-      assert Tempo.to_iso8601(converted) == "5786Y9M30D/10M1D"
+      assert Tempo.to_iso8601!(converted) == "5786Y9M30D/10M1D"
     end
 
     test "a fiscal quarter reads back as the Gregorian dates it covers" do
@@ -309,7 +309,7 @@ defmodule Tempo.FromElixir.Test do
 
       {:ok, gregorian} = Tempo.to_calendar(quarter, Calendrical.Gregorian)
 
-      assert Tempo.to_iso8601(gregorian) == "2026Y7M1D/10M1D"
+      assert Tempo.to_iso8601!(gregorian) == "2026Y7M1D/10M1D"
     end
 
     test "an interval keeps what it was carrying" do
@@ -333,7 +333,7 @@ defmodule Tempo.FromElixir.Test do
     test "an unbounded end stays unbounded" do
       {:ok, converted} = Tempo.to_calendar(~o"2026-06-15/..", Calendrical.Hebrew)
 
-      assert Tempo.to_iso8601(Interval.from(converted)) == "5786Y9M30D"
+      assert Tempo.to_iso8601!(Interval.from(converted)) == "5786Y9M30D"
       assert Interval.to(converted) in [nil, :undefined]
     end
 
@@ -353,7 +353,7 @@ defmodule Tempo.FromElixir.Test do
 
       assert IntervalSet.count(converted) == 2
       assert [first, _second] = IntervalSet.members(converted)
-      assert Tempo.to_iso8601(first) == "5786Y9M30D/10M1D"
+      assert Tempo.to_iso8601!(first) == "5786Y9M30D/10M1D"
     end
 
     test "one unconvertible member fails the whole set" do
@@ -377,7 +377,7 @@ defmodule Tempo.FromElixir.Test do
       {:ok, hebrew} = Tempo.to_calendar(~o"2026-06-15/2026-06-16", Calendrical.Hebrew)
       {:ok, back} = Tempo.to_calendar(hebrew, Calendrical.Gregorian)
 
-      assert Tempo.to_iso8601(back) == "2026Y6M15D/16D"
+      assert Tempo.to_iso8601!(back) == "2026Y6M15D/16D"
     end
 
     test "converts a value into another calendar, preserving the day" do

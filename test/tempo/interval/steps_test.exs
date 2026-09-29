@@ -163,7 +163,7 @@ defmodule Tempo.Interval.StepsTest do
     test "Enum.slice returns a window without walking from the start" do
       iv = Tempo.from_iso8601!("2026-01-01/2026-02-01")
 
-      assert Enum.map(Enum.slice(iv, 10, 3), &Tempo.to_iso8601/1) == [
+      assert Enum.map(Enum.slice(iv, 10, 3), &Tempo.to_iso8601!/1) == [
                "2026Y1M11D",
                "2026Y1M12D",
                "2026Y1M13D"

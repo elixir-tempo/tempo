@@ -12,7 +12,7 @@ defmodule Tempo.RecurrenceSetTest do
   defp named(iso, name), do: %{Tempo.from_iso8601!(iso) | metadata: %{name: name}}
 
   defp isos(set),
-    do: set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601(Interval.from(&1)))
+    do: set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!(Interval.from(&1)))
 
   defp years(set),
     do:
@@ -50,7 +50,7 @@ defmodule Tempo.RecurrenceSetTest do
 
       {:ok, set} = Tempo.to_interval_set(RecurrenceSet.new!([member]), within: ~o"2026Y")
       assert [interval] = IntervalSet.members(set)
-      assert Tempo.to_iso8601(interval) == "2026Y12M24D/27D"
+      assert Tempo.to_iso8601!(interval) == "2026Y12M24D/27D"
       assert Interval.metadata(interval) == %{name: "Christmas break"}
     end
 
@@ -119,7 +119,7 @@ defmodule Tempo.RecurrenceSetTest do
 
       assert set
              |> IntervalSet.members()
-             |> Enum.map(&{Tempo.to_iso8601(Interval.from(&1)), Interval.metadata(&1)}) == [
+             |> Enum.map(&{Tempo.to_iso8601!(Interval.from(&1)), Interval.metadata(&1)}) == [
                {"2026Y12M25D", %{name: "Christmas Day", type: :public}},
                {"2026Y12M28D", %{name: "Christmas Day", type: :public, substitute: true}}
              ]
@@ -198,7 +198,7 @@ defmodule Tempo.RecurrenceSetTest do
     defp typed(iso, type), do: Tempo.put_metadata(Tempo.from_iso8601!(iso), %{type: type})
 
     defp days(set),
-      do: set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601(Interval.from(&1)))
+      do: set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!(Interval.from(&1)))
 
     # Japan's Citizens' Holiday: 22 September when the days either side are
     # public holidays — Respect for the Aged Day (the third Monday) and the
@@ -224,7 +224,7 @@ defmodule Tempo.RecurrenceSetTest do
         set
         |> IntervalSet.members()
         |> Enum.filter(&(Interval.metadata(&1)[:name] == "Citizens' Holiday"))
-        |> Enum.map(&Tempo.to_iso8601(Interval.from(&1)))
+        |> Enum.map(&Tempo.to_iso8601!(Interval.from(&1)))
 
       assert citizens == ["2026Y9M22D"]
     end

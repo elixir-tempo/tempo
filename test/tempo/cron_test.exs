@@ -305,9 +305,14 @@ defmodule Tempo.CronTest do
     test "a nearest-weekday rule has no ISO 8601 form — clear error, no crash" do
       {:ok, rule} = Cron.parse("0 0 9 15W * *")
 
-      # to_iso8601 raises a descriptive error rather than a FunctionClauseError.
+      # to_iso8601 returns a descriptive error, and to_iso8601! raises it.
+      assert {:error, %Tempo.Iso8601EncodeError{construct: :nearest_weekday} = error} =
+               Tempo.to_iso8601(rule)
+
+      assert Exception.message(error) =~ "nearest-weekday"
+
       assert_raise Tempo.Iso8601EncodeError, ~r/nearest-weekday/, fn ->
-        Tempo.to_iso8601(rule)
+        Tempo.to_iso8601!(rule)
       end
 
       # inspect never crashes — it falls back to a labelled struct view.
@@ -439,7 +444,7 @@ defmodule Tempo.CronTest do
 
   describe "round-trips through its ISO 8601 form" do
     # A parsed cron is a recurring `%Tempo.Interval{}`; re-parsing the string
-    # `Tempo.to_iso8601/1` renders must return the identical value. Two shapes
+    # `Tempo.to_iso8601!/1` renders must return the identical value. Two shapes
     # broke this: an unanchored schedule (`from: nil`) inspects as `R/../P1W/…`
     # (the `..` open-start needed a parser branch), and a weekday+time selection
     # must serialise the weekday before the time (`FL5KT17H0MN`, not the
@@ -448,14 +453,14 @@ defmodule Tempo.CronTest do
     test "every Friday at 17:00 (unanchored, weekday + time)" do
       cron = Cron.parse!("0 17 * * 5")
 
-      assert Tempo.to_iso8601(cron) == "R/../P1W/FL5KT17H0MN"
-      assert Tempo.from_iso8601(Tempo.to_iso8601(cron)) == {:ok, cron}
+      assert Tempo.to_iso8601!(cron) == "R/../P1W/FL5KT17H0MN"
+      assert Tempo.from_iso8601(Tempo.to_iso8601!(cron)) == {:ok, cron}
     end
 
     test "a range of cron shapes each round-trip" do
       for expression <- ["0 9 * * 1", "30 8 15 * *", "0 0 1 1 *", "*/15 * * * *"] do
         cron = Cron.parse!(expression)
-        assert Tempo.from_iso8601(Tempo.to_iso8601(cron)) == {:ok, cron}
+        assert Tempo.from_iso8601(Tempo.to_iso8601!(cron)) == {:ok, cron}
       end
     end
   end

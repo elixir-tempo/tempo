@@ -16,7 +16,7 @@ defmodule Tempo.WithinWindowTest do
   # it overlaps the window.
 
   defp starts({:ok, %IntervalSet{} = set}),
-    do: set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601(Interval.from(&1)))
+    do: set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!(Interval.from(&1)))
 
   # A recurrence whose every occurrence spans `duration` from its start, as an
   # iCalendar DTEND and a multi-day holiday carry it.
@@ -100,6 +100,55 @@ defmodule Tempo.WithinWindowTest do
       assert starts(
                Tempo.to_interval_set(spanned(~o"R/../P1Y/FL12M19DN", ~o"P10D"), within: ~o"2027")
              ) == ["2027Y12M19D"]
+    end
+
+    test "an occurrence a window moves back from the period after is kept" do
+      # The five days before 3 January: 2026's run from 29 December 2025, so they
+      # are among 2026's, whether the window is a day, a year or open-ended.
+      before_new_year = ~o"R/../P1Y/FLL1M3DN/-P5DN"
+
+      assert starts(Tempo.to_interval_set(before_new_year, within: ~o"2026-01-01/2026-01-02")) ==
+               ["2025Y12M29D"]
+
+      assert starts(Tempo.to_interval_set(before_new_year, within: ~o"2026")) ==
+               ["2025Y12M29D", "2026Y12M29D"]
+
+      {:ok, from_2026} = Tempo.to_interval_set(before_new_year, within: ~o"2026/..")
+      assert [first | _rest] = from_2026 |> IntervalSet.walk() |> Enum.take(2)
+      assert Interval.from(first) == ~o"2025Y12M29D"
+    end
+
+    test "a cadence finer than a day reaches as far as its occurrences do" do
+      # Sittings every hour at half past: one of 90 minutes from 09:30 is still
+      # running at 10:00, one of 150 minutes from 08:30 too, and one of 20 is not.
+      half_past = ~o"R/../PT1H/FLT30MN"
+      ten_to_eleven = ~o"2027-01-02T10/2027-01-02T11"
+
+      assert starts(Tempo.to_interval_set(spanned(half_past, ~o"PT90M"), within: ten_to_eleven)) ==
+               ["2027Y1M2DT9H30M", "2027Y1M2DT10H30M"]
+
+      assert starts(Tempo.to_interval_set(spanned(half_past, ~o"PT150M"), within: ten_to_eleven)) ==
+               ["2027Y1M2DT8H30M", "2027Y1M2DT9H30M", "2027Y1M2DT10H30M"]
+
+      assert starts(Tempo.to_interval_set(spanned(half_past, ~o"PT20M"), within: ten_to_eleven)) ==
+               ["2027Y1M2DT10H30M"]
+
+      # The same sittings as §12.10 windows, and the 90 minutes before each.
+      assert starts(Tempo.to_interval_set(~o"R/../PT1H/FLLT30MN/PT90MN", within: ten_to_eleven)) ==
+               ["2027Y1M2DT9H30M", "2027Y1M2DT10H30M"]
+
+      assert starts(Tempo.to_interval_set(~o"R/../PT1H/FLLT30MN/-PT90MN", within: ten_to_eleven)) ==
+               ["2027Y1M2DT9H0M", "2027Y1M2DT10H0M"]
+    end
+
+    test "an occurrence's span runs from the time of day its selection picks" do
+      # Every night from 22:00 for four hours, the first of them already running
+      # when the window opens.
+      nights = spanned(~o"R/../P1D/FLT22HN", ~o"PT4H")
+      {:ok, set} = Tempo.to_interval_set(nights, within: ~o"2027-01-01/2027-01-03")
+
+      assert set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1) ==
+               ["2026Y12M31DT22H/2027Y1M1DT2H", "2027Y1M1DT22H/2DT2H", "2027Y1M2DT22H/3DT2H"]
     end
 
     test "a recurrence set's one-off member outside the window is not among its occurrences" do

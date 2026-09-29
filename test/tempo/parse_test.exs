@@ -42,7 +42,7 @@ defmodule Tempo.ParseTest do
       assert Tempo.parse("15 June 2026 14:30", locale: :en) == {:ok, ~o"2026-06-15T14:30"}
 
       assert {:ok, %Tempo.Interval{} = range} = Tempo.parse("May 5 – May 10, 2026", locale: :en)
-      assert Tempo.to_iso8601(range) == "2026Y5M5D/10D"
+      assert Tempo.to_iso8601!(range) == "2026Y5M5D/10D"
     end
 
     test "an impossible date in words is an error, not part of a date" do

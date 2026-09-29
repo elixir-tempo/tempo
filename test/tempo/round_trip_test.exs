@@ -2,6 +2,7 @@ defmodule Tempo.RoundTripTest do
   use ExUnit.Case, async: true
 
   alias Tempo.Cron
+  alias Tempo.RecurrenceSet
   alias Tempo.RRule
 
   # Round-trip tests validate that the Tempo AST can be encoded
@@ -49,7 +50,7 @@ defmodule Tempo.RoundTripTest do
         {:ok, ast} = Tempo.from_iso8601(input)
 
         # First encode
-        encoded = Tempo.to_iso8601(ast)
+        encoded = Tempo.to_iso8601!(ast)
         assert is_binary(encoded)
         assert encoded != ""
 
@@ -59,7 +60,7 @@ defmodule Tempo.RoundTripTest do
         {:ok, ast2} = Tempo.from_iso8601(encoded)
         assert ast == ast2, "AST changed after round-trip for #{inspect(input)}"
 
-        encoded2 = Tempo.to_iso8601(ast2)
+        encoded2 = Tempo.to_iso8601!(ast2)
         assert encoded == encoded2, "encoder is not a fixed point for #{inspect(input)}"
       end
     end
@@ -136,7 +137,7 @@ defmodule Tempo.RoundTripTest do
 
       # The ISO 8601 serialisation of an RRule-produced Interval
       # should match a hand-written R5/<from>/P1D.
-      assert Tempo.to_iso8601(rrule_ast) == "R5/2022Y1M1D/P1D"
+      assert Tempo.to_iso8601!(rrule_ast) == "R5/2022Y1M1D/P1D"
     end
   end
 
@@ -149,7 +150,7 @@ defmodule Tempo.RoundTripTest do
       {:ok, ast} = Tempo.from_iso8601("2022-?06-15")
       assert ast.qualifications == %{month: :uncertain}
 
-      encoded = Tempo.to_iso8601(ast)
+      encoded = Tempo.to_iso8601!(ast)
       assert encoded == "2022Y6?M15D"
 
       {:ok, ast2} = Tempo.from_iso8601(encoded)
@@ -163,7 +164,7 @@ defmodule Tempo.RoundTripTest do
       {:ok, ast} = Tempo.from_iso8601("2004-06~-11")
       assert ast.qualifications == %{year: :approximate, month: :approximate}
 
-      encoded = Tempo.to_iso8601(ast)
+      encoded = Tempo.to_iso8601!(ast)
       assert encoded == "2004~Y6~M11D"
 
       {:ok, ast2} = Tempo.from_iso8601(encoded)
@@ -174,7 +175,7 @@ defmodule Tempo.RoundTripTest do
       {:ok, ast} = Tempo.from_iso8601("2004-06-11%")
       assert ast.qualification == :uncertain_and_approximate
 
-      assert Tempo.to_iso8601(ast) == "2004Y6M11D%"
+      assert Tempo.to_iso8601!(ast) == "2004Y6M11D%"
     end
   end
 
@@ -254,6 +255,52 @@ defmodule Tempo.RoundTripTest do
     test "RRule.to_string!/1 returns the string on success" do
       {:ok, interval} = Tempo.from_iso8601("R5/2022-01-01/P1D")
       assert "COUNT=5;FREQ=DAILY" = RRule.to_string!(interval)
+    end
+  end
+
+  describe "to_iso8601/1 error cases (Iso8601EncodeError)" do
+    test "a set, a conditional member and a value that is not Tempo's are errors naming them" do
+      christmas = Tempo.from_iso8601!("R/../P1Y/FL12M25DN")
+      holidays = RecurrenceSet.new!([christmas, Tempo.from_iso8601!("R/../P1Y/FL1M1DN")])
+      {:ok, days} = Tempo.to_interval_set(holidays, within: Tempo.from_iso8601!("2026"))
+
+      boxing_day =
+        RecurrenceSet.keep_when(christmas,
+          at: [Tempo.from_iso8601!("P1D")],
+          falls_on: %{type: :public}
+        )
+
+      for {value, construct, named} <- [
+            {holidays, :recurrence_set, "a set of recurrences"},
+            {days, :interval_set, "a set of intervals"},
+            {boxing_day, :conditional, "a conditional member"},
+            {~D[2026-06-15], :value, "~D[2026-06-15]"},
+            {"2026-06-15", :value, ~s("2026-06-15")},
+            {"", :value, ~s(Cannot encode "")},
+            {:"", :value, ~s(Cannot encode :"")},
+            {nil, :value, "Cannot encode nil"}
+          ] do
+        assert {:error, %Tempo.Iso8601EncodeError{construct: ^construct} = error} =
+                 Tempo.to_iso8601(value)
+
+        assert Exception.message(error) =~ named
+      end
+    end
+
+    test "a construct with no ISO 8601 form is an error naming it, which to_iso8601!/1 raises" do
+      {:ok, rule} =
+        RRule.parse("FREQ=MONTHLY;BYDAY=2MO,2WE", from: Tempo.from_iso8601!("2026-01-01"))
+
+      assert {:error, %Tempo.Iso8601EncodeError{construct: :byday} = error} =
+               Tempo.to_iso8601(rule)
+
+      assert Exception.message(error) =~ "BYDAY=2MO,2WE"
+
+      assert_raise Tempo.Iso8601EncodeError, ~r/BYDAY=2MO,2WE/, fn ->
+        Tempo.to_iso8601!(rule)
+      end
+
+      assert Tempo.to_iso8601!(Tempo.from_iso8601!("2022-06-15")) == "2022Y6M15D"
     end
   end
 end

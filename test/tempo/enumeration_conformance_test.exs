@@ -49,7 +49,7 @@ defmodule Tempo.EnumerationConformance.Test do
       # `2022Y` has no explicit enumerator. The implicit enumerator
       # chosen by `Unit.implicit_enumerator/2` for year-only on a
       # month-based calendar is month. Enumeration walks 12 months.
-      assert {:ok, list} = take(~o"2022Y" |> Tempo.to_iso8601())
+      assert {:ok, list} = take(~o"2022Y" |> Tempo.to_iso8601!())
       assert length(list) == 3
       assert Enum.all?(list, fn %Tempo{time: [year: 2022, month: _]} -> true end)
     end

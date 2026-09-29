@@ -18,7 +18,7 @@ defmodule Tempo.JSCalendarTest do
   defp spans(set) do
     set
     |> IntervalSet.members()
-    |> Enum.map(&Tempo.to_iso8601/1)
+    |> Enum.map(&Tempo.to_iso8601!/1)
   end
 
   describe "a single event" do

@@ -70,6 +70,8 @@ These keep their names and change their meaning:
 
 * **The network and schedule builders** — record an option or a value they cannot read, which the solver then returns, where 1.x ignored an unknown option and raised on a bad value.
 
+* **`Tempo.to_iso8601/1`** — returns `{:ok, string}`, or an error for a value ISO 8601 cannot write, where 1.x returned the string and raised; `to_iso8601!/1` returns the string.
+
 ## Updating the dependency
 
 ```elixir
@@ -83,10 +85,10 @@ end
 A search for the removed names finds the renames:
 
 ```bash
-grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(meets|during)\?|Interval\.(meets|during)\?|(Tempo|Interval)\.compose|Tempo\.anchor[(/]|(NonAnchored|RequiresAnchor)Error|:unanchored|grounded\?|GroundedTempoError|(to|from)_(naive_)?date_time|from_(ical|jscalendar)|available_from_ical|to_rrule|MaterialisationError|Expander.expand|working_days?|Tempo\.weekend\(|weekends\(from|IntervalSet\.(to_list|overlapping)|RecurrenceSet\.new\(|beginning_of_|end_of_(day|month)|tighten\(|Schedule\.Slot|earliest:|(add_period|TimePeriod\.new)\([^)]*(start|end):' lib test
+grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(meets|during)\?|Interval\.(meets|during)\?|(Tempo|Interval)\.compose|Tempo\.anchor[(/]|(NonAnchored|RequiresAnchor)Error|:unanchored|grounded\?|GroundedTempoError|(to|from)_(naive_)?date_time|from_(ical|jscalendar)|available_from_ical|to_rrule|MaterialisationError|Expander.expand|working_days?|Tempo\.weekend\(|weekends\(from|IntervalSet\.(to_list|overlapping)|RecurrenceSet\.new\(|Tempo\.to_iso8601[(/]|beginning_of_|end_of_(day|month)|tighten\(|Schedule\.Slot|earliest:|(add_period|TimePeriod\.new)\([^)]*(start|end):' lib test
 ```
 
-The changes of meaning need a read rather than a replace: every `before?`, `after?` and their `certainly_` and `possibly_` forms, every duration read as a count of seconds, every shift of a zoned value by hours, every `duration/1` of a set, every window, every `:metadata` passed to `Tempo.new/1`, every `select/2` across a span longer than one period, and every `RecurrenceSet.new/2`, which the search finds.
+The changes of meaning need a read rather than a replace: every `before?`, `after?` and their `certainly_` and `possibly_` forms, every duration read as a count of seconds, every shift of a zoned value by hours, every `duration/1` of a set, every window, every `:metadata` passed to `Tempo.new/1`, every `select/2` across a span longer than one period, and every `RecurrenceSet.new/2` and `to_iso8601/1`, which the search finds.
 
 ## A set's duration is the time it covers
 
@@ -328,11 +330,11 @@ iex> {:ok, christmas} = Tempo.new(year: 2026, month: 12, day: 25, metadata: %{na
 iex> Tempo.metadata(christmas)
 %{name: "Christmas Day"}
 iex> Tempo.to_iso8601(christmas)
-"2026Y12M25D"
+{:ok, "2026Y12M25D"}
 
 iex> {:ok, tagged} = Tempo.new(year: 2026, month: 6, day: 15, tags: %{"x-source" => "hr"})
 iex> Tempo.to_iso8601(tagged)
-"2026Y6M15D[x-source=hr]"
+{:ok, "2026Y6M15D[x-source=hr]"}
 ```
 
 Converting a value moves its metadata to the interval or intervals it becomes, so a holiday's name travels with its day through the set operations.
@@ -556,3 +558,26 @@ iex> {:ok, june} = Tempo.to_interval(~o"2026Y6M")
 iex> Tempo.Interval.to(june)
 ~o"2026Y7M"
 ```
+
+## Writing ISO 8601 returns a tuple
+
+`Tempo.to_iso8601/1` returns `{:ok, string}`, as `from_iso8601/2` returns `{:ok, value}`, and an error for a value ISO 8601 has no form for: a set of intervals or of recurrences, a conditional member, a cron nearest weekday, or anything that is not a Tempo value. 1.x returned the string and raised for those. `to_iso8601!/1` returns the string.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.x
+Tempo.to_iso8601(~o"2026-12-25")
+#=> "2026Y12M25D"
+```
+
+```elixir
+iex> Tempo.to_iso8601(~o"2026-12-25")
+{:ok, "2026Y12M25D"}
+iex> {:ok, holidays} = Tempo.RecurrenceSet.new([~o"R/../P1Y/FL12M25DN", ~o"R/../P1Y/FL1M1DN"])
+iex> {:error, %Tempo.Iso8601EncodeError{}} = Tempo.to_iso8601(holidays)
+iex> holidays |> Tempo.RecurrenceSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
+["R/../P1Y/FL12M25DN", "R/../P1Y/FL1M1DN"]
+```
+
+> *"Christmas is written 2026Y12M25D. A set of holidays has no one ISO 8601 form, so each holiday is written on its own."*

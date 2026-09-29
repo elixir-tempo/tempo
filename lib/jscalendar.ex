@@ -132,7 +132,7 @@ if Code.ensure_loaded?(JSCalendar) do
         ...> })
         iex> {:ok, set} = Tempo.JSCalendar.parse(json)
         iex> [interval] = Tempo.IntervalSet.members(set)
-        iex> Tempo.to_iso8601(interval)
+        iex> Tempo.to_iso8601!(interval)
         "2026Y6M2DT9H0M0S/T10H0M0S"
         iex> Tempo.Interval.metadata(interval).title
         "Quarterly review"
