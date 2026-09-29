@@ -116,7 +116,7 @@ defmodule Tempo.OpenStartRecurrenceTest do
 
   describe "the window is half-open, [from, to)" do
     defp starts(set),
-      do: set |> IntervalSet.to_list() |> Enum.map(&Tempo.to_iso8601(Interval.from(&1)))
+      do: set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601(Interval.from(&1)))
 
     test "an occurrence starting at the window's end is outside it" do
       assert {:ok, set} =
@@ -174,7 +174,7 @@ defmodule Tempo.OpenStartRecurrenceTest do
 
     test "a diary running September to March meets New Year's Day" do
       {:ok, diary} = IntervalSet.new([Tempo.to_interval!(~o"2026-09-01/2027-03-01")])
-      holidays = RecurrenceSet.new([~o"R/../P1Y/FL1M1DN"])
+      holidays = RecurrenceSet.new!([~o"R/../P1Y/FL1M1DN"])
 
       assert {:ok, clashes} = Tempo.intersection(diary, holidays)
       assert starts(clashes) == ["2027Y1M1D"]

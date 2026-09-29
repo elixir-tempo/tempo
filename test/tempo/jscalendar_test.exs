@@ -17,7 +17,7 @@ defmodule Tempo.JSCalendarTest do
 
   defp spans(set) do
     set
-    |> IntervalSet.to_list()
+    |> IntervalSet.members()
     |> Enum.map(&Tempo.to_iso8601/1)
   end
 
@@ -36,7 +36,7 @@ defmodule Tempo.JSCalendarTest do
       assert {:ok, set} =
                Tempo.JSCalendar.parse(event(~s("start":"2026-06-02T09:00:00")))
 
-      assert [interval] = IntervalSet.to_list(set)
+      assert [interval] = IntervalSet.members(set)
       assert interval.metadata.punctual == true
       refute Tempo.Compare.compare_endpoints(interval.from, interval.to) == :same
     end
@@ -62,7 +62,7 @@ defmodule Tempo.JSCalendarTest do
                  event(~s("start":"2026-06-02T09:00:00","title":"Review","status":"confirmed"))
                )
 
-      assert [interval] = IntervalSet.to_list(set)
+      assert [interval] = IntervalSet.members(set)
       assert interval.metadata.uid == "e"
       assert interval.metadata.title == "Review"
       assert interval.metadata.status == "confirmed"
@@ -78,7 +78,7 @@ defmodule Tempo.JSCalendarTest do
                  )
                )
 
-      assert [interval] = IntervalSet.to_list(set)
+      assert [interval] = IntervalSet.members(set)
       assert interval.from.extended.zone_id == "Australia/Sydney"
     end
 
@@ -86,7 +86,7 @@ defmodule Tempo.JSCalendarTest do
       assert {:ok, set} =
                Tempo.JSCalendar.parse(event(~s("start":"2026-06-02T09:00:00")))
 
-      assert [interval] = IntervalSet.to_list(set)
+      assert [interval] = IntervalSet.members(set)
       assert interval.from.extended == nil
     end
 
@@ -94,7 +94,7 @@ defmodule Tempo.JSCalendarTest do
       assert {:ok, set} =
                Tempo.JSCalendar.parse(event(~s("start":"2026-06-02T09:00:00","timeZone":null)))
 
-      assert [interval] = IntervalSet.to_list(set)
+      assert [interval] = IntervalSet.members(set)
       assert interval.from.extended == nil
     end
 
@@ -110,7 +110,7 @@ defmodule Tempo.JSCalendarTest do
                  )
                )
 
-      assert [interval] = IntervalSet.to_list(set)
+      assert [interval] = IntervalSet.members(set)
       assert interval.to.time[:hour] == 2
     end
 
@@ -142,7 +142,7 @@ defmodule Tempo.JSCalendarTest do
                    "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"daily","count":2}]
                  )))
 
-      for interval <- IntervalSet.to_list(set) do
+      for interval <- IntervalSet.members(set) do
         assert interval.to.time[:hour] - interval.from.time[:hour] == 1
       end
     end
@@ -171,7 +171,7 @@ defmodule Tempo.JSCalendarTest do
       # The first Monday of three consecutive months.
       assert IntervalSet.count(set) == 3
 
-      for interval <- IntervalSet.to_list(set) do
+      for interval <- IntervalSet.members(set) do
         assert interval.from.time[:day] <= 7
       end
     end
@@ -303,7 +303,7 @@ defmodule Tempo.JSCalendarTest do
                    "recurrenceOverrides":{"2026-06-02T09:00:00":{"title":"Retro"}}
                  )))
 
-      assert [first, second] = IntervalSet.to_list(set)
+      assert [first, second] = IntervalSet.members(set)
       assert first.metadata.title == "Standup"
       assert second.metadata.title == "Retro"
       assert second.metadata.uid == "e"

@@ -44,7 +44,7 @@ Free time gives the *regions* where a meeting could go. A booking page offers di
 ```elixir
 mutual
 |> Tempo.IntervalSet.slots(~o"PT1H")
-|> Tempo.IntervalSet.to_list()
+|> Tempo.IntervalSet.members()
 |> Enum.filter(&Tempo.at_least?(&1, ~o"PT1H"))
 ```
 

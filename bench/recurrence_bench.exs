@@ -42,7 +42,7 @@ rules = [
 
 tempo_expand = fn interval ->
   {:ok, set} = Tempo.to_interval(interval)
-  IntervalSet.to_list(set)
+  IntervalSet.members(set)
 end
 
 ical_expand = fn {rule, dtstart} ->

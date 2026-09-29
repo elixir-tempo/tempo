@@ -187,15 +187,15 @@ defmodule Tempo.NewTest do
       value = Tempo.put_metadata(~o"2026Y{6,12}M", %{kind: :solstice_month})
       {:ok, set} = Tempo.to_interval(value)
 
-      assert set |> IntervalSet.to_list() |> Enum.map(&Interval.metadata/1) ==
+      assert set |> IntervalSet.members() |> Enum.map(&Interval.metadata/1) ==
                [%{kind: :solstice_month}, %{kind: :solstice_month}]
     end
 
     test "a labelled value is a labelled recurrence-set member" do
       {:ok, independence} = Tempo.new(year: 2026, month: 7, day: 4, metadata: %{name: "July 4"})
-      {:ok, set} = Tempo.to_interval_set(RecurrenceSet.new([independence]))
+      {:ok, set} = Tempo.to_interval_set(RecurrenceSet.new!([independence]))
 
-      assert [occurrence] = IntervalSet.to_list(set)
+      assert [occurrence] = IntervalSet.members(set)
       assert Interval.metadata(occurrence) == %{name: "July 4"}
     end
 
@@ -529,7 +529,7 @@ defmodule Tempo.NewTest do
     test "constructed Tempo plugs into select/2" do
       base = Tempo.new!(year: 2026)
       {:ok, set} = Tempo.select(base, ~o"12-25")
-      [xmas] = IntervalSet.to_list(set)
+      [xmas] = IntervalSet.members(set)
       assert xmas.from.time == [year: 2026, month: 12, day: 25]
     end
 

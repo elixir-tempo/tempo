@@ -107,7 +107,7 @@ Once every value is a bounded interval, the set-theoretic operations follow natu
 
 ```elixir
 {:ok, both} = Tempo.union(a, b)
-Tempo.IntervalSet.to_list(both)
+Tempo.IntervalSet.members(both)
 ```
 
 > The **union** of `a` and `b` keeps both intervals as distinct members — `union/2` is member-preserving so identity and metadata survive.
@@ -117,7 +117,7 @@ For the merged "one continuous window" form, coalesce explicitly:
 ```elixir
 both
 |> Tempo.IntervalSet.coalesce()
-|> Tempo.IntervalSet.to_list()
+|> Tempo.IntervalSet.members()
 ```
 
 > One continuous window — June 1 through June 20 — after coalescing.
@@ -126,7 +126,7 @@ both
 
 ```elixir
 {:ok, overlap} = Tempo.intersection(a, b)
-Tempo.IntervalSet.to_list(overlap)
+Tempo.IntervalSet.members(overlap)
 ```
 
 > The **intersection** of `a` and `b` is just the shared stretch — June 10 through June 15.
@@ -138,7 +138,7 @@ work_day = ~o"2026-06-15T09/2026-06-15T17"
 lunch    = ~o"2026-06-15T12/2026-06-15T13"
 
 {:ok, free} = Tempo.difference(work_day, lunch)
-Tempo.IntervalSet.to_list(free)
+Tempo.IntervalSet.members(free)
 ```
 
 > The **workday minus lunch** is my **free** time — two intervals, 09:00-12:00 and 13:00-17:00.
@@ -155,7 +155,7 @@ Two free intervals: 09:00-12:00 and 13:00-17:00.
 
 ```elixir
 {:ok, workdays} = Tempo.select(~o"2026-06", Tempo.workdays(:US))
-Tempo.IntervalSet.to_list(workdays) |> length()
+Tempo.IntervalSet.members(workdays) |> length()
 ```
 
 > **Workdays** of **June 2026** in the **United States** are Monday through Friday — 22 day-resolution intervals.
@@ -199,7 +199,7 @@ Tempo.IntervalSet.map(holidays, &{Tempo.month(&1), Tempo.day(&1)})
 {:ok, vacation}      = Tempo.to_interval_set(~o"2026-06-15/2026-06-20")
 {:ok, available}     = Tempo.difference(june_workdays, vacation)
 
-Tempo.IntervalSet.to_list(available)
+Tempo.IntervalSet.members(available)
 ```
 
 > **Workdays** of June **minus** my **vacation** yields the days I'm **available**. Because `select/3` returns an IntervalSet, it drops straight into `union/2`, `intersection/2`, `difference/2`, and `symmetric_difference/2`.
@@ -222,7 +222,7 @@ end
 {:ok, occurrences} = Tempo.to_interval_set(mondays)
 
 occurrences
-|> Tempo.IntervalSet.to_list()
+|> Tempo.IntervalSet.members()
 |> Enum.map(start_date)
 |> Kino.DataTable.new()
 ```
@@ -233,7 +233,7 @@ occurrences
 {:ok, rule} = Tempo.RRule.parse("FREQ=YEARLY;BYMONTH=11;BYDAY=4TH;COUNT=5", from: ~o"2022-11-24")
 {:ok, thanksgivings} = Tempo.to_interval_set(rule)
 
-thanksgivings |> Tempo.IntervalSet.to_list() |> Enum.map(start_date)
+thanksgivings |> Tempo.IntervalSet.members() |> Enum.map(start_date)
 ```
 
 ### US Presidential Election Day
@@ -248,7 +248,7 @@ thanksgivings |> Tempo.IntervalSet.to_list() |> Enum.map(start_date)
 
 {:ok, elections} = Tempo.to_interval_set(rule)
 
-elections |> Tempo.IntervalSet.to_list() |> Enum.map(start_date)
+elections |> Tempo.IntervalSet.members() |> Enum.map(start_date)
 ```
 
 ### Every Friday the 13th
@@ -257,7 +257,7 @@ elections |> Tempo.IntervalSet.to_list() |> Enum.map(start_date)
 {:ok, rule} = Tempo.RRule.parse("FREQ=MONTHLY;BYDAY=FR;BYMONTHDAY=13;COUNT=10", from: ~o"1998-02-13")
 {:ok, f13s} = Tempo.to_interval_set(rule)
 
-f13s |> Tempo.IntervalSet.to_list() |> Enum.map(start_date)
+f13s |> Tempo.IntervalSet.members() |> Enum.map(start_date)
 ```
 
 ### Last weekday of every month
@@ -268,7 +268,7 @@ f13s |> Tempo.IntervalSet.to_list() |> Enum.map(start_date)
 
 {:ok, last_weekdays} = Tempo.to_interval_set(rule)
 
-last_weekdays |> Tempo.IntervalSet.to_list() |> Enum.map(start_date)
+last_weekdays |> Tempo.IntervalSet.members() |> Enum.map(start_date)
 ```
 
 BYSETPOS applies last, picking the Nth element of each month's candidate set.
@@ -437,7 +437,7 @@ candidates = [
 
 bookable =
   Enum.filter(candidates, fn candidate ->
-    Enum.any?(Tempo.IntervalSet.to_list(mutual), &Tempo.within?(candidate, &1))
+    Enum.any?(Tempo.IntervalSet.members(mutual), &Tempo.within?(candidate, &1))
   end)
 
 bookable |> Enum.map(&inspect/1)

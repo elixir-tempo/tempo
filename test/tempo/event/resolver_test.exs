@@ -55,7 +55,7 @@ defmodule Tempo.Event.ResolverTest do
       {:ok, recurrence} = Tempo.from_iso8601("R/../P1Y/FL(fiscal-year-start)eN")
       {:ok, set} = Tempo.to_interval(recurrence, within: ~o"2026")
 
-      assert [interval] = IntervalSet.to_list(set)
+      assert [interval] = IntervalSet.members(set)
       assert Interval.from(interval) == ~o"2026Y4M1D"
     end
 
@@ -63,7 +63,7 @@ defmodule Tempo.Event.ResolverTest do
       {:ok, recurrence} = Tempo.from_iso8601("R/../P1Y/FL(fiscal-year-start)eN")
       {:ok, set} = Tempo.to_interval(recurrence, within: ~o"1999")
 
-      assert IntervalSet.to_list(set) == []
+      assert IntervalSet.members(set) == []
     end
   end
 
@@ -75,7 +75,7 @@ defmodule Tempo.Event.ResolverTest do
     test "yields zero occurrences rather than raising" do
       {:ok, recurrence} = Tempo.from_iso8601("R/../P1Y/FL(brigadoon)eN")
       assert {:ok, set} = Tempo.to_interval(recurrence, within: ~o"2026")
-      assert IntervalSet.to_list(set) == []
+      assert IntervalSet.members(set) == []
     end
   end
 end

@@ -297,10 +297,10 @@ defmodule Tempo.Inspect do
   # `Inspect.Opts.limit` bounds how many members are rendered; `:infinity`
   # shows them all — except on an unbounded (lazy) set, where "all" would
   # walk forever, so the default limit of 50 applies instead. Members are
-  # taken from the walk, never `to_list/1`, so a lazy set inspects safely.
+  # taken from the walk, never `members/1`, so a lazy set inspects safely.
   defp take_within_limit(set, :infinity) do
     if IntervalSet.bounded?(set) do
-      {IntervalSet.to_list(set), false}
+      {IntervalSet.members(set), false}
     else
       take_within_limit(set, 50)
     end

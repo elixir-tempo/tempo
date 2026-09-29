@@ -33,6 +33,8 @@ Tempo 2.0 gives each word in its API one meaning, the one it has in everyday Eng
 | `Tempo.working_days_in/2` | `Tempo.count_workdays/2` |
 | `Tempo.weekend/1` | `Tempo.weekends/1` |
 | `Tempo.weekends(from: date)`, a lazy set | `Tempo.select/2` over a span with no end |
+| `Tempo.IntervalSet.to_list/1` | `Tempo.IntervalSet.members/1` |
+| `Tempo.IntervalSet.overlapping/2` | `Tempo.IntervalSet.covered/2` |
 
 These keep their names and change their meaning:
 
@@ -56,6 +58,8 @@ These keep their names and change their meaning:
 
 * **`select/2` across a span** — selects in every period of the span, where 1.x selected in its first period alone.
 
+* **`Tempo.RecurrenceSet.new/2`** — returns `{:ok, set}` and checks its members, where 1.x returned the struct; `new!/2` returns the struct.
+
 ## Updating the dependency
 
 ```elixir
@@ -69,10 +73,10 @@ end
 A search for the removed names finds the renames:
 
 ```bash
-grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(meets|during)\?|Interval\.(meets|during)\?|(Tempo|Interval)\.compose|Tempo\.anchor[(/]|(NonAnchored|RequiresAnchor)Error|:unanchored|grounded\?|GroundedTempoError|(to|from)_(naive_)?date_time|from_(ical|jscalendar)|available_from_ical|to_rrule|MaterialisationError|Expander.expand|working_days?|Tempo\.weekend\(|weekends\(from' lib test
+grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(meets|during)\?|Interval\.(meets|during)\?|(Tempo|Interval)\.compose|Tempo\.anchor[(/]|(NonAnchored|RequiresAnchor)Error|:unanchored|grounded\?|GroundedTempoError|(to|from)_(naive_)?date_time|from_(ical|jscalendar)|available_from_ical|to_rrule|MaterialisationError|Expander.expand|working_days?|Tempo\.weekend\(|weekends\(from|IntervalSet\.(to_list|overlapping)|RecurrenceSet\.new\(' lib test
 ```
 
-The changes of meaning need a read rather than a replace: every `before?`, `after?` and their `certainly_` and `possibly_` forms, every duration read as a count of seconds, every shift of a zoned value by hours, every `duration/1` of a set, every window, every `:metadata` passed to `Tempo.new/1`, and every `select/2` across a span longer than one period.
+The changes of meaning need a read rather than a replace: every `before?`, `after?` and their `certainly_` and `possibly_` forms, every duration read as a count of seconds, every shift of a zoned value by hours, every `duration/1` of a set, every window, every `:metadata` passed to `Tempo.new/1`, every `select/2` across a span longer than one period, and every `RecurrenceSet.new/2`, which the search finds.
 
 ## A set's duration is the time it covers
 
@@ -477,3 +481,32 @@ iex> {:ok, christmases} = Tempo.select(~o"2026/2029", ~o"12-25")
 iex> Tempo.IntervalSet.count(christmases)
 3
 ```
+
+## Sets
+
+An interval set's members have one name, `Tempo.IntervalSet.members/1`: `to_list/1` read like `Enum.to_list/1`, which walks the days inside the members. The time covered by at least some number of members is `covered/2`, beside `covered?/2`, and it returns a tuple. `Tempo.RecurrenceSet.new/2` returns `{:ok, set}` and checks its members, as every other constructor that takes input does, with `new!/2` for the struct.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.x
+Tempo.IntervalSet.to_list(set)
+Tempo.IntervalSet.overlapping(bookings, at_least: 2)
+holidays = Tempo.RecurrenceSet.new([christmas, new_year])
+```
+
+```elixir
+iex> bookings = Tempo.IntervalSet.new!([
+...>   ~o"2026-06-15T09:00:00/2026-06-15T11:00:00",
+...>   ~o"2026-06-15T10:00:00/2026-06-15T12:00:00"
+...> ])
+iex> {:ok, double_booked} = Tempo.IntervalSet.covered(bookings, at_least: 2)
+iex> Tempo.IntervalSet.members(double_booked)
+[~o"2026Y6M15DT10H0M0S/T11H0M0S"]
+iex> {:ok, holidays} = Tempo.RecurrenceSet.new([~o"R/../P1Y/FL12M25DN", ~o"R/../P1Y/FL1M1DN"])
+iex> {:ok, occurrences} = Tempo.to_interval_set(holidays, within: ~o"2026Y")
+iex> Tempo.IntervalSet.count(occurrences)
+2
+```
+
+> *"The double-booked time is the time covered by at least two bookings."*

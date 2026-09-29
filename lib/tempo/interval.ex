@@ -1204,7 +1204,7 @@ defmodule Tempo.Interval do
   defp to_single_interval(%__MODULE__{from: %Tempo{}, to: %Tempo{}} = iv, _label), do: {:ok, iv}
 
   defp to_single_interval(%IntervalSet{} = set, label) do
-    case IntervalSet.to_list(set) do
+    case IntervalSet.members(set) do
       [iv] -> {:ok, iv}
       ivs -> multi_member_error(ivs, label)
     end
@@ -2658,7 +2658,7 @@ defmodule Tempo.Interval do
   defp mask_candidates(operand) do
     if non_contiguous_mask?(operand) do
       case Tempo.to_interval(operand) do
-        {:ok, %IntervalSet{} = set} -> {:ok, IntervalSet.to_list(set)}
+        {:ok, %IntervalSet{} = set} -> {:ok, IntervalSet.members(set)}
         {:ok, %__MODULE__{} = interval} -> {:ok, [interval]}
         {:error, _} = error -> error
       end
@@ -2710,7 +2710,7 @@ defmodule Tempo.Interval do
   defp anchored_operand?(%__MODULE__{from: %Tempo{} = from}), do: Tempo.anchored?(from)
 
   defp anchored_operand?(%IntervalSet{} = set) do
-    case IntervalSet.to_list(set) do
+    case IntervalSet.members(set) do
       [interval] -> anchored_operand?(interval)
       _members -> true
     end
@@ -2758,7 +2758,7 @@ defmodule Tempo.Interval do
   end
 
   defp placements(%IntervalSet{} = set) do
-    case IntervalSet.to_list(set) do
+    case IntervalSet.members(set) do
       [interval] -> placements(interval)
       _members -> to_single_interval(set, :graded)
     end
@@ -2883,7 +2883,7 @@ defmodule Tempo.Interval do
   end
 
   defp endpoint_margins(%IntervalSet{} = set) do
-    case IntervalSet.to_list(set) do
+    case IntervalSet.members(set) do
       [interval] -> endpoint_margins(interval)
       _members -> {nil, nil}
     end

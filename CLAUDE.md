@@ -71,7 +71,7 @@ Examples follow a consistent three-part structure:
 
    slots =
      mutual
-     |> Tempo.IntervalSet.to_list()
+     |> Tempo.IntervalSet.members()
      |> Enum.filter(&Tempo.at_least?(&1, ~o"PT1H"))
    ```
 
@@ -86,7 +86,7 @@ The three parts reinforce each other — nouns, verbs, prose.
 If any of these appear in user-facing examples, it's a signal that an abstraction is missing:
 
 * **`to_utc_seconds/1`** or other raw second counting — add a duration predicate instead (`at_least?`, `exactly?`, `shorter_than?`, …).
-* **Struct field accessors** like `set.intervals`, `iv.from.time[:hour]` — add a named helper (`IntervalSet.to_list/1`, a predicate, or a query function).
+* **Struct field accessors** like `set.intervals`, `iv.from.time[:hour]` — add a named helper (`IntervalSet.members/1`, a predicate, or a query function).
 * **Magic numbers** for durations (`3600`, `86_400`) — use an ISO 8601 duration literal (`~o"PT1H"`, `~o"P1D"`).
 * **Hand-rolled geometric checks** like `compare_endpoints(a + d, b) in [:earlier, :same]` — add a predicate that names the concept.
 * **Pattern-matching on Allen relation lists inline** like `Tempo.relation(a, b) in [:equals, :starts, :during, :finishes]` — name that set (`Tempo.within?/2` does exactly this). Note `Tempo.relation/2` returns the Allen relation; `Tempo.compare/3` is the separate stdlib-ternary sorter callback returning `:lt | :eq | :gt`.

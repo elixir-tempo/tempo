@@ -240,7 +240,7 @@ defmodule Tempo.Interval.PredicatesTest do
 
       one_hour_slots =
         mutual
-        |> IntervalSet.to_list()
+        |> IntervalSet.members()
         |> Enum.filter(&Tempo.at_least?(&1, ~o"PT1H"))
 
       assert length(one_hour_slots) == 3

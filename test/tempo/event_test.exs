@@ -115,7 +115,7 @@ defmodule Tempo.EventTest do
 
       dates =
         set
-        |> IntervalSet.to_list()
+        |> IntervalSet.members()
         |> Enum.map(fn interval ->
           {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
           Date.to_iso8601(date)
@@ -189,7 +189,7 @@ defmodule Tempo.EventTest do
     {:ok, set} = Tempo.to_interval(rule, within: bound)
 
     set
-    |> IntervalSet.to_list()
+    |> IntervalSet.members()
     |> Enum.map(fn interval ->
       {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
       Date.to_iso8601(date)

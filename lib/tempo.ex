@@ -5030,7 +5030,7 @@ defmodule Tempo do
   * `{:ok, interval_set}` on the lazy backend when an open-ended
     `:within` window walks a value with no end of its own. It
     answers `Tempo.IntervalSet.first/1` and the other walking
-    questions; `Tempo.IntervalSet.count/1` and `to_list/1` raise
+    questions; `Tempo.IntervalSet.count/1` and `members/1` raise
     `Tempo.UnboundedSetError`.
 
   * `{:error, reason}` when the input cannot be converted — a
@@ -5236,7 +5236,7 @@ defmodule Tempo do
 
     with %Tempo{} = first_to <- walk_end(window_from, base, 0),
          {:ok, first} <- walk_window(value, window_from, first_to, walk_opts) do
-      found = IntervalSet.to_list(first)
+      found = IntervalSet.members(first)
       horizon = horizon_after(Math.add(window_from, @occurrence_horizon), found)
 
       later =
@@ -5267,7 +5267,7 @@ defmodule Tempo do
   # A window's occurrences that start in it, and the walk's next state; a window
   # that cannot be materialised ends the walk.
   defp walked({:ok, set}, window_from, window_to, step, horizon) do
-    found = set |> IntervalSet.to_list() |> Enum.filter(&starts_from?(&1, window_from))
+    found = set |> IntervalSet.members() |> Enum.filter(&starts_from?(&1, window_from))
     {found, {window_to, step + 1, horizon_after(horizon, found)}}
   end
 
@@ -5551,7 +5551,7 @@ defmodule Tempo do
          {:ok, closed_domain} <- close_domain_ranges(domain, reach),
          {:ok, domain_set} <- to_interval(closed_domain) do
       domain_set
-      |> IntervalSet.to_list()
+      |> IntervalSet.members()
       |> filter_domain_years(domain.filter)
       |> step_domain_periods(domain, interval.duration)
       |> Enum.filter(&domain_period_in_window?(&1, reach))
@@ -5570,7 +5570,7 @@ defmodule Tempo do
        when not is_nil(filter) do
     with {:ok, occurrences} <- to_interval(%{interval | from: nil}, opts) do
       occurrences
-      |> IntervalSet.to_list()
+      |> IntervalSet.members()
       |> filter_domain_years(filter)
       |> IntervalSet.new()
     end
@@ -6293,7 +6293,7 @@ defmodule Tempo do
     else
       upper =
         set
-        |> IntervalSet.to_list()
+        |> IntervalSet.members()
         |> Enum.map(& &1.to)
         |> Enum.reduce(&later_endpoint/2)
 
@@ -6318,7 +6318,7 @@ defmodule Tempo do
       nil
     else
       set
-      |> IntervalSet.to_list()
+      |> IntervalSet.members()
       |> Enum.map(& &1.from)
       |> Enum.reduce(&earlier_endpoint/2)
     end
@@ -6605,7 +6605,7 @@ defmodule Tempo do
             {:cont, {:ok, [i | acc]}}
 
           {:ok, %Tempo.IntervalSet{} = inner_set} ->
-            {:cont, {:ok, Enum.reverse(IntervalSet.to_list(inner_set)) ++ acc}}
+            {:cont, {:ok, Enum.reverse(IntervalSet.members(inner_set)) ++ acc}}
 
           {:error, _} = err ->
             {:halt, err}
@@ -6642,7 +6642,7 @@ defmodule Tempo do
       case to_interval(%{interval | from: nil}, Keyword.put(opts, :within, run)) do
         {:ok, %Tempo.IntervalSet{} = set} ->
           own =
-            set |> IntervalSet.to_list() |> Enum.filter(&starts_in_window?(&1, run_from, run_to))
+            set |> IntervalSet.members() |> Enum.filter(&starts_in_window?(&1, run_from, run_to))
 
           {:cont, {:ok, acc ++ own}}
 
@@ -6749,7 +6749,7 @@ defmodule Tempo do
 
   defp keep_occurrences_in_window({:ok, %Tempo.IntervalSet{} = set}, window) do
     set
-    |> IntervalSet.to_list()
+    |> IntervalSet.members()
     |> occurrences_in_window(window)
     |> IntervalSet.new()
   end
@@ -6948,7 +6948,7 @@ defmodule Tempo do
   # A conditional names what it falls on and either the offsets it keeps `:at`
   # or the selector it moves `:to_next`, never both.
   defp validate_conditionals(conditionals) do
-    case Enum.reject(conditionals, &valid_conditional?/1) do
+    case Enum.reject(conditionals, &Conditional.valid?/1) do
       [] ->
         :ok
 
@@ -6956,20 +6956,6 @@ defmodule Tempo do
         {:error, ConversionError.exception(value: invalid, reason: :conditional_member)}
     end
   end
-
-  defp valid_conditional?(%Conditional{falls_on: falls_on, at: [_ | _] = offsets, to_next: nil}),
-    do: valid_falls_on?(falls_on) and Enum.all?(offsets, &match?(%Tempo.Duration{}, &1))
-
-  defp valid_conditional?(%Conditional{falls_on: falls_on, at: nil, to_next: %Tempo{}}),
-    do: valid_falls_on?(falls_on)
-
-  defp valid_conditional?(_conditional), do: false
-
-  # What a condition falls on: a metadata map the other members' occurrences are
-  # matched against, or a recurrence set whose own occurrences it reads.
-  defp valid_falls_on?(%Tempo.RecurrenceSet{}), do: true
-  defp valid_falls_on?(%_struct{}), do: false
-  defp valid_falls_on?(falls_on), do: is_map(falls_on)
 
   # Each conditional's condition as the spans of the occurrences it can fall on,
   # keyed by the conditional's member index: the other members' first-pass
@@ -6998,7 +6984,7 @@ defmodule Tempo do
     with {:ok, occurrences} <- to_interval_set(reference, opts) do
       spans =
         for %Tempo.Interval{from: %Tempo{}, to: %Tempo{}} = occurrence <-
-              IntervalSet.to_list(occurrences),
+              IntervalSet.members(occurrences),
             do: occurrence_span(occurrence)
 
       {:ok, spans}
@@ -7184,7 +7170,7 @@ defmodule Tempo do
   end
 
   defp recurrence_set_occurrences(%Tempo.Interval{} = interval), do: [interval]
-  defp recurrence_set_occurrences(%Tempo.IntervalSet{} = set), do: IntervalSet.to_list(set)
+  defp recurrence_set_occurrences(%Tempo.IntervalSet{} = set), do: IntervalSet.members(set)
 
   # A value's metadata onto the interval, or each interval, it materialised to.
   defp with_value_metadata(%Tempo.Interval{} = interval, metadata),
@@ -7544,7 +7530,7 @@ defmodule Tempo do
   defp selected_spans(%Tempo{} = endpoint, span_of, metadata, opts) do
     with {:ok, %IntervalSet{} = selected} <- to_interval(endpoint, opts) do
       selected
-      |> IntervalSet.to_list()
+      |> IntervalSet.members()
       |> Enum.map(fn %Tempo.Interval{from: date} ->
         {from, to} = span_of.(date)
         %Tempo.Interval{from: from, to: to, metadata: metadata}
@@ -7559,14 +7545,14 @@ defmodule Tempo do
 
   defp with_trailing_units({:ok, %IntervalSet{} = set}, trailing) do
     set
-    |> IntervalSet.to_list()
+    |> IntervalSet.members()
     |> Enum.reduce_while({:ok, []}, fn %Tempo.Interval{from: %Tempo{} = from}, {:ok, acc} ->
       case to_interval(%{from | time: Keyword.merge(from.time, trailing)}) do
         {:ok, %Tempo.Interval{} = interval} ->
           {:cont, {:ok, [interval | acc]}}
 
         {:ok, %IntervalSet{} = expanded} ->
-          {:cont, {:ok, Enum.reverse(IntervalSet.to_list(expanded)) ++ acc}}
+          {:cont, {:ok, Enum.reverse(IntervalSet.members(expanded)) ++ acc}}
 
         {:error, _reason} = error ->
           {:halt, error}
@@ -8380,11 +8366,11 @@ defmodule Tempo do
   ### Examples
 
       iex> {:ok, set} = Tempo.select(~o"2026-02", [1, 15])
-      iex> set |> Tempo.IntervalSet.to_list() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      iex> set |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [1, 15]
 
       iex> {:ok, set} = Tempo.select(~o"2026", ~o"12-25")
-      iex> [xmas] = Tempo.IntervalSet.to_list(set)
+      iex> [xmas] = Tempo.IntervalSet.members(set)
       iex> from = Tempo.Interval.from(xmas)
       iex> {Tempo.year(from), Tempo.month(from), Tempo.day(from)}
       {2026, 12, 25}
@@ -8453,7 +8439,7 @@ defmodule Tempo do
       20
 
       iex> {:ok, workdays} = Tempo.select(~o"2026-06-15/2026-06-22", Tempo.workdays(:SA))
-      iex> workdays |> Tempo.IntervalSet.to_list() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      iex> workdays |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [15, 16, 17, 18, 21]
 
   """
@@ -8489,11 +8475,11 @@ defmodule Tempo do
   ### Examples
 
       iex> {:ok, weekends} = Tempo.select(~o"2026-02", Tempo.weekends(:US))
-      iex> weekends |> Tempo.IntervalSet.to_list() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      iex> weekends |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [1, 7, 8, 14, 15, 21, 22, 28]
 
       iex> {:ok, weekends} = Tempo.select(~o"2026-02", Tempo.weekends(:SA))
-      iex> weekends |> Tempo.IntervalSet.to_list() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      iex> weekends |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [6, 7, 13, 14, 20, 21, 27, 28]
 
   From a date on, the weekends are a lazy set that walks only as far as

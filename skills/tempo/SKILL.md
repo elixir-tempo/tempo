@@ -46,14 +46,14 @@ See `iso8601-cheatsheet.md` for the syntax forms, each with the English it encod
 | "what does this string mean / is it valid?" | **Parse + Explain** | `Tempo.from_iso8601/1`, `Tempo.explain/1` |
 | "does A overlap / meet / come before / fall within B?" | **Relations** | `Tempo.relation/2` (the 13 Allen relations); predicates `overlaps?/2`, `within?/2`, `contains?/2`, `disjoint?/2`, `before?/2`, `after?/2` |
 | "…but the dates are uncertain / circa / ±" | **Graded relations** | `overlap_certainty/2`, `within_certainty/2`, `relation_certainty/3` → `:certain \| :possible \| :impossible`; booleans `certainly_overlaps?/2`, `possibly_overlaps?/2`, and the `*_before?`/`*_after?`/`*_within?` pairs |
-| "free/busy, subtract, merge, or split into bookable slots" | **Set algebra** | `Tempo.difference/2`, `intersection/2`, `union/2`; `Tempo.IntervalSet.coalesce/1`, `to_list/1`, `slots/3`, `count/1` |
+| "free/busy, subtract, merge, or split into bookable slots" | **Set algebra** | `Tempo.difference/2`, `intersection/2`, `union/2`; `Tempo.IntervalSet.members/1`, `coalesce/1`, `covered/2` (the double-booked time with `at_least: 2`), `slots/3`, `count/1` |
 | "how long is it / is it at least an hour?" | **Duration predicates** | `Tempo.Interval.at_least?/2`, `at_most?/2`, `exactly?/2`, `longer_than?/2`, `shorter_than?/2`, `adjacent?/2` |
-| "every Nth weekday / recurring events / occurrences of a rule" | **Recurrence** | `Tempo.RRule.parse!/2` or `Tempo.Cron.parse!/2` (RFC 5545 / cron string → a recurring `%Tempo.Interval{}`), the native `~o"R/…/FL…N"` selection they compile to, or `Tempo.Interval.new!(from:, duration:, recurrence: :infinity)` for a simple period; materialise bounded with `Tempo.to_interval(value, bound: …)` |
+| "every Nth weekday / recurring events / occurrences of a rule" | **Recurrence** | `Tempo.RRule.parse!/2` or `Tempo.Cron.parse!/2` (RFC 5545 / cron string → a recurring `%Tempo.Interval{}`), the native `~o"R/…/FL…N"` selection they compile to, or `Tempo.Interval.new!(from:, duration:, recurrence: :infinity)` for a simple period; convert to its occurrences with `Tempo.to_interval(value, within: …)` |
 | "list the days/months/hours within a span" | **Enumeration** | `Enum.to_list/1` / `Enum.take/2` on a value; `Tempo.to_interval/1` for the implicit span |
 | "order these dependent tasks; when does each run; critical path; deadline" | **Scheduling** | `Tempo.Schedule.new/0 \|> task/3 \|> solve/1`; then `critical_path/1`, `span/1`; each slot has `.start`/`.finish`/`.critical?` |
 | "given uncertain/relative constraints, are they consistent, could two have coexisted, and what do they imply?" | **Constraint network** | `Tempo.Network.new/0 \|> add_period/3 \|> add_sequence/2 \|> add_relation/4`; solve with `Tempo.Network.Solver.consistent?/1`, `Tempo.Network.Solver.contemporaneity/3` (could two periods overlap — `:certain` / `:possible` / `:impossible`), and `Tempo.Network.Solver.tighten/1` (derives narrowest bounds, even for undated periods) |
 | "N years later / shift by a duration" | **Arithmetic** | `Tempo.shift/2` (takes a `~o"P…"` duration) |
-| "convert to/from Elixir `Date`/`DateTime`" | **Interop** | `Tempo.from_elixir/2`, `Tempo.to_date/1`, `Tempo.to_date_time/1` |
+| "convert to/from Elixir `Date`/`DateTime`" | **Interop** | `Tempo.from_elixir/2`, `Tempo.to_date/1`, `Tempo.to_datetime/1` |
 
 Choosing between adjacent layers:
 

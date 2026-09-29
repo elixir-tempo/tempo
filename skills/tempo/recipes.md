@@ -41,7 +41,7 @@ work = ~o"2026-06-15T09/2026-06-15T17"
 bookable =
   free
   |> Tempo.IntervalSet.slots(~o"PT1H")
-  |> Tempo.IntervalSet.to_list()   #=> six one-hour openings
+  |> Tempo.IntervalSet.members()   #=> six one-hour openings
 ```
 
 > *"Free time is the workday **minus** the busy blocks; **bookable** slots are those gaps cut into one-hour pieces."* `difference`/`intersection`/`union` produce new intervals; `slots/3` discretises a free region into fixed-length openings.
@@ -53,24 +53,24 @@ bookable =
 ```elixir
 rule = Tempo.RRule.parse!("FREQ=MONTHLY;BYDAY=2MO", from: ~o"2025-01-01")
 Tempo.explain(rule)                 #=> "An unbounded recurrence. … Selects: on the 2nd Monday. …"
-{:ok, months} = Tempo.to_interval(rule, bound: ~o"2025")
-Tempo.IntervalSet.to_list(months)   #=> the 12 second-Mondays
+{:ok, months} = Tempo.to_interval(rule, within: ~o"2025")
+Tempo.IntervalSet.members(months)   #=> the 12 second-Mondays
 ```
 
-> *"Parse the calendar rule into a recurring interval — `explain/1` reads it back in plain English so you can confirm the pattern — then **materialise** it bounded to 2025."* For a simple period (no BY-rules) skip RRULE entirely: `Tempo.Interval.new!(from: dtstart, duration: ~o"P1W", recurrence: :infinity)`. RRULE and `Cron.parse!/2` are convenient front-doors; each compiles to a native ISO 8601 recurring interval — `inspect/1` shows the canonical `~o"R/…/FL…N"` form, which parses straight back.
+> *"Parse the calendar rule into a recurring interval — `explain/1` reads it back in plain English so you can confirm the pattern — then **convert** it to its occurrences within 2025."* For a simple period (no BY-rules) skip RRULE entirely: `Tempo.Interval.new!(from: dtstart, duration: ~o"P1W", recurrence: :infinity)`. RRULE and `Cron.parse!/2` are convenient front-doors; each compiles to a native ISO 8601 recurring interval — `inspect/1` shows the canonical `~o"R/…/FL…N"` form, which parses straight back.
 
 ---
 
-### "The last weekday of every month" — BYSETPOS (`V`)
+### "The last weekday of every month" — BYSETPOS (`I`)
 
 ```elixir
 rule = Tempo.RRule.parse!("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1", from: ~o"2025-01-01")
 Tempo.explain(rule)              #=> "… Selects: on a weekday [1..5], keeping the last occurrence. …"
-{:ok, days} = Tempo.to_interval(rule, bound: ~o"2025")
-Tempo.IntervalSet.to_list(days)  #=> Jan 31, Feb 28, Mar 31, … (last weekday of each month)
+{:ok, days} = Tempo.to_interval(rule, within: ~o"2025")
+Tempo.IntervalSet.members(days)  #=> Jan 31, Feb 28, Mar 31, … (last weekday of each month)
 ```
 
-> *"The last **weekday** of the month — not the last Friday."* `BYSETPOS` (native designator `V`) ranks the *whole* Mon–Fri candidate set each month and keeps the last; the ISO ordinal `BYDAY=-1FR` would instead pick the last *Friday*, a different date. `V` and `Q` (WKST) are ratified Tempo extensions with no plain-ISO 8601 equivalent — they round-trip through `to_iso8601/1`, but for cross-system interchange emit RFC 5545 with `Tempo.to_rrule/1`. See `guides/iso8601-conformance.md` §5.
+> *"The last **weekday** of the month — not the last Friday."* `BYSETPOS` is ISO 8601-2's position designator `I`, applied last over the whole resolved set: `~o"R/../P1M/FL{1..5}K-1IN"` ranks each month's Mon–Fri candidates and keeps the last, where `BYDAY=-1FR` (`5K-1I`) would pick the last *Friday*, a different date. For cross-system interchange, write the rule as RFC 5545 with `Tempo.RRule.to_string/1`. See `guides/iso8601-conformance.md` §5.
 
 ---
 

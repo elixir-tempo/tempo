@@ -12,7 +12,7 @@ defimpl Enumerable, for: Tempo.IntervalSet do
   # deliberate resolution of that tension: the `Enumerable` protocol
   # yields *sub-points* (the free/busy-scan and calendar-rendering
   # input), and iterating the *member intervals* is an explicit, named
-  # operation — `Tempo.IntervalSet.to_list/1` returns the members for
+  # operation — `Tempo.IntervalSet.members/1` returns the members for
   # piping into `Enum`. The protocol is not overloaded to do both; the
   # accessor makes the member-level intent visible at the call site.
 
@@ -42,7 +42,7 @@ defimpl Enumerable, for: Tempo.IntervalSet do
   @impl Enumerable
   def reduce(%Tempo.IntervalSet{} = set, acc, fun) do
     if Tempo.IntervalSet.bounded?(set) do
-      do_reduce(Tempo.IntervalSet.to_list(set), acc, fun)
+      do_reduce(Tempo.IntervalSet.members(set), acc, fun)
     else
       # Flatten the member walk into its sub-points lazily: each member
       # interval is itself Enumerable, and halting propagates, so

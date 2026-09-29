@@ -175,7 +175,7 @@ defmodule Tempo.SubSecondTest do
     test "intersection keeps the sub-second endpoints without truncation" do
       {:ok, overlap} = Tempo.intersection(work_day(), sub_second_shift())
 
-      [only] = IntervalSet.to_list(overlap)
+      [only] = IntervalSet.members(overlap)
       assert only.from.time[:microsecond] == {589_187, 6}
       assert only.to.time[:microsecond] == {589_187, 6}
     end
@@ -183,7 +183,7 @@ defmodule Tempo.SubSecondTest do
     test "difference aligns the coarser endpoints to microsecond resolution" do
       {:ok, remaining} = Tempo.difference(work_day(), sub_second_shift())
 
-      [morning, evening] = IntervalSet.to_list(remaining)
+      [morning, evening] = IntervalSet.members(remaining)
       assert morning.from.time[:microsecond] == {0, 6}
       assert morning.to.time[:microsecond] == {589_187, 6}
       assert evening.from.time[:microsecond] == {589_187, 6}
@@ -192,18 +192,18 @@ defmodule Tempo.SubSecondTest do
 
     test "union keeps both members" do
       {:ok, union} = Tempo.union(work_day(), sub_second_shift())
-      assert length(IntervalSet.to_list(union)) == 2
+      assert length(IntervalSet.members(union)) == 2
     end
 
     test "member-preserving filters accept mixed sub-second operands" do
       {:ok, overlapping} = Tempo.members_overlapping(work_day(), sub_second_shift())
-      assert length(IntervalSet.to_list(overlapping)) == 1
+      assert length(IntervalSet.members(overlapping)) == 1
 
       {:ok, outside} = Tempo.members_outside(work_day(), sub_second_shift())
-      assert IntervalSet.to_list(outside) == []
+      assert IntervalSet.members(outside) == []
 
       {:ok, exclusive} = Tempo.members_in_exactly_one(work_day(), sub_second_shift())
-      assert IntervalSet.to_list(exclusive) == []
+      assert IntervalSet.members(exclusive) == []
     end
 
     test "Allen relation between a sub-second interval and a coarser window" do

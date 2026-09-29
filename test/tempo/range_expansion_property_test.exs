@@ -138,7 +138,7 @@ defmodule Tempo.RangeExpansionPropertyTest do
   # interval rather than a set — deliberate, so accept both shapes.
   defp members(iso) do
     case iso |> Tempo.from_iso8601!() |> Tempo.to_interval() do
-      {:ok, %IntervalSet{} = set} -> IntervalSet.to_list(set)
+      {:ok, %IntervalSet{} = set} -> IntervalSet.members(set)
       {:ok, %Interval{} = interval} -> [interval]
     end
   end

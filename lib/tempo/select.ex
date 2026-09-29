@@ -231,22 +231,22 @@ defmodule Tempo.Select do
   ### Examples
 
       iex> {:ok, set} = Tempo.Select.select(~o"2026-02", [1, 15])
-      iex> Enum.map(Tempo.IntervalSet.to_list(set), &Tempo.day(Tempo.Interval.from(&1)))
+      iex> Enum.map(Tempo.IntervalSet.members(set), &Tempo.day(Tempo.Interval.from(&1)))
       [1, 15]
 
       iex> {:ok, set} = Tempo.Select.select(~o"2026", ~o"12-25")
-      iex> [xmas] = Tempo.IntervalSet.to_list(set)
+      iex> [xmas] = Tempo.IntervalSet.members(set)
       iex> xmas.from.time
       [year: 2026, month: 12, day: 25]
 
       iex> {:ok, set} = Tempo.Select.select(~o"2026", ~o"10O")
-      iex> [day10] = Tempo.IntervalSet.to_list(set)
+      iex> [day10] = Tempo.IntervalSet.members(set)
       iex> from = Tempo.Interval.from(day10)
       iex> {Tempo.month(from), Tempo.day(from)}
       {1, 10}
 
       iex> {:ok, set} = Tempo.Select.select(~o"2026-06", ~o"5K")
-      iex> set |> Tempo.IntervalSet.to_list() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      iex> set |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [5, 12, 19, 26]
 
       iex> {:ok, set} = Tempo.Select.select(~o"2026-02", Tempo.workdays(:US))
@@ -254,7 +254,7 @@ defmodule Tempo.Select do
       20
 
       iex> {:ok, set} = Tempo.Select.select(~o"2026/2029", ~o"12-25")
-      iex> set |> Tempo.IntervalSet.to_list() |> Enum.map(&Tempo.year(Tempo.Interval.from(&1)))
+      iex> set |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.year(Tempo.Interval.from(&1)))
       [2026, 2027, 2028]
 
       iex> {:ok, weekends} = Tempo.Select.select(~o"2026-06-15/..", Tempo.weekends(:US))
@@ -279,7 +279,7 @@ defmodule Tempo.Select do
   def select(%IntervalSet{} = set, selector) do
     if IntervalSet.bounded?(set) do
       set
-      |> IntervalSet.to_list()
+      |> IntervalSet.members()
       |> collect(&member_selection(&1, selector))
       |> selection_set()
     else
@@ -491,7 +491,7 @@ defmodule Tempo.Select do
   # and nothing outside the span is selected.
   defp select_in_period(period, selector) do
     with {:ok, %IntervalSet{} = selected} <- select_period(period, selector) do
-      {:ok, selected |> IntervalSet.to_list() |> Enum.filter(&starts_in?(&1, period))}
+      {:ok, selected |> IntervalSet.members() |> Enum.filter(&starts_in?(&1, period))}
     end
   end
 
@@ -513,7 +513,7 @@ defmodule Tempo.Select do
 
   defp members_of(set) do
     if IntervalSet.bounded?(set) do
-      {:ok, IntervalSet.to_list(set)}
+      {:ok, IntervalSet.members(set)}
     else
       {:error, UnboundedSetError.exception(operation: "Tempo.select/2", set: set)}
     end
@@ -978,7 +978,7 @@ defmodule Tempo.Select do
 
       {:ok, %IntervalSet{} = set} ->
         set
-        |> IntervalSet.to_list()
+        |> IntervalSet.members()
         |> Enum.map(&trim_iv_to_constraint(&1, c_time))
 
       _ ->

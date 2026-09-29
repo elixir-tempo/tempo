@@ -14,7 +14,7 @@ defmodule Tempo.GroupNegativeComponentTest do
     {:ok, set} = iso |> Tempo.from_iso8601!() |> Tempo.to_interval()
 
     set
-    |> IntervalSet.to_list()
+    |> IntervalSet.members()
     |> Enum.map(&(&1 |> Interval.from() |> Tempo.to_date() |> elem(1)))
   end
 
@@ -47,7 +47,7 @@ defmodule Tempo.GroupNegativeComponentTest do
     {:ok, set} = "{2025,2026}Y-1M" |> Tempo.from_iso8601!() |> Tempo.to_interval()
 
     months =
-      set |> IntervalSet.to_list() |> Enum.map(&{&1.from.time[:year], &1.from.time[:month]})
+      set |> IntervalSet.members() |> Enum.map(&{&1.from.time[:year], &1.from.time[:month]})
 
     assert months == [{2025, 12}, {2026, 12}]
   end
@@ -64,7 +64,7 @@ defmodule Tempo.GroupNegativeComponentTest do
 
     selection_dates =
       selected
-      |> IntervalSet.to_list()
+      |> IntervalSet.members()
       |> Enum.map(&(&1 |> Interval.from() |> Tempo.to_date() |> elem(1)))
 
     assert literal == open_ended
@@ -97,7 +97,7 @@ defmodule Tempo.GroupNegativeComponentTest do
 
       months_per_year =
         set
-        |> IntervalSet.to_list()
+        |> IntervalSet.members()
         |> Enum.group_by(& &1.from.time[:year])
         |> Map.new(fn {year, months} -> {year, length(months)} end)
 

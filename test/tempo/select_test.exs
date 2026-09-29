@@ -21,19 +21,19 @@ defmodule Tempo.Select.Test do
   describe "integer-list selector" do
     test "on a month base, indices apply at day resolution" do
       {:ok, set} = Tempo.select(~o"2026-02", [1, 15])
-      days = set |> IntervalSet.to_list() |> Enum.map(& &1.from.time[:day])
+      days = set |> IntervalSet.members() |> Enum.map(& &1.from.time[:day])
       assert days == [1, 15]
     end
 
     test "on a year base, indices apply at month resolution" do
       {:ok, set} = Tempo.select(~o"2026", [1, 4, 7, 10])
-      months = set |> IntervalSet.to_list() |> Enum.map(& &1.from.time[:month])
+      months = set |> IntervalSet.members() |> Enum.map(& &1.from.time[:month])
       assert months == [1, 4, 7, 10]
     end
 
     test "on a day base, indices apply at hour resolution" do
       {:ok, set} = Tempo.select(~o"2026-02-15", [9, 12, 17])
-      hours = set |> IntervalSet.to_list() |> Enum.map(& &1.from.time[:hour])
+      hours = set |> IntervalSet.members() |> Enum.map(& &1.from.time[:hour])
       assert hours == [9, 12, 17]
     end
 
@@ -45,13 +45,13 @@ defmodule Tempo.Select.Test do
   describe "range selector" do
     test "a range expands to an integer list" do
       {:ok, set} = Tempo.select(~o"2026-02", 6..8)
-      days = set |> IntervalSet.to_list() |> Enum.map(& &1.from.time[:day])
+      days = set |> IntervalSet.members() |> Enum.map(& &1.from.time[:day])
       assert days == [6, 7, 8]
     end
 
     test "a range on a year base selects months" do
       {:ok, set} = Tempo.select(~o"2026", 6..8)
-      months = set |> IntervalSet.to_list() |> Enum.map(& &1.from.time[:month])
+      months = set |> IntervalSet.members() |> Enum.map(& &1.from.time[:month])
       assert months == [6, 7, 8]
     end
   end
@@ -68,7 +68,7 @@ defmodule Tempo.Select.Test do
 
       result =
         set
-        |> IntervalSet.to_list()
+        |> IntervalSet.members()
         |> Enum.map(&{&1.from.time[:month], &1.from.time[:day]})
 
       assert result == [{2, 1}, {2, 15}]
@@ -78,7 +78,7 @@ defmodule Tempo.Select.Test do
       {:ok, base} = Tempo.to_interval(~o"2026")
       {:ok, set} = Tempo.select(base, [3, 6, 9])
 
-      months = set |> IntervalSet.to_list() |> Enum.map(& &1.from.time[:month])
+      months = set |> IntervalSet.members() |> Enum.map(& &1.from.time[:month])
       assert months == [3, 6, 9]
     end
   end
@@ -90,21 +90,21 @@ defmodule Tempo.Select.Test do
 
     test "Tempo.workdays(:US) on Feb 2026 returns Monday..Friday" do
       {:ok, set} = Tempo.select(~o"2026-02", Tempo.workdays(:US))
-      count = set |> IntervalSet.to_list() |> length()
+      count = set |> IntervalSet.members() |> length()
       # Feb 2026 has 20 workdays (28 days – 8 weekend days).
       assert count == 20
     end
 
     test "Tempo.weekends(:US) on Feb 2026 returns Saturday..Sunday" do
       {:ok, set} = Tempo.select(~o"2026-02", Tempo.weekends(:US))
-      days = set |> IntervalSet.to_list() |> Enum.map(& &1.from.time[:day])
+      days = set |> IntervalSet.members() |> Enum.map(& &1.from.time[:day])
       # Sundays: 1, 8, 15, 22. Saturdays: 7, 14, 21, 28.
       assert days == [1, 7, 8, 14, 15, 21, 22, 28]
     end
 
     test "Tempo.workdays(:US) intervals are half-open day spans" do
       {:ok, set} = Tempo.select(~o"2026-02", Tempo.workdays(:US))
-      [first | _] = set |> IntervalSet.to_list()
+      [first | _] = set |> IntervalSet.members()
 
       # Feb 2 is the first Monday of Feb 2026.
       assert first.from.time == [year: 2026, month: 2, day: 2]
@@ -128,7 +128,7 @@ defmodule Tempo.Select.Test do
       # so 13 weeks yield 26 weekend days.
       {:ok, set} = Tempo.select(~o"2026Y{1..13}W", Tempo.weekends(:US))
 
-      days = IntervalSet.to_list(set)
+      days = IntervalSet.members(set)
       assert length(days) == 26
 
       # ISO week 1 of 2026 spans 2025-12-29..2026-01-05; its
@@ -141,7 +141,7 @@ defmodule Tempo.Select.Test do
     test "weekend selection over a single week-resolution base" do
       {:ok, set} = Tempo.select(~o"2026Y1W", Tempo.weekends(:US))
 
-      days = IntervalSet.to_list(set)
+      days = IntervalSet.members(set)
       assert Enum.map(days, & &1.from.time[:day]) == [3, 4]
     end
   end
@@ -157,13 +157,13 @@ defmodule Tempo.Select.Test do
 
     test "explicit territory argument" do
       {:ok, set} = Tempo.select(~o"2026-02", Tempo.weekends(:SA))
-      days = set |> IntervalSet.to_list() |> Enum.map(& &1.from.time[:day])
+      days = set |> IntervalSet.members() |> Enum.map(& &1.from.time[:day])
       assert days == @sa_feb_weekend
     end
 
     test "locale string resolves via Localize.Territory" do
       {:ok, set} = Tempo.select(~o"2026-02", Tempo.weekends("ar-SA"))
-      days = set |> IntervalSet.to_list() |> Enum.map(& &1.from.time[:day])
+      days = set |> IntervalSet.members() |> Enum.map(& &1.from.time[:day])
       assert days == @sa_feb_weekend
     end
 
@@ -172,7 +172,7 @@ defmodule Tempo.Select.Test do
 
       for value <- ["ar-SA", :"ar-SA", tag] do
         {:ok, set} = Tempo.select(~o"2026-02", Tempo.weekends(value))
-        days = set |> IntervalSet.to_list() |> Enum.map(& &1.from.time[:day])
+        days = set |> IntervalSet.members() |> Enum.map(& &1.from.time[:day])
         assert days == @sa_feb_weekend, "value=#{inspect(value)} did not resolve to SA"
       end
     end
@@ -180,7 +180,7 @@ defmodule Tempo.Select.Test do
     test "territory strings in 'XX', 'xx', 'xx-zzzz' forms all resolve" do
       for territory <- [:SA, "SA", "sa", "sazzzz"] do
         {:ok, set} = Tempo.select(~o"2026-02", Tempo.weekends(territory))
-        days = set |> IntervalSet.to_list() |> Enum.map(& &1.from.time[:day])
+        days = set |> IntervalSet.members() |> Enum.map(& &1.from.time[:day])
         assert days == @sa_feb_weekend, "territory=#{inspect(territory)} did not resolve to SA"
       end
     end
@@ -190,7 +190,7 @@ defmodule Tempo.Select.Test do
 
       try do
         {:ok, set} = Tempo.select(~o"2026-02", Tempo.weekends())
-        days = set |> IntervalSet.to_list() |> Enum.map(& &1.from.time[:day])
+        days = set |> IntervalSet.members() |> Enum.map(& &1.from.time[:day])
         assert days == @sa_feb_weekend
       after
         Application.delete_env(:ex_tempo, :default_territory)
@@ -199,7 +199,7 @@ defmodule Tempo.Select.Test do
 
     test "default fallback uses the Localize locale (en → US)" do
       {:ok, set} = Tempo.select(~o"2026-02", Tempo.weekends())
-      days = set |> IntervalSet.to_list() |> Enum.map(& &1.from.time[:day])
+      days = set |> IntervalSet.members() |> Enum.map(& &1.from.time[:day])
       assert days == @us_feb_weekend
     end
   end
@@ -207,7 +207,7 @@ defmodule Tempo.Select.Test do
   describe "Tempo / Interval projection selector" do
     test "project a single Tempo onto a larger base" do
       {:ok, set} = Tempo.select(~o"2026", ~o"12-25")
-      [xmas] = IntervalSet.to_list(set)
+      [xmas] = IntervalSet.members(set)
 
       assert xmas.from.time[:year] == 2026
       assert xmas.from.time[:month] == 12
@@ -219,7 +219,7 @@ defmodule Tempo.Select.Test do
 
       pairs =
         set
-        |> IntervalSet.to_list()
+        |> IntervalSet.members()
         |> Enum.map(&{&1.from.time[:month], &1.from.time[:day]})
 
       assert pairs == [{7, 4}, {12, 25}]
@@ -229,7 +229,7 @@ defmodule Tempo.Select.Test do
       vacation = %Tempo.Interval{from: ~o"2026-07-10", to: ~o"2026-07-20"}
       {:ok, set} = Tempo.select(~o"2026", vacation)
 
-      [projected] = IntervalSet.to_list(set)
+      [projected] = IntervalSet.members(set)
       assert projected.from.time[:month] == 7
       assert projected.from.time[:day] == 10
     end
@@ -244,7 +244,7 @@ defmodule Tempo.Select.Test do
 
       pairs =
         set
-        |> IntervalSet.to_list()
+        |> IntervalSet.members()
         |> Enum.map(&{&1.from.time[:month], &1.from.time[:day]})
 
       assert pairs == [{7, 10}, {12, 20}]
@@ -253,7 +253,7 @@ defmodule Tempo.Select.Test do
     test "day-of-week-only projection (`~o\"5K\"`) — every Friday in the base" do
       {:ok, set} = Tempo.select(~o"2026-06", ~o"5K")
 
-      days = set |> IntervalSet.to_list() |> Enum.map(& &1.from.time[:day])
+      days = set |> IntervalSet.members() |> Enum.map(& &1.from.time[:day])
       assert days == [5, 12, 19, 26]
     end
 
@@ -272,7 +272,7 @@ defmodule Tempo.Select.Test do
     test "ordinal-day projection (`~o\"10O\"`) — the 10th day of the year" do
       {:ok, set} = Tempo.select(~o"2026", ~o"10O")
 
-      [iv] = IntervalSet.to_list(set)
+      [iv] = IntervalSet.members(set)
       assert iv.from.time[:year] == 2026
       assert iv.from.time[:month] == 1
       assert iv.from.time[:day] == 10
@@ -283,7 +283,7 @@ defmodule Tempo.Select.Test do
       # one day, not one hour.
       {:ok, set} = Tempo.select(~o"2026", ~o"10O")
 
-      [iv] = IntervalSet.to_list(set)
+      [iv] = IntervalSet.members(set)
       assert iv.to.time[:day] == 11
       assert iv.to.time[:month] == 1
     end
@@ -291,7 +291,7 @@ defmodule Tempo.Select.Test do
     test "month-day projection (`~o\"12-25\"`) produces a day-shaped span" do
       {:ok, set} = Tempo.select(~o"2026", ~o"12-25")
 
-      [iv] = IntervalSet.to_list(set)
+      [iv] = IntervalSet.members(set)
       assert iv.from.time[:day] == 25
       assert iv.to.time[:day] == 26
     end
@@ -301,14 +301,14 @@ defmodule Tempo.Select.Test do
     test "the function receives the base and its result is recursed" do
       fun = fn _base -> [1, 15] end
       {:ok, set} = Tempo.select(~o"2026-02", fun)
-      days = set |> IntervalSet.to_list() |> Enum.map(& &1.from.time[:day])
+      days = set |> IntervalSet.members() |> Enum.map(& &1.from.time[:day])
       assert days == [1, 15]
     end
 
     test "the function can return a workdays selector" do
       fun = fn _base -> Tempo.workdays(:US) end
       {:ok, set} = Tempo.select(~o"2026-02", fun)
-      count = set |> IntervalSet.to_list() |> length()
+      count = set |> IntervalSet.members() |> length()
       assert count == 20
     end
   end
@@ -334,7 +334,7 @@ defmodule Tempo.Select.Test do
 
     test "`-1M` on a year base selects the last month (December for Gregorian)" do
       {:ok, set} = Tempo.select(~o"2026", ~o"-1M")
-      [iv] = IntervalSet.to_list(set)
+      [iv] = IntervalSet.members(set)
 
       assert iv.from.time[:year] == 2026
       assert iv.from.time[:month] == 12
@@ -344,14 +344,14 @@ defmodule Tempo.Select.Test do
 
     test "`-2M` on a year base selects the second-to-last month (November)" do
       {:ok, set} = Tempo.select(~o"2026", ~o"-2M")
-      [iv] = IntervalSet.to_list(set)
+      [iv] = IntervalSet.members(set)
 
       assert iv.from.time[:month] == 11
     end
 
     test "`-1D` on a year base selects the last day of the year (Dec 31)" do
       {:ok, set} = Tempo.select(~o"2026", ~o"-1D")
-      [iv] = IntervalSet.to_list(set)
+      [iv] = IntervalSet.members(set)
 
       assert iv.from.time[:year] == 2026
       assert iv.from.time[:month] == 12
@@ -360,7 +360,7 @@ defmodule Tempo.Select.Test do
 
     test "`-1D` on a month base selects the last day of that month" do
       {:ok, set} = Tempo.select(~o"2026-06", ~o"-1D")
-      [iv] = IntervalSet.to_list(set)
+      [iv] = IntervalSet.members(set)
 
       assert iv.from.time[:month] == 6
       assert iv.from.time[:day] == 30
@@ -368,17 +368,17 @@ defmodule Tempo.Select.Test do
 
     test "`-1D` on February resolves to the correct last-day for leap-year context" do
       {:ok, feb_2024} = Tempo.select(~o"2024-02", ~o"-1D")
-      [iv_24] = IntervalSet.to_list(feb_2024)
+      [iv_24] = IntervalSet.members(feb_2024)
       assert iv_24.from.time[:day] == 29
 
       {:ok, feb_2026} = Tempo.select(~o"2026-02", ~o"-1D")
-      [iv_26] = IntervalSet.to_list(feb_2026)
+      [iv_26] = IntervalSet.members(feb_2026)
       assert iv_26.from.time[:day] == 28
     end
 
     test "`-1W` on a year base selects the last ISO week of the year" do
       {:ok, set_2026} = Tempo.select(~o"2026", ~o"-1W")
-      [iv_2026] = IntervalSet.to_list(set_2026)
+      [iv_2026] = IntervalSet.members(set_2026)
       # 2026 is a 53-week year in ISO 8601.
       assert iv_2026.from.time[:year] == 2026
       assert iv_2026.from.time[:week] == 53
@@ -386,7 +386,7 @@ defmodule Tempo.Select.Test do
       refute Keyword.has_key?(iv_2026.from.time, :month)
 
       {:ok, set_2028} = Tempo.select(~o"2028", ~o"-1W")
-      [iv_2028] = IntervalSet.to_list(set_2028)
+      [iv_2028] = IntervalSet.members(set_2028)
       assert iv_2028.from.time[:week] == 52
     end
 
@@ -395,7 +395,7 @@ defmodule Tempo.Select.Test do
       # a `[year, month, week]` composite and materialises it as an
       # N-week span within the month.
       {:ok, set} = Tempo.select(~o"2026-06", ~o"1W")
-      [iv] = IntervalSet.to_list(set)
+      [iv] = IntervalSet.members(set)
 
       assert iv.from.time[:month] == 6
       assert iv.from.time[:week] == 1
@@ -404,7 +404,7 @@ defmodule Tempo.Select.Test do
     test "`-1W` on a month base resolves as last week-of-month" do
       # Gregorian June has 30 days → 5 week-of-month slots.
       {:ok, set} = Tempo.select(~o"2026-06", ~o"-1W")
-      [iv] = IntervalSet.to_list(set)
+      [iv] = IntervalSet.members(set)
 
       assert iv.from.time[:month] == 6
       assert iv.from.time[:week] == 5
@@ -412,7 +412,7 @@ defmodule Tempo.Select.Test do
 
     test "`-1W` on a February base resolves to week 4 (28-day month)" do
       {:ok, set} = Tempo.select(~o"2026-02", ~o"-1W")
-      [iv] = IntervalSet.to_list(set)
+      [iv] = IntervalSet.members(set)
 
       assert iv.from.time[:month] == 2
       assert iv.from.time[:week] == 4
@@ -422,7 +422,7 @@ defmodule Tempo.Select.Test do
       # Parser stores `~o"-1O"` with `:day` key; the resolution is
       # the same as `~o"-1D"` on a year base — last day of year.
       {:ok, set} = Tempo.select(~o"2026", ~o"-1O")
-      [iv] = IntervalSet.to_list(set)
+      [iv] = IntervalSet.members(set)
 
       assert iv.from.time[:month] == 12
       assert iv.from.time[:day] == 31
@@ -437,7 +437,7 @@ defmodule Tempo.Select.Test do
 
     test "`-1K` as a selector returns Sundays of the base" do
       {:ok, set} = Tempo.select(~o"2026-06", ~o"-1K")
-      days = set |> IntervalSet.to_list() |> Enum.map(& &1.from.time[:day])
+      days = set |> IntervalSet.members() |> Enum.map(& &1.from.time[:day])
 
       # June 2026 Sundays: 7, 14, 21, 28.
       assert days == [7, 14, 21, 28]
@@ -481,7 +481,7 @@ defmodule Tempo.Select.Test do
 
     test "`-1H` on a day base selects the last hour of the day" do
       {:ok, set} = Tempo.select(~o"2026-06-15", ~o"-1H")
-      [iv] = IntervalSet.to_list(set)
+      [iv] = IntervalSet.members(set)
 
       assert iv.from.time[:day] == 15
       assert iv.from.time[:hour] == 23
@@ -489,7 +489,7 @@ defmodule Tempo.Select.Test do
 
     test "`T-1M` on an hour base selects the last minute of the hour" do
       {:ok, set} = Tempo.select(~o"2026-06-15T14", ~o"T-1M")
-      [iv] = IntervalSet.to_list(set)
+      [iv] = IntervalSet.members(set)
 
       assert iv.from.time[:hour] == 14
       assert iv.from.time[:minute] == 59
@@ -527,7 +527,7 @@ defmodule Tempo.Select.Test do
 
       triples =
         set
-        |> IntervalSet.to_list()
+        |> IntervalSet.members()
         |> Enum.map(&{&1.from.time[:year], &1.from.time[:month], &1.from.time[:day]})
 
       assert triples == [{2026, 1, 1}, {2026, 1, 15}, {2026, 3, 1}, {2026, 3, 15}]
@@ -539,7 +539,7 @@ defmodule Tempo.Select.Test do
       {:ok, base} = IntervalSet.new([jan, mar])
 
       {:ok, set} = Tempo.select(base, Tempo.workdays(:US))
-      count = set |> IntervalSet.to_list() |> length()
+      count = set |> IntervalSet.members() |> length()
 
       # Jan 2026: 22 workdays. Mar 2026: 22 workdays. Total 44.
       assert count == 44
@@ -799,7 +799,7 @@ defmodule Tempo.Select.Test do
 
     test "selected day intervals are half-open single-day spans" do
       {:ok, set} = Tempo.select(~o"2026-02", [15])
-      [day] = IntervalSet.to_list(set)
+      [day] = IntervalSet.members(set)
 
       # The span runs from day 15 to day 16 — half-open. `to_interval`
       # may additionally fill the endpoints with `hour: 0` etc., so
@@ -821,7 +821,7 @@ defmodule Tempo.Select.Test do
 
       days =
         weekend_days
-        |> IntervalSet.to_list()
+        |> IntervalSet.members()
         |> Enum.map(&{&1.from.time[:month], &1.from.time[:day]})
 
       # Sat/Sun of 2026-W01 (Jan 3-4) and of 2026-W04 (Jan 24-25).

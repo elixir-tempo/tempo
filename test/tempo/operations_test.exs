@@ -745,7 +745,7 @@ defmodule Tempo.Operations.Test do
     # back to the same instants: the IXDTF `u-ca` tag on each endpoint
     # has to stay in step with the endpoint's (converted) units.
     defp assert_round_trips(%IntervalSet{} = set) do
-      for interval <- IntervalSet.to_list(set) do
+      for interval <- IntervalSet.members(set) do
         for endpoint <- [interval.from, interval.to] do
           assert {:ok, reparsed} = Tempo.from_iso8601(Tempo.to_iso8601(endpoint))
           assert Tempo.relation(endpoint, reparsed) == :equals
@@ -759,7 +759,7 @@ defmodule Tempo.Operations.Test do
     test "conversion to Gregorian drops the source-calendar u-ca tag" do
       {:ok, result} = Tempo.intersection(~o"2026", ~o"1447-09[u-ca=islamic-civil]")
 
-      [interval] = IntervalSet.to_list(result)
+      [interval] = IntervalSet.members(result)
       assert interval.from.calendar == Calendrical.Gregorian
       assert interval.from.extended == nil
       refute Tempo.to_iso8601(interval) =~ "u-ca"
@@ -772,7 +772,7 @@ defmodule Tempo.Operations.Test do
       # `from` endpoint comes from the converted (Gregorian) operand.
       {:ok, result} = Tempo.intersection(~o"1447[u-ca=islamic-civil]", ~o"2026")
 
-      [interval] = IntervalSet.to_list(result)
+      [interval] = IntervalSet.members(result)
       assert interval.from.calendar == Calendrical.Islamic.Civil
       assert interval.from.extended.calendar == :islamic_civil
       assert Tempo.to_iso8601(interval.from) =~ "[u-ca=islamic-civil]"
@@ -992,7 +992,7 @@ defmodule Tempo.Operations.Test do
     {:ok, set} = Tempo.to_interval_set(result)
 
     set
-    |> IntervalSet.to_list()
+    |> IntervalSet.members()
     |> Enum.map(&{Compare.to_utc_seconds(&1.from), Compare.to_utc_seconds(&1.to)})
     |> Enum.sort()
   end
@@ -1084,7 +1084,7 @@ defmodule Tempo.Operations.Test do
     end
 
     defp metadata_of(set) do
-      set |> IntervalSet.to_list() |> Enum.map(&Interval.metadata/1)
+      set |> IntervalSet.members() |> Enum.map(&Interval.metadata/1)
     end
 
     test "defaults to the left operand's metadata, unchanged from before the option existed",

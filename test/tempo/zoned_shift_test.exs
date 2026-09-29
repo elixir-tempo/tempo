@@ -103,7 +103,7 @@ defmodule Tempo.ZonedShiftTest do
       {:ok, hours} =
         Tempo.to_interval(Tempo.from_iso8601!("R4/2026-03-08T00[America/New_York]/PT1H"))
 
-      starts = hours |> IntervalSet.to_list() |> Enum.map(&Tempo.hour(&1.from))
+      starts = hours |> IntervalSet.members() |> Enum.map(&Tempo.hour(&1.from))
 
       assert starts == [0, 1, 3, 4]
     end

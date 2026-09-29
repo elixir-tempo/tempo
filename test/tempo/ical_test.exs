@@ -359,7 +359,7 @@ defmodule Tempo.ICal.Test do
 
         starts =
           set
-          |> IntervalSet.to_list()
+          |> IntervalSet.members()
           |> Enum.map(&{&1.from.time[:month], &1.from.time[:day]})
 
         # RRULE Jan 3 / 10 / 17, minus EXDATE Jan 10, plus RDATE Feb 1.
@@ -367,7 +367,7 @@ defmodule Tempo.ICal.Test do
 
         # Every occurrence stays floating — the recurrence machinery
         # doesn't anchor a zone-less base to a zone.
-        assert Enum.all?(IntervalSet.to_list(set), &(&1.from.extended == nil))
+        assert Enum.all?(IntervalSet.members(set), &(&1.from.extended == nil))
       end
     end
   end

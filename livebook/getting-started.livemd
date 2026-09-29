@@ -95,7 +95,7 @@ Cut a free region into bookable slots:
 ```elixir
 working
 |> Tempo.IntervalSet.slots(~o"PT2H")
-|> Tempo.IntervalSet.to_list()
+|> Tempo.IntervalSet.members()
 ```
 
 ## Locale-aware formatting

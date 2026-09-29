@@ -197,7 +197,7 @@ Every instant in both operands. Each result interval is the portion of an A memb
 
 ```elixir
 iex> {:ok, r} = Tempo.intersection(~o"2022Y", ~o"2022-06-15")
-iex> [iv] = Tempo.IntervalSet.to_list(r)
+iex> [iv] = Tempo.IntervalSet.members(r)
 iex> Tempo.day(iv)
 15                                   # trimmed to the day-shaped overlap
 ```
@@ -206,7 +206,7 @@ For the member-preserving filter — keep whole A members that overlap, don't tr
 
 ```elixir
 iex> {:ok, r} = Tempo.members_overlapping(~o"2022Y", ~o"2022-06-15")
-iex> [iv] = Tempo.IntervalSet.to_list(r)
+iex> [iv] = Tempo.IntervalSet.members(r)
 iex> Tempo.year(iv)
 2022                                 # the year member is kept whole
 ```
@@ -308,11 +308,11 @@ iex> Tempo.IntervalSet.count(free)
 iex> Enum.count(free)
 62                                   # 62 sub-points: 31 + 31 days
 
-iex> free |> Tempo.IntervalSet.to_list() |> Enum.filter(&Tempo.at_least?(&1, ~o"P1M"))
+iex> free |> Tempo.IntervalSet.members() |> Enum.filter(&Tempo.at_least?(&1, ~o"P1M"))
 [~o"2026Y1M1D/2M1D", ~o"2026Y3M1D/4M1D"]   # both windows ≥ 1 month
 ```
 
-`to_list/1` exposes the windows for `Enum`; `Tempo.at_least?/2` (and its companions) then select by duration — the member-level idiom that keeps the sub-point walk and the window count from being confused.
+`Tempo.IntervalSet.members/1` exposes the windows for `Enum`; `Tempo.at_least?/2` (and its companions) then select by duration — the member-level idiom that keeps the sub-point walk and the window count from being confused.
 
 ## 4. Algebraic laws
 

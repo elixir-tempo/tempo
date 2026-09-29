@@ -118,7 +118,7 @@ event = Tempo.Interval.new!(
 
 # Clip to work hours
 {:ok, clipped} = Tempo.intersection(event, ~o"2026-04-21T09/2026-04-21T17")
-[iv] = Tempo.IntervalSet.to_list(clipped)
+[iv] = Tempo.IntervalSet.members(clipped)
 
 Tempo.Interval.metadata(iv).summary
 # "Design review"  — preserved through the intersection

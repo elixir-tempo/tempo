@@ -6,7 +6,7 @@ defmodule Tempo.CalendarTest do
   # The Gregorian ISO-8601 day each interval in a materialised set falls on.
   defp gregorian_days(set) do
     set
-    |> IntervalSet.to_list()
+    |> IntervalSet.members()
     |> Enum.map(fn interval ->
       {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
       {:ok, gregorian} = Date.convert(date, Calendar.ISO)
@@ -177,7 +177,7 @@ defmodule Tempo.CalendarTest do
       # a materialised occurrence is struct-equal to the date written by hand.
       {:ok, orthodox_christmas} = Tempo.from_iso8601("R/../P1Y/FL12M25DN[u-ca=julian]")
       {:ok, set} = Tempo.to_interval(orthodox_christmas, within: Tempo.from_iso8601!("2025Y"))
-      [occurrence] = IntervalSet.to_list(set)
+      [occurrence] = IntervalSet.members(set)
 
       assert Interval.from(occurrence) == Tempo.from_iso8601!("2024Y12M25D[u-ca=julian]")
     end
@@ -294,7 +294,7 @@ defmodule Tempo.CalendarTest do
       {:ok, rec} = Tempo.from_iso8601("R/../P1Y/FL8m15DN[u-ca=chinese]")
       {:ok, bound} = Tempo.from_iso8601("2024Y/2027Y")
       {:ok, set} = Tempo.to_interval(rec, within: bound)
-      months = set |> IntervalSet.to_list() |> Enum.map(&Interval.from(&1).time[:month])
+      months = set |> IntervalSet.members() |> Enum.map(&Interval.from(&1).time[:month])
       # 4662 carries a leap month, so traditional 8 is ordinal 9 there; the
       # common years 4661 and 4663 keep it at ordinal 8.
       assert months == [8, 9, 8]
@@ -307,7 +307,7 @@ defmodule Tempo.CalendarTest do
 
       year_months =
         set
-        |> IntervalSet.to_list()
+        |> IntervalSet.members()
         |> Enum.map(fn interval ->
           time = Interval.from(interval).time
           {time[:year], time[:month]}
@@ -359,7 +359,7 @@ defmodule Tempo.CalendarTest do
       {:ok, bound} = Tempo.from_iso8601("2026Y/2030Y")
       {:ok, set} = Tempo.to_interval(rec, within: bound)
 
-      assert [%Interval{} = adar_i] = IntervalSet.to_list(set)
+      assert [%Interval{} = adar_i] = IntervalSet.members(set)
       assert Interval.from(adar_i).time[:year] == 5787
       assert Interval.from(adar_i).time[:month] == 6
     end
@@ -409,7 +409,7 @@ defmodule Tempo.CalendarTest do
 
       starts =
         set
-        |> IntervalSet.to_list()
+        |> IntervalSet.members()
         |> Enum.map(&Tempo.to_iso8601(Interval.from(&1)))
 
       assert starts == [

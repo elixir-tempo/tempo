@@ -24,7 +24,7 @@ defmodule Tempo.ICal.AvailabilityTest do
 
   defp spans(free) do
     free
-    |> IntervalSet.to_list()
+    |> IntervalSet.members()
     |> Enum.map(fn interval ->
       {interval.from.time[:day], interval.from.time[:hour], interval.to.time[:hour]}
     end)
@@ -319,7 +319,7 @@ defmodule Tempo.ICal.AvailabilityTest do
 
       # Open hours come from VAVAILABILITY, claims from VEVENT.
       assert IntervalSet.count(free) == 5
-      assert [standup] = IntervalSet.to_list(busy)
+      assert [standup] = IntervalSet.members(busy)
       assert standup.metadata.summary == "Standup"
 
       # And they compose the way a scheduler needs.

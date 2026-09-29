@@ -9,7 +9,7 @@ if Code.ensure_loaded?(Table.Reader) do
 
     def init(set) do
       if IntervalSet.bounded?(set) do
-        members = IntervalSet.to_list(set)
+        members = IntervalSet.members(set)
         keys = metadata_keys(members)
         metadata = %{columns: [:from, :to | keys], count: length(members)}
 

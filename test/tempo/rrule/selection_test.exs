@@ -710,7 +710,7 @@ defmodule Tempo.RRule.SelectionTest do
       {:ok, set} = Tempo.to_interval(rule, within: ~o"2026Y")
 
       # "the 4th Wednesday for 5 days": one occurrence, [Jan 28, Feb 2).
-      assert [%Interval{} = occurrence] = IntervalSet.to_list(set)
+      assert [%Interval{} = occurrence] = IntervalSet.members(set)
       assert Interval.from(occurrence) == ~o"2026Y1M28D"
       assert Interval.to(occurrence) == ~o"2026Y2M2D"
     end
@@ -767,7 +767,7 @@ defmodule Tempo.RRule.SelectionTest do
       {:ok, rule} = Tempo.from_iso8601("R/2020Y/P4Y/FL11M3DN")
       {:ok, set} = Tempo.to_interval(rule, within: ~o"{2019..2028}Y")
 
-      assert Enum.map(IntervalSet.to_list(set), &Tempo.to_iso8601(Interval.from(&1))) ==
+      assert Enum.map(IntervalSet.members(set), &Tempo.to_iso8601(Interval.from(&1))) ==
                ["2020Y11M3D", "2024Y11M3D", "2028Y11M3D"]
     end
 
@@ -775,7 +775,7 @@ defmodule Tempo.RRule.SelectionTest do
       {:ok, rule} = Tempo.from_iso8601("R3/2020Y/P1Y/FL6M15DN")
       {:ok, set} = Tempo.to_interval(rule)
 
-      assert Enum.map(IntervalSet.to_list(set), &Tempo.to_iso8601(Interval.from(&1))) ==
+      assert Enum.map(IntervalSet.members(set), &Tempo.to_iso8601(Interval.from(&1))) ==
                ["2020Y6M15D", "2021Y6M15D", "2022Y6M15D"]
     end
   end
@@ -787,7 +787,7 @@ defmodule Tempo.RRule.SelectionTest do
     {:ok, set} = Tempo.to_interval(rule, within: bound)
 
     set
-    |> IntervalSet.to_list()
+    |> IntervalSet.members()
     |> Enum.map(fn interval ->
       {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
       Date.to_iso8601(date)
@@ -800,7 +800,7 @@ defmodule Tempo.RRule.SelectionTest do
     {:ok, set} = Tempo.to_interval(rule, within: bound)
 
     set
-    |> IntervalSet.to_list()
+    |> IntervalSet.members()
     |> Enum.map(fn interval ->
       {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
       date |> Date.convert!(Calendar.ISO) |> Date.to_iso8601()
@@ -930,7 +930,7 @@ defmodule Tempo.RRule.SelectionTest do
     test "the units after a selection apply to every date it selects" do
       # §12.11.2 Example 2: every Monday, Tuesday and Friday of 2018 at 10:00
       {:ok, set} = Tempo.to_interval(Tempo.from_iso8601!("2018YL{1,2,5}KNT10H0M0S"))
-      [first | _rest] = occurrences = IntervalSet.to_list(set)
+      [first | _rest] = occurrences = IntervalSet.members(set)
 
       assert length(occurrences) == 157
       assert Tempo.relation(first, ~o"2018-01-01T10:00:00/2018-01-01T10:00:01") == :equals
@@ -951,7 +951,7 @@ defmodule Tempo.RRule.SelectionTest do
     {:ok, set} = iso |> Tempo.from_iso8601!() |> Tempo.to_interval(options)
 
     set
-    |> IntervalSet.to_list()
+    |> IntervalSet.members()
     |> Enum.map(fn interval ->
       {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
       Date.to_iso8601(date)

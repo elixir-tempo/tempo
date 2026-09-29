@@ -7,7 +7,7 @@ defmodule Tempo.UnboundedSetError do
   Unbounded sets support the walking operations — `Enum.take/2`,
   `Tempo.IntervalSet.walk/1`, `covered?/2`, `first/1`, and use as a
   `skipping:` busy set — but any operation whose answer requires the
-  whole member list (`to_list/1`, `count/1`, `coalesce/1`, set
+  whole member list (`members/1`, `count/1`, `coalesce/1`, set
   algebra) refuses rather than walking forever. Bound the set first:
   intersect the walk with a finite span, or take the members you need.
 

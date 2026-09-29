@@ -143,7 +143,7 @@ defmodule Tempo.DurationResolutionTest do
       {:ok, set} = ICal.parse(ics)
 
       rdate =
-        Enum.find(IntervalSet.to_list(set), &(&1.from.time == [year: 2022, month: 8, day: 1]))
+        Enum.find(IntervalSet.members(set), &(&1.from.time == [year: 2022, month: 8, day: 1]))
 
       assert rdate.to.time == [year: 2022, month: 8, day: 2]
     end

@@ -312,7 +312,7 @@ iex> Tempo.IntervalSet.count(merged)
 
 ```elixir
 iex> {:ok, overlap} = Tempo.intersection(a, b)
-iex> [span] = Tempo.IntervalSet.to_list(overlap)
+iex> [span] = Tempo.IntervalSet.members(overlap)
 iex> {from, to} = Tempo.Interval.endpoints(span)
 iex> {Tempo.day(from), Tempo.day(to)}
 {10, 15}
@@ -350,6 +350,21 @@ Each free-time fragment carries the workday's metadata (the A-operand). To trace
 iex> {:ok, set} = Tempo.symmetric_difference(a, b)
 ```
 
+### How do I find double-booked time?
+
+```elixir
+iex> bookings = Tempo.IntervalSet.new!([
+...>   ~o"2026-06-15T09:00:00/2026-06-15T11:00:00",
+...>   ~o"2026-06-15T10:00:00/2026-06-15T12:00:00",
+...>   ~o"2026-06-15T14:00:00/2026-06-15T15:00:00"
+...> ])
+iex> {:ok, double_booked} = Tempo.IntervalSet.covered(bookings, at_least: 2)
+iex> Tempo.IntervalSet.members(double_booked)
+[~o"2026Y6M15DT10H0M0S/T11H0M0S"]
+```
+
+> The **double-booked** time is the time **covered** by **at least two** bookings. Without `:at_least`, `covered/2` is the time the bookings cover at all; two bookings that merely meet, one ending as the next begins, never count twice.
+
 ---
 
 ## 6. Selecting sub-spans with `Tempo.select/2`
@@ -382,7 +397,7 @@ iex> Tempo.IntervalSet.map(paydays, &Tempo.day/1)
 
 ```elixir
 iex> {:ok, set} = Tempo.select(~o"2026", ~o"12-25")
-iex> [xmas] = Tempo.IntervalSet.to_list(set)
+iex> [xmas] = Tempo.IntervalSet.members(set)
 iex> {Tempo.year(xmas), Tempo.month(xmas), Tempo.day(xmas)}
 {2026, 12, 25}
 ```
@@ -513,7 +528,7 @@ iex> Tempo.IntervalSet.count(set)
 ```elixir
 iex> recurrence = Tempo.RRule.parse!("FREQ=YEARLY;BYMONTH=11;BYDAY=4TH;COUNT=5", from: ~o"2022-11-24")
 iex> {:ok, set} = Tempo.to_interval(recurrence)
-iex> Enum.map(Tempo.IntervalSet.to_list(set), &Tempo.day(Tempo.Interval.from(&1)))
+iex> Enum.map(Tempo.IntervalSet.members(set), &Tempo.day(Tempo.Interval.from(&1)))
 [24, 23, 28, 27, 26]
 ```
 
@@ -541,7 +556,7 @@ iex> recurrence =
 ...>     from: ~o"1996-11-05"
 ...>   )
 iex> {:ok, set} = Tempo.to_interval(recurrence)
-iex> Enum.map(Tempo.IntervalSet.to_list(set), fn iv ->
+iex> Enum.map(Tempo.IntervalSet.members(set), fn iv ->
 ...>   start = Tempo.Interval.from(iv)
 ...>   {Tempo.year(start), Tempo.day(start)}
 ...> end)
@@ -607,7 +622,7 @@ Every RRULE part (including BY-rules, BYSETPOS, WKST, RDATE, EXDATE) expands cor
 
 ada_meetings =
   schedule
-  |> Tempo.IntervalSet.to_list()
+  |> Tempo.IntervalSet.members()
   |> Enum.filter(fn meeting ->
     "ada@example.com" in (Tempo.Interval.metadata(meeting)[:attendees] || [])
   end)
@@ -854,7 +869,7 @@ work = ~o"2026-06-15T09/2026-06-15T17"
 
 slots =
   mutual
-  |> Tempo.IntervalSet.to_list()
+  |> Tempo.IntervalSet.members()
   |> Enum.filter(&Tempo.at_least?(&1, ~o"PT1H"))
 ```
 
@@ -865,7 +880,7 @@ slots =
 ```elixir
 mutual                                  # the mutual free time from above
 |> Tempo.IntervalSet.slots(~o"PT1H")    # cut into back-to-back 1-hour slots
-|> Tempo.IntervalSet.to_list()
+|> Tempo.IntervalSet.members()
 ```
 
 > Where the recipe above gives the free **windows**, `slots/2` cuts each window into the discrete **1-hour slots** a booking page would actually offer. Pass `every: ~o"PT30M"` to start a slot on every half-hour (overlapping), or a larger `:every` to leave gaps between offered times.
@@ -881,7 +896,7 @@ candidates = [
 
 bookable =
   Enum.filter(candidates, fn candidate ->
-    Enum.any?(Tempo.IntervalSet.to_list(mutual), &Tempo.within?(candidate, &1))
+    Enum.any?(Tempo.IntervalSet.members(mutual), &Tempo.within?(candidate, &1))
   end)
 ```
 

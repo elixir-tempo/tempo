@@ -317,7 +317,7 @@ defmodule Tempo.RRuleTest do
       {:ok, three} = RRule.parse("FREQ=DAILY;BYDAY=SU;COUNT=3", from: ~o"2024-07-01")
       {:ok, %Tempo.Interval{from: one_from}} = Tempo.to_interval(one)
       {:ok, set} = Tempo.to_interval(three)
-      [first | _] = IntervalSet.to_list(set)
+      [first | _] = IntervalSet.members(set)
       assert one_from == first.from
     end
 
@@ -359,7 +359,7 @@ defmodule Tempo.RRuleTest do
         )
 
       {:ok, set} = Tempo.to_interval(i)
-      first = set |> IntervalSet.to_list() |> hd()
+      first = set |> IntervalSet.members() |> hd()
 
       assert Tempo.hour(first.from) == 18
       assert Tempo.hour(first.to) == 20
@@ -374,7 +374,7 @@ defmodule Tempo.RRuleTest do
 
       {:ok, set} = Tempo.to_interval(i)
 
-      for occurrence <- IntervalSet.to_list(set) do
+      for occurrence <- IntervalSet.members(set) do
         refute Map.has_key?(occurrence.metadata, :occurrence_duration)
       end
     end
@@ -406,7 +406,7 @@ defmodule Tempo.RRuleTest do
 
       {:ok, set} = Tempo.to_interval(i)
 
-      for occurrence <- IntervalSet.to_list(set) do
+      for occurrence <- IntervalSet.members(set) do
         assert occurrence.metadata.summary == "Standup"
         refute Map.has_key?(occurrence.metadata, :occurrence_duration)
       end
@@ -415,11 +415,11 @@ defmodule Tempo.RRuleTest do
 
   defp first_occurrence(value) do
     {:ok, set} = Tempo.to_interval(value, within: ~o"2025")
-    set |> IntervalSet.to_list() |> hd()
+    set |> IntervalSet.members() |> hd()
   end
 
   defp occurrences(value) do
     {:ok, set} = Tempo.to_interval(value, within: ~o"2024/2028")
-    IntervalSet.to_list(set)
+    IntervalSet.members(set)
   end
 end

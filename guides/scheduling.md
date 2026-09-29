@@ -252,7 +252,7 @@ Free time gives you the *regions* where a meeting could go. Turn them into the d
 ```elixir
 mutual
 |> Tempo.IntervalSet.slots(~o"PT1H")    # cut into back-to-back 1-hour slots
-|> Tempo.IntervalSet.to_list()
+|> Tempo.IntervalSet.members()
 #=> 11:00–12:00, 12:00–13:00, 13:00–14:00, 15:00–16:00
 ```
 
@@ -337,7 +337,7 @@ defmodule Schedule do
   def occurrences_in(%{recurrence: recurrence}, from, to) do
     window = Tempo.Interval.new!(from: from, to: to)
     {:ok, set} = Tempo.to_interval(recurrence, within: window)
-    Tempo.IntervalSet.to_list(set)
+    Tempo.IntervalSet.members(set)
   end
 end
 

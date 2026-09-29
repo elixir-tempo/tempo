@@ -40,7 +40,7 @@ defmodule Tempo.IntervalSetTreeTest do
       assert IntervalSet.empty?(set)
       assert IntervalSet.count(set) == 0
       assert IntervalSet.first(set) == nil
-      assert IntervalSet.to_list(set) == []
+      assert IntervalSet.members(set) == []
     end
 
     test "unanchored members are rejected with direction" do
@@ -79,7 +79,7 @@ defmodule Tempo.IntervalSetTreeTest do
       assert Enum.map(candidates, &(&1.from.time[:day] || 1)) |> length() == 2
 
       assert candidates ==
-               Enum.filter(IntervalSet.to_list(tree), fn iv ->
+               Enum.filter(IntervalSet.members(tree), fn iv ->
                  Compare.to_utc_seconds(iv.from) < hi and Compare.to_utc_seconds(iv.to) > lo
                end)
     end
@@ -93,7 +93,7 @@ defmodule Tempo.IntervalSetTreeTest do
             ) do
         {tree, list} = both_backends(specs)
 
-        assert IntervalSet.to_list(tree) == IntervalSet.to_list(list)
+        assert IntervalSet.members(tree) == IntervalSet.members(list)
         assert IntervalSet.count(tree) == IntervalSet.count(list)
         assert IntervalSet.first(tree) == IntervalSet.first(list)
         assert IntervalSet.empty?(tree) == IntervalSet.empty?(list)
@@ -115,7 +115,7 @@ defmodule Tempo.IntervalSetTreeTest do
         hi = Compare.to_utc_seconds(day(lo_offset + width))
 
         expected =
-          Enum.filter(IntervalSet.to_list(tree), fn iv ->
+          Enum.filter(IntervalSet.members(tree), fn iv ->
             Compare.to_utc_seconds(iv.from) < hi and Compare.to_utc_seconds(iv.to) > lo
           end)
 

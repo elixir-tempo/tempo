@@ -181,6 +181,8 @@ Selectors are plural nouns: "the workdays of June" is `Tempo.select(~o"2026-06",
 
 * **`RecurrenceSet.new/2`** — every other constructor that takes input returns `{:ok, value}` and has a bang variant.
 
+* **Found while implementing (2026-09-29)** — `covered/2` defaults `:at_least` to one, the time the set covers, and returns `{:ok, set}`, so a bad option or a lazy set is an error rather than a raise. `new/2` checks members as conversion does, which still checks a set built without it.
+
 ## Span ends
 
 `Interval` names a span's ends `from` and `to`. `Network.TimePeriod.new/2` calls them `:start` and `:end`, and `Schedule.Slot` has `start`, `finish`, `latest_start` and `latest_finish`.
@@ -297,7 +299,7 @@ Each task is one commit, verified on both upstream branches, with its guides, RE
 
 * [x] **Occurrences and internals** — `ConversionError`, `RRule.Expander` internal, the Internals group, the undocumented functions. 2026-09-29, `3b2167a`.
 
-* [ ] **Workdays** — the renames, plural selectors, and `select/2` over an open span.
+* [x] **Workdays** — the renames, plural selectors, and `select/2` over an open span. 2026-09-29, `3e5467a`.
 
 * [ ] **Sets** — `members/1`, `covered/2`, `RecurrenceSet.new/2`.
 

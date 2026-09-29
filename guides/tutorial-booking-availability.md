@@ -79,7 +79,7 @@ A booking page doesn't offer "regions"; it offers slots. Cut the free time into 
 iex> slots =
 ...>   free
 ...>   |> Tempo.IntervalSet.slots(~o"PT1H")
-...>   |> Tempo.IntervalSet.to_list()
+...>   |> Tempo.IntervalSet.members()
 ...>   |> Enum.filter(&Tempo.at_least?(&1, ~o"PT1H"))
 iex> length(slots)
 5

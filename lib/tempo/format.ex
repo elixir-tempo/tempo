@@ -96,7 +96,7 @@ defmodule Tempo.Format do
     # CLDR "list separator" formatting could replace the simple
     # ", " join; deferred until Localize exposes a listPattern API.
     set
-    |> IntervalSet.to_list()
+    |> IntervalSet.members()
     |> Enum.map_join(", ", &to_string(&1, options))
   end
 

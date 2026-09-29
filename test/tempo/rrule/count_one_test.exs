@@ -26,7 +26,7 @@ defmodule Tempo.RRule.CountOneTest do
     """
 
     {:ok, set} = ICal.parse(ics)
-    IntervalSet.to_list(set)
+    IntervalSet.members(set)
   end
 
   describe "a rule with one occurrence" do

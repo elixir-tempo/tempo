@@ -73,7 +73,7 @@ defmodule Tempo.CoreCoverageTest do
 
     defp member_dates(set) do
       set
-      |> IntervalSet.to_list()
+      |> IntervalSet.members()
       |> Enum.map(fn iv -> {iv.from.time[:month], iv.from.time[:day]} end)
     end
 

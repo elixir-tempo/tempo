@@ -30,6 +30,7 @@ defmodule Tempo.RecurrenceSet do
 
   """
 
+  alias Tempo.ConversionError
   alias Tempo.RecurrenceSet.Conditional
 
   @typedoc "A member: a recurrence or concrete interval, a value, a nested set, or a conditional member."
@@ -60,21 +61,110 @@ defmodule Tempo.RecurrenceSet do
 
   ### Returns
 
-  * A `t:t/0`.
+  * `{:ok, set}`.
+
+  * `{:error, reason}` when `members` is not a list of members, a
+    conditional member lacks what `keep_when/2` or `move_when/2` needs,
+    or an option is not one `new/2` takes.
 
   ### Examples
 
       iex> xmas = Tempo.from_iso8601!("R/../P1Y/FL12M25DN")
       iex> new_year = Tempo.from_iso8601!("R/../P1Y/FL1M1DN")
-      iex> set = Tempo.RecurrenceSet.new([xmas, new_year], metadata: %{territory: :AU})
-      iex> {length(Tempo.RecurrenceSet.members(set)), Tempo.RecurrenceSet.metadata(set)}
+      iex> {:ok, holidays} = Tempo.RecurrenceSet.new([xmas, new_year], metadata: %{territory: :AU})
+      iex> {length(Tempo.RecurrenceSet.members(holidays)), Tempo.RecurrenceSet.metadata(holidays)}
       {2, %{territory: :AU}}
 
+      iex> {:error, %Tempo.ConversionError{reason: :recurrence_set_member}} =
+      ...>   Tempo.RecurrenceSet.new(["R/../P1Y/FL12M25DN"])
+
   """
-  @spec new([member()], keyword()) :: t()
-  def new(members, options \\ []) when is_list(members) do
-    %__MODULE__{members: members, metadata: Keyword.get(options, :metadata, %{})}
+  @spec new([member()], keyword()) :: {:ok, t()} | {:error, Exception.t()}
+  def new(members, options \\ [])
+
+  def new(members, options) when is_list(members) do
+    with {:ok, metadata} <- metadata_option(options),
+         :ok <- validate_members(members) do
+      {:ok, %__MODULE__{members: members, metadata: metadata}}
+    end
   end
+
+  def new(members, _options) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.RecurrenceSet.new/2 takes a list of members, not #{inspect(members)}."
+     )}
+  end
+
+  @doc """
+  Builds a recurrence set from a list of members, raising on an error.
+
+  ### Arguments
+
+  * `members` is a list of members, as for `new/2`.
+
+  ### Options
+
+  * `:metadata` is a map of set-level metadata, as for `new/2`.
+
+  ### Returns
+
+  * A `t:t/0`, or raises the error `new/2` returns.
+
+  ### Examples
+
+      iex> christmas = Tempo.from_iso8601!("R/../P1Y/FL12M25DN")
+      iex> Tempo.RecurrenceSet.new!([christmas]) |> Tempo.RecurrenceSet.members()
+      [christmas]
+
+  """
+  @spec new!([member()], keyword()) :: t()
+  def new!(members, options \\ []) do
+    case new(members, options) do
+      {:ok, set} -> set
+      {:error, exception} -> raise exception
+    end
+  end
+
+  defp metadata_option(options) do
+    with true <- Keyword.keyword?(options),
+         [] <- Keyword.keys(options) -- [:metadata],
+         metadata when is_map(metadata) <- Keyword.get(options, :metadata, %{}) do
+      {:ok, metadata}
+    else
+      _invalid ->
+        {:error,
+         ArgumentError.exception(
+           "Tempo.RecurrenceSet.new/2 takes one option, :metadata, a map, not " <>
+             "#{inspect(options)}."
+         )}
+    end
+  end
+
+  defp validate_members(members) do
+    case Enum.find_value(members, &member_error/1) do
+      nil -> :ok
+      error -> {:error, error}
+    end
+  end
+
+  # The error for a member a set cannot hold, or `nil`: a set holds
+  # intervals (recurrences or concrete), values, nested sets and
+  # conditional members, and a conditional names what it needs.
+  defp member_error(%Tempo.Interval{}), do: nil
+  defp member_error(%Tempo{}), do: nil
+  defp member_error(%__MODULE__{}), do: nil
+
+  defp member_error(%Conditional{member: member} = conditional) do
+    if Conditional.valid?(conditional) do
+      member_error(member)
+    else
+      ConversionError.exception(value: conditional, reason: :conditional_member)
+    end
+  end
+
+  defp member_error(member),
+    do: ConversionError.exception(value: member, reason: :recurrence_set_member)
 
   @doc """
   Returns the set's members, in the order they were given.
@@ -91,7 +181,8 @@ defmodule Tempo.RecurrenceSet do
   ### Examples
 
       iex> christmas = Tempo.from_iso8601!("R/../P1Y/FL12M25DN")
-      iex> Tempo.RecurrenceSet.new([christmas]) |> Tempo.RecurrenceSet.members()
+      iex> {:ok, holidays} = Tempo.RecurrenceSet.new([christmas])
+      iex> Tempo.RecurrenceSet.members(holidays)
       [christmas]
 
   """
@@ -131,7 +222,7 @@ defmodule Tempo.RecurrenceSet do
       ...>     at: [~o"-P1D", ~o"P1D"],
       ...>     falls_on: %{type: :public}
       ...>   )
-      iex> holidays =
+      iex> {:ok, holidays} =
       ...>   Tempo.RecurrenceSet.new([
       ...>     Tempo.put_metadata(~o"2026-09-21", %{type: :public}),
       ...>     Tempo.put_metadata(~o"2026-09-23", %{type: :public}),
@@ -186,7 +277,7 @@ defmodule Tempo.RecurrenceSet do
       ...>     falls_on: %{type: :observance},
       ...>     to_next: ~o"4K"
       ...>   )
-      iex> holidays =
+      iex> {:ok, holidays} =
       ...>   Tempo.RecurrenceSet.new([
       ...>     Tempo.put_metadata(~o"2026-04-09", %{type: :observance}),
       ...>     naefelser_fahrt
@@ -220,7 +311,8 @@ defmodule Tempo.RecurrenceSet do
 
   ### Examples
 
-      iex> Tempo.RecurrenceSet.new([], metadata: %{territory: :AU}) |> Tempo.RecurrenceSet.metadata()
+      iex> {:ok, holidays} = Tempo.RecurrenceSet.new([], metadata: %{territory: :AU})
+      iex> Tempo.RecurrenceSet.metadata(holidays)
       %{territory: :AU}
 
   """

@@ -15,7 +15,7 @@ defmodule Tempo.SelectTimeOfDayTest do
   describe "integer indices take the unit from the base's own resolution" do
     test "a day span ending in the next month selects hours, not days" do
       {:ok, set} = Tempo.select(~o"2026-07-31/2026-08-01", 9..16)
-      [first | _rest] = IntervalSet.to_list(set)
+      [first | _rest] = IntervalSet.members(set)
 
       assert IntervalSet.count(set) == 8
       assert first.from.time == [year: 2026, month: 7, day: 31, hour: 9]
@@ -23,7 +23,7 @@ defmodule Tempo.SelectTimeOfDayTest do
 
     test "a day span ending in the next year selects hours, not months" do
       {:ok, set} = Tempo.select(~o"2026-12-31/2027-01-01", 9..16)
-      [first | _rest] = IntervalSet.to_list(set)
+      [first | _rest] = IntervalSet.members(set)
 
       assert IntervalSet.count(set) == 8
       assert first.from.time == [year: 2026, month: 12, day: 31, hour: 9]
@@ -37,7 +37,7 @@ defmodule Tempo.SelectTimeOfDayTest do
       assert IntervalSet.count(hours) == 23 * 8
 
       resolutions =
-        hours |> IntervalSet.to_list() |> Enum.map(&Interval.resolution/1) |> Enum.uniq()
+        hours |> IntervalSet.members() |> Enum.map(&Interval.resolution/1) |> Enum.uniq()
 
       assert resolutions == [:hour]
     end
@@ -50,7 +50,7 @@ defmodule Tempo.SelectTimeOfDayTest do
 
       assert IntervalSet.count(open) == 23
 
-      [first | _rest] = IntervalSet.to_list(open)
+      [first | _rest] = IntervalSet.members(open)
       assert first.from.time == [year: 2026, month: 7, day: 1, hour: 9]
       assert first.to.time == [year: 2026, month: 7, day: 1, hour: 17]
       assert Tempo.exactly?(first, ~o"PT8H")
@@ -62,14 +62,14 @@ defmodule Tempo.SelectTimeOfDayTest do
 
       assert IntervalSet.count(split) == 46
 
-      [morning, afternoon | _rest] = IntervalSet.to_list(split)
+      [morning, afternoon | _rest] = IntervalSet.members(split)
       assert Tempo.exactly?(morning, ~o"PT3H")
       assert Tempo.exactly?(afternoon, ~o"PT4H")
     end
 
     test "half-open: nine to five is written nine to five" do
       {:ok, open} = Tempo.select(~o"2026-07-15/2026-07-16", ~o"T09/T17")
-      [window] = IntervalSet.to_list(open)
+      [window] = IntervalSet.members(open)
 
       assert Tempo.exactly?(window, ~o"PT8H")
     end
@@ -78,7 +78,7 @@ defmodule Tempo.SelectTimeOfDayTest do
   describe "the duration form" do
     test "start plus duration projects a non-hour-aligned window" do
       {:ok, statutory} = Tempo.select(~o"2026-07-15/2026-07-16", ~o"T09/PT7H36M")
-      [window] = IntervalSet.to_list(statutory)
+      [window] = IntervalSet.members(statutory)
 
       assert window.from.time == [year: 2026, month: 7, day: 15, hour: 9]
       assert window.to.time == [year: 2026, month: 7, day: 15, hour: 16, minute: 36]
@@ -89,7 +89,7 @@ defmodule Tempo.SelectTimeOfDayTest do
   describe "windows that cross midnight roll forward" do
     test "a night shift's end lands on the following day" do
       {:ok, shifts} = Tempo.select(~o"2026-07-15/2026-07-16", ~o"T21/T05")
-      [shift] = IntervalSet.to_list(shifts)
+      [shift] = IntervalSet.members(shifts)
 
       assert shift.from.time == [year: 2026, month: 7, day: 15, hour: 21]
       assert shift.to.time == [year: 2026, month: 7, day: 16, hour: 5]
@@ -98,7 +98,7 @@ defmodule Tempo.SelectTimeOfDayTest do
 
     test "an equal from and to reads as a full day" do
       {:ok, full} = Tempo.select(~o"2026-07-15/2026-07-16", ~o"T09/T09")
-      [window] = IntervalSet.to_list(full)
+      [window] = IntervalSet.members(full)
 
       assert Tempo.exactly?(window, ~o"PT24H")
     end

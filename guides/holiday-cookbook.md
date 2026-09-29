@@ -194,7 +194,8 @@ citizens_holiday =
     falls_on: %{type: :public}
   )
 
-september = Tempo.RecurrenceSet.new([respect_for_the_aged, autumnal_equinox, citizens_holiday])
+{:ok, september} =
+  Tempo.RecurrenceSet.new([respect_for_the_aged, autumnal_equinox, citizens_holiday])
 
 {:ok, silver_week} = Tempo.to_interval_set(september, within: ~o"2026Y")
 # 21, 22 and 23 September 2026
@@ -213,7 +214,7 @@ naefelser_fahrt =
     to_next: ~o"4K"
   )
 
-glarus = Tempo.RecurrenceSet.new([maundy_thursday, naefelser_fahrt])
+{:ok, glarus} = Tempo.RecurrenceSet.new([maundy_thursday, naefelser_fahrt])
 
 {:ok, spring} = Tempo.to_interval_set(glarus, within: ~o"2026Y")
 # Maundy Thursday on 2 April, and Näfelser Fahrt moved to 9 April

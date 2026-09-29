@@ -102,7 +102,7 @@ defmodule Tempo.IntervalSet do
   The set struct. `:intervals` holds the backend's state — for the
   default `Tempo.IntervalSet.Backend.List` that is the member list
   itself; other backends store their own representation there. Reach
-  members through the named accessors (`to_list/1`, `walk/1`,
+  members through the named accessors (`members/1`, `walk/1`,
   `count/1`, `empty?/1`, `first/1`), never the field.
   """
   @type t :: %__MODULE__{
@@ -244,68 +244,28 @@ defmodule Tempo.IntervalSet do
   end
 
   @doc """
-  Return the member intervals as a plain list.
-
-  The `Enumerable` protocol implementation for an IntervalSet
-  walks every sub-point inside each interval (consistent with
-  the Tempo and Tempo.Interval `Enumerable` implementations —
-  every Tempo value is a span, iteration walks its sub-points at
-  the next-finer resolution).
-
-  When you want to operate on the **member intervals** instead
-  — filter them, count them, map them — `to_list/1` gives you
-  a plain list you can pipe into `Enum`. `members/1` is the same
-  function under a name that says which list you are getting, and
-  reads better at a call site where the distinction matters.
-
-  ### Examples
-
-      iex> {:ok, set} = Tempo.IntervalSet.new([
-      ...>   %Tempo.Interval{from: ~o"2026-06-01", to: ~o"2026-06-10"},
-      ...>   %Tempo.Interval{from: ~o"2026-07-01", to: ~o"2026-07-10"}
-      ...> ])
-      iex> set |> Tempo.IntervalSet.to_list() |> length()
-      2
-
-  Pair with the interval predicates for expressive scheduling:
-
-      set
-      |> Tempo.IntervalSet.to_list()
-      |> Enum.filter(&Tempo.at_least?(&1, ~o"PT1H"))
-
-  """
-  @spec to_list(t()) :: [Interval.t()]
-  def to_list(%__MODULE__{backend: backend, intervals: state} = set) do
-    ensure_bounded!(set, "Tempo.IntervalSet.to_list/1")
-    backend.to_list(state)
-  end
-
-  @doc """
   The member intervals, as a plain list.
 
-  The same value and the same cost as `to_list/1`, under a name that
-  says *which* list you get. An IntervalSet has two plausible ones and
-  they are wildly different sizes: `Enum` walks the sub-points inside
-  the set, while this walks the intervals the set is made of.
+  An IntervalSet holds two lists a reader might reach for, and they
+  are wildly different sizes: `Enum` walks the sub-points inside the
+  members (every day, every second, as `Tempo` and `Tempo.Interval`
+  enumerate), while `members/1` gives the intervals the set is made
+  of — the list to filter, count or map.
 
       {:ok, set} = Tempo.IntervalSet.new([
         ~o"2026-06-15T09:00:00/2026-06-15T12:00:00",
         ~o"2026-06-15T13:00:00/2026-06-15T17:00:00"
       ])
 
-      Enum.count(set)                       #=> 25200 — every second
+      Enum.count(set)                             #=> 25200 — every second
       Tempo.IntervalSet.members(set) |> length()  #=> 2 — the two blocks
 
-  Prefer `members/1` wherever the intent is "the intervals this set is
-  made of". `to_list/1` remains, because converting a collection to a
-  list is an idiom Elixir readers expect to find, and the two are
-  interchangeable.
-
-  The trap `members/1` is named to avoid: at day resolution the two
-  counts *agree* — a five-member set of days enumerates as five days —
-  so code that reaches for `Enum` is correct until the day someone
-  passes it hours, and then it is silently wrong by a factor of the
-  granularity. See `walk/1` for the lazy counterpart.
+  The two agree at day resolution — a five-member set of days
+  enumerates as five days — so code that reaches for `Enum` is correct
+  until someone passes it hours, and then silently wrong by a factor
+  of the granularity. A lazy set has no end to list, so `members/1`
+  raises `Tempo.UnboundedSetError` for one; `walk/1` is its lazy
+  counterpart.
 
   ### Arguments
 
@@ -324,18 +284,23 @@ defmodule Tempo.IntervalSet do
       iex> Tempo.IntervalSet.members(set) |> length()
       2
 
-      iex> {:ok, set} = Tempo.IntervalSet.new([~o"2026-06-15T09:00:00/2026-06-15T12:00:00"])
-      iex> Tempo.IntervalSet.members(set) == Tempo.IntervalSet.to_list(set)
-      true
+  Pair with the interval predicates for expressive scheduling:
+
+      set
+      |> Tempo.IntervalSet.members()
+      |> Enum.filter(&Tempo.at_least?(&1, ~o"PT1H"))
 
   """
   @spec members(t()) :: [Interval.t()]
-  def members(%__MODULE__{} = set), do: to_list(set)
+  def members(%__MODULE__{backend: backend, intervals: state} = set) do
+    ensure_bounded!(set, "Tempo.IntervalSet.members/1")
+    backend.to_list(state)
+  end
 
   @doc """
   An enumerable yielding the member intervals in time order.
 
-  The lazy-safe counterpart to `to_list/1`: on the default list
+  The lazy-safe counterpart to `members/1`: on the default list
   backend it is the member list; on a lazy backend it is a stream
   that never builds more members than the caller consumes.
 
@@ -363,7 +328,7 @@ defmodule Tempo.IntervalSet do
   Return the number of member intervals in the set.
 
   A named helper so callers never have to write
-  `length(set.intervals)` or `length(to_list(set))` in
+  `length(set.intervals)` or `length(members(set))` in
   user-facing code.
 
   ### Arguments
@@ -499,7 +464,7 @@ defmodule Tempo.IntervalSet do
   Whether the set's backend holds a finite member list.
 
   `true` on the list and tree backends; `false` on a lazy generator
-  backend, where aggregate operations (`to_list/1`, `count/1`,
+  backend, where aggregate operations (`members/1`, `count/1`,
   `coalesce/1`, set algebra) raise `Tempo.UnboundedSetError` instead
   of walking forever.
 
@@ -608,7 +573,7 @@ defmodule Tempo.IntervalSet do
   """
   @spec duration(t()) :: Duration.t()
   def duration(%__MODULE__{} = set) do
-    case set |> coalesce() |> to_list() do
+    case set |> coalesce() |> members() do
       [] -> %Duration{time: [second: 0]}
       members -> members |> Enum.map(&Interval.duration/1) |> Duration.sum()
     end
@@ -673,7 +638,7 @@ defmodule Tempo.IntervalSet do
   end
 
   def slots(%__MODULE__{} = set, %Tempo.Duration{} = duration, options) do
-    intervals = to_list(set)
+    intervals = members(set)
 
     every = Keyword.get(options, :every, duration)
 
@@ -740,7 +705,7 @@ defmodule Tempo.IntervalSet do
   """
   @spec map(t(), (Interval.t() -> any())) :: [any()]
   def map(%__MODULE__{} = set, fun) when is_function(fun, 1) do
-    set |> to_list() |> Enum.map(fun)
+    set |> members() |> Enum.map(fun)
   end
 
   @doc """
@@ -773,7 +738,7 @@ defmodule Tempo.IntervalSet do
   """
   @spec filter(t(), (Interval.t() -> as_boolean(any()))) :: t()
   def filter(%__MODULE__{} = set, fun) when is_function(fun, 1) do
-    with_intervals(set, set |> to_list() |> Enum.filter(fun))
+    with_intervals(set, set |> members() |> Enum.filter(fun))
   end
 
   @doc """
@@ -829,8 +794,8 @@ defmodule Tempo.IntervalSet do
   def relation_matrix(a, b) do
     with {:ok, %__MODULE__{} = a_set} <- coerce(a),
          {:ok, %__MODULE__{} = b_set} <- coerce(b) do
-      a_ivs = to_list(a_set)
-      b_ivs = to_list(b_set)
+      a_ivs = members(a_set)
+      b_ivs = members(b_set)
 
       for {iv_a, ai} <- Enum.with_index(a_ivs),
           {iv_b, bi} <- Enum.with_index(b_ivs) do
@@ -963,7 +928,7 @@ defmodule Tempo.IntervalSet do
   """
   @spec coalesce(t()) :: t()
   def coalesce(%__MODULE__{} = set) do
-    with_intervals(set, coalesce_intervals(to_list(set)))
+    with_intervals(set, coalesce_intervals(members(set)))
   end
 
   @doc """
@@ -1003,7 +968,7 @@ defmodule Tempo.IntervalSet do
     candidates =
       case point_span_seconds(point) do
         {:ok, seconds_range} -> backend.overlapping(state, seconds_range)
-        :error -> to_list(set)
+        :error -> members(set)
       end
 
     Enum.any?(candidates, fn interval -> Interval.within?(point, interval) end)
@@ -1019,67 +984,108 @@ defmodule Tempo.IntervalSet do
   end
 
   @doc """
-  The regions covered by at least `:at_least` members of the set.
+  The time covered by at least `:at_least` members of the set.
 
-  Where `coalesce/1` flattens overlap away, this measures it. Sweeping
-  the members' endpoints and tracking how many are open at each instant
-  answers the questions overlap depth is really asked for — *"when are
-  three or more of these happening at once?"*, *"where is this
-  double-booked?"*, *"when did load peak?"*
-
-  `at_least: 1` is the covered region, equivalent to
-  `coalesce/1`. Higher thresholds narrow to the busier parts.
+  With the default of one, this is the time the set covers at all: its
+  members' union, with touching members merged, as `coalesce/1` gives.
+  A higher threshold measures overlap — `covered(bookings, at_least:
+  2)` is the double-booked time, and `at_least: 3` the time when three
+  or more happen at once. Sweeping the members' endpoints and counting
+  how many are open at each instant answers what overlap is asked for:
+  *"where is this double-booked?"*, *"when did the load peak?"*
 
   The half-open convention decides the boundaries: a member ending at
-  the instant another begins does not overlap it, so depth never
-  spuriously rises where two members merely meet.
+  the instant another begins does not overlap it, so two members that
+  merely meet are never covered twice.
 
   ### Arguments
 
   * `set` is a `t:t/0`.
 
+  * `options` is a keyword list of options.
+
   ### Options
 
-  * `:at_least` is the minimum number of overlapping members a region
-    must have. Required, and must be positive.
+  * `:at_least` is the number of members a region must be covered by, a
+    positive integer. The default is `1`.
 
   ### Returns
 
-  * a `t:t/0` of the qualifying regions, in order. Empty when nothing
-    reaches the threshold.
+  * `{:ok, covered}`, a `t:t/0` of the qualifying regions in time
+    order, empty when nothing reaches the threshold.
+
+  * `{:error, reason}` for an option `covered/2` does not take, or for a
+    lazy set, which has no end to sweep to.
 
   ### Examples
 
-      iex> set = Tempo.IntervalSet.new!([
-      ...>   %Tempo.Interval{from: ~o"2026-06-15T09:00:00", to: ~o"2026-06-15T12:00:00"},
-      ...>   %Tempo.Interval{from: ~o"2026-06-15T11:00:00", to: ~o"2026-06-15T14:00:00"}
+      iex> bookings = Tempo.IntervalSet.new!([
+      ...>   ~o"2026-06-15T09:00:00/2026-06-15T12:00:00",
+      ...>   ~o"2026-06-15T11:00:00/2026-06-15T14:00:00"
       ...> ])
-      iex> set
-      ...> |> Tempo.IntervalSet.overlapping(at_least: 2)
-      ...> |> Tempo.IntervalSet.members()
+      iex> {:ok, double_booked} = Tempo.IntervalSet.covered(bookings, at_least: 2)
+      iex> Tempo.IntervalSet.members(double_booked)
       [~o"2026Y6M15DT11H0M0S/T12H0M0S"]
+      iex> {:ok, busy} = Tempo.IntervalSet.covered(bookings)
+      iex> Tempo.IntervalSet.members(busy)
+      [~o"2026Y6M15DT9H0M0S/T14H0M0S"]
 
   Members that merely meet do not overlap:
 
-      iex> set = Tempo.IntervalSet.new!([
-      ...>   %Tempo.Interval{from: ~o"2026-06-15T09:00:00", to: ~o"2026-06-15T10:00:00"},
-      ...>   %Tempo.Interval{from: ~o"2026-06-15T10:00:00", to: ~o"2026-06-15T11:00:00"}
+      iex> back_to_back = Tempo.IntervalSet.new!([
+      ...>   ~o"2026-06-15T09:00:00/2026-06-15T10:00:00",
+      ...>   ~o"2026-06-15T10:00:00/2026-06-15T11:00:00"
       ...> ])
-      iex> set |> Tempo.IntervalSet.overlapping(at_least: 2) |> Tempo.IntervalSet.empty?()
+      iex> {:ok, double_booked} = Tempo.IntervalSet.covered(back_to_back, at_least: 2)
+      iex> Tempo.IntervalSet.empty?(double_booked)
       true
 
   """
-  @spec overlapping(t(), keyword()) :: t()
-  def overlapping(%__MODULE__{} = set, options) do
-    threshold = Keyword.fetch!(options, :at_least)
+  @spec covered(t(), keyword()) :: {:ok, t()} | {:error, Exception.t()}
+  def covered(set, options \\ [])
 
-    set
-    |> to_list()
-    |> Enum.flat_map(fn %Interval{from: from, to: to} -> [{from, 1}, {to, -1}] end)
-    |> sort_edges()
-    |> sweep_depth(threshold, 0, nil, [])
-    |> Enum.reverse()
-    |> then(&with_intervals(set, &1))
+  def covered(%__MODULE__{} = set, options) do
+    with {:ok, threshold} <- at_least_option(options),
+         :ok <- sweepable(set) do
+      set
+      |> members()
+      |> Enum.flat_map(fn %Interval{from: from, to: to} -> [{from, 1}, {to, -1}] end)
+      |> sort_edges()
+      |> sweep_depth(threshold, 0, nil, [])
+      |> Enum.reverse()
+      |> then(&{:ok, with_intervals(set, &1)})
+    end
+  end
+
+  def covered(value, _options) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.IntervalSet.covered/2 takes a Tempo.IntervalSet, not #{inspect(value)}."
+     )}
+  end
+
+  defp at_least_option(options) do
+    with true <- Keyword.keyword?(options),
+         [] <- Keyword.keys(options) -- [:at_least],
+         at_least when is_integer(at_least) and at_least > 0 <-
+           Keyword.get(options, :at_least, 1) do
+      {:ok, at_least}
+    else
+      _invalid ->
+        {:error,
+         ArgumentError.exception(
+           "Tempo.IntervalSet.covered/2 takes one option, :at_least, a positive " <>
+             "integer, not #{inspect(options)}."
+         )}
+    end
+  end
+
+  defp sweepable(set) do
+    if bounded?(set) do
+      :ok
+    else
+      {:error, UnboundedSetError.exception(operation: "Tempo.IntervalSet.covered/2", set: set)}
+    end
   end
 
   # Closing edges sort before opening ones at the same instant, which

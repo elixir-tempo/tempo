@@ -134,7 +134,7 @@ defmodule Tempo.Operations do
   defp maybe_split_midnight_crossers(a, b, _class_a, _class_b), do: {:ok, a, b}
 
   defp split_crossers(%IntervalSet{} = set) do
-    split = set |> IntervalSet.to_list() |> Enum.flat_map(&maybe_split/1)
+    split = set |> IntervalSet.members() |> Enum.flat_map(&maybe_split/1)
 
     case IntervalSet.new(split) do
       {:ok, sorted} -> sorted
@@ -235,9 +235,9 @@ defmodule Tempo.Operations do
 
   defp anchor_to_days(%IntervalSet{} = unanchored_set, %IntervalSet{} = window_set) do
     materialised =
-      for window_interval <- IntervalSet.to_list(window_set),
+      for window_interval <- IntervalSet.members(window_set),
           day_tempo <- days_in(window_interval),
-          na_interval <- IntervalSet.to_list(unanchored_set) do
+          na_interval <- IntervalSet.members(unanchored_set) do
         anchor_interval_to_day(na_interval, day_tempo)
       end
 
@@ -483,7 +483,7 @@ defmodule Tempo.Operations do
 
   defp convert_calendar_intervals(%IntervalSet{} = set, target_calendar) do
     converted =
-      Enum.map(IntervalSet.to_list(set), fn %Interval{from: from, to: to} = interval ->
+      Enum.map(IntervalSet.members(set), fn %Interval{from: from, to: to} = interval ->
         %{
           interval
           | from: convert_tempo_calendar(from, target_calendar),
@@ -618,7 +618,7 @@ defmodule Tempo.Operations do
   end
 
   defp week_axis?(%IntervalSet{} = set) do
-    Enum.any?(IntervalSet.to_list(set), fn %Interval{from: from, to: to} ->
+    Enum.any?(IntervalSet.members(set), fn %Interval{from: from, to: to} ->
       week_axis_endpoint?(from) or week_axis_endpoint?(to)
     end)
   end
@@ -703,7 +703,7 @@ defmodule Tempo.Operations do
   # endpoints falls back to the default, as an empty set already does.
   defp finest_resolution(%IntervalSet{} = set) do
     set
-    |> IntervalSet.to_list()
+    |> IntervalSet.members()
     |> Enum.flat_map(fn %Interval{from: from, to: to} -> [from, to] end)
     |> Enum.filter(&is_struct(&1, Tempo))
     |> Enum.map(fn endpoint -> endpoint |> Tempo.resolution() |> elem(0) end)
@@ -738,7 +738,7 @@ defmodule Tempo.Operations do
   # Both callers apply monotone per-endpoint transforms, so the
   # from-sorted precondition the sweeps rely on is preserved.
   defp map_endpoints(%IntervalSet{} = set, mapper) do
-    with {:ok, mapped} <- map_interval_endpoints(IntervalSet.to_list(set), mapper, []) do
+    with {:ok, mapped} <- map_interval_endpoints(IntervalSet.members(set), mapper, []) do
       {:ok, IntervalSet.with_intervals(set, mapped)}
     end
   end
@@ -793,7 +793,7 @@ defmodule Tempo.Operations do
 
   def union(a, b, opts) do
     with {:ok, {a_set, b_set}} <- align(a, b, opts) do
-      IntervalSet.new(IntervalSet.to_list(a_set) ++ IntervalSet.to_list(b_set),
+      IntervalSet.new(IntervalSet.members(a_set) ++ IntervalSet.members(b_set),
         metadata: a_set.metadata
       )
     end
@@ -857,7 +857,7 @@ defmodule Tempo.Operations do
       ...>   metadata: %{free: ["Bob"]})
       iex> accumulate = fn a, b -> Map.merge(a, b, fn _key, x, y -> x ++ y end) end
       iex> {:ok, both} = Tempo.intersection(alice, bob, metadata: {:merge, accumulate})
-      iex> both |> Tempo.IntervalSet.to_list() |> Enum.map(&Tempo.Interval.metadata/1)
+      iex> both |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.Interval.metadata/1)
       [%{free: ["Alice", "Bob"]}]
 
   """
@@ -874,7 +874,7 @@ defmodule Tempo.Operations do
     with {:ok, resolve} <- metadata_resolver(Keyword.get(opts, :metadata, :left)),
          {:ok, {a_set, b_set}} <- align(a, b, opts) do
       IntervalSet.new(
-        sweep_intersection(IntervalSet.to_list(a_set), IntervalSet.to_list(b_set), resolve),
+        sweep_intersection(IntervalSet.members(a_set), IntervalSet.members(b_set), resolve),
         metadata: a_set.metadata
       )
     end
@@ -905,7 +905,7 @@ defmodule Tempo.Operations do
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
   def members_overlapping(a, b, opts \\ []) do
     with {:ok, {a_set, b_set}} <- align(a, b, opts) do
-      result = sweep_members(IntervalSet.to_list(a_set), IntervalSet.to_list(b_set), :overlapping)
+      result = sweep_members(IntervalSet.members(a_set), IntervalSet.members(b_set), :overlapping)
       IntervalSet.new(result, metadata: a_set.metadata)
     end
   end
@@ -1084,8 +1084,8 @@ defmodule Tempo.Operations do
 
       IntervalSet.new(
         sweep_difference(
-          IntervalSet.to_list(window_set),
-          IntervalSet.to_list(coalesced_input)
+          IntervalSet.members(window_set),
+          IntervalSet.members(coalesced_input)
         ),
         metadata: window_set.metadata
       )
@@ -1142,7 +1142,7 @@ defmodule Tempo.Operations do
 
   def difference(a, b, opts) do
     with {:ok, {a_set, b_set}} <- align(a, b, opts) do
-      IntervalSet.new(sweep_difference(IntervalSet.to_list(a_set), IntervalSet.to_list(b_set)),
+      IntervalSet.new(sweep_difference(IntervalSet.members(a_set), IntervalSet.members(b_set)),
         metadata: a_set.metadata
       )
     end
@@ -1198,7 +1198,7 @@ defmodule Tempo.Operations do
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
   def members_outside(a, b, opts \\ []) do
     with {:ok, {a_set, b_set}} <- align(a, b, opts) do
-      result = sweep_members(IntervalSet.to_list(a_set), IntervalSet.to_list(b_set), :outside)
+      result = sweep_members(IntervalSet.members(a_set), IntervalSet.members(b_set), :outside)
       IntervalSet.new(result, metadata: a_set.metadata)
     end
   end
@@ -1292,7 +1292,7 @@ defmodule Tempo.Operations do
   def symmetric_difference(a, b, opts \\ []) do
     with {:ok, a_minus_b} <- difference(a, b, opts),
          {:ok, b_minus_a} <- difference(b, a, opts) do
-      IntervalSet.new(IntervalSet.to_list(a_minus_b) ++ IntervalSet.to_list(b_minus_a),
+      IntervalSet.new(IntervalSet.members(a_minus_b) ++ IntervalSet.members(b_minus_a),
         metadata: a_minus_b.metadata
       )
     end
@@ -1323,7 +1323,7 @@ defmodule Tempo.Operations do
   def members_in_exactly_one(a, b, opts \\ []) do
     with {:ok, a_minus_b} <- members_outside(a, b, opts),
          {:ok, b_minus_a} <- members_outside(b, a, opts) do
-      IntervalSet.new(IntervalSet.to_list(a_minus_b) ++ IntervalSet.to_list(b_minus_a),
+      IntervalSet.new(IntervalSet.members(a_minus_b) ++ IntervalSet.members(b_minus_a),
         metadata: a_minus_b.metadata
       )
     end
@@ -1427,8 +1427,8 @@ defmodule Tempo.Operations do
   def equal?(a, b, opts \\ []) do
     case align(a, b, opts) do
       {:ok, {a_set, b_set}} ->
-        a_members = IntervalSet.to_list(IntervalSet.coalesce(a_set))
-        b_members = IntervalSet.to_list(IntervalSet.coalesce(b_set))
+        a_members = IntervalSet.members(IntervalSet.coalesce(a_set))
+        b_members = IntervalSet.members(IntervalSet.coalesce(b_set))
 
         length(a_members) == length(b_members) and
           a_members |> Enum.zip(b_members) |> Enum.all?(&same_extent?/1)

@@ -37,7 +37,7 @@ defmodule Tempo.OpenWindowTest do
 
   describe "an open-ended :within window over other values" do
     test "a recurrence set's members come in time order" do
-      holidays = RecurrenceSet.new([~o"R/../P1Y/FL12M25DN", ~o"R/../P1Y/FL1M1DN"])
+      holidays = RecurrenceSet.new!([~o"R/../P1Y/FL12M25DN", ~o"R/../P1Y/FL1M1DN"])
       {:ok, upcoming} = Tempo.to_interval_set(holidays, within: ~o"2026-12-26/..")
 
       assert starts(upcoming, 3) == [~o"2027-01-01", ~o"2027-12-25", ~o"2028-01-01"]

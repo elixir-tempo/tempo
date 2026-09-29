@@ -10,7 +10,7 @@ defmodule Tempo.ExclusionDomainTest do
 
   defp years(%IntervalSet{} = set) do
     set
-    |> IntervalSet.to_list()
+    |> IntervalSet.members()
     |> Enum.map(&(&1 |> Interval.from() |> Tempo.year()))
     |> Enum.sort()
   end
@@ -64,7 +64,7 @@ defmodule Tempo.ExclusionDomainTest do
 
     test "each occurrence is the selection's date within its year" do
       {:ok, set} = Tempo.to_interval(~o"R/{2025Y}/P1Y/FL12M25DN")
-      assert [interval] = IntervalSet.to_list(set)
+      assert [interval] = IntervalSet.members(set)
       assert Interval.from(interval) == ~o"2025Y12M25D"
     end
 
@@ -133,7 +133,7 @@ defmodule Tempo.ExclusionDomainTest do
       {:ok, set} =
         Tempo.to_interval(~o"R/{2024Y..2027Y}/P1Y/FL1m1DN[u-ca=chinese]", within: ~o"2026Y")
 
-      assert [interval] = IntervalSet.to_list(set)
+      assert [interval] = IntervalSet.members(set)
       {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
       assert Date.convert!(date, Calendar.ISO) == ~D[2026-02-17]
     end
@@ -197,7 +197,7 @@ defmodule Tempo.ExclusionDomainTest do
 
       dates =
         set
-        |> IntervalSet.to_list()
+        |> IntervalSet.members()
         |> Enum.map(fn interval ->
           {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
           date

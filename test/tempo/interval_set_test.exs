@@ -100,7 +100,7 @@ defmodule Tempo.IntervalSet.Test do
     # Tempo.Interval: iterating walks the sub-points at the
     # next-finer resolution, not the member intervals
     # themselves. For member-interval iteration use
-    # `Tempo.IntervalSet.to_list/1`.
+    # `Tempo.IntervalSet.members/1`.
 
     test "iterates each interval's values in time order" do
       jan = interval(~o"2022Y1M")
@@ -143,13 +143,13 @@ defmodule Tempo.IntervalSet.Test do
     end
   end
 
-  describe "to_list/1 — member intervals as a plain list" do
+  describe "members/1 — member intervals as a plain list" do
     test "returns the constituent %Tempo.Interval{} values" do
       jan = interval(~o"2022Y1M")
       mar = interval(~o"2022Y3M")
       {:ok, set} = Tempo.IntervalSet.new([jan, mar])
 
-      assert [a, b] = Tempo.IntervalSet.to_list(set)
+      assert [a, b] = Tempo.IntervalSet.members(set)
       assert %Tempo.Interval{} = a
       assert a.from.time == [year: 2022, month: 1]
       assert b.from.time == [year: 2022, month: 3]
@@ -162,7 +162,7 @@ defmodule Tempo.IntervalSet.Test do
 
       long_enough =
         set
-        |> Tempo.IntervalSet.to_list()
+        |> Tempo.IntervalSet.members()
         |> Enum.filter(&Tempo.at_least?(&1, ~o"P28D"))
 
       assert length(long_enough) == 2
@@ -170,7 +170,7 @@ defmodule Tempo.IntervalSet.Test do
 
     test "empty set → empty list" do
       {:ok, set} = Tempo.IntervalSet.new([])
-      assert Tempo.IntervalSet.to_list(set) == []
+      assert Tempo.IntervalSet.members(set) == []
     end
   end
 
@@ -253,7 +253,7 @@ defmodule Tempo.IntervalSet.Test do
       only_january = Tempo.IntervalSet.filter(set, &(Tempo.month(&1) == 1))
 
       assert Tempo.IntervalSet.count(only_january) == 1
-      [only] = Tempo.IntervalSet.to_list(only_january)
+      [only] = Tempo.IntervalSet.members(only_january)
       assert Tempo.month(only) == 1
     end
 
@@ -344,7 +344,7 @@ defmodule Tempo.IntervalSet.Test do
     end
   end
 
-  describe "overlapping/2" do
+  describe "covered/2" do
     defp at(from, to) do
       Interval.new!(
         from: Tempo.from_iso8601!("2026-06-15T#{from}:00:00"),
@@ -352,43 +352,44 @@ defmodule Tempo.IntervalSet.Test do
       )
     end
 
-    defp spans(set) do
-      set |> Tempo.IntervalSet.to_list() |> Enum.map(&Tempo.to_iso8601/1)
-    end
+    defp spans({:ok, set}), do: spans(set)
+    defp spans(set), do: set |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.to_iso8601/1)
 
-    test "at_least: 1 is the covered region" do
+    test "the default, at_least: 1, is the time the set covers" do
       set = Tempo.IntervalSet.new!([at("09", "11"), at("10", "12")])
 
-      assert spans(Tempo.IntervalSet.overlapping(set, at_least: 1)) ==
-               spans(Tempo.IntervalSet.coalesce(set))
+      assert spans(Tempo.IntervalSet.covered(set)) == spans(Tempo.IntervalSet.coalesce(set))
+      assert spans(Tempo.IntervalSet.covered(set, at_least: 1)) == ["2026Y6M15DT9H0M0S/T12H0M0S"]
     end
 
     test "at_least: 2 keeps only the doubled part" do
       set = Tempo.IntervalSet.new!([at("09", "12"), at("11", "14")])
 
-      assert spans(Tempo.IntervalSet.overlapping(set, at_least: 2)) ==
+      assert spans(Tempo.IntervalSet.covered(set, at_least: 2)) ==
                ["2026Y6M15DT11H0M0S/T12H0M0S"]
     end
 
     test "a threshold no member reaches yields nothing" do
       set = Tempo.IntervalSet.new!([at("09", "10"), at("11", "12")])
 
-      assert Tempo.IntervalSet.overlapping(set, at_least: 2) |> Tempo.IntervalSet.empty?()
+      assert {:ok, none} = Tempo.IntervalSet.covered(set, at_least: 2)
+      assert Tempo.IntervalSet.empty?(none)
     end
 
     test "members that merely meet never count as overlapping" do
       set = Tempo.IntervalSet.new!([at("09", "10"), at("10", "11"), at("11", "12")])
 
-      assert Tempo.IntervalSet.overlapping(set, at_least: 2) |> Tempo.IntervalSet.empty?()
+      assert {:ok, none} = Tempo.IntervalSet.covered(set, at_least: 2)
+      assert Tempo.IntervalSet.empty?(none)
     end
 
     test "depth is tracked across three members" do
       set = Tempo.IntervalSet.new!([at("09", "14"), at("10", "13"), at("11", "12")])
 
-      assert spans(Tempo.IntervalSet.overlapping(set, at_least: 3)) ==
+      assert spans(Tempo.IntervalSet.covered(set, at_least: 3)) ==
                ["2026Y6M15DT11H0M0S/T12H0M0S"]
 
-      assert spans(Tempo.IntervalSet.overlapping(set, at_least: 2)) ==
+      assert spans(Tempo.IntervalSet.covered(set, at_least: 2)) ==
                ["2026Y6M15DT10H0M0S/T13H0M0S"]
     end
 
@@ -401,7 +402,7 @@ defmodule Tempo.IntervalSet.Test do
           at("15", "17")
         ])
 
-      assert spans(Tempo.IntervalSet.overlapping(set, at_least: 2)) == [
+      assert spans(Tempo.IntervalSet.covered(set, at_least: 2)) == [
                "2026Y6M15DT10H0M0S/T11H0M0S",
                "2026Y6M15DT15H0M0S/T16H0M0S"
              ]
@@ -413,8 +414,9 @@ defmodule Tempo.IntervalSet.Test do
 
       widths =
         for depth <- 1..4 do
-          set
-          |> Tempo.IntervalSet.overlapping(at_least: depth)
+          {:ok, covered} = Tempo.IntervalSet.covered(set, at_least: depth)
+
+          covered
           |> Tempo.IntervalSet.duration()
           |> Map.get(:time)
           |> Keyword.get(:second)
@@ -426,7 +428,36 @@ defmodule Tempo.IntervalSet.Test do
     test "an empty set has no overlap at any depth" do
       set = Tempo.IntervalSet.new!([])
 
-      assert Tempo.IntervalSet.overlapping(set, at_least: 1) |> Tempo.IntervalSet.empty?()
+      assert {:ok, none} = Tempo.IntervalSet.covered(set)
+      assert Tempo.IntervalSet.empty?(none)
+    end
+
+    test "an option covered/2 does not take is an error, not a raise" do
+      set = Tempo.IntervalSet.new!([at("09", "11")])
+
+      for options <- [
+            [at_least: 0],
+            [at_least: -1],
+            [at_least: 1.5],
+            [at_least: :two],
+            [at_least: nil],
+            [atleast: 2],
+            [:at_least],
+            %{at_least: 2},
+            2
+          ] do
+        assert {:error, %ArgumentError{} = error} = Tempo.IntervalSet.covered(set, options)
+        assert Exception.message(error) =~ "takes one option, :at_least"
+      end
+    end
+
+    test "a lazy set, or a value that is not an interval set, is an error, not a raise" do
+      {:ok, weekends} = Tempo.select(~o"2026-06-15/..", Tempo.weekends(:US))
+      assert {:error, %Tempo.UnboundedSetError{}} = Tempo.IntervalSet.covered(weekends)
+
+      for value <- [nil, "set", [], ~o"2026-06-15"] do
+        assert {:error, %ArgumentError{}} = Tempo.IntervalSet.covered(value, at_least: 2)
+      end
     end
   end
 
@@ -442,7 +473,7 @@ defmodule Tempo.IntervalSet.Test do
       metadata =
         work
         |> Tempo.IntervalSet.slots(~o"PT1H")
-        |> Tempo.IntervalSet.to_list()
+        |> Tempo.IntervalSet.members()
         |> Enum.map(&Interval.metadata/1)
 
       assert metadata == List.duplicate(%{resource: "Boardroom"}, 3)
@@ -466,7 +497,7 @@ defmodule Tempo.IntervalSet.Test do
       metadata =
         set
         |> Tempo.IntervalSet.slots(~o"PT1H")
-        |> Tempo.IntervalSet.to_list()
+        |> Tempo.IntervalSet.members()
         |> Enum.map(&Interval.metadata/1)
 
       assert metadata == [%{resource: "Boardroom"}, %{resource: "Annexe"}]
@@ -478,7 +509,7 @@ defmodule Tempo.IntervalSet.Test do
       metadata =
         work
         |> Tempo.IntervalSet.slots(~o"PT1H")
-        |> Tempo.IntervalSet.to_list()
+        |> Tempo.IntervalSet.members()
         |> Enum.map(&Interval.metadata/1)
 
       assert metadata == [%{}, %{}]
@@ -492,7 +523,7 @@ defmodule Tempo.IntervalSet.Test do
 
       assert Tempo.IntervalSet.count(slots) == 3
 
-      assert slots |> Tempo.IntervalSet.to_list() |> Enum.map(& &1.from.time[:hour]) ==
+      assert slots |> Tempo.IntervalSet.members() |> Enum.map(& &1.from.time[:hour]) ==
                [9, 10, 11]
     end
 
@@ -501,7 +532,7 @@ defmodule Tempo.IntervalSet.Test do
       slots = Tempo.IntervalSet.slots(work, ~o"PT1H")
 
       assert Tempo.IntervalSet.count(slots) == 2
-      [first, second] = Tempo.IntervalSet.to_list(slots)
+      [first, second] = Tempo.IntervalSet.members(slots)
       assert first.to.time == second.from.time
     end
 
@@ -576,16 +607,6 @@ defmodule Tempo.IntervalSet.Test do
 
       assert length(Tempo.IntervalSet.members(set)) == 5
       assert Enum.count(set) == 5
-    end
-
-    test "is exactly to_list/1" do
-      {:ok, set} =
-        Tempo.IntervalSet.new([
-          ~o"2026-06-01/2026-06-10",
-          ~o"2026-07-01/2026-07-10"
-        ])
-
-      assert Tempo.IntervalSet.members(set) == Tempo.IntervalSet.to_list(set)
     end
 
     test "agrees with count/1" do

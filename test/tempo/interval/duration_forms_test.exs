@@ -89,8 +89,8 @@ defmodule Tempo.Interval.DurationFormsTest do
         for spelling <- @spelled do
           {:ok, set} = IntervalSet.new([spelling])
 
-          assert IntervalSet.to_list(set) |> Enum.map(&Interval.endpoints/1) ==
-                   IntervalSet.to_list(expected) |> Enum.map(&Interval.endpoints/1)
+          assert IntervalSet.members(set) |> Enum.map(&Interval.endpoints/1) ==
+                   IntervalSet.members(expected) |> Enum.map(&Interval.endpoints/1)
         end
       end
     end
@@ -125,7 +125,7 @@ defmodule Tempo.Interval.DurationFormsTest do
         )
 
       {:ok, set} = IntervalSet.new([interval])
-      [member] = IntervalSet.to_list(set)
+      [member] = IntervalSet.members(set)
 
       assert Interval.endpoints(member) == {~o"2026-12-25", ~o"2026-12-26"}
       assert Interval.metadata(member) == %{name: "Christmas Day"}

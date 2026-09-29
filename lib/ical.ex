@@ -152,7 +152,7 @@ if Code.ensure_loaded?(ICal) do
         iex> {:ok, set} = Tempo.ICal.parse(ics)
         iex> Tempo.IntervalSet.count(set)
         1
-        iex> [iv] = Tempo.IntervalSet.to_list(set)
+        iex> [iv] = Tempo.IntervalSet.members(set)
         iex> Tempo.Interval.metadata(iv).summary
         "Test meeting"
         iex> Tempo.Interval.metadata(iv).location
@@ -292,7 +292,7 @@ if Code.ensure_loaded?(ICal) do
         ...> END:VCALENDAR
         ...> \"\"\")
         iex> {:ok, free} = Tempo.ICal.available(calendar, within: ~o"2026Y6M1D/8D")
-        iex> [tuesday] = Tempo.IntervalSet.to_list(free)
+        iex> [tuesday] = Tempo.IntervalSet.members(free)
         iex> from = Tempo.Interval.from(tuesday)
         iex> to = Tempo.Interval.to(tuesday)
         iex> {Tempo.day(from), Tempo.hour(from), Tempo.hour(to)}

@@ -34,6 +34,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 | `Tempo.working_days_in/2` | `Tempo.count_workdays/2` |
 | `Tempo.weekend/1` | `Tempo.weekends/1` |
 | `Tempo.weekends(from: date)`, a lazy set | `Tempo.select/2` over a span with no end |
+| `Tempo.IntervalSet.to_list/1` | `Tempo.IntervalSet.members/1` |
+| `Tempo.IntervalSet.overlapping/2` | `Tempo.IntervalSet.covered/2` |
 
 * `Tempo.duration/1` and `Tempo.IntervalSet.duration/1` measure the time a set covers, counting time its members share once; `IntervalSet.total_duration/1`, which did, is removed.
 
@@ -76,6 +78,12 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * `Tempo.weekends/1` is the weekend selector, plural as `workdays/1` is, and both return an error for a territory they cannot resolve, which `select/2` returns as it is. 1.x's lazy `weekends/1` is `Tempo.select(~o"2026-06-15/..", Tempo.weekends())`.
 
 * `Tempo.select/2` selects in every period of a span, at its start's resolution, where it selected in the first alone: `~o"2026/2029"` holds three Christmases. A selection starts in its period, so `Tempo.select(~o"2026-06", ~o"07-01")` is empty.
+
+* `Tempo.IntervalSet.members/1` is the one name for a set's member intervals; `to_list/1`, a second name that read like `Enum.to_list/1`, which walks the days inside them, is removed.
+
+* `Tempo.IntervalSet.covered/2` is `overlapping/2` renamed: the time covered by at least `:at_least` members, one by default. It returns `{:ok, set}`, and an error for a bad option or a lazy set, where it raised.
+
+* `Tempo.RecurrenceSet.new/2` returns `{:ok, set}` and checks its members and options, with `new!/2` for the struct; a bad member failed only when the set was converted.
 
 ### Added
 

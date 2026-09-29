@@ -75,7 +75,7 @@ Read aloud: *"The US workdays from today on. Take the fifth after today."* The c
 
 ### A span with no end
 
-`Tempo.Interval.new!(from: today)` is the span from today on — `~o"2026-06-15/.."` written as a literal. Selecting from a span with no end gives a lazy set: it finds each workday only as the walk reaches it, so `Enum.at(5)` finds six and stops. Questions that need every member (`Tempo.IntervalSet.count/1`, `to_list/1`, the set operations) refuse a lazy set with `Tempo.UnboundedSetError`: take what you need from `Tempo.IntervalSet.walk/1`, or give the span an end. The same lazy set is the busy time `Tempo.shift/3` skips — see the [scheduling guide](./scheduling.md).
+`Tempo.Interval.new!(from: today)` is the span from today on — `~o"2026-06-15/.."` written as a literal. Selecting from a span with no end gives a lazy set: it finds each workday only as the walk reaches it, so `Enum.at(5)` finds six and stops. Questions that need every member (`Tempo.IntervalSet.count/1`, `members/1`, the set operations) refuse a lazy set with `Tempo.UnboundedSetError`: take what you need from `Tempo.IntervalSet.walk/1`, or give the span an end. The same lazy set is the busy time `Tempo.shift/3` skips — see the [scheduling guide](./scheduling.md).
 
 ## Related queries
 

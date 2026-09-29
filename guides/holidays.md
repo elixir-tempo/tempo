@@ -48,7 +48,7 @@ Tempo.IntervalSet.count(holidays)
 
 ```elixir
 holidays
-|> Tempo.IntervalSet.to_list()
+|> Tempo.IntervalSet.members()
 |> Enum.take(3)
 |> Enum.each(fn iv ->
   IO.puts "#{Tempo.month(iv)}/#{Tempo.day(iv)}: #{Tempo.Interval.metadata(iv).summary}"
@@ -156,7 +156,7 @@ q3 = ~o"2026-07/2026-10"
 {:ok, q3_holidays} = Tempo.members_overlapping(holidays, q3)
 
 q3_holidays
-|> Tempo.IntervalSet.to_list()
+|> Tempo.IntervalSet.members()
 |> Enum.each(fn iv ->
   IO.puts "#{Tempo.month(iv)}/#{Tempo.day(iv)}: #{Tempo.Interval.metadata(iv).summary}"
 end)
@@ -184,7 +184,7 @@ window = Tempo.Interval.new!(from: today, to: Tempo.shift(today, week: 3))
 
 target =
   open_days
-  |> Tempo.IntervalSet.to_list()
+  |> Tempo.IntervalSet.members()
   |> Enum.at(5)
 #=> %Tempo.Interval{from: ~o"2026Y7M8D", ...}
 ```
@@ -246,7 +246,7 @@ q3 = ~o"2026-07/2026-10"
 
 candidate_weeks =
   open_days
-  |> Tempo.IntervalSet.to_list()
+  |> Tempo.IntervalSet.members()
   |> Enum.chunk_by(&week_key/1)
   |> Enum.filter(&(length(&1) == 5))
 

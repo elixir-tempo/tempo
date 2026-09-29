@@ -1891,7 +1891,7 @@ defmodule Tempo.Math do
           {:cont, {:ok, [interval | acc]}}
 
         {:ok, %IntervalSet{} = set} ->
-          {:cont, {:ok, Enum.reverse(IntervalSet.to_list(set)) ++ acc}}
+          {:cont, {:ok, Enum.reverse(IntervalSet.members(set)) ++ acc}}
 
         {:error, _} = error ->
           {:halt, error}
@@ -1917,7 +1917,7 @@ defmodule Tempo.Math do
   # checked as the walk consumes them (`span_payload/1`).
   defp validate_busy_members(%IntervalSet{} = set) do
     if IntervalSet.bounded?(set) do
-      set |> IntervalSet.to_list() |> Enum.find_value(:ok, &busy_member_error/1)
+      set |> IntervalSet.members() |> Enum.find_value(:ok, &busy_member_error/1)
     else
       :ok
     end

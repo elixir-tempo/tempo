@@ -12,7 +12,7 @@ defmodule Tempo.DomainFilterTest do
 
   defp years(%IntervalSet{} = set) do
     set
-    |> IntervalSet.to_list()
+    |> IntervalSet.members()
     |> Enum.map(&(&1 |> Interval.from() |> Tempo.year()))
     |> Enum.sort()
   end

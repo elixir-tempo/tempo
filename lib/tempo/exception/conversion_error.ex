@@ -60,7 +60,8 @@ defmodule Tempo.ConversionError do
   def message(%__MODULE__{reason: :recurrence_set_member, value: value}) do
     "Cannot read #{inspect(value)} as a Tempo.RecurrenceSet member — a " <>
       "member is a Tempo.Interval (a recurrence or a concrete interval), a Tempo value, " <>
-      "or a nested Tempo.RecurrenceSet."
+      "a nested Tempo.RecurrenceSet, or a conditional member from " <>
+      "Tempo.RecurrenceSet.keep_when/2 or move_when/2."
   end
 
   def message(%__MODULE__{reason: :conditional_member, value: value}) do

@@ -28,7 +28,7 @@ Every form below is a string you can hand to the `~o"…"` sigil or `Tempo.from_
 | `../1985` | up to 1985, open start |
 | `../..` | fully open (any time) |
 | `R5/2022-01-01/P1M` | 5 monthly repeats starting 2022-01-01 |
-| `R/2022-01-01/P1M` | monthly, unbounded (materialise with a `bound:`) |
+| `R/2022-01-01/P1M` | monthly, unbounded (convert with a `within:` window) |
 
 ## ISO 8601-2: uncertainty & approximation (EDTF §8)
 
@@ -59,7 +59,7 @@ Qualifiers are **metadata** — they do not widen the interval's bounds. They ri
 | `156X` | some year in the 1560s (1560–1569) |
 | `19XX` | some year in the 1900s |
 | `2020-XX` | some month in 2020 |
-| `1985-XX-15` | the 15th of *some* month in 1985 (materialises to 12 disjoint days — an IntervalSet) |
+| `1985-XX-15` | the 15th of *some* month in 1985 (converts to 12 disjoint days — an IntervalSet) |
 
 ## ISO 8601-2: sets (one-of vs all-of)
 
@@ -74,10 +74,10 @@ A one-of set is epistemic: Tempo refuses to silently flatten it into a span, bec
 ## Advanced (see `guides/iso8601-conformance.md` for the code tables)
 
 * **Seasons / quarters / halves** — numeric sub-year codes (e.g. `2022-21` ≈ spring). Look up the exact code rather than guessing.
-* **Groups & selections** — `nGspanUNITU` groups and `L…N` selections express calendrical patterns natively: `~o"R/2025-01-01/P1M/FL2I1KN"` is "the 2nd Monday of every month" (`2I` = 2nd instance, `1K` = Monday). RRULE and cron compile to exactly this form and it round-trips, so `inspect/1` on any recurrence returns the canonical selection string.
-* **`V` and `Q` — ratified project-specific designators** for the two RRULE filters with no ISO 8601 form. Both round-trip through `to_iso8601/1`; they are *not* standard ISO 8601, so for cross-system interchange emit RFC 5545 with `Tempo.to_rrule/1` instead. See `guides/iso8601-conformance.md` §5.
-  * **`V` = BYSETPOS** — the Nth of the whole **merged** per-period candidate set, applied last. This is the one people get wrong: `-1V` over `BYDAY=MO..FR` is the last **weekday** of the month (e.g. Aug 31 Wed), *not* the last Friday. Contrast the ISO ordinal `I`, which ranks a **single** weekday (`-1I5K` / `-1FR` = last Friday, Aug 26). `{1,3}V` picks the 1st and 3rd; negatives count from the end.
-  * **`Q` = WKST** — the weekday a week **starts** on (`7Q` = Sunday; Monday is the default and is omitted). A no-op for `FREQ=WEEKLY;INTERVAL=1`; it only changes results when the week boundary decides which weeks are on — `INTERVAL≥2` or `BYWEEKNO`.
+* **Groups & selections** — `nGspanUNITU` groups and `L…N` selections express calendrical patterns natively: `~o"R/2025-01-01/P1M/FL1K2IN"` is "the 2nd Monday of every month" (`1K` = Monday, `2I` = the 2nd of them). RRULE and cron compile to exactly this form and it round-trips, so `inspect/1` on any recurrence returns the canonical selection string.
+* **Position `I` and week start `q`** — the two RRULE filters that need care. See `guides/iso8601-conformance.md` §5.
+  * **`I` = BYSETPOS** — ISO 8601-2 §12.9's position designator, applied last over the whole resolved set and written after what it counts. This is the one people get wrong: `{1..5}K-1I` over a month is its last **weekday** (e.g. Aug 31 Wed), *not* its last Friday, which is `5K-1I` (Aug 26). Negatives count from the end.
+  * **`q` = WKST** — Tempo's lowercase extension for the weekday a week **starts** on (`7q` = Sunday; Monday is the default and is omitted). A no-op for `FREQ=WEEKLY;INTERVAL=1`; it only changes results when the week boundary decides which weeks are on — `INTERVAL≥2` or `BYWEEKNO`. It is *not* standard ISO 8601, so for cross-system interchange write the rule as RFC 5545 with `Tempo.RRule.to_string/1`.
 
 ## IXDTF suffixes (RFC 9557 extended info)
 

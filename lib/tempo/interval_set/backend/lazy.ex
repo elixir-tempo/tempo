@@ -9,7 +9,7 @@ defmodule Tempo.IntervalSet.Backend.Lazy do
   `first/1`, `empty?/1`, `covered?/2`, `Enum.take/2`, and use as a
   `Tempo.shift/3` `skipping:` busy set — without ever building more
   members than the caller consumes. `bounded?/1` is `false`, so every
-  aggregate operation (`to_list/1`, `count/1`, `coalesce/1`, set
+  aggregate operation (`members/1`, `count/1`, `coalesce/1`, set
   algebra) raises `Tempo.UnboundedSetError` instead of walking forever.
 
   Build one from your own generator with
@@ -34,7 +34,7 @@ defmodule Tempo.IntervalSet.Backend.Lazy do
   @impl true
   @spec to_list(term()) :: no_return()
   def to_list(_state) do
-    raise UnboundedSetError.exception(operation: "Tempo.IntervalSet.to_list/1")
+    raise UnboundedSetError.exception(operation: "Tempo.IntervalSet.members/1")
   end
 
   @impl true

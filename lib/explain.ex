@@ -647,7 +647,7 @@ defmodule Tempo.Explain do
       ]
       |> Enum.reject(&is_nil/1)
     else
-      interval_set_member_parts(IntervalSet.to_list(set), metadata)
+      interval_set_member_parts(IntervalSet.members(set), metadata)
     end
   end
 

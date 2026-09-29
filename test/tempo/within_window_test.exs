@@ -16,7 +16,7 @@ defmodule Tempo.WithinWindowTest do
   # it overlaps the window.
 
   defp starts({:ok, %IntervalSet{} = set}),
-    do: set |> IntervalSet.to_list() |> Enum.map(&Tempo.to_iso8601(Interval.from(&1)))
+    do: set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601(Interval.from(&1)))
 
   defp ics(events) do
     """
@@ -69,7 +69,7 @@ defmodule Tempo.WithinWindowTest do
     end
 
     test "a recurrence set's one-off member outside the window is not among its occurrences" do
-      holidays = RecurrenceSet.new([~o"2026-06-15", ~o"R/../P1Y/FL12M25DN"])
+      holidays = RecurrenceSet.new!([~o"2026-06-15", ~o"R/../P1Y/FL12M25DN"])
 
       assert starts(Tempo.to_interval_set(holidays, within: ~o"2027")) == ["2027Y12M25D"]
     end
@@ -82,7 +82,7 @@ defmodule Tempo.WithinWindowTest do
         )
 
       assert {:ok, events} = ICal.parse(calendar, within: ~o"2026-06-15/2026-06-22")
-      assert Enum.map(IntervalSet.to_list(events), &Interval.metadata(&1).uid) == ["in-the-week"]
+      assert Enum.map(IntervalSet.members(events), &Interval.metadata(&1).uid) == ["in-the-week"]
     end
 
     test "a JSCalendar event outside the window is not returned" do

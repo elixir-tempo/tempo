@@ -19,7 +19,7 @@ defmodule Tempo.RRuleByMonthExpansionTest do
     {:ok, set} = Tempo.to_interval(parsed)
 
     set
-    |> IntervalSet.to_list()
+    |> IntervalSet.members()
     |> Enum.map(&(&1 |> Interval.from() |> Tempo.to_date() |> elem(1)))
   end
 
@@ -127,7 +127,7 @@ defmodule Tempo.RRuleByMonthExpansionTest do
       {:ok, set} = Tempo.to_interval(parsed)
 
       set
-      |> IntervalSet.to_list()
+      |> IntervalSet.members()
       |> Enum.map(&Tempo.to_iso8601(Interval.from(&1)))
     end
 

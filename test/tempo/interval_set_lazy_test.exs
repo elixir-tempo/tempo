@@ -51,7 +51,7 @@ defmodule Tempo.IntervalSetLazyTest do
     test "to_list and count raise with direction" do
       set = mondays(~o"2026-01-05")
 
-      assert_raise Tempo.UnboundedSetError, ~r/walk\/1/, fn -> IntervalSet.to_list(set) end
+      assert_raise Tempo.UnboundedSetError, ~r/walk\/1/, fn -> IntervalSet.members(set) end
       assert_raise Tempo.UnboundedSetError, fn -> IntervalSet.count(set) end
       assert_raise Tempo.UnboundedSetError, fn -> IntervalSet.last(set) end
     end
