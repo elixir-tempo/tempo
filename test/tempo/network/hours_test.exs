@@ -155,6 +155,22 @@ defmodule Tempo.Network.HoursTest do
       assert Tempo.equal?(offset.earliest_end, Tempo.from_iso8601!("2026-06-01T13+05:30"))
     end
 
+    test "a zoned bound in another calendar keeps its calendar" do
+      jerusalem = Tempo.from_iso8601!("5787-01-01T10:00[Asia/Jerusalem][u-ca=hebrew]")
+
+      period =
+        Network.new()
+        |> Network.add_period(:a, from: jerusalem, duration: ~o"PT2H")
+        |> solved(:a)
+
+      assert period.earliest_end.calendar == Calendrical.Hebrew
+
+      assert Tempo.equal?(
+               period.earliest_end,
+               Tempo.from_iso8601!("5787-01-01T12:00[Asia/Jerusalem][u-ca=hebrew]")
+             )
+    end
+
     test "bounds in two zones share UTC" do
       network =
         Network.new()

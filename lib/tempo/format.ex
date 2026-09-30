@@ -63,6 +63,9 @@ defmodule Tempo.Format do
 
   @time_units [:hour, :minute, :second, :microsecond]
 
+  # Localize's relative-time units, coarsest first.
+  @relative_units [:year, :quarter, :month, :week, :day, :hour, :minute, :second]
+
   @doc """
   Format a Tempo, Interval, or IntervalSet as a locale-aware
   string.
@@ -165,16 +168,33 @@ defmodule Tempo.Format do
 
   defp render_relative(%Tempo{} = tempo, options) do
     {from, options} = Keyword.pop_lazy(options, :from, &Tempo.utc_now/0)
+    {unit, options} = Keyword.pop(options, :unit)
 
     # Localize counts the unit's calendar periods from the baseline to the
     # value, in the value's calendar and on the value's wall clock.
-    with {:ok, value, baseline} <- relative_moments(tempo, from, Keyword.get(options, :unit)),
-         {:ok, string} <- Relative.to_string(value, Keyword.put(options, :relative_to, baseline)) do
+    with {:ok, value, baseline, own_unit} <- relative_moments(tempo, from, unit),
+         options = Keyword.put(options, :relative_to, baseline),
+         {:ok, unit} <- counting_unit(unit, value, options, own_unit),
+         {:ok, string} <- Relative.to_string(value, Keyword.put(options, :unit, unit)) do
       string
     else
       {:error, exception} -> raise exception
     end
   end
+
+  # The unit asked for or, without one, the unit Localize chooses — the
+  # largest of which a whole one lies between — but never one finer than the
+  # value's own: 2027 is "next year" from July 2026, not "in 6 months".
+  # Localize names its unit on the number's parts, which a named form such
+  # as "yesterday" has none of, so it is asked for the numeric form.
+  defp counting_unit(nil, value, options, own_unit) do
+    with {:ok, parts} <- Relative.to_parts(value, Keyword.put(options, :numeric, :always)) do
+      chosen = Enum.find_value(parts, & &1[:unit])
+      {:ok, Enum.find(@relative_units, &(&1 in [chosen, own_unit]))}
+    end
+  end
+
+  defp counting_unit(unit, _value, _options, _own_unit), do: {:ok, unit}
 
   # The value and the baseline as Localize counts between them, each from
   # where its span starts. The value is on its own wall clock and in its own
@@ -191,7 +211,7 @@ defmodule Tempo.Format do
          kind = span_kind(value, unit),
          {:ok, moment} <- moment(value, kind, place(value)),
          {:ok, baseline} <- baseline(from, kind, place(value), place(from)) do
-      {:ok, moment, baseline}
+      {:ok, moment, baseline, own_unit(value)}
     end
   end
 
@@ -231,6 +251,19 @@ defmodule Tempo.Format do
     {resolution, _span} = Tempo.resolution(value)
     if resolution in @time_units, do: :time, else: :date
   end
+
+  # The unit a value is written to: a day for a day of the week or of the
+  # year, and a second for a fraction of one.
+  defp own_unit(value) do
+    {resolution, _span} = Tempo.resolution(value)
+    relative_unit(resolution)
+  end
+
+  defp relative_unit(unit) when unit in [:year, :month, :week, :day, :hour, :minute, :second],
+    do: unit
+
+  defp relative_unit(:microsecond), do: :second
+  defp relative_unit(_day), do: :day
 
   # Where a value's wall clock is: a named zone, a fixed offset in seconds,
   # or nowhere, for a floating value.

@@ -218,7 +218,6 @@ defmodule Tempo.ToRelativeStringTest do
   describe "a value is where its span starts" do
     test "a year, a week and a quarter" do
       assert Tempo.to_relative_string(~o"2027", from: ~o"2026-07-01", unit: :year) == "next year"
-      assert Tempo.to_relative_string(~o"2027", from: ~o"2026-07-01") == "in 6 months"
 
       assert Tempo.to_relative_string(~o"2026-W26", from: ~o"2026-06-17", unit: :week) ==
                "next week"
@@ -267,6 +266,39 @@ defmodule Tempo.ToRelativeStringTest do
       assert_raise Tempo.IntervalEndpointsError, fn ->
         Tempo.to_relative_string(iv, from: ~o"2026-06-15T12:00:00Z")
       end
+    end
+  end
+
+  describe "without :unit, never a unit finer than the value's own" do
+    test "a year, a month and a week nearest the baseline count in their own unit" do
+      assert Tempo.to_relative_string(~o"2027", from: ~o"2026-07-01") == "next year"
+      assert Tempo.to_relative_string(~o"2026", from: ~o"2026-07-01") == "this year"
+      assert Tempo.to_relative_string(~o"2026-08", from: ~o"2026-07-15") == "next month"
+      assert Tempo.to_relative_string(~o"2026-W26", from: ~o"2026-06-17") == "next week"
+    end
+
+    test "an hour and a minute count in their own unit" do
+      from = Tempo.from_iso8601!("2026-06-15T12:30")
+      assert Tempo.to_relative_string(~o"2026-06-15T12", from: from) == "this hour"
+
+      from = Tempo.from_iso8601!("2026-06-15T12:00:30")
+      assert Tempo.to_relative_string(~o"2026-06-15T12:01", from: from) == "in 1 minute"
+    end
+
+    test "a larger unit Localize chooses stands" do
+      assert Tempo.to_relative_string(~o"2024-03", from: ~o"2026-07-15") == "2 years ago"
+      assert Tempo.to_relative_string(~o"2026-W40", from: ~o"2026-06-17") == "in 3 months"
+
+      from = Tempo.from_iso8601!("2026-06-15T12:00")
+      assert Tempo.to_relative_string(~o"2026-06-15T15:00", from: from) == "in 3 hours"
+    end
+
+    test "a :unit given is counted in as it is, and :numeric is kept" do
+      assert Tempo.to_relative_string(~o"2027", from: ~o"2026-07-01", unit: :month) ==
+               "in 6 months"
+
+      assert Tempo.to_relative_string(~o"2027", from: ~o"2026-07-01", numeric: :always) ==
+               "in 1 year"
     end
   end
 

@@ -63,7 +63,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.duration/2` returns `{:error, %Tempo.FloatingTempoError{}}` for a zoned value against a floating one, the pair `relation/2` refuses, where it measured the floating one as UTC.
 
-* `Tempo.to_relative_string/2` counts calendar periods in the value's own calendar and on its own wall clock, as Localize does: 1 February is "next month" from 31 January, where 1.x divided seconds by a mean month. A zoned value finer than a day raises `Tempo.FloatingTempoError` from a floating `:from`, where it read that as UTC.
+* `Tempo.to_relative_string/2` counts calendar periods in the value's own calendar and on its own wall clock, never in a unit finer than the value's own: 1 February is "next month" from 31 January and 2027 "next year" from July 2026, where 1.x divided seconds by a mean month. A zoned value finer than a day raises `Tempo.FloatingTempoError` from a floating `:from`, where it read that as UTC.
 
 * A zone or offset on an interval's start applies to a floating end, as ISO 8601-1 §5.5.1 says: `2018-01-15T10:00+05:00/2018-02-20T10:00` ends at +05:00, where its end was floating. `Tempo.Interval.new/1` follows the same rule.
 
@@ -192,6 +192,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* `Tempo.shift_zone/2` keeps a value in its own calendar, with its calendar annotation, tags, metadata and qualification, where it wrote the Gregorian wall clock under the value's calendar and dropped the rest.
 
 * A network's relation delays set its axis, so a six-month gap between year-dated periods is six months, where it rounded to a year, and a bound on a finer axis is the span it names, so `{:not_after, ~o"1300Y"}` allows all of 1300. A network counting only weeks is placed in days, where it raised.
 

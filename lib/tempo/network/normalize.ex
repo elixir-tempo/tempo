@@ -618,10 +618,8 @@ defmodule Tempo.Network.Normalize do
     do: wall_value(seconds + offset, calendar, shift: Zone.offset_to_shift(offset))
 
   defp value_at(seconds, calendar, {:zone, zone}) do
-    with {:ok, utc} <- wall_value(seconds, Calendrical.Gregorian, zone: "Etc/UTC"),
-         {:ok, zoned} <- Tempo.shift_zone(utc, zone) do
-      in_calendar(zoned, calendar)
-    end
+    with {:ok, utc} <- wall_value(seconds, calendar, zone: "Etc/UTC"),
+         do: Tempo.shift_zone(utc, zone)
   end
 
   defp wall_value(seconds, calendar, options) do
@@ -646,10 +644,6 @@ defmodule Tempo.Network.Normalize do
         error
     end
   end
-
-  defp in_calendar(value, Calendrical.Gregorian), do: {:ok, value}
-
-  defp in_calendar(value, calendar), do: Tempo.to_calendar(value, calendar)
 
   # A value at the coarsest of the network's unit, minutes and seconds that
   # loses nothing: 13:00 in a network of hours, 14:30 where an offset or a

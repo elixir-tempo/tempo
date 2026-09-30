@@ -4,7 +4,7 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ## Open
 
-* [ ] **`shift_zone/2` in another calendar** — `Tempo.shift_zone/2` writes the Gregorian wall clock into a value of another calendar: 1 Tishri 5787 10:00 in Jerusalem, shifted to UTC, reads as Hebrew year 2026, month 9, day 12 (`do_shift_zone/2` in `lib/tempo.ex` keeps the value's calendar on `seconds_to_datetime/1`'s Gregorian date).
+* [ ] **`to_iso8601/1` drops a converted value's calendar** — it writes `[u-ca=…]` only from a parsed annotation (`extended.calendar`), so a Hebrew value from `to_calendar/2` or `from_elixir/1` writes `5786Y9M30D`, which reads back as Gregorian year 5786; a network's results in another calendar write so too.
 
 * [ ] **`shift_zone/2` writes two time-zone annotations** — its result writes as `2026Y3M7DT9H0M0SZ-5H[America/New_York][-05:00]`, the offset annotation coming from `extended.zone_offset` beside the zone, where RFC 9557 allows one; the parser drops the second, so it round-trips, but the form is not RFC 9557's. A network in hours in a zone shows its results so.
 
@@ -65,6 +65,10 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **Set algebra over open-ended windows** — a research project for later (user, 2026-09-28): how far union, intersection, difference, complement and the predicates go on the lazy sets an open-ended window gives, a test of the whole algebra. Questions in [plans/open-ended-set-algebra.md](plans/open-ended-set-algebra.md).
 
 ## Done
+
+* [x] **`shift_zone/2` keeps the value's calendar** — a value in another calendar stays in it, with its calendar annotation, tags, metadata and qualification, where it took the Gregorian wall clock and dropped the rest; a network in hours with a zoned bound in another calendar solves, where it returned an error. 2026-09-30.
+
+* [x] **`to_relative_string/2` counts no finer than the value** — without a `:unit`, the unit Localize chooses but never one finer than the value's own, so 2027 is "next year" from July 2026 (user). 2026-09-30.
 
 * [x] **`to_relative_string/2` counts calendar periods** — Tempo gives Localize the value where its span starts, on its own wall clock and in its own calendar and zone, and `:from` where the value's clock reads it, and Localize counts the unit's periods; Tempo's seconds per month and year are gone. 2026-09-30.
 

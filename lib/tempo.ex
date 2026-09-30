@@ -4112,6 +4112,8 @@ defmodule Tempo do
   rules are re-evaluated from the configured time zone database at
   call time.
 
+  The value stays in its own calendar and keeps its calendar annotation, tags, metadata and qualification; only its zone and offset change.
+
   ### Arguments
 
   * `tempo` is a `t:t/0` that carries zone information — either an
@@ -4137,6 +4139,13 @@ defmodule Tempo do
       "America/New_York"
       iex> Keyword.take(new_york.time, [:hour, :minute])
       [hour: 8, minute: 0]
+
+  Rosh Hashanah 5787 at 10:00 in Jerusalem is 07:00 that day in UTC, in the Hebrew calendar:
+
+      iex> jerusalem = Tempo.from_iso8601!("5787-01-01T10:00:00[Asia/Jerusalem][u-ca=hebrew]")
+      iex> {:ok, utc} = Tempo.shift_zone(jerusalem, "Etc/UTC")
+      iex> {Tempo.year(utc), Tempo.month(utc), Tempo.day(utc), Tempo.hour(utc)}
+      {5787, 1, 1, 7}
 
   """
   @spec shift_zone(t(), String.t()) :: {:ok, t()} | {:error, error_reason()}
@@ -4226,83 +4235,78 @@ defmodule Tempo do
   @spec zoned?(t()) :: boolean()
   def zoned?(%Tempo{} = tempo), do: not floating?(tempo)
 
-  defp do_shift_zone(%Tempo{calendar: calendar} = tempo, "Etc/UTC") do
-    utc_seconds = Compare.to_utc_seconds(tempo)
+  # The same instant on `target_zone`'s wall clock, to the second and in the
+  # value's own calendar. The value keeps everything else it carries — its
+  # calendar annotation, tags, metadata and qualification — and the target
+  # zone and its offset take the place of its own.
+  defp do_shift_zone(%Tempo{} = tempo, target_zone) do
+    calendar = Compare.effective_calendar(tempo.calendar)
+    utc_seconds = tempo |> Compare.to_utc_seconds() |> floor()
 
-    {{year, month, day}, {hour, minute, second}} =
-      seconds_to_datetime(utc_seconds)
-
-    {:ok,
-     %__MODULE__{
-       time: [
-         year: year,
-         month: month,
-         day: day,
-         hour: hour,
-         minute: minute,
-         second: second
-       ],
-       shift: [hour: 0],
-       calendar: calendar || Calendrical.Gregorian,
-       extended: %{
-         zone_id: "Etc/UTC",
-         zone_offset: 0,
-         calendar: nil,
-         zone_critical: false,
-         tags: %{}
-       }
-     }}
-  end
-
-  defp do_shift_zone(%Tempo{calendar: calendar} = tempo, target_zone) do
-    utc_seconds = Compare.to_utc_seconds(tempo)
-
-    case TimeZoneDatabase.period_at_utc(target_zone, utc_seconds) do
-      {:ok, period} ->
-        offset_seconds = TimeZoneDatabase.total_offset(period)
-        wall_seconds = utc_seconds + offset_seconds
-
-        {{year, month, day}, {hour, minute, second}} =
-          seconds_to_datetime(wall_seconds)
-
-        {:ok,
-         %__MODULE__{
-           time: [
-             year: year,
-             month: month,
-             day: day,
-             hour: hour,
-             minute: minute,
-             second: second
-           ],
-           shift: Zone.offset_to_shift(offset_seconds),
-           calendar: calendar || Calendrical.Gregorian,
-           extended: %{
-             zone_id: target_zone,
-             zone_offset: div(offset_seconds, 60),
-             calendar: nil,
-             zone_critical: false,
-             tags: %{}
-           }
-         }}
-
-      {:error, _reason} ->
-        {:error, UnknownZoneError.exception(zone_id: target_zone)}
+    with {:ok, offset} <- zone_offset_at(target_zone, utc_seconds),
+         {:ok, time} <- wall_components(utc_seconds + offset, calendar, tempo) do
+      {:ok,
+       %{
+         tempo
+         | time: time,
+           shift: Zone.offset_to_shift(offset),
+           calendar: calendar,
+           extended: in_zone_extended(tempo.extended, target_zone, offset)
+       }}
     end
   end
 
-  # Seconds-on-the-gregorian-line back to `{{y, m, d}, {h, mi, s}}`.
-  # `Calendrical.Gregorian.date_from_iso_days/1` counts from 0000-01-01
-  # (day 0) and, unlike OTP ≤ 28's
-  # `:calendar.gregorian_seconds_to_datetime/1`, handles negative
-  # (pre-common-era) values on every OTP.
-  defp seconds_to_datetime(seconds) do
-    days = Integer.floor_div(seconds, 86_400)
-    time_of_day = Integer.mod(seconds, 86_400)
-    {year, month, day} = Gregorian.date_from_iso_days(days)
+  defp zone_offset_at("Etc/UTC", _utc_seconds), do: {:ok, 0}
 
-    {{year, month, day},
-     {div(time_of_day, 3_600), time_of_day |> rem(3_600) |> div(60), rem(time_of_day, 60)}}
+  defp zone_offset_at(zone, utc_seconds) do
+    case TimeZoneDatabase.period_at_utc(zone, utc_seconds) do
+      {:ok, period} -> {:ok, TimeZoneDatabase.total_offset(period)}
+      {:error, _reason} -> {:error, UnknownZoneError.exception(zone_id: zone)}
+    end
+  end
+
+  # A wall-clock reading in Gregorian seconds as a value's components in
+  # `calendar`: the day as the calendar numbers it, and the time of day.
+  defp wall_components(seconds, calendar, tempo) do
+    time_of_day = Integer.mod(seconds, 86_400)
+
+    with {:ok, {year, month, day}} <-
+           day_in_calendar(Integer.floor_div(seconds, 86_400), calendar, tempo) do
+      {:ok,
+       [
+         year: year,
+         month: month,
+         day: day,
+         hour: div(time_of_day, 3_600),
+         minute: time_of_day |> rem(3_600) |> div(60),
+         second: rem(time_of_day, 60)
+       ]}
+    end
+  end
+
+  # The day `days` after 0000-01-01 as `calendar` numbers it. Both counts
+  # from day 0 take negative (pre-common-era) days on every OTP, which OTP
+  # ≤ 28's `:calendar.gregorian_seconds_to_datetime/1` does not.
+  defp day_in_calendar(days, Gregorian, _tempo),
+    do: {:ok, Gregorian.date_from_iso_days(days)}
+
+  defp day_in_calendar(days, calendar, tempo) do
+    case days |> Date.from_gregorian_days() |> Date.convert(calendar) do
+      {:ok, %Date{year: year, month: month, day: day}} ->
+        {:ok, {year, month, day}}
+
+      {:error, reason} ->
+        {:error, ConversionError.exception(value: tempo, target: calendar, reason: reason)}
+    end
+  end
+
+  # The value's annotations with `zone` and its offset in place of its own
+  # zone. A critical flag belonged to the zone it replaces.
+  defp in_zone_extended(extended, zone, offset) do
+    Map.merge(
+      extended || %{calendar: nil, tags: %{}},
+      %{zone_id: zone, zone_offset: div(offset, 60), zone_critical: false}
+    )
   end
 
   ## ---------------------------------------------------------
@@ -4908,7 +4912,7 @@ defmodule Tempo do
 
   * `:from` is a `t:t/0` — the reference point the output is relative to, from where its span starts. When the value and `:from` are both zoned, `:from` is read on the value's clock, and otherwise on its own. A zoned value finer than a day needs a zoned `:from`; a floating one raises `Tempo.FloatingTempoError`. Defaults to `Tempo.utc_now/0`.
 
-  * `:unit` is the unit to count in: `:year`, `:quarter`, `:month`, `:week`, `:day`, `:hour`, `:minute`, `:second`, or a weekday from `:mon` to `:sun`. The difference is the number of the unit's calendar periods from `:from` to the value, and weeks and weekdays start on the locale's first day of the week. When `:unit` is omitted, it is the largest unit of which a whole one lies between them.
+  * `:unit` is the unit to count in: `:year`, `:quarter`, `:month`, `:week`, `:day`, `:hour`, `:minute`, `:second`, or a weekday from `:mon` to `:sun`. The difference is the number of the unit's calendar periods from `:from` to the value, and weeks and weekdays start on the locale's first day of the week. When `:unit` is omitted, it is the largest unit of which a whole one lies between them, but never one finer than the value's own: 2027 is "next year" from July 2026, not "in 6 months".
 
   * `:format` is `:standard`, `:narrow`, or `:short`. Defaults to `:standard`.
 
@@ -4930,6 +4934,9 @@ defmodule Tempo do
 
       iex> Tempo.to_relative_string(~o"2026-02-01", from: ~o"2026-01-31", unit: :month)
       "next month"
+
+      iex> Tempo.to_relative_string(~o"2027", from: ~o"2026-07-01")
+      "next year"
 
   Rosh Hashanah 5787 is the day after 11 September 2026, and in the Hebrew calendar it is next year:
 
