@@ -63,6 +63,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.duration/2` returns `{:error, %Tempo.FloatingTempoError{}}` for a zoned value against a floating one, the pair `relation/2` refuses, where it measured the floating one as UTC.
 
+* `Tempo.to_relative_string/2` counts calendar periods in the value's own calendar and on its own wall clock, as Localize does: 1 February is "next month" from 31 January, where 1.x divided seconds by a mean month. A zoned value finer than a day raises `Tempo.FloatingTempoError` from a floating `:from`, where it read that as UTC.
+
 * A zone or offset on an interval's start applies to a floating end, as ISO 8601-1 §5.5.1 says: `2018-01-15T10:00+05:00/2018-02-20T10:00` ends at +05:00, where its end was floating. `Tempo.Interval.new/1` follows the same rule.
 
 * `Tempo.new/1`'s `:metadata` is the value's own metadata, read with `Tempo.metadata/1` and never written to its ISO 8601 form, where it was written as IXDTF suffix tags; tags take the new `:tags` option, validated so `to_iso8601/1` cannot fail on one.
@@ -192,8 +194,6 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 ### Fixed
 
 * A network's relation delays set its axis, so a six-month gap between year-dated periods is six months, where it rounded to a year, and a bound on a finer axis is the span it names, so `{:not_after, ~o"1300Y"}` allows all of 1300. A network counting only weeks is placed in days, where it raised.
-
-* `Tempo.to_relative_string/2` with `:unit` leaves the scaling to Localize, as it did without one: 50 days in months is "in 2 months", where it was "next month".
 
 * `Tempo.Schedule.span/1` returns an error for a plan with no tasks or no fixed start, where it raised.
 

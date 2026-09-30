@@ -101,7 +101,7 @@ defmodule Tempo.ToRelativeStringTest do
   end
 
   describe "unit override" do
-    test ":unit forces the output unit (seconds converted correctly)" do
+    test ":unit hour counts the hours between" do
       now = Tempo.from_iso8601!("2026-06-15T12:00:00Z")
 
       assert Tempo.to_relative_string(~o"2026-06-17T12:00:00Z", from: now, unit: :hour) ==
@@ -115,19 +115,127 @@ defmodule Tempo.ToRelativeStringTest do
                "in 60 minutes"
     end
 
-    test ":unit scales as Localize does, rounding, as without a unit" do
-      # 50 days is about 1.6 months
+    test ":unit counts the unit's calendar periods" do
       from = Tempo.from_iso8601!("2026-07-01T00:00:00Z")
-      value = ~o"2026-08-20T00:00:00Z"
 
-      assert Tempo.to_relative_string(value, from: from, unit: :month) == "in 2 months"
-      assert Tempo.to_relative_string(value, from: from) == "in 2 months"
+      # August is the month after July, whichever day of it
+      assert Tempo.to_relative_string(~o"2026-08-20T00:00:00Z", from: from, unit: :month) ==
+               "next month"
 
-      # 18 months is about 1.5 years
       assert Tempo.to_relative_string(~o"2028-01-01T00:00:00Z", from: from, unit: :year) ==
                "in 2 years"
 
+      assert Tempo.to_relative_string(~o"2026-02-01", from: ~o"2026-01-31", unit: :month) ==
+               "next month"
+    end
+
+    test "without :unit, the largest unit of which a whole one lies between" do
+      from = Tempo.from_iso8601!("2026-07-01T00:00:00Z")
+
+      assert Tempo.to_relative_string(~o"2026-08-20T00:00:00Z", from: from) == "next month"
       assert Tempo.to_relative_string(~o"2028-01-01T00:00:00Z", from: from) == "in 2 years"
+      assert Tempo.to_relative_string(~o"2026-02-01", from: ~o"2026-01-31") == "tomorrow"
+    end
+
+    test "quarters and weekdays are calendar periods" do
+      assert Tempo.to_relative_string(~o"2026-07-01", from: ~o"2026-06-30", unit: :quarter) ==
+               "next quarter"
+
+      assert Tempo.to_relative_string(~o"2026-06-01", from: ~o"2026-06-30", unit: :quarter) ==
+               "this quarter"
+
+      # 17 June 2026 is a Wednesday, and 22 June the Monday after
+      assert Tempo.to_relative_string(~o"2026-06-22", from: ~o"2026-06-17", unit: :mon) ==
+               "next Monday"
+    end
+  end
+
+  describe "the value's own calendar" do
+    test "a Hebrew date counts Hebrew months and years" do
+      # 1 Tishri 5787 is 12 September 2026, the day after 29 Elul 5786
+      new_year = Tempo.from_iso8601!("5787-01-01[u-ca=hebrew]")
+
+      assert Tempo.to_relative_string(new_year, from: ~o"2026-09-11", unit: :month) ==
+               "next month"
+
+      assert Tempo.to_relative_string(new_year, from: ~o"2026-09-11", unit: :year) ==
+               "next year"
+
+      assert Tempo.to_relative_string(new_year, from: ~o"2026-09-11") == "tomorrow"
+
+      assert Tempo.to_relative_string(~o"2026-09-12", from: ~o"2026-09-11", unit: :month) ==
+               "this month"
+    end
+  end
+
+  describe "the value's own wall clock" do
+    test "a zoned value counts days on its own clock" do
+      sydney = Tempo.from_iso8601!("2026-06-16T01:00[Australia/Sydney]")
+
+      # 13:00 UTC is 23:00 the day before in Sydney
+      from = Tempo.from_iso8601!("2026-06-15T13:00:00Z")
+
+      assert Tempo.to_relative_string(sydney, from: from, unit: :day) == "tomorrow"
+      assert Tempo.to_relative_string(sydney, from: from) == "in 2 hours"
+    end
+
+    test "a value with an offset counts days at its offset" do
+      value = Tempo.from_iso8601!("2026-06-16T01:00+10:00")
+      from = Tempo.from_iso8601!("2026-06-15T13:00:00Z")
+
+      assert Tempo.to_relative_string(value, from: from, unit: :day) == "tomorrow"
+    end
+
+    test "a zoned day is the day its own clock shows" do
+      # 15:00 UTC on 15 June is 01:00 on 16 June in Sydney
+      sydney = Tempo.from_iso8601!("2026-06-16[Australia/Sydney]")
+      from = Tempo.from_iso8601!("2026-06-15T15:00:00Z")
+
+      assert Tempo.to_relative_string(sydney, from: from) == "today"
+    end
+
+    test "hours across a change of offset are the hours that pass" do
+      # New York's clocks go from 02:00 to 03:00 on 8 March 2026
+      value = Tempo.from_iso8601!("2026-03-08T04:00[America/New_York]")
+      from = Tempo.from_iso8601!("2026-03-08T01:00[America/New_York]")
+
+      assert Tempo.to_relative_string(value, from: from, unit: :hour) == "in 2 hours"
+    end
+
+    test "a floating value is read on the baseline's wall clock" do
+      from = Tempo.from_iso8601!("2026-06-15T12:00[Australia/Sydney]")
+
+      assert Tempo.to_relative_string(~o"2026-06-15T15:00", from: from) == "in 3 hours"
+    end
+
+    test "a zoned day is counted from a floating one" do
+      sydney = Tempo.from_iso8601!("2026-06-16[Australia/Sydney]")
+
+      assert Tempo.to_relative_string(sydney, from: ~o"2026-06-15") == "tomorrow"
+    end
+  end
+
+  describe "a value is where its span starts" do
+    test "a year, a week and a quarter" do
+      assert Tempo.to_relative_string(~o"2027", from: ~o"2026-07-01", unit: :year) == "next year"
+      assert Tempo.to_relative_string(~o"2027", from: ~o"2026-07-01") == "in 6 months"
+
+      assert Tempo.to_relative_string(~o"2026-W26", from: ~o"2026-06-17", unit: :week) ==
+               "next week"
+
+      # The first quarter of 2026
+      first_quarter = Tempo.from_iso8601!("2026-33")
+
+      assert Tempo.to_relative_string(first_quarter, from: ~o"2026-06-15", unit: :quarter) ==
+               "last quarter"
+    end
+
+    test "a day counted in hours starts at midnight" do
+      assert Tempo.to_relative_string(~o"2026-06-16", from: ~o"2026-06-15T23:00", unit: :hour) ==
+               "in 1 hour"
+
+      assert Tempo.to_relative_string(~o"2026-06-16", from: ~o"2026-06-15T23:00") ==
+               "tomorrow"
     end
   end
 
@@ -168,6 +276,38 @@ defmodule Tempo.ToRelativeStringTest do
 
       assert_raise Tempo.UnanchoredError, fn ->
         Tempo.to_relative_string(~o"T10:30:00", from: now)
+      end
+    end
+
+    test "an unanchored :from raises" do
+      assert_raise Tempo.UnanchoredError, fn ->
+        Tempo.to_relative_string(~o"2026-06-16", from: ~o"T10:00")
+      end
+    end
+
+    test "a :from that is not a Tempo raises" do
+      assert_raise ArgumentError, ~r/must be a Tempo/, fn ->
+        Tempo.to_relative_string(~o"2026-06-16", from: ~D[2026-06-15])
+      end
+    end
+
+    test "a zoned value finer than a day from a floating :from raises" do
+      sydney = Tempo.from_iso8601!("2026-06-15T15:00[Australia/Sydney]")
+
+      assert_raise Tempo.FloatingTempoError, fn ->
+        Tempo.to_relative_string(sydney, from: ~o"2026-06-15T12:00")
+      end
+
+      offset = Tempo.from_iso8601!("2026-06-15T15:00+10:00")
+
+      assert_raise Tempo.FloatingTempoError, fn ->
+        Tempo.to_relative_string(offset, from: ~o"2026-06-15T12:00")
+      end
+    end
+
+    test "a value naming several spans raises" do
+      assert_raise ArgumentError, ~r/several spans/, fn ->
+        Tempo.to_relative_string(Tempo.from_iso8601!("{2026,2027}Y"), from: ~o"2026-07-01")
       end
     end
   end

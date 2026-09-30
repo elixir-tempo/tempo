@@ -78,6 +78,8 @@ These keep their names and change their meaning:
 
 * **`Tempo.to_iso8601/1`** — returns `{:ok, string}`, or an error for a value ISO 8601 cannot write, where 1.x returned the string and raised; `to_iso8601!/1` returns the string.
 
+* **`Tempo.to_relative_string/2`** — counts calendar periods in the value's own calendar and on its own wall clock, where 1.x divided the seconds between two UTC instants by a mean month or year.
+
 ## Updating the dependency
 
 ```elixir
@@ -605,3 +607,27 @@ iex> holidays |> Tempo.RecurrenceSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
 ```
 
 > *"Christmas is written 2026Y12M25D. A set of holidays has no one ISO 8601 form, so each holiday is written on its own."*
+
+## A relative time counts calendar periods
+
+`Tempo.to_relative_string/2` counts the calendar periods from `:from` to the value in the value's own calendar and on its own wall clock, as Localize counts them. 1.x measured the seconds between the two as UTC instants and divided them by a mean month or year.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.x — a day is less than a mean month
+Tempo.to_relative_string(~o"2026-02-01", from: ~o"2026-01-31", unit: :month)
+#=> "this month"
+```
+
+```elixir
+iex> Tempo.to_relative_string(~o"2026-02-01", from: ~o"2026-01-31", unit: :month)
+"next month"
+iex> sydney = Tempo.from_iso8601!("2026-06-16T01:00[Australia/Sydney]")
+iex> Tempo.to_relative_string(sydney, from: Tempo.from_iso8601!("2026-06-15T13:00:00Z"), unit: :day)
+"tomorrow"
+```
+
+> *"The first of February is next month from the last day of January. One in the morning in Sydney is tomorrow from 13:00 UTC the day before, which is 23:00 in Sydney."*
+
+A zoned value finer than a day is measured from a zoned `:from`, and a floating one raises `Tempo.FloatingTempoError`, where 1.x read it as UTC.

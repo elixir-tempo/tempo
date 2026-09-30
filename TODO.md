@@ -4,13 +4,15 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ## Open
 
+* [ ] **`shift_zone/2` in another calendar** — `Tempo.shift_zone/2` writes the Gregorian wall clock into a value of another calendar: 1 Tishri 5787 10:00 in Jerusalem, shifted to UTC, reads as Hebrew year 2026, month 9, day 12 (`do_shift_zone/2` in `lib/tempo.ex` keeps the value's calendar on `seconds_to_datetime/1`'s Gregorian date).
+
 * [ ] **`shift_zone/2` writes two time-zone annotations** — its result writes as `2026Y3M7DT9H0M0SZ-5H[America/New_York][-05:00]`, the offset annotation coming from `extended.zone_offset` beside the zone, where RFC 9557 allows one; the parser drops the second, so it round-trips, but the form is not RFC 9557's. A network in hours in a zone shows its results so.
 
 * [ ] **A sub-day cadence's first selected occurrence is a whole day** — `R/../PT1H/FL1KN` within Monday 5 January 2026 (and `R/2026-01-05/PT1H/FL1KN`) starts from the day the weekday names, so its first occurrence is `2026Y1M5D/6D` and the rest are hours; without the selection the first is `2026Y1M5D/T1H`.
 
 * [ ] **Livebooks install 2.0 at the release** — `getting-started`, `tempo_tour`, `scheduling-workbook` and `uncertain-dates-workbook` install `{:ex_tempo, "~> 1.6"}` and the Melbourne deck `~> 1.6.3`, while their code uses the 2.0 names: at the 2.0.0 release each installs `~> 2.0`, as `everyday-holidays` already does.
 
-* [ ] **`to_relative_string/2` raises** — `Tempo.Format.render_relative/2` raises `UnanchoredError` for a value without a year and `IntervalEndpointsError` for an open interval, where the library returns `{:error, reason}`; its spec says it returns a string.
+* [ ] **`to_relative_string/2` raises** — `Tempo.Format.render_relative/2` raises `UnanchoredError` for a value or `:from` without a year, `IntervalEndpointsError` for an open interval, `FloatingTempoError` for a zoned value finer than a day from a floating `:from`, and `ArgumentError` for a value naming several spans or a `:from` that is not a Tempo, where the library returns `{:error, reason}`; its spec says it returns a string.
 
 * [ ] **A grouped endpoint raises when compared** — a hand-built interval whose endpoint holds a group (`~o"20C"`, `~o"2022Y1M2G3DU"`) raises in `Compare.to_utc_seconds/1` when measured or compared; `to_interval/1` converts such values first, the other entry points do not.
 
@@ -58,21 +60,19 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **Vocabulary for 2.0** — one meaning per word and one word per meaning across Tempo and tempo_holidays: `:within` for `:bound`, "anchor" in one sense, no public "materialise", `Tempo.Allen` beside everyday predicates, `datetime`, "workday". Every decision is taken; the tasks are in [plans/vocabulary.md](plans/vocabulary.md). Fifteen of its sixteen tasks have landed, through tempo_holidays and the real-world livebook (`livebook/everyday-holidays.livemd`, and its tempo_holidays copy); `tempo_sql`'s move to `~> 2.0` remains, once 2.0.0 is on hex.
 
-## Blocked
-
-* [ ] **A quarter in `to_relative_string/2`** — `unit: :quarter` formats the difference in seconds as quarters ("in 7,948,800 quarters"), as do the weekday units. Blocked on `Localize.DateTime.Relative` scaling them, written up for Localize 2026-09-30; Tempo then needs only a test.
-
 ## Deferred
 
 * [ ] **Set algebra over open-ended windows** — a research project for later (user, 2026-09-28): how far union, intersection, difference, complement and the predicates go on the lazy sets an open-ended window gives, a test of the whole algebra. Questions in [plans/open-ended-set-algebra.md](plans/open-ended-set-algebra.md).
 
 ## Done
 
+* [x] **`to_relative_string/2` counts calendar periods** — Tempo gives Localize the value where its span starts, on its own wall clock and in its own calendar and zone, and `:from` where the value's clock reads it, and Localize counts the unit's periods; Tempo's seconds per month and year are gone. 2026-09-30.
+
+* [x] **A quarter in `to_relative_string/2`** — `unit: :quarter` and the weekday units count calendar quarters and weeks, now that Localize does; tested. 2026-09-30.
+
 * [x] **Networks and schedules in hours** — a network in hours, minutes or seconds counts seconds on the time line (the wall clock, or UTC for zoned bounds) and shows its unit; an hour is elapsed time and a day or longer is measured in its period's zone, a day across a daylight-saving change its 23 or 25 hours. 2026-09-30.
 
 * [x] **A network measures actual lengths** — a year or a month in a network of days is measured by calendar arithmetic from where its period can start, in its calendar, never a mean length; relation delays set the axis, a bound is the span it names, and a week-only or hour network no longer raises (user: actual lengths, 2026-09-30). 2026-09-30.
-
-* [x] **`to_relative_string/2` scales through Localize** — Tempo passes Localize the two instants and the `:unit`, and drops its own seconds per month and year, so a unit rounds as the unit Localize chooses does. 2026-09-30.
 
 * [x] **A domain keeps what its years select** — a run keeps every occurrence its periods select, wherever a window moves it, so a window's anchor year gates it as in date-holidays, and a count counts from the domain's first period, where `R1/{…}` raised; a year in a selection limits the periods as a domain's years do (2026's week 1 Monday is 29 December 2025); the `:within` reach covers numbered weeks and a weekly period's weekdays. 2026-09-30.
 

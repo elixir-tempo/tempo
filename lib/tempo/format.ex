@@ -52,10 +52,16 @@ defmodule Tempo.Format do
 
   alias Localize.DateTime.Relative
   alias Tempo.Compare
+  alias Tempo.FloatingTempoError
+  alias Tempo.Interval
   alias Tempo.Interval.Steps
   alias Tempo.IntervalSet
   alias Tempo.Math
+  alias Tempo.TimeZoneDatabase
   alias Tempo.UnanchoredError
+  alias Tempo.UnknownZoneError
+
+  @time_units [:hour, :minute, :second, :microsecond]
 
   @doc """
   Format a Tempo, Interval, or IntervalSet as a locale-aware
@@ -158,33 +164,107 @@ defmodule Tempo.Format do
   end
 
   defp render_relative(%Tempo{} = tempo, options) do
-    unless Tempo.anchored?(tempo) do
-      raise UnanchoredError.exception(
-              operation: :to_relative_string,
-              value: tempo
-            )
-    end
+    {from, options} = Keyword.pop_lazy(options, :from, &Tempo.utc_now/0)
 
-    {from_tempo, options} = Keyword.pop_lazy(options, :from, &Tempo.utc_now/0)
-
-    # Localize measures the difference between the two instants, and
-    # scales it to the `:unit` asked for or to one it chooses.
-    options = Keyword.put(options, :relative_to, utc_instant(from_tempo))
-
-    case Relative.to_string(utc_instant(tempo), options) do
-      {:ok, string} -> string
+    # Localize counts the unit's calendar periods from the baseline to the
+    # value, in the value's calendar and on the value's wall clock.
+    with {:ok, value, baseline} <- relative_moments(tempo, from, Keyword.get(options, :unit)),
+         {:ok, string} <- Relative.to_string(value, Keyword.put(options, :relative_to, baseline)) do
+      string
+    else
       {:error, exception} -> raise exception
     end
   end
 
-  # A value as the instant Localize measures a relative time from: its UTC
-  # seconds, a floating value read as UTC, to the whole second.
-  defp utc_instant(%Tempo{} = tempo) do
-    tempo
-    |> Compare.to_utc_seconds()
-    |> floor()
-    |> DateTime.from_gregorian_seconds({0, 0}, Calendrical.Gregorian)
+  # The value and the baseline as Localize counts between them, each from
+  # where its span starts. The value is on its own wall clock and in its own
+  # calendar: a date for a day or longer, and a date and time for a finer
+  # value or a finer unit, in its time zone when it names one, so the hours
+  # across a change of offset are the hours that pass. The baseline is where
+  # the value's clock reads it when both are zoned, and its own wall clock
+  # otherwise.
+  defp relative_moments(tempo, from, unit) do
+    with {:ok, tempo} <- anchored(tempo),
+         {:ok, from} <- anchored(from),
+         %Tempo{} = value <- Interval.from(tempo),
+         %Tempo{} = from <- Interval.from(from),
+         kind = span_kind(value, unit),
+         {:ok, moment} <- moment(value, kind, place(value)),
+         {:ok, baseline} <- baseline(from, kind, place(value), place(from)) do
+      {:ok, moment, baseline}
+    end
   end
+
+  defp anchored(%Tempo{} = value) do
+    if Tempo.anchored?(value),
+      do: {:ok, value},
+      else: {:error, UnanchoredError.exception(operation: :to_relative_string, value: value)}
+  end
+
+  defp anchored(other) do
+    {:error, ArgumentError.exception("`:from` must be a Tempo value, got #{inspect(other)}.")}
+  end
+
+  defp moment(value, :date, _place), do: wall_date(value)
+  defp moment(value, :time, {:zone, zone}), do: zoned_datetime(value, zone)
+  defp moment(value, :time, _place), do: wall_datetime(value)
+
+  # A zoned value finer than a day is measured from a baseline on the time
+  # line, which a floating one is not.
+  defp baseline(from, :time, place, :floating) when place != :floating,
+    do: {:error, FloatingTempoError.exception(operation: :to_relative_string, value: from)}
+
+  defp baseline(from, _kind, {:zone, zone}, from_place) when from_place != :floating,
+    do: zoned_datetime(from, zone)
+
+  defp baseline(from, _kind, {:offset, offset}, from_place) when from_place != :floating,
+    do: {:ok, NaiveDateTime.from_gregorian_seconds(utc_seconds(from) + offset)}
+
+  defp baseline(from, _kind, _place, _from_place), do: wall_datetime(from)
+
+  # A value finer than a day, or counted in a unit finer than a day, is a
+  # moment of its day; otherwise it is a date, so 16 June is "in 1 hour"
+  # from 23:00 the day before and "tomorrow" in days.
+  defp span_kind(_value, unit) when unit in @time_units, do: :time
+
+  defp span_kind(value, _unit) do
+    {resolution, _span} = Tempo.resolution(value)
+    if resolution in @time_units, do: :time, else: :date
+  end
+
+  # Where a value's wall clock is: a named zone, a fixed offset in seconds,
+  # or nowhere, for a floating value.
+  defp place(%Tempo{extended: %{zone_id: zone}}) when is_binary(zone), do: {:zone, zone}
+
+  defp place(%Tempo{shift: shift}) when is_list(shift),
+    do: {:offset, Compare.offset_seconds(shift)}
+
+  defp place(%Tempo{}), do: :floating
+
+  # A value's first moment on its own wall clock, in its own calendar.
+  defp wall_datetime(%Tempo{calendar: calendar} = value) do
+    value
+    |> Compare.to_wall_seconds()
+    |> floor()
+    |> NaiveDateTime.from_gregorian_seconds()
+    |> NaiveDateTime.convert(Compare.effective_calendar(calendar))
+  end
+
+  defp wall_date(value) do
+    with {:ok, datetime} <- wall_datetime(value), do: {:ok, NaiveDateTime.to_date(datetime)}
+  end
+
+  # A zoned value's first moment in `zone`, in its own calendar.
+  defp zoned_datetime(%Tempo{calendar: calendar} = value, zone) do
+    utc = DateTime.from_gregorian_seconds(utc_seconds(value))
+
+    case DateTime.shift_zone(utc, zone, TimeZoneDatabase.database()) do
+      {:ok, zoned} -> DateTime.convert(zoned, Compare.effective_calendar(calendar))
+      {:error, _reason} -> {:error, UnknownZoneError.exception(zone_id: zone)}
+    end
+  end
+
+  defp utc_seconds(value), do: value |> Compare.to_utc_seconds() |> floor()
 
   ## ---------------------------------------------------------
   ## Closed-interval expansion for year/month Tempo values

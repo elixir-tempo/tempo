@@ -4892,40 +4892,27 @@ defmodule Tempo do
   defdelegate to_string(value, options \\ []), to: Tempo.Format
 
   @doc """
-  Format a Tempo as a locale-aware relative time string like
-  `"3 hours ago"` or `"in 2 days"`.
+  Format a Tempo as a locale-aware relative time string like `"3 hours ago"` or `"in 2 days"`.
 
-  Routes through Localize's CLDR `relativeTime` patterns. The
-  reference point ("now") comes from `Tempo.utc_now/0` unless
-  overridden with the `:from` option — which makes this safe to
-  use in tests via `Tempo.Clock.Test`.
+  Routes through Localize's CLDR `relativeTime` patterns. The reference point ("now") comes from `Tempo.utc_now/0` unless overridden with the `:from` option — which makes this safe to use in tests via `Tempo.Clock.Test`.
 
-  For intervals, the `:from` endpoint of the interval is used as
-  the target — "the meeting starts in 2 hours" rather than
-  "lasts 2 hours" (for duration phrasing, use `Tempo.to_string/2`
-  on a `Tempo.Duration`).
+  The difference is counted in calendar periods of the value's own calendar, on the value's own wall clock: 1 February is "next month" from 31 January, and a Hebrew date counts Hebrew months. A value is where its span starts. A day or longer is a date, counted in days and longer periods; a finer value, or one counted in hours, minutes or seconds, is a moment of its day, in its time zone when it has one, so the hours across a change of offset are the hours that pass.
+
+  For intervals, the `:from` endpoint of the interval is used as the target — "the meeting starts in 2 hours" rather than "lasts 2 hours" (for duration phrasing, use `Tempo.to_string/2` on a `Tempo.Duration`).
 
   ### Arguments
 
-  * `value` is a `t:t/0` or `t:Tempo.Interval.t/0`. The value
-    must be anchored (have a year component); unanchored values
-    raise `Tempo.UnanchoredError`.
+  * `value` is a `t:t/0` or `t:Tempo.Interval.t/0`. The value must be anchored (have a year component); unanchored values raise `Tempo.UnanchoredError`.
 
   ### Options
 
-  * `:from` is a `t:t/0` — the reference point the output is
-    relative to. Defaults to `Tempo.utc_now/0`.
+  * `:from` is a `t:t/0` — the reference point the output is relative to, from where its span starts. When the value and `:from` are both zoned, `:from` is read on the value's clock, and otherwise on its own. A zoned value finer than a day needs a zoned `:from`; a floating one raises `Tempo.FloatingTempoError`. Defaults to `Tempo.utc_now/0`.
 
-  * `:unit` is the unit to express the difference in (`:second`,
-    `:minute`, `:hour`, `:day`, `:week`, `:month`, `:year`).
-    Localize scales the difference to it and rounds, as it does to
-    the unit it chooses when `:unit` is omitted.
+  * `:unit` is the unit to count in: `:year`, `:quarter`, `:month`, `:week`, `:day`, `:hour`, `:minute`, `:second`, or a weekday from `:mon` to `:sun`. The difference is the number of the unit's calendar periods from `:from` to the value, and weeks and weekdays start on the locale's first day of the week. When `:unit` is omitted, it is the largest unit of which a whole one lies between them.
 
-  * `:format` is `:standard`, `:narrow`, or `:short`. Defaults to
-    `:standard`.
+  * `:format` is `:standard`, `:narrow`, or `:short`. Defaults to `:standard`.
 
-  * `:locale` is a CLDR locale. Defaults to Localize's configured
-    default.
+  * `:locale` is a CLDR locale. Defaults to Localize's configured default.
 
   ### Returns
 
@@ -4941,13 +4928,14 @@ defmodule Tempo do
       iex> Tempo.to_relative_string(~o"2026-06-15T15:00:00Z", from: now)
       "in 3 hours"
 
-      iex> now = Tempo.from_iso8601!("2026-06-15T12:00:00Z")
-      iex> Tempo.to_relative_string(~o"2026-06-10T12:00:00Z", from: now)
-      "5 days ago"
+      iex> Tempo.to_relative_string(~o"2026-02-01", from: ~o"2026-01-31", unit: :month)
+      "next month"
 
-      iex> now = Tempo.from_iso8601!("2026-07-01T00:00:00Z")
-      iex> Tempo.to_relative_string(~o"2026-08-20T00:00:00Z", from: now, unit: :month)
-      "in 2 months"
+  Rosh Hashanah 5787 is the day after 11 September 2026, and in the Hebrew calendar it is next year:
+
+      iex> new_year = Tempo.from_iso8601!("5787-01-01[u-ca=hebrew]")
+      iex> Tempo.to_relative_string(new_year, from: ~o"2026-09-11", unit: :year)
+      "next year"
 
   """
   @spec to_relative_string(t() | Tempo.Interval.t(), keyword()) :: String.t()
