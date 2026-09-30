@@ -3,7 +3,10 @@ defmodule Tempo.Inspect do
 
   import Kernel, except: [inspect: 1]
 
+  alias Calendrical.Gregorian
   alias Localize.Validity.U
+  alias Tempo.Compare
+  alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.Iso8601EncodeError
   alias Tempo.Math
@@ -26,7 +29,144 @@ defmodule Tempo.Inspect do
 
   """
   @spec to_iodata(term()) :: iodata()
-  def to_iodata(value), do: inspect_value(value)
+  def to_iodata(value), do: value |> with_calendar_names() |> inspect_value()
+
+  @doc """
+  The calendar in a Tempo value that ISO 8601 cannot write: one with no IXDTF
+  identifier that reads back as it — a fiscal or composite calendar built at
+  run time, or a consumer's own — whose dates the Gregorian calendar numbers
+  differently, so the unnamed form would read back as other days. `nil` when
+  the value has none.
+  """
+  @spec unnamed_calendar(term()) :: module() | nil
+  def unnamed_calendar(value) do
+    value
+    |> unnamed_values()
+    |> Enum.find_value(fn tempo -> if not reads_as_gregorian?(tempo), do: tempo.calendar end)
+  end
+
+  defp unnamed_values(value),
+    do: value |> named_values() |> Enum.filter(&(calendar_name(&1) == :unnamed))
+
+  # A value in a calendar without a name reads back as Gregorian, which names
+  # the same days when the two number them alike from where its span starts —
+  # a calendar that differs only in its week, say. A value without a year
+  # names no days in any calendar, and a week-based calendar's weeks are not
+  # Gregorian months.
+  defp reads_as_gregorian?(%Tempo{calendar: calendar} = tempo) do
+    cond do
+      not Tempo.anchored?(tempo) -> true
+      week_based?(calendar) -> false
+      true -> same_start_in_gregorian?(tempo)
+    end
+  end
+
+  defp same_start_in_gregorian?(tempo) do
+    with %Tempo{time: time} = start <- Interval.from(tempo),
+         true <- gregorian_date?(time) do
+      Compare.to_wall_seconds(start) ==
+        Compare.to_wall_seconds(%{start | calendar: Calendrical.Gregorian})
+    else
+      _other -> false
+    end
+  end
+
+  defp gregorian_date?(time) do
+    case {Keyword.get(time, :year), Keyword.get(time, :month, 1), Keyword.get(time, :day, 1)} do
+      {year, month, day} when is_integer(year) and is_integer(month) and is_integer(day) ->
+        Gregorian.valid_date?(year, month, day)
+
+      _not_a_date ->
+        false
+    end
+  end
+
+  # Every value's calendar is written as the IXDTF identifier that reads back
+  # as it, so a value in another calendar round-trips however it was made:
+  # parsed with `[u-ca=…]`, converted with `Tempo.to_calendar/2`, or built
+  # from an Elixir date. The top-level value, an interval's endpoints and a
+  # set's members carry it; a selection's own values and a recurrence's rule
+  # take theirs from the value around them.
+  defp with_calendar_names(%Tempo{} = tempo), do: with_calendar_name(tempo)
+
+  defp with_calendar_names(%Tempo.Interval{from: from, to: to} = interval),
+    do: %{interval | from: with_calendar_names(from), to: with_calendar_names(to)}
+
+  defp with_calendar_names(%Tempo.Set{set: members} = set),
+    do: %{set | set: Enum.map(members, &with_calendar_names/1)}
+
+  defp with_calendar_names(value), do: value
+
+  defp named_values(%Tempo{} = tempo), do: [tempo]
+
+  defp named_values(%Tempo.Interval{from: from, to: to}),
+    do: named_values(from) ++ named_values(to)
+
+  defp named_values(%Tempo.Set{set: members}), do: Enum.flat_map(members, &named_values/1)
+  defp named_values(_value), do: []
+
+  defp with_calendar_name(%Tempo{} = tempo) do
+    case calendar_name(tempo) do
+      :unnamed -> put_calendar_name(tempo, nil)
+      name -> put_calendar_name(tempo, name)
+    end
+  end
+
+  # The identifier a value's calendar is written as: the one it was parsed
+  # with when that names the same calendar, none for the Gregorian and ISO
+  # week calendars (a week date is its own notation), or else the name in
+  # Calendrical's registry or the CLDR calendar type — whichever reads back as
+  # this calendar, since several calendars share a CLDR type.
+  defp calendar_name(%Tempo{calendar: calendar, extended: extended}) do
+    calendar = calendar || Calendrical.Gregorian
+    parsed = extended && Map.get(extended, :calendar)
+
+    cond do
+      is_atom(parsed) and not is_nil(parsed) and names?(parsed, calendar) -> parsed
+      calendar in [Calendrical.Gregorian, Calendrical.ISOWeek] -> nil
+      true -> faithful_name(calendar)
+    end
+  end
+
+  defp week_based?(calendar) do
+    Code.ensure_loaded?(calendar) and function_exported?(calendar, :calendar_base, 0) and
+      calendar.calendar_base() == :week
+  end
+
+  defp faithful_name(calendar) do
+    [additional_calendar_module_name(calendar), cldr_calendar_type(calendar)]
+    |> Enum.find_value(:unnamed, fn
+      {:ok, name} -> if names?(name, calendar), do: name
+      :error -> nil
+    end)
+  end
+
+  defp names?(name, calendar),
+    do: Calendrical.calendar_from_cldr_calendar_type(name) == {:ok, calendar}
+
+  defp cldr_calendar_type(calendar) do
+    if Code.ensure_loaded?(calendar) and function_exported?(calendar, :cldr_calendar_type, 0),
+      do: {:ok, calendar.cldr_calendar_type()},
+      else: :error
+  end
+
+  defp put_calendar_name(%Tempo{extended: nil} = tempo, nil), do: tempo
+
+  defp put_calendar_name(%Tempo{extended: nil} = tempo, name) do
+    %{
+      tempo
+      | extended: %{
+          zone_id: nil,
+          zone_offset: nil,
+          calendar: name,
+          zone_critical: false,
+          tags: %{}
+        }
+    }
+  end
+
+  defp put_calendar_name(%Tempo{extended: extended} = tempo, name),
+    do: %{tempo | extended: Map.put(extended, :calendar, name)}
 
   @doc """
   The construct in a Tempo value that has no ISO 8601 form, found before
@@ -52,12 +192,13 @@ defmodule Tempo.Inspect do
   defp unencodable_in(%Tempo{} = tempo), do: unencodable(tempo)
   defp unencodable_in(_value), do: nil
 
-  # Inspect wraps `Tempo.to_iso8601/1` in sigil syntax. Keeping
-  # encoding in one place — `Tempo.to_iso8601/1` — means the
+  # Inspect wraps the encoding `Tempo.to_iso8601/1` writes in sigil
+  # syntax. Keeping encoding in one place — `to_iodata/1` — means the
   # Inspect output is guaranteed to round-trip through
   # `Tempo.from_iso8601/1` for the Gregorian and ISO-week cases,
   # and through the equivalent `Tempo.from_iso8601!/2` call for
-  # non-default calendars.
+  # non-default calendars, which also covers a calendar ISO 8601
+  # cannot name and `Tempo.to_iso8601/1` refuses.
 
   # Metadata is not part of the ISO 8601 form, so — as for an interval — it
   # shows as a decoration outside the sigil body, which still re-parses.
@@ -84,8 +225,10 @@ defmodule Tempo.Inspect do
   end
 
   def inspect(%Tempo.Interval{} = interval) do
+    rendering = interval_rendering(interval)
+
     encoded(interval, "Tempo.Interval", fn iso8601 ->
-      body = @sigil_o <> iso8601 <> "\""
+      body = rendering.(iso8601)
 
       case interval_tags(interval) do
         "" -> body
@@ -104,10 +247,24 @@ defmodule Tempo.Inspect do
 
   # A value with no ISO 8601 form (a cron nearest-weekday recurrence) cannot be
   # rendered as a sigil that parses back, so it shows as a labelled struct view.
+  # A calendar ISO 8601 cannot name is no obstacle here: the rendering names
+  # its module.
   defp encoded(value, tag, render) do
-    case Tempo.to_iso8601(value) do
-      {:ok, iso8601} -> render.(iso8601)
-      {:error, _reason} -> "#" <> tag <> "<not ISO 8601 expressible>"
+    case unencodable(value) do
+      nil -> value |> to_iodata() |> IO.iodata_to_binary() |> render.()
+      _construct -> "#" <> tag <> "<not ISO 8601 expressible>"
+    end
+  end
+
+  # An interval in a calendar ISO 8601 cannot name reads back only with that
+  # calendar given, as a value in any calendar but the defaults is shown.
+  defp interval_rendering(interval) do
+    case unnamed_values(interval) do
+      [] ->
+        &(@sigil_o <> &1 <> "\"")
+
+      [%Tempo{calendar: calendar} | _rest] ->
+        &(@from_iso8601 <> &1 <> "\", " <> Kernel.inspect(calendar) <> ")")
     end
   end
 

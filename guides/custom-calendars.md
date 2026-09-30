@@ -15,7 +15,7 @@ The US federal fiscal year runs October → September. Calendrical ships the fis
 {:ok, fiscal_months} = Tempo.to_interval(fiscal_2026)
 
 Enum.count(fiscal_months)                       #=> 12
-fiscal_months |> Enum.at(0) #=> ~o"2026Y1M"
+fiscal_months |> Enum.at(0) #=> Tempo.from_iso8601!("2026Y1M", Calendrical.FiscalYear.US)
 ```
 
 > *"Fiscal year 2026 is twelve fiscal months; iterating it walks them in order."*
@@ -60,6 +60,19 @@ Tempo.relation(Tempo.from_iso8601!("2026-01-01", academic), ~o"2025-09-01")  #=>
 ```
 
 > *"Academic year 2026 begins on the 1st of September, 2025."*
+
+## Writing them down
+
+ISO 8601 writes a calendar other than the Gregorian with an IXDTF `[u-ca=…]` suffix, and that names only the CLDR calendars and the ones Calendrical registers. A fiscal, retail or academic calendar built at run time has no name there, so `Tempo.to_iso8601/1` returns an error rather than a string that would read back as other days, and the inspected form names the calendar module instead:
+
+```elixir
+term_start = Tempo.from_iso8601!("2026-01-01", academic)
+
+Tempo.to_iso8601(term_start)  #=> {:error, %Tempo.Iso8601EncodeError{construct: :calendar, …}}
+term_start                    #=> Tempo.from_iso8601!("2026Y1M1D", MyApp.Academic)
+```
+
+> *"The first day of academic year 2026 has no ISO 8601 form of its own, so it is written with its calendar named."*
 
 ## What ties them together
 

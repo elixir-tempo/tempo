@@ -133,17 +133,22 @@ defmodule Tempo.RRuleByMonthExpansionTest do
 
     test "a day-30 DTSTART clamps to each year's own month length" do
       assert hebrew_expand("FREQ=YEARLY;BYMONTH=2;COUNT=4", "5786-05-30") ==
-               ["5787Y2M30D", "5788Y2M30D", "5789Y2M29D", "5790Y2M29D"]
+               [
+                 "5787Y2M30D[u-ca=hebrew]",
+                 "5788Y2M30D[u-ca=hebrew]",
+                 "5789Y2M29D[u-ca=hebrew]",
+                 "5790Y2M29D[u-ca=hebrew]"
+               ]
     end
 
     test "BYMONTHDAY overrides a day-30 DTSTART in every year" do
       assert hebrew_expand("FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=10;COUNT=3", "5786-05-30") ==
-               ["5787Y4M10D", "5788Y4M10D", "5789Y4M10D"]
+               ["5787Y4M10D[u-ca=hebrew]", "5788Y4M10D[u-ca=hebrew]", "5789Y4M10D[u-ca=hebrew]"]
     end
 
     test "a leap month only occurs in leap years — dropped, not clamped" do
       assert hebrew_expand("FREQ=YEARLY;BYMONTH=13;BYMONTHDAY=5;COUNT=3", "5786-05-30") ==
-               ["5787Y13M5D", "5790Y13M5D", "5793Y13M5D"]
+               ["5787Y13M5D[u-ca=hebrew]", "5790Y13M5D[u-ca=hebrew]", "5793Y13M5D[u-ca=hebrew]"]
     end
   end
 end

@@ -17,13 +17,16 @@ defmodule Tempo.Iso8601EncodeError do
   resolved set, so interleaved weekday/position cannot be written — and
   round-trips only through its RRULE string via `Tempo.RRule.to_string/1`.
 
+  A value in a calendar ISO 8601 cannot name has no form either: IXDTF's `[u-ca=…]` names the CLDR calendars and Calendrical's registered ones, so a fiscal or composite calendar built at run time, or a consumer's own, would read back as another calendar. The error's `:calendar` is that calendar.
+
   """
 
-  defexception [:construct, :value]
+  defexception [:construct, :value, :calendar]
 
   @type t :: %__MODULE__{
           construct: atom() | nil,
-          value: term() | nil
+          value: term() | nil,
+          calendar: module() | nil
         }
 
   @impl true
@@ -58,6 +61,12 @@ defmodule Tempo.Iso8601EncodeError do
   def message(%__MODULE__{construct: :conditional}) do
     "Cannot encode a conditional member of a recurrence set as ISO 8601 — its " <>
       "condition has no ISO 8601 form. Its `member` can be encoded."
+  end
+
+  def message(%__MODULE__{construct: :calendar, calendar: calendar}) do
+    "Cannot encode a value in #{inspect(calendar)} as ISO 8601 — IXDTF's " <>
+      "`[u-ca=…]` names no such calendar, so the value would read back in another. " <>
+      "Convert it with `Tempo.to_calendar/2` first."
   end
 
   def message(%__MODULE__{construct: :value, value: value}) do

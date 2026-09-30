@@ -587,7 +587,7 @@ iex> Tempo.Interval.to(june)
 
 ## Writing ISO 8601 returns a tuple
 
-`Tempo.to_iso8601/1` returns `{:ok, string}`, as `from_iso8601/2` returns `{:ok, value}`, and an error for a value ISO 8601 has no form for: a set of intervals or of recurrences, a conditional member, a cron nearest weekday, or anything that is not a Tempo value. 1.x returned the string and raised for those. `to_iso8601!/1` returns the string.
+`Tempo.to_iso8601/1` returns `{:ok, string}`, as `from_iso8601/2` returns `{:ok, value}`, and an error for a value ISO 8601 has no form for: a set of intervals or of recurrences, a conditional member, a cron nearest weekday, a value in a calendar IXDTF cannot name (a fiscal year, say), or anything that is not a Tempo value. 1.x returned the string and raised for those, and wrote a value in another calendar without its calendar unless it had been parsed with one. `to_iso8601!/1` returns the string.
 
 <!-- guides:skip -->
 

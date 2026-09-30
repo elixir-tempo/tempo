@@ -195,6 +195,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.shift_zone/2` keeps a value in its own calendar, with its calendar annotation, tags, metadata and qualification, where it wrote the Gregorian wall clock under the value's calendar and dropped the rest.
 
+* `Tempo.to_iso8601/1` writes a value's calendar however the value was made, so a Hebrew date from `Tempo.to_calendar/2` reads back as Hebrew, where it read back as Gregorian; a calendar IXDTF cannot name whose days the Gregorian calendar numbers differently, such as a fiscal year, is an error.
+
 * A network's relation delays set its axis, so a six-month gap between year-dated periods is six months, where it rounded to a year, and a bound on a finer axis is the span it names, so `{:not_after, ~o"1300Y"}` allows all of 1300. A network counting only weeks is placed in days, where it raised.
 
 * `Tempo.Schedule.span/1` returns an error for a plan with no tasks or no fixed start, where it raised.

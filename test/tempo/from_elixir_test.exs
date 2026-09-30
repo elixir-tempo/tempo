@@ -300,7 +300,7 @@ defmodule Tempo.FromElixir.Test do
       {:ok, converted} =
         Tempo.to_calendar(~o"2026-06-15/2026-06-16", Calendrical.Hebrew)
 
-      assert Tempo.to_iso8601!(converted) == "5786Y9M30D/10M1D"
+      assert Tempo.to_iso8601!(converted) == "5786Y9M30D/10M1D[u-ca=hebrew]"
     end
 
     test "a fiscal quarter reads back as the Gregorian dates it covers" do
@@ -333,7 +333,7 @@ defmodule Tempo.FromElixir.Test do
     test "an unbounded end stays unbounded" do
       {:ok, converted} = Tempo.to_calendar(~o"2026-06-15/..", Calendrical.Hebrew)
 
-      assert Tempo.to_iso8601!(Interval.from(converted)) == "5786Y9M30D"
+      assert Tempo.to_iso8601!(Interval.from(converted)) == "5786Y9M30D[u-ca=hebrew]"
       assert Interval.to(converted) in [nil, :undefined]
     end
 
@@ -353,7 +353,7 @@ defmodule Tempo.FromElixir.Test do
 
       assert IntervalSet.count(converted) == 2
       assert [first, _second] = IntervalSet.members(converted)
-      assert Tempo.to_iso8601!(first) == "5786Y9M30D/10M1D"
+      assert Tempo.to_iso8601!(first) == "5786Y9M30D/10M1D[u-ca=hebrew]"
     end
 
     test "one unconvertible member fails the whole set" do

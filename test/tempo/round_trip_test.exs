@@ -1,6 +1,7 @@
 defmodule Tempo.RoundTripTest do
   use ExUnit.Case, async: true
 
+  alias Calendrical.FiscalYear
   alias Tempo.Cron
   alias Tempo.RecurrenceSet
   alias Tempo.RRule
@@ -301,6 +302,96 @@ defmodule Tempo.RoundTripTest do
       end
 
       assert Tempo.to_iso8601!(Tempo.from_iso8601!("2022-06-15")) == "2022Y6M15D"
+    end
+  end
+
+  defmodule SundayStart do
+    use Calendrical.Base.Month,
+      month_of_year: 1,
+      min_days_in_first_week: 1,
+      day_of_week: Calendrical.sunday()
+  end
+
+  describe "a value in another calendar reads back in it, however it was made" do
+    defp read_back(value), do: value |> Tempo.to_iso8601!() |> Tempo.from_iso8601!()
+
+    test "converted, built from an Elixir date, built with a calendar and parsed with one" do
+      for value <- [
+            Tempo.to_calendar!(Tempo.from_iso8601!("2026-06-15"), Calendrical.Hebrew),
+            Tempo.from_elixir(Date.new!(5786, 9, 30, Calendrical.Hebrew)),
+            Tempo.new!(year: 5786, month: 9, day: 30, calendar: Calendrical.Hebrew),
+            Tempo.from_iso8601!("5786-09-30", Calendrical.Hebrew)
+          ] do
+        assert Tempo.to_iso8601!(value) == "5786Y9M30D[u-ca=hebrew]"
+
+        back = read_back(value)
+        assert {back.calendar, back.time} == {Calendrical.Hebrew, value.time}
+      end
+    end
+
+    test "a calendar sharing its CLDR type with another is written by the name that reads back" do
+      julian = Tempo.to_calendar!(Tempo.from_iso8601!("2026-06-15"), Calendrical.Julian)
+      assert Tempo.to_iso8601!(julian) == "2026Y6M2D[u-ca=julian]"
+      assert read_back(julian).calendar == Calendrical.Julian
+
+      # The Vietnamese calendar's CLDR type is the Chinese calendar's.
+      vietnamese = Tempo.to_calendar!(Tempo.from_iso8601!("2026-06-15"), Calendrical.Vietnamese)
+      assert read_back(vietnamese).calendar == Calendrical.Vietnamese
+    end
+
+    test "a zoned value and an interval" do
+      zoned =
+        Tempo.new!(
+          year: 5786,
+          month: 9,
+          day: 30,
+          hour: 10,
+          calendar: Calendrical.Hebrew,
+          zone: "Asia/Jerusalem"
+        )
+
+      back = read_back(zoned)
+
+      assert {back.calendar, back.time, back.extended.zone_id} ==
+               {Calendrical.Hebrew, zoned.time, "Asia/Jerusalem"}
+
+      interval =
+        Tempo.to_calendar!(Tempo.from_iso8601!("2026-06-15/2026-06-20"), Calendrical.Hebrew)
+
+      assert Tempo.to_iso8601!(interval) == "5786Y9M30D/10M5D[u-ca=hebrew]"
+      assert inspect(interval) == ~s|~o"5786Y9M30D/10M5D[u-ca=hebrew]"|
+
+      back = read_back(interval)
+      assert {back.from.calendar, back.to.calendar} == {Calendrical.Hebrew, Calendrical.Hebrew}
+    end
+
+    test "an annotation naming another calendar than the value's is not written" do
+      # An explicit calendar wins over the parsed `[u-ca=hebrew]`, so the
+      # value is the Gregorian year 5786.
+      value = Tempo.from_iso8601!("5786-09-30[u-ca=hebrew]", Calendrical.Gregorian)
+
+      assert Tempo.to_iso8601!(value) == "5786Y9M30D"
+      assert read_back(value).calendar == Calendrical.Gregorian
+    end
+
+    test "a calendar that numbers its days as the Gregorian does needs no name" do
+      sunday = Tempo.from_iso8601!("2026-08-16", SundayStart)
+
+      assert Tempo.to_iso8601!(sunday) == "2026Y8M16D"
+    end
+
+    test "a calendar ISO 8601 cannot name is an error, and inspect names its module" do
+      {:ok, fiscal} = FiscalYear.calendar_for(:AU)
+      {:ok, quarter} = Tempo.from_elixir(fiscal.quarter(2027, 1))
+
+      assert {:error, %Tempo.Iso8601EncodeError{construct: :calendar, calendar: ^fiscal} = error} =
+               Tempo.to_iso8601(quarter)
+
+      assert Exception.message(error) =~ inspect(fiscal)
+      assert_raise Tempo.Iso8601EncodeError, fn -> Tempo.to_iso8601!(quarter) end
+
+      {read_back, _binding} = Code.eval_string(inspect(quarter))
+      assert read_back == quarter
     end
   end
 end

@@ -1723,6 +1723,8 @@ defmodule Tempo do
   a zoned or calendar-tagged value round-trips too. An interval's
   `:unit` and `:metadata` have no ISO 8601 form and are not written.
 
+  A value in a calendar other than the Gregorian is written with the identifier that reads back as its calendar, however the value was made: parsed with one, converted with `to_calendar/2`, or built from an Elixir date.
+
   ### Arguments
 
   * `value` is a `t:Tempo.t/0`, `t:Tempo.Interval.t/0`,
@@ -1735,8 +1737,10 @@ defmodule Tempo do
 
   * `{:error, %Tempo.Iso8601EncodeError{}}` for a value with no ISO 8601
     form: an interval set, a recurrence set, a conditional member, anything
-    that is not a Tempo value, or a value holding a cron nearest-weekday or
-    an ordinal BYDAY across distinct weekdays.
+    that is not a Tempo value, a value holding a cron nearest-weekday or
+    an ordinal BYDAY across distinct weekdays, or a value in a calendar IXDTF
+    cannot name (a fiscal year, say) whose dates the Gregorian calendar
+    numbers differently.
 
   ### Examples
 
@@ -1750,6 +1754,9 @@ defmodule Tempo do
       iex> Tempo.to_iso8601(i)
       {:ok, "1984Y?/2004Y~"}
 
+      iex> Tempo.to_calendar!(~o"2026-06-15", Calendrical.Hebrew) |> Tempo.to_iso8601()
+      {:ok, "5786Y9M30D[u-ca=hebrew]"}
+
       iex> holidays = Tempo.RecurrenceSet.new!([~o"R/../P1Y/FL12M25DN", ~o"R/../P1Y/FL1M1DN"])
       iex> {:error, error} = Tempo.to_iso8601(holidays)
       iex> Exception.message(error) =~ "no form for a set of recurrences"
@@ -1758,9 +1765,16 @@ defmodule Tempo do
   """
   @spec to_iso8601(term()) :: {:ok, String.t()} | {:error, Iso8601EncodeError.t()}
   def to_iso8601(%struct{} = value) when struct in [Tempo, Interval, Duration, Tempo.Set] do
-    case Tempo.Inspect.unencodable(value) do
-      nil -> {:ok, value |> Tempo.Inspect.to_iodata() |> IO.iodata_to_binary()}
-      construct -> {:error, Iso8601EncodeError.exception(construct: construct, value: value)}
+    with nil <- Tempo.Inspect.unencodable(value),
+         nil <- Tempo.Inspect.unnamed_calendar(value) do
+      {:ok, value |> Tempo.Inspect.to_iodata() |> IO.iodata_to_binary()}
+    else
+      construct when construct in [:byday, :nearest_weekday] ->
+        {:error, Iso8601EncodeError.exception(construct: construct, value: value)}
+
+      calendar ->
+        {:error,
+         Iso8601EncodeError.exception(construct: :calendar, value: value, calendar: calendar)}
     end
   end
 
@@ -3661,7 +3675,7 @@ defmodule Tempo do
       iex> {:ok, set} = Tempo.IntervalSet.new([~o"2026-06-15/2026-06-16"])
       iex> {:ok, hebrew} = Tempo.to_calendar(set, Calendrical.Hebrew)
       iex> hebrew |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
-      ["5786Y9M30D/10M1D"]
+      ["5786Y9M30D/10M1D[u-ca=hebrew]"]
 
   """
   @spec to_calendar(t() | Interval.t() | IntervalSet.t(), module()) ::
