@@ -130,13 +130,13 @@ defmodule Tempo.FromElixir.Test do
       assert tempo.extended.zone_id == "Etc/UTC"
     end
 
-    test "zoned datetime carries zone_id and offset" do
+    test "a zoned datetime carries its zone, and its offset as its shift" do
       dt = DateTime.new!(~D[2022-06-15], ~T[10:30:00], "Europe/Paris")
       tempo = Tempo.from_elixir(dt)
       assert tempo.extended.zone_id == "Europe/Paris"
       # June is summer time (CEST = UTC+2).
       assert tempo.shift == [hour: 2]
-      assert tempo.extended.zone_offset == 120
+      assert Tempo.to_iso8601!(tempo) == "2022Y6M15DT10H30M0SZ+2H[Europe/Paris]"
     end
 
     test "negative offset (America/New_York winter)" do
@@ -144,7 +144,7 @@ defmodule Tempo.FromElixir.Test do
       tempo = Tempo.from_elixir(dt)
       # EST = UTC-5.
       assert tempo.shift == [hour: -5]
-      assert tempo.extended.zone_offset == -300
+      assert Tempo.to_iso8601!(tempo) == "2022Y12M25DT14H0M0SZ-5H[America/New_York]"
     end
 
     test "midnight UTC is second resolution (not coarsened to :day)" do

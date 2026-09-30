@@ -322,7 +322,12 @@ defmodule Tempo.Inspect do
   defp zone_id_trailer(_), do: []
 
   # An IXDTF numeric offset (`[+08:45]`) is stored as signed minutes from UTC;
-  # render it back in the bracketed `[±HH:MM]` form so it round-trips.
+  # render it back in the bracketed `[±HH:MM]` form so it round-trips. It is a
+  # time zone annotation, and RFC 9557 gives a value one, so beside a zone
+  # name it is not written: the value's offset is its shift.
+  defp zone_offset_trailer(%{zone_id: zone_id}) when is_binary(zone_id) and zone_id != "",
+    do: []
+
   defp zone_offset_trailer(%{zone_offset: minutes}) when is_integer(minutes) do
     sign = if minutes < 0, do: "-", else: "+"
     absolute = abs(minutes)

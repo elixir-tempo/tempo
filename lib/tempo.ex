@@ -2152,7 +2152,7 @@ defmodule Tempo do
       calendar: tempo_calendar,
       extended: %{
         zone_id: time_zone,
-        zone_offset: div(total_offset, 60),
+        zone_offset: nil,
         calendar: nil,
         zone_critical: false,
         tags: %{}
@@ -3682,18 +3682,23 @@ defmodule Tempo do
 
   # On a DST fall-back the same wall time occurs at two offsets;
   # pick the candidate whose total offset matches the offset the
-  # Tempo recorded (`extended.zone_offset`, in minutes). Falls back
-  # to the first (pre-transition, higher-offset) candidate.
+  # Tempo recorded — an offset annotation (`extended.zone_offset`,
+  # in minutes) or its UTC offset (`shift`). Falls back to the first
+  # (pre-transition, higher-offset) candidate.
   defp disambiguate_fold(first, second, %Tempo{extended: %{zone_offset: minutes}})
-       when is_integer(minutes) do
-    target_seconds = minutes * 60
+       when is_integer(minutes),
+       do: fold_at_offset(first, second, minutes * 60)
 
-    Enum.find([first, second], first, fn dt ->
-      dt.utc_offset + dt.std_offset == target_seconds
-    end)
-  end
+  defp disambiguate_fold(first, second, %Tempo{shift: shift}) when is_list(shift),
+    do: fold_at_offset(first, second, Compare.offset_seconds(shift))
 
   defp disambiguate_fold(first, _second, _tempo), do: first
+
+  defp fold_at_offset(first, second, offset_seconds) do
+    Enum.find([first, second], first, fn dt ->
+      dt.utc_offset + dt.std_offset == offset_seconds
+    end)
+  end
 
   @doc """
   Convert a day-resolution value from its current calendar into
@@ -4341,7 +4346,7 @@ defmodule Tempo do
          | time: time,
            shift: Zone.offset_to_shift(offset),
            calendar: calendar,
-           extended: in_zone_extended(tempo.extended, target_zone, offset)
+           extended: in_zone_extended(tempo.extended, target_zone)
        }}
     end
   end
@@ -4388,12 +4393,13 @@ defmodule Tempo do
     end
   end
 
-  # The value's annotations with `zone` and its offset in place of its own
-  # zone. A critical flag belonged to the zone it replaces.
-  defp in_zone_extended(extended, zone, offset) do
+  # The value's annotations with `zone` in place of its own zone or offset
+  # annotation: RFC 9557 gives a value one, and its offset is its shift. A
+  # critical flag belonged to the zone it replaces.
+  defp in_zone_extended(extended, zone) do
     Map.merge(
       extended || %{calendar: nil, tags: %{}},
-      %{zone_id: zone, zone_offset: div(offset, 60), zone_critical: false}
+      %{zone_id: zone, zone_offset: nil, zone_critical: false}
     )
   end
 

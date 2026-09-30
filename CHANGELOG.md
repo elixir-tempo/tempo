@@ -195,6 +195,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.shift_zone/2` keeps a value in its own calendar, with its calendar annotation, tags, metadata and qualification, where it wrote the Gregorian wall clock under the value's calendar and dropped the rest.
 
+* `Tempo.shift_zone/2`, `now/1`, `utc_now/0` and `from_elixir/1` of a `DateTime` write one time zone annotation, `2026Y3M8DT9H0M0SZ-4H[America/New_York]`, as RFC 9557 allows, where they added the offset as a second (`[-05:00]`) that went stale when the value was shifted across a change of offset.
+
 * `Tempo.to_iso8601/1` writes a value's calendar however the value was made, so a Hebrew date from `Tempo.to_calendar/2` reads back as Hebrew, where it read back as Gregorian; a calendar IXDTF cannot name whose days the Gregorian calendar numbers differently, such as a fiscal year, is an error.
 
 * A week-based calendar's value (the ISO week or NRF calendar's, or a retail one's) has ISO 8601's week date shape however it is made, and `Tempo.to_iso8601/1` writes it as ISO 8601-2's `2026Y25W2K[u-ca=iso-week]`, which reads back, where it wrote `2026Y25W2D` or `2026Y25M2D`. Such values compare, shift by days and weeks, round and convert, where comparing a parsed one raised, and a month added to any week date is an error, where it raised.

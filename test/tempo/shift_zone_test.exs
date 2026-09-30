@@ -1,6 +1,8 @@
 defmodule Tempo.ShiftZoneTest do
   use ExUnit.Case, async: true
 
+  import Tempo.Sigils
+
   alias Tempo.Compare
 
   describe "Tempo.shift_zone/2" do
@@ -121,6 +123,48 @@ defmodule Tempo.ShiftZoneTest do
 
       assert Keyword.take(utc.time, [:year, :month, :day, :hour]) ==
                [year: 1448, month: 3, day: 15, hour: 7]
+    end
+  end
+
+  describe "one time zone annotation, as RFC 9557 gives a value" do
+    test "a shifted value, the current time and a DateTime's value name their zone alone" do
+      paris = Tempo.from_iso8601!("2026-06-15T14:00:00[Europe/Paris]")
+      {:ok, new_york} = Tempo.shift_zone(paris, "America/New_York")
+      winter = DateTime.new!(~D[2026-03-07], ~T[09:00:00], "America/New_York")
+
+      assert Tempo.to_iso8601!(new_york) == "2026Y6M15DT8H0M0SZ-4H[America/New_York]"
+
+      assert Tempo.to_iso8601!(Tempo.from_elixir(winter)) ==
+               "2026Y3M7DT9H0M0SZ-5H[America/New_York]"
+
+      assert Tempo.to_iso8601!(Tempo.utc_now()) =~ ~r/Z\[Etc\/UTC\]$/
+    end
+
+    test "the offset follows the value across a change of offset" do
+      winter = Tempo.from_elixir(DateTime.new!(~D[2026-03-07], ~T[09:00:00], "America/New_York"))
+
+      assert Tempo.to_iso8601!(Tempo.shift(winter, ~o"P1D")) ==
+               "2026Y3M8DT9H0M0SZ-4H[America/New_York]"
+    end
+
+    test "the second of two equal wall times keeps its offset" do
+      # 01:30 happens twice in New York on 1 November 2026: EDT, then EST.
+      {:ambiguous, _first, second} =
+        DateTime.new(~D[2026-11-01], ~T[01:30:00], "America/New_York")
+
+      {:ok, round_trip} = second |> Tempo.from_elixir() |> Tempo.to_datetime()
+
+      assert round_trip.utc_offset + round_trip.std_offset == -5 * 3600
+    end
+
+    test "an offset annotation is written alone, and beside a zone name not at all" do
+      assert Tempo.to_iso8601!(Tempo.from_iso8601!("2026-06-15T14:00:00[+08:45]")) ==
+               "2026Y6M15DT14H0M0S[+08:45]"
+
+      paris = Tempo.from_iso8601!("2026-06-15T14:00:00+02:00[Europe/Paris]")
+      both = %{paris | extended: %{paris.extended | zone_offset: 120}}
+
+      assert Tempo.to_iso8601!(both) == "2026Y6M15DT14H0M0SZ+2H0M[Europe/Paris]"
     end
   end
 
