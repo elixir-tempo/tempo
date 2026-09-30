@@ -303,7 +303,8 @@ defmodule Tempo.Validation do
   #     day of the ISO 8601 week, as a `[year, month, day]` value.
   #
   #   * `:week`-based (`Calendrical.ISOWeek` and the week-based fiscal
-  #     calendars) — keep the native `[year, week, day]` shape.
+  #     calendars) — keep the `[year, week, day_of_week]` shape, the
+  #     calendar's own week and day.
   def resolve([{:year, year}, {:week, week}, {:day_of_week, day} | rest], calendar)
       when is_integer(year) and is_integer(week) and is_integer(day) do
     with {:ok, week} <- conform(week, 1..iso_weeks_in_year(year, calendar)//1),
@@ -925,7 +926,7 @@ defmodule Tempo.Validation do
   end
 
   def year_week_day(year, week, day, rest, :week, calendar) do
-    prepend_year(year, resolve([{:week, week}, {:day, day} | rest], calendar))
+    prepend_year(year, resolve([{:week, week}, {:day_of_week, day} | rest], calendar))
   end
 
   defp prepend_year(_year, {:error, reason}), do: {:error, reason}

@@ -7,8 +7,8 @@ defmodule Tempo.Split do
     {[{:year, year}, {:month, month}, {:day, day}], time_of_day}
   end
 
-  def split([{:year, year}, {:week, week}, {:day, day} | time_of_day]) do
-    {[{:year, year}, {:week, week}, {:day, day}], time_of_day}
+  def split([{:year, year}, {:week, week}, {:day_of_week, day} | time_of_day]) do
+    {[{:year, year}, {:week, week}, {:day_of_week, day}], time_of_day}
   end
 
   def split([{:year, year}, {:month, month} | time_of_day]) do
@@ -27,8 +27,8 @@ defmodule Tempo.Split do
     {[{:month, month}, {:day, day}], time_of_day}
   end
 
-  def split([{:week, week}, {:day, day} | time_of_day]) do
-    {[{:week, week}, {:day, day}], time_of_day}
+  def split([{:week, week}, {:day_of_week, day} | time_of_day]) do
+    {[{:week, week}, {:day_of_week, day}], time_of_day}
   end
 
   def split([{:year, year} | time_of_day]) do

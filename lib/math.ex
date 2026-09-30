@@ -10,6 +10,7 @@ defmodule Tempo.Math do
   alias Tempo.InvalidUnitError
   alias Tempo.Iso8601.Unit
   alias Tempo.Mask
+  alias Tempo.ResolutionError
   alias Tempo.TimeZoneDatabase
   alias Tempo.UnanchoredError
   alias Tempo.Validation
@@ -1108,7 +1109,25 @@ defmodule Tempo.Math do
   # the duration is applied and re-attach each to its (shifted) component
   # afterwards — `Tempo.shift(~o"2018±2Y", ~o"P1Y") == ~o"2019±2Y"` rather
   # than crashing the integer arithmetic on the tuple.
-  defp add_crisp(%Tempo{} = tempo, %Tempo.Duration{time: duration_time}) do
+  # A week date names a week and a day of it, and no month, so it has no
+  # month to step; its weeks and days step on the week axis.
+  defp add_crisp(%Tempo{time: time} = tempo, %Tempo.Duration{time: duration_time} = duration) do
+    if Keyword.has_key?(time, :week) and not Keyword.has_key?(time, :month) and
+         Keyword.get(duration_time, :month, 0) != 0 do
+      {:error,
+       ResolutionError.exception(
+         current: :week,
+         target: :month,
+         operation: :shift,
+         calendar: tempo.calendar,
+         reason: "#{inspect(tempo)} is a week date, with no month to add months to"
+       )}
+    else
+      add_crisp_units(tempo, duration)
+    end
+  end
+
+  defp add_crisp_units(%Tempo{} = tempo, %Tempo.Duration{time: duration_time}) do
     {crisp_time, annotations} = strip_component_annotations(tempo.time)
 
     # Normalise weeks to days *before* extending resolution, so a `P1W` shift

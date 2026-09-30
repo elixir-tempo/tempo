@@ -598,9 +598,8 @@ defmodule Tempo.Compare do
   # Resolve the proleptic Gregorian `{year, month, day}` from the time
   # list, handling the three date representations Tempo stores:
   #
-  #   * Week date — `[year, week, day_of_week]`, or a week-based
-  #     calendar's `[year, week, day]`, in ISO 8601 weeks
-  #     (`Tempo.Validation.date_from_iso_week/4`).
+  #   * Week date — `[year, week, day_of_week]`, in ISO 8601 weeks or a
+  #     week-based calendar's own (`Tempo.Validation.date_from_iso_week/4`).
   #   * Ordinal date — `[year, day]` with `:day` holding the
   #     day-of-year and no `:month` (the absence of `:month` is the
   #     disambiguator, matching `Tempo.to_date/1`).

@@ -29,7 +29,12 @@ defmodule Tempo.Inspect do
 
   """
   @spec to_iodata(term()) :: iodata()
-  def to_iodata(value), do: value |> with_calendar_names() |> inspect_value()
+  def to_iodata(value), do: to_iodata(value, Gregorian)
+
+  # The encoding with a value in `implied` left unnamed: the Gregorian
+  # calendar a bare ISO 8601 string reads as, or the ISO week calendar the
+  # `W` sigil modifier gives.
+  defp to_iodata(value, implied), do: value |> with_calendar_names(implied) |> inspect_value()
 
   @doc """
   The calendar in a Tempo value that ISO 8601 cannot write: one with no IXDTF
@@ -87,15 +92,20 @@ defmodule Tempo.Inspect do
   # from an Elixir date. The top-level value, an interval's endpoints and a
   # set's members carry it; a selection's own values and a recurrence's rule
   # take theirs from the value around them.
-  defp with_calendar_names(%Tempo{} = tempo), do: with_calendar_name(tempo)
+  defp with_calendar_names(%Tempo{} = tempo, implied), do: with_calendar_name(tempo, implied)
 
-  defp with_calendar_names(%Tempo.Interval{from: from, to: to} = interval),
-    do: %{interval | from: with_calendar_names(from), to: with_calendar_names(to)}
+  defp with_calendar_names(%Tempo.Interval{from: from, to: to} = interval, implied) do
+    %{
+      interval
+      | from: with_calendar_names(from, implied),
+        to: with_calendar_names(to, implied)
+    }
+  end
 
-  defp with_calendar_names(%Tempo.Set{set: members} = set),
-    do: %{set | set: Enum.map(members, &with_calendar_names/1)}
+  defp with_calendar_names(%Tempo.Set{set: members} = set, implied),
+    do: %{set | set: Enum.map(members, &with_calendar_names(&1, implied))}
 
-  defp with_calendar_names(value), do: value
+  defp with_calendar_names(value, _implied), do: value
 
   defp named_values(%Tempo{} = tempo), do: [tempo]
 
@@ -105,25 +115,25 @@ defmodule Tempo.Inspect do
   defp named_values(%Tempo.Set{set: members}), do: Enum.flat_map(members, &named_values/1)
   defp named_values(_value), do: []
 
-  defp with_calendar_name(%Tempo{} = tempo) do
-    case calendar_name(tempo) do
+  defp with_calendar_name(%Tempo{} = tempo, implied) do
+    case calendar_name(tempo, implied) do
       :unnamed -> put_calendar_name(tempo, nil)
       name -> put_calendar_name(tempo, name)
     end
   end
 
   # The identifier a value's calendar is written as: the one it was parsed
-  # with when that names the same calendar, none for the Gregorian and ISO
-  # week calendars (a week date is its own notation), or else the name in
-  # Calendrical's registry or the CLDR calendar type — whichever reads back as
-  # this calendar, since several calendars share a CLDR type.
-  defp calendar_name(%Tempo{calendar: calendar, extended: extended}) do
-    calendar = calendar || Calendrical.Gregorian
+  # with when that names the same calendar, none for the Gregorian calendar
+  # or the one the rendering implies, or else the name in Calendrical's
+  # registry or the CLDR calendar type — whichever reads back as this
+  # calendar, since several calendars share a CLDR type.
+  defp calendar_name(%Tempo{calendar: calendar, extended: extended}, implied \\ Gregorian) do
+    calendar = calendar || Gregorian
     parsed = extended && Map.get(extended, :calendar)
 
     cond do
       is_atom(parsed) and not is_nil(parsed) and names?(parsed, calendar) -> parsed
-      calendar in [Calendrical.Gregorian, Calendrical.ISOWeek] -> nil
+      calendar in [Gregorian, implied] -> nil
       true -> faithful_name(calendar)
     end
   end
@@ -214,7 +224,7 @@ defmodule Tempo.Inspect do
   end
 
   def inspect(%Tempo{calendar: Calendrical.ISOWeek} = tempo) do
-    encoded(tempo, "Tempo", &(@sigil_o <> &1 <> "\"W"))
+    encoded(tempo, "Tempo", &(@sigil_o <> &1 <> "\"W"), Calendrical.ISOWeek)
   end
 
   def inspect(%Tempo{calendar: calendar} = tempo) do
@@ -249,9 +259,9 @@ defmodule Tempo.Inspect do
   # rendered as a sigil that parses back, so it shows as a labelled struct view.
   # A calendar ISO 8601 cannot name is no obstacle here: the rendering names
   # its module.
-  defp encoded(value, tag, render) do
+  defp encoded(value, tag, render, implied \\ Gregorian) do
     case unencodable(value) do
-      nil -> value |> to_iodata() |> IO.iodata_to_binary() |> render.()
+      nil -> value |> to_iodata(implied) |> IO.iodata_to_binary() |> render.()
       _construct -> "#" <> tag <> "<not ISO 8601 expressible>"
     end
   end

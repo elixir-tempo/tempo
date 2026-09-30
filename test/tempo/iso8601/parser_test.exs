@@ -272,7 +272,8 @@ defmodule Tempo.Iso8601.Parser.Test do
 
     # Section 7.2.4 Example 1 with week based calendar
     assert Tempo.from_iso8601("1985Y15W7K", Calendrical.ISOWeek) ==
-             {:ok, %Tempo{calendar: Calendrical.ISOWeek, time: [year: 1985, week: 15, day: 7]}}
+             {:ok,
+              %Tempo{calendar: Calendrical.ISOWeek, time: [year: 1985, week: 15, day_of_week: 7]}}
   end
 
   test "Section 7.3 Time" do
@@ -590,7 +591,7 @@ defmodule Tempo.Iso8601.Parser.Test do
     assert Tempo.from_iso8601("2022Y1W7K", Calendrical.ISOWeek) ==
              {:ok,
               %Tempo{
-                time: [year: 2022, week: 1, day: 7],
+                time: [year: 2022, week: 1, day_of_week: 7],
                 shift: nil,
                 calendar: Calendrical.ISOWeek
               }}

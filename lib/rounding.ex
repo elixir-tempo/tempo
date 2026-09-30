@@ -24,9 +24,14 @@ defmodule Tempo.Rounding do
     |> round(calendar, :month, :year)
   end
 
-  defp round([{:year, _year}, {:week, _month}, {:day, _day}] = time, calendar, :day, :year) do
+  defp round(
+         [{:year, _year}, {:week, _week}, {:day_of_week, _day}] = time,
+         calendar,
+         :day_of_week,
+         :year
+       ) do
     time
-    |> round(calendar, :day, :week)
+    |> round(calendar, :day_of_week, :week)
     |> round(calendar, :week, :year)
   end
 
@@ -80,12 +85,13 @@ defmodule Tempo.Rounding do
 
   # Round to week
 
-  defp round([{:year, year}, {:week, week}, {:day, day}], calendar, :day, :week) do
-    if day <= div(calendar.days_in_week(), 2) do
-      [{:year, year}, {:week, week}]
-    else
-      {year, week, _day} = calendar.plus(year, week, 1, :weeks, 1)
-      [{:year, year}, {:week, week}]
+  # A week's second half rounds to the next week, which after the year's
+  # last is the next year's first.
+  defp round([{:year, year}, {:week, week}, {:day_of_week, day}], calendar, :day_of_week, :week) do
+    cond do
+      day <= div(calendar.days_in_week(), 2) -> [{:year, year}, {:week, week}]
+      week < Validation.iso_weeks_in_year(year, calendar) -> [{:year, year}, {:week, week + 1}]
+      true -> [{:year, year + 1}, {:week, 1}]
     end
   end
 
@@ -103,7 +109,12 @@ defmodule Tempo.Rounding do
     time
   end
 
-  defp round([{:year, _year}, {:week, _month}, {:day, _day}] = time, _calendar, :day, :day) do
+  defp round(
+         [{:year, _year}, {:week, _week}, {:day_of_week, _day}] = time,
+         _calendar,
+         :day_of_week,
+         :day
+       ) do
     time
   end
 

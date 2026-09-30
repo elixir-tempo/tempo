@@ -1853,8 +1853,35 @@ defmodule Tempo do
   end
 
   def from_date(%{year: year, month: month, day: day, calendar: calendar}) do
-    AST.build([year: year, month: month, day: day], calendar)
+    AST.build(date_units(year, month, day, calendar), calendar)
   end
+
+  @doc false
+  # A date's fields as a value's units: the month and day of a month-based
+  # calendar, or the week and the day of the week a week-based calendar keeps
+  # in them, so its values take ISO 8601's week date shape as a parsed one does.
+  @spec date_units(integer(), integer(), integer(), module()) :: keyword()
+  def date_units(year, month, day, Calendrical.Gregorian),
+    do: [year: year, month: month, day: day]
+
+  def date_units(year, month, day, calendar) do
+    if week_based_calendar?(calendar),
+      do: [year: year, week: month, day_of_week: day],
+      else: [year: year, month: month, day: day]
+  end
+
+  @doc false
+  # A calendar that numbers weeks within its year rather than months.
+  @spec week_based_calendar?(module()) :: boolean()
+  def week_based_calendar?(calendar) do
+    Code.ensure_loaded?(calendar) and function_exported?(calendar, :calendar_base, 0) and
+      calendar.calendar_base() == :week
+  end
+
+  # The unit of a day in a calendar's dates: the day of the week in a
+  # week-based calendar.
+  defp day_unit(calendar),
+    do: if(week_based_calendar?(calendar), do: :day_of_week, else: :day)
 
   @doc """
   Create a `t:Tempo.Interval.t/0` from an Elixir `Date.Range`,
@@ -1884,7 +1911,8 @@ defmodule Tempo do
   ### Options
 
   * `:resolution` is a time unit atom applied to both endpoints via
-    `at_resolution/2`. The default is `:day`.
+    `at_resolution/2`. The default is the day: `:day`, or
+    `:day_of_week` in a week-based calendar.
 
   ### Returns
 
@@ -1919,7 +1947,7 @@ defmodule Tempo do
              "(Tempo intervals have positive extent)."
        )}
     else
-      resolution = Keyword.get(options, :resolution, :day)
+      resolution = Keyword.get_lazy(options, :resolution, fn -> day_unit(first.calendar) end)
 
       with %Tempo{} = from <- at_resolution(from_date(first), resolution),
            %Tempo{} = to <- at_resolution(from_date(Calendrical.next(last, :day)), resolution) do
@@ -2060,8 +2088,8 @@ defmodule Tempo do
         } = naive
       ) do
     AST.build(
-      [year: year, month: month, day: day, hour: hour, minute: minute, second: second] ++
-        microsecond_component(naive),
+      date_units(year, month, day, calendar) ++
+        [hour: hour, minute: minute, second: second] ++ microsecond_component(naive),
       calendar
     )
   end
@@ -2113,8 +2141,8 @@ defmodule Tempo do
     tempo_calendar = calendar_iso_as_gregorian(calendar)
 
     time =
-      [year: year, month: month, day: day, hour: hour, minute: minute, second: second] ++
-        microsecond_component(dt)
+      date_units(year, month, day, tempo_calendar) ++
+        [hour: hour, minute: minute, second: second] ++ microsecond_component(dt)
 
     total_offset = utc_offset + std_offset
 
@@ -3110,7 +3138,7 @@ defmodule Tempo do
   def from_elixir(value, options \\ [])
 
   def from_elixir(%Date{} = date, options) do
-    resolution = Keyword.get(options, :resolution, :day)
+    resolution = Keyword.get_lazy(options, :resolution, fn -> day_unit(date.calendar) end)
 
     date
     |> from_date()
@@ -3343,8 +3371,8 @@ defmodule Tempo do
     `~o"2020Y166D"` all convert correctly.
 
   * Week date — `[year: Y, week: W, day_of_week: K]`, an ISO 8601 week
-    counted in the calendar's own year, and a week-based calendar's
-    `[year: Y, week: W, day: K]`.
+    counted in the calendar's own year, or a week-based calendar's own
+    week.
 
   ### Returns
 
@@ -3402,13 +3430,6 @@ defmodule Tempo do
     with {:ok, date} <- Validation.date_from_iso_week(year, week, day, calendar_of(tempo)) do
       Date.convert(date, native_calendar(tempo))
     end
-  end
-
-  # A week-based calendar's own date: year, week and day of the week.
-  def to_date(%Tempo{time: [year: year, week: week, day: day], calendar: calendar})
-      when is_integer(year) and is_integer(week) and is_integer(day) and is_atom(calendar) and
-             not is_nil(calendar) do
-    Date.new(year, week, day, calendar)
   end
 
   def to_date(%Tempo{} = value) do
@@ -3495,8 +3516,58 @@ defmodule Tempo do
     NaiveDateTime.new(year, month, day, hour, minute, second, 0, native_calendar(tempo))
   end
 
+  def to_naive_datetime(
+        %Tempo{
+          time: [
+            year: year,
+            week: week,
+            day_of_week: day,
+            hour: hour,
+            minute: minute,
+            second: second,
+            microsecond: microsecond
+          ]
+        } = tempo
+      )
+      when is_integer(year) and is_integer(week) and is_integer(day) do
+    week_naive_datetime(tempo, {year, week, day}, {hour, minute, second, microsecond})
+  end
+
+  def to_naive_datetime(
+        %Tempo{
+          time: [
+            year: year,
+            week: week,
+            day_of_week: day,
+            hour: hour,
+            minute: minute,
+            second: second
+          ]
+        } = tempo
+      )
+      when is_integer(year) and is_integer(week) and is_integer(day) do
+    week_naive_datetime(tempo, {year, week, day}, {hour, minute, second, 0})
+  end
+
   def to_naive_datetime(%Tempo{} = value) do
     {:error, ConversionError.exception(value: value, target: NaiveDateTime)}
+  end
+
+  # A week date's day as its calendar numbers it — the calendar's own week
+  # in a week-based calendar, ISO 8601's in any other — at its time of day.
+  defp week_naive_datetime(tempo, {year, week, day}, {hour, minute, second, microsecond}) do
+    with {:ok, date} <- Validation.date_from_iso_week(year, week, day, calendar_of(tempo)) do
+      NaiveDateTime.new(
+        date.year,
+        date.month,
+        date.day,
+        hour,
+        minute,
+        second,
+        microsecond,
+        native_calendar(tempo)
+      )
+    end
   end
 
   @doc """
@@ -3710,13 +3781,18 @@ defmodule Tempo do
     convert_date(value, Date.new(year, month, day, source || Calendrical.Gregorian), calendar)
   end
 
-  # A week-based calendar's date is its year, week and day of the week.
+  # A week date is the day of its week: the calendar's own week in a
+  # week-based calendar, and ISO 8601's in any other.
   def to_calendar(
-        %Tempo{time: [year: year, week: week, day: day], shift: nil, calendar: source} = value,
+        %Tempo{
+          time: [year: year, week: week, day_of_week: day],
+          shift: nil,
+          calendar: source
+        } = value,
         calendar
       )
       when is_atom(calendar) and is_atom(source) and not is_nil(source) do
-    convert_date(value, Date.new(year, week, day, source), calendar)
+    convert_date(value, Validation.date_from_iso_week(year, week, day, source), calendar)
   end
 
   def to_calendar(%Tempo{} = value, calendar) when is_atom(calendar) do
@@ -4287,14 +4363,12 @@ defmodule Tempo do
     with {:ok, {year, month, day}} <-
            day_in_calendar(Integer.floor_div(seconds, 86_400), calendar, tempo) do
       {:ok,
-       [
-         year: year,
-         month: month,
-         day: day,
-         hour: div(time_of_day, 3_600),
-         minute: time_of_day |> rem(3_600) |> div(60),
-         second: rem(time_of_day, 60)
-       ]}
+       date_units(year, month, day, calendar) ++
+         [
+           hour: div(time_of_day, 3_600),
+           minute: time_of_day |> rem(3_600) |> div(60),
+           second: rem(time_of_day, 60)
+         ]}
     end
   end
 
@@ -4640,9 +4714,26 @@ defmodule Tempo do
         raise ArgumentError,
               "Tempo.#{function}/1 requires a year component. Got: #{inspect(tempo)}"
 
-    month = Keyword.get(time, :month, 1)
-    day = Keyword.get(time, :day, default_day)
-    {year, month, day}
+    case Keyword.fetch(time, :week) do
+      {:ok, week} ->
+        week_date_ymd!(tempo, function, {year, week, Keyword.get(time, :day_of_week, 1)})
+
+      :error ->
+        {year, Keyword.get(time, :month, 1), Keyword.get(time, :day, default_day)}
+    end
+  end
+
+  # A week date's day as its calendar numbers it: the calendar's own week and
+  # day in a week-based calendar, and the date of the ISO 8601 week's day in
+  # any other.
+  defp week_date_ymd!(tempo, function, {year, week, day}) do
+    case Validation.date_from_iso_week(year, week, day, calendar_of(tempo)) do
+      {:ok, date} ->
+        {date.year, date.month, date.day}
+
+      {:error, _reason} ->
+        raise ArgumentError, "Tempo.#{function}/1 cannot place #{inspect(tempo)} on a day."
+    end
   end
 
   ## ---------------------------------------------------------

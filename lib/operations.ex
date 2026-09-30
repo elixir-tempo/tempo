@@ -482,57 +482,69 @@ defmodule Tempo.Operations do
   defp endpoint_calendar(_), do: nil
 
   defp convert_calendar_intervals(%IntervalSet{} = set, target_calendar) do
-    converted =
-      Enum.map(IntervalSet.members(set), fn %Interval{from: from, to: to} = interval ->
-        %{
-          interval
-          | from: convert_tempo_calendar(from, target_calendar),
-            to: convert_tempo_calendar(to, target_calendar)
-        }
-      end)
-
-    {:ok, IntervalSet.with_intervals(set, converted)}
-  end
-
-  # Convert a single %Tempo{}'s year/month/day into the target
-  # calendar. Unanchored Tempos (no :year) pass through
-  # unchanged — their components are calendar-independent.
-  # An unbounded endpoint carries no calendar-bound components.
-  defp convert_tempo_calendar(nil, _target_calendar), do: nil
-
-  defp convert_tempo_calendar(%Tempo{} = tempo, target_calendar) do
-    if Tempo.anchored?(tempo) do
-      source_calendar = tempo.calendar
-
-      # Extend to day precision so we have year/month/day to
-      # feed Date.convert.
-      extended =
-        case Tempo.extend_resolution(tempo, :day) do
-          %Tempo{} = ext -> ext
-          _ -> tempo
-        end
-
-      year = Keyword.fetch!(extended.time, :year)
-      month = Keyword.fetch!(extended.time, :month)
-      day = Keyword.fetch!(extended.time, :day)
-
-      src_date = Date.new!(year, month, day, source_calendar)
-      tgt_date = Date.convert!(src_date, target_calendar)
-
-      # Preserve any hour/minute/second on the input.
-      time_tail =
-        extended.time
-        |> Enum.drop_while(fn {k, _} -> k not in [:hour, :minute, :second] end)
-
-      new_time =
-        [year: tgt_date.year, month: tgt_date.month, day: tgt_date.day] ++ time_tail
-
-      %{extended | time: new_time, calendar: target_calendar}
-      |> retag_extended_calendar(target_calendar)
-    else
-      tempo
+    set
+    |> IntervalSet.members()
+    |> Enum.reduce_while({:ok, []}, fn %Interval{from: from, to: to} = interval, {:ok, acc} ->
+      with {:ok, from} <- convert_tempo_calendar(from, target_calendar),
+           {:ok, to} <- convert_tempo_calendar(to, target_calendar) do
+        {:cont, {:ok, [%{interval | from: from, to: to} | acc]}}
+      else
+        error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, converted} -> {:ok, IntervalSet.with_intervals(set, Enum.reverse(converted))}
+      error -> error
     end
   end
+
+  # Convert a single %Tempo{}'s day into the target calendar, keeping its
+  # time of day. Unanchored Tempos (no :year) pass through unchanged —
+  # their components are calendar-independent. An unbounded endpoint
+  # carries no calendar-bound components.
+  defp convert_tempo_calendar(nil, _target_calendar), do: {:ok, nil}
+
+  defp convert_tempo_calendar(%Tempo{} = tempo, target_calendar) do
+    if Tempo.anchored?(tempo),
+      do: convert_anchored_calendar(tempo, target_calendar),
+      else: {:ok, tempo}
+  end
+
+  # Extend to day precision so there is a day to convert — a calendar date,
+  # or a week date's day of the week — and write the converted day in the
+  # target calendar's shape.
+  defp convert_anchored_calendar(tempo, target_calendar) do
+    extended =
+      case Tempo.extend_resolution(tempo, day_unit(tempo)) do
+        %Tempo{} = ext -> ext
+        _ -> tempo
+      end
+
+    {day, time_of_day} =
+      Enum.split_while(
+        extended.time,
+        &(elem(&1, 0) not in [:hour, :minute, :second, :microsecond])
+      )
+
+    with {:ok, source_date} <- Tempo.to_date(%{extended | time: day, shift: nil}),
+         {:ok, date} <- Date.convert(source_date, target_calendar) do
+      time = Tempo.date_units(date.year, date.month, date.day, target_calendar) ++ time_of_day
+
+      {:ok,
+       %{extended | time: time, calendar: target_calendar}
+       |> retag_extended_calendar(target_calendar)}
+    else
+      {:error, %{__exception__: true}} = error ->
+        error
+
+      {:error, _reason} ->
+        {:error, ConversionError.exception(value: tempo, target: target_calendar)}
+    end
+  end
+
+  # The day unit a value extends to: the day of the week on a week axis.
+  defp day_unit(%Tempo{time: time}),
+    do: if(Keyword.has_key?(time, :week), do: :day_of_week, else: :day)
 
   @empty_extended %{
     calendar: nil,

@@ -628,15 +628,14 @@ defmodule Tempo.Network.Normalize do
 
     case Calendrical.date_from_iso_days(days, calendar) do
       %Date{year: year, month: month, day: day} ->
-        [
-          year: year,
-          month: month,
-          day: day,
+        year
+        |> Tempo.date_units(month, day, calendar)
+        |> Kernel.++(
           hour: div(time_of_day, 3600),
           minute: div(rem(time_of_day, 3600), 60),
           second: rem(time_of_day, 60),
           calendar: calendar
-        ]
+        )
         |> Kernel.++(options)
         |> Tempo.new()
 

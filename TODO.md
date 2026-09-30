@@ -4,7 +4,7 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ## Open
 
-* [ ] **A week-based calendar's ISO 8601 form** — `to_iso8601/1` writes a value in a week-based calendar in a form that does not read back: `from_elixir/1` stores the week under `:month` (`2026Y25M2D`, month 25 as Gregorian; `2026Y20M3D[u-ca=nrf]`, an invalid month), while the parser and `to_date/1` use `:week`, whose form `2026Y25W2D` the parser rejects. Pick one shape for ISO week, NRF and retail calendars and make `from_elixir/1`, the encoder and the parser agree on it.
+* [ ] **A week date's `to_string/2`** — `Tempo.to_string/2` renders any week date as its year (`"2026"` for `~o"2026-W25-2"W` and for a Gregorian ISO week date alike). Localize, which it would hand the day to, formats a week-based calendar's `Date` from its fields: `Localize.Date.to_string(Date.new!(2026, 25, 2, Calendrical.ISOWeek))` is `"Jun 2, 2026"` (an upstream report, 2026-09-30).
 
 * [ ] **`shift_zone/2` writes two time-zone annotations** — its result writes as `2026Y3M7DT9H0M0SZ-5H[America/New_York][-05:00]`, the offset annotation coming from `extended.zone_offset` beside the zone, where RFC 9557 allows one; the parser drops the second, so it round-trips, but the form is not RFC 9557's. A network in hours in a zone shows its results so.
 
@@ -65,6 +65,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **Set algebra over open-ended windows** — a research project for later (user, 2026-09-28): how far union, intersection, difference, complement and the predicates go on the lazy sets an open-ended window gives, a test of the whole algebra. Questions in [plans/open-ended-set-algebra.md](plans/open-ended-set-algebra.md).
 
 ## Done
+
+* [x] **A week-based calendar's ISO 8601 form** — one shape, ISO 8601's week date `[year, week, day_of_week]`, from the parser, `from_elixir/1`, `to_calendar/2`, `shift_zone/2`, a network's clock and set operations, written as ISO 8601-2's `2026Y25W2K` with its calendar; such values compare, shift, round, split and convert, and a month added to a week date is an error. 2026-09-30.
 
 * [x] **`to_iso8601/1` writes a value's calendar** — however the value was made (`to_calendar/2`, `from_elixir/1`, `new/1`, a parse with a calendar), by the identifier that reads back as its calendar, and drops a parsed one naming another; a calendar IXDTF cannot name whose days differ from the Gregorian's is an error, and inspect names its module for an interval too. 2026-09-30.
 
