@@ -21,11 +21,16 @@ defmodule Tempo.Network.Solver do
     periods, with `relation_certainty/4` for a single named relation.
 
   These all run in O(n³) on the boundary count (Floyd–Warshall), which is
-  interactive for the hundreds of periods these chronologies contain.
+  interactive for the hundreds of periods these chronologies contain. A
+  duration in a unit coarser than the network's axis (a year in a network
+  of days) is measured by its actual length from where its period can
+  start, and the network is solved again as those lengths narrow, until
+  they settle (see `Tempo.Network.Normalize`).
 
-  A network whose builders recorded an error (see `Tempo.Network`)
-  returns that error from every function here, and the predicates
-  raise it.
+  A network whose builders recorded an error (see `Tempo.Network`), or one
+  it cannot place (a unit finer than a day, a fraction of its unit),
+  returns that error from every function here, and the predicates raise
+  it.
 
   """
 
@@ -57,9 +62,11 @@ defmodule Tempo.Network.Solver do
   """
   @spec consistent?(Network.t()) :: boolean()
   def consistent?(%Network{} = network) do
-    check!(network)
-    %{dist: distances} = network |> Normalize.normalize() |> shortest_paths()
-    not negative_cycle?(distances)
+    case solved(network) do
+      {:ok, _solution} -> true
+      {:error, :inconsistent} -> false
+      {:error, exception} -> raise exception
+    end
   end
 
   @doc """
@@ -94,26 +101,70 @@ defmodule Tempo.Network.Solver do
   """
   @spec propagate(Network.t()) :: {:ok, Network.t()} | {:error, :inconsistent | Exception.t()}
   def propagate(%Network{} = network) do
-    with :ok <- Network.check(network) do
-      propagated(network)
+    with {:ok, %{normalized: normalized, dist: distances}} <- solved(network),
+         {:ok, periods} <- tightened_periods(network.periods, distances, normalized) do
+      {:ok, %{network | periods: periods}}
     end
   end
 
-  defp propagated(network) do
-    normalized = Normalize.normalize(network)
-    %{dist: distances} = shortest_paths(normalized)
+  defp tightened_periods(periods, distances, normalized) do
+    Enum.reduce_while(periods, {:ok, %{}}, fn {id, period}, {:ok, tightened} ->
+      case tighten_period(id, period, distances, normalized) do
+        {:ok, period} -> {:cont, {:ok, Map.put(tightened, id, period)}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  # Normalise the network and solve it: solve with each measured duration at
+  # the lengths found so far, measure them again from the bounds that gives
+  # their starts, and repeat until the lengths stop changing. A round only
+  # narrows the starts, so the lengths settle.
+  defp solved(network) do
+    with :ok <- Network.check(network),
+         {:ok, normalized} <- Normalize.normalize(network) do
+      settle(normalized, %{}, :deferring)
+    end
+  end
+
+  defp settle(normalized, lengths, mode) do
+    solving = %{
+      normalized
+      | edges: normalized.edges ++ Normalize.measured_edges(normalized, lengths)
+    }
+
+    %{dist: distances, next: next} = shortest_paths(solving)
 
     if negative_cycle?(distances) do
       {:error, :inconsistent}
     else
-      periods =
-        Map.new(network.periods, fn {id, period} ->
-          {id, tighten_period(id, period, distances, normalized.unit)}
-        end)
+      case Normalize.measure(normalized, distances, lengths, mode) do
+        {:ok, measured} ->
+          settled(measured, lengths, mode, normalized, %{
+            normalized: solving,
+            dist: distances,
+            next: next
+          })
 
-      {:ok, %{network | periods: periods}}
+        {:error, _reason} = error ->
+          error
+      end
     end
   end
+
+  # The lengths stopped changing. A measure left waiting on a wide start is
+  # measured in the final rounds; still waiting after them, its start is
+  # unbounded in a calendar with no known extremes, which is an error.
+  defp settled(lengths, lengths, mode, normalized, solution) do
+    case {Normalize.all_measured(normalized, lengths), mode} do
+      {:ok, _mode} -> {:ok, solution}
+      {{:error, _reason}, :deferring} -> settle(normalized, lengths, :final)
+      {{:error, _reason} = error, :final} -> error
+    end
+  end
+
+  defp settled(measured, _lengths, mode, normalized, _solution),
+    do: settle(normalized, measured, mode)
 
   @doc """
   Classify whether two periods overlap in time, given the whole network.
@@ -167,11 +218,8 @@ defmodule Tempo.Network.Solver do
   @spec contemporaneity(Network.t(), term(), term()) ::
           :certain | :possible | :impossible | {:error, :inconsistent | Exception.t()}
   def contemporaneity(%Network{} = network, p1, p2) do
-    with :ok <- Network.check(network) do
-      %{dist: distances} = network |> Normalize.normalize() |> shortest_paths()
-
+    with {:ok, %{dist: distances}} <- solved(network) do
       cond do
-        negative_cycle?(distances) -> {:error, :inconsistent}
         sure_overlap?(distances, p1, p2) -> :certain
         possible_overlap?(distances, p1, p2) -> :possible
         true -> :impossible
@@ -185,8 +233,7 @@ defmodule Tempo.Network.Solver do
   """
   @spec certainly_contemporary?(Network.t(), term(), term()) :: boolean()
   def certainly_contemporary?(%Network{} = network, p1, p2) do
-    check!(network)
-    contemporaneity(network, p1, p2) == :certain
+    verdict(contemporaneity(network, p1, p2)) == :certain
   end
 
   @doc """
@@ -195,18 +242,13 @@ defmodule Tempo.Network.Solver do
   """
   @spec possibly_contemporary?(Network.t(), term(), term()) :: boolean()
   def possibly_contemporary?(%Network{} = network, p1, p2) do
-    check!(network)
-    contemporaneity(network, p1, p2) in [:certain, :possible]
+    verdict(contemporaneity(network, p1, p2)) in [:certain, :possible]
   end
 
   # A predicate has only true and false to give, so an error the network's
-  # builders recorded raises.
-  defp check!(network) do
-    case Network.check(network) do
-      :ok -> :ok
-      {:error, exception} -> raise exception
-    end
-  end
+  # builders recorded, or one solving it met, raises.
+  defp verdict({:error, exception}) when is_exception(exception), do: raise(exception)
+  defp verdict(verdict), do: verdict
 
   # Prop. 7 — overlap is entailed iff both synchronism inequalities
   # beg(p₁) ≤ end(p₂) and beg(p₂) ≤ end(p₁) are already implied, i.e. the
@@ -307,14 +349,9 @@ defmodule Tempo.Network.Solver do
   def relation(%Network{} = network, p1, p2) do
     with :ok <- Network.check(network),
          :ok <- known_period(network, p1),
-         :ok <- known_period(network, p2) do
-      %{dist: distances} = network |> Normalize.normalize() |> shortest_paths()
-
-      if negative_cycle?(distances) do
-        {:error, :inconsistent}
-      else
-        feasible_relations(distances, p1, p2)
-      end
+         :ok <- known_period(network, p2),
+         {:ok, %{dist: distances}} <- solved(network) do
+      feasible_relations(distances, p1, p2)
     end
   end
 
@@ -523,32 +560,31 @@ defmodule Tempo.Network.Solver do
   end
 
   defp traced(network, boundary, bound) do
-    normalized = Normalize.normalize(network)
-    %{dist: distances, next: next} = shortest_paths(normalized)
-
-    if negative_cycle?(distances) do
-      {:error, :inconsistent}
-    else
+    with {:ok, %{dist: distances} = solution} <- solved(network) do
       {from_node, to_node} = trace_nodes(boundary, bound)
 
       case get(distances, from_node, to_node) do
-        :inf ->
-          {:error, :unbounded}
-
-        _weight ->
-          path = reconstruct(next, from_node, to_node)
-          provenance = build_provenance(normalized.edges)
-          steps = build_steps(path, distances, provenance, bound, normalized.unit)
-
-          {:ok,
-           %{
-             boundary: boundary,
-             bound: bound,
-             value: bound_value(distances, boundary, bound, normalized.unit),
-             steps: steps,
-             prose: render_prose(steps, boundary, bound, network)
-           }}
+        :inf -> {:error, :unbounded}
+        _weight -> trace_of(network, boundary, bound, solution, {from_node, to_node})
       end
+    end
+  end
+
+  defp trace_of(network, boundary, bound, solution, {from_node, to_node}) do
+    %{normalized: normalized, dist: distances, next: next} = solution
+    path = reconstruct(next, from_node, to_node)
+    provenance = build_provenance(normalized.edges)
+
+    with {:ok, steps} <- build_steps(path, distances, provenance, bound, normalized),
+         {:ok, value} <- bound_value(distances, boundary, bound, normalized) do
+      {:ok,
+       %{
+         boundary: boundary,
+         bound: bound,
+         value: value,
+         steps: steps,
+         prose: render_prose(steps, boundary, bound, network)
+       }}
     end
   end
 
@@ -557,51 +593,59 @@ defmodule Tempo.Network.Solver do
 
   # --- bound extraction ------------------------------------------
 
-  defp tighten_period(id, period, distances, unit) do
+  defp tighten_period(id, period, distances, normalized) do
     start = {:start, id}
     finish = {:end, id}
 
-    %{
-      period
-      | earliest_start: lower(distances, start, unit),
-        latest_start: upper(distances, start, unit),
-        earliest_end: lower(distances, finish, unit),
-        latest_end: upper(distances, finish, unit),
-        min_duration: min_span(distances, start, finish, unit),
-        max_duration: max_span(distances, start, finish, unit)
-    }
+    with {:ok, earliest_start} <- lower(distances, start, normalized),
+         {:ok, latest_start} <- upper(distances, start, normalized),
+         {:ok, earliest_end} <- lower(distances, finish, normalized),
+         {:ok, latest_end} <- upper(distances, finish, normalized),
+         {:ok, min_duration} <- min_span(distances, start, finish, normalized),
+         {:ok, max_duration} <- max_span(distances, start, finish, normalized) do
+      {:ok,
+       %{
+         period
+         | earliest_start: earliest_start,
+           latest_start: latest_start,
+           earliest_end: earliest_end,
+           latest_end: latest_end,
+           min_duration: min_duration,
+           max_duration: max_duration
+       }}
+    end
   end
 
   # node ≤ origin + dist(node, origin)  → latest value of node.
-  defp upper(distances, node, unit) do
+  defp upper(distances, node, normalized) do
     case get(distances, node, :origin) do
-      :inf -> nil
-      weight -> axis_to_date(weight, unit)
+      :inf -> {:ok, nil}
+      weight -> Normalize.date_at(weight, normalized)
     end
   end
 
   # origin − node ≤ dist(origin, node)  → node ≥ −dist(origin, node).
-  defp lower(distances, node, unit) do
+  defp lower(distances, node, normalized) do
     case get(distances, :origin, node) do
-      :inf -> nil
-      weight -> axis_to_date(-weight, unit)
+      :inf -> {:ok, nil}
+      weight -> Normalize.date_at(-weight, normalized)
     end
   end
 
   # end − start ≤ dist(end, start) → max duration.
-  defp max_span(distances, start, finish, unit) do
+  defp max_span(distances, start, finish, normalized) do
     case get(distances, finish, start) do
-      :inf -> nil
-      weight -> axis_to_duration(weight, unit)
+      :inf -> {:ok, nil}
+      weight -> Normalize.duration_of(weight, normalized)
     end
   end
 
   # start − end ≤ dist(start, end) → end − start ≥ −dist(start, end).
-  defp min_span(distances, start, finish, unit) do
+  defp min_span(distances, start, finish, normalized) do
     case get(distances, start, finish) do
-      :inf -> nil
-      weight when -weight <= 0 -> nil
-      weight -> axis_to_duration(-weight, unit)
+      :inf -> {:ok, nil}
+      weight when -weight <= 0 -> {:ok, nil}
+      weight -> Normalize.duration_of(-weight, normalized)
     end
   end
 
@@ -657,27 +701,6 @@ defmodule Tempo.Network.Solver do
   defp less?(:inf, _b), do: false
   defp less?(a, b), do: a < b
 
-  # --- axis → Tempo ----------------------------------------------
-
-  defp axis_to_date(value, :year), do: Tempo.from_iso8601!("#{value}Y")
-
-  defp axis_to_date(value, :month) do
-    year = Integer.floor_div(value, 12)
-    month = Integer.mod(value, 12) + 1
-    Tempo.from_iso8601!("#{year}-#{pad(month)}")
-  end
-
-  defp axis_to_date(value, :day) do
-    value |> Date.from_gregorian_days() |> Tempo.from_elixir()
-  end
-
-  defp axis_to_duration(value, :year), do: Tempo.from_iso8601!("P#{value}Y")
-  defp axis_to_duration(value, :month), do: Tempo.from_iso8601!("P#{value}M")
-  defp axis_to_duration(value, :day), do: Tempo.from_iso8601!("P#{value}D")
-
-  defp pad(month) when month < 10, do: "0#{month}"
-  defp pad(month), do: "#{month}"
-
   # --- trace reconstruction --------------------------------------
 
   defp reconstruct(_next, node, node), do: [node]
@@ -702,22 +725,30 @@ defmodule Tempo.Network.Solver do
   # Each path hop becomes a step naming the constraint that justifies it
   # and the bound derived at the reached boundary. The origin carries no
   # bound of its own, so it never appears as a step.
-  defp build_steps(path, distances, provenance, bound, unit) do
+  defp build_steps(path, distances, provenance, bound, normalized) do
     path
     |> Enum.chunk_every(2, 1, :discard)
     |> Enum.reject(fn [_prev, node] -> node == :origin end)
-    |> Enum.map(fn [prev, node] ->
+    |> Enum.reduce_while({:ok, []}, fn [prev, node], {:ok, steps} ->
       {_weight, source} = Map.fetch!(provenance, {prev, node})
-      %{boundary: node, value: bound_value(distances, node, bound, unit), source: source}
+
+      case bound_value(distances, node, bound, normalized) do
+        {:ok, value} -> {:cont, {:ok, [%{boundary: node, value: value, source: source} | steps]}}
+        {:error, _reason} = error -> {:halt, error}
+      end
     end)
+    |> in_order()
   end
 
-  defp bound_value(distances, boundary, :earliest, unit) do
-    axis_to_date(-get(distances, :origin, boundary), unit)
+  defp in_order({:ok, steps}), do: {:ok, Enum.reverse(steps)}
+  defp in_order({:error, _reason} = error), do: error
+
+  defp bound_value(distances, boundary, :earliest, normalized) do
+    Normalize.date_at(-get(distances, :origin, boundary), normalized)
   end
 
-  defp bound_value(distances, boundary, :latest, unit) do
-    axis_to_date(get(distances, boundary, :origin), unit)
+  defp bound_value(distances, boundary, :latest, normalized) do
+    Normalize.date_at(get(distances, boundary, :origin), normalized)
   end
 
   # --- trace prose -----------------------------------------------

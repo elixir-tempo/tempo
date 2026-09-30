@@ -4,7 +4,7 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ## Open
 
-* [ ] **`Network.Normalize` counts Gregorian years** — it places undated durations on one axis with a mean Gregorian year and month (365.2425 and 30.436875 days), so a Hebrew or Islamic network counts Gregorian ones. Calendrical has no per-calendar mean length; decide whether it should (reviewed 2026-09-30).
+* [ ] **Networks and schedules in hours** — a network, and so a `Tempo.Schedule` task, counts in years, months or days, and returns an error for hours, minutes or seconds. A sub-day axis would place values on the UTC time line and measure a day across a daylight-saving change. Plan in [plans/network-actual-lengths.md](plans/network-actual-lengths.md).
 
 * [ ] **A sub-day cadence's first selected occurrence is a whole day** — `R/../PT1H/FL1KN` within Monday 5 January 2026 (and `R/2026-01-05/PT1H/FL1KN`) starts from the day the weekday names, so its first occurrence is `2026Y1M5D/6D` and the rest are hours; without the selection the first is `2026Y1M5D/T1H`.
 
@@ -67,6 +67,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **Set algebra over open-ended windows** — a research project for later (user, 2026-09-28): how far union, intersection, difference, complement and the predicates go on the lazy sets an open-ended window gives, a test of the whole algebra. Questions in [plans/open-ended-set-algebra.md](plans/open-ended-set-algebra.md).
 
 ## Done
+
+* [x] **A network measures actual lengths** — a year or a month in a network of days is measured by calendar arithmetic from where its period can start, in its calendar, never a mean length; relation delays set the axis, a bound is the span it names, and a week-only or hour network no longer raises (user: actual lengths, 2026-09-30). 2026-09-30.
 
 * [x] **`to_relative_string/2` scales through Localize** — Tempo passes Localize the two instants and the `:unit`, and drops its own seconds per month and year, so a unit rounds as the unit Localize chooses does. 2026-09-30.
 

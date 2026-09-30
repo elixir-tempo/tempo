@@ -105,6 +105,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.shift/3` with `:skipping` steps a day shifted by days or weeks from free day to free day and returns a day: one day of free time after a Friday before a long weekend is the Tuesday, where it was midnight on the Saturday.
 
+* A network measures a year or a month in a network of days by its actual length from where its period can start, in the period's calendar, and gives its results in the network's calendar, where it used a mean Gregorian year and month: a year from 1 January 2024 is 366 days, and one from 1 Tishri 5784 is 383. `Tempo.Network.Normalize.normalize/1` returns `{:ok, normalized}` or an error, where it returned the map and raised.
+
 ### Added
 
 * A `Tempo.IntervalSet` is tabular data (`Table.Reader`) when the optional `table` package is present: a row per member with its `from`, `to` and metadata, so `Kino.DataTable.new/1` shows a set of holidays with their names.
@@ -186,6 +188,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* A network's relation delays set its axis, so a six-month gap between year-dated periods is six months, where it rounded to a year, and a bound on a finer axis is the span it names, so `{:not_after, ~o"1300Y"}` allows all of 1300. A network counting only weeks is placed in days, and one naming hours returns an error, where both raised.
 
 * `Tempo.to_relative_string/2` with `:unit` leaves the scaling to Localize, as it did without one: 50 days in months is "in 2 months", where it was "next month".
 

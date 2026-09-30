@@ -48,6 +48,19 @@ The vocabulary mirrors how an archaeologist actually speaks:
 
 A bare integer year (`1200`, `-664`) and an ISO 8601 string are also accepted as shorthands for year-grained work, but the `~o` form is the idiom — and it is what every bound is stored and returned as.
 
+A network works in the finest unit it is given: years for the chronologies here, days as soon as one date or duration names a day. A coarser duration is then measured by its actual length, in its period's own calendar, from where the period can start, never by an average year or month. A bound is the span it names, so `{:not_after, ~o"1300Y"}` in a day-grained network allows the whole of 1300. Networks count in years, months or days:
+
+```elixir
+# A reign that began on 1 January 2024 and lasted a year ended 366 days later.
+{:ok, solved} =
+  Network.new()
+  |> Network.add_period(:reign, from: ~o"2024-01-01", duration: ~o"P1Y")
+  |> Tempo.Network.Solver.propagate()
+
+solved.periods[:reign].earliest_end
+#=> ~o"2025Y1M1D"
+```
+
 > *"K1 began no earlier than 1200 and reigned at most 10 years; K2 ended by 1300 and reigned at least 35."*
 
 ## 3. Building ChronoLand
