@@ -201,6 +201,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.day_of_week/1`, `day_of_year/1`, `quarter_of_year/1`, `split/1` and `round/2` read a week date as the day it names, where they read it as 1 January of its year or split its day off as a time.
 
+* `Tempo.to_string/2` renders a week date as the day it names and a week, or a range of weeks, as its first and last day ("Jun 15 – 21, 2026"), where it rendered the year alone.
+
 * A network's relation delays set its axis, so a six-month gap between year-dated periods is six months, where it rounded to a year, and a bound on a finer axis is the span it names, so `{:not_after, ~o"1300Y"}` allows all of 1300. A network counting only weeks is placed in days, where it raised.
 
 * `Tempo.Schedule.span/1` returns an error for a plan with no tasks or no fixed start, where it raised.

@@ -4933,9 +4933,9 @@ defmodule Tempo do
   Routes through Localize so format patterns, month and weekday
   names, day periods, and punctuation all follow CLDR data for
   the chosen locale. The default format is keyed off the Tempo's
-  resolution — a year-only value renders as `"2026"`, a month
-  value as `"Jun 2026"`, a day value as `"Jun 15, 2026"`, and so
-  on.
+  resolution — a year renders as its first and last months, a month
+  or a week as its first and last days, a day as that day, and so
+  on. A week date is the day it names.
 
   `Tempo.to_string/1,2` is the end-user display function.
   `inspect/1` remains the programmer-facing form and returns the
@@ -4980,6 +4980,9 @@ defmodule Tempo do
 
       iex> Tempo.to_string(~o"2026-06-15")
       "Jun 15, 2026"
+
+      iex> Tempo.to_string(~o"2026-W25")
+      "Jun 15 – 21, 2026"
 
       iex> Tempo.to_string(~o"2026-06-15", format: :long)
       "June 15, 2026"

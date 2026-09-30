@@ -19,6 +19,10 @@ defmodule Tempo.Format do
   * `~o"2026-06"` (month resolution) → `"Jun 1\u2009\u2013\u200930, 2026"`.
     Iteration over a month yields days; first and last day.
 
+  * `~o"2026-W25"` (week resolution) → its first and last day,
+    `"Jun 15 – 21, 2026"`. A week date (`~o"2026-W25-2"`) is the
+    day it names, `"Jun 16, 2026"`.
+
   * `~o"2026-06-15"` (day resolution) → `"Jun 15, 2026"`. A day is
     atomic at human display granularity; collapse to a single
     value.
@@ -60,6 +64,7 @@ defmodule Tempo.Format do
   alias Tempo.TimeZoneDatabase
   alias Tempo.UnanchoredError
   alias Tempo.UnknownZoneError
+  alias Tempo.Validation
 
   @time_units [:hour, :minute, :second, :microsecond]
 
@@ -310,7 +315,7 @@ defmodule Tempo.Format do
   defp expand_as_closed_interval?(unit, tempo, options)
 
   defp expand_as_closed_interval?(unit, %Tempo{time: time}, options)
-       when unit in [:year, :month] do
+       when unit in [:year, :month, :week] do
     Keyword.has_key?(time, :year) and expandable_format?(Keyword.get(options, :format))
   end
 
@@ -348,7 +353,7 @@ defmodule Tempo.Format do
 
         closed_last =
           to
-          |> Math.subtract(Tempo.Duration.build([{iter_unit, 1}]))
+          |> Math.subtract(Tempo.Duration.build([{duration_unit(iter_unit), 1}]))
           |> Tempo.trunc(iter_unit)
 
         options = with_default_interval_options(options, first, closed_last)
@@ -368,10 +373,15 @@ defmodule Tempo.Format do
 
   defp next_finer_unit(:year), do: :month
   defp next_finer_unit(:month), do: :day
+  defp next_finer_unit(:week), do: :day_of_week
   defp next_finer_unit(:day), do: :hour
   defp next_finer_unit(:hour), do: :minute
   defp next_finer_unit(:minute), do: :second
   defp next_finer_unit(:second), do: :second
+
+  # A week's days are days of the week; a duration counts them as days.
+  defp duration_unit(:day_of_week), do: :day
+  defp duration_unit(unit), do: unit
 
   ## ---------------------------------------------------------
   ## Single-value rendering (day, hour, minute, second, time-only)
@@ -482,7 +492,8 @@ defmodule Tempo.Format do
   defp axis(format) when format in [:y, :yMMM, :yMMMd], do: :date
   defp axis(_format), do: :both
 
-  defp has_field?(%Tempo{time: time}, field), do: Keyword.has_key?(time, field)
+  # The fields Localize is given, so a week date has the day it names.
+  defp has_field?(%Tempo{} = tempo, field), do: Map.has_key?(to_locale_map(tempo), field)
 
   # A Tempo is date-only when its time kv list contains none of
   # :hour, :minute, :second. It is time-only when it contains
@@ -503,12 +514,30 @@ defmodule Tempo.Format do
   # Convert a Tempo to the map shape Localize accepts: flatten the
   # time keyword list into map keys and append the :calendar field.
   defp to_locale_map(%Tempo{time: time, calendar: calendar}) do
+    calendar = calendar || Calendrical.Gregorian
+
     time
+    |> week_date_as_day(calendar)
     |> Enum.reduce(%{}, fn
       {k, v}, acc when is_integer(v) -> Map.put(acc, k, v)
       _other, acc -> acc
     end)
-    |> Map.put(:calendar, calendar || Calendrical.Gregorian)
+    |> Map.put(:calendar, calendar)
+  end
+
+  # A week date names a day — its day of the week, or the first day of a
+  # whole week — which Localize takes as a date's year, month and day in
+  # the value's calendar.
+  defp week_date_as_day(time, calendar) do
+    with week when is_integer(week) <- Keyword.get(time, :week),
+         year when is_integer(year) <- Keyword.get(time, :year),
+         day when is_integer(day) <- Keyword.get(time, :day_of_week, 1),
+         {:ok, date} <- Validation.date_from_iso_week(year, week, day, calendar) do
+      [year: date.year, month: date.month, day: date.day] ++
+        Keyword.drop(time, [:year, :week, :day_of_week])
+    else
+      _not_a_week_date -> time
+    end
   end
 
   defp default_format_for_unit(:year, _tempo), do: :y
@@ -541,7 +570,7 @@ defmodule Tempo.Format do
   # note in CLAUDE.md).
   defp closed_last_for_interval(%Tempo{} = from, %Tempo{} = to) do
     {iter_unit, _} = Tempo.resolution(from)
-    Math.subtract(to, Tempo.Duration.build([{iter_unit, 1}]))
+    Math.subtract(to, Tempo.Duration.build([{duration_unit(iter_unit), 1}]))
   end
 
   # When an interval's endpoints carry time-of-day components that
@@ -571,11 +600,9 @@ defmodule Tempo.Format do
   # use :day. If both have at least month, use :month. Otherwise
   # :year.
   defp display_unit_for_midnight_pair(%Tempo{time: from_time}, %Tempo{time: to_time}) do
-    cond do
-      Keyword.has_key?(from_time, :day) and Keyword.has_key?(to_time, :day) -> :day
-      Keyword.has_key?(from_time, :month) and Keyword.has_key?(to_time, :month) -> :month
-      true -> :year
-    end
+    Enum.find([:day, :day_of_week, :month, :week], :year, fn unit ->
+      Keyword.has_key?(from_time, unit) and Keyword.has_key?(to_time, unit)
+    end)
   end
 
   # Intervals take {:format, :fields} options; `:fields` tells
@@ -592,7 +619,7 @@ defmodule Tempo.Format do
   defp interval_fields_for(%Tempo{} = from, %Tempo{} = to) do
     {from_unit, _} = Tempo.resolution(from)
     {to_unit, _} = Tempo.resolution(to)
-    coarsest = coarsest_unit(from_unit, to_unit)
+    coarsest = coarsest_unit(day_as_day(from_unit), day_as_day(to_unit))
 
     case coarsest do
       :year -> :year_and_month
@@ -601,6 +628,10 @@ defmodule Tempo.Format do
       _time_component -> :date
     end
   end
+
+  # A week date's day is a day.
+  defp day_as_day(:day_of_week), do: :day
+  defp day_as_day(unit), do: unit
 
   @unit_order_ctf [:year, :month, :day, :hour, :minute, :second]
 
@@ -660,6 +691,7 @@ defmodule Tempo.Format do
     # year), so fill both endpoints down to the unit first; a nil
     # unit (a user-written explicit interval) is a no-op.
     calendar = Compare.effective_calendar(from.calendar)
+    unit = unit || week_days(from)
     {Steps.fill_to_unit(from, unit, calendar), Steps.fill_to_unit(to, unit, calendar)}
   end
 
@@ -672,6 +704,14 @@ defmodule Tempo.Format do
         raise Tempo.IntervalEndpointsError,
           operation: "Tempo.Format.to_string/2",
           interval: interval
+    end
+  end
+
+  # A range of whole weeks is shown by its days, as a week is.
+  defp week_days(%Tempo{} = tempo) do
+    case Tempo.resolution(tempo) do
+      {:week, _span} -> :day_of_week
+      _other -> nil
     end
   end
 end
