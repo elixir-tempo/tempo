@@ -85,8 +85,9 @@ defmodule Tempo.RRule.Selection do
   * `:keep_span` is `true` when the occurrences carry an explicit span
     (an iCalendar `DTEND`, an `:occurrence_duration`), which an hour,
     minute or second expansion keeps by moving the candidate's `to` with
-    its `from`. The default is `false`: each occurrence is resized to its
-    own resolution afterwards.
+    its `from`. The default is `false`: when the rule expands (see
+    `expands?/2`), each occurrence is resized to its own resolution
+    afterwards.
 
   ### Returns
 
@@ -127,6 +128,48 @@ defmodule Tempo.RRule.Selection do
   # crash. Future phases replace this catch-all with a specific
   # error once every shape is accounted for.
   def apply(%Interval{} = candidate, _, _freq, _options), do: [candidate]
+
+  @doc """
+  Returns whether a `repeat_rule` expands each candidate into points rather than only limiting the candidates it keeps.
+
+  An expansion makes points within a candidate — the 15th of a monthly candidate, the Mondays of a weekly one, 09:00 of a daily one — and each point is an occurrence one unit of its own resolution long. A rule whose parts only limit keeps or drops whole candidates, so each occurrence it keeps spans its cadence, as it would without the rule: the Monday hours of an hourly recurrence are hours, and the January weeks of a weekly one are weeks. A §12.10 window expands.
+
+  ### Arguments
+
+  * `repeat_rule` is either `nil` or a `%Tempo{}` whose `:time` holds `[selection: [...]]`.
+
+  * `freq` is the enclosing `FREQ` atom, as for `apply/4`.
+
+  ### Returns
+
+  * `true` when a part of the rule expands at `freq`.
+
+  * `false` otherwise.
+
+  ### Examples
+
+      iex> the_15th = %Tempo{time: [selection: [day: 15]], calendar: Calendrical.Gregorian}
+      iex> Tempo.RRule.Selection.expands?(the_15th, :month)
+      true
+
+      iex> mondays = %Tempo{time: [selection: [day_of_week: 1]], calendar: Calendrical.Gregorian}
+      iex> Tempo.RRule.Selection.expands?(mondays, :hour)
+      false
+
+  """
+  @spec expands?(Tempo.t() | nil, atom()) :: boolean()
+  def expands?(%Tempo{time: [selection: selection]}, freq) do
+    case split_window(selection) do
+      {_scope, %Interval{}, _within} ->
+        true
+
+      :none ->
+        {_years, parts} = Keyword.pop(selection, :year)
+        parts |> Enum.sort_by(&application_order_key/1) |> any_part_expands?(freq, parts)
+    end
+  end
+
+  def expands?(_repeat_rule, _freq), do: false
 
   defp selection_context(options) do
     origin_day =
@@ -198,6 +241,15 @@ defmodule Tempo.RRule.Selection do
   defp scope_after({:week, _weeks}, :year), do: :day
   defp scope_after({:calendar_week, _weeks}, :year), do: :day
   defp scope_after(_entry, scope), do: scope
+
+  # The parts in the order and at the scope `resolve_in_period/4` applies
+  # them: a BYWEEKNO that expands a year hands its days on at day scope.
+  defp any_part_expands?([], _scope, _selection), do: false
+
+  defp any_part_expands?([part | rest], scope, selection) do
+    role(part, scope, selection) != :limit or
+      any_part_expands?(rest, scope_after(part, scope), selection)
+  end
 
   # Split a selection around a §12.10 window: `{scope, window, within}` where
   # `scope` are the elements before it (coarser context, e.g. a month), and
@@ -373,17 +425,55 @@ defmodule Tempo.RRule.Selection do
     Enum.find_index(@application_order, &(&1 == token)) || length(@application_order)
   end
 
-  # WKST — context-only token consumed by `apply_selection`.
-  # Already extracted before the reduce fires, so by the time it
-  # shows up here it's a no-op.
-  defp apply_entry({:wkst, _}, candidates, _freq, _selection, _wkst), do: candidates
+  # Unit weight for the EXPAND-vs-LIMIT decision: rules whose
+  # unit is FINER than FREQ (bigger weight) act as EXPAND; rules
+  # whose unit is EQUAL or COARSER act as LIMIT. The weights only
+  # need an ordering, not specific values.
+  @unit_weight %{
+    year: 1,
+    month: 2,
+    week: 3,
+    day: 4,
+    hour: 5,
+    minute: 6,
+    second: 7
+  }
+
+  # A part applies in the role its scope gives it, which `expands?/2` reads
+  # too.
+  defp apply_entry(entry, candidates, scope, selection, wkst) do
+    apply_role(role(entry, scope, selection), entry, candidates, scope, selection, wkst)
+  end
+
+  # The role a part plays at a scope, per the table in the moduledoc:
+  # `:expand` makes points within each candidate, `{:expand, period}` makes a
+  # BYDAY's weekdays within the week, month or year, and `:limit` keeps or
+  # drops whole candidates.
+  defp role({token, _value}, :year, _selection)
+       when token in [:month, :traditional_month, :day_of_year, :event, :week, :calendar_week],
+       do: :expand
+
+  defp role({token, _value}, scope, _selection)
+       when token in [:day, :nearest_weekday] and scope in [:month, :year],
+       do: :expand
+
+  defp role({:day_of_week, _days}, scope, selection), do: no_ordinal_byday_role(scope, selection)
+  defp role({:byday, _pairs}, _scope, _selection), do: :expand
+
+  defp role({unit, _values}, scope, _selection) when unit in [:hour, :minute, :second] do
+    if Map.get(@unit_weight, scope, 0) < Map.get(@unit_weight, unit, 0),
+      do: :expand,
+      else: :limit
+  end
+
+  defp role(_entry, _scope, _selection), do: :limit
 
   # BYMONTH — EXPAND for FREQ=YEARLY, LIMIT otherwise. Per RFC
   # 5545 §3.3.10, a YEARLY rule with BYMONTH=6,7 produces an
   # occurrence in each listed month of each year; finer FREQs
   # already iterate at finer-than-year granularity, so they
   # just filter.
-  defp apply_entry({:month, months}, candidates, :year, selection, _wkst) do
+  defp apply_role(:expand, {:month, months}, candidates, _scope, selection, _wkst) do
     # RFC 5545 §3.3.10: the BY* parts apply in order BYMONTH,
     # BYWEEKNO, BYYEARDAY, BYMONTHDAY, BYDAY — so when any later
     # part determines the day, the day this expansion carries from
@@ -398,7 +488,7 @@ defmodule Tempo.RRule.Selection do
     end)
   end
 
-  defp apply_entry({:month, months}, candidates, _freq, _selection, _wkst) do
+  defp apply_role(:limit, {:month, months}, candidates, _scope, _selection, _wkst) do
     limit(candidates, months, &month_of/1)
   end
 
@@ -407,10 +497,10 @@ defmodule Tempo.RRule.Selection do
   # ordinary BYMONTH. The traditional→ordinal step is Calendrical's, via
   # `Tempo.Validation.ordinal_month_from_traditional/3`. A leap month the candidate's
   # year does not carry resolves to nothing, so that year yields no occurrence.
-  defp apply_entry({:traditional_month, months}, candidates, freq, selection, wkst) do
+  defp apply_role(_role, {:traditional_month, months}, candidates, scope, selection, wkst) do
     Enum.flat_map(candidates, fn candidate ->
       ordinals = traditional_months_to_ordinals(candidate, List.wrap(months))
-      apply_entry({:month, ordinals}, [candidate], freq, selection, wkst)
+      apply_entry({:month, ordinals}, [candidate], scope, selection, wkst)
     end)
   end
 
@@ -418,14 +508,13 @@ defmodule Tempo.RRule.Selection do
   # otherwise. RFC forbids it with FREQ=WEEKLY; we don't reject
   # (malformed rules are a parser concern). `-1` is the last
   # day of the enclosing month.
-  defp apply_entry({:day, days}, candidates, freq, _selection, _wkst)
-       when freq in [:month, :year] do
+  defp apply_role(:expand, {:day, days}, candidates, _scope, _selection, _wkst) do
     Enum.flat_map(candidates, fn candidate ->
       expand_candidate_days(candidate, List.wrap(days))
     end)
   end
 
-  defp apply_entry({:day, days}, candidates, _freq, _selection, _wkst) do
+  defp apply_role(:limit, {:day, days}, candidates, _scope, _selection, _wkst) do
     Enum.filter(candidates, fn candidate ->
       in_month_day_list?(candidate, List.wrap(days))
     end)
@@ -435,14 +524,13 @@ defmodule Tempo.RRule.Selection do
   # for MONTHLY/YEARLY (project each enclosing month onto its
   # nearest-weekday date), LIMIT otherwise (keep candidates whose
   # day is a nearest-weekday for their month).
-  defp apply_entry({:nearest_weekday, targets}, candidates, freq, _selection, _wkst)
-       when freq in [:month, :year] do
+  defp apply_role(:expand, {:nearest_weekday, targets}, candidates, _scope, _selection, _wkst) do
     Enum.flat_map(candidates, fn candidate ->
       expand_nearest_weekdays(candidate, List.wrap(targets))
     end)
   end
 
-  defp apply_entry({:nearest_weekday, targets}, candidates, _freq, _selection, _wkst) do
+  defp apply_role(:limit, {:nearest_weekday, targets}, candidates, _scope, _selection, _wkst) do
     Enum.filter(candidates, fn candidate ->
       day_of(candidate) in nearest_weekday_days(candidate, List.wrap(targets))
     end)
@@ -453,7 +541,14 @@ defmodule Tempo.RRule.Selection do
   # monthday list OR whose weekday matches a byday entry. The cron
   # builder pairs this with a DAILY cadence so every candidate day
   # is visited.
-  defp apply_entry({:or_day, {monthdays, byday_entries}}, candidates, _freq, _selection, _wkst) do
+  defp apply_role(
+         :limit,
+         {:or_day, {monthdays, byday_entries}},
+         candidates,
+         _scope,
+         _selection,
+         _wkst
+       ) do
     Enum.filter(candidates, fn candidate ->
       in_month_day_list?(candidate, monthdays) or weekday_matches?(candidate, byday_entries)
     end)
@@ -461,13 +556,13 @@ defmodule Tempo.RRule.Selection do
 
   # BYYEARDAY — EXPAND for YEARLY, LIMIT otherwise. Signed
   # indexing: `-1` is the last day of the year.
-  defp apply_entry({:day_of_year, days}, candidates, :year, _selection, _wkst) do
+  defp apply_role(:expand, {:day_of_year, days}, candidates, _scope, _selection, _wkst) do
     Enum.flat_map(candidates, fn candidate ->
       expand_candidate_year_days(candidate, List.wrap(days))
     end)
   end
 
-  defp apply_entry({:day_of_year, days}, candidates, _freq, _selection, _wkst) do
+  defp apply_role(:limit, {:day_of_year, days}, candidates, _scope, _selection, _wkst) do
     Enum.filter(candidates, fn candidate ->
       in_year_day_list?(candidate, List.wrap(days))
     end)
@@ -479,11 +574,11 @@ defmodule Tempo.RRule.Selection do
   # or a year the resolver cannot reach (an equinox outside Astro's range) drops
   # silently, like any other invalid combination. For finer FREQs it is a LIMIT:
   # keep candidates already sitting on the event's date.
-  defp apply_entry({:event, name}, candidates, :year, _selection, _wkst) do
+  defp apply_role(:expand, {:event, name}, candidates, _scope, _selection, _wkst) do
     Enum.flat_map(candidates, fn candidate -> expand_event(candidate, name) end)
   end
 
-  defp apply_entry({:event, name}, candidates, _freq, _selection, _wkst) do
+  defp apply_role(:limit, {:event, name}, candidates, _scope, _selection, _wkst) do
     Enum.filter(candidates, fn candidate -> on_event_date?(candidate, name) end)
   end
 
@@ -492,7 +587,7 @@ defmodule Tempo.RRule.Selection do
   # days of that week). Signed indexing: `-1` is the last week.
   # After a BYMONTH expansion only the days in the candidate's
   # month are kept.
-  defp apply_entry({:week, weeks}, candidates, :year, selection, wkst) do
+  defp apply_role(:expand, {:week, weeks}, candidates, _scope, selection, wkst) do
     within_month? = month_selected?(selection)
 
     Enum.flat_map(candidates, fn candidate ->
@@ -500,7 +595,7 @@ defmodule Tempo.RRule.Selection do
     end)
   end
 
-  defp apply_entry({:week, weeks}, candidates, _freq, _selection, wkst) do
+  defp apply_role(:limit, {:week, weeks}, candidates, _scope, _selection, wkst) do
     Enum.filter(candidates, fn candidate ->
       in_week_no_list?(candidate, List.wrap(weeks), wkst)
     end)
@@ -509,7 +604,7 @@ defmodule Tempo.RRule.Selection do
   # A calendar-week selection (`w`, Tempo's extension) — EXPAND for YEARLY
   # as BYWEEKNO is, LIMIT otherwise — in the weeks the calendar numbers
   # itself rather than ISO 8601's.
-  defp apply_entry({:calendar_week, weeks}, candidates, :year, selection, _wkst) do
+  defp apply_role(:expand, {:calendar_week, weeks}, candidates, _scope, selection, _wkst) do
     within_month? = month_selected?(selection)
 
     Enum.flat_map(candidates, fn candidate ->
@@ -517,7 +612,7 @@ defmodule Tempo.RRule.Selection do
     end)
   end
 
-  defp apply_entry({:calendar_week, weeks}, candidates, _freq, _selection, _wkst) do
+  defp apply_role(:limit, {:calendar_week, weeks}, candidates, _scope, _selection, _wkst) do
     Enum.filter(candidates, fn candidate ->
       in_calendar_week_list?(candidate, List.wrap(weeks))
     end)
@@ -535,54 +630,52 @@ defmodule Tempo.RRule.Selection do
   #
   # The `selection` list lets us detect the sibling tokens and
   # downgrade EXPAND → LIMIT per Notes 1/2.
-  defp apply_entry({:day_of_week, days}, candidates, freq, selection, wkst) do
-    case no_ordinal_byday_role(freq, selection) do
-      :limit ->
-        Enum.filter(candidates, fn candidate ->
-          weekday_of(candidate) in List.wrap(days)
-        end)
+  defp apply_role(:limit, {:day_of_week, days}, candidates, _scope, _selection, _wkst) do
+    Enum.filter(candidates, fn candidate ->
+      weekday_of(candidate) in List.wrap(days)
+    end)
+  end
 
-      {:expand, :week} ->
-        Enum.flat_map(candidates, &expand_weekdays_in_week(&1, List.wrap(days), wkst))
+  defp apply_role({:expand, :week}, {:day_of_week, days}, candidates, _scope, _selection, wkst) do
+    Enum.flat_map(candidates, &expand_weekdays_in_week(&1, List.wrap(days), wkst))
+  end
 
-      {:expand, :month} ->
-        Enum.flat_map(candidates, &expand_weekdays_in_month(&1, List.wrap(days)))
+  defp apply_role({:expand, :month}, {:day_of_week, days}, candidates, _scope, _selection, _wkst) do
+    Enum.flat_map(candidates, &expand_weekdays_in_month(&1, List.wrap(days)))
+  end
 
-      {:expand, :year} ->
-        Enum.flat_map(candidates, &expand_weekdays_in_year(&1, List.wrap(days)))
-    end
+  defp apply_role({:expand, :year}, {:day_of_week, days}, candidates, _scope, _selection, _wkst) do
+    Enum.flat_map(candidates, &expand_weekdays_in_year(&1, List.wrap(days)))
   end
 
   # BYDAY with ordinals — EXPAND. Each `{ordinal, weekday}` pair
   # picks one (or more) specific date within the enclosing
   # period. Backed by `Calendrical.Kday.nth_kday/3` which
   # handles both positive and negative ordinals.
-  defp apply_entry({:byday, pairs}, candidates, freq, selection, wkst) do
-    scope = byday_ordinal_scope(freq, selection)
+  defp apply_role(:expand, {:byday, pairs}, candidates, scope, selection, wkst) do
+    period = byday_ordinal_scope(scope, selection)
 
     Enum.flat_map(candidates, fn candidate ->
-      expand_byday_pairs(candidate, pairs, scope, wkst)
+      expand_byday_pairs(candidate, pairs, period, wkst)
     end)
   end
 
   # BYHOUR / BYMINUTE / BYSECOND — EXPAND when FREQ is coarser
   # than the unit, LIMIT when FREQ is the same unit or finer.
-  defp apply_entry({:hour, values}, candidates, freq, selection, _wkst) do
-    expand_or_limit_time(candidates, :hour, List.wrap(values), freq, keep_span?(selection))
+  defp apply_role(:expand, {unit, values}, candidates, _scope, selection, _wkst)
+       when unit in [:hour, :minute, :second] do
+    expand_time(candidates, unit, List.wrap(values), keep_span?(selection))
   end
 
-  defp apply_entry({:minute, values}, candidates, freq, selection, _wkst) do
-    expand_or_limit_time(candidates, :minute, List.wrap(values), freq, keep_span?(selection))
-  end
-
-  defp apply_entry({:second, values}, candidates, freq, selection, _wkst) do
-    expand_or_limit_time(candidates, :second, List.wrap(values), freq, keep_span?(selection))
+  defp apply_role(:limit, {unit, values}, candidates, _scope, _selection, _wkst)
+       when unit in [:hour, :minute, :second] do
+    limit_time(candidates, unit, List.wrap(values))
   end
 
   # A year (`Y`) among a window's selectors — LIMIT: keep the window's days
   # in a listed year (a year number, a mask such as `202XY`, or `X*Y` for any
   # year). Anywhere else a year limits the period (`resolve_in_period/4`).
-  defp apply_entry({:year, years}, candidates, _freq, _selection, _wkst) do
+  defp apply_role(:limit, {:year, years}, candidates, _scope, _selection, _wkst) do
     Enum.filter(candidates, &year_selected?(year_of(&1), years))
   end
 
@@ -590,12 +683,13 @@ defmodule Tempo.RRule.Selection do
   # the accumulated `candidates` list as the resolved set and picks the Nth
   # element. Positive ordinals count from the start (1-based), negative from the
   # end (`-1` = last).
-  defp apply_entry({:instance, positions}, candidates, _freq, _selection, _wkst) do
+  defp apply_role(:limit, {:instance, positions}, candidates, _scope, _selection, _wkst) do
     pick_set_positions(candidates, List.wrap(positions))
   end
 
-  # Unknown tokens pass through unchanged.
-  defp apply_entry(_entry, candidates, _freq, _selection, _wkst), do: candidates
+  # WKST, a context-only token `apply_selection/3` has already read, and
+  # unknown tokens pass through unchanged.
+  defp apply_role(_role, _entry, candidates, _scope, _selection, _wkst), do: candidates
 
   defp keep_span?(selection), do: Keyword.get(selection, :keep_span, false)
 
@@ -1551,28 +1645,6 @@ defmodule Tempo.RRule.Selection do
   ## ------------------------------------------------------------
   ## BYHOUR / BYMINUTE / BYSECOND
   ## ------------------------------------------------------------
-
-  # Unit weight for the EXPAND-vs-LIMIT decision: rules whose
-  # unit is FINER than FREQ (bigger weight) act as EXPAND; rules
-  # whose unit is EQUAL or COARSER act as LIMIT. The weights only
-  # need an ordering, not specific values.
-  @unit_weight %{
-    year: 1,
-    month: 2,
-    week: 3,
-    day: 4,
-    hour: 5,
-    minute: 6,
-    second: 7
-  }
-
-  defp expand_or_limit_time(candidates, unit, values, freq, keep_span?) do
-    if Map.get(@unit_weight, freq, 0) < Map.get(@unit_weight, unit, 0) do
-      expand_time(candidates, unit, values, keep_span?)
-    else
-      limit_time(candidates, unit, values)
-    end
-  end
 
   defp expand_time(candidates, unit, values, keep_span?) do
     Enum.flat_map(candidates, fn candidate ->

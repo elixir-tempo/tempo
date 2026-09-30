@@ -10,6 +10,8 @@ defmodule Tempo.RRule.SelectionTest do
   alias Tempo.RRule.Rule
   alias Tempo.RRule.Selection
 
+  doctest Selection
+
   # These tests exercise the Phase B pipeline:
   #
   #   parser / adapter
@@ -408,6 +410,65 @@ defmodule Tempo.RRule.SelectionTest do
                  "2026Y1M6DT9H0M0S/T13H0M0S",
                  "2026Y1M6DT22H0M0S/7DT2H0M0S"
                ]
+    end
+  end
+
+  describe "a selection that only limits keeps whole occurrences" do
+    # A selection whose parts only limit keeps or drops the cadence's steps, so
+    # each occurrence it keeps is the step it would be without the selection.
+    # A selection that expands picks points, each one unit of its resolution.
+    test "the Monday hours of an hourly recurrence are its hours, from the first" do
+      monday = ~o"2026-01-05"
+
+      for rule <- ["R/../PT1H/FL1KN", "R/2026-01-05/PT1H/FL1KN"] do
+        hours = occurrence_spans(rule, monday)
+
+        assert length(hours) == 24
+        assert Enum.take(hours, 2) == ["2026Y1M5D/T1H", "2026Y1M5DT1H/T2H"]
+        assert hours == occurrence_spans(String.replace(rule, "/FL1KN", ""), monday)
+      end
+    end
+
+    test "each occurrence spans its cadence, however many units it steps" do
+      monday = ~o"2026-01-05"
+
+      assert Enum.take(occurrence_spans("R/../PT2H/FL1KN", monday), 2) ==
+               ["2026Y1M5D/T2H", "2026Y1M5DT2H/T4H"]
+
+      assert Enum.take(occurrence_spans("R/../PT30M/FL1KN", monday), 2) ==
+               ["2026Y1M5D/T0H30M", "2026Y1M5DT0H30M/T1H0M"]
+
+      assert Enum.take(occurrence_spans("R/../PT1H30M/FL1KN", monday), 2) ==
+               ["2026Y1M5D/T1H30M", "2026Y1M5DT1H30M/T3H0M"]
+
+      assert occurrence_spans("R/2026-01-05/P2D/FL1KN", ~o"2026-01") ==
+               ["2026Y1M5D/7D", "2026Y1M19D/21D"]
+    end
+
+    test "the January weeks of a weekly recurrence are weeks" do
+      weeks = ["2026Y1M5D/12D", "2026Y1M12D/19D", "2026Y1M19D/26D", "2026Y1M26D/2M2D"]
+      {:ok, weekly} = RRule.parse("FREQ=WEEKLY;BYMONTH=1", from: ~o"2026-01-05")
+      {:ok, set} = Tempo.to_interval(weekly, within: ~o"2026")
+
+      assert occurrence_spans("R/2026-01-05/P1W/FL1MN", ~o"2026") == weeks
+      assert Enum.map(IntervalSet.members(set), &Tempo.to_iso8601!/1) == weeks
+
+      assert occurrence_spans("R/2026-01-01/P1M/FL{1,2}MN", ~o"2026") ==
+               ["2026Y1M1D/2M1D", "2026Y2M1D/3M1D"]
+    end
+
+    test "a point a selection expands to is one unit of its resolution" do
+      # Half past each hour, and each Monday of a weekly recurrence. Under a
+      # cadence of mixed units, half past the hour and 09:00 are still points.
+      assert occurrence_spans("R/../PT1H/FLT30MN", ~o"2026-01-05T09/2026-01-05T11") ==
+               ["2026Y1M5DT9H30M/T31M", "2026Y1M5DT10H30M/T31M"]
+
+      assert hd(occurrence_spans("R/../P1W/FL1KN", ~o"2026-01")) == "2026Y1M5D/6D"
+
+      assert hd(occurrence_spans("R/../PT1H30M/FLT30MN", ~o"2026-01-05")) ==
+               "2026Y1M5DT0H30M/T31M"
+
+      assert hd(occurrence_spans("R/../P1DT12H/FLT9HN", ~o"2026-01-05")) == "2026Y1M5DT9H/T10H"
     end
   end
 

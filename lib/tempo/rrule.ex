@@ -90,7 +90,8 @@ defmodule Tempo.RRule do
 
   * `:duration` — a `%Tempo.Duration{}` span for each occurrence,
     the RRULE echo of iCalendar's `DURATION`. Each occurrence spans
-    this rather than one unit of its own resolution, so a
+    this rather than the span the rule gives it (one unit of its own
+    resolution for a day the rule picks), so a
     `FREQ=MONTHLY;BYDAY=1WE` rule starting at 18:00 with a two-hour
     duration emits `18:00/20:00` occurrences.
 
@@ -388,7 +389,7 @@ defmodule Tempo.RRule do
   #
   #   * `:duration` — a `%Tempo.Duration{}` occurrence span, attached
   #     as `occurrence_duration` (the iCalendar `DURATION` echo: each
-  #     occurrence spans this rather than one unit of its resolution).
+  #     occurrence spans this rather than the span its rule gives it).
   #
   #   * `:base_to` — a `%Tempo{}` occurrence-0 upper endpoint, attached
   #     as `occurrence_base_to` (the `DTEND`-style span).

@@ -193,6 +193,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A recurrence whose selection only limits its steps keeps each step whole, as it is without the selection: `R/../PT1H/FL1KN` is a Monday's hours from the first, and `R/2026-01-05/P1W/FL1MN` January's weeks, where each occurrence was cut to one unit of its start, so the first hour was the whole day.
+
 * `Tempo.shift_zone/2` keeps a value in its own calendar, with its calendar annotation, tags, metadata and qualification, where it wrote the Gregorian wall clock under the value's calendar and dropped the rest.
 
 * `Tempo.shift_zone/2`, `now/1`, `utc_now/0` and `from_elixir/1` of a `DateTime` write one time zone annotation, `2026Y3M8DT9H0M0SZ-4H[America/New_York]`, as RFC 9557 allows, where they added the offset as a second (`[-05:00]`) that went stale when the value was shifted across a change of offset.

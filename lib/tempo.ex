@@ -6372,12 +6372,13 @@ defmodule Tempo do
          %Tempo.Duration{} = cadence
        ) do
     freq = freq_of(cadence)
-    resize? = not explicit_occurrence_span?(metadata)
+    explicit_span? = explicit_occurrence_span?(metadata)
+    resize? = not explicit_span? and Selection.expands?(rule, freq)
     origin_day = origin_day_of(interval)
 
     fn candidate ->
       candidate
-      |> Selection.apply(rule, freq, origin_day: origin_day, keep_span: not resize?)
+      |> Selection.apply(rule, freq, origin_day: origin_day, keep_span: explicit_span?)
       |> resize_selected_occurrences(resize?)
     end
   end
@@ -6394,15 +6395,18 @@ defmodule Tempo do
 
   defp origin_day_of(_interval), do: nil
 
-  # A selection picks *points* at its own resolution — "the 15th"
-  # is the day the 15th, not the month it sits in. The candidate the
-  # selection expands spans a whole cadence period (so the resolver
-  # can see the enclosing month/year), so each selected occurrence
-  # inherits that period as its span. Unless the recurrence carries
-  # an explicit event span (a DTEND-style `occurrence_base_to` or
-  # `occurrence_duration`), resize each occurrence to one unit of its
-  # own resolution. This keeps native `~o".../FL15DN"`, RRULE, and
-  # cron consistent without storing any per-occurrence metadata.
+  # A selection that expands picks *points* at their own resolution —
+  # "the 15th" is the day the 15th, not the month it sits in. The
+  # candidate it expands spans a whole cadence period (so the resolver
+  # can see the enclosing month/year), so each point inherits that
+  # period as its span. Unless the recurrence carries an explicit event
+  # span (a DTEND-style `occurrence_base_to` or `occurrence_duration`),
+  # resize each point to one unit of its own resolution. A selection
+  # that only limits keeps whole candidates, each spanning its cadence
+  # as it would without the selection: the Monday hours of an hourly
+  # recurrence are hours, and the January weeks of a weekly one weeks.
+  # This keeps native `~o".../FL15DN"`, RRULE, and cron consistent
+  # without storing any per-occurrence metadata.
   defp resize_selected_occurrences(occurrences, false) do
     Enum.map(occurrences, &drop_windowed_marker/1)
   end
