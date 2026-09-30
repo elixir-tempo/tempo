@@ -130,8 +130,8 @@ defmodule Tempo.Network.ActualLengthsTest do
   end
 
   describe "what a network cannot place is an error, not a raise" do
-    test "a unit finer than a day" do
-      network = Network.add_period(Network.new(), :a, from: ~o"2026-01-05T10")
+    test "a unit finer than a second" do
+      network = Network.add_period(Network.new(), :a, from: ~o"2026-01-05T10:00:00.5")
 
       assert {:error, %ArgumentError{}} = Solver.propagate(network)
       assert {:error, %ArgumentError{}} = Normalize.normalize(network)
@@ -139,7 +139,7 @@ defmodule Tempo.Network.ActualLengthsTest do
 
       assert {:error, %ArgumentError{}} =
                Schedule.new()
-               |> Schedule.task(:a, duration: ~o"PT4H", start: ~o"2026-06-01")
+               |> Schedule.task(:a, duration: ~o"PT0.5S", start: ~o"2026-06-01")
                |> Schedule.solve()
     end
 

@@ -109,6 +109,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Added
 
+* A `Tempo.Network`, and so a `Tempo.Schedule`, counts in hours, minutes and seconds on the time line, where one naming them raised: a task of `~o"PT4H"` from 09:00 runs to 13:00. An hour is elapsed time, and a day in a zone is measured, so one across a daylight-saving change is its 23 or 25 hours.
+
 * A `Tempo.IntervalSet` is tabular data (`Table.Reader`) when the optional `table` package is present: a row per member with its `from`, `to` and metadata, so `Kino.DataTable.new/1` shows a set of holidays with their names.
 
 * The livebook `everyday-holidays.livemd` answers everyday holiday questions — the next school holidays, the days until Election Day, a year's holidays and those two countries share — with each holiday written as its ISO 8601 rule.
@@ -189,7 +191,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
-* A network's relation delays set its axis, so a six-month gap between year-dated periods is six months, where it rounded to a year, and a bound on a finer axis is the span it names, so `{:not_after, ~o"1300Y"}` allows all of 1300. A network counting only weeks is placed in days, and one naming hours returns an error, where both raised.
+* A network's relation delays set its axis, so a six-month gap between year-dated periods is six months, where it rounded to a year, and a bound on a finer axis is the span it names, so `{:not_after, ~o"1300Y"}` allows all of 1300. A network counting only weeks is placed in days, where it raised.
 
 * `Tempo.to_relative_string/2` with `:unit` leaves the scaling to Localize, as it did without one: 50 days in months is "in 2 months", where it was "next month".
 

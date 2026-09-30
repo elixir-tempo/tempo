@@ -4,7 +4,7 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ## Open
 
-* [ ] **Networks and schedules in hours** — a network, and so a `Tempo.Schedule` task, counts in years, months or days, and returns an error for hours, minutes or seconds. A sub-day axis would place values on the UTC time line and measure a day across a daylight-saving change. Plan in [plans/network-actual-lengths.md](plans/network-actual-lengths.md).
+* [ ] **`shift_zone/2` writes two time-zone annotations** — its result writes as `2026Y3M7DT9H0M0SZ-5H[America/New_York][-05:00]`, the offset annotation coming from `extended.zone_offset` beside the zone, where RFC 9557 allows one; the parser drops the second, so it round-trips, but the form is not RFC 9557's. A network in hours in a zone shows its results so.
 
 * [ ] **A sub-day cadence's first selected occurrence is a whole day** — `R/../PT1H/FL1KN` within Monday 5 January 2026 (and `R/2026-01-05/PT1H/FL1KN`) starts from the day the weekday names, so its first occurrence is `2026Y1M5D/6D` and the rest are hours; without the selection the first is `2026Y1M5D/T1H`.
 
@@ -67,6 +67,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **Set algebra over open-ended windows** — a research project for later (user, 2026-09-28): how far union, intersection, difference, complement and the predicates go on the lazy sets an open-ended window gives, a test of the whole algebra. Questions in [plans/open-ended-set-algebra.md](plans/open-ended-set-algebra.md).
 
 ## Done
+
+* [x] **Networks and schedules in hours** — a network in hours, minutes or seconds counts seconds on the time line (the wall clock, or UTC for zoned bounds) and shows its unit; an hour is elapsed time and a day or longer is measured in its period's zone, a day across a daylight-saving change its 23 or 25 hours. 2026-09-30.
 
 * [x] **A network measures actual lengths** — a year or a month in a network of days is measured by calendar arithmetic from where its period can start, in its calendar, never a mean length; relation delays set the axis, a bound is the span it names, and a week-only or hour network no longer raises (user: actual lengths, 2026-09-30). 2026-09-30.
 

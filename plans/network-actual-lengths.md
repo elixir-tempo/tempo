@@ -2,8 +2,6 @@
 
 **Status:** implemented (v2.0.0), 2026-09-30
 
-Networks in hours remain open (the last task).
-
 `Tempo.Network.Normalize` put a network's durations on one integer axis with a mean Gregorian year and month (365.2425 and 30.436875 days). Tempo does not use mean year and month lengths: it uses the actual ones, even if that requires enumeration (user, 2026-09-30). This plan replaces the means, and fixes the other ways the normaliser placed values inexactly.
 
 ## What was wrong
@@ -20,7 +18,7 @@ Networks in hours remain open (the last task).
 
 ## Decisions
 
-* **The axis** is the finest unit among the bounds, the period durations and the relation delays; a week counts in days. A year axis counts the years of the network's calendar when all its bounds share one; a month axis only Gregorian months; anything else is a day axis, whose positions are Calendrical's iso days and so calendar-neutral. Hours, minutes and seconds return an error for now.
+* **The axis** is the finest unit among the bounds, the period durations and the relation delays; a week counts in days. A year axis counts the years of the network's calendar when all its bounds share one; a month axis only Gregorian months; a day axis Calendrical's iso days, calendar-neutral; and hours, minutes and seconds count seconds on the time line, results shown in the network's unit.
 
 * **A bound is the span it names**: a lower bound takes its first axis unit, an upper bound its last.
 
@@ -34,9 +32,9 @@ Networks in hours remain open (the last task).
 
 ## Tasks
 
-* [ ] **Networks and schedules in hours** — sub-day axes on the UTC time line, measured days across DST; left open.
-
 ### Done
+
+* [x] **Networks and schedules in hours** — a sub-day network counts seconds on the time line (the wall clock for floating bounds, UTC for zoned ones; floating and zoned bounds together are an error) and shows its unit. Hours, minutes and seconds are counts; a day or longer is measured in the period's zone, its start range cut into segments of one length at wall midnights, or in a zone sampled hourly with bisection, so a day across a daylight-saving change is its 23 or 25 hours even where a gap moves its end. A zoned start with no bound is an error. 2026-09-30.
 
 * [x] **Normalize** — the axis, bounds as spans, counts, measures and their bounds, errors for what a network cannot place. 2026-09-30.
 

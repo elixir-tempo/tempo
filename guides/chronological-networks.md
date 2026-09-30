@@ -48,7 +48,7 @@ The vocabulary mirrors how an archaeologist actually speaks:
 
 A bare integer year (`1200`, `-664`) and an ISO 8601 string are also accepted as shorthands for year-grained work, but the `~o` form is the idiom — and it is what every bound is stored and returned as.
 
-A network works in the finest unit it is given: years for the chronologies here, days as soon as one date or duration names a day. A coarser duration is then measured by its actual length, in its period's own calendar, from where the period can start, never by an average year or month. A bound is the span it names, so `{:not_after, ~o"1300Y"}` in a day-grained network allows the whole of 1300. Networks count in years, months or days:
+A network works in the finest unit it is given: years for the chronologies here, days as soon as one date or duration names a day. A coarser duration is then measured by its actual length, in its period's own calendar, from where the period can start, never by an average year or month. A bound is the span it names, so `{:not_after, ~o"1300Y"}` in a day-grained network allows the whole of 1300. Networks count in years, months or days, and in hours, minutes or seconds on the time line, where an hour is elapsed time and a day in a zone is its 23, 24 or 25 hours:
 
 ```elixir
 # A reign that began on 1 January 2024 and lasted a year ended 366 days later.

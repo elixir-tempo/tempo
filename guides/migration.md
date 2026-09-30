@@ -72,7 +72,7 @@ These keep their names and change their meaning:
 
 * **The network and schedule builders** — record an option or a value they cannot read, which the solver then returns, where 1.x ignored an unknown option and raised on a bad value.
 
-* **`Tempo.Network.Normalize.normalize/1`** — returns `{:ok, normalized}`, or an error for a unit finer than a day or a fraction of the axis unit, where 1.x returned the map and raised; a duration in a coarser unit than the axis is in its new `:measures`, not its `:edges`.
+* **`Tempo.Network.Normalize.normalize/1`** — returns `{:ok, normalized}`, or an error for a unit finer than a second, floating and zoned bounds in one network of hours, or a fraction of the axis unit, where 1.x returned the map and raised; a duration in a coarser unit than the axis is in its new `:measures`, not its `:edges`.
 
 * **A network's lengths** — a year or a month in a network of days (or a year in one of months) is its actual length from where its period can start, in the period's calendar, where 1.x used a mean Gregorian year and month: a year from 1 January 2024 is 366 days, where it was 365.
 

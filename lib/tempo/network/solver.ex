@@ -28,7 +28,8 @@ defmodule Tempo.Network.Solver do
   they settle (see `Tempo.Network.Normalize`).
 
   A network whose builders recorded an error (see `Tempo.Network`), or one
-  it cannot place (a unit finer than a day, a fraction of its unit),
+  it cannot place (a unit finer than a second, floating and zoned bounds
+  in one network of hours, a fraction of its unit),
   returns that error from every function here, and the predicates raise
   it.
 

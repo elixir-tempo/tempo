@@ -314,6 +314,8 @@ Tempo.Schedule.span(plan)          #=> the project interval, 06-01 .. 06-08
 
 Each task carries a `:duration` (exact or a `{min, max}` range) and optional `:after` dependencies (finish-to-start — a successor starts no earlier than its predecessors finish). Bounds come from `:start` (an exact start date), `:not_before`, `:deadline`, or a `:within` pair of dates. `solve/1` returns a `%Tempo.Schedule.ScheduledTask{}` per task: its `early` schedule, the interval from the earliest it can start to the earliest it can finish, its `late` schedule, and `critical?`, true when a task has zero slack. An over-tight deadline or a dependency cycle returns `{:error, :infeasible}`, and an option `task/3` cannot read, such as 1.x's `:earliest`, comes back from `solve/1` as an error naming it.
 
+Tasks can last hours or minutes as well as days: `duration: ~o"PT4H"` from `start: ~o"2026-06-01T09"` runs to 13:00. An hour is elapsed time, so in a zone four hours from 01:00 on the night the clocks spring forward end at 06:00, and a task of a day runs the 23 or 25 hours that day has.
+
 ### What this is not
 
 Scheduling *around* a busy calendar — "drop this task into the first free gap" — is a disjunctive problem (before *or* after each existing meeting) that the Simple Temporal Problem can't express. For that, subtract the busy periods to find the free regions (`Tempo.difference/2`), then cut those regions into fixed-length bookable slots with `Tempo.IntervalSet.slots/3` (see [set operations](./set-operations.md) and [the cookbook](./cookbook.md)). `Tempo.Schedule` is for *dependency* scheduling, where constraints compose by conjunction.
