@@ -46,7 +46,7 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **`ClockTest` timing** — "process-local override does not leak to peer processes" failed once under load (passing in isolation and on re-runs): `assert_receive`'s default 100 ms timeout is short on a busy machine.
 
-* [ ] **Move the Localize lock to `main`** — Localize `main` (`53519d19`) gives MF2's `:date`, `:time` and `:datetime` TR35's options, has semantic skeletons take the locale's own widths, and numbers its next release 1.4.0; Tempo locks `ff1c9b5`. Tempo `64c2e3b` passes all 4,793 tests, format, credo --strict and release docs against it (a scratch copy, 2026-09-29; dialyzer not run), so `mix deps.update localize` should be the whole change.
+* [ ] **Move the Localize and Calendrical locks to `main`** — Tempo locks Localize `b2b18bb` and Calendrical `c9426f7`. Localize `main` (`6e9cdb63`, its unreleased 1.4.0) needs calendar callbacks only Calendrical `main` (`e8a10c3`) has, such as `parsing_calendar/0`, so the two move together: `mix deps.update calendrical localize`. Tempo `cee4726` compiles without warnings and passes all 5,076 tests, dialyzer and docs against them (a scratch copy, 2026-10-02), and the move unblocks "A span formatted with a skeleton".
 
 ## In progress
 
