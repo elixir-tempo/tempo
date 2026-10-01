@@ -5021,11 +5021,11 @@ defmodule Tempo do
 
   ### Arguments
 
-  * `value` is a `t:t/0` or `t:Tempo.Interval.t/0`. The value must be anchored (have a year component); unanchored values raise `Tempo.UnanchoredError`.
+  * `value` is a `t:t/0` or `t:Tempo.Interval.t/0`. The value must be anchored (have a year component); an unanchored one is an error.
 
   ### Options
 
-  * `:from` is a `t:t/0` — the reference point the output is relative to, from where its span starts. When the value and `:from` are both zoned, `:from` is read on the value's clock, and otherwise on its own. A zoned value finer than a day needs a zoned `:from`; a floating one raises `Tempo.FloatingTempoError`. Defaults to `Tempo.utc_now/0`.
+  * `:from` is a `t:t/0` — the reference point the output is relative to, from where its span starts. When the value and `:from` are both zoned, `:from` is read on the value's clock, and otherwise on its own. A zoned value finer than a day needs a zoned `:from`; a floating one is an error. Defaults to `Tempo.utc_now/0`.
 
   * `:unit` is the unit to count in: `:year`, `:quarter`, `:month`, `:week`, `:day`, `:hour`, `:minute`, `:second`, or a weekday from `:mon` to `:sun`. The difference is the number of the unit's calendar periods from `:from` to the value, and weeks and weekdays start on the locale's first day of the week. When `:unit` is omitted, it is the largest unit of which a whole one lies between them, but never one finer than the value's own: 2027 is "next year" from July 2026, not "in 6 months".
 
@@ -5035,33 +5035,73 @@ defmodule Tempo do
 
   ### Returns
 
-  * A `t:String.t/0`.
+  * `{:ok, string}` — the relative time.
+
+  * `{:error, exception}` — a `Tempo.UnanchoredError` for a value or `:from` without a year, a `Tempo.IntervalEndpointsError` for an interval without a start, a `Tempo.FloatingTempoError` for a zoned value finer than a day from a floating `:from`, an `ArgumentError` for a value naming several spans, a value or `:from` that is not a Tempo value, or options that are not a keyword list, and Localize's error for a locale, unit or format it does not accept.
 
   ### Examples
 
       iex> now = Tempo.from_iso8601!("2026-06-15T12:00:00Z")
       iex> Tempo.to_relative_string(~o"2026-06-14T12:00:00Z", from: now)
-      "yesterday"
+      {:ok, "yesterday"}
 
       iex> now = Tempo.from_iso8601!("2026-06-15T12:00:00Z")
       iex> Tempo.to_relative_string(~o"2026-06-15T15:00:00Z", from: now)
-      "in 3 hours"
+      {:ok, "in 3 hours"}
 
       iex> Tempo.to_relative_string(~o"2026-02-01", from: ~o"2026-01-31", unit: :month)
-      "next month"
+      {:ok, "next month"}
 
       iex> Tempo.to_relative_string(~o"2027", from: ~o"2026-07-01")
-      "next year"
+      {:ok, "next year"}
 
   Rosh Hashanah 5787 is the day after 11 September 2026, and in the Hebrew calendar it is next year:
 
       iex> new_year = Tempo.from_iso8601!("5787-01-01[u-ca=hebrew]")
       iex> Tempo.to_relative_string(new_year, from: ~o"2026-09-11", unit: :year)
+      {:ok, "next year"}
+
+  A time of day names no year to count from:
+
+      iex> {:error, %Tempo.UnanchoredError{}} = Tempo.to_relative_string(~o"T10:30")
+
+  """
+  @spec to_relative_string(t() | Tempo.Interval.t(), keyword()) ::
+          {:ok, String.t()} | {:error, Exception.t()}
+  defdelegate to_relative_string(value, options \\ []), to: Tempo.Format
+
+  @doc """
+  Format a Tempo as a locale-aware relative time string, raising for a value it cannot format.
+
+  ### Arguments
+
+  * `value` is a `t:t/0` or `t:Tempo.Interval.t/0`.
+
+  ### Options
+
+  * The options of `to_relative_string/2`.
+
+  ### Returns
+
+  * A `t:String.t/0` like `"3 hours ago"` or `"in 2 days"`.
+
+  ### Raises
+
+  * The exception `to_relative_string/2` returns.
+
+  ### Examples
+
+      iex> Tempo.to_relative_string!(~o"2027", from: ~o"2026-07-01")
       "next year"
 
   """
-  @spec to_relative_string(t() | Tempo.Interval.t(), keyword()) :: String.t()
-  defdelegate to_relative_string(value, options \\ []), to: Tempo.Format
+  @spec to_relative_string!(t() | Tempo.Interval.t(), keyword()) :: String.t()
+  def to_relative_string!(value, options \\ []) do
+    case to_relative_string(value, options) do
+      {:ok, string} -> string
+      {:error, exception} -> raise exception
+    end
+  end
 
   @doc """
   Convert an implicit-span `t:#{__MODULE__}.t/0` into the

@@ -105,6 +105,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.to_iso8601/1` returns `{:ok, string}`, or a `Tempo.Iso8601EncodeError` for a value with no ISO 8601 form — a set, a conditional member, a cron nearest weekday or a value that is not Tempo's — where it raised. `to_iso8601!/1` returns the string.
 
+* `Tempo.to_relative_string/2` returns `{:ok, string}`, or an error for a value it cannot count from — one without a year, an interval without a start, a zoned time from a floating `:from`, a value naming several spans or one that is not a Tempo value — and Localize's error for an option it refuses, where it raised. `to_relative_string!/2` returns the string.
+
 * `Tempo.shift/3` with `:skipping` steps a day shifted by days or weeks from free day to free day and returns a day: one day of free time after a Friday before a long weekend is the Tuesday, where it was midnight on the Saturday.
 
 * A network measures a year or a month in a network of days by its actual length from where its period can start, in the period's calendar, and gives its results in the network's calendar, where it used a mean Gregorian year and month: a year from 1 January 2024 is 366 days, and one from 1 Tishri 5784 is 383. `Tempo.Network.Normalize.normalize/1` returns `{:ok, normalized}` or an error, where it returned the map and raised.

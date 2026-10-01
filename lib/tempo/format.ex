@@ -59,6 +59,7 @@ defmodule Tempo.Format do
   alias Tempo.FloatingTempoError
   alias Tempo.Interval
   alias Tempo.Interval.Steps
+  alias Tempo.IntervalEndpointsError
   alias Tempo.IntervalSet
   alias Tempo.Math
   alias Tempo.TimeZoneDatabase
@@ -151,24 +152,44 @@ defmodule Tempo.Format do
   Format a Tempo or Tempo.Interval as a locale-aware relative
   time string, like `"3 hours ago"` or `"in 2 days"`.
 
-  Delegated from `Tempo.to_relative_string/1,2`.
+  Delegated from `Tempo.to_relative_string/1,2`, which describes what it
+  returns.
 
   """
-  @spec to_relative_string(Tempo.t() | Tempo.Interval.t(), keyword()) :: String.t()
+  @spec to_relative_string(Tempo.t() | Tempo.Interval.t(), keyword()) ::
+          {:ok, String.t()} | {:error, Exception.t()}
   def to_relative_string(value, options \\ [])
 
-  def to_relative_string(%Tempo{} = tempo, options) do
-    render_relative(tempo, options)
+  def to_relative_string(value, options) do
+    if Keyword.keyword?(options),
+      do: relative_string(value, options),
+      else: {:error, options_error(options)}
   end
 
-  def to_relative_string(%Tempo.Interval{from: %Tempo{} = from}, options) do
-    render_relative(from, options)
+  defp relative_string(%Tempo{} = tempo, options), do: render_relative(tempo, options)
+
+  defp relative_string(%Tempo.Interval{from: %Tempo{} = from}, options),
+    do: render_relative(from, options)
+
+  defp relative_string(%Tempo.Interval{}, _options) do
+    {:error,
+     IntervalEndpointsError.exception(
+       operation: "to_relative_string/2",
+       reason: "Tempo.to_relative_string/2 requires an interval with a concrete :from endpoint."
+     )}
   end
 
-  def to_relative_string(%Tempo.Interval{}, _options) do
-    raise Tempo.IntervalEndpointsError,
-      operation: "to_relative_string/2",
-      reason: "Tempo.to_relative_string/2 requires an interval with a concrete :from endpoint."
+  defp relative_string(value, _options) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.to_relative_string/2 formats a Tempo value or an interval, got #{inspect(value)}."
+     )}
+  end
+
+  defp options_error(options) do
+    ArgumentError.exception(
+      "Tempo.to_relative_string/2 takes a keyword list of options, got #{inspect(options)}."
+    )
   end
 
   defp render_relative(%Tempo{} = tempo, options) do
@@ -179,11 +200,8 @@ defmodule Tempo.Format do
     # value, in the value's calendar and on the value's wall clock.
     with {:ok, value, baseline, own_unit} <- relative_moments(tempo, from, unit),
          options = Keyword.put(options, :relative_to, baseline),
-         {:ok, unit} <- counting_unit(unit, value, options, own_unit),
-         {:ok, string} <- Relative.to_string(value, Keyword.put(options, :unit, unit)) do
-      string
-    else
-      {:error, exception} -> raise exception
+         {:ok, unit} <- counting_unit(unit, value, options, own_unit) do
+      Relative.to_string(value, Keyword.put(options, :unit, unit))
     end
   end
 
@@ -211,8 +229,8 @@ defmodule Tempo.Format do
   defp relative_moments(tempo, from, unit) do
     with {:ok, tempo} <- anchored(tempo),
          {:ok, from} <- anchored(from),
-         %Tempo{} = value <- Interval.from(tempo),
-         %Tempo{} = from <- Interval.from(from),
+         {:ok, value} <- span_start(tempo),
+         {:ok, from} <- span_start(from),
          kind = span_kind(value, unit),
          {:ok, moment} <- moment(value, kind, place(value)),
          {:ok, baseline} <- baseline(from, kind, place(value), place(from)) do
@@ -228,6 +246,25 @@ defmodule Tempo.Format do
 
   defp anchored(other) do
     {:error, ArgumentError.exception("`:from` must be a Tempo value, got #{inspect(other)}.")}
+  end
+
+  # Where a value's span starts. A value naming several spans has no one
+  # start, nor does one whose span is open at its start.
+  defp span_start(value) do
+    case Interval.from(value) do
+      %Tempo{} = start ->
+        {:ok, start}
+
+      {:error, _reason} = error ->
+        error
+
+      _open ->
+        {:error,
+         IntervalEndpointsError.exception(
+           operation: "to_relative_string/2",
+           reason: "#{inspect(value)} has no start to count from."
+         )}
+    end
   end
 
   defp moment(value, :date, _place), do: wall_date(value)
@@ -701,7 +738,7 @@ defmodule Tempo.Format do
         {from, to}
 
       _other ->
-        raise Tempo.IntervalEndpointsError,
+        raise IntervalEndpointsError,
           operation: "Tempo.Format.to_string/2",
           interval: interval
     end

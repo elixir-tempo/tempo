@@ -78,7 +78,7 @@ These keep their names and change their meaning:
 
 * **`Tempo.to_iso8601/1`** — returns `{:ok, string}`, or an error for a value ISO 8601 cannot write, where 1.x returned the string and raised; `to_iso8601!/1` returns the string.
 
-* **`Tempo.to_relative_string/2`** — counts calendar periods in the value's own calendar and on its own wall clock, and never in a unit finer than the value's own, where 1.x divided the seconds between two UTC instants by a mean month or year.
+* **`Tempo.to_relative_string/2`** — counts calendar periods in the value's own calendar and on its own wall clock, and never in a unit finer than the value's own, where 1.x divided the seconds between two UTC instants by a mean month or year. It returns `{:ok, string}`, or an error where 1.x raised; `to_relative_string!/2` returns the string.
 
 ## Updating the dependency
 
@@ -610,7 +610,7 @@ iex> holidays |> Tempo.RecurrenceSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
 
 ## A relative time counts calendar periods
 
-`Tempo.to_relative_string/2` counts the calendar periods from `:from` to the value in the value's own calendar and on its own wall clock, as Localize counts them. 1.x measured the seconds between the two as UTC instants and divided them by a mean month or year.
+`Tempo.to_relative_string/2` counts the calendar periods from `:from` to the value in the value's own calendar and on its own wall clock, as Localize counts them. 1.x measured the seconds between the two as UTC instants and divided them by a mean month or year. It returns `{:ok, string}`, as `to_iso8601/1` does, and an error for a value it cannot count from, where 1.x raised; `to_relative_string!/2` returns the string.
 
 <!-- guides:skip -->
 
@@ -622,10 +622,10 @@ Tempo.to_relative_string(~o"2026-02-01", from: ~o"2026-01-31", unit: :month)
 
 ```elixir
 iex> Tempo.to_relative_string(~o"2026-02-01", from: ~o"2026-01-31", unit: :month)
-"next month"
+{:ok, "next month"}
 iex> sydney = Tempo.from_iso8601!("2026-06-16T01:00[Australia/Sydney]")
 iex> Tempo.to_relative_string(sydney, from: Tempo.from_iso8601!("2026-06-15T13:00:00Z"), unit: :day)
-"tomorrow"
+{:ok, "tomorrow"}
 ```
 
 > *"The first of February is next month from the last day of January. One in the morning in Sydney is tomorrow from 13:00 UTC the day before, which is 23:00 in Sydney."*
@@ -634,7 +634,7 @@ Without a `:unit`, a value is never counted in a unit finer than its own, so a y
 
 ```elixir
 iex> Tempo.to_relative_string(~o"2027", from: ~o"2026-07-01")
-"next year"
+{:ok, "next year"}
 ```
 
-A zoned value finer than a day is measured from a zoned `:from`, and a floating one raises `Tempo.FloatingTempoError`, where 1.x read it as UTC.
+A zoned value finer than a day is measured from a zoned `:from`, and a floating one is an error, a `Tempo.FloatingTempoError`, where 1.x read it as UTC.
