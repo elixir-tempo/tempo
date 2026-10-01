@@ -215,7 +215,9 @@ Tempo.RRule.parse!("FREQ=MONTHLY;BYDAY=TU,WE,TH;BYSETPOS=3")
 #   from 1997-09 → Sept 4, Oct 7, Nov 6
 ```
 
-The one recurrence shape with **no** ISO 8601 form is an ordinal spread across *distinct* weekdays — "the 2nd Monday **and** the 2nd Wednesday" (`BYDAY=2MO,2WE`). A single `I` ranks one set; it cannot name two independent per-weekday ordinals at once. Tempo holds such a rule as an internal `:byday` selection that round-trips only through `Tempo.RRule.to_string/1`, never through `to_iso8601/1`.
+Times inside the selection join the set `I` ranks: `L5KT{9,17}H2IN` is the 2nd of every Friday's 09:00 and 17:00, the first Friday at 17:00. Times written after the selection refine each date it picks instead, as §12.9's Example 5 writes 09:00 on the second Tuesday (`L2K2INT9H`), so an RRULE ordinal with times, `BYDAY=2FR;BYHOUR=9,17`, is `R/../P1M/FL5K2INT{9,17}H`.
+
+The recurrence shapes with **no** ISO 8601 form are an ordinal spread across *distinct* weekdays — "the 2nd Monday **and** the 2nd Wednesday" (`BYDAY=2MO,2WE`) — and an ordinal beside a `BYSETPOS`. A single `I` ranks one set; it cannot name two independent per-weekday ordinals at once, nor a weekday's ordinal and a position over the whole set. Tempo holds such a rule as an internal `:byday` selection that round-trips only through `Tempo.RRule.to_string/1`, never through `to_iso8601/1`; so does a rule with an `UNTIL`, since ISO 8601 bounds a recurrence only by its count.
 
 #### `q` — week start (RRULE `WKST`)
 

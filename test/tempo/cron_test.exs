@@ -10,26 +10,106 @@ defmodule Tempo.CronTest do
   alias Tempo.RRule.Expander
   alias Tempo.RRule.Rule
 
-  describe "pure-step shortcut (FREQ=unit, INTERVAL=n)" do
+  describe "every field `*`" do
     test "`* * * * *` → every minute" do
       assert {:ok, %Rule{freq: :minute, interval: 1}} = Cron.to_rule("* * * * *")
-    end
-
-    test "`*/15 * * * *` → every 15 minutes" do
-      assert {:ok, %Rule{freq: :minute, interval: 15, byminute: nil}} =
-               Cron.to_rule("*/15 * * * *")
-    end
-
-    test "`* */2 * * *` → every 2 hours" do
-      assert {:ok, %Rule{freq: :hour, interval: 2}} = Cron.to_rule("* */2 * * *")
     end
 
     test "6-field `* * * * * *` → every second" do
       assert {:ok, %Rule{freq: :second, interval: 1}} = Cron.to_rule("* * * * * *")
     end
+  end
 
-    test "6-field `*/10 * * * * *` → every 10 seconds" do
-      assert {:ok, %Rule{freq: :second, interval: 10}} = Cron.to_rule("*/10 * * * * *")
+  describe "a step fires on the values it steps to" do
+    # A step is a list of values like any other, so its firings keep to the
+    # clock whatever the start, and each is one minute (a second with six
+    # fields), not the length of the step.
+    test "`*/15 * * * *` fires at 0, 15, 30 and 45 past each hour" do
+      assert {:ok, %Rule{freq: :hour, byminute: [0, 15, 30, 45]}} = Cron.to_rule("*/15 * * * *")
+
+      assert firings("*/15 * * * *", ~o"2026-01-05T09:05", ~o"2026-01-05T09") ==
+               ["2026Y1M5DT9H15M/T16M", "2026Y1M5DT9H30M/T31M", "2026Y1M5DT9H45M/T46M"]
+    end
+
+    test "a step that does not divide the hour starts again each hour" do
+      minutes = firings("*/7 * * * *", ~o"2026-01-05", ~o"2026-01-05T09/2026-01-05T11")
+
+      assert length(minutes) == 18
+      assert Enum.slice(minutes, 8, 2) == ["2026Y1M5DT9H56M/T57M", "2026Y1M5DT10H0M/T1M"]
+    end
+
+    test "an hour step fires every minute of the hours it names" do
+      minutes = firings("* */2 * * *", ~o"2026-01-05", ~o"2026-01-05T00/2026-01-05T04")
+
+      assert length(minutes) == 120
+      assert Enum.at(minutes, 60) == "2026Y1M5DT2H0M/T1M"
+    end
+
+    test "a day-of-month step fires on the days it names" do
+      assert {:ok, %Rule{freq: :month, bymonthday: odd_days}} = Cron.to_rule("* * */2 * *")
+      assert odd_days == Enum.to_list(1..31//2)
+
+      midnights = firings("0 0 */2 * *", ~o"2026-01-01", ~o"2026-01")
+      assert length(midnights) == 16
+      assert Enum.take(midnights, 2) == ["2026Y1M1DT0H0M/T1M", "2026Y1M3DT0H0M/T1M"]
+    end
+
+    test "a step beside other fields keeps its step" do
+      assert firings("*/30 9-10 * * 1", ~o"2026-01-05", ~o"2026-01-05/2026-01-12") == [
+               "2026Y1M5DT9H0M/T1M",
+               "2026Y1M5DT9H30M/T31M",
+               "2026Y1M5DT10H0M/T1M",
+               "2026Y1M5DT10H30M/T31M"
+             ]
+
+      assert length(firings("0 */2 * * *", ~o"2026-01-05", ~o"2026-01-05")) == 12
+    end
+
+    test "6-field `*/10 * * * * *` fires at 0, 10, … 50 seconds past each minute" do
+      assert {:ok, %Rule{freq: :minute, bysecond: [0, 10, 20, 30, 40, 50]}} =
+               Cron.to_rule("*/10 * * * * *")
+
+      assert length(firings("*/10 * * * * *", ~o"2026-01-05T09:00:00", ~o"2026-01-05T09:00")) ==
+               6
+    end
+  end
+
+  describe "a `*` is every value of its field" do
+    # A `*` finer than the rule's frequency is every value, not the start's,
+    # so a five-field expression fires on every minute it names.
+    test "every hour of a Monday, and of the 5th" do
+      assert length(firings("0 * * * 1", ~o"2026-01-05", ~o"2026-01-05/2026-01-12")) == 24
+      assert length(firings("0 * 5 * *", ~o"2026-01-01", ~o"2026-01")) == 24
+    end
+
+    test "every day of June, and every minute of nine o'clock" do
+      june = firings("0 0 * 6 *", ~o"2026-01-01", ~o"2026")
+      nine = firings("* 9 * * 1", ~o"2026-01-05", ~o"2026-01-05/2026-01-12")
+
+      assert {length(june), hd(june), List.last(june)} ==
+               {30, "2026Y6M1DT0H0M/T1M", "2026Y6M30DT0H0M/T1M"}
+
+      assert {length(nine), hd(nine), List.last(nine)} ==
+               {60, "2026Y1M5DT9H0M/T1M", "2026Y1M5DT9H59M/T10H0M"}
+    end
+  end
+
+  describe "the start of the firings" do
+    test "firings start at the first whole minute at or after `:from`" do
+      assert hd(firings("30 9 * * *", ~o"2026-01-05T09:05:30", ~o"2026-01-05/2026-01-07")) ==
+               "2026Y1M5DT9H30M/T31M"
+
+      assert hd(firings("* * * * *", ~o"2026-01-05T09:05:30", ~o"2026-01-05T09")) ==
+               "2026Y1M5DT9H6M/T7M"
+    end
+
+    test "with six fields, at the first whole second" do
+      assert hd(firings("*/10 * * * * *", ~o"2026-01-05T09:05:03.5", ~o"2026-01-05T09:05")) ==
+               "2026Y1M5DT9H5M10S/T11S"
+    end
+
+    test "a `:from` that is not a date or time is an error" do
+      assert {:error, %Tempo.CronError{}} = Cron.parse("@daily", from: "2026-01-01")
     end
   end
 
@@ -222,6 +302,24 @@ defmodule Tempo.CronTest do
     end
   end
 
+  describe "an ordinal weekday" do
+    test "counts within each month" do
+      second_fridays = firings("0 0 * * 5#2", ~o"2026-01-01", ~o"2026")
+      last_fridays = firings("0 0 * * 5L", ~o"2026-01-01", ~o"2026")
+
+      assert {length(second_fridays), Enum.take(second_fridays, 2)} ==
+               {12, ["2026Y1M9DT0H0M/T1M", "2026Y2M13DT0H0M/T1M"]}
+
+      assert {length(last_fridays), Enum.take(last_fridays, 2)} ==
+               {12, ["2026Y1M30DT0H0M/T1M", "2026Y2M27DT0H0M/T1M"]}
+    end
+
+    test "picks its day before its times" do
+      assert firings("0 9,17 * * 5#2", ~o"2026-01-01", ~o"2026-01") ==
+               ["2026Y1M9DT9H0M/T1M", "2026Y1M9DT17H0M/T1M"]
+    end
+  end
+
   describe "7-field cron with year" do
     test "single year becomes UNTIL" do
       assert {:ok, rule} = Cron.to_rule("0 0 0 1 1 * 2026")
@@ -239,6 +337,18 @@ defmodule Tempo.CronTest do
       assert {:ok, rule} = Cron.to_rule("0 0 0 1 1 * 2025-2028")
       assert rule.byyear == [2025, 2026, 2027, 2028]
       assert rule.until.time == [year: 2029]
+    end
+
+    test "a year list, a single year and a year step limit the firings" do
+      assert firings("0 0 0 1 1 * 2025,2027,2029", ~o"2025-01-01", ~o"2024/2031") ==
+               ["2025Y1M1DT0H0M0S/T1S", "2027Y1M1DT0H0M0S/T1S", "2029Y1M1DT0H0M0S/T1S"]
+
+      # A single year bounds the start as well as the end
+      assert firings("0 0 12 * * * 2027", ~o"2026-12-30", ~o"2026-12-30/2027-01-03") ==
+               ["2027Y1M1DT12H0M0S/T1S", "2027Y1M2DT12H0M0S/T1S"]
+
+      assert firings("0 0 0 1 1 * */2", ~o"2026-01-01", ~o"2026/2030") ==
+               ["2026Y1M1DT0H0M0S/T1S", "2028Y1M1DT0H0M0S/T1S"]
     end
 
     test "expansion keeps only the listed years, skipping the gaps" do
@@ -384,6 +494,15 @@ defmodule Tempo.CronTest do
       assert rule.byday == [{nil, 5}]
     end
 
+    test "a day field that starts with `*` is unrestricted, so the two hold together" do
+      # As Vixie cron reads them: the odd days that are Mondays, and the 13th
+      # when it is a Tuesday, Thursday, Saturday or Sunday.
+      assert firings("0 0 */2 * 1", ~o"2026-01-01", ~o"2026-01") ==
+               ["2026Y1M5DT0H0M/T1M", "2026Y1M19DT0H0M/T1M"]
+
+      assert firings("0 0 13 * */2", ~o"2026-01-01", ~o"2026-01") == ["2026Y1M13DT0H0M/T1M"]
+    end
+
     test "a restricted day-of-month alone (dow = `*`) does not trigger the union" do
       assert {:ok, rule} = Cron.to_rule("0 0 13 * *")
       assert rule.bymonthday_or_byday == nil
@@ -458,10 +577,32 @@ defmodule Tempo.CronTest do
     end
 
     test "a range of cron shapes each round-trip" do
-      for expression <- ["0 9 * * 1", "30 8 15 * *", "0 0 1 1 *", "*/15 * * * *"] do
+      for expression <- [
+            "0 9 * * 1",
+            "30 8 15 * *",
+            "0 0 1 1 *",
+            "*/15 * * * *",
+            "0 * * * 1",
+            "0 0 */2 * 1",
+            "*/10 * * * * *",
+            "0 0 * * 5#2",
+            "30 8 * 11 4#4"
+          ] do
         cron = Cron.parse!(expression)
-        assert Tempo.from_iso8601(Tempo.to_iso8601!(cron)) == {:ok, cron}
+        assert Tempo.from_iso8601(Tempo.to_iso8601!(cron)) == {:ok, cron}, expression
       end
     end
+
+    test "a day-of-month OR day-of-week union has no ISO 8601 form" do
+      assert {:error, %Tempo.Iso8601EncodeError{construct: :or_day}} =
+               Tempo.to_iso8601(Cron.parse!("0 0 13 * 5"))
+    end
+  end
+
+  # Parse a cron expression from `from` and list its firings within `within`.
+  defp firings(expression, from, within) do
+    {:ok, cron} = Cron.parse(expression, from: from)
+    {:ok, set} = Tempo.to_interval(cron, within: within)
+    set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
   end
 end

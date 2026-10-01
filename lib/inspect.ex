@@ -181,11 +181,19 @@ defmodule Tempo.Inspect do
   @doc """
   The construct in a Tempo value that has no ISO 8601 form, found before
   the value is encoded: an ordinal BYDAY across distinct weekdays
-  (`:byday`) or a cron nearest-weekday (`:nearest_weekday`), anywhere in
-  its selections. `nil` when the value has neither.
+  (`:byday`), a cron nearest-weekday (`:nearest_weekday`) or a cron
+  day-of-month OR day-of-week union (`:or_day`), anywhere in its
+  selections, or a recurrence's end (RFC 5545 `UNTIL`, `:until`). `nil`
+  when the value has none.
   """
-  @spec unencodable(term()) :: :byday | :nearest_weekday | nil
+  @spec unencodable(term()) :: :byday | :nearest_weekday | :or_day | :until | nil
   def unencodable(%Tempo{time: time}), do: unencodable_in(time)
+
+  # An end beside a cadence is RFC 5545's `UNTIL`. ISO 8601's own
+  # duration/end form leaves the start undefined rather than absent.
+  def unencodable(%Tempo.Interval{from: from, to: %Tempo{}, duration: %Tempo.Duration{}})
+      when is_nil(from) or is_struct(from, Tempo),
+      do: :until
 
   def unencodable(%Tempo.Interval{} = interval),
     do: Enum.find_value([interval.from, interval.to, interval.repeat_rule], &unencodable/1)
@@ -193,8 +201,9 @@ defmodule Tempo.Inspect do
   def unencodable(%Tempo.Set{set: members}), do: Enum.find_value(members, &unencodable/1)
   def unencodable(_value), do: nil
 
-  defp unencodable_in({construct, _value}) when construct in [:byday, :nearest_weekday],
-    do: construct
+  defp unencodable_in({construct, _value})
+       when construct in [:byday, :nearest_weekday, :or_day],
+       do: construct
 
   defp unencodable_in({_key, value}), do: unencodable_in(value)
   defp unencodable_in(list) when is_list(list), do: Enum.find_value(list, &unencodable_in/1)
@@ -717,23 +726,13 @@ defmodule Tempo.Inspect do
     [?R, recurrence(recurrence), ?/, "..", ?/, inspect_value(duration)]
   end
 
-  defp inspect_value(%Tempo.Interval{
-         recurrence: recurrence,
-         from: nil,
-         to: %Tempo{} = to,
-         duration: %Tempo.Duration{} = duration,
-         repeat_rule: nil
-       }) do
-    [
-      ?R,
-      recurrence(recurrence),
-      ?/,
-      "..",
-      ?/,
-      inspect_value(to),
-      ?/,
-      inspect_value(duration)
-    ]
+  # An end beside a cadence is RFC 5545's `UNTIL`, which ISO 8601 has no
+  # form for: it bounds a recurrence only by its count, and its start/end
+  # form names the first occurrence's end. Raise a clear error, as for the
+  # other constructs ISO 8601 cannot express.
+  defp inspect_value(%Tempo.Interval{from: from, to: %Tempo{}, duration: %Tempo.Duration{}})
+       when is_nil(from) or is_struct(from, Tempo) do
+    raise Iso8601EncodeError.exception(construct: :until)
   end
 
   defp inspect_value(%Tempo.Interval{
@@ -757,26 +756,24 @@ defmodule Tempo.Inspect do
     ]
   end
 
+  # ISO 8601's duration/end form with a repeat rule (`R/P1D/2026Y12M31D/F…`).
   defp inspect_value(%Tempo.Interval{
          recurrence: recurrence,
-         from: nil,
+         from: :undefined,
          to: %Tempo{} = to,
          duration: %Tempo.Duration{} = duration,
-         repeat_rule: %Tempo{time: rule_time} = repeat_rule
+         repeat_rule: %Tempo{} = repeat_rule
        }) do
     [
       ?R,
       recurrence(recurrence),
       ?/,
-      "..",
+      inspect_value(duration),
       ?/,
       inspect_value(to),
       ?/,
-      inspect_value(duration),
-      ?/,
       ?F,
-      inspect_value(rule_time),
-      repeat_rule_calendar_trailer(repeat_rule)
+      inspect_value(repeat_rule)
     ]
   end
 
@@ -1021,6 +1018,12 @@ defmodule Tempo.Inspect do
   # `FunctionClauseError`; the Inspect protocol catches it and falls back.
   defp inspect_value({:nearest_weekday, _targets}) do
     raise Iso8601EncodeError.exception(construct: :nearest_weekday)
+  end
+
+  # A cron day-of-month OR day-of-week union fires when either field holds,
+  # where every part of an ISO 8601 selection holds at once.
+  defp inspect_value({:or_day, _days}) do
+    raise Iso8601EncodeError.exception(construct: :or_day)
   end
 
   defp inspect_value({:interval, interval}), do: inspect_value(interval)

@@ -35,6 +35,9 @@ defmodule Tempo.RoundTripTest do
       "R/2022-01-01/P1D",
       "R5/2022-01-01/P1M",
       "P1D/2022-01-01",
+      "R/P1D/2026-12-31/F1DLT9HN",
+      "R12/PT2H30M0S/20150929T153000/F2W",
+      "R/../P1M/FL5K2INT9H0M",
       "../1985-04-12",
       "1985-04-12/..",
       "../..",
@@ -80,7 +83,9 @@ defmodule Tempo.RoundTripTest do
       "FREQ=MONTHLY;BYDAY=1MO,3MO",
       "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1",
       "FREQ=YEARLY;BYMONTH=6,7,8",
-      "FREQ=DAILY;BYHOUR=9;BYMINUTE=0,30"
+      "FREQ=DAILY;BYHOUR=9;BYMINUTE=0,30",
+      "FREQ=MONTHLY;BYDAY=2FR;BYHOUR=9,17;BYMINUTE=0",
+      "FREQ=MONTHLY;BYDAY=2FR;BYHOUR=9,17;BYSETPOS=-1"
     ]
 
     for rrule <- @cases do
@@ -286,6 +291,28 @@ defmodule Tempo.RoundTripTest do
 
         assert Exception.message(error) =~ named
       end
+    end
+
+    test "a recurrence's end (RFC 5545 UNTIL) has no ISO 8601 form" do
+      # ISO 8601 bounds a recurrence only by its count, and its start/end
+      # form names the first occurrence's end, so the RRULE keeps it.
+      start = Tempo.from_iso8601!("2026-01-01")
+
+      for rule <- [
+            RRule.parse!("FREQ=DAILY;UNTIL=20261231", from: start),
+            RRule.parse!("FREQ=DAILY;UNTIL=20261231"),
+            RRule.parse!("FREQ=DAILY;UNTIL=20261231;BYHOUR=9", from: start),
+            Cron.parse!("0 0 12 * * * 2027", from: start)
+          ] do
+        assert {:error, %Tempo.Iso8601EncodeError{construct: :until} = error} =
+                 Tempo.to_iso8601(rule)
+
+        assert Exception.message(error) =~ "UNTIL"
+        assert inspect(rule) == "#Tempo.Interval<not ISO 8601 expressible>"
+      end
+
+      assert {:ok, "UNTIL=20261231;FREQ=DAILY;BYHOUR=9"} =
+               RRule.to_string(RRule.parse!("FREQ=DAILY;UNTIL=20261231;BYHOUR=9", from: start))
     end
 
     test "a construct with no ISO 8601 form is an error naming it, which to_iso8601!/1 raises" do

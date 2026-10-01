@@ -4,8 +4,6 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ## Open
 
-* [ ] **Cron: a step or a `*` beside a set field** — a step beside another set field fires on every value (`step_expand/2` in `lib/tempo/cron.ex` drops it: `*/30 9-10 * * 1` fires every minute from 09:00 to 10:59, `0 */2 * * *` every hour), and a `*` between the rule's frequency and a finer set field takes the start's value, so `0 * * * 1` and `0 * 5 * *` fire once on the day where cron fires hourly. Found 2026-10-01.
-
 * [ ] **Livebooks install 2.0 at the release** — `getting-started`, `tempo_tour`, `scheduling-workbook` and `uncertain-dates-workbook` install `{:ex_tempo, "~> 1.6"}` and the Melbourne deck `~> 1.6.3`, while their code uses the 2.0 names: at the 2.0.0 release each installs `~> 2.0`, as `everyday-holidays` already does.
 
 * [ ] **`to_relative_string/2` raises** — `Tempo.Format.render_relative/2` raises `UnanchoredError` for a value or `:from` without a year, `IntervalEndpointsError` for an open interval, `FloatingTempoError` for a zoned value finer than a day from a floating `:from`, and `ArgumentError` for a value naming several spans or a `:from` that is not a Tempo, where the library returns `{:error, reason}`; its spec says it returns a string.
@@ -21,8 +19,6 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **A zone on a recurrence is dropped** — `R/../P1Y/FL3M20DN[+09:00]` and a domain recurrence's `[zone]` suffix parse and vanish (the start value's suffix, `R/2026-03-20[+09:00]/P1Y`, is kept). Carry it as zoned occurrences, as the suffix means elsewhere, or refuse it.
 
 * [ ] **§12.10 window shorter than a day** — `FL11MLL1K1IN/PT12HN1K1IN` (and `/P0DN…`) walks `[lo, lo - 1]`, the anchor and the day before, as `Date.range/2` infers for a reversed range (with a runtime deprecation warning before the day-number walk replaced it). Decide the semantics — no day, or the anchor day whose start the window contains — and test it.
-
-* [ ] **A time selection before its step** — under a cadence of mixed units a time selection applies to the step's first day, so `R/../P1DT12H/FLT9HN` gives 09:00 on 6 January 2026 for the step from noon that day, three hours before the step begins. Found 2026-10-01.
 
 * [ ] **`explain/1` words a window of hours in ISO 8601** — `Tempo.explain(~o"R/2027-01-01/P1D/FLLT22HN/PT4HN")` says "the PT4H window from at 22:00" where it means the four hours from 22:00: `window_phrase/2` in `lib/explain.ex` words only a window of days or weeks, and a time-of-day selection's noun carries its "at".
 
@@ -67,6 +63,14 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **Set algebra over open-ended windows** — a research project for later (user, 2026-09-28): how far union, intersection, difference, complement and the predicates go on the lazy sets an open-ended window gives, a test of the whole algebra. Questions in [plans/open-ended-set-algebra.md](plans/open-ended-set-algebra.md).
 
 ## Done
+
+* [x] **A recurrence with an end has no ISO 8601 form** — `to_iso8601/1` returns an `Iso8601EncodeError` for an RFC 5545 `UNTIL`, which ISO 8601 cannot bound a recurrence by, where it raised, wrote a form that did not parse, or wrote the end as the first occurrence's; ISO's duration/end form with a repeat rule keeps its duration. 2026-10-01.
+
+* [x] **An ordinal weekday with several times** — units after a recurrence's selection apply to every date it picks (`FL5K2INT9H0M`, ISO 8601-2 §12.9 Example 5), and an RRULE ordinal weekday's times lower to them, so `BYDAY=2FR;BYHOUR=9,17` fires on the second Friday at both times and round-trips; beside a `BYSETPOS` the ordinal stays `:byday`. 2026-10-01.
+
+* [x] **Cron: a step or a `*` beside a set field** — a step is the values it steps to and a `*` every value of its field, each firing one minute (a second with six or seven fields) from the first whole one at or after `:from`; ordinal weekdays count within the month, years limit both ends, and a starred day field composes with AND, as in Vixie cron. 2026-10-01.
+
+* [x] **A time selection before its step** — documented, not changed (user): a selection picks its points in the calendar period of the cadence's unit that holds each step's start, as RFC 5545 and ISO 8601-2 §13.4 do, and a cadence of mixed units takes its period from its first unit. 2026-10-01.
 
 * [x] **A sub-day cadence's first selected occurrence is a whole day** — a selection that only limits a recurrence keeps each step whole, as without it: `R/../PT1H/FL1KN`'s first Monday hour is an hour, two-hour and 90-minute steps keep their length, and a weekly recurrence's January weeks are weeks, where each was cut to one unit of its start. 2026-10-01.
 

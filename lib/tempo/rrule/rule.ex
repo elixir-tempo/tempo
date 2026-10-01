@@ -51,9 +51,8 @@ defmodule Tempo.RRule.Rule do
 
   * `:byyear` — list of absolute years. A non-standard extension
     (RFC 5545 has no `BYYEAR`); used by `Tempo.Cron` to honour a
-    multi-year cron field such as `2025,2027,2029`. The expander
-    materialises the cadence up to the last listed year and keeps
-    only occurrences whose year is in the list.
+    cron year field such as `2025,2027,2029`. It becomes a year in
+    the selection, which keeps only the periods in a listed year.
 
   * `:bymonthday_nearest` — list of `pos_integer()` days or the
     atom `:last`. A non-standard extension carrying the cron `W`
@@ -145,7 +144,8 @@ defmodule Tempo.RRule.Rule do
         rule.bysecond,
         rule.bysetpos,
         rule.bymonthday_nearest,
-        rule.bymonthday_or_byday
+        rule.bymonthday_or_byday,
+        rule.byyear
       ],
       &(&1 != nil)
     )
@@ -165,6 +165,8 @@ defmodule Tempo.RRule.Rule do
   re-parseable ISO 8601 form. `byday` precedes the time elements because a
   weekday after `T…H…M` is out of resolution order and will not round-trip.
 
+  An ordinal weekday on one weekday (`BYDAY=2FR`) becomes a weekday and a position (`5K2I`), and a position applies last within a selection, so the hours, minutes and seconds the rule names follow the selection instead of joining it: `BYDAY=2FR;BYHOUR=9` is `L5K2INT9H`, as ISO 8601-2 §12.9 writes 09:00 on the second Tuesday. Beside a `BYSETPOS`, which takes the selection's one position, the ordinal stays an RRULE-only `:byday`.
+
   A YEARLY rule with `BYWEEKNO` and no `BYYEARDAY`, `BYMONTHDAY` or `BYDAY`
   selects the weekday of its start: RFC 5545 evaluates it that way, and
   ISO 8601-2 (Annex C.3 and C.4) has a conversion state the weekday
@@ -179,9 +181,7 @@ defmodule Tempo.RRule.Rule do
 
   ### Returns
 
-  * A `%Tempo{}` carrying `[selection: …]`, or `nil` when the rule has no
-    `BY*` filter and a default `WKST` (the simple recurrence needs no
-    repeat rule).
+  * A `%Tempo{}` carrying `[selection: …]`, followed by an ordinal weekday's times when it has them, or `nil` when the rule has no `BY*` filter and a default `WKST` (the simple recurrence needs no repeat rule).
 
   ### Examples
 
@@ -205,24 +205,47 @@ defmodule Tempo.RRule.Rule do
     if has_by_rules?(rule) or non_default_wkst?(rule) do
       selection =
         []
+        |> push_by(rule.byyear, :year)
         |> push_by(rule.bymonth, :month)
         |> push_by(rule.bymonthday, :day)
         |> push_by(rule.bymonthday_nearest, :nearest_weekday)
         |> push_or_day(rule.bymonthday_or_byday)
         |> push_by(rule.byyearday, :day_of_year)
         |> push_by(rule.byweekno, :week)
-        |> push_byday(rule.byday)
-        |> push_by(rule.byhour, :hour)
-        |> push_by(rule.byminute, :minute)
-        |> push_by(rule.bysecond, :second)
+        |> push_byday(rule.byday, rule.bysetpos)
+        |> push_times(rule, not times_after_selection?(rule))
         |> push_by(rule.bysetpos, :instance)
         |> push_wkst(rule.wkst)
         |> Enum.reverse()
         |> Parser.consolidate_selection()
 
-      %Tempo{time: [selection: selection], calendar: Calendrical.Gregorian}
+      units =
+        []
+        |> push_times(rule, times_after_selection?(rule))
+        |> Enum.reverse()
+        |> Parser.consolidate_selection()
+
+      %Tempo{time: [{:selection, selection} | units], calendar: Calendrical.Gregorian}
     end
   end
+
+  # Whether an ordinal weekday's position picks the day before its times
+  # refine it, so the times follow the selection.
+  defp times_after_selection?(%__MODULE__{byday: [_ | _] = byday, bysetpos: nil} = rule) do
+    single_weekday_ordinals(byday) != nil and
+      Enum.any?([rule.byhour, rule.byminute, rule.bysecond], &(&1 not in [nil, []]))
+  end
+
+  defp times_after_selection?(_rule), do: false
+
+  defp push_times(acc, rule, true) do
+    acc
+    |> push_by(rule.byhour, :hour)
+    |> push_by(rule.byminute, :minute)
+    |> push_by(rule.bysecond, :second)
+  end
+
+  defp push_times(acc, _rule, false), do: acc
 
   defp non_default_wkst?(%__MODULE__{wkst: wkst}) when is_integer(wkst) and wkst != 1, do: true
   defp non_default_wkst?(_rule), do: false
@@ -277,16 +300,18 @@ defmodule Tempo.RRule.Rule do
   #     `{:instance, ords}` (weekday then position, the ISO order — `day_of_week`
   #     is prepended after `:instance` so it lands first once the list reverses);
   #   * ordinals across DISTINCT weekdays (`2MO,2WE`, `1MO,-1FR`, mixed) have no
-  #     single-position ISO form, so they stay `{:byday, entries}` (RRULE-only).
-  defp push_byday(acc, nil), do: acc
-  defp push_byday(acc, []), do: acc
+  #     single-position ISO form, so they stay `{:byday, entries}` (RRULE-only);
+  #   * an ordinal beside a BYSETPOS, which takes the selection's one position,
+  #     stays `{:byday, entries}` too.
+  defp push_byday(acc, nil, _bysetpos), do: acc
+  defp push_byday(acc, [], _bysetpos), do: acc
 
-  defp push_byday(acc, entries) when is_list(entries) do
+  defp push_byday(acc, entries, bysetpos) when is_list(entries) do
     cond do
       Enum.all?(entries, fn {ordinal, _day} -> is_nil(ordinal) end) ->
         push_day_of_week(acc, Enum.map(entries, fn {nil, day} -> day end))
 
-      single_weekday_ordinals(entries) ->
+      is_nil(bysetpos) and single_weekday_ordinals(entries) != nil ->
         {day, ordinals} = single_weekday_ordinals(entries)
         [{:instance, ordinals}, {:day_of_week, day} | acc]
 

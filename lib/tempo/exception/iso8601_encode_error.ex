@@ -6,7 +6,7 @@ defmodule Tempo.Iso8601EncodeError do
   That is a value of a type ISO 8601 has no form for — a
   `t:Tempo.IntervalSet.t/0` or a `t:Tempo.RecurrenceSet.t/0`, which are sets
   of intervals and of recurrences, a conditional member of a recurrence set,
-  or anything that is not a Tempo value — or a Tempo value holding one of two
+  or anything that is not a Tempo value — or a Tempo value holding one of four
   constructs. A **nearest-weekday** recurrence — the cron `W`
   day-of-month modifier (`15W`, `LW`), parsed by `Tempo.Cron` into a
   `:nearest_weekday` token — has no ISO 8601 designator and, unlike RFC 5545
@@ -16,6 +16,7 @@ defmodule Tempo.Iso8601EncodeError do
   has no ISO form either — the §12.9 position designator `I` applies to one
   resolved set, so interleaved weekday/position cannot be written — and
   round-trips only through its RRULE string via `Tempo.RRule.to_string/1`.
+  A cron **day-of-month OR day-of-week** union (`0 0 13 * 5`, the 13th or any Friday) fires when either field holds, where every part of an ISO 8601 selection holds at once; it round-trips only through its cron string. A recurrence's **end** (RFC 5545 `UNTIL`) has no form either: ISO 8601 bounds a recurrence only by its count, and its start/end form names the first occurrence's end; it round-trips through its RRULE string via `Tempo.RRule.to_string/1`.
 
   A value in a calendar ISO 8601 cannot name has no form either: IXDTF's `[u-ca=…]` names the CLDR calendars and Calendrical's registered ones, so a fiscal or composite calendar built at run time, or a consumer's own, would read back as another calendar. The error's `:calendar` is that calendar.
 
@@ -39,6 +40,18 @@ defmodule Tempo.Iso8601EncodeError do
     "Cannot encode a nearest-weekday recurrence (cron `W`, e.g. `15W`) as " <>
       "ISO 8601 — it has no ISO 8601 designator. It is expressible only as a " <>
       "cron string; for the day-level operation use `Tempo.nearest_workday/2`."
+  end
+
+  def message(%__MODULE__{construct: :until}) do
+    "Cannot encode a recurrence's end (RFC 5545 `UNTIL`) as ISO 8601 — ISO 8601 " <>
+      "bounds a recurrence only by its count, and its start/end form names the " <>
+      "first occurrence's end. Encode it as an RRULE with `Tempo.RRule.to_string/1`."
+  end
+
+  def message(%__MODULE__{construct: :or_day}) do
+    "Cannot encode a cron day-of-month OR day-of-week union (e.g. `0 0 13 * 5`, " <>
+      "the 13th or any Friday) as ISO 8601 — every part of an ISO 8601 selection " <>
+      "holds at once. It is expressible only as a cron string."
   end
 
   def message(%__MODULE__{construct: :byday}) do

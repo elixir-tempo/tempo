@@ -472,6 +472,48 @@ defmodule Tempo.RRule.SelectionTest do
     end
   end
 
+  describe "an ordinal weekday's times follow its position" do
+    # ISO 8601-2 §12.9 applies a position last within a selection, and its
+    # Example 5 writes 09:00 on the second Tuesday as `L2K2INT9H`: the units
+    # after a selection apply to every date it picks.
+    test "the second Friday at 09:00 and 17:00" do
+      {:ok, rule} =
+        RRule.parse("FREQ=MONTHLY;BYDAY=2FR;BYHOUR=9,17;BYMINUTE=0", from: ~o"2026-01-01T09:00")
+
+      assert occurrence_spans_of(rule, ~o"2026-01/2026-03") == [
+               "2026Y1M9DT9H0M/T1M",
+               "2026Y1M9DT17H0M/T1M",
+               "2026Y2M13DT9H0M/T1M",
+               "2026Y2M13DT17H0M/T1M"
+             ]
+
+      assert Tempo.to_iso8601!(rule) == "R/2026Y1M1DT9H0M/P1M/FL5K2INT{9,17}H0M"
+
+      assert occurrence_spans("R/../P1M/FL5K2INT9H0M", ~o"2026-01/2026-03") ==
+               ["2026Y1M9DT9H0M/T1M", "2026Y2M13DT9H0M/T1M"]
+    end
+
+    test "a position after the times picks from all of them" do
+      # The 2nd of every Friday's 09:00 and 17:00 is the first Friday's 17:00
+      assert occurrence_spans("R/../P1M/FL5KT{9,17}H2IN", ~o"2026-01/2026-03") ==
+               ["2026Y1M2DT17H/T18H", "2026Y2M6DT17H/T18H"]
+
+      {:ok, last_of_second} =
+        RRule.parse("FREQ=MONTHLY;BYDAY=2FR;BYHOUR=9,17;BYSETPOS=-1", from: ~o"2026-01-01T09:00")
+
+      assert occurrence_spans_of(last_of_second, ~o"2026-01/2026-03") ==
+               ["2026Y1M9DT17H0M/T1M", "2026Y2M13DT17H0M/T1M"]
+
+      assert {:error, %Tempo.Iso8601EncodeError{construct: :byday}} =
+               Tempo.to_iso8601(last_of_second)
+    end
+
+    test "explain/1 reads the times with the weekday" do
+      assert to_string(Tempo.explain(~o"R/../P1M/FL5K2INT{9,17}H0M")) =~
+               "on the 2nd Friday, at 09:00 or 17:00"
+    end
+  end
+
   describe "end-to-end — BYMONTH through Tempo.ICal.parse/2" do
     test "FREQ=MONTHLY;BYMONTH=6,7,8;COUNT=6 no longer falls back to first-only" do
       ics = """
@@ -1169,8 +1211,11 @@ defmodule Tempo.RRule.SelectionTest do
   end
 
   # Materialise a recurrence within `within` and list its occurrences.
-  defp occurrence_spans(iso, within) do
-    {:ok, set} = iso |> Tempo.from_iso8601!() |> Tempo.to_interval(within: within)
+  defp occurrence_spans(iso, within),
+    do: iso |> Tempo.from_iso8601!() |> occurrence_spans_of(within)
+
+  defp occurrence_spans_of(recurrence, within) do
+    {:ok, set} = Tempo.to_interval(recurrence, within: within)
     set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
   end
 

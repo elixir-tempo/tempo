@@ -67,7 +67,9 @@ defmodule Tempo.IntervalRegressionTest do
       assert inspect(interval) == ~S|~o"R10/../P1D"|
     end
 
-    test "Interval with nil from and a bounded to renders with both anchors" do
+    test "Interval with nil from and an end (an RRULE UNTIL) inspects without an ISO 8601 form" do
+      # ISO 8601 bounds a recurrence only by its count, so the end has no
+      # form: `R/../2022Y12M31D/P1W` would not read back.
       interval = %Tempo.Interval{
         recurrence: :infinity,
         duration: %Tempo.Duration{time: [week: 1]},
@@ -75,7 +77,8 @@ defmodule Tempo.IntervalRegressionTest do
         to: ~o"2022-12-31"
       }
 
-      assert inspect(interval) == ~S|~o"R/../2022Y12M31D/P1W"|
+      assert inspect(interval) == "#Tempo.Interval<not ISO 8601 expressible>"
+      assert {:error, %Tempo.Iso8601EncodeError{construct: :until}} = Tempo.to_iso8601(interval)
     end
 
     test "Interval with nil from and a repeat rule" do

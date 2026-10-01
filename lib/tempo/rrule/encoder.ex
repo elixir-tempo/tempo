@@ -194,11 +194,15 @@ defmodule Tempo.RRule.Encoder do
   defp by_parts(nil, _interval), do: {:ok, []}
 
   # A selection encodes only when every token has an RRULE BY-part; one
-  # that has none is an error naming it, never a part silently dropped.
-  defp by_parts(%Tempo{time: [selection: selection]}, interval) do
-    case selection |> Keyword.keys() |> Enum.reject(&(&1 in @rrule_tokens)) |> Enum.uniq() do
+  # that has none is an error naming it, never a part silently dropped. The
+  # units after a selection (`L5K2INT9H`) are BY-parts too.
+  defp by_parts(%Tempo{time: [{:selection, selection} | units]}, interval) do
+    case (selection ++ units)
+         |> Keyword.keys()
+         |> Enum.reject(&(&1 in @rrule_tokens))
+         |> Enum.uniq() do
       [] ->
-        {:ok, encode_selection(selection)}
+        {:ok, encode_selection(selection) ++ Enum.flat_map(units, &encode_by_entry/1)}
 
       tokens ->
         {:error,

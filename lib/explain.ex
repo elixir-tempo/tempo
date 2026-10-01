@@ -922,7 +922,9 @@ defmodule Tempo.Explain do
 
   # ── Recurrence + selection prose ───────────────────────────────
 
-  defp selection_of(%Tempo{time: [selection: selection]}), do: selection
+  # The units after a selection (`L5K2INT9H`) read as part of it: "on the
+  # 2nd Friday, at 09:00".
+  defp selection_of(%Tempo{time: [{:selection, selection} | units]}), do: selection ++ units
   defp selection_of(_), do: nil
 
   defp recurrence_headline(:infinity), do: "An unbounded recurrence."

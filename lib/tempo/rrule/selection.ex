@@ -41,6 +41,8 @@ defmodule Tempo.RRule.Selection do
   2026's occurrence although it falls on 29 December 2025, and a
   position (`I`) picks among a listed year's occurrences.
 
+  An expansion picks its points in the calendar period of the enclosing frequency that holds the candidate's start, as RFC 5545 evaluates `BY*` rules: a daily candidate that starts at noon has its `BYHOUR=9` at 09:00 that day, three hours before it. A cadence of mixed units (`P1DT12H`) takes its frequency from its first unit.
+
   Tokens this module doesn't interpret pass through unchanged
   so partial support is correct for the partial inputs.
 
@@ -67,7 +69,7 @@ defmodule Tempo.RRule.Selection do
     occurrence under consideration.
 
   * `repeat_rule` is either `nil` (no rule — passthrough) or a
-    `%Tempo{}` whose `:time` holds `[selection: [...]]`.
+    `%Tempo{}` whose `:time` holds `[selection: [...]]`, followed by any units that apply to every date the selection picks (`L5K2INT9H` is 09:00 on the second Friday).
 
   * `freq` is the enclosing `FREQ` atom (`:second`, `:minute`,
     `:hour`, `:day`, `:week`, `:month`, `:year`). Drives the
@@ -113,7 +115,12 @@ defmodule Tempo.RRule.Selection do
 
   def apply(%Interval{} = candidate, nil, _freq, _options), do: [candidate]
 
-  def apply(%Interval{} = candidate, %Tempo{time: [selection: selection]}, freq, options) do
+  def apply(
+        %Interval{} = candidate,
+        %Tempo{time: [{:selection, selection} | units]},
+        freq,
+        options
+      ) do
     # The recurrence's *original* start day rides along as a tagged
     # entry: cadence stepping clamps the candidate's day (Feb 29 →
     # Feb 28 in a common year), and an expansion that repositions the
@@ -121,7 +128,11 @@ defmodule Tempo.RRule.Selection do
     # occurrence — not from an intermediate clamp. Whether the
     # occurrences carry an explicit span rides along the same way.
     # Handlers that don't consume the tags pass them through.
-    apply_selection(candidate, selection ++ selection_context(options), freq)
+    context = selection_context(options)
+
+    candidate
+    |> apply_selection(selection ++ context, freq)
+    |> with_units(units, Keyword.get(context, :keep_span, false))
   end
 
   # No selection shape we recognise — pass through rather than
@@ -136,7 +147,7 @@ defmodule Tempo.RRule.Selection do
 
   ### Arguments
 
-  * `repeat_rule` is either `nil` or a `%Tempo{}` whose `:time` holds `[selection: [...]]`.
+  * `repeat_rule` is either `nil` or a `%Tempo{}` whose `:time` holds `[selection: [...]]`, followed by any units that refine every date the selection picks, as for `apply/4`. A rule with such units expands.
 
   * `freq` is the enclosing `FREQ` atom, as for `apply/4`.
 
@@ -158,6 +169,8 @@ defmodule Tempo.RRule.Selection do
 
   """
   @spec expands?(Tempo.t() | nil, atom()) :: boolean()
+  def expands?(%Tempo{time: [{:selection, _selection}, _unit | _units]}, _freq), do: true
+
   def expands?(%Tempo{time: [selection: selection]}, freq) do
     case split_window(selection) do
       {_scope, %Interval{}, _within} ->
@@ -170,6 +183,18 @@ defmodule Tempo.RRule.Selection do
   end
 
   def expands?(_repeat_rule, _freq), do: false
+
+  # The units after a selection apply to every date it picks (ISO 8601-2
+  # §12.11.2): the selection, its position applied last of all, picks the
+  # day, and `T9H` then makes it 09:00 that day (§12.9 Example 5).
+  defp with_units(occurrences, [], _keep_span?), do: occurrences
+
+  defp with_units(occurrences, units, keep_span?) do
+    Enum.reduce(units, occurrences, fn {unit, values}, acc ->
+      values = values |> List.wrap() |> Enum.flat_map(&expand_range_element/1)
+      expand_time(acc, unit, values, keep_span?)
+    end)
+  end
 
   defp selection_context(options) do
     origin_day =

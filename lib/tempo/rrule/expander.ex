@@ -93,9 +93,8 @@ defmodule Tempo.RRule.Expander do
   def expand(rule, dtstart, options \\ [])
 
   def expand(%Rule{} = rule, %Tempo{} = dtstart, options) do
-    with {:ok, ast} <- to_ast(rule, dtstart, options),
-         {:ok, occurrences} <- materialise(ast, options) do
-      {:ok, filter_byyear(occurrences, rule.byyear)}
+    with {:ok, ast} <- to_ast(rule, dtstart, options) do
+      materialise(ast, options)
     end
   end
 
@@ -207,18 +206,6 @@ defmodule Tempo.RRule.Expander do
       {:ok, %Interval{} = single} -> {:ok, [single]}
       {:error, _} = err -> err
     end
-  end
-
-  # Honour a `:byyear` filter (a non-standard cron extension for a
-  # multi-year field like `2025,2027,2029`). The cadence is already
-  # bounded by UNTIL = last-year + 1, so we only need to drop the
-  # in-between years the list omits.
-  defp filter_byyear(occurrences, nil), do: occurrences
-
-  defp filter_byyear(occurrences, years) when is_list(years) do
-    Enum.filter(occurrences, fn %Interval{from: %Tempo{time: time}} ->
-      Keyword.get(time, :year) in years
-    end)
   end
 
   ## ------------------------------------------------------------

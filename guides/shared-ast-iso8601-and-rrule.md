@@ -19,7 +19,9 @@ Short version:
 Both formats model a bounded recurrence as:
 
 * A **cadence** — how often an event recurs. In ISO 8601 that's a `P…` duration; in RRULE it's `FREQ` + `INTERVAL`.
-* A **bound** — how many times or until when. In ISO 8601 the count is a prefix (`R<n>/…`) and "until" is the second endpoint of the interval (`<from>/<to>`); in RRULE the count is `COUNT=n` and the until is `UNTIL=<date>`. Only one of count or until may be present in RRULE; ISO 8601 similarly treats R-count and explicit end-dates as alternatives.
+
+* A **bound** — how many times or until when. In ISO 8601 the bound is the count prefix (`R<n>/…`) alone: an `R/<from>/<to>` interval names the first occurrence, not an end. RRULE has the count, `COUNT=n`, and an end, `UNTIL=<date>`, which cannot be present together; a rule with an `UNTIL` has no ISO 8601 form.
+
 * A **selection pattern** — which specific instances to pick from the underlying recurrence. In ISO 8601 this is the selection sublanguage `L…N` and the `/F<rule>` repeat-rule combinator; in RRULE this is the family of `BY*` rules (`BYMONTH`, `BYDAY`, `BYMONTHDAY`, `BYHOUR`, `BYSETPOS`, etc.).
 
 Tempo puts each concern in its own field on `%Tempo.Interval{}`:
@@ -28,11 +30,17 @@ Tempo puts each concern in its own field on `%Tempo.Interval{}`:
 |---|---|---|---|
 | Cadence | `:duration` (`%Tempo.Duration{time: [{unit, n}]}`) | `P<n><unit>` | `FREQ=<unit>;INTERVAL=<n>` |
 | Count | `:recurrence` (integer or `:infinity`) | `R<n>/...` | `COUNT=<n>` |
-| Until | `:to` (`%Tempo{}` or `:undefined` or `nil`) | `...<to>/...` | `UNTIL=<date>` |
+| Until | `:to` beside a cadence (`%Tempo{}`) | none: `R/<from>/<to>` names the first occurrence | `UNTIL=<date>` |
 | Selection | `:repeat_rule` (`%Tempo{time: [selection: [...]]}`) | `/F<rule>` or inline `L…N` | `BY*` rules |
 | Start | `:from` (`%Tempo{}`) | `<from>/...` | `DTSTART` (not in RRULE itself) |
 
 The token-level selection shape — `{:selection, [unit: value_or_list, ...]}` — is **byte-for-byte identical** whether it comes from parsing `L4KN` in ISO 8601-2 or `BYDAY=4TH` in RRULE. That shared shape is what makes `Tempo.RRule.to_string/1` and `Tempo.to_iso8601/1` both possible without any format-specific intermediate.
+
+### Where a selection picks its points
+
+A selection that picks points — the 15th, 09:00, the Mondays of a week — picks them in the calendar period of the cadence's unit that holds each step's start: the day for a daily cadence, the month for a monthly one. That is how RFC 5545 evaluates its `BY*` rules and ISO 8601-2 §13.4 its eligible time intervals, and the step's start only moves the periods along. So a point can fall before its step when the start is not at the top of its period: `R/2026-01-05T12/P2D/FLT9HN`, like `FREQ=DAILY;INTERVAL=2;BYHOUR=9` from noon, fires at 09:00 on 7, 9 and 11 January, three hours before each step.
+
+A cadence of mixed units, which ISO 8601-2's repeat rule has no form for, takes its period from its first unit. `P1DT12H` picks in days, so `R/2026-01-05/P1DT12H/FLT9HN` fires at 09:00 on the first day of each step — 5, 6, 8, 9 and 11 January — while `PT36H` picks in hours, where `FLT9HN` keeps only the steps that start at 09:00.
 
 ## What ISO 8601 can express and RRULE cannot
 
@@ -96,7 +104,7 @@ Most RRULE `BY*` filters map straight onto the ISO 8601-2 selection grammar — 
 
 ### `BYSETPOS` — the ISO 8601-2 §12.9 position `I`
 
-RRULE `BYSETPOS=-1` ("take the last element of the resolved per-period set") is the ISO 8601-2 position designator: it is held as an `:instance` token, applied last, after every other BY-rule. It renders weekday-then-position, so `FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1` round-trips as `~o"R/../P1M/FL{1..5}K-1IN"`. A single-weekday ordinal is the same token: `BYDAY=2MO` ("the 2nd Monday") lowers to `day_of_week: 1, instance: 2` and renders `1K2I`. The one shape with no ISO form is an ordinal across *distinct* weekdays (`BYDAY=2MO,2WE`), held as an internal `:byday` token that round-trips only via `Tempo.RRule.to_string/1`.
+RRULE `BYSETPOS=-1` ("take the last element of the resolved per-period set") is the ISO 8601-2 position designator: it is held as an `:instance` token, applied last, after every other BY-rule. It renders weekday-then-position, so `FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1` round-trips as `~o"R/../P1M/FL{1..5}K-1IN"`. A single-weekday ordinal is the same token: `BYDAY=2MO` ("the 2nd Monday") lowers to `day_of_week: 1, instance: 2` and renders `1K2I`. Since a position applies last within a selection, the ordinal's times follow the selection rather than join it, as ISO 8601-2 §12.9 writes 09:00 on the second Tuesday: `BYDAY=2TU;BYHOUR=9` is `L2K2INT9H`. The shapes with no ISO form are an ordinal across *distinct* weekdays (`BYDAY=2MO,2WE`) and an ordinal beside a `BYSETPOS`, which takes the selection's one position; each is held as an internal `:byday` token that round-trips only via `Tempo.RRule.to_string/1`.
 
 ### `WKST` — the `q` designator
 
@@ -108,9 +116,13 @@ Because ISO 8601 can describe more than RRULE, and RRULE needs specific features
 
 ### `Tempo.to_iso8601/1` returns `{:error, %Tempo.Iso8601EncodeError{}}` for
 
-* An ordinal spread across distinct weekdays (`BYDAY=2MO,2WE`), which a single `I` cannot express.
+* An ordinal spread across distinct weekdays (`BYDAY=2MO,2WE`), or an ordinal beside a `BYSETPOS`, which a single `I` cannot express.
+
+* A recurrence's end (RFC 5545 `UNTIL`): ISO 8601 bounds a recurrence only by its count.
 
 * A cron nearest weekday (`15W`).
+
+* A cron day-of-month OR day-of-week union (`0 0 13 * 5`, the 13th or any Friday), since every part of an ISO 8601 selection holds at once.
 
 * A set of intervals or of recurrences, or a conditional member of one: ISO 8601 has no syntax for a set of values, so encode its members one by one.
 

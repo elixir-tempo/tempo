@@ -9,6 +9,8 @@ defmodule Tempo.Cron do
   parsed, convert it to its occurrences like any other recurrence — `Tempo.to_interval/2`
   with a `:within` window — or supply `:from` to start the occurrences.
 
+  Each occurrence is one firing: the minute the expression names, or the second with six or seven fields. Every field limits one component of it — a `*` is every value of its field and a step every `S`th — so `0 * * * 1` fires every hour of a Monday, and `*/15 * * * *` at 0, 15, 30 and 45 past each hour whatever the start.
+
   ### Supported formats
 
   * **5-field POSIX**: `"minute hour day-of-month month day-of-week"`.
@@ -17,10 +19,7 @@ defmodule Tempo.Cron do
     This is the variant used by Quantum and other Elixir
     schedulers.
 
-  * **7-field (with year)**: `"second minute hour day-of-month month day-of-week year"`.
-    A single concrete year is converted into an `UNTIL` limit; a
-    year list or range (`2025,2027,2029`) becomes a `bymonthday`-style
-    `byyear` filter bounded one past the last listed year.
+  * **7-field (with year)**: `"second minute hour day-of-month month day-of-week year"`. The year field limits the firings to the years it names — one year, a list, a range or a step — and the schedule ends after the last of them.
 
   ### Field grammar
 
@@ -89,6 +88,8 @@ defmodule Tempo.Cron do
   either field (an ordinal day-of-week `5#2`/`5L`, or a nearest-weekday
   `15W`) opts out and keeps the AND-composing interpretation.
 
+  As in Vixie cron, a field that starts with `*` is unrestricted — a step such as `*/2` as much as `*` itself — so its days compose with AND: `0 0 */2 * 1` fires on the odd-numbered days that are Mondays.
+
   ### Not supported (AST gaps)
 
   * **`@reboot`** — not a time expression.
@@ -135,8 +136,9 @@ defmodule Tempo.Cron do
   }
 
   # Coarsest-to-finest cascade priority; the first specified field
-  # sets FREQ, everything finer becomes a BY rule.
-  @cascade_order [:year, :month, :day_of_week, :day_of_month, :hour, :minute, :second]
+  # sets FREQ, everything finer becomes a BY rule. A year only limits
+  # the firings (`apply_year_limit/2`).
+  @cascade_order [:month, :day_of_week, :day_of_month, :hour, :minute, :second]
 
   @doc """
   Parse a cron expression into a recurring `t:Tempo.Interval.t/0`.
@@ -152,8 +154,7 @@ defmodule Tempo.Cron do
 
   ### Options
 
-  * `:from` — the recurrence's start, a `t:Tempo.t/0`. Optional;
-    supply it to enumerate or list concrete occurrences.
+  * `:from` — the recurrence's start, a `t:Tempo.t/0`. Optional; supply it to enumerate or list concrete occurrences. The firings start at the first whole minute at or after it (the first whole second with six or seven fields), so a five-field schedule from 09:05:30 starts at 09:06.
 
   ### Returns
 
@@ -174,8 +175,9 @@ defmodule Tempo.Cron do
   """
   @spec parse(String.t(), keyword()) :: {:ok, Tempo.Interval.t()} | {:error, Exception.t()}
   def parse(expression, options \\ []) when is_binary(expression) do
-    with {:ok, rule} <- to_rule(expression) do
-      Expander.to_ast(rule, Keyword.get(options, :from))
+    with {:ok, rule} <- to_rule(expression),
+         {:ok, from} <- firing_start(Keyword.get(options, :from), rule, expression) do
+      Expander.to_ast(rule, from)
     end
   end
 
@@ -208,6 +210,48 @@ defmodule Tempo.Cron do
     case Map.get(@aliases, String.downcase(trimmed)) do
       nil -> parse_fields(trimmed, expression)
       expanded -> parse_fields(expanded, expression)
+    end
+  end
+
+  # A cron fires on whole minutes, or whole seconds with six or seven
+  # fields, so its firings start at the first of them at or after the
+  # `:from` given: 09:05:30 starts a five-field schedule at 09:06.
+  defp firing_start(nil, _rule, _expression), do: {:ok, nil}
+
+  defp firing_start(%Tempo{time: time} = from, rule, _expression) when is_list(time) do
+    grain = grain(rule)
+
+    with %Tempo{} = on_grain <- Tempo.trunc(from, grain) do
+      if past_grain?(time, grain),
+        do: next_grain(on_grain, grain),
+        else: {:ok, on_grain}
+    end
+  end
+
+  defp firing_start(from, _rule, expression) do
+    {:error,
+     CronError.exception(
+       input: expression,
+       reason: "The :from option must be a date or time, got #{inspect(from)}"
+     )}
+  end
+
+  defp grain(%Rule{freq: :second}), do: :second
+  defp grain(%Rule{bysecond: [_ | _]}), do: :second
+  defp grain(%Rule{}), do: :minute
+
+  defp past_grain?(time, :minute), do: nonzero?(time[:second]) or nonzero?(time[:microsecond])
+  defp past_grain?(time, :second), do: nonzero?(time[:microsecond])
+
+  defp nonzero?(nil), do: false
+  defp nonzero?(0), do: false
+  defp nonzero?({0, _precision}), do: false
+  defp nonzero?(_value), do: true
+
+  defp next_grain(on_grain, grain) do
+    case Tempo.shift(on_grain, %Tempo.Duration{time: [{grain, 1}]}) do
+      %Tempo{} = next -> {:ok, next}
+      {:error, _reason} = error -> error
     end
   end
 
@@ -270,9 +314,9 @@ defmodule Tempo.Cron do
       }
 
       rule =
-        case posix_or_case(n_dom, n_dow) do
+        case posix_or_case(n_dom, n_dow, starred?(dom) or starred?(dow)) do
           {:or, monthdays, byday_entries} -> build_or_rule(fields, monthdays, byday_entries)
-          :no -> choose_freq(fields)
+          :no -> cascade(fields)
         end
 
       {:ok, apply_year_limit(rule, n_year)}
@@ -281,10 +325,12 @@ defmodule Tempo.Cron do
 
   # POSIX cron: when BOTH day-of-month and day-of-week are restricted
   # to plain lists, a date matches if EITHER is satisfied (the union),
-  # not both. Quartz extensions opt out — an ordinal day-of-week
-  # (`5#2`, `5L`) or a nearest-weekday day-of-month (`15W`, which is
-  # not a `{:list, _}`) keeps the AND-composing interpretation.
-  defp posix_or_case({:list, monthdays}, {:list, byday_entries}) do
+  # not both. As in Vixie cron, a field that starts with `*` — a step
+  # such as `*/2` as much as `*` itself — is unrestricted, so the two
+  # compose with AND. Quartz extensions opt out too — an ordinal
+  # day-of-week (`5#2`, `5L`) or a nearest-weekday day-of-month
+  # (`15W`, which is not a `{:list, _}`).
+  defp posix_or_case({:list, monthdays}, {:list, byday_entries}, false) do
     if Enum.all?(byday_entries, fn {ordinal, _day} -> is_nil(ordinal) end) do
       {:or, monthdays, byday_entries}
     else
@@ -292,18 +338,18 @@ defmodule Tempo.Cron do
     end
   end
 
-  defp posix_or_case(_dom, _dow), do: :no
+  defp posix_or_case(_dom, _dow, _starred?), do: :no
+
+  defp starred?(field), do: String.starts_with?(field, "*")
 
   # The POSIX OR case runs a DAILY cadence so every candidate day is
-  # visited, carrying the time-of-day and month as ordinary BY filters
-  # plus the day-of-month-OR-day-of-week union. (A wildcard sub-day
-  # time field is the one case this under-serves; fixed times — the
-  # common shape, e.g. `0 0 13 * 5` — are exact.)
+  # visited, carrying the time of day and month as ordinary BY filters
+  # plus the day-of-month-OR-day-of-week union.
   defp build_or_rule(fields, monthdays, byday_entries) do
     %Rule{freq: :day, interval: 1}
-    |> put_by_list(:byhour, fields.hour)
-    |> put_by_list(:byminute, fields.minute)
-    |> put_by_list(:bysecond, fields.second)
+    |> put_by_list(:byhour, fields.hour || every_value(:hour, fields))
+    |> put_by_list(:byminute, fields.minute || every_value(:minute, fields))
+    |> put_by_list(:bysecond, fields.second || every_value(:second, fields))
     |> put_by_list(:bymonth, fields.month)
     |> Map.put(:bymonthday_or_byday, {monthdays, byday_entries})
   end
@@ -312,62 +358,12 @@ defmodule Tempo.Cron do
   ## FREQ selection
   ## ---------------------------------------------------------
 
-  # Build the final Rule. Two shapes of input:
-  #
-  #  (A) "Pure step" shortcut. The finest non-`*` field is a
-  #      `{:step, n}` and every coarser field is `nil` (was `*`).
-  #      Collapse to `FREQ=unit, INTERVAL=n`, no BY rules.
-  #
-  #  (B) Cascade. Pick FREQ from the *coarsest* non-`*` field; all
-  #      finer non-`*` fields become BY rules. Step patterns at
-  #      non-finest levels expand into BY lists.
-  defp choose_freq(fields) do
-    case pure_step(fields) do
-      {:ok, freq, interval} -> %Rule{freq: freq, interval: interval}
-      :no -> cascade(fields)
-    end
-  end
-
-  defp pure_step(fields) do
-    # Walk finest → coarsest looking for the first non-nil field.
-    # If it's `{:step, n}` AND everything coarser is nil, we win.
-    order = [:second, :minute, :hour, :day_of_month, :month, :day_of_week, :year]
-
-    case Enum.find(order, fn k -> Map.get(fields, k) != nil end) do
-      nil ->
-        # Every field was `*`. FREQ is minute (or second if 6-field).
-        if fields.has_seconds?, do: {:ok, :second, 1}, else: {:ok, :minute, 1}
-
-      finest ->
-        finest_step_freq(Map.get(fields, finest), finest, fields, order)
-    end
-  end
-
-  defp finest_step_freq({:step, n}, finest, fields, order) do
-    if coarser_all_nil?(fields, finest, order),
-      do: {:ok, field_to_freq(finest), n},
-      else: :no
-  end
-
-  defp finest_step_freq(_value, _finest, _fields, _order), do: :no
-
-  defp coarser_all_nil?(fields, finest, order) do
-    order
-    |> Enum.drop_while(&(&1 != finest))
-    |> Enum.drop(1)
-    |> Enum.all?(fn k -> Map.get(fields, k) == nil end)
-  end
-
-  defp field_to_freq(:second), do: :second
-  defp field_to_freq(:minute), do: :minute
-  defp field_to_freq(:hour), do: :hour
-  defp field_to_freq(:day_of_month), do: :month
-  defp field_to_freq(:month), do: :year
-  defp field_to_freq(:day_of_week), do: :week
-  defp field_to_freq(:year), do: :year
-
-  # Cascade: pick FREQ from coarsest specified field; everything
-  # finer becomes a BY rule list.
+  # Pick FREQ from the coarsest restricted field; every finer field
+  # becomes a BY rule, with its own values or, for a `*`, every value,
+  # so no component is left for the start to supply. A step is a list
+  # like any other (`*/15` is minutes 0, 15, 30 and 45 of each hour),
+  # and every firing is one minute long, or one second with six or
+  # seven fields.
   defp cascade(fields) do
     case Enum.find(@cascade_order, fn field -> not nil?(Map.fetch!(fields, field)) end) do
       nil -> default_cascade(fields)
@@ -378,16 +374,15 @@ defmodule Tempo.Cron do
   defp default_cascade(%{has_seconds?: true}), do: %Rule{freq: :second, interval: 1}
   defp default_cascade(_fields), do: %Rule{freq: :minute, interval: 1}
 
-  defp build_cascade(field, fields) when field in [:year, :month] do
+  defp build_cascade(:month, fields) do
     %Rule{freq: :year, interval: 1}
     |> put_by_list(:bymonth, fields.month)
     |> add_finer_by(fields, :month)
   end
 
   defp build_cascade(:day_of_week, fields) do
-    %Rule{freq: :week, interval: 1}
+    %Rule{freq: weekday_freq(fields), interval: 1}
     |> put_by_list(:byday, fields.day_of_week)
-    |> maybe_add_bymonthday(fields.day_of_month)
     |> add_finer_by(fields, :day_of_week)
   end
 
@@ -417,19 +412,41 @@ defmodule Tempo.Cron do
   defp nil?(nil), do: true
   defp nil?(_), do: false
 
-  # Add BY rules for every field finer than `coarsest` that is not
-  # nil.
+  # Add a BY rule for every field finer than `coarsest`: its own
+  # values, or every value for a `*` (`every_value/2`).
   defp add_finer_by(rule, fields, coarsest) do
-    order = [:year, :month, :day_of_week, :day_of_month, :hour, :minute, :second]
-
-    order
+    @cascade_order
     |> Enum.drop_while(&(&1 != coarsest))
     |> Enum.drop(1)
     |> Enum.reduce(rule, fn field, acc ->
-      by_key = field_to_by_key(field)
-      put_by_list(acc, by_key, Map.get(fields, field))
+      values = Map.get(fields, field) || every_value(field, fields)
+      put_by_list(acc, field_to_by_key(field), values)
     end)
   end
+
+  # A `*` finer than the rule's frequency is every value of its field,
+  # not the start's: `0 * * * 1` fires every hour of a Monday. A month's
+  # days come from its weekdays when they are given, and five fields
+  # have no seconds.
+  defp every_value(:day_of_month, %{day_of_week: nil}), do: {:list, Enum.to_list(1..31)}
+  defp every_value(:hour, _fields), do: {:list, Enum.to_list(0..23)}
+  defp every_value(:minute, _fields), do: {:list, Enum.to_list(0..59)}
+  defp every_value(:second, %{has_seconds?: true}), do: {:list, Enum.to_list(0..59)}
+  defp every_value(_field, _fields), do: nil
+
+  # Weekdays recur weekly, but an ordinal weekday (`5#2`, `5L`) counts
+  # within its month, and a day of the month or a year limits each
+  # firing by its own date where a week can span two months or two
+  # years, so those walk months or days.
+  defp weekday_freq(%{day_of_week: {:list, entries}} = fields) do
+    entries
+    |> Enum.any?(fn {ordinal, _day} -> ordinal != nil end)
+    |> weekday_freq(fields.day_of_month || fields.year)
+  end
+
+  defp weekday_freq(true = _ordinal?, _date_limit), do: :month
+  defp weekday_freq(false, nil), do: :week
+  defp weekday_freq(false, _date_limit), do: :day
 
   defp field_to_by_key(:month), do: :bymonth
   defp field_to_by_key(:day_of_month), do: :bymonthday
@@ -437,47 +454,21 @@ defmodule Tempo.Cron do
   defp field_to_by_key(:hour), do: :byhour
   defp field_to_by_key(:minute), do: :byminute
   defp field_to_by_key(:second), do: :bysecond
-  defp field_to_by_key(:year), do: :__year__
 
   # Convert normalised form into a list of integers (or keep byday
   # tuples as-is). `nil` means "skip this BY rule".
-  defp put_by_list(rule, :__year__, _), do: rule
   defp put_by_list(rule, _key, nil), do: rule
 
   defp put_by_list(rule, :bymonthday, {:nearest, targets}),
     do: %{rule | bymonthday_nearest: targets}
 
   defp put_by_list(rule, key, {:list, values}), do: Map.put(rule, key, values)
-  defp put_by_list(rule, key, {:step, _n}), do: rule |> Map.put(key, step_expand(key, rule))
 
-  # When dow is specified and dom is ALSO specified, add bymonthday.
-  # POSIX OR semantics would need more; see module docs.
-  defp maybe_add_bymonthday(rule, nil), do: rule
-  defp maybe_add_bymonthday(rule, {:list, list}), do: Map.put(rule, :bymonthday, list)
-  defp maybe_add_bymonthday(rule, {:nearest, targets}), do: %{rule | bymonthday_nearest: targets}
-  defp maybe_add_bymonthday(rule, _), do: rule
-
-  # Expand a `{:step, n}` into the relevant BY list. Rare case:
-  # only hit when a step appears alongside other constraints.
-  defp step_expand(:bymonth, _rule), do: Enum.to_list(1..12)
-  defp step_expand(:bymonthday, _rule), do: Enum.to_list(1..31)
-  defp step_expand(:byhour, _rule), do: Enum.to_list(0..23)
-  defp step_expand(:byminute, _rule), do: Enum.to_list(0..59)
-  defp step_expand(:bysecond, _rule), do: Enum.to_list(0..59)
-  defp step_expand(:byday, _rule), do: Enum.map(1..7, &{nil, &1})
-
-  # Year-as-UNTIL: a single concrete year becomes `until`.
+  # A year field limits the firings to the years it names — one, a
+  # list, a range or a step — and the schedule ends after the last.
   defp apply_year_limit(rule, nil), do: rule
 
-  defp apply_year_limit(rule, {:list, [year]}) do
-    %{rule | until: %Tempo{calendar: Calendrical.Gregorian, time: [year: year + 1]}}
-  end
-
-  # A multi-year list (`2025,2027,2029`, or a range/step that expands
-  # to one) becomes a `:byyear` filter. The cadence is bounded by an
-  # UNTIL one past the last listed year so the recurrence terminates;
-  # the expander then keeps only occurrences whose year is listed.
-  defp apply_year_limit(rule, {:list, [_ | _] = years}) do
+  defp apply_year_limit(rule, {:list, years}) do
     %{
       rule
       | byyear: years,
@@ -485,20 +476,12 @@ defmodule Tempo.Cron do
     }
   end
 
-  defp apply_year_limit(rule, _multiple), do: rule
-
   ## ---------------------------------------------------------
   ## Field normalisers
   ## ---------------------------------------------------------
 
   defp normalise(nil, _field, _range), do: {:ok, nil}
   defp normalise("*", _field, _range), do: {:ok, nil}
-
-  defp normalise("*/" <> step_str, field, range) do
-    with {:ok, step} <- parse_int(step_str, field, 1..(range.last - range.first + 1)) do
-      {:ok, {:step, step}}
-    end
-  end
 
   defp normalise(string, field, range) do
     with {:ok, values} <- parse_list(string, field, range) do

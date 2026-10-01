@@ -193,6 +193,16 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* Units written after a recurrence's selection apply to every date it picks, so `R/../P1M/FL5K2INT9H0M` fires at 09:00 on the second Friday, where each occurrence was the whole month. An RRULE ordinal weekday's times take this form, so `BYDAY=2FR;BYHOUR=9,17` fires on the second Friday at both times, where it fired on the first Friday at 17:00.
+
+* `Tempo.to_iso8601/1` returns an error for a recurrence with an RFC 5545 `UNTIL`, which ISO 8601 has no form for, where it raised, wrote a form that did not parse, or wrote the end as the first occurrence's. It writes ISO 8601's duration/end form with a repeat rule (`R/P1D/2026Y12M31D/F…`), where it dropped the duration.
+
+* `Tempo.Cron` fires on the values a step steps to and on every value of a `*`: `*/15 * * * *` at 0, 15, 30 and 45 past each hour whatever the start, `0 * * * 1` every hour of a Monday. Each firing is a minute (a second with six or seven fields), from the first whole one at or after `:from`.
+
+* `Tempo.Cron` fires an ordinal weekday (`5#2`, `5L`) within each month, keeps a year field's years through `parse/2` with a single year bounding both ends, and composes a day field that starts with `*` with AND, as Vixie cron does.
+
+* `Tempo.Cron.parse/2` returns an error for a `:from` that is not a date or time, and `Tempo.to_iso8601/1` for a cron day-of-month OR day-of-week union, where both raised.
+
 * A recurrence whose selection only limits its steps keeps each step whole, as it is without the selection: `R/../PT1H/FL1KN` is a Monday's hours from the first, and `R/2026-01-05/P1W/FL1MN` January's weeks, where each occurrence was cut to one unit of its start, so the first hour was the whole day.
 
 * `Tempo.shift_zone/2` keeps a value in its own calendar, with its calendar annotation, tags, metadata and qualification, where it wrote the Gregorian wall clock under the value's calendar and dropped the rest.

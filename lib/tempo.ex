@@ -1737,8 +1737,9 @@ defmodule Tempo do
 
   * `{:error, %Tempo.Iso8601EncodeError{}}` for a value with no ISO 8601
     form: an interval set, a recurrence set, a conditional member, anything
-    that is not a Tempo value, a value holding a cron nearest-weekday or
-    an ordinal BYDAY across distinct weekdays, or a value in a calendar IXDTF
+    that is not a Tempo value, a value holding a cron nearest-weekday, a cron
+    day-of-month OR day-of-week union or an ordinal BYDAY across distinct
+    weekdays, a recurrence with an end (RFC 5545 `UNTIL`), or a value in a calendar IXDTF
     cannot name (a fiscal year, say) whose dates the Gregorian calendar
     numbers differently.
 
@@ -1769,7 +1770,7 @@ defmodule Tempo do
          nil <- Tempo.Inspect.unnamed_calendar(value) do
       {:ok, value |> Tempo.Inspect.to_iodata() |> IO.iodata_to_binary()}
     else
-      construct when construct in [:byday, :nearest_weekday] ->
+      construct when construct in [:byday, :nearest_weekday, :or_day, :until] ->
         {:error, Iso8601EncodeError.exception(construct: construct, value: value)}
 
       calendar ->
@@ -6010,7 +6011,7 @@ defmodule Tempo do
   # December–January school break does, and a week reaching past the period's
   # edges.
   defp window_reach(%Tempo.Interval{
-         repeat_rule: %Tempo{time: [selection: selection]},
+         repeat_rule: %Tempo{time: [{:selection, selection} | _units]},
          duration: %Tempo.Duration{} = cadence,
          metadata: metadata
        }) do
@@ -6590,7 +6591,7 @@ defmodule Tempo do
   # grain is left exactly as written.
   defp fill_selection_start(
          %Tempo{} = from,
-         %Tempo.Interval{repeat_rule: %Tempo{time: [selection: [_ | _]]}} = interval
+         %Tempo.Interval{repeat_rule: %Tempo{time: [{:selection, [_ | _]} | _units]}} = interval
        ) do
     unit = start_unit(interval)
 
@@ -6643,7 +6644,7 @@ defmodule Tempo do
   # *day*, and a §12.10 window ending the selection runs from a day). With
   # no selection, the day floor keeps a plain cadence (`R/../P1D`) walking
   # days.
-  defp start_unit(%Tempo.Interval{repeat_rule: %Tempo{time: [selection: selection]}})
+  defp start_unit(%Tempo.Interval{repeat_rule: %Tempo{time: [{:selection, selection} | _units]}})
        when selection != [] do
     # The finest unit is the last selection component (they are written
     # coarse-to-fine), the week start (`q`) aside: it is context, not a unit.
