@@ -43,6 +43,44 @@ defmodule Tempo.RRule.Encoder do
   }
 
   @doc false
+  # A recurrence written with a start and an end (`R5/2026-06-15/2026-06-20`)
+  # steps by the length of its first occurrence, as `Tempo.to_interval/2` walks
+  # it, so its rule is that of the recurrence written with that duration.
+  def encode(
+        %Tempo.Interval{
+          recurrence: recurrence,
+          from: %Tempo{} = from,
+          to: %Tempo{} = to,
+          duration: nil
+        } =
+          interval
+      )
+      when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
+    with {:ok, duration} <- Tempo.duration(from, to) do
+      encode(%{interval | to: nil, duration: duration})
+    end
+  end
+
+  # A recurrence written with a duration and an end (`R5/P1D/2026-06-20`) ends
+  # with its last occurrence, which is no UNTIL: its rule is its count and
+  # cadence, from its first occurrence. Without a count it runs back without
+  # end and has no first occurrence, which an RRULE needs.
+  def encode(%Tempo.Interval{recurrence: count, from: :undefined, to: %Tempo{}} = interval)
+      when is_integer(count) and count > 1 do
+    encode(%{interval | to: nil})
+  end
+
+  def encode(%Tempo.Interval{recurrence: :infinity, from: :undefined, to: %Tempo{}} = interval) do
+    {:error,
+     ConversionError.exception(
+       reason:
+         "An RRULE runs forward from its first occurrence, and #{inspect(interval)} runs " <>
+           "back from its end without one.",
+       value: interval,
+       target: :rrule
+     )}
+  end
+
   def encode(%Tempo.Interval{duration: nil} = value) do
     {:error,
      ConversionError.exception(

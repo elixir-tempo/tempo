@@ -3,6 +3,8 @@ defmodule Tempo.Mask do
 
   import Tempo.Enumeration, only: [adjusted_range: 4, backtrack: 2, current_units: 1]
 
+  alias Tempo.Validation
+
   # Fill in the mask when enumerating. The unspecified digits are filled
   # with the known candidate values and then expanded. For `year: :any` we
   # use the current year.
@@ -102,7 +104,7 @@ defmodule Tempo.Mask do
 
   ### Arguments
 
-  * `unit` is one of `:year`, `:month`, `:day`, `:hour`,
+  * `unit` is one of `:year`, `:month`, `:week`, `:day`, `:hour`,
     `:minute`, `:second`.
 
   * `mask` is the digit-pattern list (e.g. `[:X, :X]` or
@@ -127,6 +129,9 @@ defmodule Tempo.Mask do
     in a calendar whose month count varies by year, or a day range
     with no month.
 
+  * `{:error, {:unmaskable, unit}}` for any other unit, which has
+    no range of values to narrow to.
+
   ### Examples
 
       iex> Tempo.Mask.valid_values(:month, [:X, :X], [year: 1985], Calendrical.Gregorian)
@@ -144,7 +149,7 @@ defmodule Tempo.Mask do
           mask :: list(),
           previous :: keyword(),
           calendar :: module()
-        ) :: {:ok, [integer()]} | {:error, :unanchored}
+        ) :: {:ok, [integer()]} | {:error, :unanchored | {:unmaskable, atom()}}
   # Year masks are digit-bounded — there is no calendar range for years —
   # so their candidates come straight from the digit pattern.
   def valid_values(:year, [:negative | rest], _previous, _calendar) do
@@ -162,8 +167,20 @@ defmodule Tempo.Mask do
 
     case valid_range(unit, previous, calendar) do
       {:ok, range} -> {:ok, Enum.filter(range, &padded_matches_mask?(&1, mask, width))}
+      {:ambiguous, lengths} -> candidates_in_every_length(mask, width, lengths)
       {:error, _reason} = error -> error
     end
+  end
+
+  # A range whose length depends on the missing year — February's 28 or 29
+  # days, a Hebrew year's 12 or 13 months. The candidates are known when every
+  # one fits the shortest length (`1X` days are 10 to 19 in any February).
+  defp candidates_in_every_length(mask, width, shortest..longest//_step) do
+    candidates = Enum.filter(1..longest, &padded_matches_mask?(&1, mask, width))
+
+    if Enum.all?(candidates, &(&1 <= shortest)),
+      do: {:ok, candidates},
+      else: {:error, :unanchored}
   end
 
   # A yearless value (`XX-15`, "the 15th of any month") has no year to
@@ -191,12 +208,21 @@ defmodule Tempo.Mask do
     end
   end
 
+  defp valid_range(:week, previous, calendar) do
+    case Keyword.get(previous, :year) do
+      year when is_integer(year) -> {:ok, 1..Validation.iso_weeks_in_year(year, calendar)}
+      _no_concrete_year -> {:error, :unanchored}
+    end
+  end
+
   defp valid_range(:hour, _previous, _calendar), do: {:ok, 0..23}
   defp valid_range(:minute, _previous, _calendar), do: {:ok, 0..59}
   defp valid_range(:second, _previous, _calendar), do: {:ok, 0..59}
+  defp valid_range(unit, _previous, _calendar), do: {:error, {:unmaskable, unit}}
 
   defp unanchored_range(count) when is_integer(count), do: {:ok, 1..count}
-  defp unanchored_range(_ambiguous_or_undefined), do: {:error, :unanchored}
+  defp unanchored_range({:ambiguous, %Range{} = lengths}), do: {:ambiguous, lengths}
+  defp unanchored_range(_undefined), do: {:error, :unanchored}
 
   # Pad candidate to the mask's width with leading zeros, then
   # compare digit-by-digit: `:X` matches any digit, a digit set

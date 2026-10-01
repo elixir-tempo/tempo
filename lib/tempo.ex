@@ -4939,11 +4939,13 @@ defmodule Tempo do
 
   Routes through Localize so format patterns, month and weekday names, day periods, and punctuation all follow CLDR data for the chosen locale. The default format is keyed off the Tempo's resolution — a year renders as its first and last months, a month or a week as its first and last days, a day as that day, and so on. A week date is the day it names.
 
+  A value that names something other than its own one span renders as the span or spans `Tempo.to_interval/2` gives it: a mask its span (`~o"202X"` is 2020 to 2029), and a recurrence, a selection or a set its spans as a list in the locale. A one-of set renders as its alternatives ("2026 or 2027").
+
   `Tempo.to_string/1,2` is the end-user display function. `inspect/1` remains the programmer-facing form and returns the `~o"…"` sigil representation unchanged. Interpolation renders a value as `to_string/1` does, and writes one it cannot render in its ISO 8601 form.
 
   ### Arguments
 
-  * `value` is a `t:t/0`, `t:Tempo.Interval.t/0`, `t:Tempo.IntervalSet.t/0` or `t:Tempo.Duration.t/0`.
+  * `value` is a `t:t/0`, `t:Tempo.Interval.t/0`, `t:Tempo.IntervalSet.t/0`, `t:Tempo.Set.t/0`, `t:Tempo.RecurrenceSet.t/0` or `t:Tempo.Duration.t/0`.
 
   * `options` is a keyword list of options.
 
@@ -4953,13 +4955,15 @@ defmodule Tempo do
 
   * `:locale` is a CLDR locale identifier such as `"en"`, `"en-GB"`, or `"de"`. Defaults to Localize's configured default locale.
 
-  * Any other option accepted by `Localize.Date.to_string/2`, `Localize.Time.to_string/2`, `Localize.DateTime.to_string/2`, or `Localize.Interval.to_string/3` is forwarded verbatim.
+  * `:within` is the window for a value with no end of its own — a recurrence with no count or `UNTIL`, a selection in an unspecified year, a recurrence set — whose occurrences are shown, as `Tempo.to_interval/2` takes it.
+
+  * Any other option accepted by `Localize.Date.to_string/2`, `Localize.Time.to_string/2`, `Localize.DateTime.to_string/2`, `Localize.Interval.to_string/3` or `Localize.Duration.to_string/2` is forwarded verbatim. A duration shows a fraction of a second as microseconds unless `:except` leaves them out.
 
   ### Returns
 
   * `{:ok, string}` with the formatted value.
 
-  * `{:error, exception}` when the value cannot be rendered: a `Tempo.IntervalEndpointsError` for an interval without both ends, a `Tempo.UnboundedSetError` for an interval set without an end, an `ArgumentError` for a value of another kind or options that are not a keyword list, and Localize's error for a value it cannot render, such as a set of years, or a locale or format it does not accept.
+  * `{:error, exception}` when the value cannot be rendered: a `Tempo.IntervalEndpointsError` for an interval without both ends, a `Tempo.UnboundedRecurrenceError` for a recurrence with no end and no `:within` window, a `Tempo.UnboundedSetError` for an interval set without an end, a `Tempo.UnanchoredError` for a week or a day of the week without a year, a `Tempo.InvalidDateError` for a mask that names no date, an `ArgumentError` for a value of another kind or options that are not a keyword list, and Localize's error for a locale or format it does not accept.
 
   ### Examples
 
@@ -4987,6 +4991,14 @@ defmodule Tempo do
       iex> Tempo.to_string(~o"P3DT2H", format: :short)
       {:ok, "3 days, 2 hr"}
 
+  A recurrence is its occurrences, as a list, and a one-of set its alternatives:
+
+      iex> Tempo.to_string(~o"R3/2026-06-15/P1D")
+      {:ok, "Jun 15, 2026, Jun 16, 2026, and Jun 17, 2026"}
+
+      iex> Tempo.to_string(~o"[2026-06-15,2026-07-04]")
+      {:ok, "Jun 15, 2026 or Jul 4, 2026"}
+
   An open interval has no last day to show, so it is an error, and interpolation writes it in ISO 8601:
 
       iex> {:error, %Tempo.IntervalEndpointsError{}} = Tempo.to_string(~o"2026-06-15/..")
@@ -4995,7 +5007,12 @@ defmodule Tempo do
 
   """
   @spec to_string(
-          t() | Tempo.Interval.t() | Tempo.IntervalSet.t() | Tempo.Duration.t(),
+          t()
+          | Tempo.Interval.t()
+          | Tempo.IntervalSet.t()
+          | Tempo.Set.t()
+          | Tempo.RecurrenceSet.t()
+          | Tempo.Duration.t(),
           keyword()
         ) :: {:ok, String.t()} | {:error, Exception.t()}
   defdelegate to_string(value, options \\ []), to: Tempo.Format
@@ -5011,7 +5028,7 @@ defmodule Tempo do
 
   ### Options
 
-  * The options of `to_string/2`.
+  * The options of `to_string/2`, `:within` included.
 
   ### Returns
 
@@ -5028,7 +5045,12 @@ defmodule Tempo do
 
   """
   @spec to_string!(
-          t() | Tempo.Interval.t() | Tempo.IntervalSet.t() | Tempo.Duration.t(),
+          t()
+          | Tempo.Interval.t()
+          | Tempo.IntervalSet.t()
+          | Tempo.Set.t()
+          | Tempo.RecurrenceSet.t()
+          | Tempo.Duration.t(),
           keyword()
         ) :: String.t()
   def to_string!(value, options \\ []) do
@@ -5160,6 +5182,10 @@ defmodule Tempo do
   mask of years resolves one year at a time. A selection in an
   unspecified year (`~o"X*YL5M7K2IN"`) needs a `:within` window.
 
+  A mask is the span its digits allow: `~o"156X"` is the 1560s and `~o"2026-06-1X"` the 10th to the 19th of June 2026. Candidates that are not consecutive (`~o"2026-06-X5"`), or a mask with a narrower unit after it (`~o"1985-XX-15"`), are a span each, and a candidate the calendar has no room for drops out.
+
+  A recurrence is its occurrences however ISO 8601-1 §5.6.1 writes it: a start and a duration, a start and an end that are its first occurrence (each one after it starts where the one before ends and is as long), or a duration and an end that are its last.
+
   ### Arguments
 
   * `value` is a `t:#{__MODULE__}.t/0`, `t:Tempo.Interval.t/0`,
@@ -5217,6 +5243,9 @@ defmodule Tempo do
     one — `~o"X*Y2M28D"` (February is 28 or 29 days), or a yearless
     masked month in a calendar whose month count varies by year.
 
+  * `{:error, %Tempo.InvalidDateError{}}` when a mask names no date —
+    `~o"2026-02-3X"`, as February has no 30th or 31st.
+
   ### Examples
 
       iex> {:ok, tempo} = Tempo.from_iso8601("2026-01")
@@ -5255,6 +5284,7 @@ defmodule Tempo do
           | Tempo.Interval.t()
           | Tempo.IntervalSet.t()
           | Tempo.Set.t()
+          | Tempo.RecurrenceSet.t()
           | Tempo.Duration.t(),
           keyword()
         ) ::
@@ -5499,6 +5529,9 @@ defmodule Tempo do
           {:ok, [Tempo.Interval.t()]} | {:error, error_reason()}
   def occurrences_within(occurrences, options), do: keep_within(occurrences, options)
 
+  # A recurrence of no occurrences (`R0/2026-06-15/P1D`) is an empty set.
+  defp materialise(%Tempo.Interval{recurrence: 0}, _opts), do: IntervalSet.new([])
+
   # A bounded recurrence (`R3/1985-01/P1M`) expands to N disjoint
   # intervals. Each occurrence starts at `from + i*duration` and
   # runs for one duration. Requires `Tempo.Math.add/2`.
@@ -5518,7 +5551,7 @@ defmodule Tempo do
        )
        when is_integer(n) and n > 1 do
     {from, interval} = fill_selection_start(from, interval)
-    step = if direction == -1, do: negate_duration(duration), else: duration
+    step = if direction == -1, do: Duration.negate(duration), else: duration
 
     intervals =
       iterate_recurrence(
@@ -5610,7 +5643,7 @@ defmodule Tempo do
        )
        when to in [nil, :undefined] do
     {from, interval} = fill_selection_start(from, interval)
-    step = if direction == -1, do: negate_duration(duration), else: duration
+    step = if direction == -1, do: Duration.negate(duration), else: duration
 
     case iterate_recurrence(
            from,
@@ -5783,6 +5816,56 @@ defmodule Tempo do
           {:ok, start} -> materialise_from_bound(interval, start, within, opts)
           {:error, _} = error -> error
         end
+    end
+  end
+
+  # A recurrence written with a start and an end (`R5/2026-06-15/2026-06-20`,
+  # ISO 8601-1 §5.6.1 a). The two identify the first occurrence, and each one
+  # after it starts where the one before ends and is as long, measured in the
+  # unit its endpoints are written in (`duration/2`): `R3/2026-01/2026-03` steps
+  # two months at a time. It materialises as the same recurrence written with
+  # that duration, so its count, an unending one's `:within` window and a repeat
+  # rule apply as they do there.
+  defp materialise(
+         %Tempo.Interval{
+           recurrence: recurrence,
+           from: %Tempo{} = from,
+           to: %Tempo{} = to,
+           duration: nil
+         } = interval,
+         opts
+       )
+       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
+    with {:ok, duration} <- duration(from, to) do
+      case materialise(%{interval | to: nil, duration: duration}, opts) do
+        {:error, %UnboundedRecurrenceError{} = error} -> {:error, %{error | interval: interval}}
+        materialised -> materialised
+      end
+    end
+  end
+
+  # A recurrence written with a duration and an end (`R5/P1D/2026-06-20`,
+  # ISO 8601-1 §5.6.1 c). The two identify the last occurrence, and the others
+  # run back from it, one duration each. Every occurrence is counted from the
+  # end (`end − k × duration`), as a forward recurrence counts from its start,
+  # so a month cadence keeps the stated end. An unending one runs back without
+  # limit, so the `:within` window ends it.
+  defp materialise(
+         %Tempo.Interval{
+           recurrence: recurrence,
+           from: :undefined,
+           duration: %Tempo.Duration{} = duration,
+           to: %Tempo{} = to
+         } = interval,
+         opts
+       )
+       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
+    back = Duration.negate(duration)
+    metadata = strip_span_directives(interval.metadata)
+
+    with {:ok, occurrences} <- occurrences_back(to, back, recurrence, interval, metadata, opts),
+         {:ok, kept} <- keep_within(occurrences, opts) do
+      IntervalSet.new(kept, coalesce: coalesce_opt(opts))
     end
   end
 
@@ -6164,7 +6247,7 @@ defmodule Tempo do
     with {:ok, first} <- period_holding(window_from, interval) do
       period_not_reaching(
         first,
-        negate_duration(cadence),
+        Duration.negate(cadence),
         &reaches_forward?(&1, forward, window_from)
       )
     end
@@ -6257,7 +6340,7 @@ defmodule Tempo do
   defp carried(error, _durations, _direction), do: error
 
   defp oriented(duration, :on), do: duration
-  defp oriented(duration, :back), do: negate_duration(duration)
+  defp oriented(duration, :back), do: Duration.negate(duration)
 
   # The start of the cadence period `edge` falls in, at the grain the
   # recurrence starts at and in the calendar it selects in.
@@ -6286,14 +6369,15 @@ defmodule Tempo do
   defp add_n_durations(tempo, _duration, 0), do: tempo
 
   defp add_n_durations(tempo, %Tempo.Duration{time: time}, n) when n > 0 do
-    scaled = Enum.map(time, fn {unit, amount} -> {unit, amount * n} end)
+    scaled = Enum.map(time, &scaled_amount(&1, n))
     Math.add(tempo, %Tempo.Duration{time: scaled})
   end
 
-  defp negate_duration(%Tempo.Duration{time: time}) do
-    negated = Enum.map(time, fn {unit, amount} -> {unit, -amount} end)
-    %Tempo.Duration{time: negated}
-  end
+  # A fractional second's microseconds are a `{value, precision}` pair.
+  defp scaled_amount({:microsecond, {value, precision}}, n),
+    do: {:microsecond, {value * n, precision}}
+
+  defp scaled_amount({unit, amount}, n), do: {unit, amount * n}
 
   ## ---------------------------------------------------------
   ## Recurrence-expansion helpers
@@ -6366,6 +6450,72 @@ defmodule Tempo do
     |> Stream.reject(fn %Tempo.Interval{from: f} -> before_dtstart?(f, from) end)
     |> Stream.take(output_limit)
     |> Enum.to_list()
+  end
+
+  # The occurrences of a recurrence written with a duration and an end, earliest
+  # first: a count's, or an unending one's back to the start of its `:within`
+  # window, without which it has no first occurrence.
+  defp occurrences_back(to, back, count, _interval, metadata, _opts) when is_integer(count) do
+    occurrences_back_to(to, back, metadata, 0, fn k, _occurrence -> k < count end, [])
+  end
+
+  defp occurrences_back(to, back, :infinity, interval, metadata, opts) do
+    case Keyword.fetch(opts, :within) do
+      {:ok, within} -> occurrences_back_within(to, back, bound_lower(within), metadata)
+      :error -> {:error, UnboundedRecurrenceError.exception(interval: interval)}
+    end
+  end
+
+  defp occurrences_back_within(_to, _back, nil, _metadata), do: {:error, empty_bound_error()}
+
+  defp occurrences_back_within(to, back, %Tempo{} = window_from, metadata) do
+    ends_in_window? = fn _k, %Tempo.Interval{to: stop} ->
+      Compare.compare_endpoints(stop, window_from) == :later
+    end
+
+    occurrences_back_to(to, back, metadata, 0, ends_in_window?, [])
+  end
+
+  # Walks back from the end one occurrence at a time while `more?` holds for an
+  # occurrence and its index, prepending each, so the list comes out earliest
+  # first.
+  defp occurrences_back_to(to, back, metadata, k, more?, occurrences)
+       when k < @recurrence_safety_cap do
+    case occurrence_back(to, back, k, metadata) do
+      {:ok, occurrence} ->
+        if more?.(k, occurrence),
+          do: occurrences_back_to(to, back, metadata, k + 1, more?, [occurrence | occurrences]),
+          else: {:ok, occurrences}
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  defp occurrences_back_to(_to, _back, _metadata, _k, _more?, occurrences),
+    do: {:ok, occurrences}
+
+  # The occurrence `k` cadences back from the end: it ends `k` durations before
+  # the end and starts one duration earlier.
+  defp occurrence_back(to, back, k, metadata) do
+    case {add_n_durations(to, back, k + 1), add_n_durations(to, back, k)} do
+      {%Tempo{} = start, %Tempo{} = stop} ->
+        {:ok, %Tempo.Interval{from: start, to: stop, metadata: metadata}}
+
+      {{:error, _reason} = error, _stop} ->
+        error
+
+      {_start, {:error, _reason} = error} ->
+        error
+
+      {start, _stop} ->
+        {:error,
+         ConversionError.exception(
+           value: to,
+           reason:
+             "Stepping #{inspect(to)} back by #{inspect(back)} gives #{inspect(start)}, not one value."
+         )}
+    end
   end
 
   # Every occurrence the periods from `from` select, walking while a
@@ -6755,32 +6905,59 @@ defmodule Tempo do
     if Compare.compare_endpoints(a, b) == :earlier, do: a, else: b
   end
 
-  # A "non-contiguous mask" is a mask at some unit followed by
-  # one or more concrete units: `1985-XX-15` (month masked, day
-  # concrete) produces 12 disjoint day-intervals, not a single
-  # year-wide span. When detected, rewrite the mask position to
-  # the list of valid candidate values (calendar-aware) so the
-  # existing multi-expansion path handles it.
-  #
-  # A mask with only masks after it (`1985-XX-XX`) is still
-  # "contiguous widening" — no concrete unit pins a sub-span, so
-  # the enclosing year interval is the right representation.
+  # A mask narrows to the values its digits allow (`Mask.valid_values/4`, which
+  # asks the calendar how many months, days and weeks there are). One followed
+  # by something that narrows further — a concrete unit, a set, a group or a
+  # partly masked unit (`1985-XX-15`, `2026-XX-1X`) — names disjoint spans, so
+  # it is replaced by its candidate values and expanded member by member. A
+  # partly masked unit with nothing that narrows after it is the span from its
+  # first candidate to its last (`2026-06-1X`, 10 to 19 June), or its candidates
+  # when they are not consecutive (`2026-06-X5`, the 5th, 15th and 25th). A
+  # fully masked unit with nothing that narrows after it (`1985-XX-XX`) widens
+  # to the units before it, which is exactly its span, as a year mask is the
+  # span its digits allow (`202X`, the 2020s).
   defp expand_non_contiguous_mask(%Tempo{time: time, calendar: calendar} = tempo) do
     case find_non_contiguous_mask(time, [], calendar) do
       nil -> {:ok, tempo}
       {new_time} -> {:ok, %{tempo | time: new_time}}
-      {:error, :unanchored} -> {:error, UnanchoredError.exception(value: tempo)}
+      {:span, first, last} -> {:span, %{tempo | time: first}, %{tempo | time: last}}
+      {:members, times} -> {:members, Enum.map(times, &%{tempo | time: &1})}
+      {:error, reason} -> {:error, mask_error(tempo, reason)}
     end
+  end
+
+  defp mask_error(tempo, :unanchored), do: UnanchoredError.exception(value: tempo)
+
+  defp mask_error(tempo, {:no_candidates, unit}) do
+    InvalidDateError.exception(
+      reason: "#{inspect(tempo)} names no date: no #{unit} matches its mask."
+    )
+  end
+
+  defp mask_error(tempo, {:unmaskable, unit}) do
+    ConversionError.exception(
+      value: tempo,
+      reason: "#{inspect(tempo)} masks its #{unit}, which has no range of values to narrow to."
+    )
   end
 
   defp find_non_contiguous_mask([], _previous, _calendar), do: nil
 
   defp find_non_contiguous_mask([{unit, {:mask, mask}} | rest], previous, calendar) do
-    if tail_has_concrete?(rest) do
-      # Non-contiguous: substitute the mask with candidate values.
-      substitute_mask(unit, mask, Enum.reverse(previous), rest, calendar)
-    else
-      nil
+    prefix = Enum.reverse(previous)
+
+    cond do
+      tail_narrows?(rest) and tail_masked?(rest) ->
+        mask_members(unit, mask, prefix, rest, calendar)
+
+      tail_narrows?(rest) ->
+        substitute_mask(unit, mask, prefix, rest, calendar)
+
+      unit != :year and partial_mask?(mask) ->
+        narrow_mask(unit, mask, prefix, calendar)
+
+      true ->
+        nil
     end
   end
 
@@ -6793,21 +6970,61 @@ defmodule Tempo do
   # `Enumerable`.
   defp substitute_mask(unit, mask, prefix, rest, calendar) do
     case Mask.valid_values(unit, mask, prefix, calendar) do
+      {:ok, []} -> {:error, {:no_candidates, unit}}
       {:ok, [single]} -> {prefix ++ [{unit, single}] ++ rest}
       {:ok, many} -> {prefix ++ [{unit, many}] ++ rest}
-      {:error, :unanchored} = error -> error
+      {:error, _reason} = error -> error
     end
   end
 
-  defp tail_has_concrete?([]), do: false
-  defp tail_has_concrete?([{_unit, {:mask, _}} | rest]), do: tail_has_concrete?(rest)
-  defp tail_has_concrete?([{_unit, :any} | rest]), do: tail_has_concrete?(rest)
-
-  defp tail_has_concrete?([{_unit, value} | _rest]) when is_integer(value) do
-    true
+  # A mask with a mask after it that narrows: each candidate is a value of its
+  # own, so the later mask narrows within it rather than being walked value by
+  # value (`2026-XX-1X` is twelve spans of ten days, not 120 days).
+  defp mask_members(unit, mask, prefix, rest, calendar) do
+    case Mask.valid_values(unit, mask, prefix, calendar) do
+      {:ok, []} -> {:error, {:no_candidates, unit}}
+      {:ok, values} -> {:members, Enum.map(values, &(prefix ++ [{unit, &1}] ++ rest))}
+      {:error, _reason} = error -> error
+    end
   end
 
-  defp tail_has_concrete?([_ | rest]), do: tail_has_concrete?(rest)
+  defp tail_masked?(rest), do: Enum.any?(rest, &match?({_unit, {:mask, _mask}}, &1))
+
+  # A partly masked unit with nothing that narrows after it. Anything after it
+  # is fully masked and widens, so it is dropped.
+  defp narrow_mask(unit, mask, prefix, calendar) do
+    case Mask.valid_values(unit, mask, prefix, calendar) do
+      {:ok, []} -> {:error, {:no_candidates, unit}}
+      {:ok, [single]} -> {prefix ++ [{unit, single}]}
+      {:ok, [first | _] = values} -> consecutive_or_scattered(unit, first, values, prefix)
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp consecutive_or_scattered(unit, first, values, prefix) do
+    last = List.last(values)
+
+    if last - first + 1 == length(values),
+      do: {:span, prefix ++ [{unit, first}], prefix ++ [{unit, last}]},
+      else: {prefix ++ [{unit, values}]}
+  end
+
+  # A mask some of whose digits are given (`1X`, `X5`, `XXX{0,2,4,6,8}`).
+  defp partial_mask?(mask), do: Enum.any?(mask, &(is_integer(&1) or is_list(&1)))
+
+  # Whether anything after a mask narrows its span further.
+  defp tail_narrows?([]), do: false
+  defp tail_narrows?([{_unit, value} | _rest]) when is_integer(value), do: true
+  defp tail_narrows?([{_unit, values} | _rest]) when is_list(values), do: true
+  defp tail_narrows?([{_unit, {:group, _range}} | _rest]), do: true
+
+  defp tail_narrows?([{_unit, {value, meta}} | _rest]) when is_integer(value) and is_list(meta),
+    do: true
+
+  defp tail_narrows?([{_unit, {:mask, mask}} | rest]),
+    do: partial_mask?(mask) or tail_narrows?(rest)
+
+  defp tail_narrows?([_entry | rest]), do: tail_narrows?(rest)
 
   # A Tempo is "multi" if any of its time slots holds a list of
   # more than one candidate value. The existing Enumerable
@@ -6863,26 +7080,47 @@ defmodule Tempo do
     # re-validate, which resolves the negative against that member's
     # own month or year (leap-aware, per ISO 8601-2 §4.4.1), exactly
     # as a scalar literal resolves at parse.
-    intervals =
-      tempo
-      |> expand_members()
-      |> Enum.map(fn member ->
-        case normalise_member(member) do
-          {:ok, %Tempo{} = resolved} -> to_interval(resolved)
-          {:error, _} = err -> err
-        end
-      end)
+    tempo
+    |> expand_members()
+    |> materialise_members()
+  end
 
-    case Enum.find(intervals, &match?({:error, _}, &1)) do
-      nil ->
-        intervals
-        |> Enum.map(fn {:ok, i} -> i end)
-        |> IntervalSet.new()
+  defp materialise_members(members) do
+    members
+    |> Enum.map(&member_interval/1)
+    |> gather_members()
+  end
 
-      {:error, _} = err ->
-        err
+  # Members expanded from a mask, or from a set before one, are kept only when
+  # they hold a date, as a set drops the values its context cannot hold
+  # (`2026-XX-3X` has no February). When none does, the value names no date.
+  defp materialise_mask_members(members) do
+    results = Enum.map(members, &member_interval/1)
+
+    case Enum.reject(results, &match?({:error, %InvalidDateError{}}, &1)) do
+      [] when results != [] -> hd(results)
+      kept -> gather_members(kept)
     end
   end
+
+  defp member_interval(member) do
+    case normalise_member(member) do
+      {:ok, %Tempo{} = resolved} -> to_interval(resolved)
+      {:error, _} = err -> err
+    end
+  end
+
+  # A member that still holds a mask (`2026-01-1X` from `2026-XX-1X`) may be a
+  # span or several, so the members' intervals are gathered into one set.
+  defp gather_members(results) do
+    case Enum.find(results, &match?({:error, _}, &1)) do
+      nil -> results |> Enum.flat_map(&member_intervals/1) |> IntervalSet.new()
+      {:error, _} = err -> err
+    end
+  end
+
+  defp member_intervals({:ok, %IntervalSet{} = set}), do: IntervalSet.members(set)
+  defp member_intervals({:ok, %Tempo.Interval{} = interval}), do: [interval]
 
   # Any combination of ranges, in any component positions, expands
   # through the cartesian expander — each component resolves against
@@ -7395,7 +7633,7 @@ defmodule Tempo do
         {offsets ++ lower, offsets ++ upper}
 
       %Conditional{to_next: selector}, {lower, upper} ->
-        {[negate_duration(selection_search_span(selector)) | lower], upper}
+        {[Duration.negate(selection_search_span(selector)) | lower], upper}
     end)
   end
 
@@ -7927,13 +8165,50 @@ defmodule Tempo do
   defp with_trailing_units({:error, _reason} = error, _trailing), do: error
 
   defp do_to_interval(%Tempo{} = tempo) do
-    # Step 1: if the Tempo has a non-contiguous mask (a mask
-    # followed by concrete units — e.g. `1985-XX-15`), rewrite the
-    # time list to substitute the mask with the list of valid
-    # values. This turns a previously-widened case into a proper
-    # multi-interval expansion.
-    with {:ok, tempo} <- expand_non_contiguous_mask(tempo) do
-      materialise_expanded(tempo)
+    case mask_context_members(tempo) do
+      {:ok, members} -> materialise_mask_members(members)
+      :none -> narrowed_interval(tempo)
+    end
+  end
+
+  # A set before a value's first mask (`2026-{6,7}-1X`): each member of the set
+  # is a context of its own, in which the mask narrows.
+  defp mask_context_members(%Tempo{time: time} = tempo) do
+    time
+    |> Enum.split_while(&(not match?({_unit, {:mask, _mask}}, &1)))
+    |> context_members(tempo)
+  end
+
+  defp context_members({[_ | _] = context, [_ | _] = masked}, tempo) do
+    case Enumeration.expand(%{tempo | time: context}) do
+      {:ok, members} -> {:ok, Enum.map(members, &%{&1 | time: &1.time ++ masked})}
+      :not_expandable -> :none
+    end
+  end
+
+  defp context_members(_split, _tempo), do: :none
+
+  defp narrowed_interval(%Tempo{} = tempo) do
+    # Step 1: narrow any mask to the values it allows (see
+    # `expand_non_contiguous_mask/1`): replaced by its candidates when
+    # they are disjoint spans (`1985-XX-15`), by values of their own when
+    # a later mask narrows within each (`2026-XX-1X`), or the span from
+    # the first to the last when they are consecutive (`2026-06-1X`).
+    case expand_non_contiguous_mask(tempo) do
+      {:ok, tempo} -> materialise_expanded(tempo)
+      {:span, first, last} -> masked_span(first, last)
+      {:members, members} -> materialise_mask_members(members)
+      {:error, _reason} = error -> error
+    end
+  end
+
+  # The span of a mask's consecutive candidates: from the start of the first to
+  # the end of the last. It walks the masked unit, as the mask does and as a
+  # year mask's span walks its years.
+  defp masked_span(%Tempo{} = first, %Tempo{} = last) do
+    with {:ok, {lower, _upper}, _unit} <- Interval.next_unit_boundary(first),
+         {:ok, {_lower, upper}, _unit} <- Interval.next_unit_boundary(last) do
+      {:ok, %Tempo.Interval{from: lower, to: upper}}
     end
   end
 
@@ -7963,7 +8238,8 @@ defmodule Tempo do
   ### Arguments
 
   * `value` is a `t:#{__MODULE__}.t/0`, `t:Tempo.Interval.t/0`,
-    `t:Tempo.IntervalSet.t/0`, or `t:Tempo.Set.t/0`.
+    `t:Tempo.IntervalSet.t/0`, `t:Tempo.RecurrenceSet.t/0`, or
+    `t:Tempo.Set.t/0`.
 
   ### Returns
 
@@ -7988,6 +8264,7 @@ defmodule Tempo do
           | Tempo.Interval.t()
           | Tempo.IntervalSet.t()
           | Tempo.Set.t()
+          | Tempo.RecurrenceSet.t()
           | Tempo.Duration.t()
         ) ::
           Tempo.Interval.t() | Tempo.IntervalSet.t()

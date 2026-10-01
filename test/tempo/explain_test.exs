@@ -5,6 +5,7 @@ defmodule Tempo.Explain.Test do
   alias Tempo.Explain
   alias Tempo.ICal
   alias Tempo.IntervalSet
+  alias Tempo.RRule
 
   # Tests for `Tempo.Explain.explain/1` — structured prose
   # descriptions of Tempo values. Three formatters (`to_string`,
@@ -224,6 +225,31 @@ defmodule Tempo.Explain.Test do
     test "a real recurrence still wins over the start-and-duration clause" do
       assert Tempo.explain(~o"R3/2026-01-01/P1M") =~ "recurrence of 3 occurrences"
       assert Tempo.explain(~o"R1/2026-01-01/P1Y") =~ "start and a duration"
+    end
+
+    test "a recurrence written with an end is a recurrence" do
+      start_and_end = ~o"R5/2026-06-15/2026-06-20"
+      assert Explain.explain(start_and_end).kind == :recurring_interval
+      assert Tempo.explain(start_and_end) =~ "recurrence of 5 occurrences"
+      assert Tempo.explain(start_and_end) =~ "First occurrence: 2026-06-15 to 2026-06-20"
+
+      duration_and_end = ~o"R5/P1D/2026-06-20"
+      assert Explain.explain(duration_and_end).kind == :recurring_interval
+      assert Tempo.explain(duration_and_end) =~ "recurrence of 5 occurrences"
+      assert Tempo.explain(duration_and_end) =~ "Ending: 2026-06-20"
+
+      assert Tempo.explain(~o"R/2026-06-15/2026-06-20") =~ "unbounded recurrence"
+    end
+
+    test "a duration and an end are a closed interval, not an open one" do
+      assert Explain.explain(~o"P1D/2026-06-20").kind == :closed_interval
+    end
+
+    test "an RRULE with an UNTIL is bounded by it" do
+      {:ok, rule} = RRule.parse("FREQ=DAILY;UNTIL=20260620", from: ~o"2026-06-15")
+
+      assert Tempo.explain(rule) =~ "A recurrence until 2026-06-20."
+      refute Tempo.explain(rule) =~ "unbounded"
     end
 
     test "a counted recurrence with an open start is explained the same way" do

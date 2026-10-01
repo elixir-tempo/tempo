@@ -28,10 +28,13 @@ defmodule Tempo.Set do
 
   @type filter :: :even | :odd | :leap | :common | nil
 
+  @typedoc "A set's member: a value, a range of values or an interval."
+  @type member :: Tempo.t() | Tempo.Range.t() | Tempo.Interval.t()
+
   @type t :: %__MODULE__{
           type: :all | :one,
-          set: [Tempo.t()],
-          except: [Tempo.t()],
+          set: [member()],
+          except: [member()],
           filter: filter()
         }
 

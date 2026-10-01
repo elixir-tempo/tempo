@@ -1,6 +1,8 @@
 defmodule Tempo.ToInterval.Test do
   use ExUnit.Case, async: true
 
+  import Tempo.Sigils
+
   alias Tempo.Interval
   alias Tempo.IntervalSet
 
@@ -124,7 +126,7 @@ defmodule Tempo.ToInterval.Test do
     end
   end
 
-  describe "mask values (widest enclosing bound)" do
+  describe "mask values (the span their digits allow)" do
     test "positive year mask `156X` → decade span" do
       {:ok, tempo} = Tempo.from_iso8601("156X")
       {:ok, interval} = Tempo.to_interval(tempo)
@@ -186,6 +188,179 @@ defmodule Tempo.ToInterval.Test do
                i.from.time[:year] == 1985 and i.from.time[:day] == 15
              end)
     end
+
+    test "a partly masked day is the span from its first candidate to its last" do
+      {:ok, interval} = Tempo.to_interval(~o"2026-06-1X")
+      assert {interval.from.time, interval.to.time} == {ymd(2026, 6, 10), ymd(2026, 6, 20)}
+
+      {:ok, interval} = Tempo.to_interval(~o"2026-06-0X")
+      assert {interval.from.time, interval.to.time} == {ymd(2026, 6, 1), ymd(2026, 6, 10)}
+    end
+
+    test "a partly masked day narrows to the days its month has" do
+      {:ok, interval} = Tempo.to_interval(~o"2026-06-3X")
+      assert {interval.from.time, interval.to.time} == {ymd(2026, 6, 30), ymd(2026, 7, 1)}
+
+      assert {:error, %Tempo.InvalidDateError{}} = Tempo.to_interval(~o"2026-02-3X")
+    end
+
+    test "scattered candidates are spans of their own" do
+      {:ok, set} = Tempo.to_interval(~o"2026-06-X5")
+      assert spans(set) == [ymd_span(2026, 6, 5), ymd_span(2026, 6, 15), ymd_span(2026, 6, 25)]
+    end
+
+    test "a partly masked month, hour or minute narrows as a day does" do
+      {:ok, months} = Tempo.to_interval(~o"2026-1X")
+
+      assert {months.from.time, months.to.time} ==
+               {[year: 2026, month: 10], [year: 2027, month: 1]}
+
+      {:ok, hours} = Tempo.to_interval(~o"2026-06-15T1X")
+      assert {hours.from.time[:hour], hours.to.time[:hour]} == {10, 20}
+
+      {:ok, minutes} = Tempo.to_interval(~o"2026-06-15T10:3X")
+      assert {minutes.from.time[:minute], minutes.to.time[:minute]} == {30, 40}
+    end
+
+    test "a mask before a partly masked day is one span per candidate" do
+      {:ok, set} = Tempo.to_interval(~o"2026-XX-1X")
+      members = IntervalSet.members(set)
+
+      assert Enum.map(members, & &1.from.time[:month]) == Enum.to_list(1..12)
+      assert Enum.all?(members, &(&1.from.time[:day] == 10 and &1.to.time[:day] == 20))
+    end
+
+    test "a candidate with no day drops out, as a set's does" do
+      {:ok, set} = Tempo.to_interval(~o"2026-XX-3X")
+      months = set |> IntervalSet.members() |> Enum.map(& &1.from.time[:month]) |> Enum.uniq()
+
+      assert months == [1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    end
+
+    test "a set before a mask is a context for it" do
+      {:ok, set} = Tempo.to_interval(~o"2026-{6,7}-1X")
+
+      assert spans(set) == [
+               {ymd(2026, 6, 10), ymd(2026, 6, 20)},
+               {ymd(2026, 7, 10), ymd(2026, 7, 20)}
+             ]
+
+      {:ok, set} = Tempo.to_interval(~o"2026-{6,7}-XX")
+
+      assert spans(set) == [
+               {[year: 2026, month: 6], [year: 2026, month: 7]},
+               {[year: 2026, month: 7], [year: 2026, month: 8]}
+             ]
+    end
+
+    test "a mask without a year narrows when every year agrees" do
+      {:ok, set} = Tempo.to_interval(~o"XX-1X")
+      february = Enum.at(IntervalSet.members(set), 1)
+
+      assert {february.from.time, february.to.time} ==
+               {[month: 2, day: 10], [month: 2, day: 20]}
+    end
+
+    test "a masked week with a day of the week is that day of each week" do
+      {:ok, set} = Tempo.to_interval(~o"2026-W1X-3")
+      wednesdays = IntervalSet.members(set)
+
+      assert length(wednesdays) == 10
+      assert hd(wednesdays).from.time == ymd(2026, 3, 4)
+    end
+  end
+
+  describe "sets of week dates" do
+    test "a set of weeks or of days of the week is each date it names" do
+      {:ok, set} = Tempo.to_interval(~o"2026-W{10,11}-3")
+      assert spans(set) == [ymd_span(2026, 3, 4), ymd_span(2026, 3, 11)]
+
+      {:ok, set} = Tempo.to_interval(~o"2026-W25-{1,3}")
+      assert spans(set) == [ymd_span(2026, 6, 15), ymd_span(2026, 6, 17)]
+    end
+  end
+
+  describe "a recurrence written with an end (ISO 8601-1 §5.6.1)" do
+    test "a start and an end are its first occurrence, and the rest follow it" do
+      {:ok, set} = Tempo.to_interval(~o"R5/2026-06-15/2026-06-20")
+
+      assert spans(set) == [
+               {ymd(2026, 6, 15), ymd(2026, 6, 20)},
+               {ymd(2026, 6, 20), ymd(2026, 6, 25)},
+               {ymd(2026, 6, 25), ymd(2026, 6, 30)},
+               {ymd(2026, 6, 30), ymd(2026, 7, 5)},
+               {ymd(2026, 7, 5), ymd(2026, 7, 10)}
+             ]
+    end
+
+    test "each occurrence is as long as the first, in the unit its endpoints are written in" do
+      {:ok, months} = Tempo.to_interval(~o"R3/2026-01/2026-03")
+
+      assert spans(months) == [
+               {[year: 2026, month: 1], [year: 2026, month: 3]},
+               {[year: 2026, month: 3], [year: 2026, month: 5]},
+               {[year: 2026, month: 5], [year: 2026, month: 7]}
+             ]
+
+      {:ok, days} = Tempo.to_interval(~o"R2/2026-01-31/2026-02-28")
+
+      assert spans(days) == [
+               {ymd(2026, 1, 31), ymd(2026, 2, 28)},
+               {ymd(2026, 2, 28), ymd(2026, 3, 28)}
+             ]
+    end
+
+    test "a duration and an end are its last occurrence, and the rest precede it" do
+      {:ok, set} = Tempo.to_interval(~o"R5/P1D/2026-06-20")
+      assert spans(set) == Enum.map(15..19, &ymd_span(2026, 6, &1))
+    end
+
+    test "a month cadence back from an end keeps the end" do
+      {:ok, set} = Tempo.to_interval(~o"R3/P1M/2026-07-31")
+
+      assert spans(set) == [
+               {ymd(2026, 4, 30), ymd(2026, 5, 31)},
+               {ymd(2026, 5, 31), ymd(2026, 6, 30)},
+               {ymd(2026, 6, 30), ymd(2026, 7, 31)}
+             ]
+    end
+
+    test "a fraction of a second steps back as it steps forward" do
+      {:ok, set} = Tempo.to_interval(~o"R3/PT0.5S/2026-06-15T10:00:00")
+      [_, _, last] = IntervalSet.members(set)
+
+      assert length(IntervalSet.members(set)) == 3
+      assert last.to.time == [year: 2026, month: 6, day: 15, hour: 10, minute: 0, second: 0]
+    end
+
+    test "an unending one needs a :within window, and names itself without one" do
+      unending = ~o"R/2026-06-15/2026-06-20"
+
+      assert {:error, %Tempo.UnboundedRecurrenceError{interval: ^unending}} =
+               Tempo.to_interval(unending)
+
+      {:ok, june} = Tempo.to_interval(unending, within: ~o"2026-06")
+      assert length(IntervalSet.members(june)) == 4
+
+      assert {:error, %Tempo.UnboundedRecurrenceError{}} = Tempo.to_interval(~o"R/P1D/2026-06-20")
+
+      {:ok, june} = Tempo.to_interval(~o"R/P1D/2026-06-20", within: ~o"2026-06")
+      assert spans(june) == Enum.map(1..19, &ymd_span(2026, 6, &1))
+    end
+
+    test "a recurrence of no occurrences is an empty set" do
+      {:ok, set} = Tempo.to_interval(~o"R0/2026-06-15/P1D")
+      assert IntervalSet.members(set) == []
+    end
+  end
+
+  defp ymd(year, month, day), do: [year: year, month: month, day: day]
+
+  # One mid-month day's span.
+  defp ymd_span(year, month, day), do: {ymd(year, month, day), ymd(year, month, day + 1)}
+
+  defp spans(%IntervalSet{} = set) do
+    for %Interval{from: from, to: to} <- IntervalSet.members(set), do: {from.time, to.time}
   end
 
   describe "group values (century / decade / unit groups)" do

@@ -14,6 +14,14 @@ defimpl String.Chars, for: Tempo.IntervalSet do
   def to_string(set), do: Tempo.Format.string_chars(set)
 end
 
+defimpl String.Chars, for: Tempo.Set do
+  def to_string(set), do: Tempo.Format.string_chars(set)
+end
+
+defimpl String.Chars, for: Tempo.RecurrenceSet do
+  def to_string(set), do: Tempo.Format.string_chars(set)
+end
+
 defimpl String.Chars, for: Tempo.Duration do
   def to_string(duration), do: Tempo.Format.string_chars(duration)
 end

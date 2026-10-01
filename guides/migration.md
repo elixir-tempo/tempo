@@ -80,7 +80,7 @@ These keep their names and change their meaning:
 
 * **`Tempo.to_relative_string/2`** — counts calendar periods in the value's own calendar and on its own wall clock, and never in a unit finer than the value's own, where 1.x divided the seconds between two UTC instants by a mean month or year. It returns `{:ok, string}`, or an error where 1.x raised; `to_relative_string!/2` returns the string.
 
-* **`Tempo.to_string/2`** — returns `{:ok, string}`, or an error for a value it cannot render, where 1.x returned the string and raised; `to_string!/2` returns the string, and interpolating a value it cannot render writes its ISO 8601 form.
+* **`Tempo.to_string/2`** — returns `{:ok, string}`, or an error for a value it cannot render, where 1.x returned the string and raised; `to_string!/2` returns the string, and interpolating a value it cannot render writes its ISO 8601 form. Several spans are joined as a list in the locale, where 1.x used commas.
 
 ## Updating the dependency
 
@@ -643,7 +643,7 @@ A zoned value finer than a day is measured from a zoned `:from`, and a floating 
 
 ## Formatting returns a tuple
 
-`Tempo.to_string/2` returns `{:ok, string}`, as `to_relative_string/2` does, and an error for a value it cannot render, where 1.x raised: an open interval, a recurrence of a duration and an interval set without an end have no last day to show. `to_string!/2` returns the string. Interpolation cannot return an error, so it writes such a value in its ISO 8601 form, where 1.x raised.
+`Tempo.to_string/2` returns `{:ok, string}`, as `to_relative_string/2` does, and an error for a value it cannot render, where 1.x raised: an open interval, a recurrence with no end and an interval set without an end have no last day to show. `to_string!/2` returns the string. Interpolation cannot return an error, so it writes such a value in its ISO 8601 form, where 1.x raised. A value naming several spans renders them as a list in the locale ("Jun 15, 2026 and Jul 4, 2026"), where 1.x joined them with commas.
 
 ```elixir
 iex> Tempo.to_string(~o"2026-06-15")

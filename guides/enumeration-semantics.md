@@ -54,7 +54,7 @@ Any component may carry a range, a range with step, a set of values, or a cartes
 
 ### 2.3. Recurring intervals
 
-A *bounded* recurring interval enumerates exactly as its converted occurrences do — the walk delegates to `Tempo.to_interval/1`'s `IntervalSet`, yielding the sub-points of every occurrence. `Enum.count(~o"R5/2022-01-01/P1M")` is `151` (the days of January through May), identical to counting the converted set; for the *occurrence* count use `to_interval!/1` and `Tempo.IntervalSet.count/1`. An *unbounded* recurrence (`R/…`) raises `Tempo.UnboundedRecurrenceError` — convert it with `Tempo.to_interval(r, within: …)` first — matching how `relation/2` and `duration/1` refuse recurrences.
+A *bounded* recurring interval enumerates exactly as its converted occurrences do — the walk delegates to `Tempo.to_interval/1`'s `IntervalSet`, yielding the sub-points of every occurrence. `Enum.count(~o"R5/2022-01-01/P1M")` is `151` (the days of January through May), identical to counting the converted set; for the *occurrence* count use `to_interval!/1` and `Tempo.IntervalSet.count/1`. A recurrence written with a start and an end (`R3/2022-01-01/2022-01-08`, whose first occurrence is that week) or a duration and an end (`R3/P1W/2022-01-22`, whose last occurrence ends there) walks the same way. An *unbounded* recurrence (`R/…`) raises `Tempo.UnboundedRecurrenceError` — convert it with `Tempo.to_interval(r, within: …)` first — matching how `relation/2` and `duration/1` refuse recurrences.
 
 ### 2.4. Missing / unknown digits (EDTF masks)
 
@@ -145,6 +145,7 @@ Call `Tempo.to_interval_set/1` if you always want the IntervalSet form (a single
 | `-1XXX` | `[year: -1999]` | `[year: -999]` | `nil` |
 | `1985-XX-XX` | `[year: 1985]` | `[year: 1986]` | `nil` |
 | `1985-06-XX` | `[year: 1985, month: 6]` | `[year: 1985, month: 7]` | `nil` |
+| `1985-06-1X` | `[year: 1985, month: 6, day: 10]` | `[year: 1985, month: 6, day: 20]` | `nil` (walks days) |
 
 A `nil` unit means the walk derives its step from the endpoint resolution — the default for user-written explicit intervals (`~o"2026-01-01/2026-02-01"` iterates days) and for masked/grouped values whose widened bounds already sit at the iteration resolution. You can also set the unit yourself: `Tempo.Interval.new(from: ~o"2025-07-04", to: ~o"2025-07-05", unit: :hour)` walks a day-resolution extent at hour granularity.
 
@@ -152,9 +153,9 @@ Mask rules:
 
 * A **year mask** (`156X`, `-1XXX`) translates directly to a year range via `Tempo.Mask.mask_bounds/1`. The signed half-open upper bound is computed as `-magnitude_min + 1` for negative masks.
 
-* A **finer-unit mask** (`1985-XX-XX`, `1985-06-XX`, `1985-XX-15`) widens to the coarsest un-masked prefix and increments there. `1985-XX-XX` becomes year-resolution bounds because the mask at month-level can't map cleanly to a valid-month range; `1985-06-XX` keeps month resolution because only the day is masked.
+* A **finer-unit mask** narrows to the values its digits allow in the calendar: `1985-06-1X` is the 10th to the 19th of June, `[1985-06-10, 1985-06-20)`, and `1985-06-3X` the 30th alone. A fully masked unit allows every value, so `1985-XX-XX` is the year and `1985-06-XX` the month, and a mask walks its own unit, as `156X` walks years.
 
-* `1985-XX-15` (day specified, month masked) is semantically non-contiguous — the covered moments are "the 15th of any 1985 month" which isn't a single interval. `to_interval/1` accepts the looser bound (`[year: 1985]..[year: 1986]`) rather than returning a set.
+* Candidates that are not consecutive (`1985-06-X5`, the 5th, 15th and 25th), or a mask with a narrower unit after it (`1985-XX-15`, the 15th of each month; `1985-XX-1X`, the 10th to the 19th of each), are an `IntervalSet` of a span each. A candidate the calendar has no room for drops out, as a set's does (`1985-XX-31` has no February), and a mask none of whose candidates fits (`1985-02-3X`) is an error.
 
 `to_interval/1` is idempotent on existing intervals and interval sets. Multi-valued AST shapes (ranges, stepped ranges, iterated groups, all-of sets) convert to `%Tempo.IntervalSet{}` with each expanded member distinct. One-of sets (`[a,b,c]`) are *epistemic* (the value is one of these, we don't know which) and return an error from `to_interval/1` — flattening them would assert all members happened, which is semantically wrong. Bare `%Tempo.Duration{}` values also return an error (no anchor on the time line).
 
@@ -331,7 +332,7 @@ Known divergences:
 
 * **Second-resolution values.** `to_interval/1` converts it to a one-second span (`~o"2026-01-15T10:30:00"` → `[10:30:00, 10:30:01)`), but implicit iteration drills one unit finer into sub-second tenths — so `Enum.to_list(~o"2026-01-15T10:30:00")` yields ten deciseconds (`.0`–`.9`) while the interval forward-steps as a single second. Coarser resolutions don't diverge because their converted interval carries the drill unit on `:unit` (a day walks hours); the second case deliberately carries none (a clean `[t, t+1s)` span for set operations).
 
-* **Masked values iterated implicitly.** The current implicit enumeration of masked values (`1985-XX-XX`) has known quirks — it does not always walk the full cartesian product of valid month/day pairs. `to_interval/1` widens to the coarsest un-masked prefix and produces a clean span; iterating that interval yields the straightforward forward-stepped sequence. Prefer the explicit form for set operations on masked values.
+* **Masked values iterated implicitly.** The current implicit enumeration of masked values (`1985-XX-XX`) has known quirks — it does not always walk the full cartesian product of valid month/day pairs. `to_interval/1` gives the span or spans its digits allow; iterating that yields the straightforward forward-stepped sequence. Prefer the explicit form for set operations on masked values.
 
 ## 6. Summary table
 

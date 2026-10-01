@@ -66,7 +66,7 @@ defmodule Tempo.Interval do
   alias Tempo.UnanchoredError
 
   @type t :: %__MODULE__{
-          recurrence: pos_integer() | :infinity,
+          recurrence: non_neg_integer() | :infinity,
           direction: 1 | -1,
           from: Tempo.t() | Tempo.Duration.t() | :undefined | nil,
           to: Tempo.t() | :undefined | nil,
@@ -1700,10 +1700,12 @@ defmodule Tempo.Interval do
   * A `t:Tempo.Duration.t/0` in the endpoints' unit. An empty or
     inverted interval has a duration of zero in that unit.
 
-  * `:infinity` when one or both endpoints are `:undefined`.
+  * `:infinity` when one or both endpoints are `:undefined`, or for a
+    recurrence without end.
 
   * `{:error, reason}` — a `Tempo.ConversionError` for a finite
-    recurrence, whose length is its occurrences' (the
+    recurrence, bounded by a count or an RRULE `UNTIL`, whose length
+    is its occurrences' (the
     `Tempo.IntervalSet.duration/1` of its interval set); a
     `Tempo.UnanchoredError` for an endpoint without a year; an
     `ArgumentError` for endpoints in different calendars, an endpoint
@@ -1782,11 +1784,21 @@ defmodule Tempo.Interval do
   # A finite recurring interval's duration is the total across its
   # occurrences, which only the materialised set can report — reading
   # the base span (or the open `to` as infinity) would be wrong on
-  # both counts. Unbounded recurrences fall through to `:infinity`,
-  # which is their true total extent.
+  # both counts. An RRULE `UNTIL` bounds a recurrence as a count does.
+  # Any other unbounded recurrence is `:infinity`, its true total
+  # extent, however its first occurrence is written.
   defp resolved_duration(%__MODULE__{recurrence: recurrence} = interval, _leap_seconds?)
-       when is_integer(recurrence) and recurrence > 1,
+       when is_integer(recurrence) and recurrence != 1,
        do: {:error, ConversionError.exception(value: interval, reason: :recurring_duration)}
+
+  defp resolved_duration(
+         %__MODULE__{recurrence: :infinity, from: %Tempo{}, to: %Tempo{}, duration: %Duration{}} =
+           interval,
+         _leap_seconds?
+       ),
+       do: {:error, ConversionError.exception(value: interval, reason: :recurring_duration)}
+
+  defp resolved_duration(%__MODULE__{recurrence: :infinity}, _leap_seconds?), do: :infinity
 
   defp resolved_duration(%__MODULE__{from: from, to: to}, _leap_seconds?)
        when from in [nil, :undefined] or to in [nil, :undefined],

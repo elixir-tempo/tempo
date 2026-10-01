@@ -4,6 +4,8 @@ defmodule Tempo.FormatTest do
   import Tempo.Sigils
 
   alias Tempo.IntervalSet
+  alias Tempo.RecurrenceSet
+  alias Tempo.RRule
 
   doctest Tempo, only: [to_string: 2, to_string!: 2]
 
@@ -153,24 +155,133 @@ defmodule Tempo.FormatTest do
   end
 
   describe "Tempo.to_string/2 on Tempo.IntervalSet" do
-    test "joins members with ', '" do
-      {:ok, set} = Tempo.union(~o"2022", ~o"2024")
+    test "joins its members as a list in the locale" do
+      {:ok, two} = Tempo.union(~o"2022", ~o"2024")
 
-      assert Tempo.to_string(set) ==
-               {:ok, "Jan#{@en_dash_sep}Dec 2022, Jan#{@en_dash_sep}Dec 2024"}
+      assert Tempo.to_string(two) ==
+               {:ok, "Jan#{@en_dash_sep}Dec 2022 and Jan#{@en_dash_sep}Dec 2024"}
+
+      {:ok, three} = Tempo.union(two, ~o"2026")
+
+      assert Tempo.to_string(three) ==
+               {:ok,
+                "Jan#{@en_dash_sep}Dec 2022, Jan#{@en_dash_sep}Dec 2024, and Jan#{@en_dash_sep}Dec 2026"}
+
+      assert {:ok, german} = Tempo.to_string(two, locale: :de)
+      assert german =~ " und "
+    end
+  end
+
+  describe "Tempo.to_string/2 — the spans a value names" do
+    test "a recurrence is its occurrences, however it is written" do
+      assert Tempo.to_string(~o"R3/2026-06-15/P1D") ==
+               {:ok, "Jun 15, 2026, Jun 16, 2026, and Jun 17, 2026"}
+
+      assert Tempo.to_string(~o"R2/2026-06-15/2026-06-20") ==
+               {:ok, "Jun 15#{@en_dash_sep}19, 2026 and Jun 20#{@en_dash_sep}24, 2026"}
+
+      assert Tempo.to_string(~o"R2/P1D/2026-06-20") ==
+               {:ok, "Jun 18, 2026 and Jun 19, 2026"}
+    end
+
+    test "an RRULE with an UNTIL is every occurrence up to it" do
+      {:ok, rule} = RRule.parse("FREQ=DAILY;UNTIL=20260617", from: ~o"2026-06-15")
+
+      assert Tempo.to_string(rule) == {:ok, "Jun 15, 2026, Jun 16, 2026, and Jun 17, 2026"}
+    end
+
+    test "an unending recurrence is its occurrences in a :within window" do
+      weekly = ~o"R/2026-06-15/P1W"
+
+      assert {:error, %Tempo.UnboundedRecurrenceError{}} = Tempo.to_string(weekly)
+
+      assert Tempo.to_string(weekly, within: ~o"2026-06") ==
+               {:ok,
+                "Jun 15#{@en_dash_sep}21, 2026, Jun 22#{@en_dash_sep}28, 2026, " <>
+                  "and Jun 29#{@en_dash_sep}Jul 5, 2026"}
+
+      assert {:error, %Tempo.IntervalEndpointsError{reason: :open_start}} =
+               Tempo.to_string(~o"R/../P1Y/FL12M25DN")
+
+      assert Tempo.to_string(~o"R/../P1Y/FL12M25DN", within: ~o"2026") == {:ok, "Dec 25, 2026"}
+    end
+
+    test "a mask is the span its digits allow" do
+      assert Tempo.to_string(~o"202X") == {:ok, "2020#{@en_dash_sep}2029"}
+      assert Tempo.to_string(~o"2026-06-1X") == {:ok, "Jun 10#{@en_dash_sep}19, 2026"}
+
+      assert Tempo.to_string(~o"2026-06-X5") ==
+               {:ok, "Jun 5, 2026, Jun 15, 2026, and Jun 25, 2026"}
+
+      assert {:error, %Tempo.InvalidDateError{}} = Tempo.to_string(~o"2026-02-3X")
+    end
+
+    test "a set is its members, and a one-of set its alternatives" do
+      assert Tempo.to_string(~o"2026-{6,7}-15") == {:ok, "Jun 15, 2026 and Jul 15, 2026"}
+
+      assert Tempo.to_string(~o"{2026,2027}") ==
+               {:ok, "Jan#{@en_dash_sep}Dec 2026 and Jan#{@en_dash_sep}Dec 2027"}
+
+      assert Tempo.to_string(~o"{2026-06-15,2026-07-04}") == {:ok, "Jun 15, 2026 and Jul 4, 2026"}
+
+      assert Tempo.to_string(~o"[2026,2027]") ==
+               {:ok, "Jan#{@en_dash_sep}Dec 2026 or Jan#{@en_dash_sep}Dec 2027"}
+
+      assert Tempo.to_string(~o"[2020..2025,2030]") ==
+               {:ok, "Jan 2020#{@en_dash_sep}Dec 2025 or Jan#{@en_dash_sep}Dec 2030"}
+
+      assert {:ok, german} = Tempo.to_string(~o"[2026,2027]", locale: :de)
+      assert german =~ " oder "
+    end
+
+    test "a group is its span" do
+      assert Tempo.to_string(~o"20C") == {:ok, "2000#{@en_dash_sep}2099"}
+      assert Tempo.to_string(~o"2026-33") == {:ok, "Jan#{@en_dash_sep}Mar 2026"}
+    end
+
+    test "a selection is the dates it selects" do
+      assert Tempo.to_string(~o"2026YL1K1IN") == {:ok, "Jan 5, 2026"}
+
+      assert {:error, %Tempo.UnboundedRecurrenceError{}} = Tempo.to_string(~o"L1K1IN")
+      assert Tempo.to_string(~o"L1K1IN", within: ~o"2026") == {:ok, "Jan 5, 2026"}
+    end
+
+    test "a recurrence set is its occurrences in a :within window" do
+      {:ok, holidays} = RecurrenceSet.new([~o"R/../P1Y/FL12M25DN", ~o"R/../P1Y/FL1M1DN"])
+
+      assert {:error, %Tempo.IntervalEndpointsError{}} = Tempo.to_string(holidays)
+      assert Tempo.to_string(holidays, within: ~o"2026") == {:ok, "Jan 1, 2026 and Dec 25, 2026"}
+    end
+
+    test "a span of one value renders as that value, so a skeleton applies to it" do
+      assert Tempo.to_string(~o"2026-06-15/2026-06-16", format: :yMMMd) == {:ok, "Jun 15, 2026"}
+      assert Tempo.to_string(~o"2026YL1K1IN", format: :yMMMd) == {:ok, "Jan 5, 2026"}
+      assert Tempo.to_string(~o"2026-06-XX", format: :yMMMd) == {:ok, "Jun 2026"}
+      assert Tempo.to_string(~o"2026-06-XX") == Tempo.to_string(~o"2026-06")
+    end
+
+    test "a month without a year is its name" do
+      assert Tempo.to_string(~o"6M") == {:ok, "Jun"}
+      assert Tempo.to_string(~o"6M", format: :long) == {:ok, "June"}
+    end
+
+    test "a week or a day of the week without a year is an error naming it" do
+      assert {:error, %Tempo.UnanchoredError{value: ~o"25W"}} = Tempo.to_string(~o"W25")
+      assert {:error, %Tempo.UnanchoredError{value: ~o"5K"}} = Tempo.to_string(~o"5K")
     end
   end
 
   describe "Tempo.to_string/2 — values it cannot render" do
-    test "an interval without both ends is an error" do
-      assert {:error, %Tempo.IntervalEndpointsError{}} = Tempo.to_string(~o"2026-06-15/..")
-      assert {:error, %Tempo.IntervalEndpointsError{}} = Tempo.to_string(~o"../2026-06-15")
-    end
+    test "an interval without both ends is an error naming the open end" do
+      assert {:error, %Tempo.IntervalEndpointsError{} = open_end} =
+               Tempo.to_string(~o"2026-06-15/..")
 
-    test "a recurrence is an error" do
-      assert {:error, %Tempo.IntervalEndpointsError{}} = Tempo.to_string(~o"R/2026-06-15/P1D")
-      assert {:error, %Tempo.IntervalEndpointsError{}} = Tempo.to_string(~o"R5/2026-06-15/P1D")
-      assert {:error, %Tempo.IntervalEndpointsError{}} = Tempo.to_string(~o"R/../P1Y/FL12M25DN")
+      assert Exception.message(open_end) =~ "has no end"
+
+      assert {:error, %Tempo.IntervalEndpointsError{} = open_start} =
+               Tempo.to_string(~o"../2026-06-15")
+
+      assert Exception.message(open_start) =~ "has no start"
     end
 
     test "an interval set without an end is an error" do
@@ -181,14 +292,6 @@ defmodule Tempo.FormatTest do
         |> IntervalSet.from_stream()
 
       assert {:error, %Tempo.UnboundedSetError{}} = Tempo.to_string(mondays)
-    end
-
-    test "a value Localize cannot render is an error" do
-      assert {:error, exception} = Tempo.to_string(~o"{2026,2027}")
-      assert is_exception(exception)
-
-      assert {:error, exception} = Tempo.to_string(~o"202X")
-      assert is_exception(exception)
     end
 
     test "a locale or format Localize does not accept is Localize's error" do
@@ -219,8 +322,8 @@ defmodule Tempo.FormatTest do
       assert {:error, %ArgumentError{}} = Tempo.to_string(~D[2026-06-15])
       assert {:error, %ArgumentError{}} = Tempo.to_string(nil)
 
-      assert {:error, %ArgumentError{message: message}} = Tempo.to_string(~o"[2026,2027]")
-      assert message =~ "formats a Tempo, Tempo.Interval, Tempo.IntervalSet or Tempo.Duration"
+      assert {:error, %ArgumentError{message: message}} = Tempo.to_string(~D[2026-06-15])
+      assert message =~ "formats a Tempo, Tempo.Interval, Tempo.IntervalSet, Tempo.Set"
     end
 
     test "options that are not a keyword list are an error" do
@@ -265,7 +368,14 @@ defmodule Tempo.FormatTest do
       assert "From #{~o"2026-06-15/.."}" == "From 2026Y6M15D/.."
       assert "#{~o"../2026-06-15"}" == "../2026Y6M15D"
       assert "#{~o"R/2026-06-15/P1D"}" == "R/2026Y6M15D/P1D"
-      assert "#{~o"202X"}" == "202XY"
+      assert "#{~o"W25"}" == "25W"
+    end
+
+    test "a set and a recurrence set interpolate" do
+      assert "#{~o"[2026,2027]"}" == "Jan#{@en_dash_sep}Dec 2026 or Jan#{@en_dash_sep}Dec 2027"
+
+      {:ok, holidays} = RecurrenceSet.new([~o"R/../P1Y/FL12M25DN", ~o"R/../P1Y/FL1M1DN"])
+      assert "#{holidays}" == inspect(holidays)
     end
 
     test "a value with no ISO 8601 form either interpolates in its inspect form" do
@@ -294,6 +404,12 @@ defmodule Tempo.FormatTest do
 
     test "zero duration renders as `0 seconds`" do
       assert Tempo.to_string(~o"P0D") == {:ok, "0 seconds"}
+    end
+
+    test "a fraction of a second is kept" do
+      assert Tempo.to_string(~o"PT0.5S") == {:ok, "500,000 microseconds"}
+      assert Tempo.to_string(~o"PT1.5S") == {:ok, "1 second, 500,000 microseconds"}
+      assert Tempo.to_string(~o"PT1.5S", except: [:microsecond]) == {:ok, "1 second"}
     end
 
     test ":format short abbreviates" do

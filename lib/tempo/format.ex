@@ -2,7 +2,7 @@ defmodule Tempo.Format do
   @moduledoc """
   Locale-aware formatting for `Tempo` values, dispatching to the Localize library.
 
-  `Tempo.to_string/1,2`, `Tempo.to_string!/1,2` and the `String.Chars` implementation for `Tempo`, `Tempo.Interval`, `Tempo.IntervalSet` and `Tempo.Duration` route through this module. Callers don't need to use it directly.
+  `Tempo.to_string/1,2`, `Tempo.to_string!/1,2` and the `String.Chars` implementation for `Tempo`, `Tempo.Interval`, `Tempo.IntervalSet`, `Tempo.Set`, `Tempo.RecurrenceSet` and `Tempo.Duration` route through this module. Callers don't need to use it directly.
 
   ### Rendering rule — Tempo values are intervals
 
@@ -24,9 +24,13 @@ defmodule Tempo.Format do
 
   The underlying interval is always half-open `[from, to)`. For display we compute the **closed** last member — `to - 1 iteration_unit` — so users see `"Jan\u2009\u2013\u2009Dec 2026"`, not `"Jan\u2009\u2013\u2009Jan 2026/2027"`. The closure happens purely at the display layer; the internal representation is unchanged.
 
+  ### Values that name several spans
+
+  A value that names something other than its own one span — a mask, a group, a set, a selection, a recurrence, a recurrence set — renders as the span or spans `Tempo.to_interval/2` gives it, in a `:within` window when it has no end of its own. Several spans are joined as a CLDR list in the locale ("Jun 15, 2026 and Jul 15, 2026"), and a one-of set's members as alternatives ("2026 or 2027").
+
   ### Values that cannot be rendered
 
-  `Tempo.to_string/2` returns `{:error, exception}` for a value it cannot render — an interval without two concrete ends, such as an open interval or a recurrence of a duration, an interval set without an end, or a value, locale or format Localize does not accept — and `Tempo.to_string!/2` raises it. `String.Chars` has no way to return an error, and interpolation sits on render paths, so interpolating such a value writes its ISO 8601 form (`"2026Y6M15D/.."` for an open interval), or its `inspect/1` form when it has none.
+  `Tempo.to_string/2` returns `{:error, exception}` for a value it cannot render — an interval without both ends, a recurrence with no end and no `:within` window, an interval set without an end, a week or a day of the week without a year, or a locale or format Localize does not accept — and `Tempo.to_string!/2` raises it. `String.Chars` has no way to return an error, and interpolation sits on render paths, so interpolating such a value writes its ISO 8601 form (`"2026Y6M15D/.."` for an open interval), or its `inspect/1` form when it has none.
 
   ### Calendar awareness
 
@@ -54,29 +58,43 @@ defmodule Tempo.Format do
   @relative_units [:year, :quarter, :month, :week, :day, :hour, :minute, :second]
 
   @doc """
-  Format a Tempo, Interval, IntervalSet or Duration as a locale-aware string.
+  Format a Tempo value, interval, set or duration as a locale-aware string.
 
   Delegated from `Tempo.to_string/1,2`, which describes what it returns.
 
   """
   @spec to_string(
-          Tempo.t() | Tempo.Interval.t() | Tempo.IntervalSet.t() | Tempo.Duration.t(),
+          Tempo.t()
+          | Tempo.Interval.t()
+          | Tempo.IntervalSet.t()
+          | Tempo.Set.t()
+          | Tempo.RecurrenceSet.t()
+          | Tempo.Duration.t(),
           keyword()
         ) :: {:ok, String.t()} | {:error, Exception.t()}
   def to_string(value, options \\ [])
 
   def to_string(value, options) do
-    if Keyword.keyword?(options),
-      do: render(value, options),
-      else: {:error, options_error("to_string/2", options)}
+    if Keyword.keyword?(options) do
+      {window, options} = Keyword.split(options, [:within])
+      render(value, options, window)
+    else
+      {:error, options_error("to_string/2", options)}
+    end
   end
 
   @doc false
   # `String.Chars` has no way to return an error, and interpolation sits on
   # render paths, so a value Localize cannot render shows as its ISO 8601
   # form, and one with no ISO 8601 form as its inspect form.
-  @spec string_chars(Tempo.t() | Tempo.Interval.t() | Tempo.IntervalSet.t() | Tempo.Duration.t()) ::
-          String.t()
+  @spec string_chars(
+          Tempo.t()
+          | Tempo.Interval.t()
+          | Tempo.IntervalSet.t()
+          | Tempo.Set.t()
+          | Tempo.RecurrenceSet.t()
+          | Tempo.Duration.t()
+        ) :: String.t()
   def string_chars(value) do
     case to_string(value, []) do
       {:ok, string} -> string
@@ -91,7 +109,84 @@ defmodule Tempo.Format do
     end
   end
 
-  defp render(%Tempo{} = tempo, options) do
+  # A plain value names its own one span and renders by its resolution. Any
+  # other value — a mask, a group, a set, a selection, a recurrence, a recurrence
+  # set — renders as the span or spans `Tempo.to_interval/2` gives it, in the
+  # caller's `:within` window.
+  defp render(%Tempo{} = tempo, options, window) do
+    cond do
+      not one_span?(tempo) -> tempo |> Tempo.to_interval(window) |> render_materialised(options)
+      week_without_year?(tempo) -> {:error, week_without_year_error(tempo)}
+      true -> render_value(tempo, options)
+    end
+  end
+
+  defp render(%Tempo.Interval{} = interval, options, window) do
+    interval |> Tempo.to_interval(window) |> render_materialised(options)
+  end
+
+  defp render(%Tempo.IntervalSet{} = set, options, _window),
+    do: render_set(set, options, :standard)
+
+  # A one-of set is one of its members, so it renders as their alternatives
+  # ("2026 or 2027"); as an interval set it would assert every one.
+  defp render(%Tempo.Set{type: :one, set: members, except: []}, options, window) do
+    members
+    |> render_each(&render(&1, options, window))
+    |> join_rendered(options, :or)
+  end
+
+  defp render(%Tempo.Set{type: :one} = set, options, window) do
+    with {:ok, %IntervalSet{} = candidates} <- Tempo.to_interval(%{set | type: :all}, window) do
+      render_set(candidates, options, :or)
+    end
+  end
+
+  defp render(%Tempo.Set{} = set, options, window) do
+    set |> Tempo.to_interval(window) |> render_materialised(options)
+  end
+
+  defp render(%Tempo.RecurrenceSet{} = set, options, window) do
+    set |> Tempo.to_interval(window) |> render_materialised(options)
+  end
+
+  # A range among a one-of set's members (`[2020..2025,2030]`) is one of the
+  # values it spans, so it renders as that one span: the values an all-of set
+  # of the range holds, merged.
+  defp render(%Tempo.Range{} = range, options, window) do
+    with {:ok, %IntervalSet{} = values} <-
+           Tempo.to_interval(%Tempo.Set{type: :all, set: [range]}, window) do
+      values |> IntervalSet.coalesce() |> render_set(options, :standard)
+    end
+  end
+
+  # A duration's fraction of a second is its microseconds, which Localize
+  # leaves out unless asked (`:except` defaults to `[:microsecond]`). A Tempo
+  # duration holds only what was written, so they are kept.
+  defp render(%Tempo.Duration{} = duration, options, _window) do
+    Localize.Duration.to_string(
+      to_localize_duration(duration),
+      Keyword.put_new(options, :except, [])
+    )
+  end
+
+  defp render(value, _options, _window) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.to_string/2 formats a Tempo, Tempo.Interval, Tempo.IntervalSet, Tempo.Set, " <>
+         "Tempo.RecurrenceSet or Tempo.Duration, got #{inspect(value)}."
+     )}
+  end
+
+  defp render_materialised({:ok, %Tempo.Interval{} = interval}, options),
+    do: render_interval(interval, options)
+
+  defp render_materialised({:ok, %IntervalSet{} = set}, options),
+    do: render_set(set, options, :standard)
+
+  defp render_materialised({:error, _reason} = error, _options), do: error
+
+  defp render_value(%Tempo{} = tempo, options) do
     {unit, _} = Tempo.resolution(tempo)
 
     if expand_as_closed_interval?(unit, tempo, options) do
@@ -101,52 +196,85 @@ defmodule Tempo.Format do
     end
   end
 
-  defp render(%Tempo.Interval{} = interval, options) do
+  defp render_interval(%Tempo.Interval{} = interval, options) do
     with {:ok, from, to} <- interval_endpoints_for_format(interval) do
       {from, to} = collapse_midnight_endpoints(from, to)
-      closed_last = closed_last_for_interval(from, to)
-      options = with_default_interval_options(options, from, closed_last)
-      format_interval(from, closed_last, options)
+      render_closed(from, closed_last_for_interval(from, to), options)
     end
   end
 
-  # CLDR "list separator" formatting could replace the simple ", " join;
-  # deferred until Localize exposes a listPattern API. A set without an end
-  # has no list to join.
-  defp render(%Tempo.IntervalSet{} = set, options) do
-    if IntervalSet.bounded?(set),
-      do: set |> IntervalSet.members() |> render_members(options, []),
-      else: {:error, UnboundedSetError.exception(operation: "Tempo.to_string/2", set: set)}
+  # A span whose first and last values are one value is that value, so it
+  # renders as a value does and a skeleton format applies to it.
+  defp render_closed(%Tempo{time: time} = from, %Tempo{time: time}, options),
+    do: render_value(from, options)
+
+  defp render_closed(%Tempo{} = from, %Tempo{} = closed_last, options) do
+    options = with_default_interval_options(options, from, closed_last)
+    format_interval(from, closed_last, options)
   end
 
-  defp render(%Tempo.Duration{} = duration, options) do
-    Localize.Duration.to_string(to_localize_duration(duration), options)
-  end
+  defp render_closed(_from, {:error, _reason} = error, _options), do: error
 
-  defp render(value, _options) do
-    {:error,
-     ArgumentError.exception(
-       "Tempo.to_string/2 formats a Tempo, Tempo.Interval, Tempo.IntervalSet or " <>
-         "Tempo.Duration, got #{inspect(value)}."
-     )}
-  end
-
-  defp render_members([], _options, rendered),
-    do: {:ok, rendered |> Enum.reverse() |> Enum.join(", ")}
-
-  defp render_members([member | members], options, rendered) do
-    case render(member, options) do
-      {:ok, string} -> render_members(members, options, [string | rendered])
-      {:error, _reason} = error -> error
+  # The members joined as a CLDR list in the locale: `:standard` for a set's
+  # members ("A, B, and C"), `:or` for alternatives. A set without an end has
+  # no list to join.
+  defp render_set(%IntervalSet{} = set, options, style) do
+    if IntervalSet.bounded?(set) do
+      set
+      |> IntervalSet.members()
+      |> render_each(&render_interval(&1, options))
+      |> join_rendered(options, style)
+    else
+      {:error, UnboundedSetError.exception(operation: "Tempo.to_string/2", set: set)}
     end
+  end
+
+  defp render_each(items, render) do
+    Enum.reduce_while(items, {:ok, []}, fn item, {:ok, rendered} ->
+      case render.(item) do
+        {:ok, string} -> {:cont, {:ok, [string | rendered]}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp join_rendered({:ok, rendered}, options, style) do
+    Localize.List.to_string(
+      Enum.reverse(rendered),
+      [list_style: style] ++ Keyword.take(options, [:locale])
+    )
+  end
+
+  defp join_rendered({:error, _reason} = error, _options, _style), do: error
+
+  # A value whose every component is one concrete value names its own one span.
+  defp one_span?(%Tempo{time: time}), do: Enum.all?(time, &one_value?/1)
+
+  defp one_value?({:selection, _selection}), do: false
+  defp one_value?({_unit, value}) when is_integer(value), do: true
+
+  defp one_value?({:microsecond, {value, precision}})
+       when is_integer(value) and is_integer(precision),
+       do: true
+
+  defp one_value?({_unit, {value, meta}}) when is_integer(value) and is_list(meta), do: true
+  defp one_value?(_component), do: false
+
+  # A week or a day of the week with no year has no date for Localize to show.
+  defp week_without_year?(%Tempo{time: time}) do
+    not Keyword.has_key?(time, :year) and
+      (Keyword.has_key?(time, :week) or Keyword.has_key?(time, :day_of_week))
+  end
+
+  defp week_without_year_error(tempo) do
+    UnanchoredError.exception(operation: "render a week or a day of the week", value: tempo)
   end
 
   # Convert a Tempo.Duration (keyword-list time) into a
   # Localize.Duration struct. Weeks are normalised to days (as
   # `Calendrical.weeks_to_days/1` counts them, added onto any existing
   # :day count) because Localize.Duration has no :week field. Missing
-  # units default to 0; microseconds to `{0, 6}` since Tempo is
-  # second-resolution.
+  # units default to 0, and microseconds to `{0, 6}`.
   defp to_localize_duration(%Tempo.Duration{time: time}) do
     {weeks, rest} = Keyword.pop(time, :week, 0)
     days = Calendrical.weeks_to_days(weeks)
@@ -159,7 +287,7 @@ defmodule Tempo.Format do
       hour: Keyword.get(rest, :hour, 0),
       minute: Keyword.get(rest, :minute, 0),
       second: Keyword.get(rest, :second, 0),
-      microsecond: {0, 6}
+      microsecond: Keyword.get(rest, :microsecond, {0, 6})
     }
   end
 
@@ -537,7 +665,7 @@ defmodule Tempo.Format do
   # Which half of the clock a format names. Named widths name both.
   defp axis(format) when format in [:short, :medium, :long, :full], do: :both
   defp axis(format) when format in [:h, :hm, :hms], do: :time
-  defp axis(format) when format in [:y, :yMMM, :yMMMd], do: :date
+  defp axis(format) when format in [:y, :yMMM, :yMMMd, :MMM], do: :date
   defp axis(_format), do: :both
 
   # The fields Localize is given, so a week date has the day it names.
@@ -589,7 +717,11 @@ defmodule Tempo.Format do
   end
 
   defp default_format_for_unit(:year, _tempo), do: :y
-  defp default_format_for_unit(:month, _tempo), do: :yMMM
+  # A month of no particular year is its name alone.
+  defp default_format_for_unit(:month, %Tempo{time: time}) do
+    if Keyword.has_key?(time, :year), do: :yMMM, else: :MMM
+  end
+
   defp default_format_for_unit(:day, _tempo), do: :medium
 
   # `:h` and `:hm` are time-only skeletons. They are right for a value
@@ -725,9 +857,8 @@ defmodule Tempo.Format do
   end
 
   # Extract {from, to} from an interval for formatting. A plain
-  # pair of endpoints is enough for Localize.Interval; recurrence
-  # / duration-only intervals would need materialisation first and
-  # are out of scope for this dispatcher.
+  # pair of endpoints is enough for Localize.Interval; a recurrence
+  # is materialised to its occurrences before it gets here.
   defp interval_endpoints_for_format(%Tempo.Interval{
          from: %Tempo{} = from,
          to: %Tempo{} = to,
@@ -748,11 +879,20 @@ defmodule Tempo.Format do
       {%Tempo{} = from, %Tempo{} = to} ->
         {:ok, from, to}
 
-      _other ->
+      {from, _to} ->
         {:error,
-         IntervalEndpointsError.exception(operation: "Tempo.to_string/2", interval: interval)}
+         IntervalEndpointsError.exception(
+           operation: "Tempo.to_string/2",
+           interval: interval,
+           reason:
+             "Tempo.to_string/2 shows an interval from its start to its end, and " <>
+               "#{inspect(interval)} has no #{open_end(from)}."
+         )}
     end
   end
+
+  defp open_end(%Tempo{}), do: "end"
+  defp open_end(_open), do: "start"
 
   # A range of whole weeks is shown by its days, as a week is.
   defp week_days(%Tempo{} = tempo) do

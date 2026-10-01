@@ -6,6 +6,7 @@ defmodule Tempo.DurationResolutionTest do
   alias Tempo.ICal
   alias Tempo.Interval
   alias Tempo.IntervalSet
+  alias Tempo.RRule
 
   defp measure(from, to), do: Interval.duration(%Interval{from: from, to: to})
 
@@ -193,6 +194,17 @@ defmodule Tempo.DurationResolutionTest do
 
       assert {:error, %ArgumentError{}} = measure(hebrew, ~o"2026-06-15")
       assert {:error, %ArgumentError{}} = measure("2026", ~o"2027")
+    end
+
+    test "a recurrence is its occurrences' length however it is written and bounded" do
+      {:ok, until} = RRule.parse("FREQ=DAILY;UNTIL=20260620", from: ~o"2026-06-15")
+
+      for recurrence <- [~o"R5/2026-06-15/2026-06-20", ~o"R0/2026-06-15/P1D", until] do
+        assert {:error, %Tempo.ConversionError{reason: :recurring_duration}} =
+                 Interval.duration(recurrence)
+      end
+
+      assert Interval.duration(~o"R/2026-06-15/2026-06-20") == :infinity
     end
 
     test "a value that is not an interval, or an option it does not take" do

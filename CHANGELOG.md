@@ -115,6 +115,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Added
 
+* `Tempo.to_string/2` renders a `Tempo.Set` and a `Tempo.RecurrenceSet`, which interpolate too, and takes `:within`, the window for a value with no end of its own: `Tempo.to_string(~o"R/2026-06-15/P1W", within: ~o"2026-06")` is that June's weeks.
+
 * A `Tempo.Network`, and so a `Tempo.Schedule`, counts in hours, minutes and seconds on the time line, where one naming them raised: a task of `~o"PT4H"` from 09:00 runs to 13:00. An hour is elapsed time, and a day in a zone is measured, so one across a daylight-saving change is its 23 or 25 hours.
 
 * A `Tempo.IntervalSet` is tabular data (`Table.Reader`) when the optional `table` package is present: a row per member with its `from`, `to` and metadata, so `Kino.DataTable.new/1` shows a set of holidays with their names.
@@ -169,6 +171,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Changed
 
+* `Tempo.to_string/2` joins several spans as a list in the locale ("Jun 15, 2026 and Jul 4, 2026"), and a one-of set's members as alternatives ("2026 or 2027"), where it joined them with commas.
+
 * The duration predicates (`at_least?/2`, `at_most?/2`, `exactly?/2`, `longer_than?/2`, `shorter_than?/2`) measure an interval set by the time it covers and a value by the span it names, and `duration/1` measures a value's span.
 
 * `Tempo.select/2` keeps the metadata of what it selects from: each school day of a term tagged `%{term: 3}` is tagged `%{term: 3}` too, and a set's own metadata stays with the set.
@@ -196,6 +200,12 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* `Tempo.to_interval/2` expands a recurrence written with a start and an end, or a duration and an end (ISO 8601-1 §5.6.1), to its occurrences, where it returned it unexpanded, and `R0` to an empty set. `explain/1`, `duration/1` and `Tempo.RRule.to_string/1` read both forms as recurrences, and `explain/1` an RRULE `UNTIL` as bounded.
+
+* A partly masked unit is the span its digits allow, `2026-06-1X` the 10th to the 19th of June and `2026-06-X5` three days, where `to_interval/2` widened it to the month. A masked week before a day of the week (`2026-W1X-3`) and a set of week dates (`2026-W25-{1,3}`) materialise, where they raised.
+
+* `Tempo.to_string/2` renders a mask, group, set, selection or recurrence as the spans it names, where it rendered the bare year (`2026YL1K1IN` as "2026"), the first span or Localize's error; a month without a year as its name, and a duration's fraction of a second. A week or a day of the week without a year is an error naming it.
 
 * Units written after a recurrence's selection apply to every date it picks, so `R/../P1M/FL5K2INT9H0M` fires at 09:00 on the second Friday, where each occurrence was the whole month. An RRULE ordinal weekday's times take this form, so `BYDAY=2FR;BYHOUR=9,17` fires on the second Friday at both times, where it fired on the first Friday at 17:00.
 

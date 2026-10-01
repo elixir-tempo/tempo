@@ -134,6 +134,25 @@ defmodule Tempo.RoundTripTest do
       {:ok, ast} = Tempo.from_iso8601("R5/2022-01-01/P2W")
       assert {:ok, "COUNT=5;FREQ=WEEKLY;INTERVAL=2"} = RRule.to_string(ast)
     end
+
+    test "a start and an end step by the first occurrence's length" do
+      assert {:ok, "COUNT=5;FREQ=DAILY;INTERVAL=5"} =
+               "R5/2026-06-15/2026-06-20" |> Tempo.from_iso8601!() |> RRule.to_string()
+
+      assert {:ok, "COUNT=3;FREQ=MONTHLY;INTERVAL=2"} =
+               "R3/2026-01/2026-03" |> Tempo.from_iso8601!() |> RRule.to_string()
+
+      assert {:ok, "FREQ=DAILY;INTERVAL=5"} =
+               "R/2026-06-15/2026-06-20" |> Tempo.from_iso8601!() |> RRule.to_string()
+    end
+
+    test "a duration and an end are a count, not an UNTIL" do
+      assert {:ok, "COUNT=5;FREQ=DAILY"} =
+               "R5/P1D/2026-06-20" |> Tempo.from_iso8601!() |> RRule.to_string()
+
+      assert {:error, %Tempo.ConversionError{target: :rrule}} =
+               "R/P1D/2026-06-20" |> Tempo.from_iso8601!() |> RRule.to_string()
+    end
   end
 
   describe "cross-format: RRULE → ISO 8601 interval" do

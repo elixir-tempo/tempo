@@ -152,6 +152,20 @@ defmodule Tempo.Explain do
   end
 
   defp classify(%Tempo.Interval{from: :undefined, to: :undefined}), do: :fully_open_interval
+
+  # A duration and an end imply the start, so such an interval is not open.
+  defp classify(%Tempo.Interval{
+         from: :undefined,
+         to: %Tempo{},
+         duration: %Tempo.Duration{},
+         recurrence: recurrence
+       })
+       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1),
+       do: :recurring_interval
+
+  defp classify(%Tempo.Interval{from: :undefined, to: %Tempo{}, duration: %Tempo.Duration{}}),
+    do: :closed_interval
+
   defp classify(%Tempo.Interval{from: :undefined}), do: :open_lower_interval
   defp classify(%Tempo.Interval{to: :undefined}), do: :open_upper_interval
 
@@ -484,6 +498,23 @@ defmodule Tempo.Explain do
     ]
   end
 
+  # `R5/P1D/2026-06-20` — a recurrence written with a duration and an end,
+  # which are its last occurrence (ISO 8601-1 §5.6.1 c); the others precede it.
+  defp interval_parts(%Tempo.Interval{
+         recurrence: recurrence,
+         from: :undefined,
+         to: %Tempo{} = to,
+         duration: %Tempo.Duration{time: duration_time}
+       })
+       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
+    [
+      {:headline, recurrence_headline(recurrence)},
+      {:span, "Ending: #{render_endpoint(to)} (exclusive — half-open `[from, to)`)."},
+      {:span, "Cadence: #{duration_prose(duration_time)}."},
+      {:hint, recurrence_hint(recurrence, to)}
+    ]
+  end
+
   # `P1D/2026-06-15` — a duration and an end. The lower bound is implied
   # by the duration, not absent, so this must be matched before the
   # open-lower clause below: that clause would call a bounded one-day
@@ -515,6 +546,28 @@ defmodule Tempo.Explain do
       {:span, "Lower bound: #{render_endpoint(from)}."},
       {:hint, "Enumerates forward forever — use `Enum.take/2` to halt."}
     ]
+  end
+
+  # An RRULE with an `UNTIL` (`FREQ=DAILY;UNTIL=20260620`) repeats until its
+  # end: bounded, though it names no count.
+  defp interval_parts(
+         %Tempo.Interval{
+           recurrence: :infinity,
+           from: %Tempo{} = from,
+           to: %Tempo{} = until,
+           duration: %Tempo.Duration{time: dt}
+         } = interval
+       ) do
+    selection = selection_of(interval.repeat_rule)
+
+    [
+      {:headline, "A recurrence until #{render_endpoint(until)}."},
+      {:span, "Starting: #{render_endpoint(from)}."},
+      selection && {:span, "Selects: #{selection_prose(selection)}."},
+      {:span, "Cadence: #{duration_prose(dt)}."},
+      {:hint, "List its occurrences: `Tempo.to_interval(interval)`."}
+    ]
+    |> Enum.reject(&is_nil/1)
   end
 
   defp interval_parts(
@@ -602,6 +655,25 @@ defmodule Tempo.Explain do
       {:span, "Starts: #{render_endpoint(from)}."},
       {:span, "Duration: #{duration_prose(duration_time)}."},
       {:hint, "Resolve the implied end with `Tempo.to_interval/1`."}
+    ]
+  end
+
+  # `R5/2026-06-15/2026-06-20` — a recurrence written with a start and an end,
+  # which are its first occurrence (ISO 8601-1 §5.6.1 a); each after it starts
+  # where the one before ends and is as long.
+  defp interval_parts(%Tempo.Interval{
+         recurrence: recurrence,
+         from: %Tempo{} = from,
+         to: %Tempo{} = to,
+         duration: nil
+       })
+       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
+    [
+      {:headline, recurrence_headline(recurrence)},
+      {:span,
+       "First occurrence: #{render_endpoint(from)} to #{render_endpoint(to)} (exclusive)."},
+      {:span, "Each occurrence starts where the one before ends and is as long."},
+      {:hint, recurrence_hint(recurrence, from)}
     ]
   end
 

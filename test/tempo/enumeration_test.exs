@@ -444,12 +444,14 @@ defmodule Tempo.Enumeration.Test do
       end
     end
 
-    test "an Rn/from/to repetition is refused, not walked as a single span" do
+    test "an Rn/from/to repetition walks its occurrences, not a single span" do
       {:ok, r3} = Tempo.from_iso8601("R3/2022-01-01/2022-01-08")
+      {:ok, set} = Tempo.to_interval(r3)
 
-      assert_raise Tempo.ConversionError, fn ->
-        Enum.count(r3)
-      end
+      assert Enum.count(r3) == 21
+      assert Enum.at(r3, 0) == ~o"2022-01-01"
+      assert Enum.at(r3, 20) == ~o"2022-01-21"
+      assert Enum.to_list(r3) == Enum.to_list(set)
     end
 
     test "a plain interval (recurrence 1) is unaffected" do

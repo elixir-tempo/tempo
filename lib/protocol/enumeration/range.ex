@@ -128,10 +128,11 @@ defimpl Enumerable, for: Tempo.Interval do
   def reduce(%Tempo.Interval{recurrence: recurrence} = interval, acc, fun)
       when recurrence != 1 do
     # A recurring interval enumerates as its materialised occurrences.
-    # `to_interval/1` expands a bounded recurrence to an IntervalSet;
-    # an unbounded one returns `UnboundedRecurrenceError` (raised with
-    # its own `:within` direction); a shape it cannot expand (an
-    # `Rn/from/to` repetition) comes back unchanged and is refused
+    # `to_interval/1` expands a bounded recurrence to an IntervalSet,
+    # however it is written (a start and a duration, a start and an end,
+    # or a duration and an end); an unbounded one returns
+    # `UnboundedRecurrenceError` (raised with its own `:within`
+    # direction); one that comes back as a single interval is refused
     # like the crisp API refuses it — never re-entered.
     case Tempo.to_interval(interval) do
       {:ok, %Tempo.IntervalSet{} = occurrences} ->

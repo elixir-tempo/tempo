@@ -399,7 +399,7 @@ defmodule Tempo.Enumeration do
 
     case Validation.validate(partial, calendar) do
       {:ok, %Tempo{time: validated}} ->
-        validated |> Keyword.fetch!(unit) |> flatten_integers()
+        validated |> Keyword.fetch(unit) |> validated_candidates(raw)
 
       # The validator names the range this unit can hold in this
       # context (12 months in a common Hebrew year, 28 days in a
@@ -412,6 +412,12 @@ defmodule Tempo.Enumeration do
         []
     end
   end
+
+  # Validation can restate a candidate in other units — a week date as the
+  # calendar date it names — and the candidate it accepted then stands as
+  # written.
+  defp validated_candidates({:ok, value}, _raw), do: flatten_integers(value)
+  defp validated_candidates(:error, raw), do: flatten_integers(raw)
 
   # Clip to the range the unit can hold in this context, honouring the
   # range's own direction: a descending range (`{5..1}`) clips at the
