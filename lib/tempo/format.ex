@@ -1,56 +1,36 @@
 defmodule Tempo.Format do
   @moduledoc """
-  Locale-aware formatting for `Tempo` values, dispatching to the
-  Localize library.
+  Locale-aware formatting for `Tempo` values, dispatching to the Localize library.
 
-  `Tempo.to_string/1,2` and the `String.Chars` implementation for
-  `Tempo`, `Tempo.Interval`, and `Tempo.IntervalSet` route through
-  this module. Callers don't need to use it directly.
+  `Tempo.to_string/1,2`, `Tempo.to_string!/1,2` and the `String.Chars` implementation for `Tempo`, `Tempo.Interval`, `Tempo.IntervalSet` and `Tempo.Duration` route through this module. Callers don't need to use it directly.
 
   ### Rendering rule — Tempo values are intervals
 
-  A `%Tempo{}` at year or month resolution is a bounded span, and
-  its user-visible rendering reflects that span. Rule:
+  A `%Tempo{}` at year or month resolution is a bounded span, and its user-visible rendering reflects that span. Rule:
 
-  * `~o"2026"` (year resolution) → `"Jan\u2009\u2013\u2009Dec 2026"`.
-    Iteration over a year yields months; the first and last months
-    are shown.
+  * `~o"2026"` (year resolution) → `"Jan\u2009\u2013\u2009Dec 2026"`. Iteration over a year yields months; the first and last months are shown.
 
-  * `~o"2026-06"` (month resolution) → `"Jun 1\u2009\u2013\u200930, 2026"`.
-    Iteration over a month yields days; first and last day.
+  * `~o"2026-06"` (month resolution) → `"Jun 1\u2009\u2013\u200930, 2026"`. Iteration over a month yields days; first and last day.
 
-  * `~o"2026-W25"` (week resolution) → its first and last day,
-    `"Jun 15 – 21, 2026"`. A week date (`~o"2026-W25-2"`) is the
-    day it names, `"Jun 16, 2026"`.
+  * `~o"2026-W25"` (week resolution) → its first and last day, `"Jun 15\u2009\u2013\u200921, 2026"`. A week date (`~o"2026-W25-2"`) is the day it names, `"Jun 16, 2026"`.
 
-  * `~o"2026-06-15"` (day resolution) → `"Jun 15, 2026"`. A day is
-    atomic at human display granularity; collapse to a single
-    value.
+  * `~o"2026-06-15"` (day resolution) → `"Jun 15, 2026"`. A day is atomic at human display granularity; collapse to a single value.
 
-  * `~o"2026-06-15T14:30"` (minute or finer) → `"Jun 15, 2026, 2:30\u202FPM"`.
-    Same collapse rationale.
+  * `~o"2026-06-15T14:30"` (minute or finer) → `"Jun 15, 2026, 2:30\u202FPM"`. Same collapse rationale.
 
-  The cutoff between "expand as closed interval" and "collapse as
-  single value" lives at **day granularity** by design — matching
-  how people talk: "2026" is January-through-December; "June 2026"
-  is June 1 to 30; "June 15" is just June 15.
+  The cutoff between "expand as closed interval" and "collapse as single value" lives at **day granularity** by design — matching how people talk: "2026" is January-through-December; "June 2026" is June 1 to 30; "June 15" is just June 15.
 
   ### Closed vs half-open at the display boundary
 
-  The underlying interval is always half-open `[from, to)`. For
-  display we compute the **closed** last member — `to - 1
-  iteration_unit` — so users see `"Jan\u2009\u2013\u2009Dec 2026"`, not
-  `"Jan\u2009\u2013\u2009Jan 2026/2027"`. The closure happens purely at
-  the display layer; the internal representation is unchanged.
+  The underlying interval is always half-open `[from, to)`. For display we compute the **closed** last member — `to - 1 iteration_unit` — so users see `"Jan\u2009\u2013\u2009Dec 2026"`, not `"Jan\u2009\u2013\u2009Jan 2026/2027"`. The closure happens purely at the display layer; the internal representation is unchanged.
+
+  ### Values that cannot be rendered
+
+  `Tempo.to_string/2` returns `{:error, exception}` for a value it cannot render — an interval without two concrete ends, such as an open interval or a recurrence of a duration, an interval set without an end, or a value, locale or format Localize does not accept — and `Tempo.to_string!/2` raises it. `String.Chars` has no way to return an error, and interpolation sits on render paths, so interpolating such a value writes its ISO 8601 form (`"2026Y6M15D/.."` for an open interval), or its `inspect/1` form when it has none.
 
   ### Calendar awareness
 
-  The map passed to Localize carries the Tempo's `:calendar`
-  field, so Localize selects the appropriate CLDR data when
-  available for that calendar. Coverage of non-Gregorian calendars
-  depends on Localize's CLDR data and may fall back to
-  Gregorian-equivalent formatting where calendar-specific data is
-  absent.
+  The map passed to Localize carries the Tempo's `:calendar` field, so Localize selects the appropriate CLDR data when available for that calendar. Coverage of non-Gregorian calendars depends on Localize's CLDR data and may fall back to Gregorian-equivalent formatting where calendar-specific data is absent.
 
   """
 
@@ -64,6 +44,7 @@ defmodule Tempo.Format do
   alias Tempo.Math
   alias Tempo.TimeZoneDatabase
   alias Tempo.UnanchoredError
+  alias Tempo.UnboundedSetError
   alias Tempo.UnknownZoneError
   alias Tempo.Validation
 
@@ -73,19 +54,44 @@ defmodule Tempo.Format do
   @relative_units [:year, :quarter, :month, :week, :day, :hour, :minute, :second]
 
   @doc """
-  Format a Tempo, Interval, or IntervalSet as a locale-aware
-  string.
+  Format a Tempo, Interval, IntervalSet or Duration as a locale-aware string.
 
-  Delegated from `Tempo.to_string/1,2`.
+  Delegated from `Tempo.to_string/1,2`, which describes what it returns.
 
   """
   @spec to_string(
           Tempo.t() | Tempo.Interval.t() | Tempo.IntervalSet.t() | Tempo.Duration.t(),
           keyword()
-        ) :: String.t()
+        ) :: {:ok, String.t()} | {:error, Exception.t()}
   def to_string(value, options \\ [])
 
-  def to_string(%Tempo{} = tempo, options) do
+  def to_string(value, options) do
+    if Keyword.keyword?(options),
+      do: render(value, options),
+      else: {:error, options_error("to_string/2", options)}
+  end
+
+  @doc false
+  # `String.Chars` has no way to return an error, and interpolation sits on
+  # render paths, so a value Localize cannot render shows as its ISO 8601
+  # form, and one with no ISO 8601 form as its inspect form.
+  @spec string_chars(Tempo.t() | Tempo.Interval.t() | Tempo.IntervalSet.t() | Tempo.Duration.t()) ::
+          String.t()
+  def string_chars(value) do
+    case to_string(value, []) do
+      {:ok, string} -> string
+      {:error, _reason} -> iso8601_or_inspect(value)
+    end
+  end
+
+  defp iso8601_or_inspect(value) do
+    case Tempo.to_iso8601(value) do
+      {:ok, iso8601} -> iso8601
+      {:error, _reason} -> inspect(value)
+    end
+  end
+
+  defp render(%Tempo{} = tempo, options) do
     {unit, _} = Tempo.resolution(tempo)
 
     if expand_as_closed_interval?(unit, tempo, options) do
@@ -95,30 +101,43 @@ defmodule Tempo.Format do
     end
   end
 
-  def to_string(%Tempo.Interval{} = interval, options) do
-    {from, to} = interval_endpoints_for_format(interval)
-    {from, to} = collapse_midnight_endpoints(from, to)
-    closed_last = closed_last_for_interval(from, to)
-    options = with_default_interval_options(options, from, closed_last)
-
-    case format_interval(from, closed_last, options) do
-      {:ok, string} -> string
-      {:error, exception} -> raise exception
+  defp render(%Tempo.Interval{} = interval, options) do
+    with {:ok, from, to} <- interval_endpoints_for_format(interval) do
+      {from, to} = collapse_midnight_endpoints(from, to)
+      closed_last = closed_last_for_interval(from, to)
+      options = with_default_interval_options(options, from, closed_last)
+      format_interval(from, closed_last, options)
     end
   end
 
-  def to_string(%Tempo.IntervalSet{} = set, options) do
-    # CLDR "list separator" formatting could replace the simple
-    # ", " join; deferred until Localize exposes a listPattern API.
-    set
-    |> IntervalSet.members()
-    |> Enum.map_join(", ", &to_string(&1, options))
+  # CLDR "list separator" formatting could replace the simple ", " join;
+  # deferred until Localize exposes a listPattern API. A set without an end
+  # has no list to join.
+  defp render(%Tempo.IntervalSet{} = set, options) do
+    if IntervalSet.bounded?(set),
+      do: set |> IntervalSet.members() |> render_members(options, []),
+      else: {:error, UnboundedSetError.exception(operation: "Tempo.to_string/2", set: set)}
   end
 
-  def to_string(%Tempo.Duration{} = duration, options) do
-    case Localize.Duration.to_string(to_localize_duration(duration), options) do
-      {:ok, string} -> string
-      {:error, exception} -> raise exception
+  defp render(%Tempo.Duration{} = duration, options) do
+    Localize.Duration.to_string(to_localize_duration(duration), options)
+  end
+
+  defp render(value, _options) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.to_string/2 formats a Tempo, Tempo.Interval, Tempo.IntervalSet or " <>
+         "Tempo.Duration, got #{inspect(value)}."
+     )}
+  end
+
+  defp render_members([], _options, rendered),
+    do: {:ok, rendered |> Enum.reverse() |> Enum.join(", ")}
+
+  defp render_members([member | members], options, rendered) do
+    case render(member, options) do
+      {:ok, string} -> render_members(members, options, [string | rendered])
+      {:error, _reason} = error -> error
     end
   end
 
@@ -163,7 +182,7 @@ defmodule Tempo.Format do
   def to_relative_string(value, options) do
     if Keyword.keyword?(options),
       do: relative_string(value, options),
-      else: {:error, options_error(options)}
+      else: {:error, options_error("to_relative_string/2", options)}
   end
 
   defp relative_string(%Tempo{} = tempo, options), do: render_relative(tempo, options)
@@ -182,13 +201,13 @@ defmodule Tempo.Format do
   defp relative_string(value, _options) do
     {:error,
      ArgumentError.exception(
-       "Tempo.to_relative_string/2 formats a Tempo value or an interval, got #{inspect(value)}."
+       "Tempo.to_relative_string/2 formats a Tempo or Tempo.Interval, got #{inspect(value)}."
      )}
   end
 
-  defp options_error(options) do
+  defp options_error(function, options) do
     ArgumentError.exception(
-      "Tempo.to_relative_string/2 takes a keyword list of options, got #{inspect(options)}."
+      "Tempo.#{function} takes a keyword list of options, got #{inspect(options)}."
     )
   end
 
@@ -386,18 +405,15 @@ defmodule Tempo.Format do
         calendar = Compare.effective_calendar(from.calendar)
         from = Steps.fill_to_unit(from, unit, calendar)
         to = Steps.fill_to_unit(to, unit, calendar)
-        first = Tempo.trunc(from, iter_unit)
+        one_less = Tempo.Duration.build([{duration_unit(iter_unit), 1}])
 
-        closed_last =
-          to
-          |> Math.subtract(Tempo.Duration.build([{duration_unit(iter_unit), 1}]))
-          |> Tempo.trunc(iter_unit)
-
-        options = with_default_interval_options(options, first, closed_last)
-
-        case format_interval(first, closed_last, options) do
-          {:ok, string} -> string
-          {:error, exception} -> raise exception
+        with %Tempo{} = last <- Math.subtract(to, one_less),
+             %Tempo{} = first <- Tempo.trunc(from, iter_unit),
+             %Tempo{} = closed_last <- Tempo.trunc(last, iter_unit) do
+          options = with_default_interval_options(options, first, closed_last)
+          format_interval(first, closed_last, options)
+        else
+          _other -> render_single_value(tempo, options)
         end
 
       _other ->
@@ -424,12 +440,7 @@ defmodule Tempo.Format do
   ## Single-value rendering (day, hour, minute, second, time-only)
   ## ---------------------------------------------------------
 
-  defp render_single_value(%Tempo{} = tempo, options) do
-    case dispatch(tempo, options) do
-      {:ok, string} -> string
-      {:error, exception} -> raise exception
-    end
-  end
+  defp render_single_value(%Tempo{} = tempo, options), do: dispatch(tempo, options)
 
   # Route a plain Tempo to the right Localize function.
   #
@@ -729,18 +740,17 @@ defmodule Tempo.Format do
     # unit (a user-written explicit interval) is a no-op.
     calendar = Compare.effective_calendar(from.calendar)
     unit = unit || week_days(from)
-    {Steps.fill_to_unit(from, unit, calendar), Steps.fill_to_unit(to, unit, calendar)}
+    {:ok, Steps.fill_to_unit(from, unit, calendar), Steps.fill_to_unit(to, unit, calendar)}
   end
 
   defp interval_endpoints_for_format(%Tempo.Interval{} = interval) do
     case Tempo.Interval.endpoints(interval) do
       {%Tempo{} = from, %Tempo{} = to} ->
-        {from, to}
+        {:ok, from, to}
 
       _other ->
-        raise IntervalEndpointsError,
-          operation: "Tempo.Format.to_string/2",
-          interval: interval
+        {:error,
+         IntervalEndpointsError.exception(operation: "Tempo.to_string/2", interval: interval)}
     end
   end
 

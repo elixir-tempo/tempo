@@ -122,29 +122,30 @@ defmodule Tempo.WeekCalendarTest do
 
   describe "to_string/2" do
     test "a week date is the day it names" do
-      assert Tempo.to_string(Tempo.new!(year: 2026, week: 25, day_of_week: 2)) == "Jun 16, 2026"
+      assert Tempo.to_string(Tempo.new!(year: 2026, week: 25, day_of_week: 2)) ==
+               {:ok, "Jun 16, 2026"}
 
       assert Tempo.to_string(
                Tempo.new!(year: 2026, week: 25, day_of_week: 2, hour: 10, minute: 30)
              ) ==
-               "Jun 16, 2026, 10:30 AM"
+               {:ok, "Jun 16, 2026, 10:30 AM"}
     end
 
     test "a week is its first and last day, across a month or a year" do
-      assert Tempo.to_string(~o"2026-W25") == "Jun 15 – 21, 2026"
-      assert Tempo.to_string(~o"2026-W27") == "Jun 29 – Jul 5, 2026"
-      assert Tempo.to_string(~o"2026-W53") == "Dec 28, 2026 – Jan 3, 2027"
+      assert Tempo.to_string(~o"2026-W25") == {:ok, "Jun 15 – 21, 2026"}
+      assert Tempo.to_string(~o"2026-W27") == {:ok, "Jun 29 – Jul 5, 2026"}
+      assert Tempo.to_string(~o"2026-W53") == {:ok, "Dec 28, 2026 – Jan 3, 2027"}
     end
 
     test "a range of weeks runs to the last day of its last week" do
       assert Tempo.to_string(Tempo.from_iso8601!("2026-W25/2026-W27")) ==
-               "Jun 15 – 28, 2026"
+               {:ok, "Jun 15 – 28, 2026"}
     end
 
     test "a week-based calendar's date is handed to Localize in its own calendar" do
       {:ok, localized} = Localize.Date.to_string(Date.new!(2026, 25, 2, ISOWeek))
 
-      assert Tempo.to_string(~o"2026-W25-2"W) == localized
+      assert Tempo.to_string(~o"2026-W25-2"W) == {:ok, localized}
     end
   end
 

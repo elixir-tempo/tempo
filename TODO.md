@@ -4,7 +4,15 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ## Open
 
-* [ ] **`to_string/2` raises** — `Tempo.to_string/2` raises Localize's error for a locale or format it refuses, `IntervalEndpointsError` for an open interval and `FunctionClauseError` for a value that is not Tempo's, where the library returns `{:error, reason}`, as `to_relative_string/2` now does; it backs `String.Chars`, so interpolating an open interval raises too. Found 2026-10-01.
+* [ ] **A recurrence between two dates renders as its first span** — `Tempo.to_string(~o"R5/2026-06-15/2026-06-20")`, and an RRULE with an `UNTIL`, give "Jun 15 – 19, 2026", where a recurrence of a duration returns an `IntervalEndpointsError` asking for its occurrences. Found 2026-10-01.
+
+* [ ] **A masked, set or grouped value is not rendered as what it names** — `to_string/2` gives "2026 (day: 15)" for `~o"2026-{6,7}-15"`, "Jun 2026" for `~o"2026-06-1X"` and "Jun 15, 2026" for `~o"2026-06-15T1X"`; `~o"202X"`, `~o"{2026,2027}"`, `~o"20C"` and a value without a year (`~o"W25"`) return Localize's error about its input (for `202X`, the format `"MMM y – "` missing `:month`) rather than one naming the value. Found 2026-10-01.
+
+* [ ] **A selection value renders as its year** — `Tempo.to_string(~o"2026YL1K1IN")`, the first Monday of 2026, gives "2026". Found 2026-10-01.
+
+* [ ] **A duration's fraction of a second is dropped** — `to_string/2` renders `~o"PT0.5S"` as "0 seconds" and `~o"PT1.5S"` as "1 second": `to_localize_duration/1` in `Tempo.Format` sets the microseconds to zero. Found 2026-10-01.
+
+* [ ] **A one-of set or a recurrence set has no rendering** — `to_string/2` returns an `ArgumentError` for a `Tempo.Set` (`~o"[2026,2027]"`) or a `Tempo.RecurrenceSet`, and interpolating either raises `Protocol.UndefinedError`, since neither implements `String.Chars`. Found 2026-10-01.
 
 * [ ] **Livebooks install 2.0 at the release** — `getting-started`, `tempo_tour`, `scheduling-workbook` and `uncertain-dates-workbook` install `{:ex_tempo, "~> 1.6"}` and the Melbourne deck `~> 1.6.3`, while their code uses the 2.0 names: at the 2.0.0 release each installs `~> 2.0`, as `everyday-holidays` already does.
 
@@ -63,6 +71,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **Set algebra over open-ended windows** — a research project for later (user, 2026-09-28): how far union, intersection, difference, complement and the predicates go on the lazy sets an open-ended window gives, a test of the whole algebra. Questions in [plans/open-ended-set-algebra.md](plans/open-ended-set-algebra.md).
 
 ## Done
+
+* [x] **`to_string/2` raises** — it returns `{:ok, string}` or `{:error, exception}` for every value it cannot render, Localize's errors included, with `to_string!/2` for the string; interpolation writes such a value in ISO 8601, or as `inspect/1` when it has no ISO 8601 form. 2026-10-01.
 
 * [x] **`to_relative_string/2` raises** — it returns `{:ok, string}` or `{:error, exception}` for every input it cannot count from, Localize's errors included, as `to_iso8601/1` does, with `to_relative_string!/2` for the string. 2026-10-01.
 

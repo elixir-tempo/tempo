@@ -103,15 +103,15 @@ working
 Rendering reflects the span: a year formats as its first-through-last month, in any CLDR locale, and durations follow ECMA-402 conventions:
 
 ```elixir
-{Tempo.to_string(~o"2026"), Tempo.to_string(~o"2026-06")}
+{Tempo.to_string!(~o"2026"), Tempo.to_string!(~o"2026-06")}
 ```
 
 ```elixir
-{Tempo.to_string(~o"P3DT2H"), Tempo.to_string(~o"P3DT2H", format: :short)}
+{Tempo.to_string!(~o"P3DT2H"), Tempo.to_string!(~o"P3DT2H", format: :short)}
 ```
 
 ```elixir
-Tempo.to_string(~o"P1Y6M", locale: :de)
+Tempo.to_string!(~o"P1Y6M", locale: :de)
 ```
 
 And when a value puzzles you, ask it to explain itself:

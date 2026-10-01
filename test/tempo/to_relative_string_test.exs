@@ -322,9 +322,9 @@ defmodule Tempo.ToRelativeStringTest do
             {~o"2026-06-16", [from: ~D[2026-06-15]], ~r/must be a Tempo/},
             {~o"2026-06-16", [from: nil], ~r/must be a Tempo/},
             {~o"2026-06-16", [from: "2026-06-15"], ~r/must be a Tempo/},
-            {"2026-06-16", [], ~r/formats a Tempo value or an interval/},
-            {nil, [], ~r/formats a Tempo value or an interval/},
-            {~o"P1D", [], ~r/formats a Tempo value or an interval/},
+            {"2026-06-16", [], ~r/formats a Tempo or Tempo.Interval/},
+            {nil, [], ~r/formats a Tempo or Tempo.Interval/},
+            {~o"P1D", [], ~r/formats a Tempo or Tempo.Interval/},
             {~o"2026-06-16", :from, ~r/keyword list of options/}
           ] do
         assert {:error, %ArgumentError{} = error} = Tempo.to_relative_string(value, options)

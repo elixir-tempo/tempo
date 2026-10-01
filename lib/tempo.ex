@@ -4937,78 +4937,106 @@ defmodule Tempo do
   @doc """
   Format a Tempo value as a locale-aware string.
 
-  Routes through Localize so format patterns, month and weekday
-  names, day periods, and punctuation all follow CLDR data for
-  the chosen locale. The default format is keyed off the Tempo's
-  resolution — a year renders as its first and last months, a month
-  or a week as its first and last days, a day as that day, and so
-  on. A week date is the day it names.
+  Routes through Localize so format patterns, month and weekday names, day periods, and punctuation all follow CLDR data for the chosen locale. The default format is keyed off the Tempo's resolution — a year renders as its first and last months, a month or a week as its first and last days, a day as that day, and so on. A week date is the day it names.
 
-  `Tempo.to_string/1,2` is the end-user display function.
-  `inspect/1` remains the programmer-facing form and returns the
-  `~o"…"` sigil representation unchanged.
+  `Tempo.to_string/1,2` is the end-user display function. `inspect/1` remains the programmer-facing form and returns the `~o"…"` sigil representation unchanged. Interpolation renders a value as `to_string/1` does, and writes one it cannot render in its ISO 8601 form.
 
   ### Arguments
 
-  * `value` is a `t:t/0`, `t:Tempo.Interval.t/0`, or
-    `t:Tempo.IntervalSet.t/0`.
+  * `value` is a `t:t/0`, `t:Tempo.Interval.t/0`, `t:Tempo.IntervalSet.t/0` or `t:Tempo.Duration.t/0`.
+
+  * `options` is a keyword list of options.
 
   ### Options
 
-  * `:format` is a CLDR format atom (`:short | :medium | :long |
-    :full`), a skeleton atom (`:yMMM`, `:yMMMd`, `:hm`, …), or a
-    pattern string. Defaults to a resolution-appropriate choice
-    (see the module doc of `Tempo.Format` for the table).
+  * `:format` is a CLDR format atom (`:short | :medium | :long | :full`), a skeleton atom (`:yMMM`, `:yMMMd`, `:hm`, …), or a pattern string. Defaults to a resolution-appropriate choice (see the module doc of `Tempo.Format` for the table).
 
-  * `:locale` is a CLDR locale identifier such as `"en"`,
-    `"en-GB"`, or `"de"`. Defaults to Localize's configured
-    default locale.
+  * `:locale` is a CLDR locale identifier such as `"en"`, `"en-GB"`, or `"de"`. Defaults to Localize's configured default locale.
 
-  * Any other option accepted by `Localize.Date.to_string/2`,
-    `Localize.Time.to_string/2`, `Localize.DateTime.to_string/2`,
-    or `Localize.Interval.to_string/3` is forwarded verbatim.
+  * Any other option accepted by `Localize.Date.to_string/2`, `Localize.Time.to_string/2`, `Localize.DateTime.to_string/2`, or `Localize.Interval.to_string/3` is forwarded verbatim.
 
   ### Returns
 
-  * A `t:String.t/0`.
+  * `{:ok, string}` with the formatted value.
 
-  ### Raises
-
-  * Any exception Localize raises for invalid locales, missing
-    CLDR data, or unresolvable format skeletons.
+  * `{:error, exception}` when the value cannot be rendered: a `Tempo.IntervalEndpointsError` for an interval without both ends, a `Tempo.UnboundedSetError` for an interval set without an end, an `ArgumentError` for a value of another kind or options that are not a keyword list, and Localize's error for a value it cannot render, such as a set of years, or a locale or format it does not accept.
 
   ### Examples
 
       iex> Tempo.to_string(~o"2026")
-      "Jan\u2009\u2013\u2009Dec 2026"
+      {:ok, "Jan\u2009\u2013\u2009Dec 2026"}
 
       iex> Tempo.to_string(~o"2026-06")
-      "Jun 1\u2009\u2013\u200930, 2026"
+      {:ok, "Jun 1\u2009\u2013\u200930, 2026"}
 
       iex> Tempo.to_string(~o"2026-06-15")
-      "Jun 15, 2026"
+      {:ok, "Jun 15, 2026"}
 
       iex> Tempo.to_string(~o"2026-W25")
-      "Jun 15 – 21, 2026"
+      {:ok, "Jun 15\u2009\u2013\u200921, 2026"}
 
       iex> Tempo.to_string(~o"2026-06-15", format: :long)
-      "June 15, 2026"
+      {:ok, "June 15, 2026"}
 
       iex> Tempo.to_string(~o"2026", format: :long)
-      "January\u2009\u2013\u2009December 2026"
+      {:ok, "January\u2009\u2013\u2009December 2026"}
 
       iex> Tempo.to_string(~o"P1Y6M")
-      "1 year, 6 months"
+      {:ok, "1 year, 6 months"}
 
       iex> Tempo.to_string(~o"P3DT2H", format: :short)
-      "3 days, 2 hr"
+      {:ok, "3 days, 2 hr"}
+
+  An open interval has no last day to show, so it is an error, and interpolation writes it in ISO 8601:
+
+      iex> {:error, %Tempo.IntervalEndpointsError{}} = Tempo.to_string(~o"2026-06-15/..")
+      iex> "From \#{~o"2026-06-15/.."}"
+      "From 2026Y6M15D/.."
 
   """
   @spec to_string(
           t() | Tempo.Interval.t() | Tempo.IntervalSet.t() | Tempo.Duration.t(),
           keyword()
-        ) :: String.t()
+        ) :: {:ok, String.t()} | {:error, Exception.t()}
   defdelegate to_string(value, options \\ []), to: Tempo.Format
+
+  @doc """
+  Format a Tempo value as a locale-aware string, raising for a value it cannot render.
+
+  ### Arguments
+
+  * `value` is a `t:t/0`, `t:Tempo.Interval.t/0`, `t:Tempo.IntervalSet.t/0` or `t:Tempo.Duration.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * The options of `to_string/2`.
+
+  ### Returns
+
+  * A `t:String.t/0` like `"Jun 15, 2026"`.
+
+  ### Raises
+
+  * The exception `to_string/2` returns.
+
+  ### Examples
+
+      iex> Tempo.to_string!(~o"2026-06-15")
+      "Jun 15, 2026"
+
+  """
+  @spec to_string!(
+          t() | Tempo.Interval.t() | Tempo.IntervalSet.t() | Tempo.Duration.t(),
+          keyword()
+        ) :: String.t()
+  def to_string!(value, options \\ []) do
+    case to_string(value, options) do
+      {:ok, string} -> string
+      {:error, exception} -> raise exception
+    end
+  end
 
   @doc """
   Format a Tempo as a locale-aware relative time string like `"3 hours ago"` or `"in 2 days"`.

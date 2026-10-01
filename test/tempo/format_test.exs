@@ -5,7 +5,7 @@ defmodule Tempo.FormatTest do
 
   alias Tempo.IntervalSet
 
-  doctest Tempo, only: [to_string: 2]
+  doctest Tempo, only: [to_string: 2, to_string!: 2]
 
   # The CLDR range separator is a thin-space + en-dash + thin-space.
   @en_dash_sep "\u2009\u2013\u2009"
@@ -16,36 +16,36 @@ defmodule Tempo.FormatTest do
 
   describe "Tempo.to_string/1 — Rule B expansion" do
     test "year resolution expands to Jan–Dec (closed interval)" do
-      assert Tempo.to_string(~o"2026") == "Jan#{@en_dash_sep}Dec 2026"
+      assert Tempo.to_string(~o"2026") == {:ok, "Jan#{@en_dash_sep}Dec 2026"}
     end
 
     test "year :long uses full month names" do
       assert Tempo.to_string(~o"2026", format: :long) ==
-               "January#{@en_dash_sep}December 2026"
+               {:ok, "January#{@en_dash_sep}December 2026"}
     end
 
     test "month resolution expands to day 1–N" do
-      assert Tempo.to_string(~o"2026-06") == "Jun 1#{@en_dash_sep}30, 2026"
+      assert Tempo.to_string(~o"2026-06") == {:ok, "Jun 1#{@en_dash_sep}30, 2026"}
     end
 
     test "month length follows the calendar (29 in a leap Feb)" do
-      assert Tempo.to_string(~o"2024-02") == "Feb 1#{@en_dash_sep}29, 2024"
+      assert Tempo.to_string(~o"2024-02") == {:ok, "Feb 1#{@en_dash_sep}29, 2024"}
     end
 
     test "month length in a common-year Feb is 28" do
-      assert Tempo.to_string(~o"2025-02") == "Feb 1#{@en_dash_sep}28, 2025"
+      assert Tempo.to_string(~o"2025-02") == {:ok, "Feb 1#{@en_dash_sep}28, 2025"}
     end
 
     test "day resolution collapses to a single value" do
-      assert Tempo.to_string(~o"2026-06-15") == "Jun 15, 2026"
+      assert Tempo.to_string(~o"2026-06-15") == {:ok, "Jun 15, 2026"}
     end
 
     test "day :long uses full month name" do
-      assert Tempo.to_string(~o"2026-06-15", format: :long) == "June 15, 2026"
+      assert Tempo.to_string(~o"2026-06-15", format: :long) == {:ok, "June 15, 2026"}
     end
 
     test "second resolution collapses to a single datetime" do
-      string = Tempo.to_string(~o"2026-06-15T14:30:00")
+      {:ok, string} = Tempo.to_string(~o"2026-06-15T14:30:00")
       assert string =~ "Jun 15, 2026"
       assert string =~ "2:30"
     end
@@ -54,38 +54,39 @@ defmodule Tempo.FormatTest do
   describe "Tempo.to_string/2 — locale" do
     test "en-GB switches to DMY ordering on day values" do
       assert Tempo.to_string(~o"2026-06-15", format: :long, locale: "en-GB") ==
-               "15 June 2026"
+               {:ok, "15 June 2026"}
     end
 
     test "de renders German month names" do
       assert Tempo.to_string(~o"2026-06-15", format: :long, locale: "de") ==
-               "15. Juni 2026"
+               {:ok, "15. Juni 2026"}
     end
 
     test "year expansion honours the locale" do
       assert Tempo.to_string(~o"2026", locale: "de", format: :long) ==
-               "Januar\u2013Dezember 2026"
+               {:ok, "Januar\u2013Dezember 2026"}
     end
 
     test "fr month expansion" do
-      assert Tempo.to_string(~o"2026-06", locale: "fr") =~ "juin"
+      {:ok, string} = Tempo.to_string(~o"2026-06", locale: "fr")
+      assert string =~ "juin"
     end
   end
 
   describe "Tempo.to_string/2 on Tempo.Interval — same rule" do
     test "day-resolution interval collapses to a single day when from == to − 1 day" do
       {:ok, iv} = Tempo.to_interval(~o"2026-06-15")
-      assert Tempo.to_string(iv) == "Jun 15, 2026"
+      assert Tempo.to_string(iv) == {:ok, "Jun 15, 2026"}
     end
 
     test "month-resolution interval renders the day range of the month" do
       {:ok, iv} = Tempo.to_interval(~o"2026-06")
-      assert Tempo.to_string(iv) == "Jun 1#{@en_dash_sep}30, 2026"
+      assert Tempo.to_string(iv) == {:ok, "Jun 1#{@en_dash_sep}30, 2026"}
     end
 
     test "year-resolution interval renders Jan–Dec" do
       {:ok, iv} = Tempo.to_interval(~o"2026")
-      assert Tempo.to_string(iv) == "Jan#{@en_dash_sep}Dec 2026"
+      assert Tempo.to_string(iv) == {:ok, "Jan#{@en_dash_sep}Dec 2026"}
     end
 
     test "multi-year range — union preserves members; coalesce for a single span" do
@@ -96,7 +97,7 @@ defmodule Tempo.FormatTest do
       {:ok, yr_iv} = Tempo.union(~o"2022", ~o"2023")
       coalesced = IntervalSet.coalesce(yr_iv)
 
-      assert Tempo.to_string(coalesced) == "Jan 2022#{@en_dash_sep}Dec 2023"
+      assert Tempo.to_string(coalesced) == {:ok, "Jan 2022#{@en_dash_sep}Dec 2023"}
     end
 
     test "Tempo.to_string(tempo) matches Tempo.to_string(to_interval(tempo)) — year" do
@@ -122,7 +123,7 @@ defmodule Tempo.FormatTest do
 
     test "explicit hour-level interval preserves hour display" do
       iv = %Tempo.Interval{from: ~o"2026-06-15T10", to: ~o"2026-06-15T18"}
-      string = Tempo.to_string(iv)
+      {:ok, string} = Tempo.to_string(iv)
       assert string =~ "Jun 15, 2026"
       assert string =~ "10"
       assert string =~ "5"
@@ -130,7 +131,7 @@ defmodule Tempo.FormatTest do
 
     test "month :long uses the locale's long date interval pattern" do
       {:ok, iv} = Tempo.to_interval(~o"2026-06")
-      string = Tempo.to_string(iv, format: :long)
+      {:ok, string} = Tempo.to_string(iv, format: :long)
       # Localize's :long for the :date style resolves to the locale's
       # :long date skeleton (yMMMMd for en) and its interval pattern,
       # which states the shared month and year once — full month name,
@@ -140,7 +141,7 @@ defmodule Tempo.FormatTest do
 
     test "month :full uses the day-of-week-and-month format" do
       {:ok, iv} = Tempo.to_interval(~o"2026-06")
-      string = Tempo.to_string(iv, format: :full)
+      {:ok, string} = Tempo.to_string(iv, format: :full)
       # Localize's :full for the :date style resolves to the locale's
       # :full date skeleton (yMMMMEEEEd for en), which includes the
       # full weekday name, e.g. "Monday, June 1 – Tuesday, June 30, 2026".
@@ -156,7 +157,82 @@ defmodule Tempo.FormatTest do
       {:ok, set} = Tempo.union(~o"2022", ~o"2024")
 
       assert Tempo.to_string(set) ==
-               "Jan#{@en_dash_sep}Dec 2022, Jan#{@en_dash_sep}Dec 2024"
+               {:ok, "Jan#{@en_dash_sep}Dec 2022, Jan#{@en_dash_sep}Dec 2024"}
+    end
+  end
+
+  describe "Tempo.to_string/2 — values it cannot render" do
+    test "an interval without both ends is an error" do
+      assert {:error, %Tempo.IntervalEndpointsError{}} = Tempo.to_string(~o"2026-06-15/..")
+      assert {:error, %Tempo.IntervalEndpointsError{}} = Tempo.to_string(~o"../2026-06-15")
+    end
+
+    test "a recurrence is an error" do
+      assert {:error, %Tempo.IntervalEndpointsError{}} = Tempo.to_string(~o"R/2026-06-15/P1D")
+      assert {:error, %Tempo.IntervalEndpointsError{}} = Tempo.to_string(~o"R5/2026-06-15/P1D")
+      assert {:error, %Tempo.IntervalEndpointsError{}} = Tempo.to_string(~o"R/../P1Y/FL12M25DN")
+    end
+
+    test "an interval set without an end is an error" do
+      mondays =
+        ~o"2026-01-05"
+        |> Stream.iterate(&Tempo.shift(&1, week: 1))
+        |> Stream.map(&Tempo.to_interval!/1)
+        |> IntervalSet.from_stream()
+
+      assert {:error, %Tempo.UnboundedSetError{}} = Tempo.to_string(mondays)
+    end
+
+    test "a value Localize cannot render is an error" do
+      assert {:error, exception} = Tempo.to_string(~o"{2026,2027}")
+      assert is_exception(exception)
+
+      assert {:error, exception} = Tempo.to_string(~o"202X")
+      assert is_exception(exception)
+    end
+
+    test "a locale or format Localize does not accept is Localize's error" do
+      assert {:error, %Localize.InvalidLocaleError{}} =
+               Tempo.to_string(~o"2026-06-15", locale: "xx-XX-bogus")
+
+      assert {:error, %Localize.InvalidLocaleError{}} =
+               Tempo.to_string(~o"2026", locale: "xx-XX-bogus")
+
+      assert {:error, %Localize.InvalidLocaleError{}} =
+               Tempo.to_string(~o"P1Y6M", locale: "xx-XX-bogus")
+
+      assert {:error, %Localize.DateTimeUnresolvedFormatError{}} =
+               Tempo.to_string(~o"2026-06-15", format: :nonsense)
+
+      assert {:error, %Localize.DateTimeUnresolvedFormatError{}} =
+               Tempo.to_string(~o"2026", format: :nonsense)
+    end
+
+    test "a member that cannot be rendered makes the set an error" do
+      {:ok, set} = Tempo.union(~o"2022", ~o"2024")
+
+      assert {:error, %Localize.InvalidLocaleError{}} =
+               Tempo.to_string(set, locale: "xx-XX-bogus")
+    end
+
+    test "a value of another kind is an error" do
+      assert {:error, %ArgumentError{}} = Tempo.to_string(~D[2026-06-15])
+      assert {:error, %ArgumentError{}} = Tempo.to_string(nil)
+
+      assert {:error, %ArgumentError{message: message}} = Tempo.to_string(~o"[2026,2027]")
+      assert message =~ "formats a Tempo, Tempo.Interval, Tempo.IntervalSet or Tempo.Duration"
+    end
+
+    test "options that are not a keyword list are an error" do
+      assert {:error, %ArgumentError{}} = Tempo.to_string(~o"2026", :long)
+    end
+
+    test "to_string!/2 returns the string or raises the error" do
+      assert Tempo.to_string!(~o"2026-06-15") == "Jun 15, 2026"
+
+      assert_raise Tempo.IntervalEndpointsError, fn ->
+        Tempo.to_string!(~o"2026-06-15/..")
+      end
     end
   end
 
@@ -182,33 +258,50 @@ defmodule Tempo.FormatTest do
 
     test "to_string/1 on Tempo equals Tempo.to_string/1" do
       tempo = ~o"2026-06-15"
-      assert to_string(tempo) == Tempo.to_string(tempo)
+      assert Tempo.to_string(tempo) == {:ok, to_string(tempo)}
+    end
+
+    test "a value with no localized form interpolates in its ISO 8601 form" do
+      assert "From #{~o"2026-06-15/.."}" == "From 2026Y6M15D/.."
+      assert "#{~o"../2026-06-15"}" == "../2026Y6M15D"
+      assert "#{~o"R/2026-06-15/P1D"}" == "R/2026Y6M15D/P1D"
+      assert "#{~o"202X"}" == "202XY"
+    end
+
+    test "a value with no ISO 8601 form either interpolates in its inspect form" do
+      mondays =
+        ~o"2026-01-05"
+        |> Stream.iterate(&Tempo.shift(&1, week: 1))
+        |> Stream.map(&Tempo.to_interval!/1)
+        |> IntervalSet.from_stream()
+
+      assert "#{mondays}" == inspect(mondays)
     end
   end
 
   describe "Tempo.to_string/2 on Tempo.Duration — Localize-backed" do
     test "year + month duration" do
-      assert Tempo.to_string(~o"P1Y6M") == "1 year, 6 months"
+      assert Tempo.to_string(~o"P1Y6M") == {:ok, "1 year, 6 months"}
     end
 
     test "day + hour duration" do
-      assert Tempo.to_string(~o"P3DT2H") == "3 days, 2 hours"
+      assert Tempo.to_string(~o"P3DT2H") == {:ok, "3 days, 2 hours"}
     end
 
     test "weeks normalise to days" do
-      assert Tempo.to_string(~o"P2W3D") == "17 days"
+      assert Tempo.to_string(~o"P2W3D") == {:ok, "17 days"}
     end
 
     test "zero duration renders as `0 seconds`" do
-      assert Tempo.to_string(~o"P0D") == "0 seconds"
+      assert Tempo.to_string(~o"P0D") == {:ok, "0 seconds"}
     end
 
     test ":format short abbreviates" do
-      assert Tempo.to_string(~o"P3DT2H", format: :short) == "3 days, 2 hr"
+      assert Tempo.to_string(~o"P3DT2H", format: :short) == {:ok, "3 days, 2 hr"}
     end
 
     test "locale honoured" do
-      assert Tempo.to_string(~o"P1Y6M", locale: :de) == "1 Jahr, 6 Monate"
+      assert Tempo.to_string(~o"P1Y6M", locale: :de) == {:ok, "1 Jahr, 6 Monate"}
     end
 
     test "String.Chars interpolates duration" do
@@ -235,7 +328,7 @@ defmodule Tempo.FormatTest do
     #   * a skeleton on a year or month raised, because Rule B expanded
     #     it to an interval and interval formatting takes only widths.
     #
-    # Nothing below may render an empty field, and nothing may raise.
+    # Nothing below may render an empty field, and nothing may fail.
     @values [
       {"year", ~o"2025"},
       {"month", ~o"2025-08"},
@@ -250,11 +343,11 @@ defmodule Tempo.FormatTest do
 
     @formats [nil, :short, :medium, :long, :full, :y, :yMMM, :yMMMd, :h, :hm, :hms]
 
-    test "no combination raises" do
+    test "no combination fails" do
       for {label, value} <- @values, format <- @formats do
         options = if format, do: [format: format, locale: :en], else: [locale: :en]
 
-        assert is_binary(Tempo.to_string(value, options)),
+        assert match?({:ok, string} when is_binary(string), Tempo.to_string(value, options)),
                "#{label} with #{inspect(format)} did not return a string"
       end
     end
@@ -264,7 +357,7 @@ defmodule Tempo.FormatTest do
       # after it: a leading ":", a doubled "::", or a stray ", ".
       for {label, value} <- @values, format <- @formats do
         options = if format, do: [format: format, locale: :en], else: [locale: :en]
-        rendered = Tempo.to_string(value, options)
+        {:ok, rendered} = Tempo.to_string(value, options)
 
         refute rendered =~ ~r/(^|\s):/,
                "#{label} with #{inspect(format)} rendered an empty leading field: #{inspect(rendered)}"
@@ -278,48 +371,56 @@ defmodule Tempo.FormatTest do
     end
 
     test "a format asking for more precision than the value carries is narrowed" do
-      assert Tempo.to_string(~o"2025-08-28T10", format: :hms, locale: :en) == "10#{@nbsp}AM"
-      assert Tempo.to_string(~o"2025-08-28T10:45", format: :hms, locale: :en) == "10:45#{@nbsp}AM"
-      assert Tempo.to_string(~o"T10", format: :hm, locale: :en) == "10#{@nbsp}AM"
-      assert Tempo.to_string(~o"2025-08", format: :yMMMd, locale: :en) == "Aug 2025"
-      assert Tempo.to_string(~o"2025", format: :yMMM, locale: :en) == "2025"
+      assert Tempo.to_string(~o"2025-08-28T10", format: :hms, locale: :en) ==
+               {:ok, "10#{@nbsp}AM"}
+
+      assert Tempo.to_string(~o"2025-08-28T10:45", format: :hms, locale: :en) ==
+               {:ok, "10:45#{@nbsp}AM"}
+
+      assert Tempo.to_string(~o"T10", format: :hm, locale: :en) == {:ok, "10#{@nbsp}AM"}
+      assert Tempo.to_string(~o"2025-08", format: :yMMMd, locale: :en) == {:ok, "Aug 2025"}
+      assert Tempo.to_string(~o"2025", format: :yMMM, locale: :en) == {:ok, "2025"}
     end
 
     test "a time-only format renders the time of a value that also has a date" do
-      assert Tempo.to_string(~o"2025-08-28T10:45", format: :hm, locale: :en) == "10:45#{@nbsp}AM"
+      assert Tempo.to_string(~o"2025-08-28T10:45", format: :hm, locale: :en) ==
+               {:ok, "10:45#{@nbsp}AM"}
 
       assert Tempo.to_string(~o"2025-08-28T10:45:30", format: :hms, locale: :en) ==
-               "10:45:30#{@nbsp}AM"
+               {:ok, "10:45:30#{@nbsp}AM"}
     end
 
     test "a date-only format renders the date of a value that also has a time" do
-      assert Tempo.to_string(~o"2025-08-28T10:45", format: :yMMMd, locale: :en) == "Aug 28, 2025"
-      assert Tempo.to_string(~o"2025-08-28T10:45", format: :y, locale: :en) == "2025"
+      assert Tempo.to_string(~o"2025-08-28T10:45", format: :yMMMd, locale: :en) ==
+               {:ok, "Aug 28, 2025"}
+
+      assert Tempo.to_string(~o"2025-08-28T10:45", format: :y, locale: :en) == {:ok, "2025"}
     end
 
     test "a format for an axis the value does not have falls back to the value" do
-      assert Tempo.to_string(~o"2025-08-28", format: :hm, locale: :en) == "Aug 28, 2025"
-      assert Tempo.to_string(~o"T10:45", format: :yMMMd, locale: :en) == "10:45#{@nbsp}AM"
+      assert Tempo.to_string(~o"2025-08-28", format: :hm, locale: :en) == {:ok, "Aug 28, 2025"}
+      assert Tempo.to_string(~o"T10:45", format: :yMMMd, locale: :en) == {:ok, "10:45#{@nbsp}AM"}
     end
 
     test "the default still expands a year and a month as closed intervals" do
-      assert Tempo.to_string(~o"2026", locale: :en) == "Jan#{@en_dash_sep}Dec 2026"
+      assert Tempo.to_string(~o"2026", locale: :en) == {:ok, "Jan#{@en_dash_sep}Dec 2026"}
 
       assert Tempo.to_string(~o"2026", format: :medium, locale: :en) ==
-               "Jan#{@en_dash_sep}Dec 2026"
+               {:ok, "Jan#{@en_dash_sep}Dec 2026"}
     end
 
     test "an explicit skeleton renders the value rather than expanding it" do
-      assert Tempo.to_string(~o"2026", format: :y, locale: :en) == "2026"
-      assert Tempo.to_string(~o"2026-08", format: :yMMM, locale: :en) == "Aug 2026"
+      assert Tempo.to_string(~o"2026", format: :y, locale: :en) == {:ok, "2026"}
+      assert Tempo.to_string(~o"2026-08", format: :yMMM, locale: :en) == {:ok, "Aug 2026"}
     end
 
     test "seconds appear only when the value carries them" do
       assert Tempo.to_string(~o"2025-08-28T10:45:30", locale: :en) ==
-               "Aug 28, 2025, 10:45:30#{@nbsp}AM"
+               {:ok, "Aug 28, 2025, 10:45:30#{@nbsp}AM"}
 
-      refute Tempo.to_string(~o"2025-08-28T10:45", locale: :en) =~ ":30"
-      refute Tempo.to_string(~o"2025-08-28T10:45", locale: :en) =~ ":00"
+      {:ok, minutes} = Tempo.to_string(~o"2025-08-28T10:45", locale: :en)
+      refute minutes =~ ":30"
+      refute minutes =~ ":00"
     end
   end
 end

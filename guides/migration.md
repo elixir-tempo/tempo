@@ -80,6 +80,8 @@ These keep their names and change their meaning:
 
 * **`Tempo.to_relative_string/2`** — counts calendar periods in the value's own calendar and on its own wall clock, and never in a unit finer than the value's own, where 1.x divided the seconds between two UTC instants by a mean month or year. It returns `{:ok, string}`, or an error where 1.x raised; `to_relative_string!/2` returns the string.
 
+* **`Tempo.to_string/2`** — returns `{:ok, string}`, or an error for a value it cannot render, where 1.x returned the string and raised; `to_string!/2` returns the string, and interpolating a value it cannot render writes its ISO 8601 form.
+
 ## Updating the dependency
 
 ```elixir
@@ -638,3 +640,17 @@ iex> Tempo.to_relative_string(~o"2027", from: ~o"2026-07-01")
 ```
 
 A zoned value finer than a day is measured from a zoned `:from`, and a floating one is an error, a `Tempo.FloatingTempoError`, where 1.x read it as UTC.
+
+## Formatting returns a tuple
+
+`Tempo.to_string/2` returns `{:ok, string}`, as `to_relative_string/2` does, and an error for a value it cannot render, where 1.x raised: an open interval, a recurrence of a duration and an interval set without an end have no last day to show. `to_string!/2` returns the string. Interpolation cannot return an error, so it writes such a value in its ISO 8601 form, where 1.x raised.
+
+```elixir
+iex> Tempo.to_string(~o"2026-06-15")
+{:ok, "Jun 15, 2026"}
+iex> {:error, %Tempo.IntervalEndpointsError{}} = Tempo.to_string(~o"2026-06-15/..")
+iex> "Open from #{~o"2026-06-15/.."}"
+"Open from 2026Y6M15D/.."
+```
+
+> *"The fifteenth of June is written Jun 15, 2026. A booking open from the fifteenth has no last day to write, so it is an error, and in a sentence it is written in ISO 8601."*
