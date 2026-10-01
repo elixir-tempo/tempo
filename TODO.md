@@ -56,6 +56,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **A week-based calendar's date in `to_string/2`** — Tempo hands Localize the day in its own calendar, which Localize writes from its fields: `~o"2026-W25-2"W` renders "Jun 2, 2026" for 16 June 2026. Blocked on Localize formatting a week-based calendar's date by the day it names (its TODO, 2026-10-01); Tempo then needs only a test.
 
+* [ ] **A span formatted with a skeleton** — Localize `2404ad84` takes a skeleton or a pattern for an interval, so `Tempo.to_string(~o"2026-06-15/2026-06-18", format: :yMMMd)` is "Jun 15 – 17, 2026" there, where the locked Localize returns a `DateTimeIntervalFormatError` (`:unknown_fields`). Add that test, and revisit `expandable_format?/1` in `lib/tempo/format.ex`, whose comment says interval formatting cannot honour a skeleton; its other reason, that `:y` asks for a year rather than its twelve months, still holds. Blocked on the Localize lock reaching `2404ad84` (it is at `b2b18bb`).
+
 ## Deferred
 
 * [ ] **Set algebra over open-ended windows** — a research project for later (user, 2026-09-28): how far union, intersection, difference, complement and the predicates go on the lazy sets an open-ended window gives, a test of the whole algebra. Questions in [plans/open-ended-set-algebra.md](plans/open-ended-set-algebra.md).
