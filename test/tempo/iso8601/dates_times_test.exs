@@ -19,7 +19,7 @@ defmodule Tempo.Parser.DatesTimes.Test do
 
     assert Tokenizer.tokenize("1985-04") == {:ok, {[date: [year: 1985, month: 4]], nil}}
     assert Tokenizer.tokenize("1985") == {:ok, {[date: [year: 1985]], nil}}
-    assert Tokenizer.tokenize("1985102") == {:ok, {[date: [year: 1985, day: 102]], nil}}
+    assert Tokenizer.tokenize("1985102") == {:ok, {[date: [year: 1985, day_of_year: 102]], nil}}
 
     assert Tokenizer.tokenize("1985W155") ==
              {:ok, {[date: [year: 1985, week: 15, day_of_week: 5]], nil}}
@@ -32,7 +32,7 @@ defmodule Tempo.Parser.DatesTimes.Test do
              {:ok, {[date: [year: 1985, week: 15, day_of_week: 1]], nil}}
 
     assert Tokenizer.tokenize("1985-W15") == {:ok, {[date: [year: 1985, week: 15]], nil}}
-    assert Tokenizer.tokenize("1985-102") == {:ok, {[date: [year: 1985, day: 102]], nil}}
+    assert Tokenizer.tokenize("1985-102") == {:ok, {[date: [year: 1985, day_of_year: 102]], nil}}
     assert Tokenizer.tokenize("W03") == {:ok, {[date: [week: 3]], nil}}
   end
 
@@ -40,15 +40,15 @@ defmodule Tempo.Parser.DatesTimes.Test do
     assert Tokenizer.tokenize("01M") == {:ok, {[date: [month: 1]], nil}}
     assert Tokenizer.tokenize("0001M") == {:ok, {[date: [month: 1]], nil}}
     assert Tokenizer.tokenize("1K") == {:ok, {[date: [day_of_week: 1]], nil}}
-    assert Tokenizer.tokenize("350O") == {:ok, {[date: [day: 350]], nil}}
+    assert Tokenizer.tokenize("350O") == {:ok, {[date: [day_of_year: 350]], nil}}
     assert Tokenizer.tokenize("16C") == {:ok, {[date: [century: 16]], nil}}
     assert Tokenizer.tokenize("-1985Y") == {:ok, {[date: [year: -1985]], nil}}
     assert Tokenizer.tokenize("1YB") == {:ok, {[date: [year: 0]], nil}}
     assert Tokenizer.tokenize("12YB") == {:ok, {[date: [year: -11]], nil}}
     assert Tokenizer.tokenize("-5D") == {:ok, {[date: [day: -5]], nil}}
     assert Tokenizer.tokenize("-3W") == {:ok, {[date: [week: -3]], nil}}
-    assert Tokenizer.tokenize("-7O") == {:ok, {[date: [day: -7]], nil}}
-    assert Tokenizer.tokenize("-306O") == {:ok, {[date: [day: -306]], nil}}
+    assert Tokenizer.tokenize("-7O") == {:ok, {[date: [day_of_year: -7]], nil}}
+    assert Tokenizer.tokenize("-306O") == {:ok, {[date: [day_of_year: -306]], nil}}
     assert Tokenizer.tokenize("-019") == {:ok, {[date: [decade: -19]], nil}}
     assert Tokenizer.tokenize("-1985") == {:ok, {[date: [year: -1985]], nil}}
     assert Tokenizer.tokenize("-12J") == {:ok, {[date: [decade: -12]], nil}}
@@ -306,14 +306,15 @@ defmodule Tempo.Parser.DatesTimes.Test do
      ]}
 
     assert Tokenizer.tokenize("1985102T232030") ==
-             {:ok, {[datetime: [year: 1985, day: 102, hour: 23, minute: 20, second: 30]], nil}}
+             {:ok,
+              {[datetime: [year: 1985, day_of_year: 102, hour: 23, minute: 20, second: 30]], nil}}
 
     assert Tokenizer.tokenize("1985102T232030Z") ==
              {:ok,
               {[
                  datetime: [
                    year: 1985,
-                   day: 102,
+                   day_of_year: 102,
                    hour: 23,
                    minute: 20,
                    second: 30,
@@ -326,7 +327,7 @@ defmodule Tempo.Parser.DatesTimes.Test do
               {[
                  datetime: [
                    year: 1985,
-                   day: 102,
+                   day_of_year: 102,
                    hour: 23,
                    minute: 20,
                    second: 30,
@@ -339,7 +340,7 @@ defmodule Tempo.Parser.DatesTimes.Test do
               {[
                  datetime: [
                    year: 1985,
-                   day: 102,
+                   day_of_year: 102,
                    hour: 23,
                    minute: 20,
                    second: 30,
@@ -454,7 +455,7 @@ defmodule Tempo.Parser.DatesTimes.Test do
               {[
                  datetime: [
                    year: 1985,
-                   day: 102,
+                   day_of_year: 102,
                    hour: 10,
                    minute: 15,
                    time_shift: [hour: 0]
@@ -467,7 +468,7 @@ defmodule Tempo.Parser.DatesTimes.Test do
      [
        datetime: [
          year: 1985,
-         day: 102,
+         day_of_year: 102,
          hour: 10,
          minute: 15,
          time_shift: [hour: 0]

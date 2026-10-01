@@ -71,6 +71,8 @@ defmodule Tempo.Explain do
   alias Tempo.IntervalSet
   alias Tempo.Iso8601.Unit
   alias Tempo.Mask
+  alias Tempo.RecurrenceSet
+  alias Tempo.RecurrenceSet.Conditional
 
   @doc """
   Return a structured `t:Tempo.Explanation.t/0` for any Tempo
@@ -181,6 +183,8 @@ defmodule Tempo.Explain do
 
   defp classify(%Tempo.Set{type: :all}), do: :all_of_set
   defp classify(%Tempo.Set{type: :one}), do: :one_of_set
+  defp classify(%RecurrenceSet{}), do: :recurrence_set
+  defp classify(%Conditional{}), do: :conditional_member
   defp classify(%Tempo.Duration{}), do: :duration
   defp classify(_), do: :unknown
 
@@ -193,6 +197,8 @@ defmodule Tempo.Explain do
   defp explain_parts(%Tempo.IntervalSet{} = set), do: interval_set_parts(set)
   defp explain_parts(%Tempo.Set{} = set), do: set_parts(set)
   defp explain_parts(%Tempo.Duration{} = d), do: duration_parts(d)
+  defp explain_parts(%RecurrenceSet{} = set), do: recurrence_set_parts(set)
+  defp explain_parts(%Conditional{} = conditional), do: conditional_parts(conditional)
 
   defp explain_parts(other) do
     [{:headline, "A value Tempo doesn't know how to describe: #{inspect(other)}."}]
@@ -248,9 +254,21 @@ defmodule Tempo.Explain do
       {:extended, extended_text(tempo)},
       {:calendar, calendar_text(tempo)},
       {:enumeration, enumeration_text(tempo)},
-      {:hint, "Convert it to an interval with `Tempo.to_interval/1`."}
+      {:hint, scalar_hint(tempo)}
     ]
     |> Enum.reject(fn {_, v} -> v in [nil, ""] end)
+  end
+
+  # A value converts to its span; one whose span depends on the year it does
+  # not have (a day of the year, the 29th of February) is placed in one first.
+  defp scalar_hint(%Tempo{} = tempo) do
+    case Tempo.to_interval(tempo) do
+      {:error, %Tempo.UnanchoredError{}} ->
+        "Place it in a year first with `Tempo.at/2` or `Tempo.on/2`."
+
+      _converted_or_refused ->
+        "Convert it to an interval with `Tempo.to_interval/1`."
+    end
   end
 
   defp scalar_headline(%Tempo{time: time} = tempo) do
@@ -292,25 +310,33 @@ defmodule Tempo.Explain do
   defp yearless_headline(:day_only, _m, d, _time),
     do: "Day #{d} of any month (no year or month — it recurs)."
 
+  defp yearless_headline(:day_of_year_only, _m, _d, time),
+    do: "Day #{find_unit(time, :day_of_year)} of any year (no year — it recurs)."
+
   defp yearless_headline(:none, _m, _d, time) do
     {unit, _scale} = Tempo.resolution(%Tempo{time: time})
     "A Tempo value at #{inspect(unit)} resolution."
   end
 
+  # The precision a value states, the first whose units it has. Those with no
+  # year at all — a recurring day-and-month (a birthday), a month, a bare day,
+  # a bare day of the year — are values in their own right, not partial
+  # anchored ones.
+  @precisions [
+    {[:year, :month, :day, :hour], :datetime},
+    {[:year, :month, :day], :date},
+    {[:year, :month], :month},
+    {[:year], :year},
+    {[:month, :day], :yearless_date},
+    {[:month], :yearless_month},
+    {[:day], :day_only},
+    {[:day_of_year], :day_of_year_only}
+  ]
+
   defp anchored_precision(time) do
-    cond do
-      all_present?(time, [:year, :month, :day, :hour]) -> :datetime
-      all_present?(time, [:year, :month, :day]) -> :date
-      all_present?(time, [:year, :month]) -> :month
-      all_present?(time, [:year]) -> :year
-      # No year at all: a recurring day-and-month (a birthday), a month,
-      # or a bare day. These are values in their own right, not partial
-      # anchored ones.
-      all_present?(time, [:month, :day]) -> :yearless_date
-      all_present?(time, [:month]) -> :yearless_month
-      all_present?(time, [:day]) -> :day_only
-      true -> :none
-    end
+    Enum.find_value(@precisions, :none, fn {units, precision} ->
+      all_present?(time, units) && precision
+    end)
   end
 
   defp all_present?(time, keys), do: Enum.all?(keys, &is_integer(find_unit(time, &1)))
@@ -823,6 +849,150 @@ defmodule Tempo.Explain do
   defp domain_hint(%Tempo.Set{}),
     do:
       "The domain's members are the window, so `Tempo.to_interval/1` lists its occurrences with no `:within` window."
+
+  ## ------------------------------------------------------------
+  ## Tempo.RecurrenceSet
+  ## ------------------------------------------------------------
+
+  # A recurrence set is its members' rules, each led by its name when its
+  # metadata gives one (a holiday's `:name`, an event's `:summary`).
+  defp recurrence_set_parts(%RecurrenceSet{members: [], metadata: metadata}) do
+    [{:headline, "An empty recurrence set."}, set_metadata_part(metadata)]
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp recurrence_set_parts(%RecurrenceSet{members: members, metadata: metadata}) do
+    count = length(members)
+
+    previews =
+      members
+      |> Enum.take(3)
+      |> Enum.with_index(1)
+      |> Enum.map(fn {member, index} -> {:member, "#{index}. #{member_rule_phrase(member)}."} end)
+
+    more = if count > 3, do: [{:member, "… and #{count - 3} more."}], else: []
+
+    [{:headline, "A recurrence set of #{count} member#{if count == 1, do: "", else: "s"}."}] ++
+      previews ++
+      more ++
+      List.wrap(set_metadata_part(metadata)) ++
+      [{:hint, "List its occurrences in a window: `Tempo.to_interval(set, within: ~o\"2026\")`."}]
+  end
+
+  # A member that depends on the set's other members, explained on its own.
+  defp conditional_parts(%Conditional{} = conditional) do
+    [
+      {:headline, "A recurrence-set member kept or moved by the set's other members."},
+      {:member, "#{member_rule_phrase(conditional)}."},
+      {:hint, "Add it to a `Tempo.RecurrenceSet`, which resolves it against its other members."}
+    ]
+  end
+
+  defp member_rule_phrase(member) do
+    case member_name(member) do
+      nil -> member |> rule_phrase() |> capitalised()
+      name -> "#{name}: #{rule_phrase(member)}"
+    end
+  end
+
+  defp capitalised(<<first::utf8, rest::binary>>), do: String.upcase(<<first::utf8>>) <> rest
+  defp capitalised(text), do: text
+
+  defp member_name(%Conditional{metadata: metadata, member: member}),
+    do: name_in(metadata) || member_name(member)
+
+  defp member_name(%{metadata: metadata}), do: name_in(metadata)
+  defp member_name(_member), do: nil
+
+  defp name_in(%{name: name}) when is_binary(name), do: name
+  defp name_in(%{summary: summary}) when is_binary(summary), do: summary
+  defp name_in(_metadata), do: nil
+
+  # A recurrence written with a start and an end: its first occurrence, and the
+  # rest back to back.
+  defp rule_phrase(%Tempo.Interval{
+         recurrence: recurrence,
+         from: %Tempo{} = from,
+         to: %Tempo{} = to,
+         duration: nil
+       })
+       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
+    "#{render_endpoint(from)} to #{render_endpoint(to)}, then back to back#{times_phrase(recurrence)}"
+  end
+
+  # A recurrence written with a duration and an end: its last occurrence ends
+  # there.
+  defp rule_phrase(%Tempo.Interval{
+         recurrence: recurrence,
+         from: :undefined,
+         to: %Tempo{} = to,
+         duration: %Tempo.Duration{time: cadence}
+       })
+       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
+    "#{cadence_phrase(cadence)}, ending #{render_endpoint(to)}#{times_phrase(recurrence)}"
+  end
+
+  defp rule_phrase(
+         %Tempo.Interval{recurrence: recurrence, duration: %Tempo.Duration{time: cadence}} =
+           interval
+       )
+       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
+    selection = selection_of(interval.repeat_rule)
+
+    [
+      selection && selection_prose(selection),
+      cadence_phrase(cadence),
+      start_phrase(interval.from),
+      until_phrase(interval)
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join(", ")
+    |> Kernel.<>(times_phrase(recurrence))
+  end
+
+  defp rule_phrase(%Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to}),
+    do: "#{render_endpoint(from)} to #{render_endpoint(to)}"
+
+  defp rule_phrase(%Tempo.Interval{} = interval),
+    do: interval |> interval_parts() |> headline_phrase()
+
+  defp rule_phrase(%Tempo{} = value), do: render_endpoint(value)
+
+  defp rule_phrase(%RecurrenceSet{members: members}) do
+    count = length(members)
+    "a recurrence set of #{count} member#{if count == 1, do: "", else: "s"}"
+  end
+
+  defp rule_phrase(%Conditional{member: member, to_next: %Tempo{}}),
+    do: "#{rule_phrase(member)}, moved when it falls on another member's occurrence"
+
+  defp rule_phrase(%Conditional{member: member}),
+    do:
+      "#{rule_phrase(member)}, kept only when the days around it fall on other members' occurrences"
+
+  defp rule_phrase(other), do: inspect(other)
+
+  defp cadence_phrase([{unit, 1}]), do: "every #{unit}"
+  defp cadence_phrase(cadence), do: "every #{duration_prose(cadence)}"
+
+  defp start_phrase(%Tempo{} = from), do: "from #{render_endpoint(from)}"
+  defp start_phrase(%Tempo.Set{} = domain), do: "in #{domain_prose(domain)}"
+  defp start_phrase(_open), do: nil
+
+  defp until_phrase(%Tempo.Interval{recurrence: :infinity, to: %Tempo{} = until}),
+    do: "until #{render_endpoint(until)}"
+
+  defp until_phrase(_interval), do: nil
+
+  defp times_phrase(count) when is_integer(count), do: ", #{count} times"
+  defp times_phrase(_unbounded), do: ""
+
+  # An interval's own headline, as a phrase within a sentence.
+  defp headline_phrase(parts) do
+    {:headline, headline} = List.keyfind(parts, :headline, 0)
+    headline = String.trim_trailing(headline, ".")
+    String.downcase(String.first(headline)) <> String.slice(headline, 1..-1//1)
+  end
 
   ## ------------------------------------------------------------
   ## Tempo.Duration

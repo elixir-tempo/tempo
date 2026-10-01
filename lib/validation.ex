@@ -325,6 +325,20 @@ defmodule Tempo.Validation do
     end
   end
 
+  # A day of the year (ISO 8601-2 §4.3.4) after its year is that year's
+  # ordinal day, as a monthless day after a year is. A set of them stays a
+  # day of the year, each resolved when the set is expanded.
+  def resolve([{:year, year}, {:day_of_year, day} | rest], calendar)
+      when is_integer(year) and is_number(day),
+      do: resolve([{:year, year}, {:day, day} | rest], calendar)
+
+  def resolve([{:year, year}, {:day_of_year, days}], calendar)
+      when is_integer(year) and (is_list(days) or is_struct(days, Range)) do
+    with {:ok, days} <- conform(days, 1..calendar.days_in_year(year)) do
+      [{:year, year}, {:day_of_year, days}]
+    end
+  end
+
   def resolve(
         [{:year, year}, {:day, {:group, %Range{} = days_of_year}}, {:day, day} | rest],
         calendar
@@ -527,18 +541,19 @@ defmodule Tempo.Validation do
   # `{2020,2021}Y2M{1..-1}D` could never resolve at all.
   def resolve([{:month, month}, {:day, days} | rest], calendar)
       when is_integer(month) and (is_list(days) or is_struct(days, Range)) do
-    case max_day_in_month(calendar, month) do
-      {:ok, max_day} ->
-        with {:ok, days} <- conform(days, 1..max_day),
-             rest when is_list(rest) <- resolve(rest, calendar) do
-          [{:month, month}, {:day, days} | rest]
-        end
-
-      :unknown ->
-        with rest when is_list(rest) <- resolve(rest, calendar) do
-          [{:month, month}, {:day, days} | rest]
-        end
+    with {:month, ^month} <- resolve({:month, month}, calendar) do
+      yearless_month_and_day(month, days, rest, calendar)
     end
+  end
+
+  # A day of the year counts from its year's first day, so it never follows a
+  # month.
+  def resolve([{:month, _month}, {:day_of_year, _day} | _rest], _calendar) do
+    {:error,
+     InvalidDateError.exception(
+       reason:
+         "A day of the year (O) counts from the first day of its year, so it cannot follow a month."
+     )}
   end
 
   # A bare (yearless) month + integer day is a partial date — a
@@ -550,17 +565,8 @@ defmodule Tempo.Validation do
   # prove it impossible.
   def resolve([{:month, month}, {:day, day} | rest], calendar)
       when is_integer(month) and is_integer(day) do
-    case max_day_in_month(calendar, month) do
-      {:ok, max_day} ->
-        with {:ok, day} <- conform(day, 1..max_day),
-             rest when is_list(rest) <- resolve(rest, calendar) do
-          [{:month, month}, {:day, day} | rest]
-        end
-
-      :unknown ->
-        with rest when is_list(rest) <- resolve(rest, calendar) do
-          [{:month, month}, {:day, day} | rest]
-        end
+    with {:month, ^month} <- resolve({:month, month}, calendar) do
+      yearless_month_and_day(month, day, rest, calendar)
     end
   end
 
@@ -778,6 +784,20 @@ defmodule Tempo.Validation do
     end
   end
 
+  # A unit with nothing above it to bound it — a day of no month, a day of no
+  # year, a month or a week of no year — names no time at 0, since each counts
+  # from 1 (or back from the end when negative). A month is no further from
+  # either end than the most months a year of its calendar has; a day and a
+  # week are bounded once they have a year.
+  def resolve({unit, value} = component, calendar)
+      when unit in [:day, :day_of_year, :month, :week, :calendar_week] do
+    cond do
+      names_zero?(value) -> {:error, zeroth_error(unit)}
+      unit == :month -> bounded_months(component, calendar)
+      true -> component
+    end
+  end
+
   def resolve(other, _calendar) do
     other
   end
@@ -906,6 +926,84 @@ defmodule Tempo.Validation do
       _unbounded -> :unknown
     end
   end
+
+  # A yearless month's day, bounded by the month's longest length across years
+  # (see `max_day_in_month/2`). A month whose length cannot be bounded without
+  # a year is left as it is, since Tempo cannot prove the day impossible.
+  defp yearless_month_and_day(month, day, rest, calendar) do
+    case max_day_in_month(calendar, month) do
+      {:ok, max_day} ->
+        with {:ok, day} <- conform(day, 1..max_day),
+             rest when is_list(rest) <- resolve(rest, calendar) do
+          [{:month, month}, {:day, day} | rest]
+        end
+
+      :unknown ->
+        with rest when is_list(rest) <- resolve(rest, calendar) do
+          [{:month, month}, {:day, day} | rest]
+        end
+    end
+  end
+
+  defp names_zero?(0), do: true
+  defp names_zero?(%Range{first: first, last: last}), do: first == 0 or last == 0
+  defp names_zero?(values) when is_list(values), do: Enum.any?(values, &names_zero?/1)
+  defp names_zero?(_value), do: false
+
+  defp zeroth_error(unit) do
+    InvalidDateError.exception(
+      value: 0,
+      reason:
+        "There is no #{zeroth_noun(unit)} 0: each counts from 1, or back from the end when negative."
+    )
+  end
+
+  defp zeroth_noun(:day_of_year), do: "day of the year"
+  defp zeroth_noun(:calendar_week), do: "week"
+  defp zeroth_noun(unit), do: Atom.to_string(unit)
+
+  defp bounded_months({:month, months} = component, calendar) do
+    case max_months_in_year(calendar) do
+      {:ok, max} ->
+        if months_within?(months, max),
+          do: component,
+          else:
+            {:error,
+             InvalidDateError.exception(
+               unit: :month,
+               value: months,
+               valid_range: 1..max,
+               calendar: calendar
+             )}
+
+      :unknown ->
+        component
+    end
+  end
+
+  # The most months a year of the calendar has, which `months_in_year/0`
+  # answers without a year: a count, or the counts a lunisolar calendar's
+  # years run over (12 or 13 for the Hebrew calendar).
+  defp max_months_in_year(calendar) do
+    if Code.ensure_loaded?(calendar) and function_exported?(calendar, :months_in_year, 0),
+      do: max_count(calendar.months_in_year()),
+      else: :unknown
+  end
+
+  defp max_count(count) when is_integer(count) and count > 0, do: {:ok, count}
+  defp max_count({:ambiguous, %Range{first: first, last: last}}), do: {:ok, max(first, last)}
+  defp max_count({:ambiguous, [_ | _] = counts}), do: {:ok, Enum.max(counts)}
+  defp max_count(_undefined), do: :unknown
+
+  defp months_within?(month, max) when is_integer(month), do: abs(month) <= max
+
+  defp months_within?(%Range{first: first, last: last}, max),
+    do: abs(first) <= max and abs(last) <= max
+
+  defp months_within?(months, max) when is_list(months),
+    do: Enum.all?(months, &months_within?(&1, max))
+
+  defp months_within?(_month, _max), do: true
 
   def year_week_day(year, week, day, rest, :month, calendar) do
     case date_from_iso_week(year, week, day, calendar) do

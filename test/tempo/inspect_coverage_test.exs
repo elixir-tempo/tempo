@@ -71,7 +71,7 @@ defmodule Tempo.InspectCoverageTest do
     end
 
     test "an ordinal-day set" do
-      assert inspect(Tempo.from_iso8601!("2020Y{100,200}O")) == ~s|~o"2020Y{100,200}D"|
+      assert inspect(Tempo.from_iso8601!("2020Y{100,200}O")) == ~s|~o"2020Y{100,200}O"|
     end
 
     test "a qualified second" do

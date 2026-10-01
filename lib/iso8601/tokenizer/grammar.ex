@@ -673,13 +673,13 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     ])
   end
 
-  # Day of year
+  # Day of year (ISO 8601-2 §4.3.4), its own unit: a day of the month is `D`.
 
   def implicit_day_of_year do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :group}),
-      parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all}) |> unwrap_and_tag(:day),
-      positive_integer(3) |> unwrap_and_tag(:day)
+      parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all}) |> unwrap_and_tag(:day_of_year),
+      positive_integer(3) |> unwrap_and_tag(:day_of_year)
     ])
   end
 
@@ -687,7 +687,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :group}),
       parsec({Tempo.Iso8601.Tokenizer.Set, :selection}),
-      maybe_negative_number_or_integer_set("O", :day, min: 1)
+      maybe_negative_number_or_integer_set("O", :day_of_year, min: 1)
     ])
   end
 

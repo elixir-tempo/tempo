@@ -170,18 +170,12 @@ defmodule Tempo.Math do
     end
   end
 
+  # The day after a day of the year depends on how long its year is, so one
+  # with no year cannot step.
   def add_unit(time, :day_of_year, calendar) when is_list(time) do
-    year = Keyword.fetch!(time, :year)
-    day_of_year = Keyword.fetch!(time, :day_of_year)
-    days_in_year = calendar.days_in_year(year)
-
-    if day_of_year < days_in_year do
-      {:ok, Keyword.replace!(time, :day_of_year, day_of_year + 1)}
-    else
-      {:ok,
-       time
-       |> Keyword.replace!(:year, year + 1)
-       |> Keyword.replace!(:day_of_year, 1)}
+    case Keyword.fetch(time, :year) do
+      {:ok, year} when is_integer(year) -> next_day_of_year(time, year, calendar)
+      _no_year -> {:error, :unanchored}
     end
   end
 
@@ -202,6 +196,20 @@ defmodule Tempo.Math do
     raise ArgumentError,
           "Cannot increment a Tempo at #{inspect(unit)} resolution — " <>
             "no increment rule is defined for this unit."
+  end
+
+  defp next_day_of_year(time, year, calendar) do
+    day_of_year = Keyword.fetch!(time, :day_of_year)
+    days_in_year = calendar.days_in_year(year)
+
+    if day_of_year < days_in_year do
+      {:ok, Keyword.replace!(time, :day_of_year, day_of_year + 1)}
+    else
+      {:ok,
+       time
+       |> Keyword.replace!(:year, year + 1)
+       |> Keyword.replace!(:day_of_year, 1)}
+    end
   end
 
   defp add_week_anchored(time, calendar) do
@@ -791,6 +799,11 @@ defmodule Tempo.Math do
           | Tempo.Set.t()
           | Tempo.IntervalSet.t()
           | {:error, Exception.t() | :unanchored}
+  # A day of the year with no year has no day to count to: that depends on how
+  # long its year is.
+  def add(%Tempo{time: [{:day_of_year, _day} | _units]} = tempo, %Tempo.Duration{} = duration),
+    do: {:error, UnanchoredError.exception(value: tempo, duration: duration)}
+
   def add(%Tempo{time: time} = tempo, %Tempo.Duration{time: duration_time} = duration) do
     case unit_the_rule_lacks(time, duration_time) do
       nil -> add_to_value(tempo, duration)

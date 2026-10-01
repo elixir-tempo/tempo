@@ -5,6 +5,7 @@ defmodule Tempo.Explain.Test do
   alias Tempo.Explain
   alias Tempo.ICal
   alias Tempo.IntervalSet
+  alias Tempo.RecurrenceSet
   alias Tempo.RRule
 
   # Tests for `Tempo.Explain.explain/1` — structured prose
@@ -371,6 +372,56 @@ defmodule Tempo.Explain.Test do
       {:ok, s} = Tempo.from_iso8601("[2020Y,2021Y,2022Y]")
       assert Explain.explain(s).kind == :one_of_set
       assert Tempo.explain(s) =~ "one of"
+    end
+  end
+
+  describe "Tempo.RecurrenceSet" do
+    test "a recurrence set is its members' rules, led by their names" do
+      christmas = Tempo.put_metadata(~o"R/../P1Y/FL12M25DN", %{name: "Christmas Day"})
+      {:ok, holidays} = RecurrenceSet.new([christmas, ~o"R/../P1Y/FL1M1DN"])
+
+      assert Explain.explain(holidays).kind == :recurrence_set
+
+      assert Tempo.explain(holidays) ==
+               """
+               A recurrence set of 2 members.
+               1. Christmas Day: in December, on the 25th, every year.
+               2. In January, on the 1st, every year.
+               List its occurrences in a window: `Tempo.to_interval(set, within: ~o"2026")`.\
+               """
+    end
+
+    test "each kind of member is described, three of them in full" do
+      {:ok, set} =
+        RecurrenceSet.new([
+          ~o"R5/2026-06-15/P1D",
+          ~o"R2/2026-06-15/2026-06-20",
+          ~o"2026-06-15",
+          ~o"R5/P1D/2026-06-20"
+        ])
+
+      prose = Tempo.explain(set)
+
+      assert prose =~ "1. Every day, from 2026-06-15, 5 times."
+      assert prose =~ "2. 2026-06-15 to 2026-06-20, then back to back, 2 times."
+      assert prose =~ "3. 2026-06-15."
+      assert prose =~ "… and 1 more."
+      refute prose =~ "doesn't know how to describe"
+    end
+
+    test "an empty recurrence set says so" do
+      {:ok, empty} = RecurrenceSet.new([])
+      assert Tempo.explain(empty) == "An empty recurrence set."
+    end
+
+    test "a conditional member is described on its own" do
+      christmas = Tempo.put_metadata(~o"R/../P1Y/FL12M25DN", %{name: "Christmas Day"})
+      moved = RecurrenceSet.move_when(christmas, falls_on: %{type: :public}, to_next: ~o"1K")
+
+      assert Explain.explain(moved).kind == :conditional_member
+
+      assert Tempo.explain(moved) =~
+               "Christmas Day: in December, on the 25th, every year, moved when it falls on another member's occurrence."
     end
   end
 

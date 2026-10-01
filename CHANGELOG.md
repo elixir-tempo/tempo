@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A day of the year that does not resolve to a date (`350O`, `2020Y{100,200}O`) is its own unit, `:day_of_year`, written back as `O`, where it was a `:day` written `D`, and a day of the year never follows a month. A `D` with no month is still read as a day of the year where a year resolves it: `2026Y32D` is 1 February.
+
 Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name that changed to its 2.0 form, and the [migration guide](guides/migration.md) shows each change with examples.
 
 | 1.x | 2.0 |
@@ -200,6 +202,10 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* A day, a day of the year, a month or a week of 0 is refused, and a month with no year is no further from either end than the most months a year of its calendar has (`13M` is refused in the Gregorian calendar, allowed in the Hebrew), where they parsed.
+
+* `explain/1` describes a `Tempo.RecurrenceSet` member by member, each led by its name (a holiday's `:name`, an event's `:summary`), and a conditional member on its own, where it said it did not know how to describe them.
 
 * `Tempo.to_interval/2` expands a recurrence written with a start and an end, or a duration and an end (ISO 8601-1 §5.6.1), to its occurrences, where it returned it unexpanded, and `R0` to an empty set. `explain/1`, `duration/1` and `Tempo.RRule.to_string/1` read both forms as recurrences, and `explain/1` an RRULE `UNTIL` as bounded.
 

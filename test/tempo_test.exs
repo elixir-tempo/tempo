@@ -57,10 +57,11 @@ defmodule TempoTest do
   end
 
   test "tempo merging" do
-    assert {:error, %Tempo.InvalidDateError{value: 50} = e} =
-             Tempo.merge(~o"50M", ~o"2022Y")
+    assert {:error, %Tempo.InvalidDateError{value: 29} = e} =
+             Tempo.merge(~o"2M29D", ~o"2026Y")
 
-    assert Exception.message(e) =~ "50 is not valid"
+    assert Exception.message(e) =~ "29 is not valid"
+    assert Tempo.merge(~o"2M29D", ~o"2024Y") == ~o"2024Y2M29D"
 
     assert Tempo.merge(~o"12M", ~o"2022Y") == ~o"2022Y12M"
     assert Tempo.merge(~o"12M", ~o"2022Y1M") == ~o"2022Y1M"

@@ -54,7 +54,8 @@ defmodule Tempo.Iso8601.ParserTest do
 
       assert {:ok, [date: [year: 2020, week: 28]], "", _, _, _} = Tokenizer.iso8601("2020W28")
 
-      assert {:ok, [date: [year: 2020, day: 193]], "", _, _, _} = Tokenizer.iso8601("2020193")
+      assert {:ok, [date: [year: 2020, day_of_year: 193]], "", _, _, _} =
+               Tokenizer.iso8601("2020193")
 
       assert {:ok, [date: [year: 2020, month: 11]], "", _, _, _} = Tokenizer.iso8601("2020-11")
     end

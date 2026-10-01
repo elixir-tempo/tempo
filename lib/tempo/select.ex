@@ -48,7 +48,7 @@ defmodule Tempo.Select do
   | `%Tempo{day_of_week: [...]}` | `Tempo.select(m, Tempo.workdays(:US))` | Day-of-week list — every matching weekday in the base |
   | `t:Tempo.Workdays.t/0` | `Tempo.select(m, Tempo.workdays(:AU, except: holidays))` | The workdays no holiday falls on |
   | ISO 8601-2 selection | `Tempo.select(y, ~o"L(easter)eN")` | A computed event, a §12.10 window or any `L…N`, applied in each period at the period's own cadence; units before it narrow the period first (`~o"4ML1K1IN"`) |
-  | `%Tempo{day: N}` (ordinal) | `Tempo.select(y, ~o"10O")` | Ordinal day in the year — the Nth day (ISO 8601-2 `O` suffix) |
+  | `%Tempo{day_of_year: N}` (ordinal) | `Tempo.select(y, ~o"10O")` | Ordinal day in the year — the Nth day (ISO 8601-2 `O` suffix) |
   | Negative components | `Tempo.select(y, ~o"-1M")` | ISO 8601-2 §4.4.1 — count from the end of the containing unit |
   | `%Tempo.Interval{}` or list | `Tempo.select(days, ~o"T09/T17")` | Project as a **span** — coarser units from the base, finer from each endpoint, half-open `[from, to)` |
   | Interval duration form | `Tempo.select(days, ~o"T09/PT7H36M")` | Span from the projected start plus the duration |

@@ -82,6 +82,8 @@ These keep their names and change their meaning:
 
 * **`Tempo.to_string/2`** — returns `{:ok, string}`, or an error for a value it cannot render, where 1.x returned the string and raised; `to_string!/2` returns the string, and interpolating a value it cannot render writes its ISO 8601 form. Several spans are joined as a list in the locale, where 1.x used commas.
 
+* **Ordinal days** — a day of the year that does not resolve to a date (`350O`, `2020Y{100,200}O`) holds a `:day_of_year`, written back as `O`, where 1.x held a `:day` written `D`, so a match on `[day: _]` for one now matches `[day_of_year: _]`.
+
 ## Updating the dependency
 
 ```elixir

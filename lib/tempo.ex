@@ -9889,11 +9889,9 @@ defmodule Tempo do
   Return a multi-line prose explanation of any Tempo value —
   what it is, what it spans, and how to work with it.
 
-  Returns a plain string suitable for iex. For structured output
-  that renderers can style (ANSI, HTML),
-  use `Tempo.Explain.explain/1` directly and pick a formatter.
-  ### Examples
+  Returns a plain string suitable for iex. For structured output that renderers can style (ANSI, HTML), use `Tempo.Explain.explain/1` directly and pick a formatter. A recurrence set is described member by member, each led by its name.
 
+  ### Examples
 
       iex> Tempo.explain(~o"2026-06") |> String.split("\\n") |> hd()
       "June 2026."

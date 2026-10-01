@@ -20,7 +20,7 @@ ISO 8601 lets you write the *same* value more than one way. The choice runs on t
 
 * **Implicit form** — a component's identity is implied by its **position**. In `2022-06-15`, `06` is the month because it sits in the month slot. This is the everyday form, defined in ISO 8601 Part 1.
 
-* **Explicit form** — each component carries a **designator letter** naming it: `Y` year, `M` month, `D` day, `W` week, and after the `T`, `H` hour, `M` minute, `S` second. `2022Y6M15D` needs no fixed positions because every field is labelled. Defined in ISO 8601 Part 2.
+* **Explicit form** — each component carries a **designator letter** naming it: `Y` year, `M` month, `D` day, `O` day of the year, `W` week, and after the `T`, `H` hour, `M` minute, `S` second. `2022Y6M15D` needs no fixed positions because every field is labelled. Defined in ISO 8601 Part 2.
 
 **Axis 2 — separators (the *format*; applies to the implicit form only).**
 
@@ -106,6 +106,7 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 | **Exponents on year** | `2018E3` style — parsed by `numbers.ex` `exponent()` |
 | **Significant-digit annotations** (short form) | `1950S2`, `-1859S5`, `Y3388E2S3` |
 | **Year-zero** (`0000`, `-0000`) | Parses as year 0. Interpretation per astronomical convention (year 0 = 1 BCE) is the caller's responsibility. |
+| **Day of the year** (§4.3.4) | `350O`, `1985Y102O` (12 April 1985) |
 
 ### Not supported
 
@@ -114,6 +115,12 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 | Cross-endpoint semantic validation of intervals | `2012-24/2012-21` (winter before spring) | Parses at the syntax level; a semantic ordering check across the two endpoints is not currently enforced, so a small number of syntactically-valid but semantically-inverted intervals are accepted. |
 
 All other EDTF Level 2 features — including wide-range exponent years (`Y17E8`, `Y-170000002`) and long-year significant-digit annotations (`Y171010000S3`) — are supported.
+
+### Day of the year (ISO 8601-2 §4.3.4)
+
+`O` is the day of the year and `D` the day of the month, and Tempo keeps them apart: a day of the year writes back as `O`, and it never follows a month, so `Tempo.at(~o"3M", ~o"2O")` is an error. A `D` with no month before it reads as a day of the year wherever a year resolves it — `1985Y102D` is 12 April, as `1985Y102O` is, and `Tempo.select(~o"2026", ~o"-1D")` is 31 December — and as a day of a month elsewhere: `Tempo.at(~o"3M", ~o"2D")` is 2 March.
+
+Without a year, a day, a day of the year or a week is checked only against what every year shares: none is 0. A month is no further from either end than the most months a year of its calendar has, so `13M` is refused in the Gregorian calendar and allowed in the Hebrew. A day is bounded once it has a year: `366O` is 31 December in a leap year and an error in a common one.
 
 ### Component qualification (ISO 8601-2 §8)
 

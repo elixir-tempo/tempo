@@ -419,8 +419,8 @@ defmodule Tempo.Select.Test do
     end
 
     test "`-1O` (ordinal-day) on a year base selects the last day of the year" do
-      # Parser stores `~o"-1O"` with `:day` key; the resolution is
-      # the same as `~o"-1D"` on a year base — last day of year.
+      # `~o"-1O"` is a day of the year, which on a year base resolves
+      # as `~o"-1D"` does — the last day of the year.
       {:ok, set} = Tempo.select(~o"2026", ~o"-1O")
       [iv] = IntervalSet.members(set)
 

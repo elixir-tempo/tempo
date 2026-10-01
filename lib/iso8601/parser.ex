@@ -475,6 +475,8 @@ defmodule Tempo.Iso8601.Parser do
   end
 
   defp alternative_format_duration(components) do
+    components = Enum.map(components, &duration_days/1)
+
     if Enum.all?(components, &alternative_format_component?/1) do
       second_with_fraction(components)
     else
@@ -493,6 +495,11 @@ defmodule Tempo.Iso8601.Parser do
        do: true
 
   defp alternative_format_component?(_component), do: false
+
+  # An ordinal date's day of the year is a number of days in a duration
+  # (`P0002-178T22:33:55` is `P2Y178DT22H33M55S`).
+  defp duration_days({:day_of_year, days}), do: {:day, days}
+  defp duration_days(component), do: component
 
   # A fractional second is the second the designator form writes
   # (`PT55.5S`), so both forms build the same duration.

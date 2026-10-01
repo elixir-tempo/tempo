@@ -4,10 +4,6 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ## Open
 
-* [ ] **A day with no month parses past 31** — `~o"32D"` and `~o"166D"` parse, where `~o"6M31D"` is checked against June's 30 days; `to_string/2` renders the second as "166". A day of no month should be bounded by the longest month, 31. Found 2026-10-01.
-
-* [ ] **`explain/1` does not describe a recurrence set** — `Tempo.explain/1` on a `Tempo.RecurrenceSet` says it is "a value Tempo doesn't know how to describe". Found 2026-10-01.
-
 * [ ] **Livebooks install 2.0 at the release** — `getting-started`, `tempo_tour`, `scheduling-workbook` and `uncertain-dates-workbook` install `{:ex_tempo, "~> 1.6"}` and the Melbourne deck `~> 1.6.3`, while their code uses the 2.0 names: at the 2.0.0 release each installs `~> 2.0`, as `everyday-holidays` already does.
 
 * [ ] **A grouped endpoint raises when compared** — a hand-built interval whose endpoint holds a group (`~o"20C"`, `~o"2022Y1M2G3DU"`) raises in `Compare.to_utc_seconds/1` when measured or compared; `to_interval/1` converts such values first, the other entry points do not.
@@ -65,6 +61,10 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **Set algebra over open-ended windows** — a research project for later (user, 2026-09-28): how far union, intersection, difference, complement and the predicates go on the lazy sets an open-ended window gives, a test of the whole algebra. Questions in [plans/open-ended-set-algebra.md](plans/open-ended-set-algebra.md).
 
 ## Done
+
+* [x] **Units with nothing above them, and the day of the year** — `O` is its own unit, `:day_of_year`, written back as `O` and never after a month; a `D` with no month reads as a day of the year where a year resolves it. 0 is refused for a day, a day of the year, a month or a week, and a bare month is bounded by `months_in_year/0`; a bare day or week has no upper bound until it has a year. 2026-10-01.
+
+* [x] **`explain/1` describes a recurrence set** — member by member, each led by its name, and a conditional member on its own. 2026-10-01.
 
 * [x] **What `to_string/2` renders for a value naming several spans** — a recurrence however written, a mask, group, set, selection, one-of set (as alternatives) and recurrence set render as the spans `to_interval/2` gives, joined as a list in the locale, with `:within` for one with no end; a duration keeps its fraction of a second. `to_interval/2` expands `Rn/start/end` and `Rn/duration/end` and narrows partial masks. 2026-10-01.
 

@@ -116,7 +116,7 @@ defmodule Tempo.Format do
   defp render(%Tempo{} = tempo, options, window) do
     cond do
       not one_span?(tempo) -> tempo |> Tempo.to_interval(window) |> render_materialised(options)
-      week_without_year?(tempo) -> {:error, week_without_year_error(tempo)}
+      unplaced_without_year?(tempo) -> {:error, unplaced_without_year_error(tempo)}
       true -> render_value(tempo, options)
     end
   end
@@ -260,14 +260,18 @@ defmodule Tempo.Format do
   defp one_value?({_unit, {value, meta}}) when is_integer(value) and is_list(meta), do: true
   defp one_value?(_component), do: false
 
-  # A week or a day of the week with no year has no date for Localize to show.
-  defp week_without_year?(%Tempo{time: time}) do
+  # A week, a day of the week or a day of the year with no year has no date for
+  # Localize to show.
+  defp unplaced_without_year?(%Tempo{time: time}) do
     not Keyword.has_key?(time, :year) and
-      (Keyword.has_key?(time, :week) or Keyword.has_key?(time, :day_of_week))
+      Enum.any?([:week, :day_of_week, :day_of_year], &Keyword.has_key?(time, &1))
   end
 
-  defp week_without_year_error(tempo) do
-    UnanchoredError.exception(operation: "render a week or a day of the week", value: tempo)
+  defp unplaced_without_year_error(tempo) do
+    UnanchoredError.exception(
+      operation: "render a week, a day of the week or a day of the year",
+      value: tempo
+    )
   end
 
   # Convert a Tempo.Duration (keyword-list time) into a
