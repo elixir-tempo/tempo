@@ -714,6 +714,16 @@ defmodule Tempo.Iso8601.Parser do
     %{tempo | calendar: calendar}
   end
 
+  # A recurrence's domain counts Gregorian years, as a holiday's year gates do,
+  # whatever calendar its selection is in: the years gate the occurrences that
+  # fall in them. The domain keeps its own calendar.
+  defp put_calendar(
+         %Tempo.Interval{from: %Tempo.Set{}, to: to, repeat_rule: repeat_rule} = interval,
+         calendar
+       ) do
+    %{interval | to: put_calendar(to, calendar), repeat_rule: put_calendar(repeat_rule, calendar)}
+  end
+
   defp put_calendar(
          %Tempo.Interval{from: from, to: to, repeat_rule: repeat_rule} = interval,
          calendar
@@ -728,6 +738,20 @@ defmodule Tempo.Iso8601.Parser do
         to: put_calendar(to, calendar),
         repeat_rule: put_calendar(repeat_rule, calendar)
     }
+  end
+
+  # A set has no calendar of its own: each member, each end of a range and
+  # each excluded member is a value in the calendar the set is written for.
+  defp put_calendar(%Tempo.Set{set: members, except: except} = set, calendar) do
+    %{
+      set
+      | set: Enum.map(members, &put_calendar(&1, calendar)),
+        except: Enum.map(except, &put_calendar(&1, calendar))
+    }
+  end
+
+  defp put_calendar(%Tempo.Range{first: first, last: last} = range, calendar) do
+    %{range | first: put_calendar(first, calendar), last: put_calendar(last, calendar)}
   end
 
   defp put_calendar(other, _calendar) do

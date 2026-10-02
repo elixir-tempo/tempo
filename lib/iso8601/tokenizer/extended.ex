@@ -211,8 +211,24 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
     end
   end
 
+  # A set's member, or one it excludes, may be an interval, whose endpoints
+  # carry their suffixes as a top-level interval's do.
+  defp validate_token({set, members})
+       when set in [:all_of, :one_of, :except] and is_list(members) do
+    with {:ok, members} <- reduce_while_ok(members, &validate_token/1) do
+      {:ok, {set, members}}
+    end
+  end
+
   defp validate_token(other) do
     {:ok, other}
+  end
+
+  # A recurrence's domain is a set, read as one.
+  defp validate_interval_part({:domain_set, members}) when is_list(members) do
+    with {:ok, members} <- reduce_while_ok(members, &validate_token/1) do
+      {:ok, {:domain_set, members}}
+    end
   end
 
   defp validate_interval_part({tag, inner}) when tag in [:date, :datetime, :time_of_day] do

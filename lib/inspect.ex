@@ -34,7 +34,12 @@ defmodule Tempo.Inspect do
   # The encoding with a value in `implied` left unnamed: the Gregorian
   # calendar a bare ISO 8601 string reads as, or the ISO week calendar the
   # `W` sigil modifier gives.
-  defp to_iodata(value, implied), do: value |> with_calendar_names(implied) |> inspect_value()
+  defp to_iodata(value, implied) do
+    case value |> with_calendar_names(implied) |> hoist_calendar_name(implied) do
+      {value, []} -> inspect_value(value)
+      {value, calendar} -> [inspect_value(value), calendar]
+    end
+  end
 
   @doc """
   The calendar in a Tempo value that ISO 8601 cannot write: one with no IXDTF
@@ -90,30 +95,93 @@ defmodule Tempo.Inspect do
   # as it, so a value in another calendar round-trips however it was made:
   # parsed with `[u-ca=…]`, converted with `Tempo.to_calendar/2`, or built
   # from an Elixir date. The top-level value, an interval's endpoints and a
-  # set's members carry it; a selection's own values and a recurrence's rule
-  # take theirs from the value around them.
-  defp with_calendar_names(%Tempo{} = tempo, implied), do: with_calendar_name(tempo, implied)
+  # set's members, the ends of its ranges and the members it excludes carry
+  # it; a selection's own values and a recurrence's rule take theirs from the
+  # value around them.
+  defp with_calendar_names(value, implied),
+    do: map_named(value, &with_calendar_name(&1, implied))
 
-  defp with_calendar_names(%Tempo.Interval{from: from, to: to} = interval, implied) do
+  defp map_named(%Tempo{} = tempo, fun), do: fun.(tempo)
+
+  defp map_named(%Tempo.Interval{from: from, to: to} = interval, fun),
+    do: %{interval | from: map_named(from, fun), to: map_named(to, fun)}
+
+  defp map_named(%Tempo.Set{set: members, except: except} = set, fun) do
     %{
-      interval
-      | from: with_calendar_names(from, implied),
-        to: with_calendar_names(to, implied)
+      set
+      | set: Enum.map(members, &map_named(&1, fun)),
+        except: Enum.map(except, &map_named(&1, fun))
     }
   end
 
-  defp with_calendar_names(%Tempo.Set{set: members} = set, implied),
-    do: %{set | set: Enum.map(members, &with_calendar_names(&1, implied))}
+  defp map_named(%Tempo.Range{first: first, last: last} = range, fun),
+    do: %{range | first: map_named(first, fun), last: map_named(last, fun)}
 
-  defp with_calendar_names(value, _implied), do: value
+  defp map_named(value, _fun), do: value
 
   defp named_values(%Tempo{} = tempo), do: [tempo]
 
   defp named_values(%Tempo.Interval{from: from, to: to}),
     do: named_values(from) ++ named_values(to)
 
-  defp named_values(%Tempo.Set{set: members}), do: Enum.flat_map(members, &named_values/1)
+  defp named_values(%Tempo.Set{set: members, except: except}),
+    do: Enum.flat_map(members ++ except, &named_values/1)
+
+  defp named_values(%Tempo.Range{first: first, last: last}),
+    do: named_values(first) ++ named_values(last)
+
   defp named_values(_value), do: []
+
+  # A suffix inside a set's braces does not parse, so the calendar a set's
+  # members share is written once, after the set, where it reads back as the
+  # calendar of each. A recurrence's rule takes its calendar from the suffix
+  # after the whole recurrence, which a start in the same calendar shares; its
+  # domain counts Gregorian years whatever the rule's calendar, and is written
+  # without one. Parts in different calendars keep their own names.
+  defp hoist_calendar_name(%Tempo.Set{} = set, _implied),
+    do: hoist_shared_name(set, written_names(set))
+
+  defp hoist_calendar_name(%Tempo.Interval{from: nil} = interval, _implied), do: {interval, []}
+
+  defp hoist_calendar_name(
+         %Tempo.Interval{from: %Tempo.Set{} = domain, repeat_rule: rule} = interval,
+         implied
+       ) do
+    if Enum.all?(written_names(domain), &is_nil/1),
+      do: {interval, rule_trailer(rule, implied)},
+      else: {interval, []}
+  end
+
+  defp hoist_calendar_name(%Tempo.Interval{repeat_rule: %Tempo{} = rule} = interval, implied),
+    do: hoist_shared_name(interval, written_names(interval) ++ rule_names(rule, implied))
+
+  defp hoist_calendar_name(value, _implied), do: {value, []}
+
+  defp rule_trailer(rule, implied) do
+    case rule_names(rule, implied) do
+      [name] when name not in [nil, :unnamed] -> calendar_trailer(%{calendar: name})
+      _no_rule_or_no_name -> []
+    end
+  end
+
+  defp hoist_shared_name(value, names) do
+    case Enum.uniq(names) do
+      [name] when name not in [nil, :unnamed] ->
+        {map_named(value, &put_calendar_name(&1, nil)), calendar_trailer(%{calendar: name})}
+
+      _none_or_several ->
+        {value, []}
+    end
+  end
+
+  defp written_names(value),
+    do: value |> named_values() |> Enum.map(&written_name/1)
+
+  defp written_name(%Tempo{extended: %{calendar: name}}), do: name
+  defp written_name(%Tempo{}), do: nil
+
+  defp rule_names(%Tempo{} = rule, implied), do: [calendar_name(%{rule | extended: nil}, implied)]
+  defp rule_names(_no_rule, _implied), do: []
 
   defp with_calendar_name(%Tempo{} = tempo, implied) do
     case calendar_name(tempo, implied) do
@@ -244,7 +312,7 @@ defmodule Tempo.Inspect do
   end
 
   def inspect(%Tempo.Interval{} = interval) do
-    rendering = interval_rendering(interval)
+    rendering = calendar_rendering(interval)
 
     encoded(interval, "Tempo.Interval", fn iso8601 ->
       body = rendering.(iso8601)
@@ -261,7 +329,7 @@ defmodule Tempo.Inspect do
   end
 
   def inspect(%Tempo.Set{} = set) do
-    encoded(set, "Tempo.Set", &(@sigil_o <> &1 <> "\""))
+    encoded(set, "Tempo.Set", calendar_rendering(set))
   end
 
   # A value with no ISO 8601 form (a cron nearest-weekday recurrence) cannot be
@@ -275,10 +343,11 @@ defmodule Tempo.Inspect do
     end
   end
 
-  # An interval in a calendar ISO 8601 cannot name reads back only with that
-  # calendar given, as a value in any calendar but the defaults is shown.
-  defp interval_rendering(interval) do
-    case unnamed_values(interval) do
+  # An interval or a set in a calendar ISO 8601 cannot name reads back only
+  # with that calendar given, as a value in any calendar but the defaults is
+  # shown.
+  defp calendar_rendering(value) do
+    case unnamed_values(value) do
       [] ->
         &(@sigil_o <> &1 <> "\"")
 

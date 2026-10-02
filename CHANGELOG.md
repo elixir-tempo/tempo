@@ -203,6 +203,12 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A set's members — each end of a range, each excluded member and each interval among them — are checked as a value on its own is and are in the calendar the set is written for, so `{2026-02-30}` is an error and `{5786-06-15,5786-07-01}[u-ca=hebrew]` is two Hebrew dates, where a set took any member and held it as a Gregorian date. A recurrence's domain is checked too, and keeps its Gregorian years.
+
+* `Tempo.to_iso8601/1` and `inspect/1` write a set's calendar once after it (`{5786Y6M15D,5786Y7M1D}[u-ca=hebrew]`) and a recurrence's after its rule (`R/5786Y1M1D/P1Y/FL7M1DN[u-ca=hebrew]`, with a start or a domain), so both read back in it, where a recurrence's rule read back as Gregorian.
+
+* `Tempo.union/2`, `intersection/2` and `difference/2` take a set whose member is a range (`{2026-06-15..2026-06-20}`), where they raised.
+
 * A whole date written with a month and a day, or as a day of the year, for a calendar of weeks is the Gregorian day converted into it, as Localize reads it: `~o"2026-06-15"W` and `Tempo.new(year: 2026, month: 6, day: 15, calendar: Calendrical.ISOWeek)` are `~o"2026-W25-1"W`, where each held a month and a day its calendar has none of. Anything less than a whole date there, and a month or a day of one placed on (`at/2`, `on/2`) or selected in (`select/2`) a week calendar's value, is a `Tempo.ConversionError`.
 
 * A date converted into a calendar of weeks is qualified in every unit when its year, month or day was: `2026-?06-15[u-ca=iso-week]` is `2026-W25-1?`.

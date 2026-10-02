@@ -45,18 +45,10 @@ defmodule Tempo.Iso8601.Group do
     end
   end
 
-  def expand_groups(%Tempo.Set{set: set} = tempo, calendar) do
-    expanded =
-      Enum.reduce_while(set, [], fn elem, acc ->
-        case expand_groups(elem, calendar) do
-          {:error, reason} -> {:halt, {:error, reason}}
-          {:ok, tempo} -> {:cont, [tempo | acc]}
-        end
-      end)
-
-    case expanded do
-      {:error, reason} -> {:error, reason}
-      expanded -> {:ok, %{tempo | set: Enum.reverse(expanded)}}
+  def expand_groups(%Tempo.Set{set: set, except: except} = tempo, calendar) do
+    with {:ok, set} <- expand_members(set, calendar),
+         {:ok, except} <- expand_members(except, calendar) do
+      {:ok, %{tempo | set: set, except: except}}
     end
   end
 
@@ -210,6 +202,21 @@ defmodule Tempo.Iso8601.Group do
   # An error expanding the rest of the list is the list's error.
   defp prepend(_first, {:error, _reason} = error), do: error
   defp prepend(first, time), do: [first | time]
+
+  # A set's members, and the members it excludes, each expand as a value does.
+  defp expand_members(members, calendar) do
+    members
+    |> Enum.reduce_while({:ok, []}, fn member, {:ok, expanded} ->
+      case expand_groups(member, calendar) do
+        {:ok, member} -> {:cont, {:ok, [member | expanded]}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+    |> reversed()
+  end
+
+  defp reversed({:ok, members}), do: {:ok, Enum.reverse(members)}
+  defp reversed({:error, _reason} = error), do: error
 
   ## Sub-year divisions
 

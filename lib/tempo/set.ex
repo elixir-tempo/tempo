@@ -22,6 +22,15 @@ defmodule Tempo.Set do
   matching it, so `{2000..2020}e` is the even years, `{2000..2020}l`
   the leap years and `{2000..2020}c` the common (non-leap) years of
   the range. `filter` is `nil` for an ordinary set.
+
+  A set has no calendar of its own. Each member, each end of a range
+  and each member it excludes is a value in the calendar the set is
+  written for — the one given to `Tempo.from_iso8601/2`, or named by a
+  `[u-ca=…]` suffix after the set — and is checked as a value on its
+  own is, so `{2026-02-30}` is an error. A recurrence's domain is the
+  exception: its years are Gregorian whatever calendar the
+  recurrence's selection is in.
+
   """
 
   alias Tempo.Iso8601.AST

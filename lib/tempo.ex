@@ -767,6 +767,8 @@ defmodule Tempo do
     `Calendrical.ISOWeek`, has no months, so a whole date written
     with a month and a day, or as a day of the year, is read as the
     Gregorian day and converted into it; a month alone is an error.
+    Every member of a set is in the calendar; the years of a
+    recurrence's domain (`R/{2026Y..2027Y}/…`) stay Gregorian.
 
   ### Options
 
@@ -886,7 +888,14 @@ defmodule Tempo do
     %{interval | from: from, to: to}
   end
 
+  # A set's member that is an interval is read as an interval is.
+  defp propagate_endpoint_frame(%Tempo.Set{} = set),
+    do: map_members(set, &propagate_endpoint_frame/1)
+
   defp propagate_endpoint_frame(other), do: other
+
+  defp map_members(%Tempo.Set{set: members, except: except} = set, fun),
+    do: %{set | set: Enum.map(members, fun), except: Enum.map(except, fun)}
 
   # A per-endpoint IXDTF `u-ca` suffix (`1447Y9M1D[u-ca=islamic-civil]/…`,
   # the form `to_iso8601/1` emits for non-Gregorian interval endpoints)
@@ -903,6 +912,9 @@ defmodule Tempo do
         to: resolve_endpoint_calendar(interval.to)
     }
   end
+
+  defp maybe_resolve_endpoint_calendars(%Tempo.Set{} = set, :from_ixdtf_or_default),
+    do: map_members(set, &maybe_resolve_endpoint_calendars(&1, :from_ixdtf_or_default))
 
   defp maybe_resolve_endpoint_calendars(other, _requested_calendar), do: other
 
@@ -1520,6 +1532,14 @@ defmodule Tempo do
     with :ok <- enforce_critical_zone_offset(from) do
       enforce_critical_zone_offset(to)
     end
+  end
+
+  # A set's interval members, and those it excludes, are held to it as an
+  # interval on its own is.
+  defp enforce_critical_zone_offset(%Tempo.Set{set: members, except: except}) do
+    Enum.find_value(members ++ except, :ok, fn member ->
+      with :ok <- enforce_critical_zone_offset(member), do: nil
+    end)
   end
 
   defp enforce_critical_zone_offset(_other), do: :ok

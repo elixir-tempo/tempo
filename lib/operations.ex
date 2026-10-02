@@ -381,6 +381,11 @@ defmodule Tempo.Operations do
   defp anchor_class(%Tempo.Set{set: [first | _]}), do: anchor_class(first)
   defp anchor_class(%Tempo.Set{set: []}), do: :empty
 
+  # A set's range member is anchored as its ends are.
+  defp anchor_class(%Tempo.Range{first: %Tempo{} = first}), do: anchor_class(first)
+  defp anchor_class(%Tempo.Range{last: %Tempo{} = last}), do: anchor_class(last)
+  defp anchor_class(%Tempo.Range{}), do: :empty
+
   defp anchor_class(%Tempo{} = tempo) do
     if Tempo.anchored?(tempo), do: :anchored, else: :unanchored
   end
@@ -395,6 +400,8 @@ defmodule Tempo.Operations do
   defp leading_unit(%Interval{to: %Tempo{} = to}), do: leading_unit(to)
   defp leading_unit(%Interval{}), do: nil
   defp leading_unit(%Tempo.Set{set: [first | _]}), do: leading_unit(first)
+  defp leading_unit(%Tempo.Range{first: %Tempo{} = first}), do: leading_unit(first)
+  defp leading_unit(%Tempo.Range{last: %Tempo{} = last}), do: leading_unit(last)
   defp leading_unit(%Tempo{time: [{unit, _value} | _]}), do: unit
   defp leading_unit(_other), do: nil
 

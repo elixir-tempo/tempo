@@ -70,18 +70,19 @@ defmodule Tempo.Validation do
     {:ok, duration}
   end
 
-  def validate(%Tempo.Set{set: set} = tempo, calendar) do
-    validated =
-      Enum.reduce_while(set, [], fn elem, acc ->
-        case resolve(elem, calendar) do
-          {:error, reason} -> {:halt, {:error, reason}}
-          units -> {:cont, [units | acc]}
-        end
-      end)
+  # A set's member is checked as a value is: each member, each end of a range
+  # and each member the set excludes, in its own calendar.
+  def validate(%Tempo.Set{set: set, except: except} = tempo, calendar) do
+    with {:ok, set} <- validate_members(set, calendar),
+         {:ok, except} <- validate_members(except, calendar) do
+      {:ok, %{tempo | set: set, except: except}}
+    end
+  end
 
-    case validated do
-      {:error, reason} -> {:error, reason}
-      resolved -> {:ok, %{tempo | set: Enum.reverse(resolved)}}
+  def validate(%Tempo.Range{first: first, last: last} = range, calendar) do
+    with {:ok, first} <- validate(first, endpoint_calendar(first, calendar)),
+         {:ok, last} <- validate(last, endpoint_calendar(last, calendar)) do
+      {:ok, %{range | first: first, last: last}}
     end
   end
 
@@ -92,6 +93,20 @@ defmodule Tempo.Validation do
   def validate(:undefined, _calendar) do
     {:ok, :undefined}
   end
+
+  defp validate_members(members, calendar) do
+    members
+    |> Enum.reduce_while({:ok, []}, fn member, {:ok, validated} ->
+      case validate(member, endpoint_calendar(member, calendar)) do
+        {:ok, member} -> {:cont, {:ok, [member | validated]}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+    |> reversed()
+  end
+
+  defp reversed({:ok, members}), do: {:ok, Enum.reverse(members)}
+  defp reversed({:error, _reason} = error), do: error
 
   @doc false
   # Whether a value's units are written in a calendar other than its own, as a
@@ -1541,8 +1556,8 @@ defmodule Tempo.Validation do
     end
   end
 
-  def validate_zone_existence(%Tempo.Set{set: values}) do
-    Enum.reduce_while(values, :ok, fn value, :ok ->
+  def validate_zone_existence(%Tempo.Set{set: values, except: except}) do
+    Enum.reduce_while(values ++ except, :ok, fn value, :ok ->
       case validate_zone_existence(value) do
         :ok -> {:cont, :ok}
         {:error, _} = err -> {:halt, err}

@@ -411,6 +411,61 @@ defmodule Tempo.RoundTripTest do
       assert {back.from.calendar, back.to.calendar} == {Calendrical.Hebrew, Calendrical.Hebrew}
     end
 
+    # The calendar of each value in a set or a recurrence, in the order written.
+    defp calendars(%Tempo{calendar: calendar}), do: [calendar]
+
+    defp calendars(%Tempo.Set{set: members, except: except}),
+      do: Enum.flat_map(members ++ except, &calendars/1)
+
+    defp calendars(%Tempo.Range{first: first, last: last}),
+      do: calendars(first) ++ calendars(last)
+
+    defp calendars(%Tempo.Interval{from: from, to: to, repeat_rule: rule}),
+      do: calendars(from) ++ calendars(to) ++ calendars(rule)
+
+    defp calendars(_open_or_absent), do: []
+
+    test "a set, its calendar written once after it" do
+      # A suffix inside the braces does not parse, so the members share one.
+      for {text, written} <- [
+            {"{5786-06-15,5786-07-01}", "{5786Y6M15D,5786Y7M1D}[u-ca=hebrew]"},
+            {"[5786-06-15,5786-07-01]", "[5786Y6M15D,5786Y7M1D][u-ca=hebrew]"},
+            {"{5786-06-15..5786-06-20,^5786-06-17}",
+             "{5786Y6M15D..5786Y6M20D,^5786Y6M17D}[u-ca=hebrew]"},
+            {"{5786-06-15/5786-06-20}", "{5786Y6M15D/20D}[u-ca=hebrew]"}
+          ] do
+        set = Tempo.from_iso8601!(text, Calendrical.Hebrew)
+
+        assert Tempo.to_iso8601!(set) == written
+        assert inspect(set) == ~s|~o"#{written}"|
+
+        back = read_back(set)
+        assert Enum.uniq(calendars(back)) == [Calendrical.Hebrew]
+        assert Tempo.to_iso8601!(back) == written
+      end
+    end
+
+    test "a recurrence, its calendar written once after its rule" do
+      yearly = Tempo.from_iso8601!("R/5786-01-01/P1Y/FL7M1DN", Calendrical.Hebrew)
+
+      assert Tempo.to_iso8601!(yearly) == "R/5786Y1M1D/P1Y/FL7M1DN[u-ca=hebrew]"
+      assert calendars(read_back(yearly)) == [Calendrical.Hebrew, Calendrical.Hebrew]
+
+      # A start that alone is in another calendar keeps the name to itself.
+      start_only = Tempo.from_iso8601!("R/5786Y1M1D[u-ca=hebrew]/P1Y/FL7M1DN")
+
+      assert Tempo.to_iso8601!(start_only) == "R/5786Y1M1D[u-ca=hebrew]/P1Y/FL7M1DN"
+      assert calendars(read_back(start_only)) == [Calendrical.Hebrew, Calendrical.Gregorian]
+    end
+
+    test "a recurrence with a domain, whose years stay Gregorian" do
+      gated = Tempo.from_iso8601!("R/{2026Y..2027Y}/P1Y/FL1M1DN[u-ca=hebrew]")
+      gregorian = Calendrical.Gregorian
+
+      assert Tempo.to_iso8601!(gated) == "R/{2026Y..2027Y}/P1Y/FL1M1DN[u-ca=hebrew]"
+      assert calendars(read_back(gated)) == [gregorian, gregorian, Calendrical.Hebrew]
+    end
+
     test "an annotation naming another calendar than the value's is not written" do
       # An explicit calendar wins over the parsed `[u-ca=hebrew]`, so the
       # value is the Gregorian year 5786.
@@ -438,6 +493,15 @@ defmodule Tempo.RoundTripTest do
 
       {read_back, _binding} = Code.eval_string(inspect(quarter))
       assert read_back == quarter
+
+      # A set's members, the ends of a range among them, are in it too.
+      {:ok, days} = Tempo.from_iso8601("{2027-01-01..2027-01-05}", fiscal)
+
+      assert {:error, %Tempo.Iso8601EncodeError{construct: :calendar, calendar: ^fiscal}} =
+               Tempo.to_iso8601(days)
+
+      {read_back, _binding} = Code.eval_string(inspect(days))
+      assert read_back == days
     end
   end
 end

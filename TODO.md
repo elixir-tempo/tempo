@@ -14,7 +14,7 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **Create a glossary guide** — a guide that tables every term Tempo uses (span, window, occurrence, resolution, floating, zoned, anchored, …) and defines it, so it doubles as the reference future development checks its vocabulary against (user, 2026-09-28). The decisions in [plans/vocabulary.md](plans/vocabulary.md) are its starting point.
 
-* [ ] **A zone on a recurrence is dropped** — `R/../P1Y/FL3M20DN[+09:00]` and a domain recurrence's `[zone]` suffix parse and vanish (the start value's suffix, `R/2026-03-20[+09:00]/P1Y`, is kept). Carry it as zoned occurrences, as the suffix means elsewhere, or refuse it.
+* [ ] **A zone on a recurrence or a set is dropped** — `R/../P1Y/FL3M20DN[+09:00]` and a domain recurrence's `[zone]` suffix parse and vanish (the start value's suffix, `R/2026-03-20[+09:00]/P1Y`, is kept). Carry it as zoned occurrences, as the suffix means elsewhere, or refuse it. A set's suffix does the same: `{2026-06-15T10:00,2026-06-16T10:00}[Europe/Paris]` leaves its members floating and `[key=value]` tags vanish, where its `[u-ca=…]` is its members' calendar and an interval member's own zone is kept (found 2026-10-02).
 
 * [ ] **§12.10 window shorter than a day** — `FL11MLL1K1IN/PT12HN1K1IN` (and `/P0DN…`) walks `[lo, lo - 1]`, the anchor and the day before, as `Date.range/2` infers for a reversed range (with a runtime deprecation warning before the day-number walk replaced it). Decide the semantics — no day, or the anchor day whose start the window contains — and test it.
 
@@ -46,7 +46,15 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **`ClockTest` timing** — "process-local override does not leak to peer processes" failed once under load (passing in isolation and on re-runs): `assert_receive`'s default 100 ms timeout is short on a busy machine.
 
-* [ ] **A set's members are neither checked nor put in its calendar** — `{2026-02-30,2026-04-31}` parses and materialises as spans from 30 February; `{5786-06-15,5786-07-01}[u-ca=hebrew]` (or with the calendar as an argument) holds Gregorian members in the year 5786, an NRF set's week dates are read as ISO weeks, and a set written for a calendar of weeks is not converted. `Tempo.Set.new/3` builds members in the Gregorian calendar, the parser's `put_calendar/2` passes a set by, and `Validation.validate/2` calls `resolve/2` on member structs, which returns them as they are. Found 2026-10-02.
+* [ ] **A weekday set with no week raises in `to_interval/2`** — `Tempo.to_interval(~o"{6,7}K")` raises a `KeyError` (`:week` in `[day_of_week: 1]`), where `~o"6K"` and `~o"25W{6,7}K"` convert. Found 2026-10-02.
+
+* [ ] **A qualified set is written in a form that does not parse** — `{2026-06-15,2026-06-16}?` holds the qualification on each member, and `to_iso8601/1` and `inspect/1` write `{2026Y6M15D?,2026Y6M16D?}`, which the parser refuses. Write it once after the set, as the calendar is. Found 2026-10-02.
+
+* [ ] **Sets the parser does not read** — several intervals in the extended format (`{2020/2021,2023/2024}`, where `{2020Y/2021Y,2023Y/2024Y}` parses) and a qualified member (`{2026-06-15?,2026-06~}`). Found 2026-10-02.
+
+* [ ] **A range written backwards in a set** — `{2026-06-20..2026-06-15}` parses and converts to nothing, where an interval written so is an `IntervalEndpointsError`. Decide whether it is an error. Found 2026-10-02.
+
+* [ ] **Set operations across a week calendar's resolutions** — `Tempo.difference(~o"2026"W, ~o"2026-W25"W)` is a `ResolutionError` ("Cannot express … as a month-axis calendar date"), in `Calendrical.ISOWeek` and `Calendrical.NRF` alike. Found 2026-10-02.
 
 * [ ] **A selection by day of the week is not applied in a calendar of weeks** — in `Calendrical.ISOWeek`, `R3/2026-W01-1/P1W/FL2KN` gives each week's Monday and `R3/2026-W25-1/P1Y/FL25W2KN` nothing, where the Gregorian forms give the Tuesdays and the Tuesday of week 25; a value's selection does the same (`2026YL1K1IN` is the whole year), and `R/../P1Y/FL25W2KN` with `within: ~o"2026"W`, or any `L…N` selector given to `select/2`, is a `ResolutionError`. `Tempo.RRule.Selection` reads a candidate's `:month` and `:day`, which a week date has none of. A selection by week alone (`FL25WN`) works, `select/2` by `~o"2K"` works, and one by a month or a day of the year is an error. Found 2026-10-02.
 
@@ -59,8 +67,6 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 * [ ] **`Date.compare/2` orders two dates of one calendar by their fields** — Elixir compares the `year`, `month` and `day` of two dates in the same calendar without asking the calendar (through 1.20.4 and on `main`), and in Calendrical's Julian new-year calendars (`Julian.March25`, `March1`, `Sept1`, `Dec25`) 1 January follows 31 December of the same year, so `Date.compare(~D[2022-12-31 Calendrical.Julian.March25], ~D[2022-01-01 Calendrical.Julian.March25])` is `:gt` for the day before. Tempo calls it in eleven places (`iso8601/group.ex`, `tempo.ex`, `tempo/rrule/selection.ex`, `tempo/select.ex`, `validation.ex`); `Date.diff/2`, which goes through ISO days, orders them rightly, as Localize and Calendrical now do. Noted from the Localize session (2026-10-02).
-
-* [ ] **A calendar of weeks' `days_in_month/2` counts a week's seven days** — in Calendrical's next commit after `9851306`, `days_in_month/2` and the year-less `days_in_month/1` of a calendar of weeks follow the month field of its dates, their week: 7, and `{:error, :invalid_date}` for a week the year lacks, where they counted a period of the pattern, 28 or 35, and `{:ambiguous, [28, 35]}` for the last (a period's days are `month/2`). Tempo calls both in `math.ex`, `mask.ex`, `rounding.ex`, `iso8601/group.ex` and `tempo/rrule/selection.ex`: check them with a calendar of weeks when the Calendrical lock moves. Noted from the Localize session (2026-10-02).
 
 ## In progress
 
@@ -75,6 +81,10 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **Set algebra over open-ended windows** — a research project for later (user, 2026-09-28): how far union, intersection, difference, complement and the predicates go on the lazy sets an open-ended window gives, a test of the whole algebra. Questions in [plans/open-ended-set-algebra.md](plans/open-ended-set-algebra.md).
 
 ## Done
+
+* [x] **A set's members are checked and in its calendar** — each member, each end of a range, each excluded member and each interval among them is read as a value on its own is, in the calendar the set is written for (`{2026-02-30}` is an error, `{5786-06-15,5786-07-01}[u-ca=hebrew]` two Hebrew dates); a recurrence's domain is checked and keeps its Gregorian years. `to_iso8601/1` and `inspect/1` write a set's calendar once after it and a recurrence's after its rule, and set operations take a range member. 2026-10-02.
+
+* [x] **The Localize and Calendrical locks moved to `6f3f0364` and `6566488`** — Calendrical's `days_in_month/2` now counts a week's seven days in a calendar of weeks, which Tempo does not reach for such a calendar's values, since they hold no month: the suite and nearly 400 week-calendar probes give the same results under the old locks and the new. 2026-10-02.
 
 * [x] **A month and a day in a week calendar** — a whole date written with them, or as a day of the year, is the Gregorian day converted, as Localize reads it (`~o"2026-06-15"W` is `~o"2026-W25-1"W`), where a value is parsed or built; anything less than a whole date, and a month placed on or selected in a week calendar's value, is a `ConversionError`. With it `at/2`, `on/2` and `extend/1` check a value in its own calendar, and `to_interval/2` and `select/2` return where they raised. 2026-10-02.
 
