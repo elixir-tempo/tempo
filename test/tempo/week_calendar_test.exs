@@ -354,4 +354,38 @@ defmodule Tempo.WeekCalendarTest do
                )
     end
   end
+
+  # A calendar of weeks has no day of the month, so taking a week value to
+  # day resolution found no path, and a value's selection, a `:within` window
+  # and `select/2` gave the whole span or a `ResolutionError`.
+  describe "a value's selection, a window and select/2" do
+    test "a week value at day resolution is its first day of the week" do
+      assert Tempo.at_resolution(Tempo.from_iso8601!("2026-W25", ISOWeek), :day) ==
+               Tempo.from_iso8601!("2026-W25-1", ISOWeek)
+
+      assert Tempo.at_resolution(Tempo.from_iso8601!("2026-W25", NRF), :day) ==
+               Tempo.from_iso8601!("2026-W25-1", NRF)
+    end
+
+    test "a value's selection" do
+      assert {:ok, set} = Tempo.to_interval(Tempo.from_iso8601!("2026YL1K1IN", ISOWeek))
+
+      assert Enum.map(IntervalSet.members(set), &Interval.from/1) == [
+               Tempo.from_iso8601!("2026-W01-1", ISOWeek)
+             ]
+    end
+
+    test "a recurrence within a week year, and select/2" do
+      tuesday = Tempo.from_iso8601!("2026-W25-2", ISOWeek)
+      week_year = Tempo.from_iso8601!("2026", ISOWeek)
+
+      assert {:ok, set} =
+               Tempo.to_interval(Tempo.from_iso8601!("R/../P1Y/FL25W2KN"), within: week_year)
+
+      assert Enum.map(IntervalSet.members(set), &Interval.from/1) == [tuesday]
+
+      assert {:ok, selected} = Tempo.select(Tempo.from_iso8601!("2026-W25", ISOWeek), ~o"L2KN")
+      assert Enum.map(IntervalSet.members(selected), &Interval.from/1) == [tuesday]
+    end
+  end
 end

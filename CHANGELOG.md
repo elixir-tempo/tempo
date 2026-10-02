@@ -205,6 +205,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A value in a calendar of weeks takes day resolution as its day of the week, so `Tempo.at_resolution/2` to `:day` gives `2026-W25-1`, and a value's selection (`2026YL1K1IN`), a `:within` window and `select/2` select in it, where they gave the whole span or a `Tempo.ResolutionError`.
+
 * A recurrence's selection by day of the week applies in a calendar of weeks: in `Calendrical.ISOWeek`, `R3/2026-W01-1/P1W/FL2KN` is each week's Tuesday and `R3/2026-W25-1/P1Y/FL25W2KN` the Tuesday of week 25, where they gave each week's Monday and nothing.
 
 * A recurrence from a start that holds a set or a range is a recurrence from each of its values: `R3/2026Y6M{1,15}D/P1M` is six occurrences, where it was three intervals whose ends held the set, or a `Tempo.ConversionError` when its values could not all take the step alike.

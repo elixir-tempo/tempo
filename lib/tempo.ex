@@ -3411,8 +3411,9 @@ defmodule Tempo do
   """
   @spec at_resolution(tempo :: t, target_unit :: time_unit()) ::
           t | {:error, error_reason()}
-  def at_resolution(%Tempo{} = tempo, target_unit) do
+  def at_resolution(%Tempo{calendar: calendar} = tempo, target_unit) do
     with {:ok, target_unit} <- validate_unit(target_unit) do
+      target_unit = day_unit(target_unit, calendar)
       {current_unit, _span} = resolution(tempo)
 
       case Unit.compare(target_unit, current_unit) do
@@ -3422,6 +3423,18 @@ defmodule Tempo do
       end
     end
   end
+
+  # A calendar of weeks numbers each day within its week, so its day is the
+  # day of the week (`K`): a week date at day resolution is
+  # `[year, week, day_of_week]`.
+  defp day_unit(:day, calendar) do
+    if Code.ensure_loaded?(calendar) and function_exported?(calendar, :calendar_base, 0) and
+         calendar.calendar_base() == :week,
+       do: :day_of_week,
+       else: :day
+  end
+
+  defp day_unit(unit, _calendar), do: unit
 
   @doc """
   Convert a Tempo struct into a Date.
