@@ -48,6 +48,10 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **Move the Localize and Calendrical locks to `main`** — Tempo locks Localize `b2b18bb` and Calendrical `c9426f7`. Localize `main` (`6e9cdb63`, its unreleased 1.4.0) needs calendar callbacks only Calendrical `main` (`e8a10c3`) has, such as `parsing_calendar/0`, so the two move together: `mix deps.update calendrical localize`. Tempo `cee4726` compiles without warnings and passes all 5,076 tests, dialyzer and docs against them (a scratch copy, 2026-10-02), and the move unblocks "A span formatted with a skeleton".
 
+* [ ] **Localize now writes a week-based calendar's date in its own notation** — since Localize `9fa075f5` and Calendrical `04246ef` (user, 2026-10-02: "output the same as the input"), a standard format writes a week calendar's day as its calendar writes it, "2026-W25-2", where the Blocked item below expects the Gregorian day it names ("Jun 16, 2026"); a pattern names its months from CLDR's generic calendar ("M06"). Decide what `to_string/2` shows for `~o"2026-W25-2"W` and add the test. Noted from the Localize session.
+
+* [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
+
 ## In progress
 
 * [ ] **Vocabulary for 2.0** — one meaning per word and one word per meaning across Tempo and tempo_holidays: `:within` for `:bound`, "anchor" in one sense, no public "materialise", `Tempo.Allen` beside everyday predicates, `datetime`, "workday". Every decision is taken; the tasks are in [plans/vocabulary.md](plans/vocabulary.md). Fifteen of its sixteen tasks have landed, through tempo_holidays and the real-world livebook (`livebook/everyday-holidays.livemd`, and its tempo_holidays copy); `tempo_sql`'s move to `~> 2.0` remains, once 2.0.0 is on hex.
