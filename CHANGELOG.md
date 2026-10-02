@@ -203,6 +203,10 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `explain/1` describes a week, a week date and every value in a week calendar by its week and the days it spans (`~o"2026-W25"` is "Week 25 of 2026", spanning `[2026-06-15, 2026-06-22)`), where it called each "The year 2026" with an empty span. A week calendar's dates are written in its own notation (`2026-W25-2`).
+
+* `Tempo.to_string/2` takes a skeleton or a pattern for a span of several values (`format: :yMMMd` on `2026-06-15/2026-06-18` is "Jun 15 – 17, 2026"), where it returned Localize's error.
+
 * A day, a day of the year, a month or a week of 0 is refused, and a month with no year is no further from either end than the most months a year of its calendar has (`13M` is refused in the Gregorian calendar, allowed in the Hebrew), where they parsed.
 
 * `explain/1` describes a `Tempo.RecurrenceSet` member by member, each led by its name (a holiday's `:name`, an event's `:summary`), and a conditional member on its own, where it said it did not know how to describe them.
@@ -235,7 +239,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.day_of_week/1`, `day_of_year/1`, `quarter_of_year/1`, `split/1` and `round/2` read a week date as the day it names, where they read it as 1 January of its year or split its day off as a time.
 
-* `Tempo.to_string/2` renders a week date as the day it names and a week, or a range of weeks, as its first and last day ("Jun 15 – 21, 2026"), where it rendered the year alone.
+* `Tempo.to_string/2` renders a week date as the day it names and a week, or a range of weeks, as its first and last day ("Jun 15 – 21, 2026"), where it rendered the year alone. A week calendar's day is written in that calendar's own notation ("2026-W25-2").
 
 * A network's relation delays set its axis, so a six-month gap between year-dated periods is six months, where it rounded to a year, and a bound on a finer axis is the span it names, so `{:not_after, ~o"1300Y"}` allows all of 1300. A network counting only weeks is placed in days, where it raised.
 

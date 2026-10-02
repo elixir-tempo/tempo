@@ -9886,15 +9886,25 @@ defmodule Tempo do
   end
 
   @doc """
-  Return a multi-line prose explanation of any Tempo value —
-  what it is, what it spans, and how to work with it.
+  Return a multi-line prose explanation of any Tempo value — what it is, what it spans, and how to work with it.
 
-  Returns a plain string suitable for iex. For structured output that renderers can style (ANSI, HTML), use `Tempo.Explain.explain/1` directly and pick a formatter. A recurrence set is described member by member, each led by its name.
+  For structured output that renderers can style (ANSI, HTML), use `Tempo.Explain.explain/1` directly and pick a formatter. A recurrence set is described member by member, each led by its name, and a week by its number, with the days it spans.
+
+  ### Arguments
+
+  * `value` is any Tempo value: a `t:Tempo.t/0`, an interval, a set, a duration or a recurrence set. Anything else is described as a value Tempo does not know.
+
+  ### Returns
+
+  * A plain multi-line string, suitable for iex.
 
   ### Examples
 
       iex> Tempo.explain(~o"2026-06") |> String.split("\\n") |> hd()
       "June 2026."
+
+      iex> Tempo.explain(~o"2026-W25") |> String.split("\\n") |> Enum.take(2)
+      ["Week 25 of 2026.", "Span: [2026-06-15, 2026-06-22)."]
 
   """
   @spec explain(term()) :: String.t()

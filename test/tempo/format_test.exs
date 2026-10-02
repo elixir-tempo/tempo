@@ -38,6 +38,11 @@ defmodule Tempo.FormatTest do
       assert Tempo.to_string(~o"2025-02") == {:ok, "Feb 1#{@en_dash_sep}28, 2025"}
     end
 
+    test "a year in another calendar expands to that calendar's first and last months" do
+      assert Tempo.to_string(Tempo.from_iso8601!("5786[u-ca=hebrew]")) ==
+               {:ok, "Tishri#{@en_dash_sep}Elul 5786"}
+    end
+
     test "day resolution collapses to a single value" do
       assert Tempo.to_string(~o"2026-06-15") == {:ok, "Jun 15, 2026"}
     end
@@ -258,6 +263,15 @@ defmodule Tempo.FormatTest do
       assert Tempo.to_string(~o"2026YL1K1IN", format: :yMMMd) == {:ok, "Jan 5, 2026"}
       assert Tempo.to_string(~o"2026-06-XX", format: :yMMMd) == {:ok, "Jun 2026"}
       assert Tempo.to_string(~o"2026-06-XX") == Tempo.to_string(~o"2026-06")
+    end
+
+    test "a span of several values takes a skeleton or a pattern across its ends" do
+      span = ~o"2026-06-15/2026-06-18"
+
+      assert Tempo.to_string(span, format: :yMMMd) == {:ok, "Jun 15#{@en_dash_sep}17, 2026"}
+
+      assert Tempo.to_string(span, format: "d MMM y") ==
+               {:ok, "15 Jun 2026#{@en_dash_sep}17 Jun 2026"}
     end
 
     test "a month without a year is its name" do

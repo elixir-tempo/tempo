@@ -513,9 +513,8 @@ defmodule Tempo.Format do
   # question "how should a year be shown?" — it is what to do when the
   # caller has not said. A caller who names a skeleton has said: `:y`
   # asks for a year, and rendering its twelve months instead answers a
-  # question they did not ask. Interval formatting cannot honour a
-  # skeleton anyway — Localize accepts only widths across a range — so
-  # expanding would fail rather than merely surprise.
+  # question they did not ask. A span written with two ends takes a
+  # skeleton across them, as Localize's interval formats do.
   #
   # A named width names both ends of a range as readily as a single
   # value, so those still expand.

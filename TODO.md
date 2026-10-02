@@ -18,7 +18,9 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **§12.10 window shorter than a day** — `FL11MLL1K1IN/PT12HN1K1IN` (and `/P0DN…`) walks `[lo, lo - 1]`, the anchor and the day before, as `Date.range/2` infers for a reversed range (with a runtime deprecation warning before the day-number walk replaced it). Decide the semantics — no day, or the anchor day whose start the window contains — and test it.
 
-* [ ] **`explain/1` misreads week values** — a week (`~o"2026-W25"`) and every week or day in a week calendar (`~o"2026-W25-2"W`) are explained as "The year 2026" with the span "[2026-01-01, 2026-01-01)", and a week calendar's year with the span "[2026-01-01, 2027-01-01)", though it starts on 29 December 2025; only a Gregorian week date reads right ("June 16, 2026"). Found 2026-10-02.
+* [ ] **`explain/1` names every calendar's months as Gregorian ones** — a Hebrew `5786-06-15` is explained as "June 15, 5786" where it is 15 Adar, a Persian `1405-01-01` as "January 1, 1405", and a thirteenth month (`5787-13-01`, a Coptic `1742-13-03`) as "month 13 1, 5787": `month_name/1` in `lib/explain.ex` is a list of the Gregorian calendar's English names. Found 2026-10-02.
+
+* [ ] **`explain/1` headlines a value holding a set or a group by the units before it** — `2026-{06,07}`, a set of weeks (`2026Y{25,27}W`) or of days of the year, and a quarter (`2026-33`) are each "The year 2026", and a set or group of days (`2026-06-{01,15}`, `2022Y1M2G3DU`) is its month, "June 2026"; the spans beneath are right. Found 2026-10-02.
 
 * [ ] **`explain/1` words a window of hours in ISO 8601** — `Tempo.explain(~o"R/2027-01-01/P1D/FLLT22HN/PT4HN")` says "the PT4H window from at 22:00" where it means the four hours from 22:00: `window_phrase/2` in `lib/explain.ex` words only a window of days or weeks, and a time-of-day selection's noun carries its "at".
 
@@ -48,9 +50,13 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **`ClockTest` timing** — "process-local override does not leak to peer processes" failed once under load (passing in isolation and on re-runs): `assert_receive`'s default 100 ms timeout is short on a busy machine.
 
-* [ ] **Move the Localize and Calendrical locks to `main`** — Tempo locks Localize `b2b18bb` and Calendrical `c9426f7`; Localize `main` (`2a778aaa`, its unreleased 1.4.0) needs calendar callbacks only Calendrical `main` (`df8434a`) has, such as `parsing_calendar/0`, so the two move together: `mix deps.update calendrical localize`. Tempo `cb42d9a` compiles without warnings and passes all 5,076 tests, dialyzer and docs against them (a scratch copy, 2026-10-02); of 56 operations compared across the two, 47 of them on a week calendar's values, only formatting changes, and one change is a regression, a year in a week calendar (Blocked, below). The move unblocks the other two Blocked items and corrects a Hebrew year's last month ("Tishri – Elul 5786", where the lock writes "Tishri – Av 5786").
+* [ ] **A week calendar's week in `to_string/2`** — a week calendar's day is written in its own notation, "2026-W25-2" (tested); a week is its first and last day, "2026-W25-1 – 2026-W25-7", and under a skeleton or a pattern a day is the calendar's own fields with CLDR's generic month names ("M06 2, 2026 AD"). Decide whether a week should read "2026-W25" (user, in Localize, 2026-10-02: "output the same as the input"), which neither Localize nor Calendrical writes today, and test what is decided.
+
+* [ ] **A month and a day in a week calendar** — `~o"2026-06-15"W` (and `Tempo.from_iso8601("2026-06-15", Calendrical.ISOWeek)`, a doctest) is `[year: 2026, month: 6, day: 15]` in a calendar whose dates are weeks: `to_date/1` is `:invalid_date`, `to_calendar/2` a `ConversionError`, `to_string/2` Localize's error ("Feb 15, 2026" before the locks moved), and it `:equals` the Gregorian 15 June. Decide whether it is an error or, as Localize now reads such text, the Gregorian day converted (2026-W25-1). Found 2026-10-02.
 
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
+
+* [ ] **`Date.compare/2` orders two dates of one calendar by their fields** — Elixir compares the `year`, `month` and `day` of two dates in the same calendar without asking the calendar (through 1.20.4 and on `main`), and in Calendrical's Julian new-year calendars (`Julian.March25`, `March1`, `Sept1`, `Dec25`) 1 January follows 31 December of the same year, so `Date.compare(~D[2022-12-31 Calendrical.Julian.March25], ~D[2022-01-01 Calendrical.Julian.March25])` is `:gt` for the day before. Tempo calls it in eleven places (`iso8601/group.ex`, `tempo.ex`, `tempo/rrule/selection.ex`, `tempo/select.ex`, `validation.ex`); `Date.diff/2`, which goes through ISO days, orders them rightly, as Localize and Calendrical now do. Noted from the Localize session (2026-10-02).
 
 ## In progress
 
@@ -58,17 +64,19 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ## Blocked
 
-* [ ] **A week calendar's values in `to_string/2`** — since Localize `9fa075f5` and Calendrical `04246ef` a week calendar's day is written in its own notation, as its calendar writes it (user, 2026-10-02: "output the same as the input"), so there `~o"2026-W25-2"W` is "2026-W25-2" in every locale and standard format, with a time "2026-W25-2, 10:30 AM", a week its first and last day ("2026-W25-1 – 2026-W25-7"), and under a skeleton or a pattern the calendar's own fields with CLDR's generic month names ("M06 2, 2026 AD"); the locked Localize writes "Jun 2, 2026" for that day, 16 June. Add those tests, and decide whether a week should read "2026-W25". Blocked on the locks moving.
-
-* [ ] **A year in a week calendar's `to_string/2`** — at Localize `main` `Tempo.to_string(~o"2026"W)` returns a `Localize.InvalidValueError` where the lock gives "2026", so a range of such years fails too and interpolation falls back to "2026Y[u-ca=iso-week]". Localize works out a partial date's last day from `months_in_year/1` and `days_in_month/2`, which a calendar of weeks counts in periods, and Calendrical now refuses the date that makes (Localize's `TODO.md`, 2026-10-02). Blocked on Localize; Tempo then needs only a test.
-
-* [ ] **A span formatted with a skeleton** — Localize `2404ad84` takes a skeleton or a pattern for an interval, so `Tempo.to_string(~o"2026-06-15/2026-06-18", format: :yMMMd)` is "Jun 15 – 17, 2026" there, where the locked Localize returns a `DateTimeIntervalFormatError` (`:unknown_fields`). Add that test, and revisit `expandable_format?/1` in `lib/tempo/format.ex`, whose comment says interval formatting cannot honour a skeleton; its other reason, that `:y` asks for a year rather than its twelve months, still holds. Blocked on the Localize lock reaching `2404ad84` (it is at `b2b18bb`).
+* [ ] **A year in a week calendar's `to_string/2`** — `Tempo.to_string(~o"2026"W)` returns a `Localize.InvalidValueError` since the locks moved, where it gave "2026", so a range of such years fails too and interpolation falls back to "2026Y[u-ca=iso-week]". Localize works out a partial date's last day from `months_in_year/1` and `days_in_month/2`, which a calendar of weeks counts in periods, and Calendrical refuses the date that makes (Localize's `TODO.md`, 2026-10-02). Blocked on Localize; Tempo then needs only a test.
 
 ## Deferred
 
 * [ ] **Set algebra over open-ended windows** — a research project for later (user, 2026-09-28): how far union, intersection, difference, complement and the predicates go on the lazy sets an open-ended window gives, a test of the whole algebra. Questions in [plans/open-ended-set-algebra.md](plans/open-ended-set-algebra.md).
 
 ## Done
+
+* [x] **`explain/1` reads week values** — a week, a week date and a week calendar's values are headlined by their week ("Week 25 of 2026", "Tuesday of week 25 of 2026") and span the days they start on, a week calendar's in its own notation, wherever they bound something; a week with no year recurs. 2026-10-02.
+
+* [x] **The Localize and Calendrical locks moved to `main`** — Localize `2a778aaa` and Calendrical `df8434a`, together; a week calendar's day reads "2026-W25-2" and a Hebrew year's last month is right ("Tishri – Elul 5786"). 2026-10-02.
+
+* [x] **A span formatted with a skeleton** — `to_string/2` takes a skeleton or a pattern across a span's ends ("Jun 15 – 17, 2026") now that Localize does; tested, and the comment on `expandable_format?/1` corrected. 2026-10-02.
 
 * [x] **Units with nothing above them, and the day of the year** — `O` is its own unit, `:day_of_year`, written back as `O` and never after a month; a `D` with no month reads as a day of the year where a year resolves it. 0 is refused for a day, a day of the year, a month or a week, and a bare month is bounded by `months_in_year/0`; a bare day or week has no upper bound until it has a year. 2026-10-01.
 

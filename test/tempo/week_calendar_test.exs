@@ -147,6 +147,11 @@ defmodule Tempo.WeekCalendarTest do
 
       assert Tempo.to_string(~o"2026-W25-2"W) == {:ok, localized}
     end
+
+    test "a week-based calendar's day is written as its calendar writes it" do
+      assert Tempo.to_string(~o"2026-W25-2"W) == {:ok, "2026-W25-2"}
+      assert Tempo.to_string(~o"2026-W25-2"W, format: :full, locale: :de) == {:ok, "2026-W25-2"}
+    end
   end
 
   describe "a Gregorian ISO week date" do

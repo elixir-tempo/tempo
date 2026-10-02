@@ -8,6 +8,8 @@ defmodule Tempo.Explain.Test do
   alias Tempo.RecurrenceSet
   alias Tempo.RRule
 
+  doctest Tempo.Explain
+
   # Tests for `Tempo.Explain.explain/1` — structured prose
   # descriptions of Tempo values. Three formatters (`to_string`,
   # `to_ansi`, `to_iodata`) are exercised for the same structured
@@ -47,6 +49,87 @@ defmodule Tempo.Explain.Test do
       assert :qualification in tags
 
       assert Tempo.explain(~o"2022Y?") =~ "uncertain"
+    end
+  end
+
+  describe "week values" do
+    test "a week is headlined as its week, with the days it spans" do
+      prose = Tempo.explain(~o"2026-W25")
+
+      assert prose =~ "Week 25 of 2026."
+      assert prose =~ "Span: [2026-06-15, 2026-06-22)."
+      refute prose =~ "The year"
+    end
+
+    test "a week at either end of its year spans the days it has, in whichever year" do
+      assert Tempo.explain(~o"2026-W01") =~ "Span: [2025-12-29, 2026-01-05)."
+      assert Tempo.explain(~o"2026-W53") =~ "Span: [2026-12-28, 2027-01-04)."
+    end
+
+    test "a week date keeps its own terms, names its weekday and spans its day" do
+      day = Tempo.explain(Tempo.new!(year: 2026, week: 25, day_of_week: 2))
+
+      assert day =~ "Tuesday of week 25 of 2026."
+      assert day =~ "Span: [2026-06-16, 2026-06-17)."
+
+      minute =
+        Tempo.explain(Tempo.new!(year: 2026, week: 25, day_of_week: 2, hour: 10, minute: 30))
+
+      assert minute =~ "Tuesday of week 25 of 2026 at 10:30."
+      assert minute =~ "Span: [2026-06-16T10:30, 2026-06-16T10:31)."
+    end
+
+    test "a week calendar's values are written in its own notation" do
+      assert Tempo.explain(~o"2026"W) =~ "Span: [2026-W01-1, 2027-W01-1)."
+
+      week = Tempo.explain(~o"2026-W25"W)
+      assert week =~ "Week 25 of 2026."
+      assert week =~ "Span: [2026-W25-1, 2026-W26-1)."
+
+      day = Tempo.explain(~o"2026-W25-2"W)
+      assert day =~ "Tuesday of week 25 of 2026."
+      assert day =~ "Span: [2026-W25-2, 2026-W25-3)."
+
+      minute = Tempo.explain(~o"2026-W25-2T10:30"W)
+      assert minute =~ "Tuesday of week 25 of 2026 at 10:30."
+      assert minute =~ "Span: [2026-W25-2T10:30, 2026-W25-2T10:31)."
+    end
+
+    test "a week calendar's weekday is the one its calendar gives" do
+      # The retail calendar starts its weeks on a Sunday, so its day 2 is a Monday.
+      day = Tempo.new!(year: 2026, week: 25, day_of_week: 2, calendar: Calendrical.NRF)
+
+      assert Tempo.explain(day) =~ "Monday of week 25 of 2026."
+    end
+
+    test "a week in another month-based calendar spans that calendar's days" do
+      prose = Tempo.explain(Tempo.from_iso8601!("5786-W25[u-ca=hebrew]"))
+
+      assert prose =~ "Week 25 of 5786."
+      assert prose =~ "Span: [5786-06-20, 5786-06-27)."
+    end
+
+    test "a week with no year recurs, as a yearless date does" do
+      assert Tempo.explain(~o"25W") =~ "Week 25 of any year"
+      assert Tempo.explain(~o"25W2K") =~ "Tuesday of week 25, in any year"
+      assert Tempo.explain(~o"2K") =~ "Tuesday of any week"
+      assert Tempo.explain(~o"25W2K"W) =~ "Day 2 of week 25, in any year"
+    end
+
+    test "a week is the day it starts on wherever it bounds something" do
+      assert Tempo.explain(~o"2026-W25/2026-W27") =~ "From: 2026-06-15."
+      assert Tempo.explain(~o"2026-W25/2026-W27") =~ "To:   2026-06-29"
+      assert Tempo.explain(Tempo.from_iso8601!("2026-W25/..")) =~ "Lower bound: 2026-06-15."
+      assert Tempo.explain(Tempo.from_iso8601!("R5/2026-W25/P1W")) =~ "Starting: 2026-06-15."
+      assert Tempo.explain(Tempo.from_iso8601!("2026-W2X")) =~ "Span: [2026-05-11, 2026-07-20)."
+
+      {:ok, weeks} = Tempo.union(~o"2026-W25", ~o"2026-W30")
+      assert Tempo.explain(weeks) =~ "1. 2026-06-15 → 2026-06-22"
+      assert Tempo.explain(weeks) =~ "2. 2026-07-20 → 2026-07-27"
+
+      week_calendar = Tempo.from_iso8601!("2026-W25/2026-W27", Calendrical.ISOWeek)
+      assert Tempo.explain(week_calendar) =~ "From: 2026-W25-1."
+      assert Tempo.explain(week_calendar) =~ "To:   2026-W27-1"
     end
   end
 

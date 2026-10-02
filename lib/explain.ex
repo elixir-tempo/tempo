@@ -10,8 +10,8 @@ defmodule Tempo.Explanation do
 
   ### Fields
 
-  * `:kind` — a classifier atom (e.g. `:scalar_year`,
-    `:masked_year`, `:duration`, `:interval_set`).
+  * `:kind` — a classifier atom (e.g. `:anchored`,
+    `:masked`, `:duration`, `:interval_set`).
 
   * `:parts` — a list of `{tag :: atom(), text :: String.t()}`
     tuples. Common tags:
@@ -58,7 +58,7 @@ defmodule Tempo.Explain do
   ## Example
 
       iex> Tempo.Explain.explain(~o"156X").kind
-      :masked_year
+      :masked
 
       iex> Tempo.Explain.explain(~o"156X").parts
       ...> |> Enum.map(&elem(&1, 0))
@@ -73,6 +73,7 @@ defmodule Tempo.Explain do
   alias Tempo.Mask
   alias Tempo.RecurrenceSet
   alias Tempo.RecurrenceSet.Conditional
+  alias Tempo.Validation
 
   @doc """
   Return a structured `t:Tempo.Explanation.t/0` for any Tempo
@@ -275,62 +276,123 @@ defmodule Tempo.Explain do
     cond do
       has_mask?(time) -> mask_headline(tempo)
       only_time_of_day?(time) -> time_of_day_headline(time)
-      true -> anchored_headline(time)
+      true -> precision_headline(anchored_precision(time), tempo)
     end
   end
 
-  defp anchored_headline(time) do
-    y = find_unit(time, :year)
-    m = find_unit(time, :month)
-    d = find_unit(time, :day)
+  defp precision_headline(:datetime, %Tempo{time: time}),
+    do: "#{date_phrase(time)} at #{clock_phrase(time)}."
 
-    case anchored_precision(time) do
-      :datetime -> datetime_headline(time, y, m, d)
-      :date -> "#{month_name(m)} #{d}, #{y}."
-      :month -> "#{month_name(m)} #{y}."
-      :year -> "The year #{y}."
-      other -> yearless_headline(other, m, d, time)
+  defp precision_headline(:date, %Tempo{time: time}), do: "#{date_phrase(time)}."
+
+  defp precision_headline(:month, %Tempo{time: time}),
+    do: "#{month_name(find_unit(time, :month))} #{find_unit(time, :year)}."
+
+  defp precision_headline(:year, %Tempo{time: time}), do: "The year #{find_unit(time, :year)}."
+
+  defp precision_headline(:week_datetime, %Tempo{time: time} = tempo),
+    do: "#{week_date_phrase(tempo)} at #{clock_phrase(time)}."
+
+  defp precision_headline(:week_date, %Tempo{} = tempo), do: "#{week_date_phrase(tempo)}."
+
+  defp precision_headline(:week, %Tempo{time: time}),
+    do: "Week #{find_unit(time, :week)} of #{find_unit(time, :year)}."
+
+  defp precision_headline(yearless, %Tempo{} = tempo), do: yearless_headline(yearless, tempo)
+
+  defp date_phrase(time) do
+    "#{month_name(find_unit(time, :month))} #{find_unit(time, :day)}, #{find_unit(time, :year)}"
+  end
+
+  defp clock_phrase(time),
+    do: "#{two_digit(find_unit(time, :hour))}:#{two_digit(find_unit(time, :minute) || 0)}"
+
+  # A week date in its own terms: its weekday, its week and its year.
+  defp week_date_phrase(%Tempo{time: time} = tempo) do
+    year = find_unit(time, :year)
+    week = find_unit(time, :week)
+    day = find_unit(time, :day_of_week)
+
+    "#{weekday_of(year, week, day, calendar_of(tempo))} of week #{week} of #{year}"
+  end
+
+  # The weekday a week date names, asked of the date itself: a calendar of
+  # weeks starts its week as its configuration says, so its day 2 need not be
+  # a Tuesday.
+  defp weekday_of(year, week, day, calendar) do
+    case Validation.date_from_iso_week(year, week, day, calendar) do
+      {:ok, %Date{} = date} -> weekday_name(Date.day_of_week(date, :monday))
+      _no_such_date -> "Day #{day}"
     end
   end
 
-  defp datetime_headline(time, y, m, d) do
-    h = find_unit(time, :hour)
-    mi = find_unit(time, :minute)
-    "#{month_name(m)} #{d}, #{y} at #{two_digit(h)}:#{two_digit(mi || 0)}."
+  # No year at all: a recurring day-and-month (a birthday), a month, a bare
+  # day, a week or a day of the week — values in their own right, not partial
+  # anchored ones.
+  defp yearless_headline(:yearless_date, %Tempo{time: time}) do
+    "#{month_name(find_unit(time, :month))} #{find_unit(time, :day)}, " <>
+      "in any year (no year — it recurs)."
   end
 
-  # No year at all: a recurring day-and-month (a birthday), a month, or a
-  # bare day — values in their own right, not partial anchored ones.
-  defp yearless_headline(:yearless_date, m, d, _time),
-    do: "#{month_name(m)} #{d}, in any year (no year — it recurs)."
+  defp yearless_headline(:yearless_month, %Tempo{time: time}),
+    do: "#{month_name(find_unit(time, :month))}, in any year (no year — it recurs)."
 
-  defp yearless_headline(:yearless_month, m, _d, _time),
-    do: "#{month_name(m)}, in any year (no year — it recurs)."
+  defp yearless_headline(:day_only, %Tempo{time: time}),
+    do: "Day #{find_unit(time, :day)} of any month (no year or month — it recurs)."
 
-  defp yearless_headline(:day_only, _m, d, _time),
-    do: "Day #{d} of any month (no year or month — it recurs)."
-
-  defp yearless_headline(:day_of_year_only, _m, _d, time),
+  defp yearless_headline(:day_of_year_only, %Tempo{time: time}),
     do: "Day #{find_unit(time, :day_of_year)} of any year (no year — it recurs)."
 
-  defp yearless_headline(:none, _m, _d, time) do
-    {unit, _scale} = Tempo.resolution(%Tempo{time: time})
+  defp yearless_headline(:yearless_week_date, %Tempo{time: time} = tempo) do
+    "#{yearless_weekday(tempo)} of week #{find_unit(time, :week)}, " <>
+      "in any year (no year — it recurs)."
+  end
+
+  defp yearless_headline(:yearless_week, %Tempo{time: time}),
+    do: "Week #{find_unit(time, :week)} of any year (no year — it recurs)."
+
+  defp yearless_headline(:weekday_only, %Tempo{} = tempo),
+    do: "#{yearless_weekday(tempo)} of any week (no year or week — it recurs)."
+
+  defp yearless_headline(:none, %Tempo{} = tempo) do
+    {unit, _scale} = Tempo.resolution(tempo)
     "A Tempo value at #{inspect(unit)} resolution."
   end
 
+  # Without a year there is no date to ask for its weekday. ISO 8601 numbers a
+  # month-based calendar's days of the week from Monday; a calendar of weeks'
+  # day is given by its number.
+  defp yearless_weekday(%Tempo{time: time} = tempo) do
+    day = find_unit(time, :day_of_week)
+
+    if Tempo.week_based_calendar?(calendar_of(tempo)),
+      do: "Day #{day}",
+      else: weekday_name(day)
+  end
+
+  # A value built without a calendar is Gregorian, as it is everywhere else.
+  defp calendar_of(%Tempo{calendar: nil}), do: Calendrical.Gregorian
+  defp calendar_of(%Tempo{calendar: calendar}), do: calendar
+
   # The precision a value states, the first whose units it has. Those with no
   # year at all — a recurring day-and-month (a birthday), a month, a bare day,
-  # a bare day of the year — are values in their own right, not partial
-  # anchored ones.
+  # a bare day of the year, a week or a day of the week — are values in their
+  # own right, not partial anchored ones.
   @precisions [
     {[:year, :month, :day, :hour], :datetime},
     {[:year, :month, :day], :date},
     {[:year, :month], :month},
+    {[:year, :week, :day_of_week, :hour], :week_datetime},
+    {[:year, :week, :day_of_week], :week_date},
+    {[:year, :week], :week},
     {[:year], :year},
     {[:month, :day], :yearless_date},
     {[:month], :yearless_month},
     {[:day], :day_only},
-    {[:day_of_year], :day_of_year_only}
+    {[:day_of_year], :day_of_year_only},
+    {[:week, :day_of_week], :yearless_week_date},
+    {[:week], :yearless_week},
+    {[:day_of_week], :weekday_only}
   ]
 
   defp anchored_precision(time) do
@@ -1051,9 +1113,10 @@ defmodule Tempo.Explain do
 
   # Render an endpoint in a consistent `YYYY-MM-DDTHH:MM` shape,
   # padding missing trailing units with their minimum so the
-  # output reads as a concrete moment rather than a span.
+  # output reads as a concrete moment rather than a span. A calendar
+  # of weeks writes `YYYY-Www-D` for its date.
   defp render_endpoint(%Tempo{time: time} = tempo) do
-    case {render_date_part(time), render_time_part(time)} do
+    case {render_date_part(tempo), render_time_part(time)} do
       # A mask (`198X`), a margin of error (`2018±2Y`) or a grouped
       # component has no plain calendar spelling, so show the value's own
       # rendering rather than `?`. `Inspect` is total — it falls back to a
@@ -1067,17 +1130,48 @@ defmodule Tempo.Explain do
 
   defp render_endpoint(other), do: inspect(other)
 
-  defp render_date_part(time) do
-    y = find_unit(time, :year)
-    m = find_unit(time, :month)
-    d = find_unit(time, :day)
+  defp render_date_part(%Tempo{time: time} = tempo) do
+    case find_unit(time, :year) do
+      year when is_integer(year) -> anchored_date(year, time, calendar_of(tempo))
+      _no_plain_year -> render_yearless_date(time)
+    end
+  end
+
+  # The day an anchored endpoint starts on, by the units after its year.
+  defp anchored_date(year, time, calendar) do
+    month = find_unit(time, :month)
+    week = find_unit(time, :week)
 
     cond do
-      is_integer(y) and is_integer(m) and is_integer(d) -> "#{y}-#{two_digit(m)}-#{two_digit(d)}"
-      is_integer(y) and is_integer(m) -> "#{y}-#{two_digit(m)}-01"
-      is_integer(y) -> "#{y}-01-01"
-      true -> render_yearless_date(time)
+      is_integer(month) -> month_date(year, month, find_unit(time, :day))
+      is_integer(week) -> week_date(year, week, find_unit(time, :day_of_week), calendar)
+      true -> year_start(year, calendar)
     end
+  end
+
+  defp month_date(year, month, day) when is_integer(day),
+    do: "#{year}-#{two_digit(month)}-#{two_digit(day)}"
+
+  defp month_date(year, month, _no_plain_day), do: "#{year}-#{two_digit(month)}-01"
+
+  # A week's first day, or the day of it a week date names. A calendar of
+  # weeks writes its own week date; a month-based calendar's week is the day
+  # Calendrical finds for it, written as that calendar's date.
+  defp week_date(year, week, day_of_week, calendar) do
+    day = if is_integer(day_of_week), do: day_of_week, else: 1
+
+    with false <- Tempo.week_based_calendar?(calendar),
+         {:ok, %Date{} = date} <- Validation.date_from_iso_week(year, week, day, calendar) do
+      month_date(date.year, date.month, date.day)
+    else
+      _a_calendar_of_weeks_or_no_such_week -> "#{year}-W#{two_digit(week)}-#{day}"
+    end
+  end
+
+  # A year's first day, which in a calendar of weeks is the first day of its
+  # first week.
+  defp year_start(year, calendar) do
+    if Tempo.week_based_calendar?(calendar), do: "#{year}-W01-1", else: "#{year}-01-01"
   end
 
   # ISO 8601 writes a yearless date `--MM-DD`, a yearless month `--MM`,
@@ -1095,33 +1189,21 @@ defmodule Tempo.Explain do
     end
   end
 
-  # The week and ordinal axes have their own ISO spellings.
+  # The yearless week and ordinal axes have their own ISO spellings.
   defp render_alternate_axis(time) do
-    y = find_unit(time, :year)
-    w = find_unit(time, :week)
-    dw = find_unit(time, :day_of_week)
-    dy = find_unit(time, :day_of_year)
-
-    cond do
-      is_integer(y) and is_integer(dy) -> "#{y}-#{dy}"
-      is_integer(dy) -> "day #{dy} of the year"
-      true -> render_week_axis(y, w, dw)
+    case find_unit(time, :day_of_year) do
+      day when is_integer(day) -> "day #{day} of the year"
+      _no_plain_ordinal -> render_week_axis(find_unit(time, :week), find_unit(time, :day_of_week))
     end
   end
 
-  # ISO 8601 week spellings, by which parts the value actually carries.
-  defp render_week_axis(y, w, dw) when is_integer(y) and is_integer(w) and is_integer(dw),
-    do: "#{y}-W#{two_digit(w)}-#{dw}"
+  # ISO 8601's yearless week spellings, by which parts the value carries.
+  defp render_week_axis(week, day) when is_integer(week) and is_integer(day),
+    do: "-W#{two_digit(week)}-#{day}"
 
-  defp render_week_axis(y, w, _dw) when is_integer(y) and is_integer(w),
-    do: "#{y}-W#{two_digit(w)}"
-
-  defp render_week_axis(_y, w, dw) when is_integer(w) and is_integer(dw),
-    do: "-W#{two_digit(w)}-#{dw}"
-
-  defp render_week_axis(_y, w, _dw) when is_integer(w), do: "-W#{two_digit(w)}"
-  defp render_week_axis(_y, _w, dw) when is_integer(dw), do: "day #{dw} of the week"
-  defp render_week_axis(_y, _w, _dw), do: nil
+  defp render_week_axis(week, _day) when is_integer(week), do: "-W#{two_digit(week)}"
+  defp render_week_axis(_week, day) when is_integer(day), do: "day #{day} of the week"
+  defp render_week_axis(_week, _day), do: nil
 
   defp render_time_part(time) do
     h = Keyword.get(time, :hour)
