@@ -108,7 +108,7 @@ defmodule Tempo.Interval.Steps do
   @spec count_steps(Tempo.t(), Tempo.t(), atom(), module()) ::
           non_neg_integer() | :not_supported
   def count_steps(%Tempo{time: from_time} = from, %Tempo{time: to_time} = to, unit, calendar) do
-    if date_axis?(from_time, unit) and date_axis?(to_time, unit) do
+    if counted_from?(from_time, unit) and date_axis?(to_time, unit) do
       count_date_steps(from, to, unit, calendar)
     else
       :not_supported
@@ -151,16 +151,42 @@ defmodule Tempo.Interval.Steps do
 
   defp count_date_steps(_from, _to, _unit, _calendar), do: :not_supported
 
-  # The closed forms step a calendar date — a year, a year and month, or
-  # a year, month and day beneath days and clock units — so a value on
-  # the week axis (a week's days) walks instead.
-  defp date_axis?(time, :year), do: Keyword.has_key?(time, :year)
+  # The closed forms count and step a calendar date — a year, a year and
+  # month, or a year, month and day beneath days and clock units — each of
+  # whose units is one whole number. A value on the week axis (a week's
+  # days), one with no year, and one that holds a set, a mask or an
+  # unspecified unit are walked instead.
+  defp date_axis?([{:year, year} | rest], :year) when is_integer(year), do: whole_units?(rest)
 
-  defp date_axis?(time, :month),
-    do: Keyword.has_key?(time, :year) and Keyword.has_key?(time, :month)
+  defp date_axis?([{:year, year}, {:month, month} | rest], :month)
+       when is_integer(year) and is_integer(month),
+       do: whole_units?(rest)
 
-  defp date_axis?(time, _unit),
-    do: Keyword.has_key?(time, :month) and Keyword.has_key?(time, :day)
+  defp date_axis?([{:year, year}, {:month, month}, {:day, day} | rest], unit)
+       when unit not in [:year, :month] and is_integer(year) and is_integer(month) and
+              is_integer(day),
+       do: whole_units?(rest)
+
+  defp date_axis?(_time, _unit), do: false
+
+  # The value steps are counted from, which gives a microsecond step its
+  # width, so it must hold one.
+  defp counted_from?(time, :microsecond),
+    do: date_axis?(time, :microsecond) and List.keymember?(time, :microsecond, 0)
+
+  defp counted_from?(time, unit), do: date_axis?(time, unit)
+
+  @doc false
+  # Whether every unit of a time list is one whole number: no set, range,
+  # group, mask, unspecified unit or margin of error.
+  @spec whole_units?(list()) :: boolean()
+  def whole_units?([{:microsecond, {value, precision}} | rest])
+      when is_integer(value) and is_integer(precision),
+      do: whole_units?(rest)
+
+  def whole_units?([{_unit, value} | rest]) when is_integer(value), do: whole_units?(rest)
+  def whole_units?([]), do: true
+  def whole_units?(_time), do: false
 
   @doc """
   Return the Tempo at step `n` from `from` at `unit` granularity.
@@ -195,7 +221,9 @@ defmodule Tempo.Interval.Steps do
   @spec nth_step(Tempo.t(), non_neg_integer(), atom(), module()) ::
           Tempo.t() | :not_supported
   def nth_step(%Tempo{time: time} = tempo, n, unit, calendar) do
-    if date_axis?(time, unit), do: nth_date_step(tempo, n, unit, calendar), else: :not_supported
+    if counted_from?(time, unit),
+      do: nth_date_step(tempo, n, unit, calendar),
+      else: :not_supported
   end
 
   defp nth_date_step(%Tempo{time: time} = tempo, n, :year, _calendar) do

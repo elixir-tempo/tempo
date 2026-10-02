@@ -7145,23 +7145,8 @@ defmodule Tempo do
       {new_time} -> {:ok, %{tempo | time: new_time}}
       {:span, first, last} -> {:span, %{tempo | time: first}, %{tempo | time: last}}
       {:members, times} -> {:members, Enum.map(times, &%{tempo | time: &1})}
-      {:error, reason} -> {:error, mask_error(tempo, reason)}
+      {:error, reason} -> {:error, Mask.error(tempo, reason)}
     end
-  end
-
-  defp mask_error(tempo, :unanchored), do: UnanchoredError.exception(value: tempo)
-
-  defp mask_error(tempo, {:no_candidates, unit}) do
-    InvalidDateError.exception(
-      reason: "#{inspect(tempo)} names no date: no #{unit} matches its mask."
-    )
-  end
-
-  defp mask_error(tempo, {:unmaskable, unit}) do
-    ConversionError.exception(
-      value: tempo,
-      reason: "#{inspect(tempo)} masks its #{unit}, which has no range of values to narrow to."
-    )
   end
 
   defp find_non_contiguous_mask([], _previous, _calendar), do: nil
@@ -7303,9 +7288,9 @@ defmodule Tempo do
     # re-validate, which resolves the negative against that member's
     # own month or year (leap-aware, per ISO 8601-2 §4.4.1), exactly
     # as a scalar literal resolves at parse.
-    tempo
-    |> expand_members()
-    |> materialise_members()
+    with {:ok, members} <- expand_members(tempo) do
+      materialise_members(members)
+    end
   end
 
   defp materialise_members(members) do
@@ -7345,17 +7330,11 @@ defmodule Tempo do
   defp member_intervals({:ok, %IntervalSet{} = set}), do: IntervalSet.members(set)
   defp member_intervals({:ok, %Tempo.Interval{} = interval}), do: [interval]
 
-  # Any combination of ranges, in any component positions, expands
-  # through the cartesian expander — each component resolves against
-  # its already-concrete coarser units, so nested open ranges
-  # (`{2000..2010}Y{1..-1}M{1..-1}D`) terminate. Shapes it does not
-  # cover (masks, groups, `:any`) keep the odometer walk.
-  defp expand_members(%Tempo{} = tempo) do
-    case Enumeration.expand(tempo) do
-      {:ok, members} -> members
-      :not_expandable -> Enum.to_list(tempo)
-    end
-  end
+  # The members are the values the walk of `Tempo.Enumeration` names: each
+  # component resolves against its already-concrete coarser units, so nested
+  # open ranges (`{2000..2010}Y{1..-1}M{1..-1}D`) terminate, and a value that
+  # cannot be walked is an error here rather than a raise.
+  defp expand_members(%Tempo{} = tempo), do: Enumeration.members(tempo)
 
   # An expanded member is a raw combination of component values, in
   # whatever axis the source value used. The parser normalises such a
@@ -8331,7 +8310,13 @@ defmodule Tempo do
   # Each member of a context with a set of finer values (`2018Y{3,9}M`) is its
   # own period.
   defp context_members(%Tempo{} = member) do
-    if multi_tempo?(member), do: Enum.to_list(expand_members(member)), else: [member]
+    case multi_tempo?(member) and expand_members(member) do
+      false -> [member]
+      {:ok, members} -> members
+      # A context is expanded with its year, which bounds every range in
+      # it; one that cannot be listed names no period.
+      {:error, _exception} -> []
+    end
   end
 
   # The recurrence steps by the context's finest unit, so each period is one
@@ -8391,6 +8376,7 @@ defmodule Tempo do
   defp do_to_interval(%Tempo{} = tempo) do
     case mask_context_members(tempo) do
       {:ok, members} -> materialise_mask_members(members)
+      {:error, _exception} = error -> error
       :none -> narrowed_interval(tempo)
     end
   end
@@ -8406,6 +8392,7 @@ defmodule Tempo do
   defp context_members({[_ | _] = context, [_ | _] = masked}, tempo) do
     case Enumeration.expand(%{tempo | time: context}) do
       {:ok, members} -> {:ok, Enum.map(members, &%{&1 | time: &1.time ++ masked})}
+      {:error, _exception} = error -> error
       :not_expandable -> :none
     end
   end

@@ -427,19 +427,21 @@ defmodule Tempo.EnumerationConformance.Test do
       assert Enum.all?(list, fn v -> v.time[:year] == 2022 and v.time[:month] in 9..10 end)
     end
 
-    test "selection (`L…N`) preserves its shape through enumeration" do
-      # A selection is a constraint, not a sequence. Its inner
-      # keyword list (`[month: 1]` for `L1MN`) must stay intact
-      # on every yielded Tempo so downstream consumers — inspect,
-      # to_iso8601, equality — still see a well-formed selection.
+    test "selection (`L…N`) enumerates the values it selects" do
+      # A selection is a constraint on the value it is in, not a
+      # sequence of its own: `2022YL1MN` is the first month of 2022 and
+      # `2026Y6ML2KN` the Tuesdays of June 2026. Walking one yields what
+      # `Tempo.to_interval/2` gives it.
       assert {:ok, list} = take("2022YL1MN")
+      assert Enum.map(list, & &1.time) == [[year: 2022, month: 1]]
 
-      assert Enum.all?(list, fn v ->
-               case Keyword.get(v.time, :selection) do
-                 [month: 1] -> true
-                 _ -> false
-               end
-             end)
+      assert {:ok, list} = take("2026Y6ML2KN")
+
+      assert Enum.map(list, & &1.time) == [
+               [year: 2026, month: 6, day: 2],
+               [year: 2026, month: 6, day: 9],
+               [year: 2026, month: 6, day: 16]
+             ]
     end
   end
 

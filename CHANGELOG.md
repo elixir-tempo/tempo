@@ -173,6 +173,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Changed
 
+* Enumeration reads a value once and then each of its values as it is asked for: `Enum.to_list(~o"2026-06-15T10")` takes 18 µs where it took 290, and `Enum.take/2` of a large set (`{2000..2100}Y{1..-1}M{1..-1}DT{0..-1}H`) takes 50 µs where it built every member first and took a second.
+
 * `Tempo.to_string/2` joins several spans as a list in the locale ("Jun 15, 2026 and Jul 4, 2026"), and a one-of set's members as alternatives ("2026 or 2027"), where it joined them with commas.
 
 * The duration predicates (`at_least?/2`, `at_most?/2`, `exactly?/2`, `longer_than?/2`, `shorter_than?/2`) measure an interval set by the time it covers and a value by the span it names, and `duration/1` measures a value's span.
@@ -202,6 +204,22 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* `Enum` walks a value whose week, day of the week, day of the year, hour, minute or second is unspecified (`X*`) or masked, and a mask counted from the end (`2026Y-XM`, April to December), where it raised a `FunctionClauseError` or never returned. An unspecified hour, minute or second counts from 0, where it counted from 1, and `Tempo.to_interval/2` narrows a masked day of the week or of the year as it narrows a masked month.
+
+* Each unit of a walked value is read after the values before it: `Enum.count(~o"1985-XX-XX")` is 365 where it was 372, `1985-XX-31` is the seven 31sts where it yielded 31 February, and `{2026,2027}Y-1D` is the last day of each year. `Tempo.to_interval/2` lists its members by the same walk, so `2026Y{100,200}D` is 10 April and 19 July where it was 10 and 19 January, and `2026Y{2,6}MX*D` is February's 28 days and June's 30 where it was 28 of each.
+
+* A value that cannot be walked raises a named error — `Tempo.UnanchoredError` for a unit that needs a year the value lacks (`X*W`, `{1..-1}W`), `Tempo.InvalidDateError` for a mask no value matches (`1985-02-3X`), `Tempo.ConversionError` for a group of a set — where `Enum` raised a `FunctionClauseError`, a `KeyError`, an `ArgumentError` or a `Protocol.UndefinedError`, or never returned. `Tempo.to_interval/2` returns where it raised: an error for `{1..-1}W` and `3m`, and two spans for `2026Y6M{1,15}DT10H30M15.5S`.
+
+* A value that holds a selection enumerates as the spans `Tempo.to_interval/2` gives it — `Enum.to_list(~o"2026Y6ML2KN")` is the five Tuesdays of June 2026 — where it raised an `ArgumentError` or yielded hours that still held the selection. An interval from one (`2026Y6ML2KN/P1D`) walks the same way, where it raised.
+
+* An interval with no year is counted, indexed and searched by its walk (`Enum.count(Tempo.to_interval!(~o"6M"))` is 30, where it raised a `KeyError`), and one that ends before it starts walks round its axis: `T22H/T2H` is 22:00 to 01:00 and `7K/3K` Sunday to Tuesday, where both were empty. A walk takes a step only when it goes on, so `Enum.take(~o"2M27D/..", 2)` is 27 and 28 February, where it raised.
+
+* An interval whose start or end is no one point (`{2026,2027}Y/2030Y`, `2026Y/202XY`, `1M/-1M`) raises `Tempo.ConversionError` or `Tempo.IntervalEndpointsError` when it is walked, where it yielded nothing, walked past its end without stopping, or raised a `CaseClauseError` when counted.
+
+* `Enum.count/1`, `Enum.at/2` and `Enum.member?/2` of a second, a fraction of one and a year with significant digits agree with their walk: `Enum.count(~o"2026-01-15T10:30:00")` is 10, its tenths, where it was 1, and `Enum.count(~o"1950S2Y")` is 1,200 months where it was 100 years.
+
+* A margin of error (`2018±2Y`) is walked as the value it annotates, where it raised, and a year with significant digits in a set (`1950S2Y{1,2}M`) as each year of its block, where it was two values and converted to the century twice. A year mask below zero (`-1XXX`) is walked from its earliest year, and an unspecified traditional month (`X*m`) is an unspecified month, where `Tempo.to_interval/2` raised.
 
 * A day of the week that names no week spans and steps on its own axis: `Tempo.to_interval(~o"{6,7}K")` gives both days, `~o"7K"` spans `7K/1K` and `~o"7K"` plus a day is `~o"1K"`, where the last day of the week raised a `KeyError` and a day added to any left it where it was. A step back from a value with no year borrows as a step forward carries (`~o"T0H"` less an hour is `~o"T23H"`), where it raised.
 

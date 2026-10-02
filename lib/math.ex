@@ -177,6 +177,12 @@ defmodule Tempo.Math do
     end
   end
 
+  # A traditional month (`3m`) is resolved to its place in a year when a value
+  # is read, so one still on a value has no year to place it in, and the month
+  # after it depends on that year.
+  def add_unit(time, :traditional_month, _calendar) when is_list(time),
+    do: {:error, :unanchored}
+
   def add_unit(_time, unit, _calendar) do
     raise ArgumentError,
           "Cannot increment a Tempo at #{inspect(unit)} resolution — " <>

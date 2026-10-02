@@ -3,8 +3,6 @@ defimpl Enumerable, for: Tempo do
 
   alias Tempo.Enumeration
   alias Tempo.Enumeration.Zone
-  alias Tempo.Iso8601.Group
-  alias Tempo.Validation
 
   # Implicit enumeration of a resolved `%Tempo{}` walks the same
   # sequence as forward-stepping its materialised interval (see
@@ -57,169 +55,98 @@ defimpl Enumerable, for: Tempo do
 
   defp single_interval(%Tempo{} = tempo) do
     # Any value that enumerates *candidates* (masks, `:any`, ranges,
-    # groups, continuations) materialises to a single block interval whose
+    # groups) materialises to a single block interval whose
     # `count`/`slice` would disagree with the candidate walk — e.g.
     # `2020-06-XX` is 30 day-candidates, not one month-long span. Route
     # exactly those through the reduce fallback, using the canonical
     # `explicitly_enumerable?/1` predicate rather than an ad-hoc mask check
     # (which missed `:any`, ranges, and groups).
+    #
+    # The interval of a value that names one span carries the unit the value
+    # is walked by (a day's is `:hour`), and counts as the walk does. One that
+    # carries none is walked by its own ends, which is not the walk of the
+    # value: a second is walked by its tenths and its interval is one second,
+    # and a year with significant digits (`1950S2`) is walked by the months of
+    # each year of its block and its interval by the years.
     if Enumeration.explicitly_enumerable?(tempo) do
       :error
     else
       case Tempo.to_interval(tempo) do
-        {:ok, %Tempo.Interval{} = interval} -> {:ok, interval}
+        {:ok, %Tempo.Interval{unit: unit} = interval} when not is_nil(unit) -> {:ok, interval}
         _ -> :error
       end
     end
   end
 
+  # `Enumerable.reduce/3` has no error to return, so a value that cannot be
+  # walked raises the exception `Tempo.to_interval/2` would return for it.
   @impl Enumerable
-  def reduce(%Tempo{} = tempo, {:cont, _acc} = acc, fun) do
-    # Any combination of ranges in any positions expands as a
-    # cartesian product whose components resolve against their
-    # concrete ancestors — the odometer's backtracking cannot
-    # converge on several nested open ranges. Shapes the expander
-    # does not cover (masks, groups, `:any`, selections) keep the
-    # odometer walk below.
-    case Enumeration.expand(tempo) do
-      {:ok, members} -> reduce_members(members, acc, fun)
-      :not_expandable -> reduce_odometer(tempo, acc, fun)
+  def reduce(%Tempo{time: time} = tempo, acc, fun) do
+    # A value that holds a selection (`2026Y6ML2KN`, the Tuesdays of June
+    # 2026) names the dates the selection picks, and is walked as they are.
+    if List.keymember?(time, :selection, 0) do
+      reduce_spans(Tempo.to_interval(tempo), acc, fun)
+    else
+      tempo |> Enumeration.implicit_walk() |> reduce_walk(acc, fun)
     end
   end
 
-  def reduce(enum, acc, fun), do: reduce_odometer(enum, acc, fun)
+  defp reduce_spans({:ok, spans}, acc, fun), do: Enumerable.reduce(spans, acc, fun)
+  defp reduce_spans({:error, exception}, _acc, _fun), do: raise(exception)
 
-  # Emit pre-expanded members in time order, applying the same
-  # DST zone reading each odometer value gets.
-  defp reduce_members(_members, {:halt, acc}, _fun), do: {:halted, acc}
+  # The walk of the value (see `Tempo.Enumeration`), a few values at a time.
+  defp reduce_walk(_walk, {:halt, acc}, _fun), do: {:halted, acc}
 
-  defp reduce_members(members, {:suspend, acc}, fun),
-    do: {:suspended, acc, &reduce_members(members, &1, fun)}
+  defp reduce_walk(walk, {:suspend, acc}, fun),
+    do: {:suspended, acc, &reduce_walk(walk, &1, fun)}
 
-  defp reduce_members([], {:cont, acc}, _fun), do: {:done, acc}
+  defp reduce_walk(walk, {:cont, acc}, fun) do
+    case Enumeration.next(walk) do
+      {:ok, values, walk} -> reduce_values(values, walk, {:cont, acc}, fun)
+      :done -> {:done, acc}
+      {:error, exception} -> raise exception
+    end
+  end
 
-  defp reduce_members([member | rest], {:cont, acc}, fun) do
-    case Zone.zone_status(member) do
-      :gap ->
-        reduce_members(rest, {:cont, acc}, fun)
+  # The values read from the walk, each read through its zone.
+  defp reduce_values(_values, _walk, {:halt, acc}, _fun), do: {:halted, acc}
 
-      {:ambiguous, first_shift, second_shift} ->
-        emit_members(
-          [%{member | shift: first_shift}, %{member | shift: second_shift}],
-          rest,
-          acc,
-          fun
-        )
+  defp reduce_values(values, walk, {:suspend, acc}, fun),
+    do: {:suspended, acc, &reduce_values(values, walk, &1, fun)}
 
+  defp reduce_values([], walk, {:cont, acc}, fun), do: reduce_walk(walk, {:cont, acc}, fun)
+
+  defp reduce_values([value | values], walk, {:cont, acc}, fun) do
+    case Zone.zone_status(value) do
       :ok ->
-        reduce_members(rest, fun.(member, acc), fun)
+        reduce_values(values, walk, fun.(value, acc), fun)
+
+      # Wall clock never shows this moment (DST spring-forward): skip and
+      # advance.
+      :gap ->
+        reduce_values(values, walk, {:cont, acc}, fun)
+
+      # Wall clock shows this moment twice (DST fall-back): emit both
+      # occurrences, distinguished by their `:shift` — first with the
+      # pre-transition offset (e.g. AEDT +11), second with the
+      # post-transition offset (AEST +10). RFC 9557 IXDTF treats the explicit
+      # numeric offset as the fold disambiguator, so the two emitted Tempos
+      # round-trip as distinct values and compare as distinct UTC instants.
+      {:ambiguous, first_shift, second_shift} ->
+        folded = [%{value | shift: first_shift}, %{value | shift: second_shift}]
+        reduce_folded(folded, values, walk, {:cont, acc}, fun)
     end
   end
 
-  defp emit_members([], rest, acc, fun), do: reduce_members(rest, {:cont, acc}, fun)
+  # The two occurrences of a fall-back hour, then the values after it.
+  defp reduce_folded(_folded, _values, _walk, {:halt, acc}, _fun), do: {:halted, acc}
 
-  defp emit_members([value | values], rest, acc, fun) do
-    case fun.(value, acc) do
-      {:cont, acc2} -> emit_members(values, rest, acc2, fun)
-      {:halt, acc2} -> {:halted, acc2}
-      {:suspend, acc2} -> {:suspended, acc2, &emit_members(values, rest, &1, fun)}
-    end
-  end
+  defp reduce_folded(folded, values, walk, {:suspend, acc}, fun),
+    do: {:suspended, acc, &reduce_folded(folded, values, walk, &1, fun)}
 
-  defp reduce_odometer(enum, {:cont, acc}, fun) do
-    enum = make_enum(enum)
+  defp reduce_folded([], values, walk, {:cont, acc}, fun),
+    do: reduce_values(values, walk, {:cont, acc}, fun)
 
-    case Enumeration.next(enum) do
-      nil ->
-        {:done, acc}
-
-      next ->
-        tempo = Enumeration.collect(next)
-
-        case Zone.zone_status(tempo) do
-          # Wall clock never shows this moment (DST spring-forward):
-          # skip and advance.
-          :gap ->
-            reduce_odometer(next, {:cont, acc}, fun)
-
-          # Wall clock shows this moment twice (DST fall-back): emit
-          # both occurrences, distinguished by their `:shift` — first
-          # with the pre-transition offset (e.g. AEDT +11), second
-          # with the post-transition offset (AEST +10). RFC 9557
-          # IXDTF treats the explicit numeric offset as the fold
-          # disambiguator, so the two emitted Tempos round-trip as
-          # distinct values and compare as distinct UTC instants.
-          {:ambiguous, first_shift, second_shift} ->
-            emit_values(
-              [%{tempo | shift: first_shift}, %{tempo | shift: second_shift}],
-              next,
-              acc,
-              fun
-            )
-
-          :ok ->
-            reduce_odometer(next, fun.(tempo, acc), fun)
-        end
-    end
-  end
-
-  defp reduce_odometer(_enum, {:halt, acc}, _fun) do
-    {:halted, acc}
-  end
-
-  defp reduce_odometer(enum, {:suspend, acc}, fun) do
-    {:suspended, acc, &reduce_odometer(enum, &1, fun)}
-  end
-
-  # Apply `fun` to each pending value (typically the two occurrences
-  # of a DST fold), threading the accumulator, then continue normal
-  # iteration from `next`.
-  defp emit_values([], next, acc, fun), do: reduce_odometer(next, {:cont, acc}, fun)
-
-  defp emit_values([value | rest], next, acc, fun) do
-    case fun.(value, acc) do
-      {:cont, acc2} ->
-        emit_values(rest, next, acc2, fun)
-
-      {:halt, acc2} ->
-        {:halted, acc2}
-
-      {:suspend, acc2} ->
-        {:suspended, acc2, &emit_values_after_suspend(rest, next, fun, &1)}
-    end
-  end
-
-  defp emit_values_after_suspend(rest, next, fun, {:cont, acc}),
-    do: emit_values(rest, next, acc, fun)
-
-  defp emit_values_after_suspend(_rest, _next, _fun, {:halt, acc}),
-    do: {:halted, acc}
-
-  defp emit_values_after_suspend(rest, next, fun, {:suspend, acc}),
-    do: {:suspended, acc, &emit_values_after_suspend(rest, next, fun, &1)}
-
-  defp make_enum(%Tempo{calendar: calendar} = tempo) do
-    # Resolve the implicit `1..-1` enumeration range against the
-    # value's *own* calendar. Without the explicit calendar,
-    # `Validation.validate/1` defaults to Gregorian, so a Coptic
-    # month would enumerate 31 days (January) and a 13-month calendar
-    # year only 12 months. `Enumeration.next/1` already threads the
-    # calendar; this lines the range resolution up with it.
-    {:ok, tempo} =
-      tempo
-      |> Enumeration.maybe_add_implicit_enumeration()
-      |> Validation.validate(calendar)
-
-    bound_groups(tempo, calendar)
-  end
-
-  # A group walks the values its container holds: the last group of
-  # eleven days in February stops at the 28th, and the last group of
-  # five months at December.
-  defp bound_groups(%Tempo{time: time} = tempo, calendar) do
-    case Group.bound_groups(time, Tempo.Compare.effective_calendar(calendar)) do
-      {:ok, bounded} -> %{tempo | time: bounded}
-      {:error, _exception} -> tempo
-    end
-  end
+  defp reduce_folded([occurrence | folded], values, walk, {:cont, acc}, fun),
+    do: reduce_folded(folded, values, walk, fun.(occurrence, acc), fun)
 end

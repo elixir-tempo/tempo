@@ -1,93 +1,71 @@
 defmodule Tempo.Mask do
   @moduledoc false
 
-  import Tempo.Enumeration, only: [adjusted_range: 4, backtrack: 2, current_units: 1]
-
+  alias Tempo.ConversionError
+  alias Tempo.InvalidDateError
+  alias Tempo.Iso8601.Unit
+  alias Tempo.UnanchoredError
   alias Tempo.Validation
 
-  # Fill in the mask when enumerating. The unspecified digits are filled
-  # with the known candidate values and then expanded. For `year: :any` we
-  # use the current year.
-
-  def fill_unspecified(:year, :any, _calendar, _previous) do
-    Date.utc_today()
-    |> Map.fetch!(:year)
-    |> List.wrap()
-  end
-
-  def fill_unspecified(unit, :any, calendar, previous)
-      when unit in [:month, :day, :hour, :minute, :second] do
-    # The list wrapping is load-bearing: `adjusted_range/4` routes
-    # through `Validation.resolve/2`, whose clause matching the
-    # `year+month` or `year+month+day` shapes guards on
-    # `is_list(value) or is_integer(value)`. Passing the range
-    # wrapped in a list lets that clause conform `1..-1//1` to
-    # the concrete `1..months_in_year`/`1..days_in_month` range.
-    [1..-1//1]
-    |> adjusted_range(unit, calendar, backtrack(previous, calendar))
-    |> List.wrap()
-  end
-
-  # Year masks are bounded entirely by their digit pattern (no calendar
-  # context narrows them), so they defer to `valid_values/4` — the single
-  # resolver — just like the month/day path below. `valid_values/4` ignores
-  # `previous`/`calendar` for years.
-  # A year mask never depends on a coarser unit, so `valid_values/4`
-  # cannot report a missing year here — unwrap it.
-  def fill_unspecified(:year, [:negative | _] = mask, calendar, previous) do
-    {:ok, values} = valid_values(:year, mask, previous, calendar)
-    values
-  end
-
-  def fill_unspecified(:year, mask, calendar, previous) when is_list(mask) do
-    {:ok, values} = valid_values(:year, mask, previous, calendar)
-    values
-  end
-
-  # Month and day masks still need calendar context (month-of-year
-  # bounds, days-in-month), so they route through `:any` which
-  # returns a calendar-adjusted range.
-  def fill_unspecified(unit, [:negative | rest_mask], calendar, previous)
-      when unit in [:month, :day] do
-    [target_range] = fill_unspecified(unit, :any, calendar, previous)
-    digit_count = length(rest_mask)
-    min = -(integer_pow10(digit_count) - 1)
-    max = -integer_pow10(digit_count - 1)
-
-    Enum.reduce(target_range, [], fn candidate, acc ->
-      neg = -candidate
-
-      if neg in max..min//-1 and matches_mask?(abs(neg), rest_mask) do
-        [neg | acc]
-      else
-        acc
-      end
-    end)
-  end
-
-  def fill_unspecified(unit, mask, calendar, previous) when unit in [:month, :day] do
-    # Unified candidate generation: derive the concrete coarser units from
-    # the enumeration state (advance them via `backtrack/2`, then take each
-    # unit's current value) and defer to `valid_values/4` — the single,
-    # exact, calendar-aware resolver. This is the same range + zero-padded
-    # match the old inline `adjusted_range`/`padded_matches_mask?` computed,
-    # now shared with the materialisation path so the two cannot diverge.
-    concrete = previous |> backtrack(calendar) |> current_units() |> Enum.reverse()
-
-    case valid_values(unit, mask, concrete, calendar) do
-      {:ok, values} ->
-        values
-
-      # `Enumerable.reduce/3` has no error channel — its contract admits
-      # only `{:done, acc}`, `{:halted, acc}` and `{:suspended, …}` — so a
-      # value that cannot be enumerated has to signal by raising. This is
-      # a documented exception with a message, not a bare `throw`: callers
-      # can match on it, and it names the value that is missing its year.
-      {:error, :unanchored} ->
-        raise Tempo.UnanchoredError,
-          value: Enum.reverse(concrete),
-          reason: :masked
+  @doc false
+  # The values a masked unit takes when a value is walked, after the concrete
+  # units before it. A mask counted from the end (`-X`, the last nine) is read
+  # against what the unit holds there, so each candidate is the value it
+  # names: the last nine months of a twelve-month year are 4 to 12.
+  @spec candidates(atom(), list(), keyword(), module()) ::
+          {:ok, [integer()]} | {:error, :unanchored | {:unmaskable, atom()}}
+  # The years of a mask below zero (`-1XXX`) are walked from the earliest.
+  def candidates(:year, [:negative | _digits] = mask, previous, calendar) do
+    with {:ok, years} <- valid_values(:year, mask, previous, calendar) do
+      {:ok, Enum.reverse(years)}
     end
+  end
+
+  def candidates(:year, mask, previous, calendar),
+    do: valid_values(:year, mask, previous, calendar)
+
+  def candidates(unit, [:negative | mask], previous, calendar) do
+    with {:ok, %Range{last: last} = range} <- unspecified(unit, previous, calendar) do
+      counts = Range.size(range)..1//-1
+      {:ok, for(count <- counts, matches_mask?(count, mask), do: last + 1 - count)}
+    end
+  end
+
+  def candidates(unit, mask, previous, calendar),
+    do: valid_values(unit, mask, previous, calendar)
+
+  @doc false
+  # Every value an unspecified unit (`X*`) takes after the concrete units
+  # before it. A unit whose extent depends on a year the value does not have
+  # takes every value it has in some year, as a count from the end does there
+  # (`2M{1..-1}D` and `2MX*D` are both 1 to 29).
+  @spec unspecified(atom(), keyword(), module()) ::
+          {:ok, Range.t()} | {:error, :unanchored | {:unmaskable, atom()}}
+  def unspecified(unit, previous, calendar) do
+    case valid_range(unit, previous, calendar) do
+      {:ok, range} -> {:ok, range}
+      {:ambiguous, %Range{first: first, last: last}} -> {:ok, 1..max(first, last)//1}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  @doc false
+  # The exception for a mask that cannot be read, naming the value it is in.
+  @spec error(Tempo.t(), :unanchored | {:no_candidates, atom()} | {:unmaskable, atom()}) ::
+          Exception.t()
+  def error(tempo, :unanchored), do: UnanchoredError.exception(value: tempo)
+
+  def error(tempo, {:no_candidates, unit}) do
+    InvalidDateError.exception(
+      reason: "#{inspect(tempo)} names no date: no #{unit} matches its mask."
+    )
+  end
+
+  def error(tempo, {:unmaskable, unit}) do
+    ConversionError.exception(
+      value: tempo,
+      reason: "#{inspect(tempo)} masks its #{unit}, which has no range of values to narrow to."
+    )
   end
 
   @doc """
@@ -97,15 +75,15 @@ defmodule Tempo.Mask do
   This is the single, exact, calendar-aware candidate resolver.
   Both the materialisation path (non-contiguous mask expansion in
   `Tempo.to_interval/2`) and the enumeration path
-  (`fill_unspecified/4`, which delegates here) route through it, so
+  (`candidates/4`, which delegates here) route through it, so
   the two cannot diverge. For `:month` with no leading constraint,
   the result is `1..months_in_year(year)` filtered by the
   zero-padded digit pattern.
 
   ### Arguments
 
-  * `unit` is one of `:year`, `:month`, `:week`, `:day`, `:hour`,
-    `:minute`, `:second`.
+  * `unit` is one of `:year`, `:month`, `:week`, `:day`,
+    `:day_of_year`, `:day_of_week`, `:hour`, `:minute`, `:second`.
 
   * `mask` is the digit-pattern list (e.g. `[:X, :X]` or
     `[:X, 5]`).
@@ -126,8 +104,8 @@ defmodule Tempo.Mask do
 
   * `{:error, :unanchored}` when the range depends on a
     coarser unit that `previous` does not supply — a month range
-    in a calendar whose month count varies by year, or a day range
-    with no month.
+    in a calendar whose month count varies by year, a day range
+    with no month and no year, or a week with no year.
 
   * `{:error, {:unmaskable, unit}}` for any other unit, which has
     no range of values to narrow to.
@@ -197,14 +175,24 @@ defmodule Tempo.Mask do
     end
   end
 
+  # A day follows its month. With a year and no month it counts through the
+  # year, as `Tempo.Validation` reads a day written straight after a year.
   defp valid_range(:day, previous, calendar) do
     year = Keyword.get(previous, :year)
     month = Keyword.get(previous, :month)
 
     cond do
-      is_integer(year) and is_integer(month) -> {:ok, 1..calendar.days_in_month(year, month)}
-      is_integer(month) -> unanchored_range(calendar.days_in_month(month))
+      is_integer(year) and counted?(month) -> {:ok, 1..calendar.days_in_month(year, month)}
+      counted?(month) -> unanchored_range(calendar.days_in_month(month))
+      is_integer(year) and is_nil(month) -> {:ok, 1..calendar.days_in_year(year)}
       true -> {:error, :unanchored}
+    end
+  end
+
+  defp valid_range(:day_of_year, previous, calendar) do
+    case Keyword.get(previous, :year) do
+      year when is_integer(year) -> {:ok, 1..calendar.days_in_year(year)}
+      _no_concrete_year -> {:error, :unanchored}
     end
   end
 
@@ -215,10 +203,18 @@ defmodule Tempo.Mask do
     end
   end
 
-  defp valid_range(:hour, _previous, _calendar), do: {:ok, 0..23}
-  defp valid_range(:minute, _previous, _calendar), do: {:ok, 0..59}
-  defp valid_range(:second, _previous, _calendar), do: {:ok, 0..59}
-  defp valid_range(unit, _previous, _calendar), do: {:error, {:unmaskable, unit}}
+  # The day of the week and the clock units have the same extent wherever they
+  # are, which `Tempo.Iso8601.Unit.value_range/2` gives.
+  defp valid_range(unit, _previous, calendar) do
+    case Unit.value_range(unit, calendar) do
+      {:ok, range} -> {:ok, range}
+      :unknown -> {:error, {:unmaskable, unit}}
+    end
+  end
+
+  # A month counted from the first, rather than one still counting from the
+  # end of a year the value does not have.
+  defp counted?(month), do: is_integer(month) and month > 0
 
   defp unanchored_range(count) when is_integer(count), do: {:ok, 1..count}
   defp unanchored_range({:ambiguous, %Range{} = lengths}), do: {:ambiguous, lengths}
@@ -340,7 +336,4 @@ defmodule Tempo.Mask do
     {min, max} = digit_set |> set_digits() |> Enum.min_max()
     {[min | lo], [max | hi]}
   end
-
-  defp integer_pow10(0), do: 1
-  defp integer_pow10(n) when n > 0, do: 10 * integer_pow10(n - 1)
 end

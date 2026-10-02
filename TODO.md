@@ -56,9 +56,35 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **A recurrence with no year that wraps its own axis** — `R3/T22H/PT1H` gives 22:00, 22:00 and 23:00, and `R3/6K/P1D` Saturday twice and then Sunday: the occurrence past midnight, or past the week's last day, starts before the recurrence's start on the value's own axis, so the floor at the start drops it and the walk goes round again. A cadence that leaves the start where it is (a week on `7K`, a year on `12M31D`) gives occurrences of no length (`7K/7K`). Found 2026-10-02.
 
-* [ ] **The enumeration raises for six shapes** — `Enum.take/2` raises a `FunctionClauseError` for a masked hour, minute or second (`~o"2026Y6M15DT1XH"`), a group of a set (`{1,2}G3MU`) and a margin of error (`~o"2018±2Y"`), and an `ArgumentError` for a value holding a selection; `Enum.count/1` raises a `KeyError` for the span of a month with no year (`Tempo.to_interval!(~o"6M")`) and a `CaseClauseError` for one of an unspecified year (`~o"X*Y12M31D"`). A shift whose masks are disjoint and include a masked hour walks its candidates the same way, so `Tempo.shift(~o"2026Y6M15DT1XH30M", minute: 1)` raises too. Found 2026-10-02.
+* [ ] **`from_iso8601/1` raises for a masked or unspecified century or decade** — `Tempo.from_iso8601("X*C")`, `"XXC"`, `"1XC"`, `"X*J"` and `"19XJ"` raise an `ArithmeticError` (`{:mask, …} * 100`) in `Tempo.Iso8601.Parser.parse_date/1`, where a parser returns an error. Found 2026-10-03.
 
-* [ ] **A group of a set raises outside `to_interval/2`** — a value holding one (`{1,2}G3MU`, the first and second groups of three months) keeps it as a three-element tuple the `Keyword` functions cannot read: `select/2`, `at/2`, `on/2`, `trunc/2` and `nearest_workday/2` raise, and `to_interval/2` is a `ConversionError` where it could give a span for each group. `Tempo.trunc/2` also raises for a value holding a selection (`~o"2026Y4ML1K1IN"`). Found 2026-10-02.
+* [ ] **A count from the end under a single month is resolved before its year is known** — `{2026,2027}Y2M-1D` is read as `{2026,2027}Y2M29D`, the last day of a February of no year, so its walk and `to_interval/2` give nothing; `202XY2M-1D` gives the leap years alone and `X*Y2M-1D` nothing in a common year. Validation passes over a year that is a set, a mask or unspecified and reads the month and day as a value with no year; under a set of months (`{2026,2027}Y{1,2}M-1D`) the count is left for the walk and is right. Found 2026-10-03.
+
+* [ ] **`Enum.count/1` of an interval whose ends differ in resolution** — `Enum.count(~o"1985/1986-06")` is 1, the whole years between its ends, and its walk two values; `2026Y/2026Y6M15D` counts 0 and walks one, and `Enum.at/2` and `Enum.slice/3` follow the count: 145 of the 2,583 intervals in the probe. `Tempo.Interval.Steps.count_steps/4` counts between the ends cut to the unit, where the walk stops at the first step not before the end. Found 2026-10-03.
+
+* [ ] **The days of a February with no year have two answers** — 29 written `2MX*D` or `2M{1..-1}D` or left to the walk of `2M`, as validation accepts a 29th that some year has, and an `UnanchoredError` written `2MXXD`, as a mask wants every candidate to fit the shortest month, so `XXMXXD` yields January and raises at February (`to_interval/2` of `2MXXD` is the month, `2M/3M`). The months of a year with none split the other way: `X*M` and `XXM` are the twelve the Gregorian calendar always has, `{1..-1}M` and `-1M` an error. Decide one rule. Found 2026-10-03.
+
+* [ ] **`Tempo.extend/2` raises** — for a value at microsecond precision 6 it raises the `ArgumentError` the enumeration documents (`Tempo.extend(~o"2026-06-15T10:30:45.123456")`), where a function that returns tuples returns one. Found 2026-10-03.
+
+* [ ] **An unspecified year is the current Gregorian year in every calendar** — `Enum.to_list(~o"X*Y[u-ca=hebrew]")` is the Hebrew year 2026, since the walk reads `Date.utc_today().year`. Found 2026-10-03.
+
+* [ ] **Traditional months that are sets or masks** — `2026Y{1,2}m` parses as a mask (`traditional_month: {:mask, [[1..2]]}`) and a masked one (`1Xm`) is a `ConversionError` from `Enum` and `to_interval/2`: nothing lists the traditional months a year has, which is Calendrical's to answer. Found 2026-10-03.
+
+* [ ] **`to_interval/2` of a day straight after a year says the value has no year** — `~o"2026YX*D"` and `~o"2026Y3XD"` return an `UnanchoredError` ("`~o"2026YX*D"` has none"), where their walk is the days of 2026 the value names. Found 2026-10-03.
+
+* [ ] **A time after a month with no day** — `2G2MUT10H` and `2026Y-1MT10H` parse, where `6MT10H` does not; the second keeps `-1M` unresolved, and both walk to values that do not read back (`3MT10H`). Found 2026-10-03.
+
+* [ ] **A day after a group of months under a set of years** — `{2026,2028}Y2G2MU15D` walks the 15th of each month of the group, four days, where `2026Y2G2MU15D` is the fifteenth day of the group, 15 March. Found 2026-10-03.
+
+* [ ] **A set none of whose members exists is empty** — `Enum.to_list(~o"{2,6}M31D")` is `[]` and `to_interval/2` an empty set, where a mask no value matches (`1985-02-3X`) is an `InvalidDateError`. Decide whether it is an error. Found 2026-10-03.
+
+* [ ] **`Enum.count/1` and `Enum.member?/2` of an interval with no end never return** — `Enum.count(~o"2026Y/..")` walks for ever, where a lazy interval set refuses with an `UnboundedSetError`. Found 2026-10-03.
+
+* [ ] **A selected day is walked as a day and a selected hour by its minutes** — `to_interval/2` gives `2026Y4ML1K1IN` a day with no unit and `2026Y4ML1K1INT10H` an hour with `unit: :minute`, so `Enum.to_list/1` of the first is the day and of the second its sixty minutes. Found 2026-10-03.
+
+* [ ] **Converting a week date costs 220 µs** — `to_interval/2` of `2026Y{1..-1}W{1,3}KT10HX*M`, 6,360 members, takes 1.4 s where as many calendar dates take 60 ms: validating a week date walks the year's week starts (`Tempo.Validation.date_from_iso_week/4`). Listing a year mask before walking it costs the same way: `Enum.take(~o"XXXX-XX-XX", 100)` takes 2.9 ms. Found 2026-10-03.
+
+* [ ] **A group of a set raises outside `to_interval/2`** — a value holding one (`{1,2}G3MU`, the first and second groups of three months) keeps it as a three-element tuple the `Keyword` functions cannot read: `select/2`, `at/2`, `on/2`, `trunc/2` and `nearest_workday/2` raise, and `to_interval/2` and `Enum` are a `ConversionError` where they could give a span for each group. `Tempo.trunc/2` also raises for a value holding a selection (`~o"2026Y4ML1K1IN"`). Found 2026-10-02.
 
 * [ ] **A qualified set is written in a form that does not parse** — `{2026-06-15,2026-06-16}?` holds the qualification on each member, and `to_iso8601/1` and `inspect/1` write `{2026Y6M15D?,2026Y6M16D?}`, which the parser refuses. Write it once after the set, as the calendar is. Found 2026-10-02.
 
@@ -93,6 +119,10 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **Set algebra over open-ended windows** — a research project for later (user, 2026-09-28): how far union, intersection, difference, complement and the predicates go on the lazy sets an open-ended window gives, a test of the whole algebra. Questions in [plans/open-ended-set-algebra.md](plans/open-ended-set-algebra.md).
 
 ## Done
+
+* [x] **The enumeration raises** — one lazy walk for `Enum` and for `to_interval/2`'s members, each unit read after the values before it: every unit's masks and unspecified values walk, a value or an interval that cannot be walked raises a named error (`to_interval/2` returns it), and an interval with no year is counted by its walk and walks round its axis. Of 14,817 values in a probe of every unit and shape, `Enum.take/2` raised an unnamed error for 5,725 and never returned for 1,256, and now does neither for any. 2026-10-03.
+
+* [x] **The Calendrical lock moved to `b1cc801`** — two commits on from `41b4d45`: a year's days come from the calendar's `year/1`, a composite's dates are read and shifted in the calendar that has them, and a composite year that runs through days with no dates of their own keeps its days and weeks. Through Tempo nothing changes: the suite and the earlier probes give the same results under `41b4d45` and `5d2ff89`, and the suite and the probes of 14,817 values, 2,583 intervals and 662 sets under `5d2ff89` and `b1cc801`. Localize is unchanged at `6f3f0364`. 2026-10-03.
 
 * [x] **A step counts from one whole number** — a day of the week that names no week spans and steps on its own axis (`Tempo.to_interval(~o"{6,7}K")` raised a `KeyError`), a step back from a value with no year borrows as a step forward carries, and a step that would count from a unit holding a set, a range or a group is a `ConversionError` where one every value takes alike is computed. An interval's or a recurrence's end that cannot be counted to is its error. 2026-10-02.
 

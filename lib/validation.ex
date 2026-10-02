@@ -593,6 +593,11 @@ defmodule Tempo.Validation do
     end
   end
 
+  # An unspecified traditional month (`X*m`) is any month of its year, however
+  # the calendar numbers them, so it is an unspecified month.
+  def resolve([{:traditional_month, :any} | rest], calendar),
+    do: resolve([{:month, :any} | rest], calendar)
+
   # An intercalary month `{n, :leap}` (parsed from `<n>+m`) resolves to its
   # ordinal position for the year against a calendar with leap months; the rest of
   # the pipeline then sees an ordinary integer month. Any calendar without a
@@ -649,14 +654,15 @@ defmodule Tempo.Validation do
   end
 
   def resolve([{:year, year}, {:week, weeks}], calendar)
-      when is_integer(year) and (is_list(weeks) or is_integer(weeks)) do
+      when is_integer(year) and
+             (is_list(weeks) or is_integer(weeks) or is_struct(weeks, Range)) do
     with {:ok, weeks} <- conform(weeks, 1..iso_weeks_in_year(year, calendar)//1) do
       [{:year, year}, {:week, weeks}]
     end
   end
 
   def resolve([{:year, year}, {:day, days}], calendar)
-      when is_integer(year) and (is_list(days) or is_integer(days)) do
+      when is_integer(year) and (is_list(days) or is_integer(days) or is_struct(days, Range)) do
     days_in_year = calendar.days_in_year(year)
 
     with {:ok, day} <- conform(days, 1..days_in_year) do

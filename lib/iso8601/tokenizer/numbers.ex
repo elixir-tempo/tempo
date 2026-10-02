@@ -359,7 +359,7 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
 
   # A negative year with unspecified digits (e.g. `-1XXX`, `-XXXX-XX`).
   # The mask list is tagged with a leading `:negative` sentinel so
-  # downstream consumers (`Tempo.Mask.fill_unspecified/4`,
+  # downstream consumers (`Tempo.Mask.candidates/4`,
   # `Tempo.Mask.matches_mask?/2`, enumeration, inspect) can treat
   # the mask as bounded below zero.
   def form_number([?-, {:mask, list} | rest]) do

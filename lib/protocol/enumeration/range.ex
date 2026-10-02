@@ -71,6 +71,16 @@ defimpl Enumerable, for: Tempo.Interval do
     unit = iteration_unit(interval, from)
     from = Steps.fill_to_unit(from, unit, calendar)
 
+    # An end or an element with no year, or one that holds a set or a mask,
+    # has no place on the time line to compare by, so the walk answers.
+    if dated?(from) and dated?(to) and dated?(element),
+      do: stepped_member?(element, from, to, unit, calendar),
+      else: {:error, __MODULE__}
+  end
+
+  def member?(_interval, _element), do: {:error, __MODULE__}
+
+  defp stepped_member?(element, from, to, unit, calendar) do
     cond do
       Tempo.Compare.compare_endpoints(element, from) == :earlier ->
         {:ok, false}
@@ -86,7 +96,8 @@ defimpl Enumerable, for: Tempo.Interval do
     end
   end
 
-  def member?(_interval, _element), do: {:error, __MODULE__}
+  defp dated?(%Tempo{time: time}),
+    do: Steps.whole_units?(time) and Keyword.has_key?(time, :year)
 
   @impl Enumerable
   def slice(%Tempo.Interval{recurrence: recurrence}) when recurrence != 1 do
@@ -125,86 +136,166 @@ defimpl Enumerable, for: Tempo.Interval do
   end
 
   @impl Enumerable
-  def reduce(%Tempo.Interval{recurrence: recurrence} = interval, acc, fun)
-      when recurrence != 1 do
-    # A recurring interval enumerates as its materialised occurrences.
-    # `to_interval/1` expands a bounded recurrence to an IntervalSet,
-    # however it is written (a start and a duration, a start and an end,
-    # or a duration and an end); an unbounded one returns
-    # `UnboundedRecurrenceError` (raised with its own `:within`
-    # direction); one that comes back as a single interval is refused
-    # like the crisp API refuses it — never re-entered.
+  def reduce(%Tempo.Interval{} = interval, acc, fun) do
+    if occurrences?(interval),
+      do: reduce_occurrences(interval, acc, fun),
+      else: reduce_span(interval, acc, fun)
+  end
+
+  # A recurring interval, or one with an end that holds a selection
+  # (`2026Y6ML2KN/P1D`, a day from each Tuesday of June), names several spans
+  # and enumerates as they do.
+  defp occurrences?(%Tempo.Interval{recurrence: recurrence}) when recurrence != 1, do: true
+  defp occurrences?(%Tempo.Interval{from: from, to: to}), do: selects?(from) or selects?(to)
+
+  defp selects?(%Tempo{time: time}), do: List.keymember?(time, :selection, 0)
+  defp selects?(_no_endpoint), do: false
+
+  # `to_interval/1` expands a bounded recurrence to an IntervalSet,
+  # however it is written (a start and a duration, a start and an end,
+  # or a duration and an end); an unbounded one returns
+  # `UnboundedRecurrenceError` (raised with its own `:within`
+  # direction); one that comes back as a single interval is refused
+  # like the crisp API refuses it — never re-entered.
+  defp reduce_occurrences(interval, acc, fun) do
     case Tempo.to_interval(interval) do
       {:ok, %Tempo.IntervalSet{} = occurrences} ->
         Enumerable.reduce(occurrences, acc, fun)
 
       {:ok, %Tempo.Interval{}} ->
-        raise Tempo.ConversionError.exception(
-                value: interval,
-                reason: :recurring_interval
-              )
+        raise no_occurrences_error(interval)
 
       {:error, exception} when is_exception(exception) ->
         raise exception
     end
   end
 
-  def reduce(%Tempo.Interval{from: :undefined, to: :undefined}, _acc, _fun) do
+  defp no_occurrences_error(%Tempo.Interval{recurrence: recurrence} = interval)
+       when recurrence != 1,
+       do: Tempo.ConversionError.exception(value: interval, reason: :recurring_interval)
+
+  defp no_occurrences_error(interval) do
+    Tempo.IntervalEndpointsError.exception(
+      interval: interval,
+      reason:
+        "Cannot walk #{inspect(interval)}: an end that holds a selection names several " <>
+          "dates, and the interval converts to no span for each."
+    )
+  end
+
+  defp reduce_span(%Tempo.Interval{from: :undefined, to: :undefined}, _acc, _fun) do
     raise ArgumentError,
           "Cannot enumerate a fully open interval `../..` — " <>
             "no start to iterate from."
   end
 
-  def reduce(%Tempo.Interval{from: :undefined, to: %Tempo{}, duration: nil}, _acc, _fun) do
+  defp reduce_span(%Tempo.Interval{from: :undefined, to: %Tempo{}, duration: nil}, _acc, _fun) do
     raise ArgumentError,
           "Cannot enumerate an interval with an open lower bound `../to` — " <>
             "Enumerable iterates forward from the lower bound, which is not defined."
   end
 
-  def reduce(
-        %Tempo.Interval{
-          from: :undefined,
-          to: %Tempo{} = to,
-          duration: %Tempo.Duration{} = duration
-        } = interval,
-        acc,
-        fun
-      ) do
+  defp reduce_span(
+         %Tempo.Interval{
+           from: :undefined,
+           to: %Tempo{} = to,
+           duration: %Tempo.Duration{} = duration
+         } = interval,
+         acc,
+         fun
+       ) do
     # `P1M/1985-06` — duration + to. Compute the lower bound via
     # `Tempo.Math.subtract/2` and iterate as a closed interval.
-    from = Tempo.Math.subtract(to, duration)
-    do_reduce(fill_from(from, interval), to, acc, fun)
+    start = to |> Math.subtract(duration) |> derived!(to) |> fill_from(interval)
+    walk(interval, start, to, acc, fun)
   end
 
-  def reduce(
-        %Tempo.Interval{
-          from: %Tempo{} = from,
-          to: to,
-          duration: %Tempo.Duration{} = duration
-        } = interval,
-        acc,
-        fun
-      )
-      when to in [nil, :undefined] do
+  defp reduce_span(
+         %Tempo.Interval{
+           from: %Tempo{} = from,
+           to: to,
+           duration: %Tempo.Duration{} = duration
+         } = interval,
+         acc,
+         fun
+       )
+       when to in [nil, :undefined] do
     # `from + duration` — compute the upper bound and iterate as
     # a closed interval. This respects the duration bound; the
     # sequence terminates naturally.
-    computed_to = Tempo.Math.add(from, duration)
-    do_reduce(fill_from(from, interval), computed_to, acc, fun)
+    computed_to = from |> Math.add(duration) |> derived!(from)
+    walk(interval, fill_from(from, interval), computed_to, acc, fun)
   end
 
-  def reduce(%Tempo.Interval{from: %Tempo{} = from, to: to} = interval, acc, fun)
-      when is_struct(to, Tempo) or to in [:undefined, nil] do
+  defp reduce_span(%Tempo.Interval{from: %Tempo{} = from, to: to} = interval, acc, fun)
+       when is_struct(to, Tempo) or to in [:undefined, nil] do
     # Closed `[from, to)` or open-upper `from/..`. Iteration is
     # driven by `do_reduce/4` below.
-    do_reduce(fill_from(from, interval), to, acc, fun)
+    walk(interval, fill_from(from, interval), to, acc, fun)
   end
 
-  def reduce(%Tempo.Interval{}, _acc, _fun) do
+  defp reduce_span(%Tempo.Interval{}, _acc, _fun) do
     raise ArgumentError,
           "Cannot enumerate this interval shape — only closed `from/to`, " <>
             "open-upper `from/..`, and `from/duration` intervals are iterable."
   end
+
+  # A walk steps from one point and stops at another. A start that holds
+  # several values (`{2026,2027}Y/2030Y`) is no one point to step from, and
+  # an end that does, or that counts from the end of a unit it does not bound
+  # (`1M/-1M`), no one point to stop at: the walk would yield nothing, or
+  # never end.
+  defp walk(interval, %Tempo{time: start_time} = start, to, acc, fun) do
+    cond do
+      not stepped_from?(start_time) ->
+        raise Tempo.ConversionError.exception(value: start, reason: :grouped_component)
+
+      is_struct(to, Tempo) and not stops_at?(to.time, start_time) ->
+        raise Tempo.IntervalEndpointsError.exception(
+                interval: interval,
+                reason:
+                  "Cannot walk #{inspect(interval)}: its end is no one point to stop at. It " <>
+                    "holds several values (a set, a range, a group or unspecified digits) " <>
+                    "or counts from the end of a unit it does not bound."
+              )
+
+      true ->
+        do_reduce({:at, start}, walk_end(start, to), acc, fun)
+    end
+  end
+
+  # Whether an end is one point for a walk from `start` to stop at: each unit
+  # one whole number, or unspecified where the start is unspecified too
+  # (`X*Y12M31D/X*Y1M2D`, two days of whatever year).
+  defp stops_at?([{unit, :any} | rest], start),
+    do: List.keyfind(start, unit, 0) == {unit, :any} and stops_at?(rest, start)
+
+  defp stops_at?([{:year, year} | rest], start) when is_integer(year), do: stops_at?(rest, start)
+
+  defp stops_at?([{:microsecond, {value, precision}} | rest], start)
+       when is_integer(value) and is_integer(precision),
+       do: stops_at?(rest, start)
+
+  defp stops_at?([{_unit, value} | rest], start) when is_integer(value) and value >= 0,
+    do: stops_at?(rest, start)
+
+  defp stops_at?([], _start), do: true
+  defp stops_at?(_several, _start), do: false
+
+  # Whether a walk can step from a time list: one point, or one with an
+  # unspecified unit (`X*Y12M31D`), which a step carries over.
+  defp stepped_from?([{_unit, :any} | rest]), do: stepped_from?(rest)
+  defp stepped_from?([{:year, year} | rest]) when is_integer(year), do: stepped_from?(rest)
+
+  defp stepped_from?([{:microsecond, {value, precision}} | rest])
+       when is_integer(value) and is_integer(precision),
+       do: stepped_from?(rest)
+
+  defp stepped_from?([{_unit, value} | rest]) when is_integer(value) and value >= 0,
+    do: stepped_from?(rest)
+
+  defp stepped_from?([]), do: true
+  defp stepped_from?(_several), do: false
 
   # Fill the walk's start down to the interval's explicit iteration
   # unit (no-op when `:unit` is nil or already at the endpoint's
@@ -214,15 +305,54 @@ defimpl Enumerable, for: Tempo.Interval do
     Steps.fill_to_unit(from, unit, calendar)
   end
 
-  defp do_reduce(_current, _to, {:halt, acc}, _fun) do
+  # The end a duration is counted to from the other. One it cannot be
+  # counted to (the day after `2M28D`, which depends on the year) leaves no
+  # walk to make, and `Enumerable.reduce/3` has no error to return, so the
+  # stepper's error is raised.
+  defp derived!(%Tempo{} = endpoint, _other), do: endpoint
+  defp derived!({:error, exception}, _other) when is_exception(exception), do: raise(exception)
+
+  # A value that holds unspecified digits steps to a set of candidates.
+  defp derived!(_several, other),
+    do: raise(Tempo.ConversionError.exception(value: other, reason: :grouped_component))
+
+  # Where a walk stops: at its end, or never when it has none. A span with
+  # no year lies on an axis that comes round again — the hours of a day, the
+  # days of a week, the months of a year — so one that ends before it starts
+  # (`7K/1K`, Sunday to Monday; `T22H/T2H`, ten at night to two) runs off the
+  # end of the axis and on to its end.
+  defp walk_end(%Tempo{time: start_time} = start, %Tempo{time: to_time} = to) do
+    if cyclic?(start_time) and compare_time(start_time, to_time) == :gt,
+      do: {:round, start, to},
+      else: to
+  end
+
+  defp walk_end(_start, to), do: to
+
+  defp cyclic?(time) do
+    case List.keyfind(time, :year, 0) do
+      nil -> true
+      {:year, :any} -> true
+      _year -> false
+    end
+  end
+
+  # The walk's position is the value it is at, `{:at, value}`, or the one
+  # after the value it last gave, `{:after, value}`. The step is taken only
+  # when the walk goes on, so a walk that stops short of a step it cannot
+  # take (`Enum.take(~o"2M27D/..", 2)`, which stops at 28 February) gives the
+  # values it has.
+  defp do_reduce(_position, _to, {:halt, acc}, _fun) do
     {:halted, acc}
   end
 
-  defp do_reduce(current, to, {:suspend, acc}, fun) do
-    {:suspended, acc, &do_reduce(current, to, &1, fun)}
+  defp do_reduce(position, to, {:suspend, acc}, fun) do
+    {:suspended, acc, &do_reduce(position, to, &1, fun)}
   end
 
-  defp do_reduce(current, to, {:cont, acc}, fun) do
+  defp do_reduce(position, to, {:cont, acc}, fun) do
+    current = reached(position)
+
     case past_end?(current, to) do
       true ->
         {:done, acc}
@@ -234,7 +364,7 @@ defimpl Enumerable, for: Tempo.Interval do
         # gap hour, emit a fall-back hour twice with its two offsets.
         case Zone.zone_status(current) do
           :gap ->
-            do_reduce(increment(current), to, {:cont, acc}, fun)
+            do_reduce({:after, current}, to, {:cont, acc}, fun)
 
           {:ambiguous, first_shift, second_shift} ->
             emit_fold(
@@ -246,16 +376,19 @@ defimpl Enumerable, for: Tempo.Interval do
             )
 
           :ok ->
-            do_reduce(increment(current), to, fun.(current, acc), fun)
+            do_reduce({:after, current}, to, fun.(current, acc), fun)
         end
     end
   end
+
+  defp reached({:at, value}), do: value
+  defp reached({:after, value}), do: increment(value)
 
   # Emit each occurrence of a DST fall-back moment, threading the
   # accumulator and honouring halt/suspend, then advance past the
   # folded hour exactly once.
   defp emit_fold([], current, to, acc, fun),
-    do: do_reduce(increment(current), to, {:cont, acc}, fun)
+    do: do_reduce({:after, current}, to, {:cont, acc}, fun)
 
   defp emit_fold([value | rest], current, to, acc, fun) do
     case fun.(value, acc) do
@@ -296,6 +429,12 @@ defimpl Enumerable, for: Tempo.Interval do
       :lt -> false
       _ -> true
     end
+  end
+
+  # A walk that comes round is past its end once it is at or after it and
+  # before its start again.
+  defp past_end?(%Tempo{time: current}, {:round, %Tempo{time: start}, %Tempo{time: to}}) do
+    compare_time(current, to) != :lt and compare_time(current, start) == :lt
   end
 
   # Compare two keyword-list time representations as start-moments:
@@ -370,6 +509,11 @@ defimpl Enumerable, for: Tempo.Interval do
     {unit, _span} = Tempo.resolution(tempo)
 
     case Math.add_unit(tempo, unit, calendar) do
+      # A step that leaves the value where it is (a year on from `X*Y`, an
+      # unspecified year) would walk it for ever.
+      {:ok, ^tempo} ->
+        raise Tempo.ConversionError, value: tempo, reason: :grouped_component
+
       {:ok, stepped} ->
         stepped
 
