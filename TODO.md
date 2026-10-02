@@ -8,7 +8,7 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **An unending recurrence with no year gives nothing in a dated window** — `Tempo.to_interval(~o"R/T22H/PT1H", within: ~o"2026-06-15/2026-06-16")` is an empty set, where the window's day has 22:00 and 23:00. Found 2026-10-03.
 
-* [ ] **A selection by day of the week is not applied in a calendar of weeks** — in `Calendrical.ISOWeek`, `R3/2026-W01-1/P1W/FL2KN` gives each week's Monday and `R3/2026-W25-1/P1Y/FL25W2KN` nothing, where the Gregorian forms give the Tuesdays and the Tuesday of week 25; a value's selection does the same (`2026YL1K1IN` is the whole year), and `R/../P1Y/FL25W2KN` with `within: ~o"2026"W`, or any `L…N` selector given to `select/2`, is a `ResolutionError`. `Tempo.RRule.Selection` reads a candidate's `:month` and `:day`, which a week date has none of. A selection by week alone (`FL25WN`) works, `select/2` by `~o"2K"` works, and one by a month or a day of the year is an error. Found 2026-10-02.
+* [ ] **A value's selection and `select/2` in a calendar of weeks** — in `Calendrical.ISOWeek`, a value's own selection is not applied (`2026YL1K1IN` is the whole week year, where the Gregorian form is 5 January), and `R/../P1Y/FL25W2KN` with `within: ~o"2026"W`, or an `L…N` selector given to `select/2` with a week value, is a `ResolutionError` (`:extend`, second to day, no path) before any selection. A recurrence's selection by week and day of the week works since 2026-10-03. Found 2026-10-02.
 
 * [ ] **`Date.compare/2` orders two dates of one calendar by their fields** — Elixir compares the `year`, `month` and `day` of two dates in the same calendar without asking the calendar (through 1.20.4 and on `main`), and in Calendrical's Julian new-year calendars (`Julian.March25`, `March1`, `Sept1`, `Dec25`) 1 January follows 31 December of the same year, so `Date.compare(~D[2022-12-31 Calendrical.Julian.March25], ~D[2022-01-01 Calendrical.Julian.March25])` is `:gt` for the day before. Tempo calls it in eleven places (`iso8601/group.ex`, `tempo.ex`, `tempo/rrule/selection.ex`, `tempo/select.ex`, `validation.ex`); `Date.diff/2`, which goes through ISO days, orders them rightly, as Localize and Calendrical now do. Noted from the Localize session (2026-10-02).
 
@@ -127,6 +127,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A recurrence's selection by day of the week in a calendar of weeks** — `Tempo.RRule.Selection` resolves a week calendar's candidate in Calendrical's terms (its week the date's month) and writes the occurrences back as weeks: `R3/2026-W01-1/P1W/FL2KN` is each week's Tuesday, `R3/2026-W25-1/P1Y/FL25W2KN` week 25's. A value's selection and `select/2` remain, as their own item. 2026-10-03.
 
 * [x] **A recurrence from a start that holds a set gives intervals whose ends hold it** — such a recurrence is one from each of the start's values (`R3/2026Y6M{1,15}D/P1M` is six occurrences); a start that holds a mask is still refused. 2026-10-03.
 

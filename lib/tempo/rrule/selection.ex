@@ -130,9 +130,11 @@ defmodule Tempo.RRule.Selection do
     # Handlers that don't consume the tags pass them through.
     context = selection_context(options)
 
-    candidate
-    |> apply_selection(selection ++ context, freq)
-    |> with_units(units, Keyword.get(context, :keep_span, false))
+    in_calendar_terms(candidate, selection, freq, fn candidate, selection, freq ->
+      candidate
+      |> apply_selection(selection ++ context, freq)
+      |> with_units(units, Keyword.get(context, :keep_span, false))
+    end)
   end
 
   # No selection shape we recognise — pass through rather than
@@ -195,6 +197,61 @@ defmodule Tempo.RRule.Selection do
       expand_time(acc, unit, values, keep_span?)
     end)
   end
+
+  # A calendar of weeks numbers a date by its year, its week and its day in
+  # the week, and Calendrical reads that week as the date's month, a week's
+  # seven days as the month's days. A selection in such a calendar is
+  # resolved in those terms — a week (`W`, `w`) the calendar's month, a
+  # weekly period a month's — and what it selects is written back as weeks,
+  # so `FL2KN` picks each week's Tuesday and `L1K1IN` the first Monday of the
+  # week year.
+  defp in_calendar_terms(
+         %Interval{from: %Tempo{calendar: calendar}} = candidate,
+         selection,
+         freq,
+         select
+       ) do
+    if week_calendar?(calendar) do
+      candidate
+      |> map_endpoints(&week_unit_as_month/1)
+      |> select.(Enum.map(selection, &week_selector_as_month/1), week_period_as_month(freq))
+      |> Enum.map(&map_endpoints(&1, fn unit -> month_unit_as_week(unit) end))
+    else
+      select.(candidate, selection, freq)
+    end
+  end
+
+  defp in_calendar_terms(candidate, selection, freq, select),
+    do: select.(candidate, selection, freq)
+
+  defp week_calendar?(calendar) do
+    Code.ensure_loaded?(calendar) and function_exported?(calendar, :calendar_base, 0) and
+      calendar.calendar_base() == :week
+  end
+
+  defp map_endpoints(%Interval{from: from, to: to} = interval, map_unit),
+    do: %{interval | from: map_units(from, map_unit), to: map_units(to, map_unit)}
+
+  defp map_units(%Tempo{time: time} = tempo, map_unit) when is_list(time),
+    do: %{tempo | time: Enum.map(time, map_unit)}
+
+  defp map_units(endpoint, _map_unit), do: endpoint
+
+  defp week_unit_as_month({:week, week}), do: {:month, week}
+  defp week_unit_as_month({:day_of_week, day}), do: {:day, day}
+  defp week_unit_as_month(unit), do: unit
+
+  defp month_unit_as_week({:month, week}), do: {:week, week}
+  defp month_unit_as_week({:day, day}), do: {:day_of_week, day}
+  defp month_unit_as_week(unit), do: unit
+
+  defp week_selector_as_month({week, weeks}) when week in [:week, :calendar_week],
+    do: {:month, weeks}
+
+  defp week_selector_as_month(selector), do: selector
+
+  defp week_period_as_month(:week), do: :month
+  defp week_period_as_month(freq), do: freq
 
   defp selection_context(options) do
     origin_day =
@@ -1195,7 +1252,7 @@ defmodule Tempo.RRule.Selection do
          origin_day
        ) do
     year = candidate.from.time[:year]
-    months_in_year = calendar.months_in_year(year)
+    months_in_year = month_fields_in_year(calendar, year)
 
     day =
       cond do
@@ -1210,6 +1267,15 @@ defmodule Tempo.RRule.Selection do
       end
 
     swap_dates(candidate, dates)
+  end
+
+  # The values a date's month field takes in a year: a calendar of weeks keeps
+  # its week there (see `in_calendar_terms/4`), so its year has as many as it
+  # has weeks, where `months_in_year/1` counts its months.
+  defp month_fields_in_year(calendar, year) do
+    if week_calendar?(calendar),
+      do: calendar.weeks_in_year(year) |> elem(0),
+      else: calendar.months_in_year(year)
   end
 
   # A day clamps to the month's last day. A pure month selection (`L6M`)

@@ -12,6 +12,7 @@ defmodule Tempo.WeekCalendarTest do
   alias Calendrical.ISOWeek
   alias Calendrical.NRF
   alias Tempo.ConversionError
+  alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.InvalidDateError
   alias Tempo.ResolutionError
@@ -321,6 +322,36 @@ defmodule Tempo.WeekCalendarTest do
 
       assert Tempo.split(Tempo.new!(year: 2026, week: 25, day_of_week: 2, hour: 10)) ==
                {tuesday, ~o"T10"}
+    end
+  end
+
+  # A recurrence's selection read a candidate's month and day, which a week
+  # date has none of, so a weekday was not selected and a week and a weekday
+  # selected nothing.
+  describe "a recurrence's selection by day of the week" do
+    defp occurrence_starts(text, calendar) do
+      {:ok, set} = text |> Tempo.from_iso8601!(calendar) |> Tempo.to_interval()
+      set |> IntervalSet.members() |> Enum.map(&Interval.from/1)
+    end
+
+    test "picks each week's day" do
+      assert occurrence_starts("R3/2026-W01-1/P1W/FL2KN", ISOWeek) ==
+               Enum.map(
+                 ["2026-W01-2", "2026-W02-2", "2026-W03-2"],
+                 &Tempo.from_iso8601!(&1, ISOWeek)
+               )
+
+      # The NRF calendar's weeks start on a Sunday, so its Tuesday is day 3.
+      assert occurrence_starts("R3/2026-W01-1/P1W/FL2KN", NRF) ==
+               Enum.map(["2026-W01-3", "2026-W02-3", "2026-W03-3"], &Tempo.from_iso8601!(&1, NRF))
+    end
+
+    test "picks a day of a selected week each year" do
+      assert occurrence_starts("R3/2026-W25-1/P1Y/FL25W2KN", ISOWeek) ==
+               Enum.map(
+                 ["2026-W25-2", "2027-W25-2", "2028-W25-2"],
+                 &Tempo.from_iso8601!(&1, ISOWeek)
+               )
     end
   end
 end

@@ -205,6 +205,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A recurrence's selection by day of the week applies in a calendar of weeks: in `Calendrical.ISOWeek`, `R3/2026-W01-1/P1W/FL2KN` is each week's Tuesday and `R3/2026-W25-1/P1Y/FL25W2KN` the Tuesday of week 25, where they gave each week's Monday and nothing.
+
 * A recurrence from a start that holds a set or a range is a recurrence from each of its values: `R3/2026Y6M{1,15}D/P1M` is six occurrences, where it was three intervals whose ends held the set, or a `Tempo.ConversionError` when its values could not all take the step alike.
 
 * A recurrence with no year goes on round its axis: `R3/T22H/PT1H` is 22:00, 23:00 and 00:00 and `R3/6K/P1D` Saturday to Monday, where an occurrence past the end of the axis was dropped and the first repeated. A cadence that brings such a start back to itself (`R3/7K/P1W`, `R3/T22H/P1D`) is a `Tempo.ConversionError`, where its occurrences had no length.
