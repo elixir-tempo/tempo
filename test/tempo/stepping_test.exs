@@ -152,7 +152,6 @@ defmodule Tempo.SteppingTest do
             {"R3/12M31D/P1M", UnanchoredError},
             # The second occurrence would end the day after 28 February.
             {"R2/2M27D/P1D", UnanchoredError},
-            {"R3/2026Y12M{30,31}D/P1M", ConversionError},
             {"R3/202XY/P1Y", ConversionError}
           ] do
         assert {:error, %^error{}} = Tempo.to_interval(Tempo.from_iso8601!(text)), text
@@ -205,6 +204,47 @@ defmodule Tempo.SteppingTest do
                {~o"2026-06-15T23", ~o"2026-06-16T00"},
                {~o"2026-06-16T00", ~o"2026-06-16T01"}
              ]
+    end
+  end
+
+  # A recurrence from a start that holds a set stepped the set as one value,
+  # so each occurrence's ends held it, or refused a step its values could not
+  # all take alike.
+  describe "a recurrence from a start that holds a set" do
+    test "is a recurrence from each of its values" do
+      assert spans(Tempo.from_iso8601!("R3/2026Y6M{1,15}D/P1M")) == [
+               {~o"2026-06-01", ~o"2026-07-01"},
+               {~o"2026-06-15", ~o"2026-07-15"},
+               {~o"2026-07-01", ~o"2026-08-01"},
+               {~o"2026-07-15", ~o"2026-08-15"},
+               {~o"2026-08-01", ~o"2026-09-01"},
+               {~o"2026-08-15", ~o"2026-09-15"}
+             ]
+
+      assert length(spans(Tempo.from_iso8601!("R2/2026Y6M{1..3}D/P1W"))) == 6
+      assert length(spans(Tempo.from_iso8601!("R3/2026Y{6,7}M15D/P1Y"))) == 6
+    end
+
+    test "steps each value as far as its own month lets it" do
+      assert spans(Tempo.from_iso8601!("R2/2026Y12M{30,31}D/P1M")) == [
+               {~o"2026-12-30", ~o"2027-01-30"},
+               {~o"2026-12-31", ~o"2027-01-31"},
+               {~o"2027-01-30", ~o"2027-02-28"},
+               {~o"2027-01-31", ~o"2027-02-28"}
+             ]
+    end
+
+    test "within a window" do
+      {:ok, set} =
+        Tempo.to_interval(Tempo.from_iso8601!("R/2026Y6M{1,15}D/P1M"),
+          within: ~o"2026-06/2026-08"
+        )
+
+      assert IntervalSet.count(set) == 4
+    end
+
+    test "a start that holds a mask is still one start" do
+      assert {:error, %ConversionError{}} = Tempo.to_interval(Tempo.from_iso8601!("R3/202XY/P1Y"))
     end
   end
 end

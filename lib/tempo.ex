@@ -5380,12 +5380,65 @@ defmodule Tempo do
           {:ok, Tempo.Interval.t() | Tempo.IntervalSet.t()} | {:error, error_reason()}
   def to_interval(value, opts \\ []) do
     with :ok <- check_bound_option(opts, "Tempo.to_interval/2"),
+         :one_start <- recurrence_from_each_value(value, opts),
          :ok <- walkable(value) do
       case open_window_start(Keyword.get(opts, :within)) do
         {:ok, window_from} -> occurrences_from(value, window_from, opts)
         {:error, _reason} = error -> error
         :bounded -> materialise(value, opts)
       end
+    end
+  end
+
+  # A recurrence from a start that holds a set or a range
+  # (`R3/2026Y6M{1,15}D/P1M`, from the 1st and the 15th of June) is a
+  # recurrence from each of the start's values, as a set in a value is each of
+  # its members: six occurrences here. A start that holds anything else (a
+  # mask, a group) is walked, or refused, as one start.
+  defp recurrence_from_each_value(
+         %Interval{recurrence: recurrence, from: %__MODULE__{} = from} = interval,
+         opts
+       )
+       when recurrence != 1 do
+    case Enumeration.expand(from) do
+      {:ok, starts} -> occurrences_from_each(starts, interval, opts, [])
+      {:error, _exception} = error -> error
+      :not_expandable -> :one_start
+    end
+  end
+
+  defp recurrence_from_each_value(_value, _opts), do: :one_start
+
+  defp occurrences_from_each([], _interval, opts, occurrences),
+    do: IntervalSet.new(occurrences, coalesce: coalesce_opt(opts))
+
+  defp occurrences_from_each([start | starts], interval, opts, occurrences) do
+    case to_interval(%{interval | from: start}, opts) do
+      {:ok, %Interval{} = occurrence} ->
+        occurrences_from_each(starts, interval, opts, [occurrence | occurrences])
+
+      {:ok, %IntervalSet{} = set} ->
+        gathered_from_each(set, starts, interval, opts, occurrences)
+
+      {:error, _exception} = error ->
+        error
+    end
+  end
+
+  # An open-ended window gives each start's occurrences lazily, and lazy sets
+  # are not merged.
+  defp gathered_from_each(set, starts, interval, opts, occurrences) do
+    if IntervalSet.bounded?(set) do
+      occurrences = Enum.reverse(IntervalSet.members(set), occurrences)
+      occurrences_from_each(starts, interval, opts, occurrences)
+    else
+      {:error,
+       ConversionError.exception(
+         value: interval,
+         reason:
+           "A recurrence from a start that holds several values gathers the occurrences " <>
+             "of each, which an open-ended `:within` window does not end. Give the window an end."
+       )}
     end
   end
 
