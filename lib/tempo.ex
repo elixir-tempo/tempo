@@ -9888,7 +9888,7 @@ defmodule Tempo do
   @doc """
   Return a multi-line prose explanation of any Tempo value — what it is, what it spans, and how to work with it.
 
-  For structured output that renderers can style (ANSI, HTML), use `Tempo.Explain.explain/1` directly and pick a formatter. A recurrence set is described member by member, each led by its name, and a week by its number, with the days it spans.
+  For structured output that renderers can style (ANSI, HTML), use `Tempo.Explain.explain/1` directly and pick a formatter. A recurrence set is described member by member, each led by its name; a week by its number, with the days it spans; a month by the name its calendar gives it; and a value holding a set or a group by each value it names.
 
   ### Arguments
 

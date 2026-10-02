@@ -203,6 +203,10 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `explain/1` names a month as its calendar does (a Hebrew `5786-06-15` is "Adar 15, 5786", a Persian selection "in Farvardin"), where every calendar's months took the Gregorian calendar's names. A lunisolar month with no year, which no one name fits, is given by its number.
+
+* `explain/1` headlines a value holding a set or a group by what it names — "June and July 2026", "The 1st and 15th of June 2026", "January to March 2026" for a quarter — where it named only the units before it ("The year 2026"). A set of years is no longer called a value with no year, and a set of hours is written as its clock times, not `??`.
+
 * `explain/1` describes a week, a week date and every value in a week calendar by its week and the days it spans (`~o"2026-W25"` is "Week 25 of 2026", spanning `[2026-06-15, 2026-06-22)`), where it called each "The year 2026" with an empty span. A week calendar's dates are written in its own notation (`2026-W25-2`).
 
 * `Tempo.to_string/2` takes a skeleton or a pattern for a span of several values (`format: :yMMMd` on `2026-06-15/2026-06-18` is "Jun 15 – 17, 2026"), where it returned Localize's error.

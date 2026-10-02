@@ -18,10 +18,6 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **§12.10 window shorter than a day** — `FL11MLL1K1IN/PT12HN1K1IN` (and `/P0DN…`) walks `[lo, lo - 1]`, the anchor and the day before, as `Date.range/2` infers for a reversed range (with a runtime deprecation warning before the day-number walk replaced it). Decide the semantics — no day, or the anchor day whose start the window contains — and test it.
 
-* [ ] **`explain/1` names every calendar's months as Gregorian ones** — a Hebrew `5786-06-15` is explained as "June 15, 5786" where it is 15 Adar, a Persian `1405-01-01` as "January 1, 1405", and a thirteenth month (`5787-13-01`, a Coptic `1742-13-03`) as "month 13 1, 5787": `month_name/1` in `lib/explain.ex` is a list of the Gregorian calendar's English names. Found 2026-10-02.
-
-* [ ] **`explain/1` headlines a value holding a set or a group by the units before it** — `2026-{06,07}`, a set of weeks (`2026Y{25,27}W`) or of days of the year, and a quarter (`2026-33`) are each "The year 2026", and a set or group of days (`2026-06-{01,15}`, `2022Y1M2G3DU`) is its month, "June 2026"; the spans beneath are right. Found 2026-10-02.
-
 * [ ] **`explain/1` words a window of hours in ISO 8601** — `Tempo.explain(~o"R/2027-01-01/P1D/FLLT22HN/PT4HN")` says "the PT4H window from at 22:00" where it means the four hours from 22:00: `window_phrase/2` in `lib/explain.ex` words only a window of days or weeks, and a time-of-day selection's noun carries its "at".
 
 * [ ] **Week-of-month selections, and calendar-aware RRULE `BYWEEKNO`** — parse `2026Y6M2W` ("2nd week of June", a positional `W` after a month) and materialise it via `Calendrical.week_of_month/3`; and replace the hard-coded ISO week walk still used by RRULE `BYWEEKNO` with Calendrical's calendar-aware functions. Month and native week-of-year selections are done. Plan in [plans/recurrence-selection-resolution.md](plans/recurrence-selection-resolution.md).
@@ -62,15 +58,17 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **Vocabulary for 2.0** — one meaning per word and one word per meaning across Tempo and tempo_holidays: `:within` for `:bound`, "anchor" in one sense, no public "materialise", `Tempo.Allen` beside everyday predicates, `datetime`, "workday". Every decision is taken; the tasks are in [plans/vocabulary.md](plans/vocabulary.md). Fifteen of its sixteen tasks have landed, through tempo_holidays and the real-world livebook (`livebook/everyday-holidays.livemd`, and its tempo_holidays copy); `tempo_sql`'s move to `~> 2.0` remains, once 2.0.0 is on hex.
 
-## Blocked
-
-* [ ] **A year in a week calendar's `to_string/2`** — `Tempo.to_string(~o"2026"W)` returns a `Localize.InvalidValueError` since the locks moved, where it gave "2026", so a range of such years fails too and interpolation falls back to "2026Y[u-ca=iso-week]". Localize works out a partial date's last day from `months_in_year/1` and `days_in_month/2`, which a calendar of weeks counts in periods, and Calendrical refuses the date that makes (Localize's `TODO.md`, 2026-10-02). Blocked on Localize; Tempo then needs only a test.
-
 ## Deferred
 
 * [ ] **Set algebra over open-ended windows** — a research project for later (user, 2026-09-28): how far union, intersection, difference, complement and the predicates go on the lazy sets an open-ended window gives, a test of the whole algebra. Questions in [plans/open-ended-set-algebra.md](plans/open-ended-set-algebra.md).
 
 ## Done
+
+* [x] **`explain/1` names a month as its calendar does** — a Hebrew `5786-06-15` is "Adar 15, 5786" and a Persian selection "in Farvardin", the names asked of Localize; a lunisolar month with no year, which no one name fits, is given by its number ("Day 15 of month 6"). 2026-10-02.
+
+* [x] **`explain/1` headlines a set or a group as what it names** — a set is each of its members ("June and July 2026", "The 1st and 15th of June 2026", "Weeks 25 and 27 of 2026"), a group one span ("January to March 2026"), a set of years no longer a value without one, and a set of hours its clock times. 2026-10-02.
+
+* [x] **A year in a week calendar's `to_string/2`** — written again ("2026 AD") now that Localize asks a partial date's year of its calendar (`8a22bd22`); the locks moved to Localize `bf25a670` and Calendrical `9851306`, and it is tested. 2026-10-02.
 
 * [x] **`explain/1` reads week values** — a week, a week date and a week calendar's values are headlined by their week ("Week 25 of 2026", "Tuesday of week 25 of 2026") and span the days they start on, a week calendar's in its own notation, wherever they bound something; a week with no year recurs. 2026-10-02.
 

@@ -20,6 +20,12 @@ defmodule Tempo.Explain.Test do
     :ok
   end
 
+  # The first line of a value's explanation, parsed from ISO 8601 text.
+  defp headline(iso), do: iso |> Tempo.from_iso8601!() |> first_line()
+  defp headline(iso, calendar), do: iso |> Tempo.from_iso8601!(calendar) |> first_line()
+
+  defp first_line(value), do: value |> Tempo.explain() |> String.split("\n") |> hd()
+
   describe "scalar Tempo" do
     test "a year is classified :anchored with headline, span, enumeration, hint" do
       exp = Explain.explain(~o"2022Y")
@@ -130,6 +136,133 @@ defmodule Tempo.Explain.Test do
       week_calendar = Tempo.from_iso8601!("2026-W25/2026-W27", Calendrical.ISOWeek)
       assert Tempo.explain(week_calendar) =~ "From: 2026-W25-1."
       assert Tempo.explain(week_calendar) =~ "To:   2026-W27-1"
+    end
+  end
+
+  describe "months in other calendars" do
+    test "a month is named as its calendar names it" do
+      assert headline("5786-06-15[u-ca=hebrew]") == "Adar 15, 5786."
+      assert headline("5786-06-15T10:30[u-ca=hebrew]") == "Adar 15, 5786 at 10:30."
+      assert headline("5786-06[u-ca=hebrew]") == "Adar 5786."
+      assert headline("1405-01-01[u-ca=persian]") == "Farvardin 1, 1405."
+      assert headline("1447-09-01[u-ca=islamic-civil]") == "Ramadan 1, 1447."
+    end
+
+    test "a lunisolar month is named in its own year, and a thirteenth month has a name" do
+      # 5787 is a Hebrew leap year, with two Adars and thirteen months.
+      assert headline("5787-06-15[u-ca=hebrew]") == "Adar I 15, 5787."
+      assert headline("5787-07-15[u-ca=hebrew]") == "Adar II 15, 5787."
+      assert headline("5787-13-01[u-ca=hebrew]") == "Elul 1, 5787."
+      assert headline("1742-13-03[u-ca=coptic]") == "Nasie 3, 1742."
+    end
+
+    test "a calendar with the Gregorian calendar's months keeps their names" do
+      assert headline("2026-06-15[u-ca=japanese]") == "June 15, 2026."
+      assert headline("2569-06-15[u-ca=buddhist]") == "June 15, 2569."
+    end
+
+    test "a month with no year is named only where every year names it alike" do
+      assert headline("6M15D", Calendrical.Persian) =~ "Shahrivar 15, in any year"
+      assert headline("6M", Calendrical.Persian) =~ "Shahrivar, in any year"
+
+      # The Hebrew calendar's sixth month is Adar in one year and Adar I in the next.
+      assert headline("6M15D", Calendrical.Hebrew) =~ "Day 15 of month 6, in any year"
+      assert headline("6M", Calendrical.Hebrew) =~ "Month 6, in any year"
+    end
+
+    test "a selection's months are named in its calendar" do
+      yearly = Tempo.explain(Tempo.from_iso8601!("R/../P1Y/FL1M1DN[u-ca=persian]"))
+      assert yearly =~ "Selects: in Farvardin, on the 1st."
+
+      in_a_year = Tempo.explain(Tempo.from_iso8601!("1405YL1M1DN[u-ca=persian]"))
+      assert in_a_year =~ "In 1405, selects in Farvardin, on the 1st."
+
+      window = Tempo.explain(Tempo.from_iso8601!("R/../P1Y/FLL1M1DN/P5DN[u-ca=persian]"))
+      assert window =~ "Selects: the 5 days from Farvardin 1."
+
+      # A rule selects in every year, and a Hebrew month has no one name across them.
+      lunisolar = Tempo.explain(Tempo.from_iso8601!("R/../P1Y/FL7M15DN[u-ca=hebrew]"))
+      assert lunisolar =~ "Selects: in month 7, on the 15th."
+
+      assert Tempo.explain(~o"R/../P1Y/FL11M4K4IN") =~
+               "Selects: in November, on the 4th Thursday."
+    end
+  end
+
+  describe "values holding a set or a group" do
+    test "a set is each of its members" do
+      assert headline("2026-{06,07}") == "June and July 2026."
+      assert headline("2026-{06..08}") == "June–August 2026."
+      assert headline("2026-{01,06..08}") == "January, June, July, and August 2026."
+      assert headline("2026-06-{01,15}") == "The 1st and 15th of June 2026."
+      assert headline("2026-06-{01..07}") == "The 1st–7th of June 2026."
+      assert headline("2026-{06,07}-15") == "The 15th of June and July 2026."
+      assert headline("2026-{06,07}-{01,15}") == "The 1st and 15th of June and July 2026."
+    end
+
+    test "a set of years is not a value without a year" do
+      assert headline("{2021,2022}Y") == "The years 2021 and 2022."
+      assert headline("{2021..2023}Y") == "The years 2021–2023."
+      assert headline("{2021,2022}Y6M") == "June of 2021 and 2022."
+      assert headline("{2021,2022}Y6M15D") == "The 15th of June of 2021 and 2022."
+    end
+
+    test "a group is one span, from its first value to its last" do
+      assert headline("2026-33") == "January to March 2026."
+      assert headline("2026-40") == "January to June 2026."
+      assert headline("2022Y1M2G3DU") == "The 4th to 6th of January 2022."
+      assert headline("2022Y5G1WU") == "Week 5 of 2022."
+      assert headline("20C") == "The years 2000 to 2099."
+    end
+
+    test "weeks, days of the week and days of the year are named too" do
+      assert headline("2026Y{25,27}W") == "Weeks 25 and 27 of 2026."
+      assert headline("2026Y{25..27}W") == "Weeks 25–27 of 2026."
+      assert headline("2026Y25W{1,3}K") == "Monday and Wednesday of week 25 of 2026."
+      assert headline("2026Y{25,27}W2K") == "Tuesday of weeks 25 and 27 of 2026."
+      assert headline("2020Y{100,200}O") == "Days 100 and 200 of 2020."
+    end
+
+    test "several times of a day are each written" do
+      assert headline("2026-06-15T{10,14}") == "June 15, 2026 at 10:00 and 14:00."
+      assert headline("2026-06-15T10:{00,30}") == "June 15, 2026 at 10:00 and 10:30."
+      assert headline("2026-06-15T{10,14}:30") == "June 15, 2026 at 10:30 and 14:30."
+
+      assert headline("T{10,14}H") ==
+               "The times of day 10:00 and 14:00 (unanchored — they recur every day)."
+
+      assert headline("T10H{0,30}M") =~ "The times of day 10:00 and 10:30"
+    end
+
+    test "a set with no year recurs" do
+      assert headline("{6,7}M") == "June and July, in any year (no year — it recurs)."
+
+      assert headline("6M{1,15}D") ==
+               "The 1st and 15th of June, in any year (no year — it recurs)."
+
+      assert headline("{6,7}M15D") ==
+               "The 15th of June and July, in any year (no year — it recurs)."
+
+      assert headline("{10,20}W") == "Weeks 10 and 20 of any year (no year — it recurs)."
+
+      assert headline("{1,3}K") ==
+               "Monday and Wednesday of any week (no year or week — it recurs)."
+    end
+
+    test "a set's months are named in its calendar" do
+      assert headline("5786-{06,07}[u-ca=hebrew]") == "Adar and Nisan 5786."
+    end
+
+    test "a group of groups, or of days with no month, is described by its resolution" do
+      assert headline("2018-{1,3,5}G2MU") == "A Tempo value at :month resolution."
+      assert headline("{1,4,7..9}G2YU3M1D") == "A Tempo value at :day resolution."
+      assert headline("5G10DU") == "A Tempo value at :day resolution."
+    end
+
+    test "no headline writes a placeholder" do
+      for iso <- ["T{-4..-1}H", "T10H{0,30}M", "2026-06-15T10:{00,30}", "2026-{06,07}"] do
+        refute headline(iso) =~ "?", "#{iso} wrote a placeholder"
+      end
     end
   end
 

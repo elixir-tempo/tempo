@@ -239,7 +239,7 @@ defmodule Tempo.Explain do
 
     [
       {:headline, "A selection — a rule naming which occurrences are wanted."},
-      {:span, "#{scope} #{selection_prose(selection)}."},
+      {:span, "#{scope} #{selection_prose(selection, naming(tempo))}."},
       {:calendar, calendar_text(tempo)},
       {:hint, "Pair it with a recurrence (`R/../P1Y/FL…N`) to list its occurrences."}
     ]
@@ -272,21 +272,33 @@ defmodule Tempo.Explain do
     end
   end
 
+  # The units a headline reads. A value is plain when each it holds is an
+  # integer; one holding a set or a group names several values, or a span of
+  # them, and is written unit by unit.
+  @headline_units [:year, :month, :day, :week, :day_of_week, :day_of_year, :hour, :minute]
+  @headline_date_units [:year, :month, :day, :week, :day_of_week, :day_of_year]
+
   defp scalar_headline(%Tempo{time: time} = tempo) do
     cond do
       has_mask?(time) -> mask_headline(tempo)
+      not plain?(time) -> several_headline(tempo)
       only_time_of_day?(time) -> time_of_day_headline(time)
       true -> precision_headline(anchored_precision(time), tempo)
     end
   end
 
-  defp precision_headline(:datetime, %Tempo{time: time}),
-    do: "#{date_phrase(time)} at #{clock_phrase(time)}."
+  defp plain?(time), do: Enum.all?(time, &plain_unit?/1)
 
-  defp precision_headline(:date, %Tempo{time: time}), do: "#{date_phrase(time)}."
+  defp plain_unit?({unit, value}) when unit in @headline_units, do: is_integer(value)
+  defp plain_unit?({_other_unit, _value}), do: true
+  defp plain_unit?(_group_of_groups), do: false
 
-  defp precision_headline(:month, %Tempo{time: time}),
-    do: "#{month_name(find_unit(time, :month))} #{find_unit(time, :year)}."
+  defp precision_headline(:datetime, %Tempo{time: time} = tempo),
+    do: capitalised("#{date_phrase(tempo)} at #{clock_phrase(time)}.")
+
+  defp precision_headline(:date, %Tempo{} = tempo), do: capitalised("#{date_phrase(tempo)}.")
+
+  defp precision_headline(:month, %Tempo{} = tempo), do: capitalised("#{month_phrase(tempo)}.")
 
   defp precision_headline(:year, %Tempo{time: time}), do: "The year #{find_unit(time, :year)}."
 
@@ -300,12 +312,40 @@ defmodule Tempo.Explain do
 
   defp precision_headline(yearless, %Tempo{} = tempo), do: yearless_headline(yearless, tempo)
 
-  defp date_phrase(time) do
-    "#{month_name(find_unit(time, :month))} #{find_unit(time, :day)}, #{find_unit(time, :year)}"
+  # "June 15, 2026", or "day 15 of month 6 of 5786" where the month has no name.
+  defp date_phrase(%Tempo{time: time} = tempo) do
+    day = find_unit(time, :day)
+    year = find_unit(time, :year)
+
+    case named_month(tempo) do
+      {:ok, name} -> "#{name} #{day}, #{year}"
+      :error -> "day #{day} of month #{find_unit(time, :month)} of #{year}"
+    end
+  end
+
+  defp month_phrase(%Tempo{time: time} = tempo) do
+    year = find_unit(time, :year)
+
+    case named_month(tempo) do
+      {:ok, name} -> "#{name} #{year}"
+      :error -> "month #{find_unit(time, :month)} of #{year}"
+    end
   end
 
   defp clock_phrase(time),
     do: "#{two_digit(find_unit(time, :hour))}:#{two_digit(find_unit(time, :minute) || 0)}"
+
+  # The name of a value's month, in its calendar and, when it has one, its year.
+  defp named_month(%Tempo{time: time} = tempo),
+    do: fetch_month_name(find_unit(time, :month), naming(tempo))
+
+  # What names a month: its calendar and, when the value states one, its year.
+  defp naming(%Tempo{time: time} = tempo) do
+    case find_unit(time, :year) do
+      year when is_integer(year) -> {calendar_of(tempo), year}
+      _no_one_year -> {calendar_of(tempo), nil}
+    end
+  end
 
   # A week date in its own terms: its weekday, its week and its year.
   defp week_date_phrase(%Tempo{time: time} = tempo) do
@@ -329,13 +369,24 @@ defmodule Tempo.Explain do
   # No year at all: a recurring day-and-month (a birthday), a month, a bare
   # day, a week or a day of the week — values in their own right, not partial
   # anchored ones.
-  defp yearless_headline(:yearless_date, %Tempo{time: time}) do
-    "#{month_name(find_unit(time, :month))} #{find_unit(time, :day)}, " <>
-      "in any year (no year — it recurs)."
+  defp yearless_headline(:yearless_date, %Tempo{time: time} = tempo) do
+    day = find_unit(time, :day)
+
+    case named_month(tempo) do
+      {:ok, name} ->
+        "#{name} #{day}, in any year (no year — it recurs)."
+
+      :error ->
+        "Day #{day} of month #{find_unit(time, :month)}, in any year (no year — it recurs)."
+    end
   end
 
-  defp yearless_headline(:yearless_month, %Tempo{time: time}),
-    do: "#{month_name(find_unit(time, :month))}, in any year (no year — it recurs)."
+  defp yearless_headline(:yearless_month, %Tempo{time: time} = tempo) do
+    case named_month(tempo) do
+      {:ok, name} -> "#{name}, in any year (no year — it recurs)."
+      :error -> "Month #{find_unit(time, :month)}, in any year (no year — it recurs)."
+    end
+  end
 
   defp yearless_headline(:day_only, %Tempo{time: time}),
     do: "Day #{find_unit(time, :day)} of any month (no year or month — it recurs)."
@@ -408,6 +459,194 @@ defmodule Tempo.Explain do
     m = Keyword.get(time, :minute, 0)
     "The time-of-day #{two_digit(h)}:#{two_digit(m)} (unanchored — recurs every day)."
   end
+
+  # A value holding a set or a group names several values, or a span of them,
+  # so its headline writes each unit out: "The 1st and 15th of June 2026",
+  # "Weeks 25 and 27 of 2026", "January to March 2026". A unit that is neither
+  # (a margin of error, a group of groups) leaves only the resolution to state.
+  defp several_headline(%Tempo{time: time} = tempo) do
+    with true <- Enum.all?(time, &writable_unit?/1),
+         {:ok, phrase} <- shape_phrase(date_shape(time), tempo) do
+      capitalised(phrase) <> "."
+    else
+      _unwritable -> yearless_headline(:none, tempo)
+    end
+  end
+
+  # An hour or a minute is written as a clock time, which a group, a span of
+  # them, is not.
+  defp writable_unit?({unit, value}) when unit in [:hour, :minute],
+    do: is_integer(value) or values?(value)
+
+  defp writable_unit?({unit, value}) when unit in @headline_units, do: writable?(value)
+  defp writable_unit?({_other_unit, _value}), do: true
+  defp writable_unit?(_group_of_groups), do: false
+
+  defp writable?(value) when is_integer(value), do: true
+  defp writable?({:group, %Range{}}), do: true
+  defp writable?(value), do: values?(value)
+
+  defp values?([_ | _] = set), do: Enum.all?(set, &(is_integer(&1) or is_struct(&1, Range)))
+  defp values?(_margin_or_other), do: false
+
+  defp date_shape(time) do
+    for {unit, _value} <- time, unit in @headline_date_units, do: unit
+  end
+
+  # A headline by the date units a value holds, each written as the values it
+  # names. A day's clock times follow it; a value with no date at all is its
+  # times of day.
+  defp shape_phrase([], %Tempo{time: time}), do: {:ok, times_of_day_phrase(clock_times(time))}
+
+  defp shape_phrase([:year], %Tempo{time: time}) do
+    year = find_unit(time, :year)
+    {:ok, "the #{noun("year", year)} #{years_phrase(year)}"}
+  end
+
+  defp shape_phrase([:year, :month], %Tempo{} = tempo), do: {:ok, months_of_years(tempo)}
+
+  defp shape_phrase([:year, :month, :day], %Tempo{time: time} = tempo),
+    do: {:ok, days_of_months(tempo) <> at_times(time)}
+
+  defp shape_phrase([:year, :week], %Tempo{time: time}),
+    do: {:ok, "#{weeks_phrase(find_unit(time, :week))} of #{years_of(time)}"}
+
+  defp shape_phrase([:year, :week, :day_of_week], %Tempo{time: time} = tempo),
+    do: {:ok, days_of_weeks(tempo) <> at_times(time)}
+
+  defp shape_phrase([:year, :day_of_year], %Tempo{time: time}),
+    do: {:ok, "#{numbered("day", find_unit(time, :day_of_year))} of #{years_of(time)}"}
+
+  defp shape_phrase([:month], %Tempo{} = tempo),
+    do: {:ok, "#{months_phrase(tempo)}, in any year (no year — it recurs)"}
+
+  defp shape_phrase([:month, :day], %Tempo{time: time} = tempo) do
+    {:ok,
+     "#{days_phrase(find_unit(time, :day))} of #{months_phrase(tempo)}, " <>
+       "in any year (no year — it recurs)"}
+  end
+
+  # A group of days with no month counts on past any month's end (`5G10DU` is
+  # days 41 to 50), so it is not days of a month.
+  defp shape_phrase([:day], %Tempo{time: time}) do
+    case find_unit(time, :day) do
+      {:group, _days} -> :error
+      days -> {:ok, "#{days_phrase(days)} of any month (no year or month — it recurs)"}
+    end
+  end
+
+  defp shape_phrase([:day_of_year], %Tempo{time: time}) do
+    {:ok, "#{numbered("day", find_unit(time, :day_of_year))} of any year (no year — it recurs)"}
+  end
+
+  defp shape_phrase([:week], %Tempo{time: time}),
+    do: {:ok, "#{weeks_phrase(find_unit(time, :week))} of any year (no year — it recurs)"}
+
+  defp shape_phrase([:week, :day_of_week], %Tempo{time: time} = tempo) do
+    {:ok,
+     "#{weekdays_phrase(tempo)} of #{weeks_phrase(find_unit(time, :week))}, " <>
+       "in any year (no year — it recurs)"}
+  end
+
+  defp shape_phrase([:day_of_week], %Tempo{} = tempo),
+    do: {:ok, "#{weekdays_phrase(tempo)} of any week (no year or week — it recurs)"}
+
+  defp shape_phrase(_another_shape, _tempo), do: :error
+
+  # "June and July 2026", or "June of 2021 and 2022" when the years are several.
+  defp months_of_years(%Tempo{time: time} = tempo) do
+    case find_unit(time, :year) do
+      year when is_integer(year) -> "#{months_phrase(tempo)} #{year}"
+      years -> "#{months_phrase(tempo)} of #{years_phrase(years)}"
+    end
+  end
+
+  # A date as it is always written, "June 15, 2026", when only its times are
+  # several, and otherwise the days of its months: "the 1st and 15th of June
+  # 2026".
+  defp days_of_months(%Tempo{time: time} = tempo) do
+    if all_present?(time, [:year, :month, :day]),
+      do: date_phrase(tempo),
+      else: "#{days_phrase(find_unit(time, :day))} of #{months_of_years(tempo)}"
+  end
+
+  defp days_of_weeks(%Tempo{time: time} = tempo) do
+    if all_present?(time, [:year, :week, :day_of_week]) do
+      week_date_phrase(tempo)
+    else
+      "#{weekdays_phrase(tempo)} of #{weeks_phrase(find_unit(time, :week))} of #{years_of(time)}"
+    end
+  end
+
+  defp years_of(time), do: years_phrase(find_unit(time, :year))
+
+  defp years_phrase(years), do: component_phrase(years, &Integer.to_string/1)
+
+  defp months_phrase(%Tempo{time: time} = tempo),
+    do: component_phrase(find_unit(time, :month), &month_name(&1, naming(tempo)))
+
+  defp days_phrase(days), do: "the " <> component_phrase(days, &ordinal/1)
+
+  defp weeks_phrase(weeks), do: numbered("week", weeks)
+
+  # ISO 8601 numbers a month-based calendar's days of the week from Monday; a
+  # calendar of weeks' days are given by their numbers.
+  defp weekdays_phrase(%Tempo{time: time} = tempo) do
+    days = find_unit(time, :day_of_week)
+
+    if Tempo.week_based_calendar?(calendar_of(tempo)),
+      do: numbered("day", days),
+      else: component_phrase(days, &weekday_name/1)
+  end
+
+  defp numbered(word, values),
+    do: "#{noun(word, values)} #{component_phrase(values, &Integer.to_string/1)}"
+
+  defp noun(word, values), do: if(length(values_of(values)) == 1, do: word, else: word <> "s")
+
+  # A unit's values by name: one alone, a run of more than two as its ends,
+  # and otherwise each, joined with "and". A group is one span, from its first
+  # value to its last.
+  defp component_phrase(value, name) when is_integer(value), do: name.(value)
+
+  defp component_phrase({:group, %Range{first: only, last: only}}, name), do: name.(only)
+
+  defp component_phrase({:group, %Range{first: first, last: last}}, name),
+    do: "#{name.(first)} to #{name.(last)}"
+
+  defp component_phrase(set, name) do
+    values = values_of(set)
+
+    if run?(values),
+      do: "#{name.(hd(values))}–#{name.(List.last(values))}",
+      else: and_join(Enum.map(values, name))
+  end
+
+  defp run?([first | _] = values) do
+    count = length(values)
+    count > 2 and List.last(values) - first + 1 == count
+  end
+
+  defp values_of(value) when is_integer(value), do: [value]
+  defp values_of({:group, %Range{} = range}), do: Enum.to_list(range)
+  defp values_of(set), do: set |> Enum.flat_map(&expand_int/1) |> Enum.sort() |> Enum.dedup()
+
+  # Each hour with each minute, as a clock time: "10:00" and "14:00", or
+  # "10:00" and "10:30".
+  defp clock_times(time) do
+    for hour <- values_of(find_unit(time, :hour) || 0),
+        minute <- values_of(find_unit(time, :minute) || 0),
+        do: "#{two_digit(hour)}:#{two_digit(minute)}"
+  end
+
+  defp at_times(time) do
+    if find_unit(time, :hour), do: " at " <> and_join(clock_times(time)), else: ""
+  end
+
+  defp times_of_day_phrase([one]), do: "the time-of-day #{one} (unanchored — recurs every day)"
+
+  defp times_of_day_phrase(times),
+    do: "the times of day #{and_join(times)} (unanchored — they recur every day)"
 
   defp mask_headline(%Tempo{time: time}) do
     case find_first_mask(time) do
@@ -651,7 +890,7 @@ defmodule Tempo.Explain do
     [
       {:headline, "A recurrence until #{render_endpoint(until)}."},
       {:span, "Starting: #{render_endpoint(from)}."},
-      selection && {:span, "Selects: #{selection_prose(selection)}."},
+      selection && {:span, "Selects: #{selection_prose(selection, rule_naming(interval))}."},
       {:span, "Cadence: #{duration_prose(dt)}."},
       {:hint, "List its occurrences: `Tempo.to_interval(interval)`."}
     ]
@@ -671,7 +910,7 @@ defmodule Tempo.Explain do
     [
       {:headline, recurrence_headline(recurrence)},
       {:span, "Starting: #{render_endpoint(from)}."},
-      selection && {:span, "Selects: #{selection_prose(selection)}."},
+      selection && {:span, "Selects: #{selection_prose(selection, rule_naming(interval))}."},
       {:span, "Cadence: #{duration_prose(dt)}."},
       {:hint, recurrence_hint(recurrence, from)}
     ]
@@ -697,7 +936,7 @@ defmodule Tempo.Explain do
     [
       {:headline, recurrence_headline(recurrence)},
       {:span, "Starting: open — the rule names no start."},
-      selection && {:span, "Selects: #{selection_prose(selection)}."},
+      selection && {:span, "Selects: #{selection_prose(selection, rule_naming(interval))}."},
       {:span, "Cadence: #{duration_prose(duration_time)}."},
       {:hint, open_start_hint()}
     ]
@@ -721,7 +960,7 @@ defmodule Tempo.Explain do
     [
       {:headline, recurrence_headline(recurrence)},
       {:span, "Domain: #{domain_prose(domain)}."},
-      selection && {:span, "Selects: #{selection_prose(selection)}."},
+      selection && {:span, "Selects: #{selection_prose(selection, rule_naming(interval))}."},
       {:span, "Cadence: #{duration_prose(dt)}."},
       {:hint, domain_hint(domain)}
     ]
@@ -1002,7 +1241,7 @@ defmodule Tempo.Explain do
     selection = selection_of(interval.repeat_rule)
 
     [
-      selection && selection_prose(selection),
+      selection && selection_prose(selection, rule_naming(interval)),
       cadence_phrase(cadence),
       start_phrase(interval.from),
       until_phrase(interval)
@@ -1237,8 +1476,62 @@ defmodule Tempo.Explain do
 
   @months ~w(January February March April May June July August September October November December)
 
-  defp month_name(n) when is_integer(n) and n in 1..12, do: Enum.at(@months, n - 1)
-  defp month_name(other), do: "month #{inspect(other)}"
+  # A month by its name where it has one, and by its number where it has not.
+  defp month_name(month, naming) do
+    case fetch_month_name(month, naming) do
+      {:ok, name} -> name
+      :error -> "month #{inspect(month)}"
+    end
+  end
+
+  # A month's name in English, for the calendar and the year, if any, that name
+  # it. The Gregorian calendar's are listed here; another calendar's are asked
+  # of Localize, with the year when there is one, since a lunisolar calendar's
+  # sixth month is Adar in one year and Adar I in the next. Such a month has no
+  # one name without a year.
+  defp fetch_month_name(month, {calendar, year}) when is_integer(month) do
+    if gregorian_names?(calendar),
+      do: gregorian_month_name(month),
+      else: localized_month_name(month, calendar, year)
+  end
+
+  defp fetch_month_name(_set_or_group, _naming), do: :error
+
+  defp gregorian_month_name(month) when month in 1..12, do: {:ok, Enum.at(@months, month - 1)}
+  defp gregorian_month_name(_month), do: :error
+
+  # A calendar of weeks has no named months of its own, so a month written in
+  # one keeps the name it was written with.
+  defp gregorian_names?(Calendrical.Gregorian), do: true
+  defp gregorian_names?(calendar), do: Tempo.week_based_calendar?(calendar)
+
+  defp localized_month_name(month, calendar, year) do
+    with %{} = fields <- month_fields(month, calendar, year),
+         {:ok, name} <- Localize.Date.to_string(fields, format: "MMMM", locale: :en) do
+      {:ok, name}
+    else
+      _no_one_name -> :error
+    end
+  end
+
+  defp month_fields(month, calendar, year) when is_integer(year),
+    do: %{year: year, month: month, calendar: calendar}
+
+  defp month_fields(month, calendar, _no_year) do
+    if same_months_every_year?(calendar),
+      do: %{month: month, calendar: calendar},
+      else: :no_one_name
+  end
+
+  defp same_months_every_year?(calendar) do
+    Code.ensure_loaded?(calendar) and function_exported?(calendar, :months_in_year, 0) and
+      is_integer(calendar.months_in_year())
+  end
+
+  # What names the months of a rule's selection: its calendar and no year,
+  # since it selects in each.
+  defp rule_naming(%Tempo.Interval{repeat_rule: %Tempo{} = rule}), do: {calendar_of(rule), nil}
+  defp rule_naming(%Tempo.Interval{}), do: {Calendrical.Gregorian, nil}
 
   defp two_digit(n) when is_integer(n) and n >= 0 and n < 10, do: "0#{n}"
   defp two_digit(n) when is_integer(n), do: Integer.to_string(n)
@@ -1279,18 +1572,18 @@ defmodule Tempo.Explain do
   # Render a BY-rule selection as an English phrase — e.g.
   # `[month: 11, day: [2..8], day_of_week: 2]` becomes "in November, on
   # the 2nd–8th, on a Tuesday" (US Election Day).
-  defp selection_prose(selection) do
+  defp selection_prose(selection, naming) do
     case split_at_interval(selection) do
-      {scope, window, within} -> windowed_prose(scope, window, within)
-      :none -> flat_selection_prose(selection)
+      {scope, window, within} -> windowed_prose(scope, window, within, naming)
+      :none -> flat_selection_prose(selection, naming)
     end
   end
 
-  defp flat_selection_prose(selection) do
+  defp flat_selection_prose(selection, naming) do
     selection
     |> Enum.reject(fn {key, _value} -> key == :origin_day end)
     |> fuse_ordinal_weekday()
-    |> Enum.flat_map(fn entry -> List.wrap(selection_clause(entry)) end)
+    |> Enum.flat_map(fn entry -> List.wrap(selection_clause(entry, naming)) end)
     |> Enum.join(", ")
   end
 
@@ -1305,12 +1598,12 @@ defmodule Tempo.Explain do
   # ISO 8601-2 §12.10: "the last Friday within the 7 days before Easter". The
   # window is `[duration] before|from [inner]`, and the outer selectors pick
   # within it; a terminal window (no outer selectors) is described on its own.
-  defp windowed_prose(scope, %Tempo.Interval{from: inner, duration: duration}, within) do
-    window = window_phrase(duration, selection_noun(scope ++ inner_selection_of(inner)))
+  defp windowed_prose(scope, %Tempo.Interval{from: inner, duration: duration}, within, naming) do
+    window = window_phrase(duration, selection_noun(scope ++ inner_selection_of(inner), naming))
 
     case Enum.reject(within, fn {key, _value} -> key in [:origin_day, :wkst] end) do
       [] -> window
-      selectors -> "#{flat_selection_prose(selectors)} within #{window}"
+      selectors -> "#{flat_selection_prose(selectors, naming)} within #{window}"
     end
   end
 
@@ -1334,19 +1627,22 @@ defmodule Tempo.Explain do
   end
 
   # A resolved inner selection as a bare noun phrase, for embedding in a window.
-  defp selection_noun([{:event, name}]), do: event_phrase(name)
-  defp selection_noun([{:month, m}]), do: month_name(m)
-  defp selection_noun([{:month, m}, {:day, d}]) when is_integer(d), do: "#{month_name(m)} #{d}"
+  defp selection_noun([{:event, name}], _naming), do: event_phrase(name)
+  defp selection_noun([{:month, m}], naming), do: month_name(m, naming)
 
-  defp selection_noun([{:day_of_week, wd}, {:instance, i}]) when is_integer(wd) and is_integer(i),
-    do: "the #{ordinal(i)} #{weekday_name(wd)}"
+  defp selection_noun([{:month, m}, {:day, d}], naming) when is_integer(d),
+    do: "#{month_name(m, naming)} #{d}"
 
-  defp selection_noun([{:month, m}, {:day_of_week, wd}, {:instance, i}])
+  defp selection_noun([{:day_of_week, wd}, {:instance, i}], _naming)
        when is_integer(wd) and is_integer(i),
-       do: "the #{ordinal(i)} #{weekday_name(wd)} of #{month_name(m)}"
+       do: "the #{ordinal(i)} #{weekday_name(wd)}"
 
-  defp selection_noun(other) do
-    case flat_selection_prose(other) do
+  defp selection_noun([{:month, m}, {:day_of_week, wd}, {:instance, i}], naming)
+       when is_integer(wd) and is_integer(i),
+       do: "the #{ordinal(i)} #{weekday_name(wd)} of #{month_name(m, naming)}"
+
+  defp selection_noun(other, naming) do
+    case flat_selection_prose(other, naming) do
       "on " <> rest -> rest
       "in " <> rest -> rest
       prose -> prose
@@ -1385,7 +1681,11 @@ defmodule Tempo.Explain do
     positions |> List.wrap() |> Enum.flat_map(&expand_int/1) |> Enum.map(&{&1, weekday})
   end
 
-  defp selection_clause({:month, m}), do: "in #{names_phrase(m, &month_name/1)}"
+  # A month is named in the selection's calendar; no other clause needs it.
+  defp selection_clause({:month, m}, naming),
+    do: "in #{names_phrase(m, &month_name(&1, naming))}"
+
+  defp selection_clause(entry, _naming), do: selection_clause(entry)
 
   defp selection_clause({:traditional_month, {n, :leap}}),
     do: "in the leap month after traditional month #{n}"
