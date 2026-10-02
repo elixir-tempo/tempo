@@ -205,6 +205,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A recurrence with no year goes on round its axis: `R3/T22H/PT1H` is 22:00, 23:00 and 00:00 and `R3/6K/P1D` Saturday to Monday, where an occurrence past the end of the axis was dropped and the first repeated. A cadence that brings such a start back to itself (`R3/7K/P1W`, `R3/T22H/P1D`) is a `Tempo.ConversionError`, where its occurrences had no length.
+
 * A day counted from the end of a month under a year that is a set, a range, a mask or unspecified is the last day of that month in each year: `{2026,2027}Y2M-1D` is 28 February of each, where it was read as the 29th before the year was known and named nothing.
 
 * `Enum.count/1`, `Enum.at/2` and `Enum.slice/3` of an interval whose end is finer than the unit it is walked by count the step that starts before the end, as the walk takes it: `Enum.count(~o"1985/1986-06")` is 2 where it was 1, and an hour walk to `T12:30` counts the 12:00 step.

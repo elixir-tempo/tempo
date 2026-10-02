@@ -5396,12 +5396,18 @@ defmodule Tempo do
   defp walkable(
          %Tempo.Interval{
            recurrence: recurrence,
-           from: %Tempo{} = from,
+           from: %Tempo{time: from_time} = from,
            duration: %Tempo.Duration{} = cadence
          } = interval
        )
        when recurrence != 1 do
+    dated? = on_the_time_line?(from_time)
+
     case Math.add(from, cadence) do
+      # A cadence that brings a start with no year back to itself (`R3/7K/P1W`,
+      # `R3/T22H/P1D`) makes every occurrence the same whole turn of its axis,
+      # which no two endpoints on that axis can write.
+      %Tempo{time: ^from_time} when not dated? -> {:error, whole_turn_error(from, cadence)}
       %Tempo{} -> selectable(interval.repeat_rule, interval)
       {:error, reason} -> {:error, step_error(from, reason)}
       # A start that holds unspecified digits steps to a set of candidates
@@ -5423,6 +5429,26 @@ defmodule Tempo do
   end
 
   defp walkable(_value), do: :ok
+
+  # Whether a value is placed on the time line by a year of its own, where one
+  # with no year lies on an axis that comes round again.
+  defp on_the_time_line?(time) do
+    case List.keyfind(time, :year, 0) do
+      {:year, year} when is_integer(year) -> true
+      {:year, {year, _annotations}} when is_integer(year) -> true
+      _no_year -> false
+    end
+  end
+
+  defp whole_turn_error(from, cadence) do
+    ConversionError.exception(
+      value: from,
+      reason:
+        "#{inspect(cadence)} brings #{inspect(from)}, which has no year, back to itself, so " <>
+          "each occurrence would be the same whole turn of its axis. Place the start on a " <>
+          "date first with `Tempo.at/2` or `Tempo.on/2`."
+    )
+  end
 
   # The stepper names what it cannot step by an atom where it has no value to
   # name; the start is in scope here.
@@ -6624,12 +6650,7 @@ defmodule Tempo do
        when is_function(start_predicate, 1) and is_function(selection_fn, 1) do
     from
     |> period_occurrences(cadence, occurrence_end, start_predicate, selection_fn, metadata)
-    # DTSTART floor — per RFC 5545, DTSTART is always the first
-    # occurrence. BY-rule EXPAND can legitimately produce dates
-    # earlier in the DTSTART-containing period (e.g.
-    # BYMONTHDAY=1 with DTSTART=Sep 30 → also Sep 1). Drop any
-    # such pre-DTSTART candidates.
-    |> Stream.reject(&before_dtstart?(&1, from))
+    |> from_the_start(from)
     |> Stream.take(output_limit)
     |> Enum.to_list()
     |> walked(from)
@@ -6795,6 +6816,20 @@ defmodule Tempo do
   end
 
   defp strip_span_directives(metadata), do: metadata
+
+  # DTSTART floor — per RFC 5545, DTSTART is always the first occurrence.
+  # BY-rule EXPAND can legitimately produce dates earlier in the
+  # DTSTART-containing period (e.g. BYMONTHDAY=1 with DTSTART=Sep 30 → also
+  # Sep 1), and those are dropped. A start with no year lies on an axis that
+  # comes round again — the hours of a day, the days of a week — so an
+  # occurrence after it in the walk can be earlier on the axis
+  # (`R3/T22H/PT1H` reaches 00:00): only those before the first occurrence
+  # at or after the start are dropped.
+  defp from_the_start(occurrences, %Tempo{time: time} = from) do
+    if on_the_time_line?(time),
+      do: Stream.reject(occurrences, &before_dtstart?(&1, from)),
+      else: Stream.drop_while(occurrences, &before_dtstart?(&1, from))
+  end
 
   defp before_dtstart?(%Tempo.Interval{from: %Tempo{} = candidate_from}, %Tempo{} = dtstart) do
     Compare.compare_endpoints(candidate_from, dtstart) == :earlier

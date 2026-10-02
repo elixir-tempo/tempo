@@ -170,4 +170,41 @@ defmodule Tempo.SteppingTest do
       assert_raise ConversionError, ~r/holds several values/, fn -> Enum.take(days, 3) end
     end
   end
+
+  # The floor at a recurrence's start dropped an occurrence that came round
+  # past the end of the axis, so the walk went round again and repeated the
+  # first; a cadence of a whole turn gave occurrences of no length.
+  describe "a recurrence with no year that wraps its axis" do
+    test "goes on round the axis" do
+      assert spans(Tempo.from_iso8601!("R3/T22H/PT1H")) ==
+               [{~o"T0H", ~o"T1H"}, {~o"T22H", ~o"T23H"}, {~o"T23H", ~o"T0H"}]
+
+      assert spans(Tempo.from_iso8601!("R3/6K/P1D")) ==
+               [{~o"1K", ~o"2K"}, {~o"6K", ~o"7K"}, {~o"7K", ~o"1K"}]
+
+      assert spans(Tempo.from_iso8601!("R3/6K/P2D")) ==
+               [{~o"1K", ~o"3K"}, {~o"3K", ~o"5K"}, {~o"6K", ~o"1K"}]
+
+      assert spans(Tempo.from_iso8601!("R3/11M/P1M")) ==
+               [{~o"1M", ~o"2M"}, {~o"11M", ~o"12M"}, {~o"12M", ~o"1M"}]
+
+      assert spans(Tempo.from_iso8601!("R3/12M30D/P1D")) ==
+               [{~o"1M1D", ~o"1M2D"}, {~o"12M30D", ~o"12M31D"}, {~o"12M31D", ~o"1M1D"}]
+    end
+
+    test "a cadence of a whole turn is an error" do
+      for text <- ["R3/7K/P1W", "R3/T22H/P1D", "R3/12M31D/P1Y", "R3/6K/P7D"] do
+        assert {:error, %ConversionError{} = error} = Tempo.to_interval(Tempo.from_iso8601!(text))
+        assert Exception.message(error) =~ "whole turn", text
+      end
+    end
+
+    test "a start with a year is floored as before" do
+      assert spans(Tempo.from_iso8601!("R3/2026-06-15T22/PT1H")) == [
+               {~o"2026-06-15T22", ~o"2026-06-15T23"},
+               {~o"2026-06-15T23", ~o"2026-06-16T00"},
+               {~o"2026-06-16T00", ~o"2026-06-16T01"}
+             ]
+    end
+  end
 end

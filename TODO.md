@@ -6,7 +6,7 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ### Correctness
 
-* [ ] **A recurrence with no year that wraps its own axis** — `R3/T22H/PT1H` gives 22:00, 22:00 and 23:00, and `R3/6K/P1D` Saturday twice and then Sunday: the occurrence past midnight, or past the week's last day, starts before the recurrence's start on the value's own axis, so the floor at the start drops it and the walk goes round again. A cadence that leaves the start where it is (a week on `7K`, a year on `12M31D`) gives occurrences of no length (`7K/7K`). Found 2026-10-02.
+* [ ] **An unending recurrence with no year gives nothing in a dated window** — `Tempo.to_interval(~o"R/T22H/PT1H", within: ~o"2026-06-15/2026-06-16")` is an empty set, where the window's day has 22:00 and 23:00. Found 2026-10-03.
 
 * [ ] **A recurrence from a start that holds a set gives intervals whose ends hold it** — `R3/2026Y6M{1,15}D/P1M` is three intervals from `2026Y6M{1,15}D` to `2026Y7M{1,15}D` and on, where the 1st and the 15th of three months are six occurrences. Found 2026-10-02.
 
@@ -129,6 +129,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A recurrence with no year that wraps its own axis** — the floor at a start with no year drops only the occurrences before the first at or after it, so `R3/T22H/PT1H` reaches 00:00; a cadence that brings such a start back to itself is a `ConversionError`. 2026-10-03.
 
 * [x] **A count from the end under a single month is resolved before its year is known** — a day counted from the end of a month under a year that is a set, a range, a mask or unspecified is left for each year to resolve (`{2026,2027}Y2M-1D` is 28 February of each); `to_interval/2` of `X*Y2M-1D` is now a `ConversionError`. 2026-10-03.
 
