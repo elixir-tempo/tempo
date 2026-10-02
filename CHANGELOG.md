@@ -203,6 +203,16 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A whole date written with a month and a day, or as a day of the year, for a calendar of weeks is the Gregorian day converted into it, as Localize reads it: `~o"2026-06-15"W` and `Tempo.new(year: 2026, month: 6, day: 15, calendar: Calendrical.ISOWeek)` are `~o"2026-W25-1"W`, where each held a month and a day its calendar has none of. Anything less than a whole date there, and a month or a day of one placed on (`at/2`, `on/2`) or selected in (`select/2`) a week calendar's value, is a `Tempo.ConversionError`.
+
+* A date converted into a calendar of weeks is qualified in every unit when its year, month or day was: `2026-?06-15[u-ca=iso-week]` is `2026-W25-1?`.
+
+* `Tempo.at/2`, `on/2` and `extend/1` check a value in its own calendar, so a Hebrew leap year takes its thirteenth month and a week date keeps its shape when a time is placed in it, where each was checked as a Gregorian date.
+
+* `Tempo.to_interval/2` returns an error for a recurrence whose start its cadence cannot step (a month from a week date, months from a quarter) and for a selection by a month, a day of one or a day of the year in a calendar of weeks, where it raised or left the selection out.
+
+* `Tempo.select/2` gives a week calendar's days as week dates, where it built them with a month, and skips a span either end of which cannot land (29 February, in a common year), where it raised.
+
 * `explain/1` names a month as its calendar does (a Hebrew `5786-06-15` is "Adar 15, 5786", a Persian selection "in Farvardin"), where every calendar's months took the Gregorian calendar's names. A lunisolar month with no year, which no one name fits, is given by its number.
 
 * `explain/1` headlines a value holding a set or a group by what it names — "June and July 2026", "The 1st and 15th of June 2026", "January to March 2026" for a quarter — where it named only the units before it ("The year 2026"). A set of years is no longer called a value with no year, and a set of hours is written as its clock times, not `??`.

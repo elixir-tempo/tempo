@@ -98,6 +98,14 @@ defmodule Tempo.IntervalExpansion.Test do
       assert span.from.time == [year: 1985, month: 1]
       assert span.to.time == [year: 1987, month: 1]
     end
+
+    test "a start its cadence cannot step is an error, not a raise" do
+      # A quarter is a group of months, and a month cannot be added to a group.
+      {:ok, quarters} = Tempo.from_iso8601("R3/2026-33/P3M")
+
+      assert {:error, %Tempo.ConversionError{reason: :grouped_component}} =
+               Tempo.to_interval(quarters)
+    end
   end
 
   describe "from + duration" do

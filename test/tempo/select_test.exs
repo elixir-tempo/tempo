@@ -849,6 +849,18 @@ defmodule Tempo.Select.Test do
       assert IntervalSet.count(empty) == 0
     end
 
+    test "a span either end of which cannot land is skipped too" do
+      {:ok, from_leap_day} = Interval.new(from: ~o"2M29D", to: ~o"3M2D")
+      {:ok, set} = Tempo.select(~o"{2026..2029}Y", from_leap_day)
+
+      assert set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1) ==
+               ["2028Y2M29D/3M2D"]
+
+      {:ok, to_leap_day} = Interval.new(from: ~o"2M27D", to: ~o"2M29D")
+      assert {:ok, empty} = Tempo.select(~o"2026", to_leap_day)
+      assert IntervalSet.count(empty) == 0
+    end
+
     test "on/2 reports the same impossible date, because it names one year" do
       # Selecting across a range skips what cannot exist; placing the day on
       # exactly one year has nothing to skip to, so it says so.

@@ -282,7 +282,7 @@ All these errors name the specific violation and point at the expression in the 
 
 ## What match context deliberately doesn't do
 
-* **No calendar modifier.** In value context, `~o"…"w` parses the string against the ISO Week calendar. In match context, `W` always means "bind `:week`". Match-context sigils are always parsed as Gregorian and leave the matched value's `:calendar` field unconstrained.
+* **No calendar modifier.** In value context, `~o"…"W` parses the string against the ISO Week calendar. In match context, `W` always means "bind `:week`". Match-context sigils are always parsed as Gregorian and leave the matched value's `:calendar` field unconstrained.
 
 * **No stdlib types.** `~o"…"` produces a `%Tempo{}`-family pattern and cannot match `%Date{}`, `%Time{}`, `%NaiveDateTime{}`, or `%DateTime{}`. Use the stdlib sigils `~D` / `~T` / `~N` / `~U` for those, or convert via `Tempo.from_elixir/1` before matching.
 

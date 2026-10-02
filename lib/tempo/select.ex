@@ -154,6 +154,14 @@ defmodule Tempo.Select do
   `Tempo.select(~o"2026", [-1])` is December. An index the period
   does not have, such as `[30]` on February, selects nothing there.
 
+  ## A calendar of weeks
+
+  A base in a calendar of weeks, such as `Calendrical.ISOWeek`, is
+  selected in by week and day of the week (`~o"25W"`, `~o"2K"`) and by
+  time of day. Its year is the calendar's own, not the Gregorian year a
+  month and a day belong to, so a selector naming a month, a day of one
+  or a day of the year returns a `Tempo.ConversionError`.
+
   """
 
   alias Tempo.Compare
@@ -903,8 +911,10 @@ defmodule Tempo.Select do
     Calendrical.next(date, :day)
   end
 
+  # A day in the units its calendar holds a date in: a month and a day, or a
+  # calendar of weeks' week and day of the week.
   defp build_day_tempo(%Tempo{} = source, y, m, d, calendar) do
-    %Tempo{source | time: [year: y, month: m, day: d], calendar: calendar}
+    %Tempo{source | time: Tempo.date_units(y, m, d, calendar), calendar: calendar}
   end
 
   ## -----------------------------------------------------------
@@ -1045,10 +1055,13 @@ defmodule Tempo.Select do
 
   defp span_endpoint(%Interval{}), do: :point
 
+  # A span either end of which cannot land on the member (29 February, in a
+  # common year) is skipped, as a point that cannot land is.
   defp project_span(%Interval{} = base, %Tempo{} = c_from, %Tempo{} = c_to) do
-    span_from = merged_constraint_tempo(base, c_from.time)
-    span_to = merged_constraint_tempo(base, c_to.time)
-    build_span(span_from, roll_past_midnight(span_from, span_to))
+    with %Tempo{} = span_from <- merged_constraint_tempo(base, c_from.time),
+         %Tempo{} = span_to <- merged_constraint_tempo(base, c_to.time) do
+      build_span(span_from, roll_past_midnight(span_from, span_to))
+    end
   end
 
   defp project_span_duration(%Interval{} = base, %Tempo{} = c_from, %Duration{} = duration) do
@@ -1056,6 +1069,7 @@ defmodule Tempo.Select do
          %Tempo{} = span_to <- Math.add(span_from, duration) do
       build_span(span_from, span_to)
     else
+      {:error, %ConversionError{}} = error -> error
       _other -> nil
     end
   end
@@ -1086,7 +1100,29 @@ defmodule Tempo.Select do
   # ordinal-shaped list no calendar math accepts. Fill to the unit
   # first (`[year: 2026, month: 1]`), exactly the start the walk
   # itself takes.
-  defp merged_constraint_tempo(
+  #
+  # A calendar of weeks has no months, and its year is not the Gregorian
+  # year a month and a day belong to (the NRF year 2026 holds January 2027),
+  # so a month, a day of one or a day of the year selects nothing it could be
+  # held to: it is an error, as it is in a recurrence's selection.
+  defp merged_constraint_tempo(%Interval{from: %Tempo{calendar: calendar}} = base, c_time) do
+    if Validation.written_in_another_calendar?(c_time, calendar),
+      do: {:error, selects_by_month_error(calendar, c_time)},
+      else: merge_constraint(base, c_time)
+  end
+
+  defp selects_by_month_error(calendar, c_time) do
+    ConversionError.exception(
+      value: c_time,
+      target: calendar,
+      reason:
+        "#{inspect(calendar)} is a calendar of weeks, with no months, so a selection in it " <>
+          "cannot be by a month, a day of one or a day of the year; select by week (W) " <>
+          "and day of the week (K)."
+    )
+  end
+
+  defp merge_constraint(
          %Interval{from: %Tempo{calendar: calendar} = base_from} = base,
          c_time
        ) do

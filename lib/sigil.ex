@@ -14,7 +14,7 @@ defmodule Tempo.Sigils do
   ~o"2026-06-15"            #=> %Tempo{…}
   ~o"2026-06-15T10:30:00Z"  #=> zoned datetime
   ~o"1984?/2004~"           #=> qualified interval
-  ~o"2026Y"w                #=> ISO week calendar (w modifier)
+  ~o"2026Y"W                #=> ISO week calendar (W modifier)
   ```
 
   ### Why a module just for sigils
@@ -33,9 +33,11 @@ defmodule Tempo.Sigils do
 
   * No modifier — Gregorian calendar (the common case).
 
-  * `w` — ISO Week calendar (`Calendrical.ISOWeek`). Use when the
+  * `W` — ISO Week calendar (`Calendrical.ISOWeek`). Use when the
     input is in a week-based form you want parsed under ISO week
-    semantics explicitly.
+    semantics explicitly. A whole date written with a month and a
+    day is read as the Gregorian day and converted, so
+    `~o"2026-06-15"W` is `~o"2026-W25-1"W`.
 
   ## Match context
 
@@ -321,7 +323,7 @@ defmodule Tempo.Sigils do
     # No calendar modifier → defer to the string's own IXDTF
     # `[u-ca=NAME]` suffix (via `from_iso8601/1`), so
     # `~o"5786-01-01[u-ca=hebrew]"` resolves to the Hebrew calendar
-    # instead of being forced to Gregorian. A `w` modifier is an
+    # instead of being forced to Gregorian. A `W` modifier is an
     # explicit calendar choice that wins, matching `from_iso8601/2`'s
     # "explicit calendar always wins" rule.
     result =

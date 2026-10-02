@@ -324,7 +324,10 @@ defmodule Tempo do
 
   * `:calendar` is the `Calendrical` calendar module used to
     interpret and validate the components. Defaults to
-    `Calendrical.Gregorian`.
+    `Calendrical.Gregorian`. A calendar of weeks, such as
+    `Calendrical.ISOWeek`, has no months: a `:year`, `:month` and
+    `:day`, or a `:year` and `:day_of_year`, given for one are the
+    Gregorian day, converted into it.
 
   * `:zone` is an IANA time-zone name as a binary (e.g.
     `"Australia/Sydney"`). Sets `extended.zone_id`. Requires at
@@ -625,15 +628,20 @@ defmodule Tempo do
   end
 
   # An ordinal day is the calendar date it names, as the ISO 8601 ordinal
-  # date `2026-166` parses to, from Calendrical.
+  # date `2026-166` parses to, from Calendrical. One given for a calendar of
+  # weeks is the Gregorian day of the year, as one parsed for it is, and is
+  # left for the validation that converts it.
   defp day_of_year_to_date(components, options) do
+    calendar = Keyword.get(options, :calendar) || Calendrical.Gregorian
+
     case Keyword.pop(components, :day_of_year) do
-      {nil, components} ->
+      {nil, _unchanged} ->
         {:ok, components}
 
-      {day_of_year, components} ->
-        calendar = Keyword.get(options, :calendar) || Calendrical.Gregorian
-        ordinal_date(components, day_of_year, calendar)
+      {day_of_year, without_day_of_year} ->
+        if Validation.written_in_another_calendar?(components, calendar),
+          do: {:ok, components},
+          else: ordinal_date(without_day_of_year, day_of_year, calendar)
     end
   end
 
@@ -707,11 +715,18 @@ defmodule Tempo do
   # Defer to `Tempo.Validation.validate/2` for calendar-aware range
   # checks (month ≤ months_in_year, day ≤ days_in_month, leap-aware
   # Feb 29, etc.). Validation may return an `InvalidDateError` with
-  # rich context.
-  defp validate_against_calendar(%__MODULE__{calendar: calendar} = tempo) do
+  # rich context. The value keeps the components it was given, unless its
+  # calendar has none such: a month and a day given for a calendar of weeks
+  # are the Gregorian day, converted.
+  defp validate_against_calendar(%__MODULE__{time: units, calendar: calendar} = tempo) do
     case Validation.validate(tempo, calendar) do
-      {:ok, _validated} -> {:ok, tempo}
-      {:error, _} = err -> err
+      {:ok, validated} ->
+        if Validation.written_in_another_calendar?(units, calendar),
+          do: {:ok, validated},
+          else: {:ok, tempo}
+
+      {:error, _} = err ->
+        err
     end
   end
 
@@ -748,7 +763,10 @@ defmodule Tempo do
     keyword list of options. A calendar module always wins over any
     `[u-ca=NAME]` tag in the IXDTF suffix. When omitted, the
     `[u-ca=NAME]` tag names the calendar, and with no tag
-    `Calendrical.Gregorian` is used.
+    `Calendrical.Gregorian` is used. A calendar of weeks, such as
+    `Calendrical.ISOWeek`, has no months, so a whole date written
+    with a month and a day, or as a day of the year, is read as the
+    Gregorian day and converted into it; a month alone is an error.
 
   ### Options
 
@@ -789,7 +807,7 @@ defmodule Tempo do
       ...>   Tempo.from_iso8601("2022-11-20T10:30:00Z[!Continent/Imaginary]")
 
       iex> Tempo.from_iso8601("2026-06-15", Calendrical.ISOWeek)
-      {:ok, ~o"2026Y6M15D"W}
+      {:ok, ~o"2026Y25W1K"W}
 
   """
   @spec from_iso8601(String.t(), Calendar.calendar() | keyword()) ::
@@ -2733,21 +2751,45 @@ defmodule Tempo do
     end
   end
 
-  # Merge `from`'s components into `base`, validated — the engine of
-  # `at/2` and `on/2`, which are the public way to combine two values.
-  # Passes through any non-`{:ok, _}` from `Validation.validate/2`,
-  # which dialyzer widens beyond the spec.
+  # Merge `from`'s components into `base`, validated in `base`'s own
+  # calendar — the engine of `at/2` and `on/2`, which are the public way to
+  # combine two values. Passes through any non-`{:ok, _}` from
+  # `Validation.validate/2`, which dialyzer widens beyond the spec.
+  #
+  # A month, a day of one or a day of the year is not placed on a value of a
+  # calendar of weeks: its year is the calendar's own, not the Gregorian year
+  # they belong to (the NRF year 2026 holds January 2027), so the day they
+  # would name there is not one of that year's.
   @doc false
   @dialyzer {:nowarn_function, merge: 2}
   @spec merge(t(), t()) :: t() | {:error, error_reason()}
   def merge(%__MODULE__{} = base, %Tempo{} = from) do
+    calendar = calendar_of(base)
+
+    if Validation.written_in_another_calendar?(from.time, calendar),
+      do: {:error, placed_by_month_error(base, from, calendar)},
+      else: merge_in(base, from, calendar)
+  end
+
+  defp merge_in(base, from, calendar) do
     units = Enumeration.merge(base.time, from.time)
     shift = from.shift || base.shift
 
-    case Validation.validate(%{base | time: units, shift: shift}) do
+    case Validation.validate(%{base | time: units, shift: shift}, calendar) do
       {:ok, tempo} -> tempo
       other -> other
     end
+  end
+
+  defp placed_by_month_error(base, from, calendar) do
+    ConversionError.exception(
+      value: from,
+      target: calendar,
+      reason:
+        "#{inspect(calendar)} is a calendar of weeks, with no months, so #{inspect(from)} " <>
+          "cannot be placed on #{inspect(base)}; place a week (W) and a day of the week (K), " <>
+          "or write the whole date, which is read as the Gregorian day and converted."
+    )
   end
 
   @doc """
@@ -2765,7 +2807,10 @@ defmodule Tempo do
 
   A value with a year is checked against its calendar, so
   `~o"2026-02" |> Tempo.on(~o"29D")` is an error: 2026 is not a leap
-  year.
+  year. A value of a calendar of weeks, such as `Calendrical.ISOWeek`,
+  takes a week and a day of the week; a month, a day of one or a day
+  of the year placed on it is an error, since its year is the
+  calendar's own and not the Gregorian year they belong to.
 
   An interval is placed endpoint by endpoint, so nine to five on 15
   June, or 2–15 April in 2027, is one call; an open end, or one its
@@ -2980,7 +3025,7 @@ defmodule Tempo do
   defp split_at_selection(time), do: Enum.split_while(time, &(not match?({:selection, _}, &1)))
 
   defp with_units_after(%__MODULE__{time: time} = tempo, units) do
-    case Validation.validate(%{tempo | time: time ++ units}) do
+    case Validation.validate(%{tempo | time: time ++ units}, calendar_of(tempo)) do
       {:ok, placed} -> placed
       other -> other
     end
@@ -3024,7 +3069,7 @@ defmodule Tempo do
   def extend(%Tempo{} = tempo, nil) do
     tempo
     |> Enumeration.add_implicit_enumeration()
-    |> Validation.validate()
+    |> Validation.validate(calendar_of(tempo))
   end
 
   @doc """
@@ -5290,7 +5335,8 @@ defmodule Tempo do
         ) ::
           {:ok, Tempo.Interval.t() | Tempo.IntervalSet.t()} | {:error, error_reason()}
   def to_interval(value, opts \\ []) do
-    with :ok <- check_bound_option(opts, "Tempo.to_interval/2") do
+    with :ok <- check_bound_option(opts, "Tempo.to_interval/2"),
+         :ok <- walkable(value) do
       case open_window_start(Keyword.get(opts, :within)) do
         {:ok, window_from} -> occurrences_from(value, window_from, opts)
         {:error, _reason} = error -> error
@@ -5298,6 +5344,75 @@ defmodule Tempo do
       end
     end
   end
+
+  # A recurrence is walked by stepping its start by its cadence and applying
+  # its selection to each step. A cadence its start cannot be stepped by (a
+  # month, from a week date) and a selection by a unit its calendar has none of
+  # (a month, in a calendar of weeks) give nothing to walk, and are errors.
+  defp walkable(
+         %Tempo.Interval{
+           recurrence: recurrence,
+           from: %Tempo{} = from,
+           duration: %Tempo.Duration{} = cadence
+         } = interval
+       )
+       when recurrence != 1 do
+    case Math.add(from, cadence) do
+      %Tempo{} -> selectable(interval.repeat_rule, interval)
+      {:error, reason} -> {:error, step_error(from, reason)}
+    end
+  end
+
+  defp walkable(%Tempo.Interval{repeat_rule: %Tempo{} = rule} = interval),
+    do: selectable(rule, interval)
+
+  # A value holding a selection (ISO 8601-2 §12.11) selects as a rule does.
+  defp walkable(%Tempo{time: time} = value) when is_list(time) do
+    case List.keyfind(time, :selection, 0) do
+      {:selection, selection} -> selectable(%{value | time: selection}, value)
+      nil -> :ok
+    end
+  end
+
+  defp walkable(_value), do: :ok
+
+  # The stepper names what it cannot step by an atom where it has no value to
+  # name; the start is in scope here.
+  defp step_error(_from, reason) when is_exception(reason), do: reason
+  defp step_error(from, :unanchored), do: UnanchoredError.exception(value: from)
+  defp step_error(from, reason), do: materialisation_error(from, reason)
+
+  defp selectable(%Tempo{time: time} = rule, interval) do
+    if selects_by_month?(time) and week_based_calendar?(calendar_of(rule)) do
+      {:error,
+       ConversionError.exception(
+         value: interval,
+         reason:
+           "#{inspect(calendar_of(rule))} is a calendar of weeks, with no months, so " <>
+             "#{inspect(interval)} cannot select by a month, a day of one or a day of the year."
+       )}
+    else
+      :ok
+    end
+  end
+
+  defp selectable(_no_rule, _interval), do: :ok
+
+  # Whether a selection, or a window within it, selects by a month, by a day
+  # of one or by a day of the year: the units a date written for a calendar of
+  # weeks is read in the Gregorian calendar by.
+  defp selects_by_month?(units) when is_list(units), do: Enum.any?(units, &selects_by_month?/1)
+
+  defp selects_by_month?({unit, _value})
+       when unit in [:month, :traditional_month, :day, :day_of_year],
+       do: true
+
+  defp selects_by_month?({:selection, selection}), do: selects_by_month?(selection)
+
+  defp selects_by_month?({:interval, %Tempo.Interval{from: %Tempo{time: time}}}),
+    do: selects_by_month?(time)
+
+  defp selects_by_month?(_other_unit), do: false
 
   @doc false
   # 1.x called the window `:bound`. A leftover `:bound` is an error naming

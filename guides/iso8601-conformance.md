@@ -177,6 +177,8 @@ A critical flag on a *time zone* also triggers RFC 9557 §4.2 offset consistency
 
 Time zones are validated against the configured time zone database (`Tempo.TimeZoneDatabase.zone_exists?/1`); with no database configured, syntactically valid zone names are accepted without registry validation. Calendars are validated against `Localize.validate_calendar/1`, which also handles the `"gregory"` → `:gregorian` alias per BCP 47. Every other calendar Calendrical implements resolves through the identifiers `Calendrical.additional_calendars/0` registers, written with hyphens: `[u-ca=iso8601]` (the Gregorian calendar with ISO 8601's week rules, `Calendrical.ISO`), `[u-ca=iso-week]`, `[u-ca=julian]` and its year-start variants (`[u-ca=julian-march25]`), `[u-ca=vietnamese]`, `[u-ca=lunar-japanese]`, `[u-ca=nrf]`, and the reform calendars (`[u-ca=reform-england]`).
 
+A calendar of weeks (`[u-ca=iso-week]`, `[u-ca=nrf]`) has no months, so a whole date written with a month and a day, or as a day of the year, is read as the Gregorian day and converted into it: `2026-06-15[u-ca=iso-week]` is day 1 of week 25, and `2025-12-29[u-ca=iso-week]` is day 1 of week 1 of 2026. Only a whole date converts; a month alone, a set of days or a day with no year is an error there. A qualification of the year, the month or the day it was written with qualifies the whole converted date, since each of its units is worked out from all of them: `2026-?06-15[u-ca=iso-week]` is `2026-W25-1?`.
+
 ## 5. Project-specific extensions (not in ISO 8601)
 
 These syntaxes are Tempo conveniences, not part of any standard:

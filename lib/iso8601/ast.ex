@@ -149,6 +149,7 @@ defmodule Tempo.Iso8601.AST do
   # `?` (uncertain) and `~` (approximate) on the same component
   # combine to `%` (uncertain and approximate); identical qualifiers
   # are idempotent.
-  defp combine_qualification(qualifier, qualifier), do: qualifier
-  defp combine_qualification(_a, _b), do: :uncertain_and_approximate
+  @doc false
+  def combine_qualification(qualifier, qualifier), do: qualifier
+  def combine_qualification(_a, _b), do: :uncertain_and_approximate
 end
