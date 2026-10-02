@@ -146,6 +146,37 @@ defmodule Tempo.EnumerationWalk.Test do
     end
   end
 
+  describe "an interval whose ends differ in resolution counts as it walks" do
+    # count/1 counted the whole units between the ends cut to the unit, so it
+    # missed the step that starts after the end's own unit begins.
+    for text <- [
+          "1985/1986-06",
+          "2026Y/2026Y6M15D",
+          "2026-01/2026-03-15",
+          "2026-06-15/2026-06-17T06",
+          "2026-06-15T10/2026-06-15T12:30",
+          "2026-06-15T10:00/2026-06-15T10:02:30",
+          "1985-06/1987",
+          "2026-06-15/2026-07",
+          "2026/2026"
+        ] do
+      test "for #{text}" do
+        interval = Tempo.from_iso8601!(unquote(text))
+        walked = Enum.to_list(interval)
+
+        assert Enum.count(interval) == length(walked)
+        assert Enum.slice(interval, 0, 40) == Enum.take(walked, 40)
+        assert Enum.at(interval, length(walked) - 1) == List.last(walked)
+      end
+    end
+
+    test "the step the end's unit starts in is counted" do
+      assert Enum.count(~o"1985/1986-06") == 2
+      assert Enum.count(~o"2026Y/2026Y6M15D") == 1
+      assert Enum.at(~o"2026-06-15T10/2026-06-15T12:30", 2) == ~o"2026Y6M15DT12H"
+    end
+  end
+
   describe "a value that cannot be walked raises the error to_interval returns" do
     test "a unit whose values depend on a year the value does not have" do
       for value <- [~o"X*W", ~o"X*O", ~o"X*D", ~o"{1..-1}W", ~o"2MXXD", ~o"3m"] do

@@ -205,6 +205,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Enum.count/1`, `Enum.at/2` and `Enum.slice/3` of an interval whose end is finer than the unit it is walked by count the step that starts before the end, as the walk takes it: `Enum.count(~o"1985/1986-06")` is 2 where it was 1, and an hour walk to `T12:30` counts the 12:00 step.
+
 * An interval end written as a group, a mask or significant digits is read as the point its span starts at, so `Tempo.relation(~o"20C/21C", ~o"2050")` is `:contains` where it was `:preceded_by`, and `overlaps?/2`, `within?/2`, the set operations, `duration/1` and the length predicates answer by that point where they answered wrongly or raised. `Tempo.to_interval/1` gives such an interval its points (`2000Y/2100Y`), and an end that names several spans (a set, a selection) is a `Tempo.IntervalEndpointsError`.
 
 * `Tempo.from_iso8601/1` returns a `Tempo.ParseError` for a century or a decade that is not one number — unspecified digits (`1XC`, `X*J`), a set or a range (`{19,20}C`), a margin of error or significant digits — where it raised an `ArithmeticError`.

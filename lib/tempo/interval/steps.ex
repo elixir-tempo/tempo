@@ -104,12 +104,17 @@ defmodule Tempo.Interval.Steps do
       iex> Tempo.Interval.Steps.count_steps(from, to, :day, Calendrical.Gregorian)
       31
 
+      iex> from = Tempo.from_iso8601!("1985Y")
+      iex> to = Tempo.from_iso8601!("1986-06")
+      iex> Tempo.Interval.Steps.count_steps(from, to, :year, Calendrical.Gregorian)
+      2
+
   """
   @spec count_steps(Tempo.t(), Tempo.t(), atom(), module()) ::
           non_neg_integer() | :not_supported
   def count_steps(%Tempo{time: from_time} = from, %Tempo{time: to_time} = to, unit, calendar) do
     if counted_from?(from_time, unit) and date_axis?(to_time, unit) do
-      count_date_steps(from, to, unit, calendar)
+      from |> count_date_steps(to, unit, calendar) |> steps_before(from, to, unit, calendar)
     else
       :not_supported
     end
@@ -150,6 +155,21 @@ defmodule Tempo.Interval.Steps do
   end
 
   defp count_date_steps(_from, _to, _unit, _calendar), do: :not_supported
+
+  # `count_date_steps/4` counts the whole units between the two ends cut to
+  # the unit. The steps in `[from, to)` are those, and one more when the step
+  # they reach still starts before `to`, as the walk takes it: `1985/1986-06`
+  # is 1985 and 1986, and `2026Y/2026Y6M15D` is 2026.
+  defp steps_before(count, from, to, unit, calendar) when is_integer(count) and count >= 0,
+    do: from |> nth_date_step(count, unit, calendar) |> one_more_before(to, count)
+
+  defp steps_before(count, _from, _to, _unit, _calendar), do: count
+
+  defp one_more_before(%Tempo{} = step, to, count) do
+    if Compare.compare_endpoints(step, to) == :earlier, do: count + 1, else: count
+  end
+
+  defp one_more_before(:not_supported, _to, count), do: count
 
   # The closed forms count and step a calendar date — a year, a year and
   # month, or a year, month and day beneath days and clock units — each of

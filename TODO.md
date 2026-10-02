@@ -6,8 +6,6 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ### Correctness
 
-* [ ] **`Enum.count/1` of an interval whose ends differ in resolution** — `Enum.count(~o"1985/1986-06")` is 1, the whole years between its ends, and its walk two values; `2026Y/2026Y6M15D` counts 0 and walks one, and `Enum.at/2` and `Enum.slice/3` follow the count: 145 of the 2,583 intervals in the probe. `Tempo.Interval.Steps.count_steps/4` counts between the ends cut to the unit, where the walk stops at the first step not before the end. Found 2026-10-03.
-
 * [ ] **A count from the end under a single month is resolved before its year is known** — `{2026,2027}Y2M-1D` is read as `{2026,2027}Y2M29D`, the last day of a February of no year, so its walk and `to_interval/2` give nothing; `202XY2M-1D` gives the leap years alone and `X*Y2M-1D` nothing in a common year. Validation passes over a year that is a set, a mask or unspecified and reads the month and day as a value with no year; under a set of months (`{2026,2027}Y{1,2}M-1D`) the count is left for the walk and is right. Found 2026-10-03.
 
 * [ ] **A recurrence with no year that wraps its own axis** — `R3/T22H/PT1H` gives 22:00, 22:00 and 23:00, and `R3/6K/P1D` Saturday twice and then Sunday: the occurrence past midnight, or past the week's last day, starts before the recurrence's start on the value's own axis, so the floor at the start drops it and the walk goes round again. A cadence that leaves the start where it is (a week on `7K`, a year on `12M31D`) gives occurrences of no length (`7K/7K`). Found 2026-10-02.
@@ -133,6 +131,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **`Enum.count/1` of an interval whose ends differ in resolution** — `Tempo.Interval.Steps.count_steps/4` counts the step that starts before an end finer than the unit, so `count/1`, `at/2` and `slice/3` agree with the walk (`1985/1986-06` is 2). 2026-10-03.
 
 * [x] **An interval with grouped ends compares wrongly** — an end written as a group, a mask or significant digits is read as the point its span starts at, in `to_interval/1`, the Allen relations, the set operations, `duration/1` and the length predicates; an end that names several spans is an `IntervalEndpointsError`. 2026-10-03.
 
