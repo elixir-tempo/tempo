@@ -1255,7 +1255,8 @@ defmodule Tempo.Interval do
     {:error, ConversionError.exception(value: interval, reason: :recurring_interval)}
   end
 
-  defp to_single_interval(%__MODULE__{from: %Tempo{}, to: %Tempo{}} = iv, _label), do: {:ok, iv}
+  defp to_single_interval(%__MODULE__{from: %Tempo{}, to: %Tempo{}} = iv, _label),
+    do: endpoints_as_points(iv)
 
   defp to_single_interval(%IntervalSet{} = set, label) do
     case IntervalSet.members(set) do
@@ -1297,6 +1298,67 @@ defmodule Tempo.Interval do
        "Tempo.Interval.relation/2 cannot classify operand #{inspect(label)}: " <>
          "#{inspect(other)}"
      )}
+  end
+
+  @doc false
+  # An interval runs from the point its start's span starts at to the point
+  # its end's span starts at. An end written as a group, a mask or significant
+  # digits (`20C/21C`, `202X/2040`) is read as that point (`2000Y/2100Y`), so
+  # it compares as the moment it is and not as the term it is written as. An
+  # end that names several spans (a set, a selection, a mask whose values do
+  # not run together) is no one point. One whose span starts at no point it
+  # can name (`X*Y12M31D`, the 31 December of any year) is left as it is.
+  @spec endpoints_as_points(t()) :: {:ok, t()} | {:error, Exception.t()}
+  def endpoints_as_points(%__MODULE__{from: from, to: to} = interval) do
+    with {:ok, from} <- endpoint_point(from, "start", interval),
+         {:ok, to} <- endpoint_point(to, "end", interval) do
+      {:ok, %{interval | from: from, to: to}}
+    end
+  end
+
+  defp endpoint_point(%Tempo{time: time} = endpoint, end_name, interval) do
+    if point?(time),
+      do: {:ok, endpoint},
+      else: endpoint |> Tempo.to_interval() |> span_start(endpoint, end_name, interval)
+  end
+
+  defp endpoint_point(endpoint, _end_name, _interval), do: {:ok, endpoint}
+
+  defp span_start({:ok, %__MODULE__{from: %Tempo{time: time} = start}}, endpoint, _end, _iv),
+    do: if(point?(time), do: {:ok, start}, else: {:ok, endpoint})
+
+  defp span_start({:ok, %IntervalSet{} = set}, endpoint, end_name, interval) do
+    case IntervalSet.bounded?(set) and IntervalSet.members(set) do
+      [%__MODULE__{} = span] -> span_start({:ok, span}, endpoint, end_name, interval)
+      _several -> {:error, several_spans_error(endpoint, end_name, interval)}
+    end
+  end
+
+  defp span_start({:error, _exception} = error, _endpoint, _end_name, _interval), do: error
+  defp span_start({:ok, _no_start}, endpoint, _end_name, _interval), do: {:ok, endpoint}
+
+  # Whether a time list names one point: each unit one whole number (a year
+  # of either sign), with or without a margin of error.
+  defp point?([{:year, year} | rest]) when is_integer(year), do: point?(rest)
+  defp point?([{_unit, value} | rest]) when is_integer(value) and value >= 0, do: point?(rest)
+
+  defp point?([{:microsecond, {value, precision}} | rest])
+       when is_integer(value) and is_integer(precision),
+       do: point?(rest)
+
+  defp point?([{_unit, {value, [margin_of_error: _margin]}} | rest]) when is_integer(value),
+    do: point?(rest)
+
+  defp point?([]), do: true
+  defp point?(_time), do: false
+
+  defp several_spans_error(endpoint, end_name, interval) do
+    IntervalEndpointsError.exception(
+      interval: interval,
+      reason:
+        "#{inspect(interval)} has no one #{end_name}: #{inspect(endpoint)} names several " <>
+          "spans (a set, a selection, or a mask whose values do not run together)."
+    )
   end
 
   defp open_ended_error(label) do
@@ -1379,6 +1441,21 @@ defmodule Tempo.Interval do
         interval
     end
   end
+
+  # The interval a measurement or a comparison reads: both endpoints, each
+  # the point it names (`20C/2150` is `2000Y/2150Y`). An interval written
+  # with a duration resolves to its endpoints first, and one whose end names
+  # several spans is left as it is.
+  defp measured_form(interval), do: interval |> resolve_duration_form() |> as_points()
+
+  defp as_points(%__MODULE__{from: %Tempo{}, to: %Tempo{}} = interval) do
+    case endpoints_as_points(interval) do
+      {:ok, points} -> points
+      {:error, _several_spans} -> interval
+    end
+  end
+
+  defp as_points(interval), do: interval
 
   @doc """
   `true` when the interval has zero or negative length —
@@ -1753,7 +1830,7 @@ defmodule Tempo.Interval do
   def duration(%__MODULE__{} = interval, options) do
     with {:ok, leap_seconds?} <- leap_seconds_option(options) do
       interval
-      |> resolve_duration_form()
+      |> measured_form()
       |> resolved_duration(leap_seconds?)
     end
   end
@@ -2197,7 +2274,7 @@ defmodule Tempo.Interval do
   """
   @spec at_least?(t(), Duration.t()) :: boolean()
   def at_least?(interval, duration),
-    do: resolved_at_least?(resolve_duration_form(interval), duration)
+    do: resolved_at_least?(measured_form(interval), duration)
 
   defp resolved_at_least?(%__MODULE__{from: :undefined}, _), do: true
   defp resolved_at_least?(%__MODULE__{to: :undefined}, _), do: true
@@ -2224,7 +2301,7 @@ defmodule Tempo.Interval do
   """
   @spec at_most?(t(), Duration.t()) :: boolean()
   def at_most?(interval, duration),
-    do: resolved_at_most?(resolve_duration_form(interval), duration)
+    do: resolved_at_most?(measured_form(interval), duration)
 
   defp resolved_at_most?(%__MODULE__{from: :undefined}, _), do: false
   defp resolved_at_most?(%__MODULE__{to: :undefined}, _), do: false
@@ -2250,7 +2327,7 @@ defmodule Tempo.Interval do
   """
   @spec exactly?(t(), Duration.t()) :: boolean()
   def exactly?(interval, duration),
-    do: resolved_exactly?(resolve_duration_form(interval), duration)
+    do: resolved_exactly?(measured_form(interval), duration)
 
   defp resolved_exactly?(%__MODULE__{from: :undefined}, _), do: false
   defp resolved_exactly?(%__MODULE__{to: :undefined}, _), do: false
@@ -2274,7 +2351,7 @@ defmodule Tempo.Interval do
   """
   @spec longer_than?(t(), Duration.t()) :: boolean()
   def longer_than?(interval, duration),
-    do: resolved_longer_than?(resolve_duration_form(interval), duration)
+    do: resolved_longer_than?(measured_form(interval), duration)
 
   defp resolved_longer_than?(%__MODULE__{from: :undefined}, _), do: true
   defp resolved_longer_than?(%__MODULE__{to: :undefined}, _), do: true
@@ -2301,7 +2378,7 @@ defmodule Tempo.Interval do
   """
   @spec shorter_than?(t(), Duration.t()) :: boolean()
   def shorter_than?(interval, duration),
-    do: resolved_shorter_than?(resolve_duration_form(interval), duration)
+    do: resolved_shorter_than?(measured_form(interval), duration)
 
   defp resolved_shorter_than?(%__MODULE__{from: :undefined}, _), do: false
   defp resolved_shorter_than?(%__MODULE__{to: :undefined}, _), do: false
@@ -2784,8 +2861,8 @@ defmodule Tempo.Interval do
   # Each operand is classified once, and the pair dispatches on whichever
   # class dominates (earliest in the priority order below).
   defp possible_relations(a, b) do
-    a = resolve_duration_form(a)
-    b = resolve_duration_form(b)
+    a = measured_form(a)
+    b = measured_form(b)
     relations_for(dominant_class(operand_class(a), operand_class(b)), a, b)
   end
 

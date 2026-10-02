@@ -1,6 +1,7 @@
 defmodule Tempo.IntervalRegressionTest do
   use ExUnit.Case, async: true
   import Tempo.Sigils
+  alias Tempo.IntervalSet
   alias Tempo.RRule
 
   # Regressions for two bugs surfaced by the RRule AST-validation
@@ -179,6 +180,48 @@ defmodule Tempo.IntervalRegressionTest do
 
     test "the S annotation is preserved on the value" do
       assert ~o"1950S3".time == [year: {1950, [significant_digits: 3]}]
+    end
+  end
+
+  # An end written as a group, a mask or significant digits was compared as
+  # the term it is written as, so `20C/21C` preceded 2050.
+  describe "an interval end that names a span is read as the point it starts at" do
+    test "a century and a decade" do
+      interval = ~o"20C/21C"
+
+      assert Tempo.to_interval(interval) == {:ok, ~o"2000Y/2100Y"}
+      assert Tempo.relation(interval, ~o"2050") == :contains
+      assert Tempo.overlaps?(interval, ~o"2050")
+      assert Tempo.within?(~o"2050", interval)
+      assert {:ok, overlap} = Tempo.intersection(interval, ~o"2050")
+      assert IntervalSet.members(overlap) == [~o"2050Y/2051Y"]
+      assert Tempo.relation(~o"201J/202J", ~o"2050") == :precedes
+    end
+
+    test "a mask and significant digits" do
+      assert Tempo.relation(~o"2000/205X", ~o"2050") == :meets
+      assert Tempo.to_interval(~o"202X/2040") == {:ok, ~o"2020Y/2040Y"}
+      assert Tempo.duration(~o"1950S2Y/2010") == ~o"P110Y"
+    end
+
+    test "a group of months or days below a year" do
+      assert Tempo.to_interval(~o"2026Y2G3MU/2026Y12M") == {:ok, ~o"2026Y4M/2026Y12M"}
+      assert Tempo.at_least?(~o"2026Y2G3MU/2026Y12M", ~o"P1D")
+      assert Tempo.at_least?(~o"2022Y1M2G3DU/2022Y2M", ~o"P1D")
+      assert Tempo.at_least?(~o"20C/2150", ~o"P1D")
+    end
+
+    test "a margin of error is measured as the value it annotates" do
+      assert Tempo.relation(~o"2018±2Y/2060", ~o"2050") == :contains
+      assert %Tempo.Duration{} = Tempo.duration(~o"2018±2Y/2060")
+    end
+
+    test "an end that names several spans is no one point" do
+      for interval <- [~o"2026Y6M{1,15}D/2026Y7M", ~o"2026Y6ML2KN/2026Y7M"] do
+        assert {:error, %Tempo.IntervalEndpointsError{} = error} = Tempo.to_interval(interval)
+        assert Exception.message(error) =~ "names several spans"
+        assert {:error, %Tempo.IntervalEndpointsError{}} = Tempo.relation(interval, ~o"2050")
+      end
     end
   end
 end

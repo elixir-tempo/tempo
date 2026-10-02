@@ -456,6 +456,7 @@ defmodule Tempo.Compare do
   @spec to_utc_seconds(Tempo.t()) :: integer() | float()
   def to_utc_seconds(%Tempo{time: time, extended: extended, shift: shift, calendar: calendar}) do
     calendar = effective_calendar(calendar)
+    time = drop_margin_of_error(time)
     year = Keyword.get(time, :year)
 
     if year == nil do
@@ -474,6 +475,7 @@ defmodule Tempo.Compare do
   # before any offset: the reading a zone's periods are looked up by.
   @spec to_wall_seconds(Tempo.t()) :: integer() | float()
   def to_wall_seconds(%Tempo{time: time, calendar: calendar}) do
+    time = drop_margin_of_error(time)
     wall_seconds(time, Keyword.get(time, :year), effective_calendar(calendar))
   end
 

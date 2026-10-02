@@ -6049,8 +6049,10 @@ defmodule Tempo do
     end
   end
 
+  # A single interval is its own span, each end read as the point it names:
+  # `20C/21C` is `2000Y/2100Y`.
   defp materialise(%Tempo.Interval{} = interval, _opts) do
-    {:ok, interval}
+    Interval.endpoints_as_points(interval)
   end
 
   defp materialise(%Tempo.IntervalSet{} = set, _opts) do

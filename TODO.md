@@ -6,8 +6,6 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ### Correctness
 
-* [ ] **An interval with grouped ends compares wrongly** — `20C/21C` parses with its ends still groups, and compared it answers wrongly with no error: `Tempo.relation(~o"20C/21C", ~o"2050")` is `:preceded_by`, `overlaps?/2` and `within?/2` are false and `intersection/2` is empty, where `~o"20C"` alone contains 2050; `to_interval/1` leaves the ends as they are, and `at_least?/2` of a hand-built `2022Y1M2G3DU/2022Y2M` raises a `FunctionClauseError`. A value holding a set, a group, a mask or a margin raises from `Tempo.shift/3` with `:skipping` (`Tempo.shift(~o"2026Y6M{1,15}D", ~o"PT1H", skipping: busy)`), and one with an unspecified month or day from `duration/1` and `to_relative_string/2` (`~o"2026Y6MX*D"`), each a `FunctionClauseError` in Calendrical's `date_to_iso_date/4`. Recorded as a raise in `Compare.to_utc_seconds/1`; reviewed 2026-10-03.
-
 * [ ] **`Enum.count/1` of an interval whose ends differ in resolution** — `Enum.count(~o"1985/1986-06")` is 1, the whole years between its ends, and its walk two values; `2026Y/2026Y6M15D` counts 0 and walks one, and `Enum.at/2` and `Enum.slice/3` follow the count: 145 of the 2,583 intervals in the probe. `Tempo.Interval.Steps.count_steps/4` counts between the ends cut to the unit, where the walk stops at the first step not before the end. Found 2026-10-03.
 
 * [ ] **A count from the end under a single month is resolved before its year is known** — `{2026,2027}Y2M-1D` is read as `{2026,2027}Y2M29D`, the last day of a February of no year, so its walk and `to_interval/2` give nothing; `202XY2M-1D` gives the leap years alone and `X*Y2M-1D` nothing in a common year. Validation passes over a year that is a set, a mask or unspecified and reads the month and day as a value with no year; under a set of months (`{2026,2027}Y{1,2}M-1D`) the count is left for the walk and is right. Found 2026-10-03.
@@ -41,6 +39,10 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **A selected day is walked as a day and a selected hour by its minutes** — `to_interval/2` gives `2026Y4ML1K1IN` a day with no unit and `2026Y4ML1K1INT10H` an hour with `unit: :minute`, so `Enum.to_list/1` of the first is the day and of the second its sixty minutes. Found 2026-10-03.
 
 * [ ] **A group of a set raises outside `to_interval/2`** — a value holding one (`{1,2}G3MU`, the first and second groups of three months) keeps it as a three-element tuple the `Keyword` functions cannot read: `select/2`, `at/2`, `on/2`, `trunc/2` and `nearest_workday/2` raise, and `to_interval/2` and `Enum` are a `ConversionError` where they could give a span for each group. `Tempo.trunc/2` also raises for a value holding a selection (`~o"2026Y4ML1K1IN"`). Found 2026-10-02.
+
+* [ ] **`Tempo.shift/3` with `:skipping` raises for a value that is not one moment** — `Tempo.shift(~o"2026Y6M{1,15}D", ~o"PT1H", skipping: busy)` raises a `FunctionClauseError` in Calendrical's `date_to_iso_date/4`, where a shift without `:skipping` returns a `ConversionError`; a value holding a group or a mask was recorded doing the same. Split from the grouped-ends item, 2026-10-03.
+
+* [ ] **An unspecified month or day is no point to measure from** — `Tempo.duration(~o"2026Y6MX*D")` and `Tempo.to_relative_string(~o"2026Y6MX*D")` raise a `FunctionClauseError` in Calendrical's `date_to_iso_date/4`: `to_interval/1` gives the value `2026Y6MX*D/7M1D`, whose start still holds the unspecified day, and an interval end written so (`2026Y6MX*D/2026Y8M`) is left as it is. Split from the grouped-ends item, 2026-10-03.
 
 * [ ] **`Tempo.extend/2` raises** — for a value at microsecond precision 6 it raises the `ArgumentError` the enumeration documents (`Tempo.extend(~o"2026-06-15T10:30:45.123456")`), where a function that returns tuples returns one. Found 2026-10-03.
 
@@ -131,6 +133,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **An interval with grouped ends compares wrongly** — an end written as a group, a mask or significant digits is read as the point its span starts at, in `to_interval/1`, the Allen relations, the set operations, `duration/1` and the length predicates; an end that names several spans is an `IntervalEndpointsError`. 2026-10-03.
 
 * [x] **`from_iso8601/1` raises for a century or a decade that is not one number** — a `Tempo.ParseError` for one written with unspecified digits, as a set or a range, or with a margin of error or significant digits, wherever it is written, where the parser raised an `ArithmeticError`. 2026-10-03.
 

@@ -303,7 +303,7 @@ defmodule Tempo.EnumerationWalk.Test do
       assert Enum.to_list(~o"2026Y6ML2KN/P1D") ==
                [~o"2026Y6M2D", ~o"2026Y6M9D", ~o"2026Y6M16D", ~o"2026Y6M23D", ~o"2026Y6M30D"]
 
-      assert_raise Tempo.IntervalEndpointsError, ~r/holds a selection/, fn ->
+      assert_raise Tempo.IntervalEndpointsError, ~r/names several spans/, fn ->
         Enum.take(~o"2026Y6ML2KN/2026Y7M", 2)
       end
     end
