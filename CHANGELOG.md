@@ -205,6 +205,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.from_iso8601/1` returns a `Tempo.ParseError` for a century or a decade that is not one number — unspecified digits (`1XC`, `X*J`), a set or a range (`{19,20}C`), a margin of error or significant digits — where it raised an `ArithmeticError`.
+
 * `Enum` walks a value whose week, day of the week, day of the year, hour, minute or second is unspecified (`X*`) or masked, and a mask counted from the end (`2026Y-XM`, April to December), where it raised a `FunctionClauseError` or never returned. An unspecified hour, minute or second counts from 0, where it counted from 1, and `Tempo.to_interval/2` narrows a masked day of the week or of the year as it narrows a masked month.
 
 * Each unit of a walked value is read after the values before it: `Enum.count(~o"1985-XX-XX")` is 365 where it was 372, `1985-XX-31` is the seven 31sts where it yielded 31 February, and `{2026,2027}Y-1D` is the last day of each year. `Tempo.to_interval/2` lists its members by the same walk, so `2026Y{100,200}D` is 10 April and 19 July where it was 10 and 19 January, and `2026Y{2,6}MX*D` is February's 28 days and June's 30 where it was 28 of each.

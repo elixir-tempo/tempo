@@ -1,40 +1,80 @@
 # TODO
 
-Open work on Tempo. The analysis behind each item, and the record of every decision taken on the way to 1.0, is in [plans/design-notes.md](plans/design-notes.md).
+Open work on Tempo. The analysis behind each item, and the record of every decision taken on the way to 1.0, is in [plans/design-notes.md](plans/design-notes.md). Open items are grouped and ordered by priority, correctness first and conformance second (reviewed 2026-10-03).
 
 ## Open
 
-* [ ] **Livebooks install 2.0 at the release** — `getting-started`, `tempo_tour`, `scheduling-workbook` and `uncertain-dates-workbook` install `{:ex_tempo, "~> 1.6"}` and the Melbourne deck `~> 1.6.3`, while their code uses the 2.0 names: at the 2.0.0 release each installs `~> 2.0`, as `everyday-holidays` already does.
+### Correctness
 
-* [ ] **A grouped endpoint raises when compared** — a hand-built interval whose endpoint holds a group (`~o"20C"`, `~o"2022Y1M2G3DU"`) raises in `Compare.to_utc_seconds/1` when measured or compared; `to_interval/1` converts such values first, the other entry points do not. A value holding a set, a group, a mask or a margin raises the same way from `Tempo.shift/3` with `:skipping` (`Tempo.shift(~o"2026Y6M{1,15}D", ~o"PT1H", skipping: busy)`), and one with an unspecified month or day from `duration/1` and `to_relative_string/2` (`~o"2026Y6MX*D"`). Found again 2026-10-02.
+* [ ] **An interval with grouped ends compares wrongly** — `20C/21C` parses with its ends still groups, and compared it answers wrongly with no error: `Tempo.relation(~o"20C/21C", ~o"2050")` is `:preceded_by`, `overlaps?/2` and `within?/2` are false and `intersection/2` is empty, where `~o"20C"` alone contains 2050; `to_interval/1` leaves the ends as they are, and `at_least?/2` of a hand-built `2022Y1M2G3DU/2022Y2M` raises a `FunctionClauseError`. A value holding a set, a group, a mask or a margin raises from `Tempo.shift/3` with `:skipping` (`Tempo.shift(~o"2026Y6M{1,15}D", ~o"PT1H", skipping: busy)`), and one with an unspecified month or day from `duration/1` and `to_relative_string/2` (`~o"2026Y6MX*D"`), each a `FunctionClauseError` in Calendrical's `date_to_iso_date/4`. Recorded as a raise in `Compare.to_utc_seconds/1`; reviewed 2026-10-03.
 
-* [ ] **`rescue` in the library** — `lib/ical.ex` (`parse/2`, `available/2`, errors from the `ical` parser), `lib/inspect.ex` (Localize's calendar encoding) and `lib/iso8601/parser.ex` rescue exceptions where the rest of Tempo passes tagged tuples.
+* [ ] **`Enum.count/1` of an interval whose ends differ in resolution** — `Enum.count(~o"1985/1986-06")` is 1, the whole years between its ends, and its walk two values; `2026Y/2026Y6M15D` counts 0 and walks one, and `Enum.at/2` and `Enum.slice/3` follow the count: 145 of the 2,583 intervals in the probe. `Tempo.Interval.Steps.count_steps/4` counts between the ends cut to the unit, where the walk stops at the first step not before the end. Found 2026-10-03.
 
-* [ ] **A never-matching selector walks the whole horizon** — `Tempo.select/2` over an open-ended span walks a thousand years of periods before a selector that never matches ends: 30 ms of years, 0.2 s of months, about 10 s of days, minutes of hours. An index selector on a fixed-range unit could end after its first empty period, a daylight-saving gap day aside.
+* [ ] **A count from the end under a single month is resolved before its year is known** — `{2026,2027}Y2M-1D` is read as `{2026,2027}Y2M29D`, the last day of a February of no year, so its walk and `to_interval/2` give nothing; `202XY2M-1D` gives the leap years alone and `X*Y2M-1D` nothing in a common year. Validation passes over a year that is a set, a mask or unspecified and reads the month and day as a value with no year; under a set of months (`{2026,2027}Y{1,2}M-1D`) the count is left for the walk and is right. Found 2026-10-03.
 
-* [ ] **Create a glossary guide** — a guide that tables every term Tempo uses (span, window, occurrence, resolution, floating, zoned, anchored, …) and defines it, so it doubles as the reference future development checks its vocabulary against (user, 2026-09-28). The decisions in [plans/vocabulary.md](plans/vocabulary.md) are its starting point.
+* [ ] **A recurrence with no year that wraps its own axis** — `R3/T22H/PT1H` gives 22:00, 22:00 and 23:00, and `R3/6K/P1D` Saturday twice and then Sunday: the occurrence past midnight, or past the week's last day, starts before the recurrence's start on the value's own axis, so the floor at the start drops it and the walk goes round again. A cadence that leaves the start where it is (a week on `7K`, a year on `12M31D`) gives occurrences of no length (`7K/7K`). Found 2026-10-02.
+
+* [ ] **A recurrence from a start that holds a set gives intervals whose ends hold it** — `R3/2026Y6M{1,15}D/P1M` is three intervals from `2026Y6M{1,15}D` to `2026Y7M{1,15}D` and on, where the 1st and the 15th of three months are six occurrences. Found 2026-10-02.
+
+* [ ] **A selection by day of the week is not applied in a calendar of weeks** — in `Calendrical.ISOWeek`, `R3/2026-W01-1/P1W/FL2KN` gives each week's Monday and `R3/2026-W25-1/P1Y/FL25W2KN` nothing, where the Gregorian forms give the Tuesdays and the Tuesday of week 25; a value's selection does the same (`2026YL1K1IN` is the whole year), and `R/../P1Y/FL25W2KN` with `within: ~o"2026"W`, or any `L…N` selector given to `select/2`, is a `ResolutionError`. `Tempo.RRule.Selection` reads a candidate's `:month` and `:day`, which a week date has none of. A selection by week alone (`FL25WN`) works, `select/2` by `~o"2K"` works, and one by a month or a day of the year is an error. Found 2026-10-02.
+
+* [ ] **`Date.compare/2` orders two dates of one calendar by their fields** — Elixir compares the `year`, `month` and `day` of two dates in the same calendar without asking the calendar (through 1.20.4 and on `main`), and in Calendrical's Julian new-year calendars (`Julian.March25`, `March1`, `Sept1`, `Dec25`) 1 January follows 31 December of the same year, so `Date.compare(~D[2022-12-31 Calendrical.Julian.March25], ~D[2022-01-01 Calendrical.Julian.March25])` is `:gt` for the day before. Tempo calls it in eleven places (`iso8601/group.ex`, `tempo.ex`, `tempo/rrule/selection.ex`, `tempo/select.ex`, `validation.ex`); `Date.diff/2`, which goes through ISO days, orders them rightly, as Localize and Calendrical now do. Noted from the Localize session (2026-10-02).
+
+* [ ] **An unspecified month or day is stepped as its last** — `Tempo.shift(~o"2026Y6MX*D", day: 1)` is `~o"2026Y7M1D"` and `2026YX*M15D` plus a month is `2027Y1M15D`: a step forward reads `X*` as the unit's last value, which ends the value's span where it should (`2026Y6MX*D/7M1D`) and gives a shift a value that has lost the unit, where a mask shifts to a one-of range. A step back is a `ConversionError`. Found 2026-10-02.
+
+* [ ] **A month or a year added to a day of the week that names no week is that day again** — `Tempo.shift(~o"7K", month: 1)` and `year: 1` are `~o"7K"`, though the day of the week a month or a year on depends on the date: by the rule for a value with no year it is an `UnanchoredError`, as a month added to a week date is a `ResolutionError`. Found 2026-10-02.
+
+* [ ] **An unspecified year is the current Gregorian year in every calendar** — `Enum.to_list(~o"X*Y[u-ca=hebrew]")` is the Hebrew year 2026, since the walk reads `Date.utc_today().year`. Found 2026-10-03.
+
+* [ ] **A day after a group of months under a set of years** — `{2026,2028}Y2G2MU15D` walks the 15th of each month of the group, four days, where `2026Y2G2MU15D` is the fifteenth day of the group, 15 March. Found 2026-10-03.
 
 * [ ] **A zone on a recurrence or a set is dropped** — `R/../P1Y/FL3M20DN[+09:00]` and a domain recurrence's `[zone]` suffix parse and vanish (the start value's suffix, `R/2026-03-20[+09:00]/P1Y`, is kept). Carry it as zoned occurrences, as the suffix means elsewhere, or refuse it. A set's suffix does the same: `{2026-06-15T10:00,2026-06-16T10:00}[Europe/Paris]` leaves its members floating and `[key=value]` tags vanish, where its `[u-ca=…]` is its members' calendar and an interval member's own zone is kept (found 2026-10-02).
 
+* [ ] **`to_calendar/2` drops a value's qualification, metadata and tags** — `Tempo.to_calendar(~o"2026-06-15?", Calendrical.Hebrew)` is unqualified and carries no metadata or tags, since the converted value is rebuilt from a `Date`; an interval's own metadata is kept. A date written for a calendar of weeks keeps all three, a qualified year, month or day qualifying the whole date. Found 2026-10-02.
+
+* [ ] **A fraction of a century or a decade is written back as the whole one** — `20.5C` is the hundred years from 2050 (`year: {:group, 2050..2149}`, the span `2050Y/2150Y`), and `to_iso8601/1` and `inspect/1` write it `21G100YU`, which reads back as 2000 to 2099. Decide whether a fraction of a century is a value at all. Found 2026-10-03.
+
+* [ ] **A qualified set is written in a form that does not parse** — `{2026-06-15,2026-06-16}?` holds the qualification on each member, and `to_iso8601/1` and `inspect/1` write `{2026Y6M15D?,2026Y6M16D?}`, which the parser refuses. Write it once after the set, as the calendar is. Found 2026-10-02.
+
+* [ ] **A time after a month with no day** — `2G2MUT10H` and `2026Y-1MT10H` parse, where `6MT10H` does not; the second keeps `-1M` unresolved, and both walk to values that do not read back (`3MT10H`). Found 2026-10-03.
+
+* [ ] **A selected day is walked as a day and a selected hour by its minutes** — `to_interval/2` gives `2026Y4ML1K1IN` a day with no unit and `2026Y4ML1K1INT10H` an hour with `unit: :minute`, so `Enum.to_list/1` of the first is the day and of the second its sixty minutes. Found 2026-10-03.
+
+* [ ] **A group of a set raises outside `to_interval/2`** — a value holding one (`{1,2}G3MU`, the first and second groups of three months) keeps it as a three-element tuple the `Keyword` functions cannot read: `select/2`, `at/2`, `on/2`, `trunc/2` and `nearest_workday/2` raise, and `to_interval/2` and `Enum` are a `ConversionError` where they could give a span for each group. `Tempo.trunc/2` also raises for a value holding a selection (`~o"2026Y4ML1K1IN"`). Found 2026-10-02.
+
+* [ ] **`Tempo.extend/2` raises** — for a value at microsecond precision 6 it raises the `ArgumentError` the enumeration documents (`Tempo.extend(~o"2026-06-15T10:30:45.123456")`), where a function that returns tuples returns one. Found 2026-10-03.
+
+* [ ] **`Enum.count/1` and `Enum.member?/2` of an interval with no end never return** — `Enum.count(~o"2026Y/..")` walks for ever, where a lazy interval set refuses with an `UnboundedSetError`. Found 2026-10-03.
+
+* [ ] **`to_interval/2` of a day straight after a year says the value has no year** — `~o"2026YX*D"` and `~o"2026Y3XD"` return an `UnanchoredError` ("`~o"2026YX*D"` has none"), where their walk is the days of 2026 the value names. Found 2026-10-03.
+
+* [ ] **The days of a February with no year have two answers** — 29 written `2MX*D` or `2M{1..-1}D` or left to the walk of `2M`, as validation accepts a 29th that some year has, and an `UnanchoredError` written `2MXXD`, as a mask wants every candidate to fit the shortest month, so `XXMXXD` yields January and raises at February (`to_interval/2` of `2MXXD` is the month, `2M/3M`). The months of a year with none split the other way: `X*M` and `XXM` are the twelve the Gregorian calendar always has, `{1..-1}M` and `-1M` an error. Decide one rule. Found 2026-10-03.
+
+* [ ] **A set none of whose members exists is empty** — `Enum.to_list(~o"{2,6}M31D")` is `[]` and `to_interval/2` an empty set, where a mask no value matches (`1985-02-3X`) is an `InvalidDateError`. Decide whether it is an error. Found 2026-10-03.
+
+* [ ] **A range written backwards in a set** — `{2026-06-20..2026-06-15}` parses and converts to nothing, where an interval written so is an `IntervalEndpointsError`. Decide whether it is an error. Found 2026-10-02.
+
+### Conformance and completeness
+
+* [ ] **Three §12 selection parses** — `2018Y9MTLT8H20MN3I` does not parse, `FL1KT10H0M0S1IN` misreads `0S1`, and `{1,3}K1I` merges where ISO 8601-2 §12.11.3 example 2 distributes.
+
+* [ ] **An interval's end of a day alone reads as a century** — `2026-06-15/20` is `2026-06-15/21G100YU`, the two digits read as a century, where `2026-06-15/07-20`, `2026-06/08` and `2026-06-15T10:00/11:00` take the units the end leaves out from the start. ISO 8601-1 §5.5.1 allows the omission "provided that the resulting expression is unambiguous": decide whether two digits after a whole date are its day. Found 2026-10-02.
+
 * [ ] **§12.10 window shorter than a day** — `FL11MLL1K1IN/PT12HN1K1IN` (and `/P0DN…`) walks `[lo, lo - 1]`, the anchor and the day before, as `Date.range/2` infers for a reversed range (with a runtime deprecation warning before the day-number walk replaced it). Decide the semantics — no day, or the anchor day whose start the window contains — and test it.
 
-* [ ] **`explain/1` words a window of hours in ISO 8601** — `Tempo.explain(~o"R/2027-01-01/P1D/FLLT22HN/PT4HN")` says "the PT4H window from at 22:00" where it means the four hours from 22:00: `window_phrase/2` in `lib/explain.ex` words only a window of days or weeks, and a time-of-day selection's noun carries its "at".
+* [ ] **Sets the parser does not read** — several intervals in the extended format (`{2020/2021,2023/2024}`, where `{2020Y/2021Y,2023Y/2024Y}` parses) and a qualified member (`{2026-06-15?,2026-06~}`). Found 2026-10-02.
 
 * [ ] **Week-of-month selections, and calendar-aware RRULE `BYWEEKNO`** — parse `2026Y6M2W` ("2nd week of June", a positional `W` after a month) and materialise it via `Calendrical.week_of_month/3`; and replace the hard-coded ISO week walk still used by RRULE `BYWEEKNO` with Calendrical's calendar-aware functions. Month and native week-of-year selections are done. Plan in [plans/recurrence-selection-resolution.md](plans/recurrence-selection-resolution.md).
 
-* [ ] **`Tempo.Intervallic` protocol** — let user-defined structs such as `%Booking{check_in, check_out}` take part in Allen comparisons and set operations without being copied into `%Tempo.Interval{}`; default implementations for `Tempo.Interval`, `Tempo` and single-member `Tempo.IntervalSet`.
+* [ ] **Set operations across a week calendar's resolutions** — `Tempo.difference(~o"2026"W, ~o"2026-W25"W)` is a `ResolutionError` ("Cannot express … as a month-axis calendar date"), in `Calendrical.ISOWeek` and `Calendrical.NRF` alike. Found 2026-10-02.
 
-* [ ] **Lazy backend follow-ups** — splicing a lazy set into a busy list (needs a sorted stream merge), lazy set algebra (the research project under Deferred), and holiday generator sources. The refusal semantics must hold: an answer that needs an unbounded walk without a `:within` window refuses rather than hangs.
+* [ ] **A month in a calendar of weeks, read over the value's own span** — a month, a day of one or a day of the year placed on (`at/2`, `on/2`) or selected in (`select/2`, a recurrence) a week calendar's value is a `ConversionError`, since reading the value's year as the Gregorian year lands outside it (30 December on the ISO week year 2024 is in 2025, and January on the NRF year 2026 is January 2027). Decide whether they should be the Gregorian dates within the value's span, June of a week year a span of week dates, and what a week year's January is when it holds days of two. Found 2026-10-02.
 
-* [ ] **Parser cost by shape** — bare dates still pay the backtracking tax: `tokenize/1` takes ~360 µs for `2026-06-15` and ~430 µs for `20260615`, against ~40 µs for `2026Y6M15D` (measured 2026-09-24). Take a shape histogram of a real consumer's calls; if it is mostly dates, choice ordering in the single `defparsec :iso8601` entry point is the whole story. Any hand-rolled scanner must be conservative and differentially tested against the general parser.
+* [ ] **Traditional months that are sets or masks** — `2026Y{1,2}m` parses as a mask (`traditional_month: {:mask, [[1..2]]}`) and a masked one (`1Xm`) is a `ConversionError` from `Enum` and `to_interval/2`: nothing lists the traditional months a year has, which is Calendrical's to answer. Found 2026-10-03.
 
-* [ ] **A composable builder** — an API between `Tempo.new/1` (flat components) and `Tempo.from_iso8601/1` (a string) in complexity, building a value from composable sub-expressions with human names — `selection`, `recur`, windows, domains, exclusions, events — nesting freely, so programs (tempo_holidays among them) construct recurrences structurally instead of interpolating ISO 8601 strings and re-parsing them.
+* [ ] **A shift does not reach each value of a set** — a shift that would count from a unit holding several values is a `ConversionError` (`~o"2026Y6M{1,15}D"` plus a day, `~o"2026Y{6,7}M"` plus a month), where each value it names could be shifted and the results gathered. Decide the result: a set, an interval set as a disjoint mask gives, or the value itself where it can hold them (`2026Y6M{2,16}D`). Found 2026-10-02.
 
-* [ ] **Explain weekday sets by name** — `explain/1` reads `{6..7}K` as "on a weekday [6..7]"; it should read "on a Saturday or Sunday", now that holiday recurrences carry weekday limits routinely.
-
-* [ ] **Coverage to 90%** — the CI lint row runs plain `mix test` until coverage reaches the default 90% threshold, then takes the reference workflow's `mix test --cover`. 85.5% today (2026-09-27) with the existing `ignore_modules`; `mix test --cover` lists the modules below it.
-
-* [ ] **Conditional first pass walks whole periods** — it widens the bound by the conditions' reach, and the walk covers every period the widened bound touches, so a ±1-day bridge crossing both year ends materialises three years: Japan's holiday set takes 55 ms a year with its bridge, 25 ms without. Widen only where a condition reaches past the bound (the bridge's days, a move's search back from the bound's start).
+### Errors and API
 
 * [ ] **An impossible date's error names too little** — `Tempo.on(~o"2M29D", ~o"2027")` returns an `InvalidDateError` with only its reason ("29 is not valid. The valid values are 1..28"), naming no year, month or calendar.
 
@@ -42,69 +82,39 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **`Schedule.task/3`'s `:within` is a pair** — it takes a `{from, to}` tuple, where every other `:within` takes a Tempo value or an interval.
 
-* [ ] **Three §12 selection parses** — `2018Y9MTLT8H20MN3I` does not parse, `FL1KT10H0M0S1IN` misreads `0S1`, and `{1,3}K1I` merges where ISO 8601-2 §12.11.3 example 2 distributes.
+* [ ] **`explain/1` words a window of hours in ISO 8601** — `Tempo.explain(~o"R/2027-01-01/P1D/FLLT22HN/PT4HN")` says "the PT4H window from at 22:00" where it means the four hours from 22:00: `window_phrase/2` in `lib/explain.ex` words only a window of days or weeks, and a time-of-day selection's noun carries its "at".
 
-* [ ] **`ClockTest` timing** — "process-local override does not leak to peer processes" failed once under load (passing in isolation and on re-runs): `assert_receive`'s default 100 ms timeout is short on a busy machine.
+* [ ] **Explain weekday sets by name** — `explain/1` reads `{6..7}K` as "on a weekday [6..7]"; it should read "on a Saturday or Sunday", now that holiday recurrences carry weekday limits routinely.
 
-* [ ] **A shift does not reach each value of a set** — a shift that would count from a unit holding several values is a `ConversionError` (`~o"2026Y6M{1,15}D"` plus a day, `~o"2026Y{6,7}M"` plus a month), where each value it names could be shifted and the results gathered. Decide the result: a set, an interval set as a disjoint mask gives, or the value itself where it can hold them (`2026Y6M{2,16}D`). Found 2026-10-02.
+### Performance
 
-* [ ] **A recurrence from a start that holds a set gives intervals whose ends hold it** — `R3/2026Y6M{1,15}D/P1M` is three intervals from `2026Y6M{1,15}D` to `2026Y7M{1,15}D` and on, where the 1st and the 15th of three months are six occurrences. Found 2026-10-02.
-
-* [ ] **An unspecified month or day is stepped as its last** — `Tempo.shift(~o"2026Y6MX*D", day: 1)` is `~o"2026Y7M1D"` and `2026YX*M15D` plus a month is `2027Y1M15D`: a step forward reads `X*` as the unit's last value, which ends the value's span where it should (`2026Y6MX*D/7M1D`) and gives a shift a value that has lost the unit, where a mask shifts to a one-of range. A step back is a `ConversionError`. Found 2026-10-02.
-
-* [ ] **A month or a year added to a day of the week that names no week is that day again** — `Tempo.shift(~o"7K", month: 1)` and `year: 1` are `~o"7K"`, though the day of the week a month or a year on depends on the date: by the rule for a value with no year it is an `UnanchoredError`, as a month added to a week date is a `ResolutionError`. Found 2026-10-02.
-
-* [ ] **A recurrence with no year that wraps its own axis** — `R3/T22H/PT1H` gives 22:00, 22:00 and 23:00, and `R3/6K/P1D` Saturday twice and then Sunday: the occurrence past midnight, or past the week's last day, starts before the recurrence's start on the value's own axis, so the floor at the start drops it and the walk goes round again. A cadence that leaves the start where it is (a week on `7K`, a year on `12M31D`) gives occurrences of no length (`7K/7K`). Found 2026-10-02.
-
-* [ ] **`from_iso8601/1` raises for a masked or unspecified century or decade** — `Tempo.from_iso8601("X*C")`, `"XXC"`, `"1XC"`, `"X*J"` and `"19XJ"` raise an `ArithmeticError` (`{:mask, …} * 100`) in `Tempo.Iso8601.Parser.parse_date/1`, where a parser returns an error. Found 2026-10-03.
-
-* [ ] **A count from the end under a single month is resolved before its year is known** — `{2026,2027}Y2M-1D` is read as `{2026,2027}Y2M29D`, the last day of a February of no year, so its walk and `to_interval/2` give nothing; `202XY2M-1D` gives the leap years alone and `X*Y2M-1D` nothing in a common year. Validation passes over a year that is a set, a mask or unspecified and reads the month and day as a value with no year; under a set of months (`{2026,2027}Y{1,2}M-1D`) the count is left for the walk and is right. Found 2026-10-03.
-
-* [ ] **`Enum.count/1` of an interval whose ends differ in resolution** — `Enum.count(~o"1985/1986-06")` is 1, the whole years between its ends, and its walk two values; `2026Y/2026Y6M15D` counts 0 and walks one, and `Enum.at/2` and `Enum.slice/3` follow the count: 145 of the 2,583 intervals in the probe. `Tempo.Interval.Steps.count_steps/4` counts between the ends cut to the unit, where the walk stops at the first step not before the end. Found 2026-10-03.
-
-* [ ] **The days of a February with no year have two answers** — 29 written `2MX*D` or `2M{1..-1}D` or left to the walk of `2M`, as validation accepts a 29th that some year has, and an `UnanchoredError` written `2MXXD`, as a mask wants every candidate to fit the shortest month, so `XXMXXD` yields January and raises at February (`to_interval/2` of `2MXXD` is the month, `2M/3M`). The months of a year with none split the other way: `X*M` and `XXM` are the twelve the Gregorian calendar always has, `{1..-1}M` and `-1M` an error. Decide one rule. Found 2026-10-03.
-
-* [ ] **`Tempo.extend/2` raises** — for a value at microsecond precision 6 it raises the `ArgumentError` the enumeration documents (`Tempo.extend(~o"2026-06-15T10:30:45.123456")`), where a function that returns tuples returns one. Found 2026-10-03.
-
-* [ ] **An unspecified year is the current Gregorian year in every calendar** — `Enum.to_list(~o"X*Y[u-ca=hebrew]")` is the Hebrew year 2026, since the walk reads `Date.utc_today().year`. Found 2026-10-03.
-
-* [ ] **Traditional months that are sets or masks** — `2026Y{1,2}m` parses as a mask (`traditional_month: {:mask, [[1..2]]}`) and a masked one (`1Xm`) is a `ConversionError` from `Enum` and `to_interval/2`: nothing lists the traditional months a year has, which is Calendrical's to answer. Found 2026-10-03.
-
-* [ ] **`to_interval/2` of a day straight after a year says the value has no year** — `~o"2026YX*D"` and `~o"2026Y3XD"` return an `UnanchoredError` ("`~o"2026YX*D"` has none"), where their walk is the days of 2026 the value names. Found 2026-10-03.
-
-* [ ] **A time after a month with no day** — `2G2MUT10H` and `2026Y-1MT10H` parse, where `6MT10H` does not; the second keeps `-1M` unresolved, and both walk to values that do not read back (`3MT10H`). Found 2026-10-03.
-
-* [ ] **A day after a group of months under a set of years** — `{2026,2028}Y2G2MU15D` walks the 15th of each month of the group, four days, where `2026Y2G2MU15D` is the fifteenth day of the group, 15 March. Found 2026-10-03.
-
-* [ ] **A set none of whose members exists is empty** — `Enum.to_list(~o"{2,6}M31D")` is `[]` and `to_interval/2` an empty set, where a mask no value matches (`1985-02-3X`) is an `InvalidDateError`. Decide whether it is an error. Found 2026-10-03.
-
-* [ ] **`Enum.count/1` and `Enum.member?/2` of an interval with no end never return** — `Enum.count(~o"2026Y/..")` walks for ever, where a lazy interval set refuses with an `UnboundedSetError`. Found 2026-10-03.
-
-* [ ] **A selected day is walked as a day and a selected hour by its minutes** — `to_interval/2` gives `2026Y4ML1K1IN` a day with no unit and `2026Y4ML1K1INT10H` an hour with `unit: :minute`, so `Enum.to_list/1` of the first is the day and of the second its sixty minutes. Found 2026-10-03.
+* [ ] **A never-matching selector walks the whole horizon** — `Tempo.select/2` over an open-ended span walks a thousand years of periods before a selector that never matches ends: 30 ms of years, 0.2 s of months, about 10 s of days, minutes of hours. An index selector on a fixed-range unit could end after its first empty period, a daylight-saving gap day aside.
 
 * [ ] **Converting a week date costs 220 µs** — `to_interval/2` of `2026Y{1..-1}W{1,3}KT10HX*M`, 6,360 members, takes 1.4 s where as many calendar dates take 60 ms: validating a week date walks the year's week starts (`Tempo.Validation.date_from_iso_week/4`). Listing a year mask before walking it costs the same way: `Enum.take(~o"XXXX-XX-XX", 100)` takes 2.9 ms. Found 2026-10-03.
 
-* [ ] **A group of a set raises outside `to_interval/2`** — a value holding one (`{1,2}G3MU`, the first and second groups of three months) keeps it as a three-element tuple the `Keyword` functions cannot read: `select/2`, `at/2`, `on/2`, `trunc/2` and `nearest_workday/2` raise, and `to_interval/2` and `Enum` are a `ConversionError` where they could give a span for each group. `Tempo.trunc/2` also raises for a value holding a selection (`~o"2026Y4ML1K1IN"`). Found 2026-10-02.
+* [ ] **Conditional first pass walks whole periods** — it widens the bound by the conditions' reach, and the walk covers every period the widened bound touches, so a ±1-day bridge crossing both year ends materialises three years: Japan's holiday set takes 55 ms a year with its bridge, 25 ms without. Widen only where a condition reaches past the bound (the bridge's days, a move's search back from the bound's start).
 
-* [ ] **A qualified set is written in a form that does not parse** — `{2026-06-15,2026-06-16}?` holds the qualification on each member, and `to_iso8601/1` and `inspect/1` write `{2026Y6M15D?,2026Y6M16D?}`, which the parser refuses. Write it once after the set, as the calendar is. Found 2026-10-02.
+* [ ] **Parser cost by shape** — bare dates still pay the backtracking tax: `tokenize/1` takes ~360 µs for `2026-06-15` and ~430 µs for `20260615`, against ~40 µs for `2026Y6M15D` (measured 2026-09-24). Take a shape histogram of a real consumer's calls; if it is mostly dates, choice ordering in the single `defparsec :iso8601` entry point is the whole story. Any hand-rolled scanner must be conservative and differentially tested against the general parser.
 
-* [ ] **Sets the parser does not read** — several intervals in the extended format (`{2020/2021,2023/2024}`, where `{2020Y/2021Y,2023Y/2024Y}` parses) and a qualified member (`{2026-06-15?,2026-06~}`). Found 2026-10-02.
+### Features
 
-* [ ] **A range written backwards in a set** — `{2026-06-20..2026-06-15}` parses and converts to nothing, where an interval written so is an `IntervalEndpointsError`. Decide whether it is an error. Found 2026-10-02.
+* [ ] **`Tempo.Intervallic` protocol** — let user-defined structs such as `%Booking{check_in, check_out}` take part in Allen comparisons and set operations without being copied into `%Tempo.Interval{}`; default implementations for `Tempo.Interval`, `Tempo` and single-member `Tempo.IntervalSet`.
 
-* [ ] **Set operations across a week calendar's resolutions** — `Tempo.difference(~o"2026"W, ~o"2026-W25"W)` is a `ResolutionError` ("Cannot express … as a month-axis calendar date"), in `Calendrical.ISOWeek` and `Calendrical.NRF` alike. Found 2026-10-02.
+* [ ] **A composable builder** — an API between `Tempo.new/1` (flat components) and `Tempo.from_iso8601/1` (a string) in complexity, building a value from composable sub-expressions with human names — `selection`, `recur`, windows, domains, exclusions, events — nesting freely, so programs (tempo_holidays among them) construct recurrences structurally instead of interpolating ISO 8601 strings and re-parsing them.
 
-* [ ] **A selection by day of the week is not applied in a calendar of weeks** — in `Calendrical.ISOWeek`, `R3/2026-W01-1/P1W/FL2KN` gives each week's Monday and `R3/2026-W25-1/P1Y/FL25W2KN` nothing, where the Gregorian forms give the Tuesdays and the Tuesday of week 25; a value's selection does the same (`2026YL1K1IN` is the whole year), and `R/../P1Y/FL25W2KN` with `within: ~o"2026"W`, or any `L…N` selector given to `select/2`, is a `ResolutionError`. `Tempo.RRule.Selection` reads a candidate's `:month` and `:day`, which a week date has none of. A selection by week alone (`FL25WN`) works, `select/2` by `~o"2K"` works, and one by a month or a day of the year is an error. Found 2026-10-02.
+* [ ] **Lazy backend follow-ups** — splicing a lazy set into a busy list (needs a sorted stream merge), lazy set algebra (the research project under Deferred), and holiday generator sources. The refusal semantics must hold: an answer that needs an unbounded walk without a `:within` window refuses rather than hangs.
 
-* [ ] **A month in a calendar of weeks, read over the value's own span** — a month, a day of one or a day of the year placed on (`at/2`, `on/2`) or selected in (`select/2`, a recurrence) a week calendar's value is a `ConversionError`, since reading the value's year as the Gregorian year lands outside it (30 December on the ISO week year 2024 is in 2025, and January on the NRF year 2026 is January 2027). Decide whether they should be the Gregorian dates within the value's span, June of a week year a span of week dates, and what a week year's January is when it holds days of two. Found 2026-10-02.
+* [ ] **Create a glossary guide** — a guide that tables every term Tempo uses (span, window, occurrence, resolution, floating, zoned, anchored, …) and defines it, so it doubles as the reference future development checks its vocabulary against (user, 2026-09-28). The decisions in [plans/vocabulary.md](plans/vocabulary.md) are its starting point.
 
-* [ ] **`to_calendar/2` drops a value's qualification, metadata and tags** — `Tempo.to_calendar(~o"2026-06-15?", Calendrical.Hebrew)` is unqualified and carries no metadata or tags, since the converted value is rebuilt from a `Date`; an interval's own metadata is kept. A date written for a calendar of weeks keeps all three, a qualified year, month or day qualifying the whole date. Found 2026-10-02.
+### Release and housekeeping
 
-* [ ] **An interval's end of a day alone reads as a century** — `2026-06-15/20` is `2026-06-15/21G100YU`, the two digits read as a century, where `2026-06-15/07-20`, `2026-06/08` and `2026-06-15T10:00/11:00` take the units the end leaves out from the start. ISO 8601-1 §5.5.1 allows the omission "provided that the resulting expression is unambiguous": decide whether two digits after a whole date are its day. Found 2026-10-02.
+* [ ] **Livebooks install 2.0 at the release** — `getting-started`, `tempo_tour`, `scheduling-workbook` and `uncertain-dates-workbook` install `{:ex_tempo, "~> 1.6"}` and the Melbourne deck `~> 1.6.3`, while their code uses the 2.0 names: at the 2.0.0 release each installs `~> 2.0`, as `everyday-holidays` already does.
 
-* [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
+* [ ] **`rescue` in the library** — `lib/ical.ex` (`parse/2`, `available/2`, errors from the `ical` parser), `lib/inspect.ex` (Localize's calendar encoding) and `lib/iso8601/parser.ex` rescue exceptions where the rest of Tempo passes tagged tuples.
 
-* [ ] **`Date.compare/2` orders two dates of one calendar by their fields** — Elixir compares the `year`, `month` and `day` of two dates in the same calendar without asking the calendar (through 1.20.4 and on `main`), and in Calendrical's Julian new-year calendars (`Julian.March25`, `March1`, `Sept1`, `Dec25`) 1 January follows 31 December of the same year, so `Date.compare(~D[2022-12-31 Calendrical.Julian.March25], ~D[2022-01-01 Calendrical.Julian.March25])` is `:gt` for the day before. Tempo calls it in eleven places (`iso8601/group.ex`, `tempo.ex`, `tempo/rrule/selection.ex`, `tempo/select.ex`, `validation.ex`); `Date.diff/2`, which goes through ISO days, orders them rightly, as Localize and Calendrical now do. Noted from the Localize session (2026-10-02).
+* [ ] **Coverage to 90%** — the CI lint row runs plain `mix test` until coverage reaches the default 90% threshold, then takes the reference workflow's `mix test --cover`. 85.5% today (2026-09-27) with the existing `ignore_modules`; `mix test --cover` lists the modules below it.
+
+* [ ] **`ClockTest` timing** — "process-local override does not leak to peer processes" failed once under load (passing in isolation and on re-runs): `assert_receive`'s default 100 ms timeout is short on a busy machine.
 
 ## In progress
 
@@ -118,7 +128,13 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **Set algebra over open-ended windows** — a research project for later (user, 2026-09-28): how far union, intersection, difference, complement and the predicates go on the lazy sets an open-ended window gives, a test of the whole algebra. Questions in [plans/open-ended-set-algebra.md](plans/open-ended-set-algebra.md).
 
+* [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
+
 ## Done
+
+* [x] **`from_iso8601/1` raises for a century or a decade that is not one number** — a `Tempo.ParseError` for one written with unspecified digits, as a set or a range, or with a margin of error or significant digits, wherever it is written, where the parser raised an `ArithmeticError`. 2026-10-03.
+
+* [x] **The Calendrical lock moved to `4ba5827`** — one commit on from `b1cc801`: the years and months between a composite calendar's dates are counted from the days between them. Through Tempo nothing changes: the suite and tempo_holidays pass as before. Localize is unchanged at `6f3f0364`. 2026-10-03.
 
 * [x] **The enumeration raises** — one lazy walk for `Enum` and for `to_interval/2`'s members, each unit read after the values before it: every unit's masks and unspecified values walk, a value or an interval that cannot be walked raises a named error (`to_interval/2` returns it), and an interval with no year is counted by its walk and walks round its axis. Of 14,817 values in a probe of every unit and shape, `Enum.take/2` raised an unnamed error for 5,725 and never returned for 1,256, and now does neither for any. 2026-10-03.
 

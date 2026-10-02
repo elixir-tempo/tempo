@@ -21,6 +21,50 @@ defmodule Tempo.Iso8601.Parser.Test do
              {:ok, AST.build(year: [1990..1999])}
   end
 
+  describe "a century or a decade that is not one number" do
+    # Each raised an `ArithmeticError` from the parser, which multiplies
+    # the number by a hundred or by ten.
+    for text <- [
+          "X*C",
+          "XXC",
+          "1XC",
+          "-1XC",
+          "X*J",
+          "19XJ",
+          "{19,20}C",
+          "{19..20}J",
+          "{1..-1}C",
+          "20±1C",
+          "20S1J"
+        ] do
+      test "#{text} is a parse error" do
+        assert {:error, %Tempo.ParseError{} = error} = Tempo.from_iso8601(unquote(text))
+        assert Exception.message(error) =~ "is written as one number"
+      end
+    end
+
+    test "is a parse error wherever it is written" do
+      for text <- [
+            "1XC6M",
+            "1XCT10H",
+            "1XC/21C",
+            "20C/1XC",
+            "R3/1XC/P1Y",
+            "{20C,1XC}",
+            "[20C,1XC]",
+            "1XC?",
+            "1XC[u-ca=hebrew]"
+          ] do
+        assert {:error, %Tempo.ParseError{}} = Tempo.from_iso8601(text)
+      end
+    end
+
+    test "a number is still its years" do
+      assert Tempo.from_iso8601("-12C") == {:ok, AST.build(year: {:group, -1200..-1101})}
+      assert Tempo.from_iso8601("0J") == {:ok, AST.build(year: {:group, 0..9})}
+    end
+  end
+
   describe "ISO 8601-2 expanded year (±YYYYY)" do
     test "a signed year of five or more digits parses" do
       assert Tempo.from_iso8601("+12022") == {:ok, ~o"12022Y"}
