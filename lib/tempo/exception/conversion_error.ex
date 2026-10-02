@@ -21,6 +21,10 @@ defmodule Tempo.ConversionError do
 
   * `:open_range` — one end of the range is unbounded.
 
+  * `:grouped_component` — a step would count from a unit that holds
+    several values, such as the day after `~o"2026Y6M{1,15}D"`. Returned
+    by `Tempo.shift/3` too, for a shift that steps such a unit.
+
   * `:recurring_interval` and `:recurring_duration` — a recurrence
     is a rule for its occurrences, not one span.
 
@@ -111,6 +115,16 @@ defmodule Tempo.ConversionError do
 
   def message(%__MODULE__{reason: :open_range}) do
     "Cannot convert an open-ended range to an interval — one endpoint is unbounded."
+  end
+
+  def message(%__MODULE__{reason: :grouped_component, value: value}) when not is_nil(value) do
+    "Cannot step #{inspect(value)} — the step counts from a unit that holds several " <>
+      "values (a set, a range, a group or unspecified digits), which is no one value " <>
+      "to count from. Step each value it names instead."
+  end
+
+  def message(%__MODULE__{reason: :grouped_component}) do
+    "Cannot step a value from a unit that holds several values."
   end
 
   def message(%__MODULE__{value: value, target: target})

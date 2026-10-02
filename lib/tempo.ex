@@ -4887,6 +4887,13 @@ defmodule Tempo do
     `~o"1M31D"`), but `~o"1M31D"` plus one month lands on an unresolvable
     "Feb 31" and `~o"2M28D"` plus one day (Feb 29 or Mar 1?) both error.
 
+  * `{:error, %Tempo.ConversionError{reason: :grouped_component}}` when
+    the shift would count from a unit that holds several values — a
+    set, a range, a group or unspecified digits. A step every one of
+    those values takes alike is computed, so `~o"2026Y{6,7}M15D"` plus
+    one day is the 16th of both months; plus one month it is an error,
+    since no one month follows both June and July.
+
   * `{:error, reason}` when the value holds a selection and the shift
     steps a unit it does not carry: a month on `~o"2027Y4ML1K1IN"`, the
     first Monday of April 2027, is the first Monday of May, but it has no
@@ -4917,6 +4924,14 @@ defmodule Tempo do
       ~o"1M31D"
 
       iex> match?({:error, %Tempo.UnanchoredError{}}, Tempo.shift(~o"1M31D", ~o"P1M"))
+      true
+
+  The 15th of June and of July, a day on and a month on:
+
+      iex> Tempo.shift(~o"2026Y{6,7}M15D", day: 1)
+      ~o"2026Y{6..7}M16D"
+
+      iex> match?({:error, %Tempo.ConversionError{}}, Tempo.shift(~o"2026Y{6,7}M15D", month: 1))
       true
 
   On the night New York's clocks spring forward, five hours after 23:00
@@ -5306,7 +5321,16 @@ defmodule Tempo do
   * `{:error, %Tempo.UnanchoredError{}}` when the value has no
     concrete year and resolving the span would depend on the missing
     one — `~o"X*Y2M28D"` (February is 28 or 29 days), or a yearless
-    masked month in a calendar whose month count varies by year.
+    masked month in a calendar whose month count varies by year. An
+    interval's duration, or a recurrence's cadence, that cannot be
+    counted from such a value is the same error: the second month
+    after `~o"12M31D"` is a 31 February.
+
+  * `{:error, %Tempo.ConversionError{reason: :grouped_component}}`
+    when a span's end would be counted from a unit that holds several
+    values — the day after `~o"2026Y6M{1,15}D"` in
+    `2026Y6M{1,15}D/P1D`. The value on its own converts to a span for
+    each value it names.
 
   * `{:error, %Tempo.InvalidDateError{}}` when a mask names no date —
     `~o"2026-02-3X"`, as February has no 30th or 31st.
@@ -5380,6 +5404,10 @@ defmodule Tempo do
     case Math.add(from, cadence) do
       %Tempo{} -> selectable(interval.repeat_rule, interval)
       {:error, reason} -> {:error, step_error(from, reason)}
+      # A start that holds unspecified digits steps to a set of candidates
+      # (`202XY` and a month, some February of the 2020s), not to one next
+      # occurrence.
+      _several -> {:error, step_error(from, :grouped_component)}
     end
   end
 
@@ -5401,6 +5429,16 @@ defmodule Tempo do
   defp step_error(_from, reason) when is_exception(reason), do: reason
   defp step_error(from, :unanchored), do: UnanchoredError.exception(value: from)
   defp step_error(from, reason), do: materialisation_error(from, reason)
+
+  # The span a value and a duration give: the stepper's error when the
+  # duration cannot be counted from the value (a day past 28 February of no
+  # year), never an interval holding it. A value that holds unspecified
+  # digits steps to a set of candidates, which is no one end either.
+  defp derived_span({:error, reason}, value, _span), do: {:error, step_error(value, reason)}
+  defp derived_span(%Tempo{} = derived, _value, span), do: {:ok, span.(derived)}
+
+  defp derived_span(_several, value, _span),
+    do: {:error, step_error(value, :grouped_component)}
 
   defp selectable(%Tempo{time: time} = rule, interval) do
     if selects_by_month?(time) and week_based_calendar?(calendar_of(rule)) do
@@ -5688,7 +5726,7 @@ defmodule Tempo do
     {from, interval} = fill_selection_start(from, interval)
     step = if direction == -1, do: Duration.negate(duration), else: duration
 
-    intervals =
+    walk =
       iterate_recurrence(
         from,
         step,
@@ -5699,7 +5737,8 @@ defmodule Tempo do
         n
       )
 
-    with {:ok, kept} <- keep_within(intervals, opts) do
+    with {:ok, intervals} <- walk,
+         {:ok, kept} <- keep_within(intervals, opts) do
       IntervalSet.new(kept, coalesce: coalesce_opt(opts))
     end
   end
@@ -5723,18 +5762,19 @@ defmodule Tempo do
        ) do
     {from, interval} = fill_selection_start(from, interval)
 
-    intervals =
-      from
-      |> iterate_recurrence(
+    walk =
+      iterate_recurrence(
+        from,
         duration,
         occurrence_end_fn(from, duration, interval),
         &under_until?(&1, until),
         selection_fn(interval, duration),
         interval.metadata
       )
-      |> Enum.filter(&starts_under_until?(&1, until))
 
-    with {:ok, kept} <- keep_within(intervals, opts) do
+    with {:ok, intervals} <- walk,
+         under_until = Enum.filter(intervals, &starts_under_until?(&1, until)),
+         {:ok, kept} <- keep_within(under_until, opts) do
       IntervalSet.new(kept, coalesce: coalesce_opt(opts))
     end
   end
@@ -5789,16 +5829,19 @@ defmodule Tempo do
            interval.metadata,
            1
          ) do
-      [%Tempo.Interval{} = first | _] ->
+      {:ok, [%Tempo.Interval{} = first | _]} ->
         {:ok, first}
 
-      [] ->
+      {:ok, []} ->
         {:error,
          IntervalEndpointsError.exception(
            interval: interval,
            operation: "convert a count-1 recurrence whose BY-rule selects no occurrence",
            reason: :empty_selection
          )}
+
+      {:error, _reason} = error ->
+        error
     end
   end
 
@@ -5848,8 +5891,9 @@ defmodule Tempo do
     if Keyword.has_key?(time, :selection) do
       selected_spans(from, &{&1, Math.add(&1, duration)}, metadata, opts)
     else
-      to_tempo = Math.add(from, duration)
-      {:ok, %Tempo.Interval{from: from, to: to_tempo, metadata: metadata}}
+      from
+      |> Math.add(duration)
+      |> derived_span(from, &%Tempo.Interval{from: from, to: &1, metadata: metadata})
     end
   end
 
@@ -5868,8 +5912,9 @@ defmodule Tempo do
     if Keyword.has_key?(time, :selection) do
       selected_spans(to, &{Math.subtract(&1, duration), &1}, metadata, opts)
     else
-      from_tempo = Math.subtract(to, duration)
-      {:ok, %Tempo.Interval{from: from_tempo, to: to, metadata: metadata}}
+      to
+      |> Math.subtract(duration)
+      |> derived_span(to, &%Tempo.Interval{from: &1, to: to, metadata: metadata})
     end
   end
 
@@ -6112,7 +6157,7 @@ defmodule Tempo do
          {_forward, backward} = window_reach(interval),
          {:ok, walk_to} <- reach_end(window_to, interval, backward),
          {from, interval} = fill_selection_start(from, interval),
-         intervals =
+         {:ok, intervals} <-
            iterate_recurrence(
              from,
              duration,
@@ -6582,9 +6627,22 @@ defmodule Tempo do
     # earlier in the DTSTART-containing period (e.g.
     # BYMONTHDAY=1 with DTSTART=Sep 30 → also Sep 1). Drop any
     # such pre-DTSTART candidates.
-    |> Stream.reject(fn %Tempo.Interval{from: f} -> before_dtstart?(f, from) end)
+    |> Stream.reject(&before_dtstart?(&1, from))
     |> Stream.take(output_limit)
     |> Enum.to_list()
+    |> walked(from)
+  end
+
+  # The occurrences a walk gave. A step its cadence could not take ends the
+  # walk as its last element, and is the walk's error: the second month after
+  # `12M31D` is a 31 February, and an occurrence that would end there has no
+  # end. A walk that has all the occurrences it was asked for before such a
+  # step never meets it.
+  defp walked(occurrences, from) do
+    case List.last(occurrences) do
+      {:error, reason} -> {:error, step_error(from, reason)}
+      _occurrence -> {:ok, occurrences}
+    end
   end
 
   # The occurrences of a recurrence written with a duration and an end, earliest
@@ -6658,10 +6716,18 @@ defmodule Tempo do
   defp period_occurrences(from, cadence, occurrence_end, start_predicate, selection_fn, metadata) do
     from
     |> recurrence_candidates(cadence, occurrence_end, metadata)
-    |> Stream.take_while(fn {start, _} -> start_predicate.(start) end)
+    |> Stream.take_while(&walking?(&1, start_predicate))
     |> Stream.take(@recurrence_safety_cap)
-    |> Stream.flat_map(fn {_start, candidate} -> selection_fn.(candidate) end)
+    |> Stream.flat_map(&selected(&1, selection_fn))
   end
+
+  # A step the cadence could not take is the walk's last candidate, kept so
+  # the walk can return it (`walked/2`).
+  defp walking?({:error, _reason}, _start_predicate), do: true
+  defp walking?({start, _candidate}, start_predicate), do: start_predicate.(start)
+
+  defp selected({:error, _reason} = failure, _selection_fn), do: [failure]
+  defp selected({_start, candidate}, selection_fn), do: selection_fn.(candidate)
 
   # Contiguous fast path: walk the starts once and pair each with the
   # next, so occurrence i's `to` is occurrence i+1's `from`. One
@@ -6669,12 +6735,7 @@ defmodule Tempo do
   defp recurrence_candidates(from, cadence, :contiguous, metadata) do
     occurrence_metadata = strip_span_directives(metadata)
 
-    from
-    |> Stream.iterate(&Math.add(&1, cadence))
-    |> Stream.chunk_every(2, 1, :discard)
-    |> Stream.map(fn [start, next_start] ->
-      {start, %Tempo.Interval{from: start, to: next_start, metadata: occurrence_metadata}}
-    end)
+    Stream.unfold(from, &contiguous_candidate(&1, cadence, occurrence_metadata))
   end
 
   # General path: each start is `from + i × cadence` (scaled, so
@@ -6684,19 +6745,43 @@ defmodule Tempo do
        when is_function(occurrence_end_fn, 2) do
     occurrence_metadata = strip_span_directives(metadata)
 
-    0
-    |> Stream.iterate(&(&1 + 1))
-    |> Stream.map(fn i ->
-      start = add_n_durations(from, cadence, i)
-
-      {start,
-       %Tempo.Interval{
-         from: start,
-         to: occurrence_end_fn.(start, i),
-         metadata: occurrence_metadata
-       }}
-    end)
+    Stream.unfold(
+      0,
+      &stepped_candidate(&1, from, cadence, occurrence_end_fn, occurrence_metadata)
+    )
   end
+
+  # The candidate that starts at `start` and the start of the one after it,
+  # which is where it ends. A step the cadence cannot take is the walk's last
+  # candidate.
+  defp contiguous_candidate(:stopped, _cadence, _metadata), do: nil
+
+  defp contiguous_candidate(start, cadence, metadata) do
+    case Math.add(start, cadence) do
+      %Tempo{} = next_start ->
+        {{start, %Tempo.Interval{from: start, to: next_start, metadata: metadata}}, next_start}
+
+      failed ->
+        {step_failure(failed), :stopped}
+    end
+  end
+
+  defp stepped_candidate(:stopped, _from, _cadence, _occurrence_end_fn, _metadata), do: nil
+
+  defp stepped_candidate(step, from, cadence, occurrence_end_fn, metadata) do
+    with %Tempo{} = start <- add_n_durations(from, cadence, step),
+         %Tempo{} = stop <- occurrence_end_fn.(start, step) do
+      {{start, %Tempo.Interval{from: start, to: stop, metadata: metadata}}, step + 1}
+    else
+      failed -> {step_failure(failed), :stopped}
+    end
+  end
+
+  # A start or an end the cadence could not be stepped to, as the candidate
+  # that ends the walk. A value that holds unspecified digits steps to a set
+  # of candidates, which is no one start either.
+  defp step_failure({:error, _reason} = failure), do: failure
+  defp step_failure(_several), do: {:error, :grouped_component}
 
   # `occurrence_duration` / `occurrence_base_to` are *directives* to
   # this materialiser — they say how to span each occurrence. Once the
@@ -6709,9 +6794,12 @@ defmodule Tempo do
 
   defp strip_span_directives(metadata), do: metadata
 
-  defp before_dtstart?(%Tempo{} = candidate_from, %Tempo{} = dtstart) do
+  defp before_dtstart?(%Tempo.Interval{from: %Tempo{} = candidate_from}, %Tempo{} = dtstart) do
     Compare.compare_endpoints(candidate_from, dtstart) == :earlier
   end
+
+  # The step that ended a walk is not an occurrence to drop.
+  defp before_dtstart?(_failure, _dtstart), do: false
 
   # Build the per-candidate selection filter/expand function. When
   # `repeat_rule` is nil, returns a passthrough (identity). When
@@ -7342,7 +7430,7 @@ defmodule Tempo do
            start_at_unit(run_from, start_unit(interval)) do
       case start_in_repeat_calendar(start, interval) do
         %Tempo{calendar: ^run_calendar} = first_period ->
-          {:ok, walk_run(first_period, interval, run_to)}
+          walk_run(first_period, interval, run_to)
 
         _other_calendar ->
           gated_run_occurrences(interval, run_from, run_to, opts)
@@ -7362,6 +7450,7 @@ defmodule Tempo do
       interval.metadata
     )
     |> Enum.to_list()
+    |> walked(from)
   end
 
   defp gated_run_occurrences(interval, run_from, run_to, opts) do
@@ -8354,16 +8443,30 @@ defmodule Tempo do
     # multi-element lists). Masks, scalars, and single-element
     # lists use the existing single-interval path in
     # `next_unit_boundary/1`.
-    if multi_tempo?(tempo) do
-      materialise_multi(tempo)
-    else
-      # The bounds keep the value's own resolution; the iteration
-      # granularity of the implicit span travels on `:unit` (see
-      # `Tempo.Interval.next_unit_boundary/1`).
-      case Interval.next_unit_boundary(tempo) do
-        {:ok, {lower, upper}, unit} -> {:ok, %Tempo.Interval{from: lower, to: upper, unit: unit}}
-        {:error, _} = err -> err
-      end
+    case span_shape(tempo.time, :single) do
+      :single -> single_span(tempo)
+      :multi -> materialise_multi(tempo)
+      :group_of_set -> {:error, materialisation_error(tempo, :grouped_component)}
+    end
+  end
+
+  # Whether a value names one span or several, read in one pass. A group of
+  # a set (`2026Y{1,2}G3MU15D`, the first and the second groups of three
+  # months) names a span in each of its groups, and nothing expands it to
+  # them, so it is no one span.
+  defp span_shape([], shape), do: shape
+  defp span_shape([{_unit, {:group, _members}, _size} | _rest], _shape), do: :group_of_set
+
+  defp span_shape([slot | rest], shape),
+    do: span_shape(rest, if(multi_slot?(slot), do: :multi, else: shape))
+
+  # The bounds keep the value's own resolution; the iteration granularity of
+  # the implicit span travels on `:unit` (see
+  # `Tempo.Interval.next_unit_boundary/1`).
+  defp single_span(tempo) do
+    case Interval.next_unit_boundary(tempo) do
+      {:ok, {lower, upper}, unit} -> {:ok, %Tempo.Interval{from: lower, to: upper, unit: unit}}
+      {:error, _} = err -> err
     end
   end
 

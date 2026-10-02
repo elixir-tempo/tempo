@@ -6,7 +6,7 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **Livebooks install 2.0 at the release** — `getting-started`, `tempo_tour`, `scheduling-workbook` and `uncertain-dates-workbook` install `{:ex_tempo, "~> 1.6"}` and the Melbourne deck `~> 1.6.3`, while their code uses the 2.0 names: at the 2.0.0 release each installs `~> 2.0`, as `everyday-holidays` already does.
 
-* [ ] **A grouped endpoint raises when compared** — a hand-built interval whose endpoint holds a group (`~o"20C"`, `~o"2022Y1M2G3DU"`) raises in `Compare.to_utc_seconds/1` when measured or compared; `to_interval/1` converts such values first, the other entry points do not.
+* [ ] **A grouped endpoint raises when compared** — a hand-built interval whose endpoint holds a group (`~o"20C"`, `~o"2022Y1M2G3DU"`) raises in `Compare.to_utc_seconds/1` when measured or compared; `to_interval/1` converts such values first, the other entry points do not. A value holding a set, a group, a mask or a margin raises the same way from `Tempo.shift/3` with `:skipping` (`Tempo.shift(~o"2026Y6M{1,15}D", ~o"PT1H", skipping: busy)`), and one with an unspecified month or day from `duration/1` and `to_relative_string/2` (`~o"2026Y6MX*D"`). Found again 2026-10-02.
 
 * [ ] **`rescue` in the library** — `lib/ical.ex` (`parse/2`, `available/2`, errors from the `ical` parser), `lib/inspect.ex` (Localize's calendar encoding) and `lib/iso8601/parser.ex` rescue exceptions where the rest of Tempo passes tagged tuples.
 
@@ -46,7 +46,19 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **`ClockTest` timing** — "process-local override does not leak to peer processes" failed once under load (passing in isolation and on re-runs): `assert_receive`'s default 100 ms timeout is short on a busy machine.
 
-* [ ] **A weekday set with no week raises in `to_interval/2`** — `Tempo.to_interval(~o"{6,7}K")` raises a `KeyError` (`:week` in `[day_of_week: 1]`), where `~o"6K"` and `~o"25W{6,7}K"` convert. Found 2026-10-02.
+* [ ] **A shift does not reach each value of a set** — a shift that would count from a unit holding several values is a `ConversionError` (`~o"2026Y6M{1,15}D"` plus a day, `~o"2026Y{6,7}M"` plus a month), where each value it names could be shifted and the results gathered. Decide the result: a set, an interval set as a disjoint mask gives, or the value itself where it can hold them (`2026Y6M{2,16}D`). Found 2026-10-02.
+
+* [ ] **A recurrence from a start that holds a set gives intervals whose ends hold it** — `R3/2026Y6M{1,15}D/P1M` is three intervals from `2026Y6M{1,15}D` to `2026Y7M{1,15}D` and on, where the 1st and the 15th of three months are six occurrences. Found 2026-10-02.
+
+* [ ] **An unspecified month or day is stepped as its last** — `Tempo.shift(~o"2026Y6MX*D", day: 1)` is `~o"2026Y7M1D"` and `2026YX*M15D` plus a month is `2027Y1M15D`: a step forward reads `X*` as the unit's last value, which ends the value's span where it should (`2026Y6MX*D/7M1D`) and gives a shift a value that has lost the unit, where a mask shifts to a one-of range. A step back is a `ConversionError`. Found 2026-10-02.
+
+* [ ] **A month or a year added to a day of the week that names no week is that day again** — `Tempo.shift(~o"7K", month: 1)` and `year: 1` are `~o"7K"`, though the day of the week a month or a year on depends on the date: by the rule for a value with no year it is an `UnanchoredError`, as a month added to a week date is a `ResolutionError`. Found 2026-10-02.
+
+* [ ] **A recurrence with no year that wraps its own axis** — `R3/T22H/PT1H` gives 22:00, 22:00 and 23:00, and `R3/6K/P1D` Saturday twice and then Sunday: the occurrence past midnight, or past the week's last day, starts before the recurrence's start on the value's own axis, so the floor at the start drops it and the walk goes round again. A cadence that leaves the start where it is (a week on `7K`, a year on `12M31D`) gives occurrences of no length (`7K/7K`). Found 2026-10-02.
+
+* [ ] **The enumeration raises for six shapes** — `Enum.take/2` raises a `FunctionClauseError` for a masked hour, minute or second (`~o"2026Y6M15DT1XH"`), a group of a set (`{1,2}G3MU`) and a margin of error (`~o"2018±2Y"`), and an `ArgumentError` for a value holding a selection; `Enum.count/1` raises a `KeyError` for the span of a month with no year (`Tempo.to_interval!(~o"6M")`) and a `CaseClauseError` for one of an unspecified year (`~o"X*Y12M31D"`). A shift whose masks are disjoint and include a masked hour walks its candidates the same way, so `Tempo.shift(~o"2026Y6M15DT1XH30M", minute: 1)` raises too. Found 2026-10-02.
+
+* [ ] **A group of a set raises outside `to_interval/2`** — a value holding one (`{1,2}G3MU`, the first and second groups of three months) keeps it as a three-element tuple the `Keyword` functions cannot read: `select/2`, `at/2`, `on/2`, `trunc/2` and `nearest_workday/2` raise, and `to_interval/2` is a `ConversionError` where it could give a span for each group. `Tempo.trunc/2` also raises for a value holding a selection (`~o"2026Y4ML1K1IN"`). Found 2026-10-02.
 
 * [ ] **A qualified set is written in a form that does not parse** — `{2026-06-15,2026-06-16}?` holds the qualification on each member, and `to_iso8601/1` and `inspect/1` write `{2026Y6M15D?,2026Y6M16D?}`, which the parser refuses. Write it once after the set, as the calendar is. Found 2026-10-02.
 
@@ -81,6 +93,10 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **Set algebra over open-ended windows** — a research project for later (user, 2026-09-28): how far union, intersection, difference, complement and the predicates go on the lazy sets an open-ended window gives, a test of the whole algebra. Questions in [plans/open-ended-set-algebra.md](plans/open-ended-set-algebra.md).
 
 ## Done
+
+* [x] **A step counts from one whole number** — a day of the week that names no week spans and steps on its own axis (`Tempo.to_interval(~o"{6,7}K")` raised a `KeyError`), a step back from a value with no year borrows as a step forward carries, and a step that would count from a unit holding a set, a range or a group is a `ConversionError` where one every value takes alike is computed. An interval's or a recurrence's end that cannot be counted to is its error. 2026-10-02.
+
+* [x] **The Calendrical lock moved to `41b4d45`** — its composite calendars count an era's days through their changes of calendar, and a `Julian.Sept1` or `Julian.Dec25` year takes the number of the Julian year it ends in: through Tempo only dates in those two calendars change (72 of 930 probes, the year's number moved by one), and the suite and the composite-calendar probes give the same results under the old lock and the new. Localize is unchanged at `6f3f0364`. 2026-10-02.
 
 * [x] **A set's members are checked and in its calendar** — each member, each end of a range, each excluded member and each interval among them is read as a value on its own is, in the calendar the set is written for (`{2026-02-30}` is an error, `{5786-06-15,5786-07-01}[u-ca=hebrew]` two Hebrew dates); a recurrence's domain is checked and keeps its Gregorian years. `to_iso8601/1` and `inspect/1` write a set's calendar once after it and a recurrence's after its rule, and set operations take a range member. 2026-10-02.
 

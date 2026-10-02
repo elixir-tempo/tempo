@@ -377,6 +377,11 @@ defimpl Enumerable, for: Tempo.Interval do
       # step depends on a year it does not carry has to signal by raising.
       {:error, :unanchored} ->
         raise Tempo.UnanchoredError, value: tempo
+
+      # Nor has one whose next step would count from a unit holding several
+      # values.
+      {:error, :grouped_component} ->
+        raise Tempo.ConversionError, value: tempo, reason: :grouped_component
     end
   end
 end

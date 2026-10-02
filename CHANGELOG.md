@@ -203,6 +203,12 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A day of the week that names no week spans and steps on its own axis: `Tempo.to_interval(~o"{6,7}K")` gives both days, `~o"7K"` spans `7K/1K` and `~o"7K"` plus a day is `~o"1K"`, where the last day of the week raised a `KeyError` and a day added to any left it where it was. A step back from a value with no year borrows as a step forward carries (`~o"T0H"` less an hour is `~o"T23H"`), where it raised.
+
+* `Tempo.shift/3` and the spans of `Tempo.to_interval/2` no longer count from a unit that holds several values (a set, a range or a group): a step every one of them takes alike is computed (`~o"2026Y{6,7}M15D"` plus a day or a year), and any other returns `Tempo.ConversionError` with `reason: :grouped_component`. Such a step raised, collapsed the set (`~o"2026Y6M{1,15}D"` plus a day was `~o"2026Y7M1D"`), left the value as it was or returned a bare atom.
+
+* An interval's duration or a recurrence's cadence that cannot be counted from its start returns the error of the step, where `2M28D/P1D` held the error as its end and `R3/12M31D/P1M` raised a `FunctionClauseError`. An end that would be a set of candidates (`202XY/P1D`) is an error too, and enumerating an interval whose next step counts from a set raises `Tempo.ConversionError`.
+
 * A set's members — each end of a range, each excluded member and each interval among them — are checked as a value on its own is and are in the calendar the set is written for, so `{2026-02-30}` is an error and `{5786-06-15,5786-07-01}[u-ca=hebrew]` is two Hebrew dates, where a set took any member and held it as a Gregorian date. A recurrence's domain is checked too, and keeps its Gregorian years.
 
 * `Tempo.to_iso8601/1` and `inspect/1` write a set's calendar once after it (`{5786Y6M15D,5786Y7M1D}[u-ca=hebrew]`) and a recurrence's after its rule (`R/5786Y1M1D/P1Y/FL7M1DN[u-ca=hebrew]`, with a start or a domain), so both read back in it, where a recurrence's rule read back as Gregorian.

@@ -1,0 +1,173 @@
+defmodule Tempo.SteppingTest do
+  # A step counts from one whole number. A value that does not track the unit
+  # a step carries into, or that holds several values at a unit a step would
+  # count from, gives a value or an error, and never raises.
+  use ExUnit.Case, async: true
+
+  import Tempo.Sigils
+
+  alias Tempo.ConversionError
+  alias Tempo.Interval
+  alias Tempo.IntervalSet
+  alias Tempo.UnanchoredError
+
+  defp span(value) do
+    {:ok, %Interval{} = interval} = Tempo.to_interval(value)
+    {Interval.from(interval), Interval.to(interval)}
+  end
+
+  defp spans(value) do
+    {:ok, %IntervalSet{} = set} = Tempo.to_interval(value)
+    set |> IntervalSet.members() |> Enum.map(&{Interval.from(&1), Interval.to(&1)})
+  end
+
+  describe "a day of the week that names no week" do
+    test "spans to the next day of the week, and the last day to the first" do
+      assert span(~o"7K") == {~o"7K", ~o"1K"}
+      assert span(~o"7KT23H") == {~o"7KT23H", ~o"1KT0H"}
+      assert spans(~o"{6,7}K") == [{~o"6K", ~o"7K"}, {~o"7K", ~o"1K"}]
+    end
+
+    test "steps by a day, and is the same day a week on" do
+      assert Tempo.shift(~o"7K", day: 1) == ~o"1K"
+      assert Tempo.shift(~o"1K", day: -1) == ~o"7K"
+      assert Tempo.shift(~o"3K", day: 2) == ~o"5K"
+      assert Tempo.shift(~o"7K", week: 1) == ~o"7K"
+      assert Tempo.shift(~o"7KT23H", hour: 1) == ~o"1KT0H"
+      assert Tempo.shift(~o"1KT0H", hour: -1) == ~o"7KT23H"
+    end
+
+    test "starts or ends the span a duration gives" do
+      assert span(Tempo.from_iso8601!("7K/P1D")) == {~o"7K", ~o"1K"}
+      assert span(Tempo.from_iso8601!("P1D/1K")) == {~o"7K", ~o"1K"}
+    end
+
+    test "is explained, and has no date to be written as" do
+      assert Tempo.explain(~o"7K") =~ "Sunday of any week"
+      assert {:error, %UnanchoredError{}} = Tempo.to_string(~o"7K")
+    end
+  end
+
+  describe "a step back from a value with no year" do
+    test "borrows from the unit above it" do
+      assert Tempo.shift(~o"T0H", hour: -1) == ~o"T23H"
+      assert Tempo.shift(~o"T0H0M", minute: -1) == ~o"T23H59M"
+      assert Tempo.shift(~o"T0H0M0S", second: -1) == ~o"T23H59M59S"
+      assert Tempo.shift(~o"25W", week: -1) == ~o"24W"
+      assert Tempo.shift(~o"25W1K", day: -1) == ~o"24W7K"
+    end
+
+    test "is an error where the unit above depends on the year" do
+      # The week before week 1 is the 52nd or the 53rd of the year before.
+      assert {:error, %UnanchoredError{}} = Tempo.shift(~o"1W", week: -1)
+      assert {:error, %UnanchoredError{}} = Tempo.shift(~o"1W1K", day: -1)
+    end
+  end
+
+  describe "a unit that holds several values" do
+    test "is not counted from, and its set is never collapsed" do
+      for {value, shift} <- [
+            {~o"2026Y6M{1,15}D", [day: 1]},
+            {~o"2026Y6M{1,15}D", [day: -1]},
+            {~o"2026Y{6,7}M15D", [month: 1]},
+            {~o"2026Y{6,7}M", [month: -1]},
+            {~o"{2026,2027}Y", [year: 1]},
+            {~o"2026Y6M15DT{9,17}H", [hour: 1]},
+            {~o"2026Y6M15DT{9,17}H", [hour: -1]},
+            {~o"2026Y25W{6,7}K"W, [day: 1]},
+            {~o"2026Y6M3G4DU", [day: 1]},
+            {~o"2026Y3G4MU", [month: 1]}
+          ] do
+        assert {:error, %ConversionError{value: ^value, reason: :grouped_component} = error} =
+                 Tempo.shift(value, shift),
+               "#{inspect(value)} by #{inspect(shift)}"
+
+        assert Exception.message(error) =~ "holds several values"
+      end
+    end
+
+    test "is passed by where every value it names steps alike" do
+      assert Tempo.shift(~o"2026Y{6,7}M15D", day: 1) == ~o"2026Y{6,7}M16D"
+      assert Tempo.shift(~o"2026Y{6,7}M15D", day: -1) == ~o"2026Y{6,7}M14D"
+      assert Tempo.shift(~o"2026Y{6,7}M15D", year: 1) == ~o"2027Y{6,7}M15D"
+
+      # The day after the 30th is not the same day in June and in July, nor
+      # the day before the 1st.
+      assert {:error, %ConversionError{reason: :grouped_component}} =
+               Tempo.shift(~o"2026Y{6,7}M30D", day: 1)
+
+      assert {:error, %ConversionError{reason: :grouped_component}} =
+               Tempo.shift(~o"2026Y{6,7}M1D", day: -1)
+    end
+
+    test "keeps its days a month on only where the month has them all" do
+      assert Tempo.shift(~o"2026Y6M{1,15}D", month: 1) == ~o"2026Y7M{1,15}D"
+
+      # February has no 30th or 31st, and each day would be clamped to its own.
+      assert {:error, %ConversionError{reason: :grouped_component}} =
+               Tempo.shift(~o"2026Y1M{30,31}D", month: 1)
+    end
+
+    test "has no one year to carry into" do
+      assert Tempo.shift(~o"{2026,2027}Y6M15D", day: 1) == ~o"{2026,2027}Y6M16D"
+
+      assert {:error, %ConversionError{reason: :grouped_component}} =
+               Tempo.shift(~o"{2026,2027}Y12M31D", day: 1)
+    end
+  end
+
+  describe "a value no step can count from" do
+    test "has no span, and to_interval/2 returns why" do
+      for text <- ["2026Y{1,2}G3MU15D", "2026Y6M{1,2}G7DU", "2026Y6M{1,2}G7DUT10H", "-1D"] do
+        assert {:error, %ConversionError{reason: :grouped_component}} =
+                 Tempo.to_interval(Tempo.from_iso8601!(text)),
+               text
+      end
+    end
+
+    test "is shifted where the step passes the unit by" do
+      assert Tempo.shift(Tempo.from_iso8601!("2026Y{1,2}G3MU15D"), day: 1) ==
+               Tempo.from_iso8601!("2026Y{1,2}G3MU16D")
+
+      # A year on, the 15th is in whichever month the mask stands for.
+      assert Tempo.shift(~o"2026YXXM15D", year: 1) == ~o"2027YXXM15D"
+    end
+  end
+
+  describe "an end a duration cannot be counted to" do
+    test "is the interval's error, not its end" do
+      for {text, error} <- [
+            {"2M28D/P1D", UnanchoredError},
+            {"P1D/3M1D", UnanchoredError},
+            {"2026Y6M{1,15}D/P1D", ConversionError},
+            {"202XY/P1D", ConversionError}
+          ] do
+        assert {:error, %^error{}} = Tempo.to_interval(Tempo.from_iso8601!(text)), text
+      end
+    end
+
+    test "ends a recurrence's walk with the step it could not take" do
+      for {text, error} <- [
+            # The second month after 31 December is a 31 February.
+            {"R3/12M31D/P1M", UnanchoredError},
+            # The second occurrence would end the day after 28 February.
+            {"R2/2M27D/P1D", UnanchoredError},
+            {"R3/2026Y12M{30,31}D/P1M", ConversionError},
+            {"R3/202XY/P1Y", ConversionError}
+          ] do
+        assert {:error, %^error{}} = Tempo.to_interval(Tempo.from_iso8601!(text)), text
+      end
+
+      # A walk that has its occurrences before such a step never meets it:
+      # the day after the 28th depends on the month, and the 28th ends the third.
+      assert spans(Tempo.from_iso8601!("R3/25D/P1D")) ==
+               [{~o"25D", ~o"26D"}, {~o"26D", ~o"27D"}, {~o"27D", ~o"28D"}]
+    end
+
+    test "is raised by an enumeration, which has no error to return" do
+      days = Tempo.from_iso8601!("2026Y6M{1,15}D/2026Y7M1D")
+
+      assert_raise ConversionError, ~r/holds several values/, fn -> Enum.take(days, 3) end
+    end
+  end
+end
