@@ -2,6 +2,8 @@ defmodule Tempo.EnumerationWalk.Test do
   use ExUnit.Case, async: true
   import Tempo.Sigils
 
+  alias Calendrical.Gregorian
+  alias Calendrical.Hebrew
   alias Tempo.IntervalSet
 
   # The walk of a value reads its components coarse to fine, and each names
@@ -101,6 +103,40 @@ defmodule Tempo.EnumerationWalk.Test do
 
       assert member_starts(Tempo.to_interval(~o"{2026,2027}Y-1D")) ==
                [~o"2026Y12M31D", ~o"2027Y12M31D"]
+    end
+
+    # A day counted from the end under one month was read as a day of that
+    # month in no year, the 29th of February, before each year was known.
+    test "a day counted from the end of one month in each of a set of years" do
+      assert Enum.to_list(~o"{2026,2027}Y2M-1D") == [~o"2026Y2M28D", ~o"2027Y2M28D"]
+      assert Enum.to_list(~o"{2024..2025}Y2M-1D") == [~o"2024Y2M29D", ~o"2025Y2M28D"]
+
+      assert Enum.to_list(~o"{2024,2025}Y2M{1,-1}D") ==
+               [~o"2024Y2M1D", ~o"2024Y2M29D", ~o"2025Y2M1D", ~o"2025Y2M28D"]
+
+      assert member_starts(Tempo.to_interval(~o"{2026,2027}Y2M-1D")) ==
+               [~o"2026Y2M28D", ~o"2027Y2M28D"]
+    end
+
+    test "a day counted from the end of one month under a masked or unspecified year" do
+      days = Enum.to_list(~o"202XY2M-1D")
+
+      assert length(days) == 10
+      assert Enum.take(days, 2) == [~o"2020Y2M29D", ~o"2021Y2M28D"]
+
+      year = Date.utc_today().year
+      assert [%Tempo{time: [year: ^year, month: 2, day: last]}] = Enum.to_list(~o"X*Y2M-1D")
+      assert last == Gregorian.days_in_month(year, 2)
+    end
+
+    test "a day counted from the end of a month whose length varies by year in another calendar" do
+      days = Enum.to_list(Tempo.from_iso8601!("{5784,5785}Y6M-1D[u-ca=hebrew]"))
+
+      assert Enum.map(days, & &1.time[:day]) ==
+               [
+                 Hebrew.days_in_month(5784, 6),
+                 Hebrew.days_in_month(5785, 6)
+               ]
     end
 
     test "a set of days of the year keeps the days it names" do

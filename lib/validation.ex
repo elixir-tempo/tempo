@@ -916,6 +916,16 @@ defmodule Tempo.Validation do
     end
   end
 
+  # A year still to be expanded — a set, a range, a mask, an unspecified
+  # year — bounds the days of its months only once each of its values is
+  # known.
+  def resolve([{:year, years} = year | rest], calendar) when not is_integer(years) do
+    with {:year, _} = year <- resolve(year, calendar),
+         rest when is_list(rest) <- resolve_under_years(rest, calendar) do
+      [year | rest]
+    end
+  end
+
   def resolve([{unit, _value} = first | rest], calendar) do
     with {^unit, _} = first <- resolve(first, calendar),
          rest when is_list(rest) <- resolve(rest, calendar) do
@@ -1065,6 +1075,29 @@ defmodule Tempo.Validation do
       _unbounded -> :unknown
     end
   end
+
+  # The units under a year still to be expanded. A day counted from the end of
+  # its month (`{2026,2027}Y2M-1D`, the last day of each February) is left for
+  # each year to resolve, as a walk of the value reads it, and not read as a
+  # day of a month in no year, which made it the 29th.
+  defp resolve_under_years([{:month, month} = month_unit, {:day, days} = day | rest], calendar)
+       when is_integer(month) do
+    if counts_from_end?(days) do
+      with {:month, ^month} <- resolve(month_unit, calendar),
+           rest when is_list(rest) <- resolve(rest, calendar) do
+        [month_unit, day | rest]
+      end
+    else
+      resolve([month_unit, day | rest], calendar)
+    end
+  end
+
+  defp resolve_under_years(units, calendar), do: resolve(units, calendar)
+
+  defp counts_from_end?(value) when is_integer(value), do: value < 0
+  defp counts_from_end?(%Range{first: first, last: last}), do: first < 0 or last < 0
+  defp counts_from_end?(values) when is_list(values), do: Enum.any?(values, &counts_from_end?/1)
+  defp counts_from_end?(_value), do: false
 
   # A yearless month's day, bounded by the month's longest length across years
   # (see `max_day_in_month/2`). A month whose length cannot be bounded without
