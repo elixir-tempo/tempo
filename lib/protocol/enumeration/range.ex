@@ -57,6 +57,13 @@ defimpl Enumerable, for: Tempo.Interval do
     end
   end
 
+  # An interval with no end has no count, and the walk `Enum.count/1` falls
+  # back to would never end.
+  def count(%Tempo.Interval{from: %Tempo{}, to: to, duration: nil} = interval)
+      when to in [nil, :undefined] do
+    raise endless_error(interval, "Enum.count/1")
+  end
+
   def count(_interval), do: {:error, __MODULE__}
 
   @impl Enumerable
@@ -78,7 +85,62 @@ defimpl Enumerable, for: Tempo.Interval do
       else: {:error, __MODULE__}
   end
 
+  # The walk `Enum.member?/2` falls back to ends only when it finds the
+  # element, and an interval with no end is walked for ever.
+  def member?(%Tempo.Interval{from: %Tempo{} = from, to: to, duration: nil} = interval, element)
+      when to in [nil, :undefined] do
+    endless_member?(interval, from, element)
+  end
+
   def member?(_interval, _element), do: {:error, __MODULE__}
+
+  # A walk yields dated values from a dated start, one after another in
+  # time. So what is no such value is no member, and one that is has its
+  # answer in the step it would be, or in a walk that stops once it has
+  # passed it. A start with no year comes round its axis for ever, with no
+  # order to stop a search by, so the question is refused.
+  defp endless_member?(_interval, _from, element) when not is_struct(element, Tempo),
+    do: {:ok, false}
+
+  defp endless_member?(interval, %Tempo{calendar: calendar} = from, element) do
+    unit = iteration_unit(interval, from)
+    from = Steps.fill_to_unit(from, unit, calendar)
+
+    cond do
+      not dated?(from) -> raise endless_error(interval, "Enum.member?/2")
+      not dated?(element) -> {:ok, false}
+      Tempo.Compare.compare_endpoints(element, from) == :earlier -> {:ok, false}
+      true -> {:ok, on_endless_walk?(interval, element, from, unit, calendar)}
+    end
+  end
+
+  defp on_endless_walk?(interval, element, from, unit, calendar) do
+    case Steps.on_step?(element, from, unit, calendar) do
+      on_step? when is_boolean(on_step?) -> on_step?
+      :not_supported -> found_before_passed?(interval, element)
+    end
+  end
+
+  defp found_before_passed?(interval, element) do
+    Enum.reduce_while(interval, false, fn value, _found? ->
+      cond do
+        value === element -> {:halt, true}
+        Tempo.Compare.compare_endpoints(value, element) == :later -> {:halt, false}
+        true -> {:cont, false}
+      end
+    end)
+  end
+
+  defp endless_error(interval, operation) do
+    Tempo.IntervalEndpointsError.exception(
+      interval: interval,
+      operation: operation,
+      reason:
+        "`#{operation}` needs every value of #{inspect(interval)}, which has no end and " <>
+          "would be walked for ever. Take the values you need with `Enum.take/2` or " <>
+          "`Enum.take_while/2`, or give the interval an end."
+    )
+  end
 
   defp stepped_member?(element, from, to, unit, calendar) do
     cond do

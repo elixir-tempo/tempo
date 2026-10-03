@@ -8,8 +8,6 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **A group of a set has no span for each group** — `to_interval/2` and `Enum` are a `ConversionError` for a value holding one (`2026Y{1,2}G3MU`, the first and second groups of three months), where they could give a span for each group. The functions that need one value return the same error since 2026-10-03. Found 2026-10-02.
 
-* [ ] **`Enum.count/1` and `Enum.member?/2` of an interval with no end never return** — `Enum.count(~o"2026Y/..")` walks for ever, where a lazy interval set refuses with an `UnboundedSetError`. Found 2026-10-03.
-
 * [ ] **`to_interval/2` of a partly masked day straight after a year says the value has no year** — `~o"2026Y3XD"` returns an `UnanchoredError` ("`~o"2026Y3XD"` has none"), where its walk is the days of 2026 the value names. An unspecified one (`~o"2026YX*D"`) is the year since 2026-10-03, as `2026YXXXD` is. Found 2026-10-03.
 
 * [ ] **An interval or a recurrence from a masked start, written with a duration, keeps the mask in its ends** — `Tempo.to_interval(~o"2026Y6MXXD/P1M")` is `2026Y6MXXD/7MXXD`, and so for an unspecified day (`X*D`), a partly masked one (`1XD`) and each occurrence of `R3/2026Y6MXXD/P1M`, where an interval written with two ends is read as points (`2026Y6M/7M`): `Tempo.overlaps?/2` with 15 June is false, the intersection is empty and `Tempo.to_string/2` raises a `FunctionClauseError`. Found 2026-10-03.
@@ -25,6 +23,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **A set none of whose members exists is empty** — `Enum.to_list(~o"{2,6}M31D")` is `[]` and `to_interval/2` an empty set, where a mask no value matches (`1985-02-3X`) is an `InvalidDateError`. Decide whether it is an error. Found 2026-10-03.
 
 * [ ] **A range written backwards in a set** — `{2026-06-20..2026-06-15}` parses and converts to nothing, where an interval written so is an `IntervalEndpointsError`. Decide whether it is an error. Found 2026-10-02.
+
+* [ ] **What needs the last value of an interval with no end never returns** — `Enum.at(~o"2026Y/..", -1)` and `Enum.random/1` walk for ever: `Enumerable.slice/1` cannot tell them from `Enum.at/2` with a positive index and `Enum.empty?/1`, which the interval answers and a lazy interval set refuses (`UnboundedSetError`). Decide one rule for the two. Found 2026-10-03.
 
 ### Conformance and completeness
 
@@ -113,6 +113,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **`Enum.count/1` and `Enum.member?/2` of an interval with no end never return** — the count is an `IntervalEndpointsError`; membership is answered from the step the value would be, or by a walk that stops once it has passed it, where the start has a year, and refused where it has none. 2026-10-03.
 
 * [x] **`Tempo.extend/2` raises** — a value with no finer unit is a `ResolutionError`, and a value that is not one date or time, or a unit that is not `nil`, an `ArgumentError`; a second extends a decimal place at a time and inspects as `45.{0..9}S`. 2026-10-03.
 

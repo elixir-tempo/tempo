@@ -205,6 +205,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Enum.count/1` of an interval with no end (`~o"2026Y/.."`) raises a `Tempo.IntervalEndpointsError`, where it walked for ever. `Enum.member?/2` of one is answered without the whole walk where its start has a year (`~o"2020Y" in ~o"2026Y/.."` is false, where it never returned), and raises the same error where it has none.
+
 * `Tempo.extend/2` returns an error where it raised: a `Tempo.ResolutionError` for a value with no finer unit (a fraction of a second at microsecond precision), and an `ArgumentError` for a value that is not one date or time or for a unit that is not `nil`. A second extended twice is its hundred hundredths, and a second written as its fractions inspects as `45.{0..9}S`, where neither could be.
 
 * `Tempo.to_interval/2` reads an unspecified month, week, day, hour, minute or second (`X*`) as the mask of all its digits is: `~o"2026Y6MX*D"` is June 2026 and `~o"2026YX*M15D"` the 15th of each month, where the span started at the value itself and `Tempo.duration/1` and `Tempo.to_relative_string/2` raised. An interval end written so is the point its span starts at (`2026Y6MX*D/2026Y8M` is June and July).

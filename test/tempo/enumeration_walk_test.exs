@@ -416,4 +416,48 @@ defmodule Tempo.EnumerationWalk.Test do
       end
     end
   end
+
+  # `Enum.count/1`, and `Enum.member?/2` of a value the walk does not reach,
+  # fall back to a walk, which never ended.
+  describe "an interval with no end" do
+    test "has no count" do
+      assert_raise Tempo.IntervalEndpointsError,
+                   ~r/`Enum.count\/1` needs every value of ~o"2026Y\/\.\."/,
+                   fn -> Enum.count(~o"2026Y/..") end
+
+      {:ok, from_2026} = Tempo.Interval.new(from: ~o"2026Y")
+      assert_raise Tempo.IntervalEndpointsError, fn -> Enum.count(from_2026) end
+    end
+
+    test "holds the values its walk yields, and no others" do
+      assert ~o"2030Y" in ~o"2026Y/.."
+      refute ~o"2020Y" in ~o"2026Y/.."
+      refute ~o"2030Y6M" in ~o"2026Y/.."
+      refute ~o"{2030,2031}Y" in ~o"2026Y/.."
+      refute ~o"6M" in ~o"2026Y/.."
+      refute :year in ~o"2026Y/.."
+
+      assert ~o"2026Y6M15DT12H" in ~o"2026Y6M15DT10H/.."
+      refute ~o"2026Y6M15DT9H" in ~o"2026Y6M15DT10H/.."
+    end
+
+    test "is searched, on the week axis, until the walk has passed the value" do
+      assert Enum.member?(~o"2026Y25W/..", ~o"2030Y1W")
+      refute Enum.member?(~o"2026Y25W/..", ~o"2026Y20W")
+      refute Enum.member?(~o"2026Y25W/..", ~o"2030Y6M")
+    end
+
+    test "with no year comes round for ever, so a search of it is refused" do
+      assert_raise Tempo.IntervalEndpointsError, ~r/`Enum.member\?\/2` needs every value/, fn ->
+        Enum.member?(~o"T10H/..", ~o"T12H")
+      end
+
+      refute Enum.member?(~o"T10H/..", :noon)
+    end
+
+    test "is walked as far as it is asked" do
+      assert Enum.at(~o"2026Y/..", 3) == ~o"2029Y"
+      refute Enum.empty?(~o"2026Y/..")
+    end
+  end
 end
