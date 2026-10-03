@@ -143,4 +143,36 @@ defmodule Tempo.SetTest do
       assert time == [year: 5786, month: 6, day: 16]
     end
   end
+
+  # A set's `[zone]` and `[key=value]` suffix was parsed and dropped, leaving
+  # its members floating; a suffix inside the braces does not parse.
+  describe "a zone suffix on a set" do
+    test "is each member's, and written once after the set" do
+      for text <- [
+            "{2026Y6M15DT10H0M,2026Y6M16DT10H0M}[Europe/Paris]",
+            "{2026Y6M15DT10H0M,2026Y6M16DT10H0M}[+09:00]",
+            "{2026Y6M15DT10H0M,2026Y6M16DT10H0M}[Europe/Paris][foo=bar]",
+            "[2026Y6M15DT10H0M,2026Y6M16DT10H0M][Europe/Paris]",
+            "{2026Y6M15DT10H0M..2026Y6M15DT12H0M}[Europe/Paris]",
+            "R/{2026Y6M15D,2026Y6M16D}/P1Y[Europe/Paris]"
+          ] do
+        value = Tempo.from_iso8601!(text)
+
+        assert Tempo.to_iso8601!(value) == text
+        assert Tempo.from_iso8601(text) == {:ok, value}
+      end
+    end
+
+    test "puts its members in the zone" do
+      {:ok, set} =
+        Tempo.to_interval(
+          Tempo.from_iso8601!("{2026-06-15T10:00,2026-06-16T10:00}[Europe/Paris]")
+        )
+
+      assert set |> IntervalSet.members() |> Enum.map(&Interval.from/1) == [
+               Tempo.from_iso8601!("2026-06-15T10:00[Europe/Paris]"),
+               Tempo.from_iso8601!("2026-06-16T10:00[Europe/Paris]")
+             ]
+    end
+  end
 end

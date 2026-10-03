@@ -35,11 +35,57 @@ defmodule Tempo.Inspect do
   # calendar a bare ISO 8601 string reads as, or the ISO week calendar the
   # `W` sigil modifier gives.
   defp to_iodata(value, implied) do
+    {value, zone, tags} = hoist_shared_zone(value)
+
     case value |> with_calendar_names(implied) |> hoist_calendar_name(implied) do
-      {value, []} -> inspect_value(value)
-      {value, calendar} -> [inspect_value(value), calendar]
+      {value, []} -> [inspect_value(value), zone, tags]
+      {value, calendar} -> [inspect_value(value), zone, calendar, tags]
     end
   end
+
+  # A suffix inside a set's braces does not parse, so the zone and tags a
+  # set's members share are written once, after the set, where they read back
+  # as each member's — in IXDTF's order, the zone before the calendar and the
+  # tags after it. A recurrence's domain is a set, whose zone is written after
+  # the recurrence. Members in different zones keep their own.
+  defp hoist_shared_zone(%Tempo.Set{} = set), do: hoist_zone(set)
+
+  defp hoist_shared_zone(%Tempo.Interval{from: %Tempo.Set{} = domain} = interval) do
+    {domain, zone, tags} = hoist_zone(domain)
+    {%{interval | from: domain}, zone, tags}
+  end
+
+  defp hoist_shared_zone(value), do: {value, [], []}
+
+  defp hoist_zone(set) do
+    case set |> named_values() |> Enum.map(&zone_of/1) |> Enum.uniq() do
+      [%{} = shared] ->
+        {map_named(set, &without_zone/1), [zone_id_trailer(shared), zone_offset_trailer(shared)],
+         tags_trailer(shared)}
+
+      _none_or_several ->
+        {set, [], []}
+    end
+  end
+
+  defp zone_of(%Tempo{extended: %{} = extended}) do
+    zone = Map.take(extended, [:zone_id, :zone_offset, :zone_critical, :tags])
+
+    if is_binary(zone[:zone_id]) or is_integer(zone[:zone_offset]) or
+         map_size(zone[:tags] || %{}) > 0,
+       do: zone
+  end
+
+  defp zone_of(_value), do: nil
+
+  defp without_zone(%Tempo{extended: %{} = extended} = tempo) do
+    unzoned =
+      Map.merge(extended, %{zone_id: nil, zone_offset: nil, zone_critical: false, tags: %{}})
+
+    %{tempo | extended: unzoned}
+  end
+
+  defp without_zone(tempo), do: tempo
 
   @doc """
   The calendar in a Tempo value that ISO 8601 cannot write: one with no IXDTF

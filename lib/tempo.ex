@@ -975,7 +975,11 @@ defmodule Tempo do
   end
 
   def attach_extended(%Tempo.Range{} = range, extended) do
-    %{range | first: attach_extended(range.first, extended)}
+    %{
+      range
+      | first: attach_extended(range.first, extended),
+        last: attach_extended(range.last, extended)
+    }
   end
 
   def attach_extended(%Tempo.Interval{} = interval, extended) do
@@ -989,6 +993,12 @@ defmodule Tempo do
         repeat_rule: rule_extended(interval, extended)
     }
   end
+
+  # A set's suffix is each member's that has none of its own, as an
+  # interval's is each endpoint's: `{2026-06-15T10:00,2026-06-16T10:00}[Europe/Paris]`
+  # is two times in Paris. Its calendar is already the members' calendar.
+  def attach_extended(%Tempo.Set{} = set, extended),
+    do: map_members(set, &attach_extended(&1, %{extended | calendar: nil}))
 
   def attach_extended(other, _extended), do: other
 

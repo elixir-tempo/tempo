@@ -6,8 +6,6 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ### Correctness
 
-* [ ] **A zone on a set or a recurrence's domain is dropped** — a set's suffix leaves its members floating and drops its tags (`{2026-06-15T10:00,2026-06-16T10:00}[Europe/Paris]`, `[foo=bar]`), where its `[u-ca=…]` is its members' calendar, and a domain recurrence's (`R/{2026-06-15,2026-06-16}/P1Y[Europe/Paris]`) vanishes. Carrying it needs the members' zone written once after the set, since a suffix inside the braces does not parse. A recurrence with no start keeps its zone since 2026-10-03. Found 2026-10-02.
-
 * [ ] **`to_calendar/2` drops a value's qualification, metadata and tags** — `Tempo.to_calendar(~o"2026-06-15?", Calendrical.Hebrew)` is unqualified and carries no metadata or tags, since the converted value is rebuilt from a `Date`; an interval's own metadata is kept. A date written for a calendar of weeks keeps all three, a qualified year, month or day qualifying the whole date. Found 2026-10-02.
 
 * [ ] **A fraction of a century or a decade is written back as the whole one** — `20.5C` is the hundred years from 2050 (`year: {:group, 2050..2149}`, the span `2050Y/2150Y`), and `to_iso8601/1` and `inspect/1` write it `21G100YU`, which reads back as 2000 to 2099. Decide whether a fraction of a century is a value at all. Found 2026-10-03.
@@ -113,6 +111,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A zone on a set or a recurrence's domain is dropped** — a set's zone and tags are each member's that has none (a range's at both ends), and a zone the members share is written once after the set, or after a domain's recurrence, in IXDTF's order. 2026-10-03.
 
 * [x] **A zone on a recurrence with no start is dropped** — the suffix of `R/../P1Y/FL3M20DN[+09:00]` is kept on its rule (its zone and tags; the calendar is the rule's already), written back after the recurrence in IXDTF's order, and given to the start a `:within` window supplies, so the occurrences are zoned. Sets and domains remain, as their own item. 2026-10-03.
 
