@@ -13,17 +13,17 @@ defmodule Tempo.ZonedConversionTest do
     test "a UTC offset converts to the instant as a UTC DateTime" do
       # iCalendar DATE-TIMEs commonly carry offsets rather than Z.
       assert Tempo.to_elixir(~o"2026-06-15T09:00:00+10:00") ==
-               {:ok, ~U[2026-06-14 23:00:00.000000Z]}
+               {:ok, ~U[2026-06-14 23:00:00Z]}
     end
 
     test "Z converts to the same instant" do
-      assert Tempo.to_elixir(~o"2026-06-15T09:00:00Z") == {:ok, ~U[2026-06-15 09:00:00.000000Z]}
+      assert Tempo.to_elixir(~o"2026-06-15T09:00:00Z") == {:ok, ~U[2026-06-15 09:00:00Z]}
     end
 
     test "a negative half-hour offset projects with the hour's sign on the minutes" do
       # −03:30 is −(3 h 30 m): 09:00 in Newfoundland is 12:30 UTC.
       assert Tempo.to_elixir(~o"2026-06-15T09:00:00-03:30") ==
-               {:ok, ~U[2026-06-15 12:30:00.000000Z]}
+               {:ok, ~U[2026-06-15 12:30:00Z]}
     end
 
     test "a zoned value keeps its zone instead of degrading to naive" do
@@ -34,7 +34,7 @@ defmodule Tempo.ZonedConversionTest do
     end
 
     test "a floating value still converts to NaiveDateTime" do
-      assert Tempo.to_elixir(~o"2026-06-15T09:00:00") == {:ok, ~N[2026-06-15 09:00:00.000000]}
+      assert Tempo.to_elixir(~o"2026-06-15T09:00:00") == {:ok, ~N[2026-06-15 09:00:00]}
     end
 
     test "to_datetime on a floating value names the problem" do
@@ -58,7 +58,7 @@ defmodule Tempo.ZonedConversionTest do
 
     test "an offset under an hour keeps its sign" do
       assert Tempo.to_elixir(~o"2026-06-15T09:00:00-00:30") ==
-               {:ok, ~U[2026-06-15 09:30:00.000000Z]}
+               {:ok, ~U[2026-06-15 09:30:00Z]}
 
       refute Tempo.equal?(~o"2026-06-15T09:00:00-00:30", ~o"2026-06-15T09:00:00+00:30")
     end

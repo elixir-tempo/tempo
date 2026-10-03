@@ -220,6 +220,10 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
       |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_day_of_week_p})),
       parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_year_p})
       |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_week_p})),
+      # A week and a day of it with no year (`W265`), as `26W5K` is, and as
+      # the end of an interval that started in the year (`2026W251/W265`).
+      parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_week_p})
+      |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_day_of_week_p})),
       parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_week_p})
     ])
   end
@@ -233,7 +237,10 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
       |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_day_of_week_p})),
       parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_year_p})
       |> ignore(dash())
-      |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_week_p}))
+      |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_week_p})),
+      parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_week_p})
+      |> ignore(dash())
+      |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_day_of_week_p}))
     ])
   end
 
@@ -262,7 +269,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
       |> concat(parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_minute_p})),
       parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_hour_p})
     ])
-    |> optional(fraction())
+    |> optional(time_fraction())
   end
 
   def extended_time_of_day do
@@ -279,7 +286,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
       parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_hour_p})
       |> lookahead_not(digit())
     ])
-    |> optional(fraction())
+    |> optional(time_fraction())
   end
 
   def explicit_time_of_day do
@@ -822,7 +829,8 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   #
   #   * `Z`                 — UTC
   #   * `Z0H`, `Z0H0M`      — UTC with explicit-designator components
-  #   * `Z+1H`, `Z-05H30M`  — UTC with signed explicit components
+  #   * `Z1H`, `Z-05H30M`, and `Z+1H` — UTC with explicit components, signed
+  #     behind UTC (ISO 8601-2 §7.4) and, leniently, ahead of it
   def explicit_time_shift do
     zulu()
     |> optional(
@@ -1016,11 +1024,72 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   defp negate_leading([{component, value} | rest]), do: [{component, -value} | rest]
   defp negate_leading([]), do: []
 
-  def adjust_interval(date: [year: year, month: month], date: [century: century]) do
-    [date: [year: year, month: month], date: [month: century]]
+  # ISO 8601-1:2019 §5.5.1: "higher order time scale components may be
+  # omitted from the 'end of time interval' … the omitted higher order
+  # components from the 'start of time interval' expression apply." An end
+  # that is one bare number (`Tempo.Iso8601.Tokenizer.Date`'s
+  # `:bare_number_endpoint`) is the start's last component when it has as
+  # many digits as that component is written with: `2026-06-15/20` ends on
+  # the 20th, `2026-06-15T10:30/45` at 10:45, `2026-166/170` on the year's
+  # 170th day and `2026-W25-1/5` on the week's fifth. After a start with no
+  # such component it is what the number is alone, two digits a century and
+  # three a decade, and one digit is nothing.
+  @endpoint_tags [:date, :datetime, :time_of_day]
+  @endpoint_units [
+    :year,
+    :month,
+    :week,
+    :day,
+    :day_of_year,
+    :day_of_week,
+    :hour,
+    :minute,
+    :second
+  ]
+  @bare_numbers [:one_digit, :two_digits, :three_digits]
+  @two_digit_units [:month, :week, :day, :hour, :minute, :second]
+  @time_units [:hour, :minute, :second]
+
+  def adjust_interval(rest, tokens, context, _line, _offset) do
+    case abbreviated_end(Enum.reverse(tokens)) do
+      {:error, reason} -> {:error, reason}
+      tokens -> {rest, [tokens], context}
+    end
   end
 
-  def adjust_interval(other) do
-    other
+  defp abbreviated_end([{tag, start} = from, {:date, [{digits, number} | rest]} | tail])
+       when tag in @endpoint_tags and is_list(start) and digits in @bare_numbers do
+    case abbreviated(digits, number, finest_unit(start)) do
+      {:error, reason} -> {:error, reason}
+      {unit, number} -> [from, {abbreviated_tag(unit), [{unit, number} | rest]} | tail]
+    end
   end
+
+  defp abbreviated_end([token | tail]) do
+    case abbreviated_end(tail) do
+      {:error, reason} -> {:error, reason}
+      tail -> [token | tail]
+    end
+  end
+
+  defp abbreviated_end([]), do: []
+
+  defp finest_unit(start) do
+    Enum.reduce(start, nil, fn
+      {unit, _value}, _finest when unit in @endpoint_units -> unit
+      _other, finest -> finest
+    end)
+  end
+
+  defp abbreviated(:two_digits, number, unit) when unit in @two_digit_units, do: {unit, number}
+  defp abbreviated(:two_digits, number, _unit), do: {:century, number}
+  defp abbreviated(:three_digits, number, :day_of_year), do: {:day_of_year, number}
+  defp abbreviated(:three_digits, number, _unit), do: {:decade, number}
+  defp abbreviated(:one_digit, number, :day_of_week), do: {:day_of_week, number}
+
+  defp abbreviated(:one_digit, _number, _unit),
+    do: {:error, "one digit ends an interval only after a day of the week"}
+
+  defp abbreviated_tag(unit) when unit in @time_units, do: :time_of_day
+  defp abbreviated_tag(_unit), do: :date
 end

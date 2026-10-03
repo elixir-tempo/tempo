@@ -1,6 +1,8 @@
 defmodule Tempo.IntervalExpansion.Test do
   use ExUnit.Case, async: true
 
+  import Tempo.Sigils
+
   alias Tempo.IntervalSet
 
   # Tests for the two expansion paths added alongside
@@ -99,12 +101,19 @@ defmodule Tempo.IntervalExpansion.Test do
       assert span.to.time == [year: 1987, month: 1]
     end
 
-    test "a start its cadence cannot step is an error, not a raise" do
-      # A quarter is a group of months, and a month cannot be added to a group.
+    # A quarter is a group of months, which a month could not be added to,
+    # so the recurrence was refused. It is counted from the point the quarter
+    # starts at, as an interval that starts with a quarter is.
+    test "a start that names a span is counted from the point the span starts at" do
       {:ok, quarters} = Tempo.from_iso8601("R3/2026-33/P3M")
+      {:ok, set} = Tempo.to_interval(quarters)
 
-      assert {:error, %Tempo.ConversionError{reason: :grouped_component}} =
-               Tempo.to_interval(quarters)
+      # `2026-33` is the first quarter of 2026.
+      assert set |> IntervalSet.members() |> Enum.map(&{&1.from, &1.to}) == [
+               {~o"2026Y1M", ~o"2026Y4M"},
+               {~o"2026Y4M", ~o"2026Y7M"},
+               {~o"2026Y7M", ~o"2026Y10M"}
+             ]
     end
   end
 

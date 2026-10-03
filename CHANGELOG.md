@@ -115,7 +115,49 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * A network measures a year or a month in a network of days by its actual length from where its period can start, in the period's calendar, and gives its results in the network's calendar, where it used a mean Gregorian year and month: a year from 1 January 2024 is 366 days, and one from 1 Tishri 5784 is 383. `Tempo.Network.Normalize.normalize/1` returns `{:ok, normalized}` or an error, where it returned the map and raised.
 
+* An interval is walked by the finer of its two ends' units, so the values it yields are the interval and none runs past its end: `~o"2026/2026-03"` is January and February, where it was 2026 alone.
+
+* A value with no zone and one with a zone are refused by the set operations and by `Tempo.compare/3` as a sorter, with a `Tempo.FloatingTempoError`, where the floating one was read as UTC; `Tempo.ICal.available/2` reads a window with no zone in UTC. `Tempo.relation/2` and the certainty functions return the error where they raised it.
+
+* Two values with no line to share (one with a year and one without, or two with none that lead with different units) have no order: `Tempo.compare/3` raises a `Tempo.UnanchoredError`, and `relation/2`, `Interval.new/1`, `IntervalSet.new/2`, `select/2` and the set operations return it. A value that is not one point (a mask, a set, a group) is compared as the point its span starts at, where `Tempo.compare(~o"202XY", ~o"2026-06-15")` was `:gt`.
+
+* An interval's end written as one bare number is the start's last unit (ISO 8601-1 §5.5.1): `2026-06-15/20` ends on the 20th and `2026-06-15T10:30/45` at 10:45, where the number was read as century 20 and the interval ran backwards. A century is written `20C`.
+
+* `Tempo.round/2` rounds to the nearer of the unit's start and the next unit's, by where the value starts in the unit, and half way rounds up: `T10:30` is eleven o'clock, `2026-06-16` rounds to 2026 and `2026-01-16` to January. A date and time rounds to any coarser unit, where it was an error.
+
+* A span with no year that ends where it starts is once round its cycle: `~o"T0H/T0H"` is the whole day and `~o"T10H/T10H"` the 24 hours from ten, where each was empty. `Tempo.IntervalSet.coalesce/1` writes a set that covers the day so, where it wrote an hour 24 that is not read back.
+
+* A `:within` window with no zone bounds a value in a zone in that zone: 1 to 3 June, for a recurrence in New York, is those days in New York, where the window was read as UTC.
+
+* `Tempo.new/1` returns the value the same components are read as: a week and a day of it are the calendar date they name (`Tempo.new(year: 2026, week: 25, day_of_week: 3)` is `~o"2026-06-17"`), where it kept a week date the parser never gives. A date with a `:zone` and no time of day is that day in the zone, where it was refused.
+
+* `Tempo.shift_zone/2` keeps the span a value names: an hour in Paris is the hour in New York, and a day in Paris is the interval from 18:00 to 18:00 there, where each was the one second it starts at. A fraction of a second is kept, where it was dropped.
+
+* `Tempo.to_time/1`, `to_naive_datetime/1`, `to_datetime/1` and `to_elixir/1` give a whole second a precision of zero (`~T[14:30:00]`), as Elixir reads the same text, and a fraction its digits, so `from_elixir/1` gives the value back. They gave six digits, and `to_time/1` refused a fraction.
+
+* `Tempo.shift/3` applies a duration's years and months, brings the day into the month they land in, and then counts its days, as `Date.shift/2` does: 29 July less five months and a day is 27 February, where it was the 28th. A fraction of a second added to a whole one is written to the fraction's digits, where it was six.
+
+* A recurrence's occurrences are consecutive, as ISO 8601-1 §3.1.1.11 defines one: a month from 31 January is 28 February and the next occurrence runs from there to 31 March, where it ended on 28 March, three days before the third began.
+
+* A duration is counted from a point: a start or an end that names one span (a mask, a group, a quarter) is the point the span starts at before a duration is counted from it. `R3/2026-33/P3M` is three quarters and `202XY/P1Y` the year 2020, where each was a `Tempo.ConversionError`.
+
+* An explicit time shift ahead of UTC is written with no sign, as ISO 8601-2 §7.4 writes it: `Z2H0M`, where it was `Z+2H0M`, which is still read.
+
+* `Tempo.split/1` keeps the value's zone, qualification and metadata on both parts, and `Tempo.at/2` gives its result the zone either value has, so the two parts placed are the value. Both dropped the zone, and two values in two zones are a `Tempo.ZonedTempoError`.
+
+* A unit after a group counts from the group's start in every operation (ISO 8601-2 §5.4.2), and where it cannot be counted (a group of months with no year, a set or a mask of days) the walk and `Tempo.to_interval/2` return a `Tempo.ConversionError` with reason `:counted_in_group`. The walk yielded the unit in each of the group's values.
+
+* A time of day under a date with its month or its day left out is that time on the first day of what is written, and the value holds the units: `2026T17` is `~o"2026Y1M1DT17H"`, `Tempo.at(~o"2026-06", ~o"T17")` is 17:00 on 1 June, and under a group it is the group's first day (`2026Y2G3MUT10H` is 10:00 on 1 April). The value held the gap, so it compared as equal to any day of its year and lost a day added to it, and under a group of months it was that time in each month.
+
+* `1950S0` is a `Tempo.ParseError`, since the count of significant digits is a positive integer (ISO 8601-2 §4.4.3). Its walk yielded the year 1950 and its conversion was an error.
+
 ### Added
+
+* [What each operation gives each value](guides/operation-matrix.md) is a table of every class of value against every kind of operation, generated from the code and checked by the test suite, so the named errors in it are the list of what is not yet built.
+
+* `Tempo.new/1` takes `:microsecond`, a fraction of a second as Elixir's types hold one (`{500_000, 1}` is `.5`), and so takes the map of a `Time` or a `NaiveDateTime` as it takes a `Date`'s.
+
+* An interval's end may leave out the units it shares with its start in three more forms: a day and a time (`2007-11-13T09:00/15T17:00`), a week and its day (`2026-W25-1/W26-5`) and a day of the week (`2026-W25-1/5`). `W26-5` is read alone too, as `26W5K` is.
 
 * `Tempo.to_string/2` renders a `Tempo.Set` and a `Tempo.RecurrenceSet`, which interpolate too, and takes `:within`, the window for a value with no end of its own: `Tempo.to_string(~o"R/2026-06-15/P1W", within: ~o"2026-06")` is that June's weeks.
 
@@ -173,6 +215,10 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Changed
 
+* The certainty functions relate two values of many candidates along their runs and not pair by pair: `Tempo.overlap_certainty/2` of two masked values of 1,440 candidates each takes 70 milliseconds where it took 27 seconds.
+
+* An ISO week of a Gregorian year is found in one step of Calendrical's arithmetic, where every week of the year was listed to find it, so each operation on a week or a week date took several times as long.
+
 * Enumeration reads a value once and then each of its values as it is asked for: `Enum.to_list(~o"2026-06-15T10")` takes 18 µs where it took 290, and `Enum.take/2` of a large set (`{2000..2100}Y{1..-1}M{1..-1}DT{0..-1}H`) takes 50 µs where it built every member first and took a second.
 
 * `Tempo.to_string/2` joins several spans as a list in the locale ("Jun 15, 2026 and Jul 4, 2026"), and a one-of set's members as alternatives ("2026 or 2027"), where it joined them with commas.
@@ -205,6 +251,44 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.to_string/2` shows an interval from its first value to its last in the finer of its ends' units, and a week beside a date as the days between them: `~o"2026/2026-03"` is "Jan – Feb 2026" and `~o"2026-W25/2026-07-01"` is "Jun 15 – 30, 2026", where each was "2026 – 2025". A year written to significant digits is shown as the block it names (`1950S2` is "1900 – 1999"), as a mask is, where it returned Localize's error.
+
+* `Tempo.to_relative_string/2` counts to where an interval written as a duration and an end starts (`P1M/2026-07-01`), and to the first occurrence of a counted recurrence written so, where each was an error.
+
+* A year of a calendar of weeks is shifted by weeks and days and has a length in them (`Tempo.exactly?(year, ~o"P53W")`), where each was a `Tempo.ResolutionError`. `:day` truncates, rounds and extends a week date to its day of the week, in a calendar of weeks and for a Gregorian week.
+
+* `Tempo.duration/1` measures a set written as its members (`{2026Y,2030Y}`) as it measures the same set written in one value, where it returned an `ArgumentError`.
+
+* A year whose every digit is significant (`1950S4`) converts to the year it is, as its walk yields it, where `Tempo.to_interval/1` returned an error.
+
+* A fraction of a second before a time shift behind UTC (`2026-06-15T10:30:45.5-03:30`) is read, where it was a parse error.
+
+* A duration of a year and twenty-one or more months (`P1Y21M`) is that many months, where they were read as the season a date's month 21 is.
+
+* `Tempo.shift/3` returns an error for a unit a duration has none of (`fortnight: 1`, `quarter: 1`) and for a count that is not a number, where the first left the value as it was and the second raised.
+
+* An explicit time shift with seconds (`Z7H33M14S`, ISO 8601-2 §7.4's own example) is written back, where `inspect/1` failed.
+
+* An interval whose ends are on two axes, in two zones or in two calendars is walked and counted as the moments its ends are, and `Tempo.Interval.new/2` keeps each end in its own calendar, where the start was named as a day of the end's.
+
+* `Tempo.difference/2` cuts each member of its first operand by every member of the second that overlaps it, where a member that ended inside one was dropped before the next: two bookings that overlap each lost only one.
+
+* A year and an ISO week compare as the moments they start at, so `2027` and `2027-W01`, which starts on 4 January, are not one moment, and `Tempo.relation(~o"2026", ~o"2026-W53")` is `:overlaps`.
+
+* Significant digits with a unit after them (`1950S2Y6M`) convert to that unit in each year of the block, as their walk yields, and every week of a year (`2026YXXW`) to the span from its first week to its last. Each converted to the whole block or year.
+
+* A wall time a clock shows twice (`2026-10-25T02:30[Europe/Paris]`) is walked as the occurrence the value names, where each of its seconds was yielded twice.
+
+* A span with no year that runs to its cycle's end (`~o"T23H"`, `~o"12M31D"`, `~o"7K"`) is read so by every operation, through `Tempo.Interval.Cycle`: its end was read as before its start, so `Tempo.empty?/1` was true of the last hour of the day and `coalesce/1` lost it.
+
+* A value that holds two groups (`2G10DU2GT6HU30M`) resolves both, where it kept the first as a group and its own text read back as another value. A group of a set followed by a mask returns a `Tempo.ConversionError`, where every operation raised.
+
+* A value with a margin of error converts as its walk yields it beside a group or a count from the end (`2026±2Y2G3MU`, `2026±2Y-1M15D`), where the margin stayed on the ends or the count was left uncounted.
+
+* An interval whose ends have no line to share (`2020Y/X*Y6M15D`) is a `Tempo.UnanchoredError` from `Tempo.to_interval/2`, its walk and the certainty functions, where it converted to itself, was walked without end and raised.
+
+* `Tempo.trunc/2` of a week to a month is a `Tempo.ResolutionError`, where it was the year, and `Tempo.bounded?/1` is true of a recurrence of a count.
+
 * `Tempo.to_interval/2` of a partly masked day of the year is the span of the dates it names: `~o"2026Y3XD"` and `~o"2026Y3XO"` are 30 January to 8 February 2026. A day written straight after its year returned a `Tempo.UnanchoredError`, and one written `O` gave bounds that measured as no time (`2026Y30O/40O`).
 
 * `Enum.count/1` of an interval with no end (`~o"2026Y/.."`) raises a `Tempo.IntervalEndpointsError`, where it walked for ever. `Enum.member?/2` of one is answered without the whole walk where its start has a year (`~o"2020Y" in ~o"2026Y/.."` is false, where it never returned), and raises the same error where it has none.
@@ -219,7 +303,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * A value's selection with a time after it enumerates as the span it selects (`Enum.to_list(~o"2026Y4ML1K1INT10H")` is the one hour), as a selected day and a recurrence's occurrences do, where it was walked by its sixty minutes.
 
-* A month alone with a time after it (`6MT10H`) parses, as a year and a month with one does, so a group of months walks to values that read back, and a month counted from the end with a time after it is its year's month (`2026Y-1MT10H` is `2026Y12MT10H`).
+* A month alone with a time after it (`6MT10H`) parses, as a year and a month with one does, and a month counted from the end with a time after it is its year's month (`2026Y-1MT10H` is 10:00 on 1 December).
 
 * A qualified set is written with its qualification once after the set (`{2026Y6M15D,2026Y6M16D}?`), where it was written on each member inside the braces, which does not parse, and a range member is qualified at both ends, where it lost the qualification.
 
@@ -231,7 +315,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * A unit after a group under a set, a range or a mask of years counts from the group's start, as it does under one year: `{2026,2028}Y2G2MU15D` is 15 March of each year, where it was the 15th of each month of the group.
 
-* An unspecified year (`X*Y`) walks as the current year in the value's own calendar, read from `Tempo.Clock`: `X*Y[u-ca=hebrew]` is the Hebrew year that holds today, where it was the Gregorian year's number in every calendar.
+* An unspecified year (`X*Y`) is no year in particular in every operation, as ISO 8601-2 §4.6.2 reads it: `Tempo.anchored?(~o"X*Y6M")` is `false`, its walk is the days of a June of no year, and `Tempo.at/2` places it on a year. The walk read it as the current year, and comparisons and set operations as a year later than every other.
 
 * A month or a year added to a day of the week that names no week (`7K`) is a `Tempo.UnanchoredError`, since the day of the week it falls on depends on the date, where it was that day again; weeks, days and the time of day still step it.
 

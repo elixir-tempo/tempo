@@ -261,10 +261,15 @@ defmodule Tempo.WeekCalendarTest do
       assert {Tempo.day_of_week(tuesday), Tempo.day_of_year(tuesday)} == {2, 170}
       assert Tempo.round(tuesday, :week) == ~o"2026-W25"W
       assert Tempo.round(~o"2026-W25-5"W, :week) == ~o"2026-W26"W
-      assert Tempo.split(datetime) == {tuesday, ~o"T10:30:00"W}
+      # Each part keeps what the value carries, its calendar annotation too.
+      assert Tempo.split(datetime) ==
+               {Tempo.from_iso8601!("2026-W25-2[u-ca=iso-week]"),
+                Tempo.from_iso8601!("T10:30:00[u-ca=iso-week]")}
+
+      assert Tempo.split(~o"2026-W25-2T10:30:00"W) == {tuesday, ~o"T10:30:00"W}
 
       assert Tempo.to_naive_datetime(datetime) ==
-               NaiveDateTime.new(2026, 25, 2, 10, 30, 0, 0, ISOWeek)
+               NaiveDateTime.new(2026, 25, 2, 10, 30, 0, {0, 0}, ISOWeek)
     end
   end
 
@@ -313,15 +318,30 @@ defmodule Tempo.WeekCalendarTest do
     end
   end
 
+  # The user's decision of 2026-10-03: in the Gregorian calendar a week and
+  # a day of it are the calendar date they name, built or read.
   describe "a Gregorian ISO week date" do
-    test "has its day of the week, splits and rounds" do
+    test "is the calendar date it names, with its day of the week" do
       tuesday = Tempo.new!(year: 2026, week: 25, day_of_week: 2)
 
+      assert tuesday == ~o"2026-06-16"
+      assert tuesday == ~o"2026-W25-2"
       assert Tempo.day_of_week(tuesday) == 2
-      assert Tempo.round(tuesday, :week) == Tempo.new!(year: 2026, week: 25)
+    end
+
+    test "splits and rounds as the date it is" do
+      tuesday = Tempo.new!(year: 2026, week: 25, day_of_week: 2)
+
+      # A date rounds to the day its week begins on.
+      assert Tempo.round(tuesday, :week) == ~o"2026-06-15"
 
       assert Tempo.split(Tempo.new!(year: 2026, week: 25, day_of_week: 2, hour: 10)) ==
                {tuesday, ~o"T10"}
+    end
+
+    test "a week alone is a week, and rounds in its year" do
+      assert Tempo.new!(year: 2026, week: 25) == ~o"2026-W25"
+      assert Tempo.round(~o"2026-W25", :year) == ~o"2026Y"
     end
   end
 

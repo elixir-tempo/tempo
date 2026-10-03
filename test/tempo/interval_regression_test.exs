@@ -169,8 +169,15 @@ defmodule Tempo.IntervalRegressionTest do
       assert inspect(block) == ~S|~o"1950Y/1960Y"|
     end
 
-    test "non-terminal significant digits widen to the block without crashing" do
-      assert Tempo.to_interval(~o"1950S2-06") == Tempo.to_interval(~o"19XX")
+    # A unit after significant digits is that unit of each year of the block,
+    # as the walk yields it and as the mask's is. It was the block as a whole.
+    test "significant digits with a unit after them are that unit in each year of the block" do
+      assert {:ok, junes} = Tempo.to_interval(~o"1950S2-06")
+      assert {:ok, masked} = Tempo.to_interval(~o"19XX-06")
+
+      assert IntervalSet.count(junes) == 100
+      assert Tempo.equal?(junes, masked)
+      assert Enum.count(~o"1950S2-06") == 100 * 30
     end
 
     test "relation matches the equivalent mask" do

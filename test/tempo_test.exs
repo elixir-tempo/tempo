@@ -77,7 +77,7 @@ defmodule TempoTest do
   end
 
   test "to_time/1" do
-    assert Tempo.to_time(~o"01:02:03") == {:ok, ~T[01:02:03.000000]}
+    assert Tempo.to_time(~o"01:02:03") == {:ok, ~T[01:02:03]}
 
     assert {:error, %Tempo.ConversionError{target: Time}} =
              Tempo.to_time(~o"2022-11-19T01:02:03")
@@ -87,7 +87,7 @@ defmodule TempoTest do
 
   test "to_naive_datetime/1" do
     assert Tempo.to_naive_datetime(~o"2022-11-19T01:02:03") ==
-             {:ok, ~N[2022-11-19 01:02:03.000000]}
+             {:ok, ~N[2022-11-19 01:02:03]}
 
     assert {:error, %Tempo.ConversionError{target: NaiveDateTime}} =
              Tempo.to_naive_datetime(~o"2022-11")
@@ -100,12 +100,12 @@ defmodule TempoTest do
     # A zoned value projects to its wall-clock components with the
     # offset dropped — the numbers do not shift to UTC.
     assert Tempo.to_naive_datetime(~o"2022-11-19T01:02:03Z[Etc/UTC]") ==
-             {:ok, ~N[2022-11-19 01:02:03.000000]}
+             {:ok, ~N[2022-11-19 01:02:03]}
   end
 
   test "to_datetime/1 preserves the named zone (lossless inverse)" do
     assert Tempo.to_datetime(~o"2022-11-19T01:02:03Z[Etc/UTC]") ==
-             {:ok, ~U[2022-11-19 01:02:03.000000Z]}
+             {:ok, ~U[2022-11-19 01:02:03Z]}
 
     # A value with no named zone cannot name a DateTime zone.
     assert {:error, %Tempo.ConversionError{target: DateTime}} =

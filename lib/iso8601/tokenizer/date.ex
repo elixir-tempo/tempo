@@ -33,6 +33,58 @@ defmodule Tempo.Iso8601.Tokenizer.Date do
                 |> reduce(:merge_endpoint_qualification),
                 export_combinator: true
 
+  # The end of an interval written as a day and a time of day, the year and
+  # the month left out: `2007-11-13T09:00/15T17:00` ends on the 15th at
+  # 17:00 (ISO 8601-1:2019 §5.5.1). No value is written so on its own, where
+  # two digits are a century, so this is an end's form only, and the
+  # interval parser tries it where two digits and a `T` follow the solidus.
+  defcombinator :day_and_time_endpoint,
+                optional(qualification())
+                |> concat(
+                  integer(2)
+                  |> unwrap_and_tag(:day)
+                  |> lookahead(string("T"))
+                  |> choice([
+                    parsec({Tempo.Iso8601.Tokenizer.Time, :extended_time_of_day_p})
+                    |> optional(parsec({Tempo.Iso8601.Tokenizer.Time, :extended_time_shift_p})),
+                    parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_time_of_day_p})
+                    |> optional(parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_time_shift_p}))
+                  ])
+                  |> tag(:datetime)
+                )
+                |> optional(qualification())
+                |> optional(Extended.extended_suffix())
+                |> reduce(:merge_endpoint_qualification),
+                export_combinator: true
+
+  # The end of an interval written as one bare number of one, two or three
+  # digits, with nothing after it that makes it more: `2026-06-15/20`,
+  # `2026-166/170`, `2026-W25-1/5`. What the number is depends on the start
+  # (`Tempo.Iso8601.Tokenizer.Grammar.adjust_interval/5`), so it is tagged
+  # with the digits it was written with. A decimal sign and a digit after
+  # it make it a number with a fraction, which this is not.
+  defcombinator :bare_number_endpoint,
+                optional(qualification())
+                |> concat(
+                  choice([
+                    integer(3) |> unwrap_and_tag(:three_digits),
+                    integer(2) |> unwrap_and_tag(:two_digits),
+                    integer(1) |> unwrap_and_tag(:one_digit)
+                  ])
+                  |> lookahead(
+                    choice([
+                      eos(),
+                      ascii_char([?[, ?/, ?}, ?], ??, ?~, ?%]),
+                      ascii_char([?,]) |> lookahead_not(digit())
+                    ])
+                  )
+                  |> tag(:date)
+                )
+                |> optional(qualification())
+                |> optional(Extended.extended_suffix())
+                |> reduce(:merge_endpoint_qualification),
+                export_combinator: true
+
   # The explicit date — the form selections and §12.10 windows take — is parsed
   # once and then classified by what follows it: an explicit time of day makes
   # it a datetime; otherwise it is a date, with the date path's fraction folding

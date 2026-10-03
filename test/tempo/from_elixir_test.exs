@@ -136,7 +136,7 @@ defmodule Tempo.FromElixir.Test do
       assert tempo.extended.zone_id == "Europe/Paris"
       # June is summer time (CEST = UTC+2).
       assert tempo.shift == [hour: 2]
-      assert Tempo.to_iso8601!(tempo) == "2022Y6M15DT10H30M0SZ+2H[Europe/Paris]"
+      assert Tempo.to_iso8601!(tempo) == "2022Y6M15DT10H30M0SZ2H[Europe/Paris]"
     end
 
     test "negative offset (America/New_York winter)" do
@@ -224,7 +224,7 @@ defmodule Tempo.FromElixir.Test do
       # Paris is UTC+2 in June; the wall reading is 10:30, not 08:30.
       paris = DateTime.new!(~D[2022-06-15], ~T[10:30:00], "Europe/Paris")
       tempo = Tempo.from_elixir(paris)
-      assert {:ok, ~N[2022-06-15 10:30:00.000000]} = Tempo.to_naive_datetime(tempo)
+      assert {:ok, ~N[2022-06-15 10:30:00]} = Tempo.to_naive_datetime(tempo)
     end
 
     test "zoned DateTime → to_datetime preserves the zone and instant" do

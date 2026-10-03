@@ -252,14 +252,25 @@ defmodule Tempo.SubSecondTest do
       assert Tempo.to_iso8601!(result) == "2026Y6M15DT10H30M45.900S"
     end
 
-    test "adding a sub-second duration to a second-resolution value introduces sub-second" do
+    # The result was written to six digits, a precision neither value has.
+    test "adding a sub-second duration to a second-resolution value keeps the duration's digits" do
       result =
         Math.add(
           Tempo.from_iso8601!("2026-06-15T10:30:45"),
           Tempo.from_iso8601!("PT0.5S")
         )
 
-      assert Tempo.to_iso8601!(result) == "2026Y6M15DT10H30M45.500000S"
+      assert Tempo.to_iso8601!(result) == "2026Y6M15DT10H30M45.5S"
+    end
+
+    test "a fraction added to a fraction is written to the finer of the two" do
+      result =
+        Math.add(
+          Tempo.from_iso8601!("2026-06-15T10:30:45.25"),
+          Tempo.from_iso8601!("PT0.5S")
+        )
+
+      assert Tempo.to_iso8601!(result) == "2026Y6M15DT10H30M45.75S"
     end
   end
 

@@ -57,14 +57,16 @@ defmodule Tempo.FloatingTest do
     end
   end
 
-  describe "comparing a floating value with a zoned one raises" do
+  describe "comparing a floating value with a zoned one is refused" do
     setup do
       %{floating: ~o"2024-01-01", zoned: ~o"2024-01-01[Australia/Sydney]"}
     end
 
-    test "relation/2 raises", %{floating: f, zoned: g} do
-      assert_raise Tempo.FloatingTempoError, fn -> Tempo.relation(f, g) end
-      assert_raise Tempo.FloatingTempoError, fn -> Tempo.relation(g, f) end
+    # A function with an error to return returns it: relation/2 raised this
+    # one and returned every other.
+    test "relation/2 returns the error", %{floating: f, zoned: g} do
+      assert {:error, %Tempo.FloatingTempoError{operation: :compare}} = Tempo.relation(f, g)
+      assert {:error, %Tempo.FloatingTempoError{operation: :compare}} = Tempo.relation(g, f)
     end
 
     test "the relation predicates raise", %{floating: f, zoned: g} do
@@ -81,9 +83,13 @@ defmodule Tempo.FloatingTest do
       assert_raise Tempo.FloatingTempoError, fn -> Tempo.within?(f, g) end
     end
 
-    test "the certainty API raises", %{floating: f, zoned: g} do
-      assert_raise Tempo.FloatingTempoError, fn -> Tempo.overlap_certainty(f, g) end
-      assert_raise Tempo.FloatingTempoError, fn -> Tempo.within_certainty(f, g) end
+    test "the certainty functions return the error", %{floating: f, zoned: g} do
+      assert {:error, %Tempo.FloatingTempoError{}} = Tempo.overlap_certainty(f, g)
+      assert {:error, %Tempo.FloatingTempoError{}} = Tempo.within_certainty(f, g)
+      assert {:error, %Tempo.FloatingTempoError{}} = Tempo.relation_certainty(f, g, :precedes)
+    end
+
+    test "the certainty predicates raise", %{floating: f, zoned: g} do
       assert_raise Tempo.FloatingTempoError, fn -> Tempo.certainly_overlaps?(f, g) end
       assert_raise Tempo.FloatingTempoError, fn -> Tempo.possibly_overlaps?(f, g) end
     end

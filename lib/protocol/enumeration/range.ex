@@ -20,10 +20,14 @@ defimpl Enumerable, for: Tempo.Interval do
   # The step unit is the interval's explicit `:unit` when set (a
   # materialised implicit span carries its iteration granularity as
   # data — `to_interval(~o"2025-07-04")` has day-resolution bounds and
-  # `unit: :hour`), otherwise it derives from `resolution(from)`. When
-  # `:unit` is finer than the endpoint resolution the walk fills the
-  # endpoint down to the unit once at the start (`Steps.fill_to_unit/3`)
-  # instead of the bounds carrying drilled components.
+  # `unit: :hour`). Otherwise it is the highest resolution the interval's
+  # boundaries are written to: the finer of its two ends', so that the
+  # values a walk yields are the interval and none runs past its end
+  # (`2026/2026-03` is January and February, and `1985/1986-06` the
+  # seventeen months from January 1985 to May 1986). When the unit is finer
+  # than the start's resolution the walk fills the start down to it once
+  # (`Steps.fill_to_unit/3`) instead of the bounds carrying drilled
+  # components.
   #
   # Open-lower and fully-open intervals have no start to iterate
   # from, so `reduce/3` raises a clear `ArgumentError`.
@@ -41,18 +45,9 @@ defimpl Enumerable, for: Tempo.Interval do
     {:error, __MODULE__}
   end
 
-  def count(
-        %Tempo.Interval{from: %Tempo{calendar: calendar} = from, to: %Tempo{} = to} = interval
-      ) do
-    unit = iteration_unit(interval, from)
-    # Fill both bounds: the closed-form step counters read unit
-    # components from each side, and start-of-unit filling names the
-    # same boundary instant under the half-open convention.
-    from = Steps.fill_to_unit(from, unit, calendar)
-    to = Steps.fill_to_unit(to, unit, calendar)
-
-    case Steps.count_steps(from, to, unit, calendar) do
-      n when is_integer(n) -> {:ok, max(n, 0)}
+  def count(%Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to} = interval) do
+    case stepped_count(interval, from, to) do
+      {n, _from, _unit} when is_integer(n) -> {:ok, max(n, 0)}
       :not_supported -> {:error, __MODULE__}
     end
   end
@@ -79,8 +74,9 @@ defimpl Enumerable, for: Tempo.Interval do
     from = Steps.fill_to_unit(from, unit, calendar)
 
     # An end or an element with no year, or one that holds a set or a mask,
-    # has no place on the time line to compare by, so the walk answers.
-    if dated?(from) and dated?(to) and dated?(element),
+    # has no place on the time line to compare by, so the walk answers. So it
+    # does for ends that are not in the order of their units.
+    if dated?(from) and dated?(to) and dated?(element) and Tempo.Compare.structural?(from, to),
       do: stepped_member?(element, from, to, unit, calendar),
       else: {:error, __MODULE__}
   end
@@ -169,26 +165,40 @@ defimpl Enumerable, for: Tempo.Interval do
   def slice(
         %Tempo.Interval{from: %Tempo{calendar: calendar} = from, to: %Tempo{} = to} = interval
       ) do
-    unit = iteration_unit(interval, from)
-    from = Steps.fill_to_unit(from, unit, calendar)
-    to = Steps.fill_to_unit(to, unit, calendar)
-
-    case Steps.count_steps(from, to, unit, calendar) do
-      n when is_integer(n) and n >= 0 ->
-        {:ok, n, slicer(from, unit, calendar)}
-
-      _ ->
-        {:error, __MODULE__}
+    case stepped_count(interval, from, to) do
+      {n, from, unit} when is_integer(n) and n >= 0 -> {:ok, n, slicer(from, unit, calendar)}
+      _not_counted -> {:error, __MODULE__}
     end
   end
 
   def slice(_interval), do: {:error, __MODULE__}
 
-  # The explicit iteration unit when the interval carries one,
-  # otherwise the endpoint's own resolution.
-  defp iteration_unit(%Tempo.Interval{unit: unit}, from) do
-    unit || from |> Tempo.resolution() |> elem(0)
+  # The steps in `[from, to)` in closed form, with the start filled to the
+  # unit they are counted in. Ends that are not in the order of their units
+  # (a week and a date, two zones, two calendars) are counted by the walk.
+  defp stepped_count(interval, %Tempo{calendar: calendar} = from, %Tempo{} = to) do
+    unit = iteration_unit(interval, from)
+
+    if Tempo.Compare.structural?(from, to) do
+      # Fill both bounds: the closed-form step counters read unit
+      # components from each side, and start-of-unit filling names the
+      # same boundary instant under the half-open convention.
+      from = Steps.fill_to_unit(from, unit, calendar)
+      to = Steps.fill_to_unit(to, unit, calendar)
+
+      case Steps.count_steps(from, to, unit, calendar) do
+        n when is_integer(n) -> {n, from, unit}
+        :not_supported -> :not_supported
+      end
+    else
+      :not_supported
+    end
   end
+
+  # The unit the interval is walked by from `from`, which is its start or
+  # the start a duration was counted to (`Tempo.Interval.granularity/1`).
+  defp iteration_unit(%Tempo.Interval{} = interval, %Tempo{} = from),
+    do: Tempo.Interval.granularity(%{interval | from: from})
 
   defp slicer(from, unit, calendar) do
     fn start, length, step ->
@@ -268,8 +278,8 @@ defimpl Enumerable, for: Tempo.Interval do
        ) do
     # `P1M/1985-06` — duration + to. Compute the lower bound via
     # `Tempo.Math.subtract/2` and iterate as a closed interval.
-    start = to |> Math.subtract(duration) |> derived!(to) |> fill_from(interval)
-    walk(interval, start, to, acc, fun)
+    start = to |> Math.subtract(duration) |> derived!(to)
+    walk(interval, fill_from(start, to, interval), to, acc, fun)
   end
 
   defp reduce_span(
@@ -286,14 +296,14 @@ defimpl Enumerable, for: Tempo.Interval do
     # a closed interval. This respects the duration bound; the
     # sequence terminates naturally.
     computed_to = from |> Math.add(duration) |> derived!(from)
-    walk(interval, fill_from(from, interval), computed_to, acc, fun)
+    walk(interval, fill_from(from, computed_to, interval), computed_to, acc, fun)
   end
 
   defp reduce_span(%Tempo.Interval{from: %Tempo{} = from, to: to} = interval, acc, fun)
        when is_struct(to, Tempo) or to in [:undefined, nil] do
     # Closed `[from, to)` or open-upper `from/..`. Iteration is
     # driven by `do_reduce/4` below.
-    walk(interval, fill_from(from, interval), to, acc, fun)
+    walk(interval, fill_from(from, to, interval), to, acc, fun)
   end
 
   defp reduce_span(%Tempo.Interval{}, _acc, _fun) do
@@ -345,8 +355,10 @@ defimpl Enumerable, for: Tempo.Interval do
   defp stops_at?(_several, _start), do: false
 
   # Whether a walk can step from a time list: one point, or one with an
-  # unspecified unit (`X*Y12M31D`), which a step carries over.
-  defp stepped_from?([{_unit, :any} | rest]), do: stepped_from?(rest)
+  # unspecified year (`X*Y12M31D`), which a step carries over. Any other
+  # unspecified unit (`2026YX*O`, every day of the year) names a span, as a
+  # mask does, and is no one point to step from.
+  defp stepped_from?([{:year, :any} | rest]), do: stepped_from?(rest)
   defp stepped_from?([{:year, year} | rest]) when is_integer(year), do: stepped_from?(rest)
 
   defp stepped_from?([{:microsecond, {value, precision}} | rest])
@@ -359,12 +371,15 @@ defimpl Enumerable, for: Tempo.Interval do
   defp stepped_from?([]), do: true
   defp stepped_from?(_several), do: false
 
-  # Fill the walk's start down to the interval's explicit iteration
-  # unit (no-op when `:unit` is nil or already at the endpoint's
-  # resolution). Subsequent steps derive from the filled value, so
-  # the fill happens exactly once per walk.
-  defp fill_from(%Tempo{calendar: calendar} = from, %Tempo.Interval{unit: unit}) do
-    Steps.fill_to_unit(from, unit, calendar)
+  # Fill the walk's start down to the unit the walk steps by (no-op when
+  # it is already at that resolution): the interval's explicit unit, or the
+  # finer of its two ends'. Subsequent steps derive from the filled value,
+  # so the fill happens exactly once per walk. A start that is not one point
+  # is left for the walk to refuse.
+  defp fill_from(%Tempo{calendar: calendar, time: time} = from, to, interval) do
+    if stepped_from?(time),
+      do: Steps.fill_to_unit(from, iteration_unit(%{interval | to: to}, from), calendar),
+      else: from
   end
 
   # The end a duration is counted to from the other. One it cannot be
@@ -383,13 +398,38 @@ defimpl Enumerable, for: Tempo.Interval do
   # days of a week, the months of a year — so one that ends before it starts
   # (`7K/1K`, Sunday to Monday; `T22H/T2H`, ten at night to two) runs off the
   # end of the axis and on to its end.
-  defp walk_end(%Tempo{time: start_time} = start, %Tempo{time: to_time} = to) do
-    if cyclic?(start_time) and compare_time(start_time, to_time) == :gt,
-      do: {:round, start, to},
-      else: to
+  #
+  # Two ends written on one axis, in one zone and one calendar, are in the
+  # order of their units, and the walk reads its position against the end so.
+  # Any others (a week and a date, two zones, two calendars) are ordered as
+  # the moments they are.
+  #
+  # Ends with no line to share (a day of no year and a year, `X*Y6M15D/2030Y`)
+  # have no order to stop by, and their error is raised before a value is
+  # given.
+  defp walk_end(%Tempo{} = start, %Tempo{} = to) do
+    case Tempo.Compare.orderable(start, to) do
+      {:error, %Tempo.UnanchoredError{} = exception} -> raise exception
+      _ordered_or_read_by_the_walk -> end_on_one_line(start, to)
+    end
   end
 
   defp walk_end(_start, to), do: to
+
+  defp end_on_one_line(%Tempo{time: start_time} = start, %Tempo{time: to_time} = to) do
+    cond do
+      cyclic?(start_time) -> end_on_a_cycle(start, compare_time(start_time, to_time), to)
+      Tempo.Compare.structural?(start, to) -> to
+      true -> {:as_moments, to}
+    end
+  end
+
+  # A span with no year that ends where it starts is once round its axis
+  # (`T0H/T0H`, the whole day), and one that ends before it starts runs off
+  # the end of the axis and on to its end.
+  defp end_on_a_cycle(start, :eq, _to), do: {:turn, start}
+  defp end_on_a_cycle(start, :gt, to), do: {:round, start, to}
+  defp end_on_a_cycle(_start, :lt, to), do: to
 
   defp cyclic?(time) do
     case List.keyfind(time, :year, 0) do
@@ -415,7 +455,7 @@ defimpl Enumerable, for: Tempo.Interval do
   defp do_reduce(position, to, {:cont, acc}, fun) do
     current = reached(position)
 
-    case past_end?(current, to) do
+    case past_end?(current, to) and not first_of_turn?(position, to) do
       true ->
         {:done, acc}
 
@@ -445,6 +485,11 @@ defimpl Enumerable, for: Tempo.Interval do
 
   defp reached({:at, value}), do: value
   defp reached({:after, value}), do: increment(value)
+
+  # A whole turn ends where it starts, so its first value is given before
+  # the walk can be past its end.
+  defp first_of_turn?({:at, _start}, {:turn, _same_start}), do: true
+  defp first_of_turn?(_position, _to), do: false
 
   # Emit each occurrence of a DST fall-back moment, threading the
   # accumulator and honouring halt/suspend, then advance past the
@@ -492,6 +537,13 @@ defimpl Enumerable, for: Tempo.Interval do
       _ -> true
     end
   end
+
+  defp past_end?(%Tempo{} = current, {:as_moments, %Tempo{} = to}),
+    do: Tempo.Compare.compare_endpoints(current, to) != :earlier
+
+  # A whole turn is past its end when it is back at its start.
+  defp past_end?(%Tempo{time: current}, {:turn, %Tempo{time: start}}),
+    do: compare_time(current, start) == :eq
 
   # A walk that comes round is past its end once it is at or after it and
   # before its start again.

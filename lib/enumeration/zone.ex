@@ -70,19 +70,28 @@ defmodule Tempo.Enumeration.Zone do
   # minute/second with 0. Returns `nil` if the value doesn't have
   # enough components to form a NaiveDateTime.
   defp naive_from_tempo(%Tempo{time: time}) do
-    with year when is_integer(year) <- Keyword.get(time, :year),
-         month when is_integer(month) <- Keyword.get(time, :month),
-         day when is_integer(day) <- Keyword.get(time, :day),
-         hour when is_integer(hour) <- Keyword.get(time, :hour) do
-      minute = Keyword.get(time, :minute, 0)
-      second = Keyword.get(time, :second, 0)
-
-      case NaiveDateTime.new(year, month, day, hour, minute, second) do
-        {:ok, naive} -> naive
-        _ -> nil
-      end
+    with year when is_integer(year) <- whole(time, :year, nil),
+         month when is_integer(month) <- whole(time, :month, nil),
+         day when is_integer(day) <- whole(time, :day, nil),
+         hour when is_integer(hour) <- whole(time, :hour, nil),
+         minute when is_integer(minute) <- whole(time, :minute, 0),
+         second when is_integer(second) <- whole(time, :second, 0),
+         {:ok, naive} <- NaiveDateTime.new(year, month, day, hour, minute, second) do
+      naive
     else
       _ -> nil
+    end
+  end
+
+  # A unit's whole number, `default` where the unit is absent, and `nil` where
+  # it holds anything else: a set, a mask, or a group of a set, which is held
+  # as three elements that `Keyword.get/3` raises on. A value with such a
+  # unit is no one wall time to place in its zone.
+  defp whole(time, unit, default) do
+    case List.keyfind(time, unit, 0) do
+      {^unit, value} when is_integer(value) -> value
+      nil -> default
+      _several -> nil
     end
   end
 

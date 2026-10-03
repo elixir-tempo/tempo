@@ -140,7 +140,7 @@ defmodule Tempo.MixProject do
       Exceptions: ~r/^Tempo\.\w+Error$/,
       # The engine: documented for contributors, but not the API a caller uses.
       Internals:
-        ~r/^Tempo\.(Compare|Microsecond|Interval\.Steps|Network\.Normalize|RRule\.(Expander|Rule|Selection)|Iso8601\.Tokenizer(\.\w+)?)$/
+        ~r/^Tempo\.(Compare|Microsecond|Interval\.(Steps|Cycle)|Network\.Normalize|RRule\.(Expander|Rule|Selection)|Iso8601\.Tokenizer(\.\w+)?)$/
     ]
   end
 
@@ -179,6 +179,7 @@ defmodule Tempo.MixProject do
         "guides/falsehoods.md"
       ],
       Reference: [
+        "guides/operation-matrix.md",
         "guides/iso8601-conformance.md",
         "guides/rfc5545_rrule_conformance.md",
         "guides/shared-ast-iso8601-and-rrule.md"

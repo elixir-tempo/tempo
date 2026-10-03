@@ -218,8 +218,10 @@ iex> Tempo.relation(a, b)
 **Corollary — a value with *no* zone has no instant to compare at all.** If two zoned readings in different zones are different instants, then a *floating* reading — one that fixes no zone or offset — has no position on the universal time line, and there is no fact of the matter about how it orders against a zoned value. Tempo declines the comparison rather than silently reading the floating side as UTC:
 
 ```elixir
-iex> Tempo.relation(~o"2026-04-15T10:30:00", ~o"2026-04-15T10:30:00[Europe/Paris]")
-** (Tempo.FloatingTempoError) Cannot compare on a floating Tempo (no zone or offset information) ...
+iex> {:error, %Tempo.FloatingTempoError{} = refused} =
+...>   Tempo.relation(~o"2026-04-15T10:30:00", ~o"2026-04-15T10:30:00[Europe/Paris]")
+iex> refused.operation
+:compare
 ```
 
 Place the floating value in a zone first with `Tempo.in_zone/2`, or write an offset (`Z`/`+HH:MM`), and the comparison becomes well-defined. See the [Scheduling](./scheduling.md) guide's "Floating vs zoned values" section for the full treatment.

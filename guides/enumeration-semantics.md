@@ -80,7 +80,7 @@ A digit marked `X` means "any value in this position", and `X*` an unspecified u
 | Unspecified hour | `TX*H` | hours 0 to 23 |
 | Counted from the end | `2026Y-XM` | the last nine months, April to December |
 
-A mask is read in each context it lands in: `1985-XX-3X` is the 30th and 31st of January, then of March, and no day of February. A value none of whose candidates fits (`1985-02-3X`) names no date, and a unit whose values depend on a year the value does not have (`X*W`, the weeks of no year) cannot be listed; walking either raises a named error (§3.6). An unspecified year (`X*Y`) is the current year.
+A mask is read in each context it lands in: `1985-XX-3X` is the 30th and 31st of January, then of March, and no day of February. A value none of whose candidates fits (`1985-02-3X`) names no date, and a unit whose values depend on a year the value does not have (`X*W`, the weeks of no year) cannot be listed; walking either raises a named error (§3.6). An unspecified year (`X*Y`) is some year and no year in particular, so the units after it are walked as they are with no year written (`X*Y12M28D` is the hours of 28 December, each still of an unspecified year), and on its own it names nothing to list.
 
 ### 2.5. EDTF long-year shapes
 
@@ -137,7 +137,8 @@ The endpoint iteration starts from (`from`) provides the metadata carried on eac
 | Closed day | `1985-01-01/1985-01-04` | Jan 1, 2, 3 (half-open) |
 | Closed month | `1985-12/1986-02` | Dec 1985, Jan 1986 |
 | Closed week | `2022-W05/2022-W08` | W5, W6, W7 |
-| Mismatched resolutions | `1985/1986-06` | 1985, 1986 (both start before Jun 1 1986) |
+| Ends of two resolutions | `1985/1986-06` | Jan 1985 to May 1986, by the finer end's unit |
+| Ends on two axes | `2026-W25/2026-07-01` | the sixteen days from 15 June, as days of their weeks |
 | Open upper | `1985/..` | 1985, 1986, 1987, … (use `Enum.take/2`) |
 | Open upper, hour | `1985-01-01T10/..` | 10:00, 11:00, 12:00, … |
 | No year, round the clock | `T22H/T2H` | 22:00, 23:00, 00:00, 01:00 |
@@ -145,7 +146,9 @@ The endpoint iteration starts from (`from`) provides the metadata carried on eac
 | No year, round the year | `12M/2M` | December, January |
 | Per-endpoint qualifier | `1984?/2004~` | 1984 through 2003, each carrying its endpoint's qualifier where applicable |
 
-Mismatched-resolution endpoints are compared as their concrete start-moments: missing trailing units fill with their unit minimum (`:month` / `:day` / `:week` from 1, everything else from 0).
+An interval is walked at the highest resolution its boundaries are written to: the finer of its two ends' units, unless it carries a `:unit` of its own. The start is filled down to that unit, and the walk stops at the end, so the values it yields are the interval and none runs past it: `2026/2026-03` is January and February, and `2026-06-15T10/2026-06-16` the fourteen hours to midnight. An interval written with a duration (`2026-06-15/PT36H`) is walked to the end the duration gives, by the finer of the two.
+
+Ends written to different resolutions are compared as their concrete start-moments: missing trailing units fill with their unit minimum (`:month` / `:day` / `:week` from 1, everything else from 0). Ends on different axes (a week and a date), in different zones or in different calendars are compared as the moments they are.
 
 A span with no year lies on an axis that comes round again — the hours of a day, the days of a week, the months of a year — so one that ends before it starts runs off the end of the axis and on to its end. A walk takes a step only when it goes on, so `Enum.take(~o"2M27D/..", 2)` is 27 and 28 February, and the third value, which depends on the year, is an error only when it is asked for.
 
@@ -362,7 +365,13 @@ Forward-stepping through an interval uses `calendar.months_in_year/1`, `calendar
 
 ### 5.5. DST transitions
 
-Zone-aware iteration currently treats enumeration as operating on **wall-clock time** and passes the `zone_id` through unchanged on each yielded value. DST transitions are **not** compensated. Iterating hours across a DST boundary yields each wall-clock hour in turn, which may skip or repeat an instant-clock hour. This is a deliberate simplification and is documented so callers can choose to correct for it downstream.
+A zoned value is walked on the wall clock of its zone, and each value the walk yields is a wall time the zone shows.
+
+* **The hour a clock skips** when it goes forward is not yielded: `2026-03-29[Europe/Paris]` is 23 hours.
+
+* **The hour a clock shows twice** when it goes back is yielded twice, each with the offset that tells it from the other (`T2HZ2H`, then `T2HZ1H`): `2026-10-25[Europe/Paris]` is 25 hours.
+
+* **A value in the hour shown twice** (`2026-10-25T02:30[Europe/Paris]`) names the first time the clock shows it, or the one the offset written with it names. Its walk yields that occurrence, the reading `Enum.count/1`, `Tempo.to_interval/2` and comparison give it.
 
 ### 5.6. Parity between implicit and explicit iteration
 
@@ -380,8 +389,6 @@ true
 Known divergences:
 
 * **Second-resolution values.** `to_interval/1` converts it to a one-second span (`~o"2026-01-15T10:30:00"` → `[10:30:00, 10:30:01)`), but implicit iteration drills one unit finer into sub-second tenths — so `Enum.to_list(~o"2026-01-15T10:30:00")` yields ten deciseconds (`.0`–`.9`) while the interval forward-steps as a single second. Coarser resolutions don't diverge because their converted interval carries the drill unit on `:unit` (a day walks hours); the second case deliberately carries none (a clean `[t, t+1s)` span for set operations).
-
-* **Intervals whose ends differ in resolution.** `Enum.count/1` of `1985/1986-06` is 1, the whole years between its ends, where its walk yields 1985 and 1986, both of which start before June 1986.
 
 * **Masked values.** The implicit walk of a masked value yields each value its digits allow (`1985-XX-XX` is the 365 days of 1985), where `to_interval/1` gives the span or spans they cover, walked at their own resolution (`[1985, 1986)`, one year). Prefer the explicit form for set operations on masked values.
 

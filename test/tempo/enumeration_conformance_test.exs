@@ -323,13 +323,16 @@ defmodule Tempo.EnumerationConformance.Test do
     end
 
     test "Enum.take/2 on a mismatched-resolution interval `1985/1986-06`" do
-      # `1985`.start = 1985-01-01, `1986-06`.start = 1986-06-01.
-      # `1985` (start 1985-01-01) and `1986` (start 1986-01-01) both
-      # fall before 1986-06-01, so both are yielded under half-open
-      # semantics.
+      # `1985`.start = 1985-01-01, `1986-06`.start = 1986-06-01. The
+      # interval is walked at the highest resolution of its boundaries,
+      # the month, so its values are the seventeen months before June
+      # 1986 and none runs past the end.
       {:ok, interval} = Tempo.from_iso8601("1985/1986-06")
       list = Enum.to_list(interval)
-      assert Enum.map(list, & &1.time) == [[year: 1985], [year: 1986]]
+
+      assert length(list) == 17
+      assert hd(list).time == [year: 1985, month: 1]
+      assert List.last(list).time == [year: 1986, month: 5]
     end
 
     test "Enum.take/2 on `from/duration` intervals iterates forward" do

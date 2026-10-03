@@ -82,6 +82,32 @@ These keep their names and change their meaning:
 
 * **`Tempo.to_string/2`** — returns `{:ok, string}`, or an error for a value it cannot render, where 1.x returned the string and raised; `to_string!/2` returns the string, and interpolating a value it cannot render writes its ISO 8601 form. Several spans are joined as a list in the locale, where 1.x used commas.
 
+* **`round/2`** — to the nearest boundary, half way up, for a date with a time too, where 1.x rounded half an hour down and a mid-June day to the next year.
+
+* **`shift_zone/2`** — the span a value names on the other zone's clock: the same resolution where it is one unit there and otherwise an interval, where 1.x gave the second it starts at.
+
+* **`to_time/1`, `to_naive_datetime/1`, `to_datetime/1` and `to_elixir/1`** — a whole second has a precision of zero, where 1.x gave six digits.
+
+* **`Tempo.new/1` of a week and a day of it** — the calendar date they name, as the parser reads them, where 1.x kept the week date.
+
+* **`shift/3` by months and days** — the months, then the days from the day they land on, as `Date.shift/2` counts; and an unknown unit is an error, where 1.x passed it over.
+
+* **A recurrence across the end of a month** — its occurrences are consecutive, each ending where the next starts.
+
+* **A value with no zone beside one with a zone** — refused by the set operations and the sorter, where the floating one was read as UTC.
+
+* **An interval's walk** — by the finer of its two ends' units.
+
+* **An interval's end of one bare number** — the start's last unit, where it was a century.
+
+* **A span with no year that ends where it starts** — once round its cycle, where it was empty.
+
+* **`split/1` and `at/2`** — keep the zone of the value they split or place, where 1.x dropped it.
+
+* **A time of day under a year, a month or a week** — that time on its first day, with the day held in the value (`2026-06T17` is 17:00 on 1 June), where 1.x kept the gap.
+
+* **`1950S0`** — a parse error, since a value has at least one significant digit.
+
 * **Ordinal days** — a day of the year that does not resolve to a date (`350O`, `2020Y{100,200}O`) holds a `:day_of_year`, written back as `O`, where 1.x held a `:day` written `D`, so a match on `[day: _]` for one now matches `[day_of_year: _]`.
 
 ## Updating the dependency
@@ -100,7 +126,7 @@ A search for the removed names finds the renames:
 grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(meets|during)\?|Interval\.(meets|during)\?|(Tempo|Interval)\.compose|Tempo\.anchor[(/]|(NonAnchored|RequiresAnchor)Error|:unanchored|grounded\?|GroundedTempoError|(to|from)_(naive_)?date_time|from_(ical|jscalendar)|available_from_ical|to_rrule|MaterialisationError|Expander.expand|working_days?|Tempo\.weekend\(|weekends\(from|IntervalSet\.(to_list|overlapping)|RecurrenceSet\.new\(|Tempo\.to_iso8601[(/]|beginning_of_|end_of_(day|month)|tighten\(|Schedule\.Slot|earliest:|(add_period|TimePeriod\.new)\([^)]*(start|end):' lib test
 ```
 
-The changes of meaning need a read rather than a replace: every `before?`, `after?` and their `certainly_` and `possibly_` forms, every duration read as a count of seconds, every shift of a zoned value by hours, every `duration/1` of a set, every window, every `:metadata` passed to `Tempo.new/1`, every `select/2` across a span longer than one period, every `:skipping` shift of a day by days or weeks, and every `RecurrenceSet.new/2` and `to_iso8601/1`, which the search finds.
+The changes of meaning need a read rather than a replace: every `before?`, `after?` and their `certainly_` and `possibly_` forms, every duration read as a count of seconds, every shift of a zoned value by hours, every `duration/1` of a set, every window, every `:metadata` passed to `Tempo.new/1`, every `select/2` across a span longer than one period, every `:skipping` shift of a day by days or weeks, every `round/2`, every `shift_zone/2` of a value coarser than a second, every conversion to an Elixir time compared with a literal, every `Tempo.new/1` of a week and a weekday, every set operation on a value with no zone and one with a zone, and every `RecurrenceSet.new/2` and `to_iso8601/1`, which the search finds.
 
 ## A set's duration is the time it covers
 
@@ -417,7 +443,7 @@ Tempo.to_calendar(birthday)
 
 ```elixir
 iex> Tempo.to_datetime(~o"2026-06-15T09:00:00[Europe/Paris]")
-{:ok, #DateTime<2026-06-15 09:00:00.000000+02:00 CEST Europe/Paris>}
+{:ok, #DateTime<2026-06-15 09:00:00+02:00 CEST Europe/Paris>}
 iex> Tempo.to_elixir(~o"2026-06-15")
 {:ok, ~D[2026-06-15]}
 ```
@@ -656,3 +682,195 @@ iex> "Open from #{~o"2026-06-15/.."}"
 ```
 
 > *"The fifteenth of June is written Jun 15, 2026. A booking open from the fifteenth has no last day to write, so it is an error, and in a sentence it is written in ISO 8601."*
+
+## Rounding is to the nearest
+
+`Tempo.round/2` rounds a value to the start of the unit it is in or the start of the next, whichever its own start is nearer to, and half way rounds up, as `Kernel.round/1` rounds a half. 1.x rounded half an hour down, rounded a day to its month and then the month to its year, so that 16 June became the next year, and refused a date with a time. How far into a unit a value is, is measured in the unit as it is there: a month of 31 days, a day of 23 hours where the clocks go forward.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.x
+Tempo.round(~o"T10:30", :hour)
+#=> ~o"T10H"
+Tempo.round(~o"2026-06-16", :year)
+#=> ~o"2027Y"
+```
+
+```elixir
+iex> Tempo.round(~o"T10:30", :hour)
+~o"T11H"
+iex> Tempo.round(~o"2026-06-16", :year)
+~o"2026Y"
+iex> Tempo.round(~o"2026-06-15T12:00", :day)
+~o"2026Y6M16D"
+```
+
+> *"Half past ten is eleven o'clock to the nearest hour. The sixteenth of June is in the first half of its year. Noon is half way through the fifteenth, so it rounds to the sixteenth."*
+
+## A zone shift keeps the span
+
+`Tempo.shift_zone/2` returns the span a value names, read on another zone's clock. A value written to the second is the same second there, as in 1.x, and now keeps a fraction of a second. A coarser value keeps its resolution where its span is one unit on the other clock, and is otherwise the interval it is there, where 1.x gave the one second it starts at.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.x — a day became its first second
+{:ok, new_york} = Tempo.shift_zone(~o"2026-06-15[Europe/Paris]", "America/New_York")
+{Tempo.day(new_york), Tempo.hour(new_york), Tempo.minute(new_york), Tempo.second(new_york)}
+#=> {14, 18, 0, 0}
+```
+
+```elixir
+iex> {:ok, hour} = Tempo.shift_zone(~o"2026-06-15T14[Europe/Paris]", "America/New_York")
+iex> Tempo.to_iso8601!(hour)
+"2026Y6M15DT8HZ-4H[America/New_York]"
+iex> {:ok, day} = Tempo.shift_zone(~o"2026-06-15[Europe/Paris]", "America/New_York")
+iex> Tempo.to_iso8601!(day)
+"2026Y6M14DT18H0MZ-4H/15DT18H0MZ-4H[America/New_York]"
+```
+
+> *"Two in the afternoon in Paris is eight in the morning in New York, the whole hour. The fifteenth in Paris runs from six in the evening of the fourteenth to six in the evening of the fifteenth in New York."*
+
+## A whole second converts to a whole second
+
+`Tempo.to_time/1`, `to_naive_datetime/1`, `to_datetime/1` and `to_elixir/1` give a second with no fraction a precision of zero, as Elixir reads the same ISO 8601 text, and a fraction the digits it is written to. 1.x gave six digits, so `Tempo.from_elixir/1` of the result was a value to the microsecond.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.x
+Tempo.to_naive_datetime(~o"2022-11-19T01:02:03")
+#=> {:ok, ~N[2022-11-19 01:02:03.000000]}
+```
+
+```elixir
+iex> Tempo.to_naive_datetime(~o"2022-11-19T01:02:03")
+{:ok, ~N[2022-11-19 01:02:03]}
+iex> Tempo.to_time(~o"T14:30:00.25")
+{:ok, ~T[14:30:00.25]}
+iex> {:ok, naive} = Tempo.to_naive_datetime(~o"2022-11-19T01:02:03")
+iex> Tempo.from_elixir(naive)
+~o"2022Y11M19DT1H2M3S"
+```
+
+> *"Three seconds past two minutes past one is that second, and converted back it is the value it was."*
+
+## The constructor builds what the parser reads
+
+`Tempo.new/1` returns the value the same components are read as. A week and a day of it are the calendar date they name, as an ordinal date is; 1.x kept them as a week date, a value the parser never gives. A date with a `:zone` and no time of day is that day in the zone, where 1.x refused it, and `:microsecond` is a fraction of the second as Elixir's types hold one.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.x
+{:ok, day} = Tempo.new(year: 2026, week: 24, day_of_week: 3)
+day.time
+#=> [year: 2026, week: 24, day_of_week: 3]
+```
+
+```elixir
+iex> Tempo.new(year: 2026, week: 24, day_of_week: 3)
+{:ok, ~o"2026Y6M10D"}
+iex> Tempo.new(year: 2026, month: 6, day: 15, zone: "Europe/Paris")
+{:ok, ~o"2026Y6M15D[Europe/Paris]"}
+iex> Tempo.new(hour: 10, minute: 30, second: 45, microsecond: {500_000, 1})
+{:ok, ~o"T10H30M45.5S"}
+```
+
+> *"The third day of week 24 of 2026 is the tenth of June. The fifteenth of June in Paris is that day in Paris."*
+
+## A value with no zone and one with a zone do not combine
+
+A value with no zone has no place on the time line, so the set operations return a `Tempo.FloatingTempoError` for it and a zoned value, and `Tempo.compare/3` and the predicates raise it, where the floating one was read as UTC. `Tempo.relation/2` and the certainty functions return the error where they raised it. Place the floating value with `Tempo.in_zone/2` first.
+
+```elixir
+iex> {:error, %Tempo.FloatingTempoError{}} = Tempo.union(~o"2026-06-15T10", ~o"2026-06-15T10Z")
+iex> {:ok, in_utc} = Tempo.in_zone(~o"2026-06-15T10", "Etc/UTC")
+iex> {:ok, both} = Tempo.union(in_utc, ~o"2026-06-15T11Z")
+iex> Tempo.IntervalSet.count(both)
+2
+```
+
+> *"Ten o'clock nowhere in particular and ten o'clock in UTC are not put together. Placed in UTC, ten o'clock joins eleven."*
+
+## An interval is walked by its finer end
+
+An interval whose ends are written to two resolutions is walked by the finer of them, so the values it yields are the interval and none runs past its end. It was walked by its start's unit.
+
+```elixir
+iex> Enum.to_list(~o"2026/2026-03")
+[~o"2026Y1M", ~o"2026Y2M"]
+```
+
+> *"From 2026 to March 2026 is January and February."*
+
+## An interval's bare end is the start's last unit
+
+An interval's end written as one bare number is the unit its start ends with, as ISO 8601-1 §5.5.1 lets an end leave out what it shares with its start. The number was read as what it is alone, a century, and the interval ran backwards. A century at an interval's end is written with its designator.
+
+```elixir
+iex> Tempo.from_iso8601!("2026-06-15/20") == Tempo.from_iso8601!("2026-06-15/2026-06-20")
+true
+iex> Tempo.from_iso8601!("2026-06-15T10:30/45") == Tempo.from_iso8601!("2026-06-15T10:30/2026-06-15T10:45")
+true
+```
+
+> *"The fifteenth to the twentieth. Half past ten to a quarter to eleven."*
+
+## Months, then days
+
+`Tempo.shift/3` applies a duration's years and months, brings the day into the month they land in, and then counts its days, as `Date.shift/2` does. A recurrence's occurrences are consecutive, each ending where the next starts, as ISO 8601-1 defines a recurring interval. Across the end of a short month both gave another answer.
+
+```elixir
+iex> Tempo.shift(~o"2026-07-29", month: -5, day: -1)
+~o"2026Y2M27D"
+iex> {:ok, months} = Tempo.to_interval(~o"R3/2026-01-31/P1M")
+iex> months |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.Interval.to/1)
+[~o"2026Y2M28D", ~o"2026Y3M31D", ~o"2026Y4M30D"]
+```
+
+> *"Five months before the twenty-ninth of July is the end of February, and the day before that is the twenty-seventh. A month from the end of January ends at the end of February, the next at the end of March, and the third at the end of April."*
+
+## A span that ends where it starts
+
+A span with no year lies on a cycle: the day for a time of day, the week for a day of the week, the year for a month and a day. One that ends where it starts is once round, where it was empty. With a year, a span that ends where it starts is still empty.
+
+```elixir
+iex> Tempo.empty?(~o"T0H/T0H")
+false
+iex> Enum.count(~o"T0H/T0H")
+24
+iex> Tempo.empty?(~o"2026-06-15/2026-06-15")
+true
+```
+
+> *"Midnight to midnight is the whole day, twenty-four hours of it."*
+
+## A window takes the zone of what it bounds
+
+A `:within` window with no zone bounds a value in a zone in that zone, where it was read as UTC. A window written with a zone or an offset is the moments it names.
+
+```elixir
+iex> late_show = Tempo.from_iso8601!("R/2026-05-30T23:30[America/New_York]/P1D")
+iex> {:ok, shows} = Tempo.to_interval(late_show, within: ~o"2026-06-01/2026-06-03")
+iex> shows |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+[31, 1, 2]
+```
+
+> *"The shows within the first two days of June in New York are the one that runs into the first, and those that start on the first and the second."*
+
+## A time of day is on a day
+
+A time of day written under a year, a month or a week, with the day left out, is that time on the first day of what is written, and the value holds the day. 1.x kept the gap, and each function read it its own way: such a value compared as equal to any day of its year, and a day added to it was lost. `Tempo.at/2` places a time of day on a year or a month the same way, and under a group it is the first day of the group.
+
+```elixir
+iex> ~o"2026-06T17"
+~o"2026Y6M1DT17H"
+iex> Tempo.at(~o"2026", ~o"T17")
+{:ok, ~o"2026Y1M1DT17H"}
+iex> Tempo.shift(~o"2026YT17H", day: 1)
+~o"2026Y1M2DT17H"
+```
+
+> *"Five o'clock in June 2026 is five o'clock on the first of June. Five o'clock in 2026 is on the first of January, and a day later is the second."*

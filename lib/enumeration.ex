@@ -1,7 +1,6 @@
 defmodule Tempo.Enumeration do
   @moduledoc false
 
-  alias Tempo.Clock
   alias Tempo.Compare
   alias Tempo.ConversionError
   alias Tempo.InvalidDateError
@@ -129,6 +128,7 @@ defmodule Tempo.Enumeration do
     do: [{component, settled?} | settled(rest, settled? and single?(component))]
 
   defp single?({:selection, _selection}), do: true
+  defp single?({:year, :any}), do: true
 
   defp single?({:microsecond, {value, precision}}),
     do: is_integer(value) and is_integer(precision)
@@ -191,6 +191,13 @@ defmodule Tempo.Enumeration do
   defp descend(%{tempo: tempo} = walk, ancestors, []),
     do: {:ok, [%{tempo | time: :lists.reverse(ancestors)}], %{walk | status: :yielded}}
 
+  # An unspecified year (`X*Y`) is some year, and not one to list: ISO 8601-2
+  # §4.6.2 reads `X*Y12M28D` as 28 December of an unspecified year. It is
+  # carried into each value the walk yields, and the units after it are read
+  # as they are with no year written.
+  defp descend(walk, ancestors, [{{:year, :any} = year, _settled?} | rest]),
+    do: descend(walk, [year | ancestors], rest)
+
   # Whole numbers are read together. After components that each name one
   # resolved value they were resolved when the value was read, and stand as
   # they are. After a component with several values (the `6M15D` of
@@ -205,23 +212,44 @@ defmodule Tempo.Enumeration do
       else: next(walk)
   end
 
-  # A group followed by a finer unit counts that unit from the group's start:
-  # `2026Y2G2MU15D` is 15 March, the fifteenth day of the second group of two
-  # months. Validation reads it so once the units before the group are
-  # concrete, as it reads it when the value is parsed with one year, and a
-  # group it leaves as it is is walked as its values.
+  # A group followed by a finer unit counts that unit from the group's start
+  # (ISO 8601-2 §5.4.2): `2026Y2G2MU15D` is 15 March, the fifteenth day of the
+  # second group of two months. Validation reads it so once the units before
+  # the group are concrete, as it reads it when the value is parsed with one
+  # year. Where it cannot (the group's months have no year to count their days
+  # in, or the unit counted is a set or a mask and not one number) the value
+  # is not walked as though the unit were counted in each of the group's
+  # values, which is another meaning: it is an error. A unit that is counted
+  # in each value by its nature (a weekday in a group of weeks, a day of the
+  # year in a group of years) is walked so.
   defp descend(
          walk,
-         [_ | _] = ancestors,
-         [{{_unit, {:group, %Range{}}}, _settled?}, _next | _] = components
+         ancestors,
+         [{{unit, {:group, %Range{}}}, _settled?}, {{next_unit, _value}, _next_settled?} | _] =
+           components
        ) do
     case counted_from_group(walk.calendar, ancestors, components) do
-      {:ok, resolved} -> descend(walk, ancestors, resolved)
-      :as_written -> descend_into(walk, ancestors, components)
+      {:ok, resolved} ->
+        descend(walk, ancestors, resolved)
+
+      :as_written ->
+        if counted_from_group_start?(unit, next_unit),
+          do: {:error, exception(walk.tempo, :counted_in_group)},
+          else: descend_into(walk, ancestors, components)
     end
   end
 
   defp descend(walk, ancestors, components), do: descend_into(walk, ancestors, components)
+
+  # The unit a group's start is counted in: the group's own unit, or the unit
+  # next below it.
+  defp counted_from_group_start?(unit, unit), do: true
+  defp counted_from_group_start?(:year, :month), do: true
+  defp counted_from_group_start?(:month, :day), do: true
+  defp counted_from_group_start?(:day, :hour), do: true
+  defp counted_from_group_start?(:hour, :minute), do: true
+  defp counted_from_group_start?(:minute, :second), do: true
+  defp counted_from_group_start?(_unit, _next_unit), do: false
 
   # With a component of any other kind, its values are a new frame: read at
   # once when it is the last component, and passed over when it has none.
@@ -366,17 +394,6 @@ defmodule Tempo.Enumeration do
   defp candidates({_unit, {:group, _members}, _size}, _ancestors, _calendar),
     do: {:error, :grouped_component}
 
-  # An unspecified year (`X*Y`) is the current year in the value's calendar,
-  # by `Tempo.Clock`: the Hebrew year that holds today for `X*Y[u-ca=hebrew]`.
-  defp candidates({:year, :any}, _ancestors, calendar) do
-    today = Clock.utc_now() |> DateTime.to_date()
-
-    case Date.convert(today, calendar) do
-      {:ok, %Date{year: year}} -> {:ok, :year, [year]}
-      {:error, _incompatible} -> {:error, no_current_year_error(today, calendar)}
-    end
-  end
-
   defp candidates({unit, :any}, ancestors, calendar) do
     with {:ok, range} <- Mask.unspecified(unit, Enum.reverse(ancestors), calendar) do
       {:ok, unit, Enum.to_list(range)}
@@ -442,15 +459,6 @@ defmodule Tempo.Enumeration do
   end
 
   defp group_values({_unit, {:group, %Range{} = range}}), do: Enum.to_list(range)
-
-  defp no_current_year_error(today, calendar) do
-    ConversionError.exception(
-      value: today,
-      reason:
-        "An unspecified year is the current year, and today (#{Date.to_iso8601(today)}) " <>
-          "does not convert to #{inspect(calendar)}."
-    )
-  end
 
   # The values of a resolved literal: whole numbers from zero, ranges of them,
   # and the fractions of a second.
@@ -617,6 +625,9 @@ defmodule Tempo.Enumeration do
   defp exception(tempo, :grouped_component),
     do: ConversionError.exception(value: tempo, reason: :grouped_component)
 
+  defp exception(tempo, :counted_in_group),
+    do: ConversionError.exception(value: tempo, reason: :counted_in_group)
+
   # A mask or an unspecified unit whose values depend on a year the value
   # does not have.
   defp exception(tempo, :unanchored),
@@ -624,8 +635,8 @@ defmodule Tempo.Enumeration do
 
   # A count from the end of a unit the value does not bound: the weeks of no
   # year, the days of no month.
-  defp exception(%Tempo{time: time} = tempo, {:unresolved, unit}) do
-    if List.keymember?(time, :year, 0) do
+  defp exception(%Tempo{} = tempo, {:unresolved, unit}) do
+    if Tempo.anchored?(tempo) do
       ConversionError.exception(
         value: tempo,
         reason:
@@ -656,6 +667,8 @@ defmodule Tempo.Enumeration do
   # A selection is a constraint, not a sequence, so it does not make the
   # value enumerable on its own, though its inner keyword list is a list.
   defp names_several?([{:selection, _} | rest]), do: names_several?(rest)
+  # An unspecified year is one year, though no one knows which.
+  defp names_several?([{:year, :any} | rest]), do: names_several?(rest)
   defp names_several?([{_unit, value} | _rest]) when is_list(value), do: true
   defp names_several?([{_unit, :any} | _rest]), do: true
   defp names_several?([{_unit, {:mask, _}} | _rest]), do: true

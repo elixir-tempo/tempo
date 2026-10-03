@@ -25,6 +25,12 @@ defmodule Tempo.ConversionError do
     several values, such as the day after `~o"2026Y6M{1,15}D"`. Returned
     by `Tempo.shift/3` too, for a shift that steps such a unit.
 
+  * `:counted_in_group` — a unit after a group counts from the group's
+    start (ISO 8601-2 §5.4.2: `~o"2018Y2G3MU50D"` is the fiftieth day of
+    the second quarter), which takes one whole number and the units the
+    group is counted in. `~o"2G3MU15D"` has no year to count the group's
+    days in, and `~o"2026Y2G3MU{1,15}D"` counts a set.
+
   * `:recurring_interval` and `:recurring_duration` — a recurrence
     is a rule for its occurrences, not one span.
 
@@ -125,6 +131,17 @@ defmodule Tempo.ConversionError do
 
   def message(%__MODULE__{reason: :grouped_component}) do
     "Cannot step a value from a unit that holds several values."
+  end
+
+  def message(%__MODULE__{reason: :counted_in_group, value: value}) when not is_nil(value) do
+    "Cannot convert #{inspect(value)} — the unit after its group counts from the " <>
+      "group's start (ISO 8601-2 §5.4.2), which takes one whole number and the units " <>
+      "the group is counted in: a year, for a day counted in a group of months."
+  end
+
+  def message(%__MODULE__{reason: :counted_in_group}) do
+    "Cannot convert a value whose unit after a group is not one whole number counted " <>
+      "from the group's start."
   end
 
   def message(%__MODULE__{value: value, target: target})

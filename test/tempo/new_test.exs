@@ -41,9 +41,42 @@ defmodule Tempo.NewTest do
       assert t.time == [hour: 14, minute: 30]
     end
 
-    test "ISO week date" do
+    # The user's decision of 2026-10-03: a value built is the value the same
+    # components are read as, so a week and a day of it are the calendar date
+    # they name, as an ordinal date is.
+    test "ISO week date is the date it names, as the parser reads it" do
       {:ok, t} = Tempo.new(year: 2026, week: 24, day_of_week: 3)
-      assert t.time == [year: 2026, week: 24, day_of_week: 3]
+
+      assert t.time == [year: 2026, month: 6, day: 10]
+      assert t == Tempo.from_iso8601!("2026-W24-3")
+    end
+
+    test "a week alone stays a week" do
+      {:ok, t} = Tempo.new(year: 2026, week: 24)
+
+      assert t.time == [year: 2026, week: 24]
+      assert t == Tempo.from_iso8601!("2026-W24")
+    end
+
+    test "a fraction of a second is the pair Elixir's types hold" do
+      assert Tempo.new(hour: 10, minute: 30, second: 45, microsecond: {500_000, 1}) ==
+               Tempo.from_iso8601("T10:30:45.5")
+
+      assert Tempo.new(hour: 10, minute: 30, second: 45, microsecond: {0, 0}) ==
+               Tempo.from_iso8601("T10:30:45")
+
+      assert {:error, %ArgumentError{}} = Tempo.new(hour: 10, microsecond: {5, 1})
+
+      assert {:error, %Tempo.InvalidDateError{unit: :microsecond}} =
+               Tempo.new(hour: 10, minute: 30, second: 45, microsecond: 5)
+    end
+
+    test "a Time and a NaiveDateTime are taken as maps, as a Date is" do
+      assert Tempo.new(Map.from_struct(~T[10:30:00])) == Tempo.from_iso8601("T10:30:00")
+      assert Tempo.new(Map.from_struct(~T[10:30:00.250])) == Tempo.from_iso8601("T10:30:00.250")
+
+      assert Tempo.new(Map.from_struct(~N[2026-06-15 10:30:00])) ==
+               Tempo.from_iso8601("2026-06-15T10:30:00")
     end
 
     test "ordinal (day-of-year) date is the date it names" do
@@ -109,8 +142,8 @@ defmodule Tempo.NewTest do
     end
 
     test "week axis reorders correctly" do
-      {:ok, t} = Tempo.new(day_of_week: 3, year: 2026, week: 24)
-      assert t.time == [year: 2026, week: 24, day_of_week: 3]
+      assert Tempo.new(day_of_week: 3, year: 2026, week: 24) ==
+               Tempo.new(year: 2026, week: 24, day_of_week: 3)
     end
   end
 
@@ -241,11 +274,11 @@ defmodule Tempo.NewTest do
       assert {:error, %ArgumentError{}} = Tempo.new(year: 2026, month: 6, day_of_year: 166)
     end
 
-    test "zone without a time of day is rejected" do
-      assert {:error, %ArgumentError{message: msg}} =
-               Tempo.new(year: 2026, month: 6, day: 15, zone: "Europe/Paris")
-
-      assert msg =~ ":zone requires"
+    # It was refused, as having no place on the time line, where the parser
+    # reads `2026-06-15[Europe/Paris]` as that day in Paris.
+    test "a zone without a time of day is the day in the zone, as the parser reads it" do
+      assert Tempo.new(year: 2026, month: 6, day: 15, zone: "Europe/Paris") ==
+               Tempo.from_iso8601("2026-06-15[Europe/Paris]")
     end
 
     test "unknown qualification value is rejected" do

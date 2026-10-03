@@ -330,10 +330,13 @@ defmodule Tempo.Iso8601.Parser do
     end
   end
 
+  # What precedes a group may be no unit at all (the qualification of
+  # `6~M2G10DU` is an entry of its own), and is then not held to the group's
+  # order.
   def parse_date([{unit_1, value_1}, {:group, group} | rest]) do
     {min, _max} = group_min_max(group)
 
-    if Unit.compare(unit_1, min) == :lt do
+    if Unit.fetch_sort_key(unit_1) != :error and Unit.compare(unit_1, min) == :lt do
       raise Tempo.ParseError, "#{inspect(unit_1)} is less than the group min of #{inspect(min)}"
     else
       [parse_date({unit_1, value_1}) | parse_date([{:group, group} | rest])]
@@ -341,11 +344,13 @@ defmodule Tempo.Iso8601.Parser do
   end
 
   # A group followed by a selection or another group is handled by
-  # the dedicated clauses above; this clause covers a plain unit.
+  # the dedicated clauses above; this clause covers a plain unit. What
+  # follows a group may be no unit at all (the `Z` of `2GT6HUZ` is a time
+  # shift), and is then not held to the group's order.
   def parse_date([{:group, group}, {unit_2, value_2} | rest]) do
     {_min, max} = group_min_max(group)
 
-    if Unit.compare(max, unit_2) == :lt do
+    if Unit.fetch_sort_key(unit_2) != :error and Unit.compare(max, unit_2) == :lt do
       raise Tempo.ParseError,
             "#{inspect(unit_2)} is greater than the group max of #{inspect(max)}"
     else

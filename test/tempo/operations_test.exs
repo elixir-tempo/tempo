@@ -907,14 +907,14 @@ defmodule Tempo.Operations.Test do
       assert Tempo.disjoint?(evening, morning)
     end
 
-    test "zero-width unanchored interval is treated as empty" do
-      # `T12:00/T12:00` — from == to. compare_time gives :eq, which
-      # is not :gt, so crosses_midnight? returns false and the
-      # interval stays as zero-width.
-      {:ok, zero} = Tempo.from_iso8601("T12:00/T12:00")
-      {:ok, r} = Tempo.intersection(zero, zero)
-      # Zero-width intersected with zero-width is empty.
-      assert r.intervals == []
+    test "an unanchored interval that ends where it starts is the whole day" do
+      # `T12:00/T12:00` is once round the clock from noon, cut at midnight
+      # to be swept as any span that runs through it is.
+      {:ok, day} = Tempo.from_iso8601("T12:00/T12:00")
+      {:ok, r} = Tempo.intersection(day, day)
+
+      assert r.intervals == [~o"T0H0M/T12H0M", ~o"T12H0M/T0H0M"]
+      assert Tempo.equal?(r, ~o"T0H/T0H")
     end
   end
 

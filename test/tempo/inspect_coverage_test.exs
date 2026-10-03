@@ -79,7 +79,7 @@ defmodule Tempo.InspectCoverageTest do
     end
 
     test "a UTC offset shift" do
-      assert inspect(Tempo.from_iso8601!("2020-06-15T10:00:00+05:00")) =~ "Z+5H"
+      assert inspect(Tempo.from_iso8601!("2020-06-15T10:00:00+05:00")) =~ "Z5H"
     end
 
     test "a fractional second" do
@@ -112,7 +112,7 @@ defmodule Tempo.InspectCoverageTest do
     end
 
     test "offset with minutes" do
-      assert inspect(Tempo.from_iso8601!("2020-06-15T10:00:00+05:30")) =~ "Z+5H30M"
+      assert inspect(Tempo.from_iso8601!("2020-06-15T10:00:00+05:30")) =~ "Z5H30M"
     end
 
     test "zero offset" do

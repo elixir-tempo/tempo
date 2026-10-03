@@ -72,17 +72,14 @@ defmodule Tempo.Explain.Test do
       assert Tempo.explain(~o"2026-W53") =~ "Span: [2026-12-28, 2027-01-04)."
     end
 
-    test "a week date keeps its own terms, names its weekday and spans its day" do
+    # In the Gregorian calendar a week and a day of it are the calendar date
+    # they name, so it is explained as one. A week calendar's keep their terms.
+    test "a Gregorian week date is explained as the calendar date it is" do
       day = Tempo.explain(Tempo.new!(year: 2026, week: 25, day_of_week: 2))
 
-      assert day =~ "Tuesday of week 25 of 2026."
+      assert day =~ "June 16, 2026."
       assert day =~ "Span: [2026-06-16, 2026-06-17)."
-
-      minute =
-        Tempo.explain(Tempo.new!(year: 2026, week: 25, day_of_week: 2, hour: 10, minute: 30))
-
-      assert minute =~ "Tuesday of week 25 of 2026 at 10:30."
-      assert minute =~ "Span: [2026-06-16T10:30, 2026-06-16T10:31)."
+      assert day == Tempo.explain(~o"2026-W25-2")
     end
 
     test "a week calendar's values are written in its own notation" do

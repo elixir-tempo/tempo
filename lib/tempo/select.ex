@@ -437,8 +437,12 @@ defmodule Tempo.Select do
      IntervalEndpointsError.exception(interval: interval, operation: :select, reason: :open_start)}
   end
 
-  defp span(%Interval{from: %Tempo{}, to: %Tempo{}, recurrence: 1} = interval),
-    do: {:closed, interval}
+  # A closed span is walked from its start to its end, so its ends are held
+  # to one order here: two that have none (a start with a year and an end
+  # without, or an end that names no moment) are that error.
+  defp span(%Interval{from: %Tempo{} = from, to: %Tempo{} = to, recurrence: 1} = interval) do
+    with {:ok, _order} <- Compare.order(from, to), do: {:closed, interval}
+  end
 
   defp span(%Interval{from: %Tempo{}, to: :undefined, duration: nil, recurrence: 1} = interval),
     do: {:open_end, interval}
@@ -541,7 +545,7 @@ defmodule Tempo.Select do
 
   defp period_of(start) do
     with {:ok, %Interval{to: %Tempo{} = period_end} = period} <- Tempo.to_interval(start),
-         :later <- Compare.compare_endpoints(period_end, start) do
+         {:ok, :later} <- Compare.order(period_end, start) do
       {:ok, period}
     else
       {:error, _reason} = error -> error
@@ -598,9 +602,11 @@ defmodule Tempo.Select do
     end
   end
 
+  # A selected span with no place in the period's order (a day of no year
+  # selected from a time of day) starts nowhere in it.
   defp starts_in?(%Interval{from: %Tempo{} = from}, %Interval{from: period_from, to: period_to}) do
-    Compare.compare_endpoints(from, period_from) != :earlier and
-      Compare.compare_endpoints(from, period_to) == :earlier
+    match?({:ok, order} when order != :earlier, Compare.order(from, period_from)) and
+      match?({:ok, :earlier}, Compare.order(from, period_to))
   end
 
   defp starts_in?(_selected, _period), do: false

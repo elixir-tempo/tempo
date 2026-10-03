@@ -158,7 +158,17 @@ iex> Tempo.to_iso8601(Tempo.from_iso8601!("2026-06-15/2026-06-16"))
 {:ok, "2026Y6M15D/16D"}
 ```
 
-**The "unambiguous" proviso is load-bearing.** §5.2.2.2 makes a bare two-digit date component a *century*, so `2022-02-15/04` is century 04 — years 400–499 — not April, and nothing is inherited into it. Omit a component only where a designator or a separator keeps the reading clear: `/02-20` is a month and a day, `/04` is not.
+An end may be cut down to one bare number, which is then the start's last component: `2026-06-15/20` ends on the 20th, `2026-06-15T10:30/45` at 10:45, `2026-W25/27` in week 27 and `2026-166/170` on the year's 170th day. A day and a time (`2007-11-13T09:00/15T17:00`), a week and its day (`2026-W25-1/W26-5`) and a day of the week (`2026-W25-1/5`) are read the same way.
+
+```elixir
+iex> Tempo.from_iso8601!("2026-06-15/20") == Tempo.from_iso8601!("2026-06-15/2026-06-20")
+true
+
+iex> Tempo.from_iso8601!("2007-11-13T09:00/15T17:00") == Tempo.from_iso8601!("2007-11-13T09:00/2007-11-15T17:00")
+true
+```
+
+§5.5.1 allows the omission "provided that the resulting expression is unambiguous", and two digits alone are a century (§5.2.2.2). After a start written to a finer unit a century is no reading at all, since the interval would run backwards, so Tempo reads the number as the unit the start ends with. A century at the end of an interval is written with its designator, `2026-06-15/24C`, and after a start that is a year alone (`2022/24`) the two digits are still the century they are on their own.
 
 ## 4. IXDTF — Internet Extended Date/Time Format
 
@@ -186,10 +196,17 @@ A calendar of weeks (`[u-ca=iso-week]`, `[u-ca=nrf]`) has no months, so a whole 
 These syntaxes are Tempo conveniences, not part of any standard:
 
 * **Step in range** — `{1990..1999//2}Y` or `2023Y{1..-1//2}W` means "every second week in 2023".
+
 * **Calendar week** — `2027Y1w` is the calendar's own week 1, where `2027Y1W` is ISO 8601's; described below.
+
 * **A year in a recurrence selection** — `FL{2026,2028}Y1M1DN` keeps the occurrences in those years, where ISO 8601-2 §12.2 has no year rule; described with the recurrence domain below.
+
 * **Explicit suffixes** — `2022Y11M20D` instead of `2022-11-20`. Used by the `~o` sigil as the canonical output form.
+
 * **Repeat rule** — `/F` combinator inside a parsed expression.
+
+* **A time of day under a year, a month or a week** — `2026T17`, `2026-06T17` and `6MT10H` are that time on the first day of what is written, and are held with the day (`2026Y1M1DT17H`). ISO 8601-2 §7.7.1 wants the date of a date and time complete; Tempo reads a day left out as its first, as §7.10 reads a clock unit left out as zero.
+
 * **Selection position** — `L…N` with an `I` modifier for the nth occurrence of the resolved set, written weekday-then-position (`1K2I` = "the 2nd Monday"). `I` is the ISO 8601-2 §12.9 position designator, not a Tempo invention — it is listed here only for completeness and described in full below.
 
 None of these break ISO 8601 compatibility — Tempo accepts the standard forms too.

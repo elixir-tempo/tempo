@@ -94,6 +94,7 @@ defmodule Tempo.IntervalSet do
   alias Tempo.ConversionError
   alias Tempo.Duration
   alias Tempo.Interval
+  alias Tempo.Interval.Cycle
   alias Tempo.IntervalEndpointsError
   alias Tempo.IntervalSet.Backend
   alias Tempo.UnboundedSetError
@@ -163,7 +164,8 @@ defmodule Tempo.IntervalSet do
   def new(intervals, opts \\ []) when is_list(intervals) do
     intervals = Enum.map(intervals, &Interval.resolve_duration_form/1)
 
-    with :ok <- validate_all_bounded(intervals) do
+    with :ok <- validate_all_bounded(intervals),
+         :ok <- validate_one_order(intervals) do
       # `coalesce: false` is the default: IntervalSet preserves
       # member identity by design. Callers who want canonical
       # instant-set form (touching or overlapping intervals merged
@@ -184,6 +186,23 @@ defmodule Tempo.IntervalSet do
        }}
     end
   end
+
+  # The members are sorted by their starts, so each end must have a place in
+  # one order with the first member's start: a member with a year among
+  # members without, or an end that names no moment, is the comparison's
+  # error and not a sort that raises.
+  defp validate_one_order([%Interval{from: %Tempo{} = first} | _rest] = intervals) do
+    Enum.reduce_while(intervals, :ok, fn %Interval{from: from, to: to}, :ok ->
+      with :ok <- Compare.orderable(first, from),
+           :ok <- Compare.orderable(first, to) do
+        {:cont, :ok}
+      else
+        {:error, _exception} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp validate_one_order(_intervals), do: :ok
 
   defp resolve_backend(:list), do: Backend.List
   defp resolve_backend(:tree), do: Backend.Tree
@@ -943,6 +962,15 @@ defmodule Tempo.IntervalSet do
     with_intervals(set, coalesce_intervals(members(set)))
   end
 
+  @doc false
+  # `coalesce/1` for members already inside one turn of their cycle, as the
+  # set operations hold them (`Tempo.Interval.Cycle.parts/1`): they are merged
+  # as they stand, and an end at the cycle's end is left there.
+  @spec merged(t()) :: t()
+  def merged(%__MODULE__{} = set) do
+    with_intervals(set, merge_in_order(members(set)))
+  end
+
   @doc """
   `true` when any member interval of `set` covers `point`.
 
@@ -1145,9 +1173,43 @@ defmodule Tempo.IntervalSet do
   # Private helper used by `new/2` (when `coalesce: true` is
   # passed) and by the public `coalesce/1` wrapper above.
 
-  defp coalesce_intervals([]), do: []
+  # Spans with no year are on a cycle, and one that ends where its cycle does
+  # is written with its end at the cycle's start (`T23H/T0H`), which reads as
+  # before its start. So they are merged inside one turn of the cycle: each is
+  # cut at the cycle's end, the parts are merged, and the part that runs to
+  # the end and the part that starts the cycle are written back as the one
+  # span they are.
+  defp coalesce_intervals([%Interval{} = first | _rest] = intervals) do
+    if Cycle.cyclic?(first),
+      do: coalesce_on_cycle(intervals),
+      else: merge_in_order(intervals)
+  end
 
-  defp coalesce_intervals([interval | rest]) do
+  defp coalesce_intervals(intervals), do: merge_in_order(intervals)
+
+  defp coalesce_on_cycle(intervals) do
+    case cycle_parts(intervals) do
+      {:ok, parts} ->
+        parts |> Enum.sort(&compare_from/2) |> merge_in_order() |> Cycle.joined()
+
+      # Spans with no cycle to cut them at are merged as they are written.
+      {:error, _exception} ->
+        merge_in_order(intervals)
+    end
+  end
+
+  defp cycle_parts(intervals) do
+    Enum.reduce_while(intervals, {:ok, []}, fn interval, {:ok, parts} ->
+      case Cycle.parts(interval) do
+        {:ok, interval_parts} -> {:cont, {:ok, interval_parts ++ parts}}
+        {:error, _exception} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp merge_in_order([]), do: []
+
+  defp merge_in_order([interval | rest]) do
     coalesce_step(rest, [interval])
   end
 

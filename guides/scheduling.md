@@ -152,14 +152,12 @@ Tempo.zoned?(paris)                                      #=> true
 
 A floating value has no position on the universal time line, so **it cannot be compared with a zoned one** — there is no fact of the matter about whether "8am somewhere" falls before or after "8am in Paris" until you say *which* somewhere. Rather than silently reading the floating side as UTC and inventing an answer, Tempo refuses the comparison:
 
-<!-- guides:skip -->
-
 ```elixir
-Tempo.relation(~o"2030-03-01T08:00:00", ~o"2030-03-01T08:00:00[Europe/Paris]")
-#=> ** (Tempo.FloatingTempoError) Cannot compare on a floating Tempo (no zone or offset information) ...
+iex> {:error, %Tempo.FloatingTempoError{}} =
+...>   Tempo.relation(~o"2030-03-01T08:00:00", ~o"2030-03-01T08:00:00[Europe/Paris]")
 ```
 
-The same rejection applies to every comparison verb built on the relation — `before?/2`, `after?/2`, `overlaps?/2`, `within?/2`, the set predicates (`disjoint?/2`, `contains?/2`, …), and the certainty API (`overlap_certainty/2`, `certainly_before?/2`, …). Only the *mixed* case is refused: two floating values compare structurally on their shared wall-clock frame, and two zoned values compare by their instants (projected to UTC). Place the floating side in a zone first and the comparison is well-defined:
+The same refusal applies to every comparison verb built on the relation. A function with an error to return returns it, as `relation/2` does: `overlap_certainty/2`, `within_certainty/2` and `relation_certainty/3`. A predicate, with only true and false to give, raises it: `before?/2`, `after?/2`, `overlaps?/2`, `within?/2`, `disjoint?/2`, `contains?/2`, `certainly_before?/2` and the rest. Only the *mixed* case is refused: two floating values compare structurally on their shared wall-clock frame, and two zoned values compare by their instants (projected to UTC). Place the floating side in a zone first and the comparison is well-defined:
 
 ```elixir
 {:ok, paris} = Tempo.in_zone(~o"2030-03-01T08:00:00", "Europe/Paris")
@@ -353,7 +351,7 @@ Schedule.occurrences_in(retrospective, ~o"2025-07-01", ~o"2025-10-01")
 
 > **`Tempo.from_elixir/2` converts native Elixir date/time structs.** When a value arrives as a `Date`, `Time`, `NaiveDateTime`, or `DateTime` — from a database row, an API payload, a form — convert it with `from_elixir/2` rather than picking its fields apart by hand or re-formatting it to an ISO 8601 string and parsing it back. The time zone carries across faithfully, and the `:resolution` option lets you say how precise the value really is: a `DateTime` is second-precise, but a weekly meeting is a *to-the-minute* thing, so `resolution: :minute` makes the value — and every occurrence derived from it — a one-minute span rather than a one-second one. (For a value you are assembling from loose components rather than a struct, `Tempo.new/1` is the runtime companion to the `~o` sigil.)
 
-> **Store** the recurrence as a value — a zoned repeating interval, `~o"R/2025Y6M1DT14H0MZ+1H[Europe/London]/P1W"`. **Convert** it to an IntervalSet only when you need concrete occurrences, bounded to the query window. **Display** by projecting each endpoint's wall time through the viewer's preferred zone. Nothing about the stored value changes when the zone data does.
+> **Store** the recurrence as a value — a zoned repeating interval, `~o"R/2025Y6M1DT14H0MZ1H[Europe/London]/P1W"`. **Convert** it to an IntervalSet only when you need concrete occurrences, bounded to the query window. **Display** by projecting each endpoint's wall time through the viewer's preferred zone. Nothing about the stored value changes when the zone data does.
 
 ## Related reading
 

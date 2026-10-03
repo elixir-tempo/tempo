@@ -90,6 +90,15 @@ Each operand keeps its wall-clock time and zone as authoritative. When set opera
 
 A Paris 12:00 CEST interval compares equal to a UTC 10:00 interval because they map to the same UTC instant. Zone-data updates don't invalidate stored values — nothing UTC-shaped is stored — so results stay stable when IANA pushes new zone rules.
 
+A value with no zone has no UTC projection, so it is not combined with one that has: the set operations return a `Tempo.FloatingTempoError` for the pair, and the predicates raise it. Place the floating value first with `Tempo.in_zone/2`.
+
+```elixir
+iex> {:error, %Tempo.FloatingTempoError{}} = Tempo.union(~o"2026-06-15T10", ~o"2026-06-15T10Z")
+iex> {:ok, in_utc} = Tempo.in_zone(~o"2026-06-15T10", "Etc/UTC")
+iex> Tempo.equal?(in_utc, ~o"2026-06-15T10Z")
+true
+```
+
 ### 1.3. Calendar — first operand's calendar wins
 
 If the operands are in different calendars (Gregorian vs Hebrew, say), the second is converted to the first's calendar before math runs. Each endpoint of the second operand is extended to day precision, then year/month/day are converted via `Date.convert!/2`; hour/minute/second pass through unchanged (those units are calendar-independent). The result's calendar is the first operand's.
@@ -332,13 +341,18 @@ Note that `≡` here is covered-instant equality (via `Tempo.equal?/2`), not mem
 | Case | Behaviour |
 |---|---|
 | Empty IntervalSet on either side | Follows algebraic identities |
-| Open-ended interval (`1985/..`) as operand | Raises — bound the interval first |
-| Unbounded recurrence (`R/.../P1M`) | Raises — same reason |
-| `Tempo.Duration` | Raises — durations aren't instant sets |
-| One-of `Tempo.Set` (`[a,b,c]`) | Raises — epistemic disjunction, not IntervalSet |
-| Cross-calendar operands | Second operand converted to first's calendar via `Date.convert!/2`; result inherits first's calendar |
-| Cross-zone operands | Compared via UTC; result inherits first operand's zone |
-| Midnight-crossing unanchored interval (`T23:30/T01:00`) | Placed on day D converts to `[D T23:30, D+1 T01:00)`; on the time-of-day axis, split into `[T23:30, T24:00)` ∪ `[T00:00, T01:00)` before sweep-line |
+| Open-ended interval (`1985/..`) as operand | An error: bound the interval first |
+| Unbounded recurrence (`R/.../P1M`) | An error, for the same reason |
+| `Tempo.Duration` | An error: a duration is no set of instants |
+| One-of `Tempo.Set` (`[a,b,c]`) | An error: one of several values is no set of them |
+| Cross-calendar operands | Second operand converted to the first's calendar; the result is in the first's |
+| Cross-zone operands | Compared via UTC; the result is in the first operand's zone |
+| A value with no zone and one with a zone | A `Tempo.FloatingTempoError` |
+| A value with a year and one with none | A `Tempo.UnanchoredError` |
+| A span with no year that runs through its cycle's end (`T23:30/T01:00`) | Cut at midnight into `T23:30/T00:00` and `T00:00/T01:00`, and swept as two |
+| A span with no year that ends where it starts (`T00/T00`) | Once round its cycle: the whole day |
+
+Each error is returned by the operations that return a set, and raised by the predicates, which have only `true` and `false` to give.
 
 ## 6. Not in scope
 

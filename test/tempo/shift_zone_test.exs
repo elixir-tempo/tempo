@@ -96,13 +96,17 @@ defmodule Tempo.ShiftZoneTest do
       assert Compare.to_utc_seconds(read_back) == Compare.to_utc_seconds(jerusalem)
     end
 
-    test "a day that starts the evening before in UTC falls on that evening's date" do
-      # Midnight starting 1 Tishri in Jerusalem is 21:00 UTC on 29 Elul 5786
+    test "a day that starts the evening before in UTC runs from that evening's date" do
+      # Midnight starting 1 Tishri in Jerusalem is 21:00 UTC on 29 Elul 5786,
+      # and the day runs to 21:00 on 1 Tishri.
       new_year = Tempo.from_iso8601!("5787-01-01[Asia/Jerusalem][u-ca=hebrew]")
       {:ok, utc} = Tempo.shift_zone(new_year, "Etc/UTC")
 
-      assert Keyword.take(utc.time, [:year, :month, :day, :hour]) ==
+      assert Keyword.take(utc.from.time, [:year, :month, :day, :hour]) ==
                [year: 5786, month: 12, day: 29, hour: 21]
+
+      assert Keyword.take(utc.to.time, [:year, :month, :day, :hour]) ==
+               [year: 5787, month: 1, day: 1, hour: 21]
     end
 
     test "a half-hour zone, an offset and a lunar calendar" do
@@ -164,7 +168,89 @@ defmodule Tempo.ShiftZoneTest do
       paris = Tempo.from_iso8601!("2026-06-15T14:00:00+02:00[Europe/Paris]")
       both = %{paris | extended: %{paris.extended | zone_offset: 120}}
 
-      assert Tempo.to_iso8601!(both) == "2026Y6M15DT14H0M0SZ+2H0M[Europe/Paris]"
+      assert Tempo.to_iso8601!(both) == "2026Y6M15DT14H0M0SZ2H0M[Europe/Paris]"
+    end
+  end
+
+  # The user's decision of 2026-10-03: the result names the span the value
+  # names. It was the moment the value starts at, to the second: an hour, a
+  # day and a month each became one second, and a fraction of a second was
+  # dropped.
+  describe "Tempo.shift_zone/2 keeps the span a value names" do
+    test "a second and a fraction of one are the same second on the other clock" do
+      assert Tempo.shift_zone(~o"2026-06-15T10:30:45[Europe/Paris]", "America/New_York") ==
+               {:ok, ~o"2026-06-15T04:30:45-04[America/New_York]"}
+
+      assert Tempo.shift_zone(~o"2026-06-15T10:30:45.5[Europe/Paris]", "America/New_York") ==
+               {:ok, ~o"2026-06-15T04:30:45.5-04[America/New_York]"}
+    end
+
+    test "a minute and an hour keep their resolution where the clocks differ by whole ones" do
+      assert Tempo.shift_zone(~o"2026-06-15T10:30[Europe/Paris]", "America/New_York") ==
+               {:ok, ~o"2026-06-15T04:30-04[America/New_York]"}
+
+      assert Tempo.shift_zone(~o"2026-06-15T10[Europe/Paris]", "America/New_York") ==
+               {:ok, ~o"2026-06-15T04-04[America/New_York]"}
+
+      assert Tempo.shift_zone(~o"2026-06-15T10:30Z", "Asia/Kathmandu") ==
+               {:ok, ~o"2026-06-15T16:15+05:45[Asia/Kathmandu]"}
+    end
+
+    test "an hour is an interval where the clocks differ by part of one" do
+      {:ok, kolkata} = Tempo.shift_zone(~o"2026-06-15T10[Europe/Paris]", "Asia/Kolkata")
+
+      assert {kolkata.from.time, kolkata.to.time} ==
+               {[year: 2026, month: 6, day: 15, hour: 13, minute: 30],
+                [year: 2026, month: 6, day: 15, hour: 14, minute: 30]}
+
+      assert Tempo.to_iso8601(kolkata) ==
+               {:ok, "2026Y6M15DT13H30MZ5H30M/T14H30MZ5H30M[Asia/Kolkata]"}
+    end
+
+    test "a day is the interval it is on the other clock" do
+      {:ok, new_york} = Tempo.shift_zone(~o"2026-06-15[Europe/Paris]", "America/New_York")
+
+      assert {new_york.from.time, new_york.to.time} ==
+               {[year: 2026, month: 6, day: 14, hour: 18, minute: 0],
+                [year: 2026, month: 6, day: 15, hour: 18, minute: 0]}
+
+      # The day the clocks go forward in Paris is 23 hours long.
+      {:ok, utc} = Tempo.shift_zone(~o"2026-03-29[Europe/Paris]", "Etc/UTC")
+
+      assert {Tempo.hour(utc.from), Tempo.hour(utc.to)} == {23, 22}
+    end
+
+    test "a date stays a date in a zone whose clock reads the same" do
+      assert Tempo.shift_zone(~o"2026-06-15[Europe/Paris]", "Europe/Berlin") ==
+               {:ok, ~o"2026-06-15[Europe/Berlin]"}
+
+      assert Tempo.shift_zone(~o"2026-03-29[Europe/Paris]", "Europe/Berlin") ==
+               {:ok, ~o"2026-03-29[Europe/Berlin]"}
+
+      assert Tempo.shift_zone(~o"2026[Europe/Paris]", "Europe/Berlin") ==
+               {:ok, ~o"2026[Europe/Berlin]"}
+    end
+
+    test "an hour the clocks show twice keeps the offset that says which it is" do
+      {:ok, first} = Tempo.shift_zone(~o"2026-10-25T00Z", "Europe/Paris")
+      {:ok, second} = Tempo.shift_zone(~o"2026-10-25T01Z", "Europe/Paris")
+
+      assert {Tempo.hour(first), Tempo.hour(second)} == {2, 2}
+      assert {first.shift, second.shift} == {[hour: 2], [hour: 1]}
+    end
+
+    test "the span is the same on both clocks" do
+      for value <- [
+            ~o"2026-06-15T10[Europe/Paris]",
+            ~o"2026-06-15[Europe/Paris]",
+            ~o"2026-06[Europe/Paris]",
+            ~o"2026-W25[Europe/Paris]"
+          ],
+          zone <- ["America/New_York", "Asia/Kolkata", "Europe/Berlin", "Etc/UTC"] do
+        {:ok, there} = Tempo.shift_zone(value, zone)
+
+        assert Tempo.equal?(value, there), "#{inspect(value)} in #{zone}"
+      end
     end
   end
 
@@ -177,6 +263,13 @@ defmodule Tempo.ShiftZoneTest do
       assert Tempo.metadata(new_york) == %{event: "launch"}
       assert new_york.qualification == :uncertain
       assert new_york.extended.tags == %{"foo" => ["bar"]}
+    end
+
+    test "its metadata, on the interval a coarser value becomes" do
+      day = Tempo.put_metadata(~o"2026-06-15[Europe/Paris]", %{event: "launch"})
+      {:ok, new_york} = Tempo.shift_zone(day, "America/New_York")
+
+      assert Tempo.metadata(new_york) == %{event: "launch"}
     end
   end
 end

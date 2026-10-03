@@ -31,6 +31,7 @@ defmodule Tempo.Operations do
   alias Tempo.Compare
   alias Tempo.ConversionError
   alias Tempo.Interval
+  alias Tempo.Interval.Cycle
   alias Tempo.IntervalSet
   alias Tempo.Iso8601.Unit
   alias Tempo.Math
@@ -70,6 +71,10 @@ defmodule Tempo.Operations do
     without `:within`, calendar mismatch, a leftover `:bound`,
     etc.).
 
+  * `{:error, %Tempo.FloatingTempoError{}}` when one operand has a
+    zone or an offset and the other none: a value with no zone has no
+    place on the universal time line, as `Tempo.relation/2` holds.
+
   ### Examples
 
       iex> {:ok, {a, b}} = Tempo.Operations.align(~o"2026-01", ~o"2026-03")
@@ -101,6 +106,7 @@ defmodule Tempo.Operations do
   defp align_resolved(a, b, opts) do
     with :ok <- validate_operand(a),
          :ok <- validate_operand(b),
+         :ok <- Interval.same_frame(a, b),
          {:ok, class_a, class_b} <- compatible_classes(a, b, opts),
          {:ok, a_set} <- to_aligned_set(a, class_a, opts),
          {:ok, b_set} <- to_aligned_set(b, class_b, opts),
@@ -127,49 +133,34 @@ defmodule Tempo.Operations do
   ## to a specific day) are already concrete — they live on the
   ## universal time line and their endpoints don't wrap.
 
+  ## The same holds on every cycle a value with no year lies on: the
+  ## year for a month and a day (`12M31D`, whose span ends at the turn
+  ## of the year), the week for a day of the week.
+  ## `Tempo.Interval.Cycle.parts/1` cuts each such span at its cycle's
+  ## end.
+
   defp maybe_split_midnight_crossers(a, b, :unanchored, :unanchored) do
-    {:ok, split_crossers(a), split_crossers(b)}
+    with {:ok, a} <- split_crossers(a),
+         {:ok, b} <- split_crossers(b) do
+      {:ok, a, b}
+    end
   end
 
   defp maybe_split_midnight_crossers(a, b, _class_a, _class_b), do: {:ok, a, b}
 
   defp split_crossers(%IntervalSet{} = set) do
-    split = set |> IntervalSet.members() |> Enum.flat_map(&maybe_split/1)
-
-    case IntervalSet.new(split) do
-      {:ok, sorted} -> sorted
-      # Should never error — split intervals are always bounded.
-      # Fall back to unsorted form rather than raise.
-      _ -> IntervalSet.with_intervals(set, split)
-    end
-  end
-
-  defp maybe_split(%Interval{from: from, to: to} = interval) do
-    if crosses_midnight?(from, to) do
-      [
-        %Interval{from: from, to: %{from | time: end_of_day_time(from.time)}},
-        %Interval{from: %{to | time: start_of_day_time(to.time)}, to: to}
-      ]
-    else
-      [interval]
-    end
-  end
-
-  # For a time-of-day keyword list, replace `:hour` with 24 and
-  # everything finer with 0 — yields a synthetic midnight-upper
-  # endpoint that `compare_time/2` treats as later than any
-  # `[hour: 23, minute: X, ...]` value.
-  defp end_of_day_time(time) do
-    Enum.map(time, fn
-      {:hour, _} -> {:hour, 24}
-      {unit, _} -> {unit, 0}
+    set
+    |> IntervalSet.members()
+    |> Enum.reduce_while({:ok, []}, fn member, {:ok, parts} ->
+      case Cycle.parts(member) do
+        {:ok, member_parts} -> {:cont, {:ok, member_parts ++ parts}}
+        {:error, _exception} = error -> {:halt, error}
+      end
     end)
-  end
-
-  # Zero out every time-of-day unit — yields the start-of-day
-  # endpoint for the second half of a midnight-crossing interval.
-  defp start_of_day_time(time) do
-    Enum.map(time, fn {unit, _} -> {unit, 0} end)
+    |> case do
+      {:ok, parts} -> IntervalSet.new(parts, metadata: IntervalSet.metadata(set))
+      {:error, _exception} = error -> error
+    end
   end
 
   ## Cross-axis materialisation — when one operand is
@@ -244,15 +235,15 @@ defmodule Tempo.Operations do
     IntervalSet.new(materialised)
   end
 
-  # Iterate wall-clock days within a window interval. Each yielded
-  # value is a %Tempo{} with year/month/day filled in.
+  # The days a window touches, its last included when the window ends part
+  # of the way through it. Each yielded value is a %Tempo{} with
+  # year/month/day filled in.
   defp days_in(%Interval{from: from, to: to}) do
     from_day = trunc_to_day(from)
-    to_day = trunc_to_day(to)
     calendar = from.calendar
 
     Stream.unfold(from_day, fn day ->
-      if Compare.compare_time(day.time, to_day.time) == :lt do
+      if Compare.compare_time(day.time, to.time) == :lt do
         # `from_day` is `trunc_to_day/1` of a concrete endpoint, so the
         # year is always present and the step cannot need a year.
         {:ok, next_time} = Math.add_unit(day.time, :day, calendar)
@@ -273,21 +264,29 @@ defmodule Tempo.Operations do
 
   defp anchor_interval_to_day(
          %Interval{from: na_from, to: na_to},
-         %Tempo{time: day_time, calendar: calendar}
+         %Tempo{time: day_time, calendar: calendar} = day
        ) do
     if crosses_midnight?(na_from, na_to) do
       # Unanchored interval like `T23:30/T01:00` anchored to
       # day D → `[D T23:30, (D+1) T01:00)`. Advance `to`'s day.
       # The anchoring day is a concrete date, so this step is total.
       {:ok, next_day_time} = Math.add_unit(day_time, :day, calendar)
-      new_from = %{na_from | time: day_time ++ na_from.time}
-      new_to = %{na_to | time: next_day_time ++ na_to.time}
+      new_from = on_day(na_from, day_time, day)
+      new_to = on_day(na_to, next_day_time, day)
       %Interval{from: new_from, to: new_to}
     else
-      new_from = %{na_from | time: day_time ++ na_from.time}
-      new_to = %{na_to | time: day_time ++ na_to.time}
-      %Interval{from: new_from, to: new_to}
+      %Interval{from: on_day(na_from, day_time, day), to: on_day(na_to, day_time, day)}
     end
+  end
+
+  # A time of day placed on a day is in the day's zone when it has none of
+  # its own, as `Tempo.at/2` places it: 10:00 on a day in Paris is 10:00 in
+  # Paris.
+  defp on_day(%Tempo{time: time} = time_of_day, day_time, %Tempo{} = day) do
+    {_day, placed} =
+      Interval.propagate_endpoint_frame(day, %{time_of_day | time: day_time ++ time})
+
+    placed
   end
 
   # An unanchored interval "crosses midnight" when its `from`
@@ -812,7 +811,7 @@ defmodule Tempo.Operations do
 
   def union(a, b, opts) do
     with {:ok, {a_set, b_set}} <- align(a, b, opts) do
-      IntervalSet.new(IntervalSet.members(a_set) ++ IntervalSet.members(b_set),
+      written(IntervalSet.members(a_set) ++ IntervalSet.members(b_set),
         metadata: a_set.metadata
       )
     end
@@ -892,7 +891,7 @@ defmodule Tempo.Operations do
   def intersection(a, b, opts) do
     with {:ok, resolve} <- metadata_resolver(Keyword.get(opts, :metadata, :left)),
          {:ok, {a_set, b_set}} <- align(a, b, opts) do
-      IntervalSet.new(
+      written(
         sweep_intersection(IntervalSet.members(a_set), IntervalSet.members(b_set), resolve),
         metadata: a_set.metadata
       )
@@ -925,7 +924,7 @@ defmodule Tempo.Operations do
   def members_overlapping(a, b, opts \\ []) do
     with {:ok, {a_set, b_set}} <- align(a, b, opts) do
       result = sweep_members(IntervalSet.members(a_set), IntervalSet.members(b_set), :overlapping)
-      IntervalSet.new(result, metadata: a_set.metadata)
+      written(result, metadata: a_set.metadata)
     end
   end
 
@@ -1099,9 +1098,9 @@ defmodule Tempo.Operations do
       # Coalesce the input so gaps are computed against the
       # union-of-covered-instants, not against overlapping
       # members individually.
-      coalesced_input = IntervalSet.coalesce(input_set)
+      coalesced_input = IntervalSet.merged(input_set)
 
-      IntervalSet.new(
+      written(
         sweep_difference(
           IntervalSet.members(window_set),
           IntervalSet.members(coalesced_input)
@@ -1161,11 +1160,23 @@ defmodule Tempo.Operations do
 
   def difference(a, b, opts) do
     with {:ok, {a_set, b_set}} <- align(a, b, opts) do
-      IntervalSet.new(sweep_difference(IntervalSet.members(a_set), IntervalSet.members(b_set)),
+      written(sweep_difference(IntervalSet.members(a_set), IntervalSet.members(b_set)),
         metadata: a_set.metadata
       )
     end
   end
+
+  # The result of an operation, as a set. Spans with no year were cut at
+  # their cycle's end to be swept (`maybe_split_midnight_crossers/4`), and one
+  # that ends there is written as `Tempo.to_interval/2` writes it: `T23H/T0H`,
+  # the end of the day being the start of the next.
+  defp written([%Interval{} = first | _rest] = intervals, options) do
+    if Cycle.cyclic?(first),
+      do: intervals |> Enum.map(&Cycle.wrapped/1) |> IntervalSet.new(options),
+      else: IntervalSet.new(intervals, options)
+  end
+
+  defp written(intervals, options), do: IntervalSet.new(intervals, options)
 
   # N-ary set operations: the second argument may be a *list* of
   # operands, folded left-to-right. A list is never itself a valid
@@ -1218,7 +1229,7 @@ defmodule Tempo.Operations do
   def members_outside(a, b, opts \\ []) do
     with {:ok, {a_set, b_set}} <- align(a, b, opts) do
       result = sweep_members(IntervalSet.members(a_set), IntervalSet.members(b_set), :outside)
-      IntervalSet.new(result, metadata: a_set.metadata)
+      written(result, metadata: a_set.metadata)
     end
   end
 
@@ -1228,9 +1239,15 @@ defmodule Tempo.Operations do
   defp sweep_difference([], _b), do: []
   defp sweep_difference(a_list, []), do: a_list
 
-  defp sweep_difference([%Interval{} = a | a_rest], b_list) do
-    {emitted, remaining_b} = subtract_from(a, b_list)
-    emitted ++ sweep_difference(a_rest, remaining_b)
+  # The members of A are in order of their starts and may overlap each other
+  # (two bookings of one room), so a B that ends inside one A may reach the
+  # next: each A is cut by every B that can reach it. Only a B that ends at
+  # or before an A starts is dropped for the As after it, which start no
+  # earlier.
+  defp sweep_difference([%Interval{from: a_from} = a | a_rest], b_list) do
+    b_list = Enum.drop_while(b_list, &(Compare.compare_endpoints(&1.to, a_from) != :later))
+    {emitted, _remaining_b} = subtract_from(a, b_list)
+    emitted ++ sweep_difference(a_rest, b_list)
   end
 
   # Subtract all overlapping B intervals from a single A interval.
@@ -1446,8 +1463,8 @@ defmodule Tempo.Operations do
   def equal?(a, b, opts \\ []) do
     case align(a, b, opts) do
       {:ok, {a_set, b_set}} ->
-        a_members = IntervalSet.members(IntervalSet.coalesce(a_set))
-        b_members = IntervalSet.members(IntervalSet.coalesce(b_set))
+        a_members = IntervalSet.members(IntervalSet.merged(a_set))
+        b_members = IntervalSet.members(IntervalSet.merged(b_set))
 
         length(a_members) == length(b_members) and
           a_members |> Enum.zip(b_members) |> Enum.all?(&same_extent?/1)

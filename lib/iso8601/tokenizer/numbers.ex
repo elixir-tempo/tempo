@@ -263,8 +263,11 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
     |> unwrap_and_tag(:exponent)
   end
 
+  # The count of significant digits is a positive integer (ISO 8601-2
+  # §4.4.3), so a value has at least one: `1950S0` is not a value.
   def significant do
     ignore(string("S"))
+    |> lookahead_not(string("0"))
     |> integer(min: 1)
     |> unwrap_and_tag(:significant)
   end
@@ -275,6 +278,44 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
     |> lookahead_not(number_separator())
     |> reduce(:reduce_fraction)
     |> unwrap_and_tag(:fraction)
+  end
+
+  # A decimal fraction of a time of day's last unit. A time shift may follow
+  # it, and one behind UTC starts with a minus sign (`10:30:45.5-03:30`), so
+  # a dash after it does not make it something else, as it does after a
+  # number in a date.
+  #
+  # A comma is also what separates the members of a set, where a date may
+  # follow it (`{T10:00,2026-06-16}`): after a comma and digits a dash is
+  # taken for a time shift only when what follows it is written as one.
+  def time_fraction do
+    choice([
+      ignore(ascii_char([?.]))
+      |> times(ascii_char([?0..?9]), min: 1)
+      |> lookahead_not(choice([decimal_separator(), ascii_char([?], ?}])])),
+      ignore(ascii_char([?,]))
+      |> times(ascii_char([?0..?9]), min: 1)
+      |> lookahead_not(
+        choice([
+          decimal_separator(),
+          ascii_char([?], ?}]),
+          dash() |> lookahead_not(time_shift_digits())
+        ])
+      )
+    ])
+    |> reduce(:reduce_fraction)
+    |> unwrap_and_tag(:fraction)
+  end
+
+  # The digits of a time shift, after its sign: hours and minutes with a
+  # colon or as four digits, or hours alone where the text ends or a suffix
+  # or the solidus of an interval follows.
+  defp time_shift_digits do
+    choice([
+      integer(2) |> ascii_char([?:]) |> integer(2),
+      integer(4) |> lookahead_not(ascii_char([?0..?9])),
+      integer(2) |> choice([eos(), ascii_char([?[, ?/])])
+    ])
   end
 
   # Capture both the fractional digits as an integer and the count of

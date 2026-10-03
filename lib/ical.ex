@@ -123,7 +123,9 @@ if Code.ensure_loaded?(ICal) do
       one already in progress when the window opens, and one that
       runs past its end. Required when an event repeats with
       neither `COUNT` nor `UNTIL`; with no window, every event is
-      returned.
+      returned. A window with no zone is read against each event in
+      the event's own frame: as it stands against a time with no
+      zone, and in UTC against a zoned one.
 
     ### Returns
 
@@ -241,7 +243,9 @@ if Code.ensure_loaded?(ICal) do
     * `:within` is the query window, a `t:Tempo.Interval.t/0` or any
       value `Tempo.to_interval/2` accepts. Required: the occurrences
       of an `AVAILABLE` carrying an unbounded `RRULE` never end
-      without one.
+      without one. A window with no zone is read in UTC, the frame
+      iCalendar's free and busy times are exchanged in: RFC 7953 writes
+      a `VAVAILABILITY`'s own times in UTC or in a named zone.
 
     ### Returns
 
@@ -320,10 +324,13 @@ if Code.ensure_loaded?(ICal) do
       end
     end
 
+    # RFC 7953 writes a VAVAILABILITY's times in UTC or in a named zone,
+    # never with none, so a window with no zone is read in UTC: the frame
+    # iCalendar's own free and busy times are exchanged in.
     defp query_window(options) do
       case Keyword.fetch(options, :within) do
         {:ok, within} ->
-          Tempo.to_interval(within)
+          with {:ok, window} <- Tempo.to_interval(within), do: {:ok, Tempo.read_in_utc(window)}
 
         :error ->
           {:error, ":within is required — the occurrences of an unbounded RRULE never end"}

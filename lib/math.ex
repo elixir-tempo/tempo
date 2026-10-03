@@ -1215,6 +1215,10 @@ defmodule Tempo.Math do
       {:error, :grouped_component} ->
         {:error, ConversionError.exception(value: tempo, reason: :grouped_component)}
 
+      # A mask no value matches, or one on a unit with no range to narrow to.
+      {:error, {reason, _unit} = unreadable} when reason in [:no_candidates, :unmaskable] ->
+        {:error, Mask.error(tempo, unreadable)}
+
       other ->
         other
     end
@@ -1294,7 +1298,7 @@ defmodule Tempo.Math do
     # A day of the week of no week (`7K`) is on that axis too: the day after
     # it is the next day of the week, and a week after it is the same one.
     duration_time =
-      if week_axis?(crisp_time) do
+      if week_axis?(crisp_time, tempo.calendar) do
         translate_week_axis_duration(duration_time)
       else
         normalise_duration(duration_time)
@@ -1313,9 +1317,10 @@ defmodule Tempo.Math do
   end
 
   # A value on the week axis names a week, or a day of the week of no week
-  # (`7K`), and no day of a month.
-  defp week_axis?(time) do
-    Keyword.has_key?(time, :week) or
+  # (`7K`), and no day of a month. Every value of a calendar of weeks is on
+  # it, a year alone included: its year is counted in weeks.
+  defp week_axis?(time, calendar) do
+    Tempo.week_based_calendar?(calendar) or Keyword.has_key?(time, :week) or
       (Keyword.has_key?(time, :day_of_week) and not Keyword.has_key?(time, :month))
   end
 
@@ -1561,7 +1566,8 @@ defmodule Tempo.Math do
   end
 
   defp mask_candidate_bounds(unit, mask, previous, calendar) do
-    case Mask.valid_values(unit, mask, previous, calendar) do
+    case Mask.candidates(unit, mask, previous, calendar) do
+      {:ok, []} -> {:error, {:no_candidates, unit}}
       {:ok, candidates} -> {:ok, {Enum.min(candidates), Enum.max(candidates)}}
       {:error, _reason} = error -> error
     end
@@ -1751,31 +1757,43 @@ defmodule Tempo.Math do
 
   defp units_reached({unit, _amount}), do: [unit]
 
-  # Apply duration components largest-to-smallest, then clamp day
-  # to the valid range for the resulting month. `:week` appears only
-  # for week-axis values (month-axis durations normalise weeks to
-  # days before this loop runs).
-  @duration_apply_order [:year, :month, :week, :day, :day_of_week, :hour, :minute, :second]
+  # Apply duration components largest-to-smallest. The years and months
+  # are applied first and the day brought into the month they land in, and
+  # then the units that are counted from that date: 29 July less five months
+  # and a day is 27 February, the day before the 28th the months land on, as
+  # `Date.shift/2` and every calendar library count it. `:week` appears only
+  # for week-axis values (month-axis durations normalise weeks to days before
+  # this runs).
+  @calendar_units [:year, :month]
+  @counted_units [:week, :day, :day_of_week, :hour, :minute, :second]
 
   defp apply_duration(%Tempo{time: time, calendar: calendar} = tempo, duration_time) do
-    stepped =
-      @duration_apply_order
-      |> Enum.reduce_while({:ok, time}, fn unit, {:ok, acc} ->
-        case Keyword.get(duration_time, unit, 0) do
-          0 -> {:cont, {:ok, acc}}
-          n -> step_or_halt(apply_duration_component(acc, unit, n, calendar))
-        end
-      end)
-      |> thread_microsecond(Keyword.get(duration_time, :microsecond), calendar)
-
     # Only a month/year step can leave the day past the new month's length
     # ("Jan 31 + 1 month = Feb 31"); day/week/time steps already carry into the
     # next month as they go. Clamping only when a month or year is present
     # avoids a spurious demand for a year from a value that already sits on an
     # ambiguous day — e.g. `~o"2M29D"` shifted by an hour keeps its 29th.
-    with {:ok, new_time} <- maybe_clamp(stepped, duration_time, calendar) do
+    stepped =
+      {:ok, time}
+      |> apply_units(@calendar_units, duration_time, calendar)
+      |> maybe_clamp(duration_time, calendar)
+      |> apply_units(@counted_units, duration_time, calendar)
+      |> thread_microsecond(Keyword.get(duration_time, :microsecond), calendar)
+
+    with {:ok, new_time} <- stepped do
       {:ok, %{tempo | time: new_time}}
     end
+  end
+
+  defp apply_units({:error, _reason} = error, _units, _duration_time, _calendar), do: error
+
+  defp apply_units({:ok, time}, units, duration_time, calendar) do
+    Enum.reduce_while(units, {:ok, time}, fn unit, {:ok, acc} ->
+      case Keyword.get(duration_time, unit, 0) do
+        0 -> {:cont, {:ok, acc}}
+        n -> step_or_halt(apply_duration_component(acc, unit, n, calendar))
+      end
+    end)
   end
 
   defp step_or_halt({:ok, _time} = ok), do: {:cont, ok}
@@ -1836,16 +1854,19 @@ defmodule Tempo.Math do
   defp apply_microsecond_duration(time, nil, _calendar), do: {:ok, time}
   defp apply_microsecond_duration(time, {0, _precision}, _calendar), do: {:ok, time}
 
-  defp apply_microsecond_duration(time, {value, _precision}, calendar) do
-    shift_microseconds(time, value, calendar)
+  defp apply_microsecond_duration(time, {value, precision}, calendar) do
+    shift_microseconds(time, value, precision, calendar)
   end
 
+  # The result is written to the finer of the two fractions' digits: a tenth
+  # of a second added to a whole second is a second and a tenth, not one to
+  # six digits.
   @microseconds_per_second 1_000_000
-  defp shift_microseconds(time, delta, calendar) do
+  defp shift_microseconds(time, delta, delta_precision, calendar) do
     {current, precision} =
       case List.keyfind(time, :microsecond, 0) do
-        {:microsecond, {value, precision}} -> {value, precision}
-        nil -> {0, 6}
+        {:microsecond, {value, precision}} -> {value, max(precision, delta_precision)}
+        nil -> {0, delta_precision}
       end
 
     total = current + delta
@@ -2201,9 +2222,8 @@ defmodule Tempo.Math do
          :ok <- validate_exact_skipping(duration),
          {:ok, seconds} <- Duration.to_unit(duration, :second),
          {:ok, busy_set} <- normalize_busy(busy),
-         :ok <- validate_busy_members(busy_set) do
-      Interval.reject_mixed_frame!(origin, busy_set)
-
+         :ok <- validate_busy_members(busy_set),
+         :ok <- Interval.same_frame(origin, busy_set) do
       case free_days(origin, duration) do
         {:ok, days} -> walk_days(origin, days, busy_set)
         :error -> walk_skipping(origin, seconds, busy_set)

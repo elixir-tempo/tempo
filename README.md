@@ -231,21 +231,39 @@ Interactive, runnable tours for [Livebook](https://livebook.dev):
 ## Guides
 
 * [Migrating to Tempo 2.0](https://hexdocs.pm/ex_tempo/migration.html) — each 1.x name that changed, with its 2.0 form.
+
 * [Tutorial: build a booking-availability service](https://hexdocs.pm/ex_tempo/tutorial-booking-availability.html) — the journey-shaped introduction: one small system, every core concept.
+
 * [Cookbook](https://hexdocs.pm/ex_tempo/cookbook.html) — recipe-format answers to common temporal questions.
+
 * [When to use Tempo](https://hexdocs.pm/ex_tempo/when-to-use-tempo.html) — where the interval model earns its keep (and where it doesn't).
+
 * [Set operations](https://hexdocs.pm/ex_tempo/set-operations.html) — union, intersection, complement, difference, predicates.
+
 * [Scheduling](https://hexdocs.pm/ex_tempo/scheduling.html) — recurrence, free-busy availability, and dependency (critical-path) scheduling.
+
 * [Workdays and weekends](https://hexdocs.pm/ex_tempo/workdays-and-weekends.html) — territory-aware business-day arithmetic.
+
 * [Chronological networks](https://hexdocs.pm/ex_tempo/chronological-networks.html) — constraint reasoning over partially-known dates (the ChronoLog scheme).
+
 * [Holidays](https://hexdocs.pm/ex_tempo/holidays.html) — composing a real holiday calendar with workday logic.
+
 * [iCalendar integration](https://hexdocs.pm/ex_tempo/ical-integration.html) — importing `.ics` schedules with metadata preserved.
+
 * [Enumeration semantics](https://hexdocs.pm/ex_tempo/enumeration-semantics.html) — iterating across Tempo values and interval sets.
+
 * [Interop](https://hexdocs.pm/ex_tempo/interop.html) — anchored and unanchored values, and bridging native Elixir types.
+
 * [Pattern matching with sigils](https://hexdocs.pm/ex_tempo/pattern-matching-with-sigils.html) — destructuring Tempo values in function heads.
+
 * [ISO 8601 conformance](https://hexdocs.pm/ex_tempo/iso8601-conformance.html) — what's supported from the standards.
+
+* [What each operation gives each value](https://hexdocs.pm/ex_tempo/operation-matrix.html) — every class of value against every kind of operation, generated from the code and checked by the tests.
+
 * [RFC 5545 RRULE conformance](https://hexdocs.pm/ex_tempo/rfc5545_rrule_conformance.html) — recurrence-rule coverage, property by property.
+
 * [Shared AST for ISO 8601 and RRULE](https://hexdocs.pm/ex_tempo/shared-ast-iso8601-and-rrule.html) — the internal representation that unifies both.
+
 * [Temporal formalisms](https://hexdocs.pm/ex_tempo/temporal-formalisms.html) — how Tempo relates to Allen's algebra and the time-ontology literature.
 
 ## Related links

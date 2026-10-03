@@ -87,22 +87,40 @@ defimpl Enumerable, for: Tempo do
     if List.keymember?(time, :selection, 0) do
       reduce_spans(Tempo.to_interval(tempo), acc, fun)
     else
-      tempo |> Enumeration.implicit_walk() |> reduce_walk(acc, fun)
+      reduce_walk({Enumeration.implicit_walk(tempo), own_occurrence(tempo)}, acc, fun)
     end
   end
+
+  # A wall time a clock shows twice (the hour a clock goes back) names the
+  # first time it shows it, or the one the offset written with it names: the
+  # reading `Tempo.to_interval/2`, `Enum.count/1` and comparison give it. Its
+  # walk yields that occurrence. A value that holds such an hour without
+  # being in it (the day the clock goes back) is walked through both.
+  defp own_occurrence(%Tempo{shift: shift} = tempo) do
+    case Zone.zone_status(tempo) do
+      {:ambiguous, first, second} -> if same_offset?(shift, second), do: second, else: first
+      _one_reading -> :both
+    end
+  end
+
+  defp same_offset?(nil, _shift), do: false
+
+  defp same_offset?(written, shift),
+    do: Tempo.Compare.offset_seconds(written) == Tempo.Compare.offset_seconds(shift)
 
   defp reduce_spans({:ok, spans}, acc, fun), do: Enumerable.reduce(spans, acc, fun)
   defp reduce_spans({:error, exception}, _acc, _fun), do: raise(exception)
 
-  # The walk of the value (see `Tempo.Enumeration`), a few values at a time.
+  # The walk of the value (see `Tempo.Enumeration`), a few values at a time,
+  # with the occurrence of an hour shown twice that the value names.
   defp reduce_walk(_walk, {:halt, acc}, _fun), do: {:halted, acc}
 
   defp reduce_walk(walk, {:suspend, acc}, fun),
     do: {:suspended, acc, &reduce_walk(walk, &1, fun)}
 
-  defp reduce_walk(walk, {:cont, acc}, fun) do
+  defp reduce_walk({walk, fold}, {:cont, acc}, fun) do
     case Enumeration.next(walk) do
-      {:ok, values, walk} -> reduce_values(values, walk, {:cont, acc}, fun)
+      {:ok, values, next} -> reduce_values(values, {next, fold}, {:cont, acc}, fun)
       :done -> {:done, acc}
       {:error, exception} -> raise exception
     end
@@ -116,7 +134,7 @@ defimpl Enumerable, for: Tempo do
 
   defp reduce_values([], walk, {:cont, acc}, fun), do: reduce_walk(walk, {:cont, acc}, fun)
 
-  defp reduce_values([value | values], walk, {:cont, acc}, fun) do
+  defp reduce_values([value | values], {_walk, fold} = walk, {:cont, acc}, fun) do
     case Zone.zone_status(value) do
       :ok ->
         reduce_values(values, walk, fun.(value, acc), fun)
@@ -132,9 +150,14 @@ defimpl Enumerable, for: Tempo do
       # post-transition offset (AEST +10). RFC 9557 IXDTF treats the explicit
       # numeric offset as the fold disambiguator, so the two emitted Tempos
       # round-trip as distinct values and compare as distinct UTC instants.
-      {:ambiguous, first_shift, second_shift} ->
+      {:ambiguous, first_shift, second_shift} when fold == :both ->
         folded = [%{value | shift: first_shift}, %{value | shift: second_shift}]
         reduce_folded(folded, values, walk, {:cont, acc}, fun)
+
+      # The value walked is itself in the hour shown twice, and its values
+      # are in the occurrence it names.
+      {:ambiguous, _first_shift, _second_shift} ->
+        reduce_values(values, walk, fun.(%{value | shift: fold}, acc), fun)
     end
   end
 

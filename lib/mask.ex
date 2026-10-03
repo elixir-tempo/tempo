@@ -169,7 +169,7 @@ defmodule Tempo.Mask do
   # because a leap year adds one — there the answer really does depend
   # on the missing year, and `:unanchored` says so.
   defp valid_range(:month, previous, calendar) do
-    case Keyword.get(previous, :year) do
+    case unit_value(previous, :year) do
       year when is_integer(year) -> {:ok, 1..calendar.months_in_year(year)}
       _no_concrete_year -> unanchored_range(calendar.months_in_year())
     end
@@ -178,8 +178,8 @@ defmodule Tempo.Mask do
   # A day follows its month. With a year and no month it counts through the
   # year, as `Tempo.Validation` reads a day written straight after a year.
   defp valid_range(:day, previous, calendar) do
-    year = Keyword.get(previous, :year)
-    month = Keyword.get(previous, :month)
+    year = unit_value(previous, :year)
+    month = unit_value(previous, :month)
 
     cond do
       is_integer(year) and counted?(month) -> {:ok, 1..calendar.days_in_month(year, month)}
@@ -190,14 +190,14 @@ defmodule Tempo.Mask do
   end
 
   defp valid_range(:day_of_year, previous, calendar) do
-    case Keyword.get(previous, :year) do
+    case unit_value(previous, :year) do
       year when is_integer(year) -> {:ok, 1..calendar.days_in_year(year)}
       _no_concrete_year -> {:error, :unanchored}
     end
   end
 
   defp valid_range(:week, previous, calendar) do
-    case Keyword.get(previous, :year) do
+    case unit_value(previous, :year) do
       year when is_integer(year) -> {:ok, 1..Validation.iso_weeks_in_year(year, calendar)}
       _no_concrete_year -> {:error, :unanchored}
     end
@@ -209,6 +209,17 @@ defmodule Tempo.Mask do
     case Unit.value_range(unit, calendar) do
       {:ok, range} -> {:ok, range}
       :unknown -> {:error, {:unmaskable, unit}}
+    end
+  end
+
+  # The units before a mask are not always a keyword list: a group of a set
+  # (`{1,2}G3MU`) is a three-element entry, which `Keyword.get/2` raises on.
+  # It is no one number, and so no unit to count a range in.
+  defp unit_value(previous, unit) do
+    case List.keyfind(previous, unit, 0) do
+      {^unit, value} -> value
+      nil -> nil
+      _group_of_a_set -> :several
     end
   end
 

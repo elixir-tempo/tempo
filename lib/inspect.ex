@@ -809,10 +809,23 @@ defmodule Tempo.Inspect do
     [inspect_value(nth), ?G, group_time_designator(unit), inspect_value(group_size), unit_key, ?U]
   end
 
-  defp inspect_value({unit, {:group, {set_type, set_values}}, value}) do
+  # A group of a set (`{1,2}GT6HU`) is held as three elements, and is written
+  # here as the pair `written_as_pairs/1` makes of it, so that the clauses
+  # that place the one `T` of a time of day read it as they read any unit.
+  defp inspect_value({unit, {:group_of_set, {set_type, set_values}, value}}) do
     [_, unit_key] = inspect_value({unit, value})
     elements = Enum.map_join(set_values, ",", &inspect_value/1)
-    [open(set_type), elements, close(set_type), ?G, inspect_value(value), unit_key, ?U]
+
+    [
+      open(set_type),
+      elements,
+      close(set_type),
+      ?G,
+      group_time_designator(unit),
+      inspect_value(value),
+      unit_key,
+      ?U
+    ]
   end
 
   defp inspect_value(%Tempo{} = tempo) do
@@ -822,6 +835,7 @@ defmodule Tempo.Inspect do
       tempo.time
       |> fold_microsecond()
       |> apply_qualifications(qualifications)
+      |> written_as_pairs()
 
     [
       inspect_value(time),
@@ -987,7 +1001,8 @@ defmodule Tempo.Inspect do
   end
 
   defp inspect_value(%Tempo.Interval{recurrence: 1, from: from, to: to, duration: nil}) do
-    [inspect_value(drop_shared_suffix(from, to)), ?/, inspect_value(abbreviate(to, from))]
+    written_from = from |> in_its_own_calendar(to) |> drop_shared_suffix(to)
+    [inspect_value(written_from), ?/, inspect_value(abbreviate(to, from))]
   end
 
   defp inspect_value(%Tempo.Interval{recurrence: 1, from: from, to: nil, duration: duration}) do
@@ -1175,6 +1190,14 @@ defmodule Tempo.Inspect do
   defp group_time_designator(unit) when unit in [:hour, :minute, :second], do: ?T
   defp group_time_designator(_unit), do: []
 
+  defp written_as_pairs(time) when is_list(time), do: Enum.map(time, &written_as_pair/1)
+  defp written_as_pairs(time), do: time
+
+  defp written_as_pair({unit, {:group, {_set_type, _values} = set}, size}),
+    do: {unit, {:group_of_set, set, size}}
+
+  defp written_as_pair(component), do: component
+
   @qualifiable_units [
     :year,
     :month,
@@ -1240,21 +1263,18 @@ defmodule Tempo.Inspect do
   defp inspect_shift(hour: 0),
     do: ?Z
 
-  defp inspect_shift(hour: hour) when hour > 0,
-    do: [?Z, ?+, inspect_value(hour), ?H]
+  # ISO 8601-2 §7.4 writes a shift ahead of UTC with no sign (`Z8H`,
+  # `Z7H33M14S`) and one behind it with a minus before its units (`Z-5H30M`).
+  # A shift carries its sign on its first unit that is not zero, so `-00:30`
+  # is `[hour: 0, minute: -30]` and is written `Z-0H30M`.
+  defp inspect_shift(shift) when is_list(shift) do
+    sign = if Enum.any?(shift, fn {_unit, value} -> value < 0 end), do: [?-], else: []
 
-  defp inspect_shift(hour: hour),
-    do: [?Z, inspect_value(hour), ?H]
+    units =
+      Enum.map(shift, fn {unit, value} -> [inspect_value(abs(value)), unit_designator(unit)] end)
 
-  defp inspect_shift(hour: hour, minute: minute) when hour > 0,
-    do: [?Z, ?+, inspect_value(hour), ?H, inspect_value(minute), ?M]
-
-  # A negative offset under an hour carries its sign on the minute.
-  defp inspect_shift(hour: 0, minute: minute) when minute < 0,
-    do: [?Z, ?-, inspect_value(0), ?H, inspect_value(-minute), ?M]
-
-  defp inspect_shift(hour: hour, minute: minute),
-    do: [?Z, inspect_value(hour), ?H, inspect_value(minute), ?M]
+    [?Z, sign, units]
+  end
 
   defp inspect_qualification(nil), do: []
   defp inspect_qualification(:uncertain), do: "?"
@@ -1350,6 +1370,32 @@ defmodule Tempo.Inspect do
   # Both the zone and a `u-ca` calendar reach `from` from the end, so
   # either may be written once. Arbitrary IXDTF tags do not propagate — they are
   # per-endpoint metadata — so a suffix carrying any is kept on both ends.
+  #
+  # That flow is why a start in another calendar than its end's has to say
+  # so: `Tempo.Interval.new/2` of a Gregorian day and a Hebrew one is written
+  # with `[u-ca=gregory]` on the start, or the end's calendar would be read
+  # as the start's too.
+  defp in_its_own_calendar(
+         %Tempo{calendar: from_calendar, extended: from_extended} = from,
+         %Tempo{calendar: to_calendar, extended: %{calendar: to_tag}}
+       )
+       when not is_nil(to_tag) and from_calendar != to_calendar and
+              not is_nil(from_calendar) do
+    with nil <- from_extended && Map.get(from_extended, :calendar),
+         {:ok, type} <- cldr_calendar_type(from_calendar) do
+      %{from | extended: tagged_with_calendar(from_extended, type)}
+    else
+      _named_or_unnameable -> from
+    end
+  end
+
+  defp in_its_own_calendar(from, _to), do: from
+
+  defp tagged_with_calendar(nil, type),
+    do: %{zone_id: nil, zone_offset: nil, zone_critical: false, calendar: type, tags: %{}}
+
+  defp tagged_with_calendar(%{} = extended, type), do: %{extended | calendar: type}
+
   defp drop_shared_suffix(%Tempo{extended: same} = from, %Tempo{extended: same})
        when not is_nil(same) do
     if propagating_suffix?(same), do: %{from | extended: nil}, else: from
@@ -1391,6 +1437,11 @@ defmodule Tempo.Inspect do
         # shorter form that still says the same thing.
         [] -> to
         ^to_units -> to
+        # The end leaves the start's axis where the two differ
+        # (`2026Y6M15D/2026Y27W`), so the components it would leave out
+        # are not those the start implies: `27W` after a date would be
+        # read in the start's June.
+        :another_axis -> to
         remaining -> %{to | time: remaining}
       end
     else
@@ -1405,6 +1456,13 @@ defmodule Tempo.Inspect do
       to.qualification == from.qualification and to.qualifications == from.qualifications
   end
 
+  # The components of the end from the first that differs from the start's.
+  # They are implied by the start only when the end stays on the start's axis:
+  # the first that differs is the start's unit with another value, or the end
+  # goes on where the start stops.
   defp shared_prefix([same | to_rest], [same | from_rest]), do: shared_prefix(to_rest, from_rest)
-  defp shared_prefix(to_units, _from_units), do: to_units
+  defp shared_prefix([{unit, _value} | _] = to_units, [{unit, _other} | _]), do: to_units
+  defp shared_prefix(to_units, []), do: to_units
+  defp shared_prefix([], _from_units), do: []
+  defp shared_prefix(_to_units, _from_units), do: :another_axis
 end

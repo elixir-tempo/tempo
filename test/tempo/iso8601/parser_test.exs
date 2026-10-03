@@ -77,24 +77,62 @@ defmodule Tempo.Iso8601.Parser.Test do
     end
   end
 
-  # A month alone with a time after it did not parse, though a year and a
-  # month with one did, so a group of months walked to values that did not
-  # read back; a month counted from the end under a year stayed unresolved.
-  describe "a time after a month with no day" do
-    test "parses after a month alone, as after a year and a month" do
-      assert {:ok, %Tempo{time: [month: 6, hour: 10]} = value} = Tempo.from_iso8601("6MT10H")
-      assert Tempo.from_iso8601(Tempo.to_iso8601!(value)) == {:ok, value}
-
-      assert {:ok, %Tempo{time: [month: 6, hour: 10, minute: 30]}} =
-               Tempo.from_iso8601("6MT10H30M")
+  # A time of day under a date with its month or its day left out is read on
+  # the first of what is left out, as a clock unit left out is read as zero
+  # (ISO 8601-2 §7.10). The value held the units it was written with, and
+  # every reader of it took the gap its own way: it compared as equal to any
+  # day of the year, and a day added to it was lost.
+  describe "a time after a date with its month or its day left out" do
+    test "is that time on the first day of what is written" do
+      assert Tempo.from_iso8601("6MT10H") == {:ok, ~o"6M1DT10H"}
+      assert Tempo.from_iso8601("6MT10H30M") == {:ok, ~o"6M1DT10H30M"}
+      assert Tempo.from_iso8601("2026YT17H") == {:ok, ~o"2026Y1M1DT17H"}
+      assert Tempo.from_iso8601("2026T17") == {:ok, ~o"2026Y1M1DT17H"}
+      assert Tempo.from_iso8601("2026-06T17") == {:ok, ~o"2026Y6M1DT17H"}
+      assert Tempo.from_iso8601("2026YT30M") == {:ok, ~o"2026Y1M1DT0H30M"}
     end
 
-    test "a group of months walks to values that read back" do
-      assert Enum.to_list(~o"2G2MUT10H") == [~o"3MT10H", ~o"4MT10H"]
+    test "is the first day of a week, and of a week calendar's year" do
+      assert Tempo.from_iso8601("2026Y25WT17H") == {:ok, ~o"2026Y6M15DT17H"}
+
+      assert Tempo.from_iso8601("2026YT17H", Calendrical.ISOWeek) ==
+               Tempo.from_iso8601("2026Y1W1KT17H", Calendrical.ISOWeek)
+    end
+
+    # What follows a group is one instance within it (ISO 8601-2 §5.4.2).
+    test "under a group is the first day of the group" do
+      assert Tempo.from_iso8601("2026Y2G3MUT10H") == {:ok, ~o"2026Y4M1DT10H"}
+      assert Tempo.from_iso8601("2G2MUT10H") == {:ok, ~o"3M1DT10H"}
+      assert Tempo.from_iso8601("20CT10H") == {:ok, ~o"2000Y1M1DT10H"}
+    end
+
+    test "under a mask or a set is the first day of each" do
+      assert Tempo.from_iso8601("2026Y{6,7}MT10H") == {:ok, ~o"2026Y{6,7}M1DT10H"}
+      assert Tempo.from_iso8601("2026YXXMT10H") == {:ok, ~o"2026YXXM1DT10H"}
+    end
+
+    test "a group of hours is still counted in the year" do
+      assert Tempo.from_iso8601("2018Y20GT12HU3H") == {:ok, ~o"2018Y1M10DT15H"}
     end
 
     test "a month counted from the end is its year's" do
-      assert Tempo.from_iso8601("2026Y-1MT10H") == {:ok, ~o"2026Y12MT10H"}
+      assert Tempo.from_iso8601("2026Y-1MT10H") == {:ok, ~o"2026Y12M1DT10H"}
+    end
+
+    test "is one value to compare, to shift and to measure" do
+      value = ~o"2026YT17H"
+
+      assert Tempo.compare(value, ~o"2026-03-01T17") == :lt
+      assert Tempo.relation(value, ~o"2026-03-01T17") == :precedes
+      assert Tempo.shift(value, day: 1) == ~o"2026-01-02T17"
+      assert Tempo.shift(value, hour: 10) == ~o"2026-01-02T03"
+      refute Tempo.at_least?(value, ~o"P1D")
+    end
+
+    test "is what the constructor builds, and what a time placed on a year or a month is" do
+      assert Tempo.new(year: 2026, hour: 17) == {:ok, ~o"2026Y1M1DT17H"}
+      assert Tempo.at(~o"2026-06", ~o"T17") == {:ok, ~o"2026Y6M1DT17H"}
+      assert Tempo.at(~o"2026/2026-03", ~o"T17") == {:ok, ~o"2026Y1M1DT17H/2026Y3M1DT17H"}
     end
   end
 

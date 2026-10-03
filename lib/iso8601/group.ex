@@ -31,12 +31,10 @@ defmodule Tempo.Iso8601.Group do
     end
   end
 
-  def expand_groups(%Tempo.Duration{time: time} = tempo, calendar) do
-    case expand_groups(time, calendar) do
-      {:error, reason} -> {:error, reason}
-      time -> {:ok, %{tempo | time: time}}
-    end
-  end
+  # A duration's units are counts, not a date's: twenty-one months are not
+  # the season a date's month 21 is, and `P1Y21M` is a year and twenty-one
+  # months. It holds no group to expand.
+  def expand_groups(%Tempo.Duration{} = duration, _calendar), do: {:ok, duration}
 
   def expand_groups(%Tempo.Interval{} = tempo, calendar) do
     with {:ok, from} <- expand_groups(tempo.from, calendar),

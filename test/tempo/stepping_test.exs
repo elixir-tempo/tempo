@@ -150,11 +150,25 @@ defmodule Tempo.SteppingTest do
       for {text, error} <- [
             {"2M28D/P1D", UnanchoredError},
             {"P1D/3M1D", UnanchoredError},
-            {"2026Y6M{1,15}D/P1D", ConversionError},
-            {"202XY/P1D", ConversionError}
+            {"2026Y6M{1,15}D/P1D", ConversionError}
           ] do
         assert {:error, %^error{}} = Tempo.to_interval(Tempo.from_iso8601!(text)), text
       end
+    end
+
+    # A start that names a span is the point the span starts at, as it is in
+    # an interval written with two ends, and the duration is counted from it.
+    # The mask could not be stepped, and the interval was refused.
+    test "is counted from the point a start that names one span starts at" do
+      assert Tempo.to_interval(Tempo.from_iso8601!("202XY/P1D")) == {:ok, ~o"2020Y/2020Y1M2D"}
+      assert Tempo.to_interval(Tempo.from_iso8601!("202XY/P1Y")) == {:ok, ~o"2020Y/2021Y"}
+
+      # A day of the year is no month to add a month to: the span was empty.
+      assert Tempo.to_interval(Tempo.from_iso8601!("2026YXXO/P1M")) ==
+               {:ok, ~o"2026Y1M1D/2026Y2M1D"}
+
+      assert Tempo.to_interval(Tempo.from_iso8601!("P1M/2026YXXO")) ==
+               {:ok, ~o"2025Y12M1D/2026Y1M1D"}
     end
 
     test "ends a recurrence's walk with the step it could not take" do
@@ -162,8 +176,7 @@ defmodule Tempo.SteppingTest do
             # The second month after 31 December is a 31 February.
             {"R3/12M31D/P1M", UnanchoredError},
             # The second occurrence would end the day after 28 February.
-            {"R2/2M27D/P1D", UnanchoredError},
-            {"R3/202XY/P1Y", ConversionError}
+            {"R2/2M27D/P1D", UnanchoredError}
           ] do
         assert {:error, %^error{}} = Tempo.to_interval(Tempo.from_iso8601!(text)), text
       end
@@ -254,8 +267,14 @@ defmodule Tempo.SteppingTest do
       assert IntervalSet.count(set) == 4
     end
 
-    test "a start that holds a mask is still one start" do
-      assert {:error, %ConversionError{}} = Tempo.to_interval(Tempo.from_iso8601!("R3/202XY/P1Y"))
+    test "a start that holds a mask is still one start: the point its span starts at" do
+      assert spans(Tempo.from_iso8601!("R3/202XY/P1Y")) ==
+               [{~o"2020Y", ~o"2021Y"}, {~o"2021Y", ~o"2022Y"}, {~o"2022Y", ~o"2023Y"}]
+    end
+
+    test "a start that holds a group of a set is no one start" do
+      assert {:error, %ConversionError{reason: :grouped_component}} =
+               Tempo.to_interval(Tempo.from_iso8601!("R3/2026Y{1,2}G3MU15D/P1D"))
     end
   end
 

@@ -257,7 +257,12 @@ defmodule Tempo.Format do
        when is_integer(value) and is_integer(precision),
        do: true
 
-  defp one_value?({_unit, {value, meta}}) when is_integer(value) and is_list(meta), do: true
+  # A margin of error rides on the value it is written beside. Significant
+  # digits name the block of values the digits leave open (`1950S2` is the
+  # twentieth century), which is a span of its own, as a mask's is.
+  defp one_value?({_unit, {value, meta}}) when is_integer(value) and is_list(meta),
+    do: not Keyword.has_key?(meta, :significant_digits)
+
   defp one_value?(_component), do: false
 
   # A week, a day of the week or a day of the year with no year has no date for
@@ -319,15 +324,8 @@ defmodule Tempo.Format do
 
   defp relative_string(%Tempo{} = tempo, options), do: render_relative(tempo, options)
 
-  defp relative_string(%Tempo.Interval{from: %Tempo{} = from}, options),
-    do: render_relative(from, options)
-
-  defp relative_string(%Tempo.Interval{}, _options) do
-    {:error,
-     IntervalEndpointsError.exception(
-       operation: "to_relative_string/2",
-       reason: "Tempo.to_relative_string/2 requires an interval with a concrete :from endpoint."
-     )}
+  defp relative_string(%Tempo.Interval{} = interval, options) do
+    with {:ok, start} <- interval_start(interval), do: render_relative(start, options)
   end
 
   defp relative_string(value, _options) do
@@ -340,6 +338,39 @@ defmodule Tempo.Format do
   defp options_error(function, options) do
     ArgumentError.exception(
       "Tempo.#{function} takes a keyword list of options, got #{inspect(options)}."
+    )
+  end
+
+  # Where an interval starts: the start it is written with, the start its
+  # duration is counted back to from its end, and for a recurrence written
+  # to its end, the start of its first occurrence.
+  defp interval_start(%Tempo.Interval{} = interval) do
+    case Interval.from(interval) do
+      %Tempo{} = start -> {:ok, start}
+      _no_start -> first_occurrence_start(interval)
+    end
+  end
+
+  defp first_occurrence_start(%Tempo.Interval{recurrence: recurrence} = interval)
+       when is_integer(recurrence) and recurrence > 1 do
+    with {:ok, %IntervalSet{} = occurrences} <- Tempo.to_interval(interval),
+         [first | _rest] <- IntervalSet.members(occurrences),
+         %Tempo{} = start <- Interval.from(first) do
+      {:ok, start}
+    else
+      _no_occurrence -> {:error, no_start_error(interval)}
+    end
+  end
+
+  defp first_occurrence_start(interval), do: {:error, no_start_error(interval)}
+
+  defp no_start_error(interval) do
+    IntervalEndpointsError.exception(
+      operation: "to_relative_string/2",
+      interval: interval,
+      reason:
+        "Tempo.to_relative_string/2 counts to where an interval starts, and " <>
+          "#{inspect(interval)} has no start."
     )
   end
 
@@ -862,25 +893,17 @@ defmodule Tempo.Format do
   # Extract {from, to} from an interval for formatting. A plain
   # pair of endpoints is enough for Localize.Interval; a recurrence
   # is materialised to its occurrences before it gets here.
-  defp interval_endpoints_for_format(%Tempo.Interval{
-         from: %Tempo{} = from,
-         to: %Tempo{} = to,
-         unit: unit
-       }) do
-    # A materialised implicit span carries its iteration granularity
-    # on `:unit` with bounds at the value's own resolution. The
-    # rendered range spans the sub-units ("Jan – Dec 2026" for a
-    # year), so fill both endpoints down to the unit first; a nil
-    # unit (a user-written explicit interval) is a no-op.
-    calendar = Compare.effective_calendar(from.calendar)
-    unit = unit || week_days(from)
-    {:ok, Steps.fill_to_unit(from, unit, calendar), Steps.fill_to_unit(to, unit, calendar)}
-  end
-
+  #
+  # Both ends are filled down to the unit the interval is shown in, so
+  # the last value it holds is one such unit before its end: a year to
+  # a month (`2026/2026-03`) is January to February, as its walk yields.
   defp interval_endpoints_for_format(%Tempo.Interval{} = interval) do
     case Tempo.Interval.endpoints(interval) do
       {%Tempo{} = from, %Tempo{} = to} ->
-        {:ok, from, to}
+        calendar = Compare.effective_calendar(from.calendar)
+        {from, to} = on_one_axis(from, to, calendar)
+        unit = shown_unit(%Tempo.Interval{interval | from: from, to: to})
+        {:ok, Steps.fill_to_unit(from, unit, calendar), Steps.fill_to_unit(to, unit, calendar)}
 
       {from, _to} ->
         {:error,
@@ -897,11 +920,30 @@ defmodule Tempo.Format do
   defp open_end(%Tempo{}), do: "end"
   defp open_end(_open), do: "start"
 
-  # A range of whole weeks is shown by its days, as a week is.
-  defp week_days(%Tempo{} = tempo) do
-    case Tempo.resolution(tempo) do
-      {:week, _span} -> :day_of_week
-      _other -> nil
+  # A week beside a month or a day of one has no unit in common with it, so
+  # it is shown as the date its first day is: `2026-W25/2026-07-01` runs
+  # from 15 June.
+  defp on_one_axis(%Tempo{} = from, %Tempo{} = to, calendar) do
+    if week?(from) == week?(to),
+      do: {from, to},
+      else: {week_as_date(from, calendar), week_as_date(to, calendar)}
+  end
+
+  defp week?(%Tempo{time: time}), do: Keyword.has_key?(time, :week)
+
+  defp week_as_date(%Tempo{time: time} = tempo, calendar),
+    do: %Tempo{tempo | time: week_date_as_day(time, calendar)}
+
+  # The unit an interval is shown in. A materialised implicit span carries
+  # its iteration granularity on `:unit` ("Jan – Dec 2026" for a year). One
+  # written with two ends is shown in the unit it is walked by, the finer
+  # of its ends', and a range of whole weeks by its days, as a week is.
+  defp shown_unit(%Tempo.Interval{unit: unit}) when not is_nil(unit), do: unit
+
+  defp shown_unit(%Tempo.Interval{} = interval) do
+    case Tempo.Interval.granularity(interval) do
+      :week -> :day_of_week
+      unit -> unit
     end
   end
 end

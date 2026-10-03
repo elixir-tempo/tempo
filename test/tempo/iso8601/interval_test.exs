@@ -349,14 +349,72 @@ defmodule Tempo.Parser.Interval.Test do
                [year: 2022, month: 2, day: 15, hour: 11, minute: 30]
     end
 
-    test "a two-digit end is a century, not a day, so nothing is inherited" do
-      # §5.5.1 allows the omission only "provided that the resulting
-      # expression is unambiguous", and §5.2.2.2 makes a bare two-digit
-      # date component a century. `2022-02-15/04` is therefore century 04,
-      # not April, and must not quietly acquire the start's year.
-      interval = Tempo.from_iso8601!("2022-02-15/04")
+    # An end that is one bare number is the start's last component. Read as
+    # what two digits are alone, a century, `2022-02-15/20` ran from 2022
+    # back to the year 2000.
+    test "a bare number is the start's last component" do
+      for {abbreviated, whole} <- [
+            {"2026-06-15/20", "2026-06-15/2026-06-20"},
+            {"20260615/20", "2026-06-15/2026-06-20"},
+            {"2026-06/08", "2026-06/2026-08"},
+            {"2026-06-15T10/11", "2026-06-15T10/2026-06-15T11"},
+            {"2026-06-15T10:30/45", "2026-06-15T10:30/2026-06-15T10:45"},
+            {"2026-06-15T10:30:15/45", "2026-06-15T10:30:15/2026-06-15T10:30:45"},
+            {"2026-W25/27", "2026-W25/2026-W27"},
+            {"2026-W25-1/5", "2026-W25-1/2026-W25-5"},
+            {"2026-166/170", "2026-166/2026-170"},
+            {"T10:30/45", "T10:30/T10:45"},
+            {"R3/2026-06-15/20", "R3/2026-06-15/2026-06-20"}
+          ] do
+        assert Tempo.from_iso8601!(abbreviated) == Tempo.from_iso8601!(whole)
+      end
+    end
 
-      assert Interval.to(interval).time == [year: {:group, 400..499}]
+    test "a bare number keeps its end's suffix and the start's zone" do
+      assert Tempo.from_iso8601!("2026-06-15T10:30Z/45") ==
+               Tempo.from_iso8601!("2026-06-15T10:30Z/2026-06-15T10:45Z")
+
+      assert Tempo.from_iso8601!("2026-06-15T10:30[Europe/Paris]/45") ==
+               Tempo.from_iso8601!("2026-06-15T10:30[Europe/Paris]/2026-06-15T10:45")
+    end
+
+    test "a bare number that is before the start, or is no value of its unit, is an error" do
+      assert {:error, %Tempo.IntervalEndpointsError{}} = Tempo.from_iso8601("2026-06-15/07")
+      assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("2026-06-15/45")
+    end
+
+    test "a day and a time of day take the year and the month from the start" do
+      assert Tempo.from_iso8601!("2007-11-13T09:00/15T17:00") ==
+               Tempo.from_iso8601!("2007-11-13T09:00/2007-11-15T17:00")
+
+      assert Tempo.from_iso8601!("20071113T0900/15T1700") ==
+               Tempo.from_iso8601!("2007-11-13T09:00/2007-11-15T17:00")
+    end
+
+    test "a week and a day of it take the year from the start" do
+      assert Tempo.from_iso8601!("2026-W25-1/W26-5") ==
+               Tempo.from_iso8601!("2026-W25-1/2026-W26-5")
+
+      assert Tempo.from_iso8601!("2026W251/W265") == Tempo.from_iso8601!("2026-W25-1/2026-W26-5")
+      assert Tempo.from_iso8601!("W26-5") == Tempo.from_iso8601!("26W5K")
+    end
+
+    test "a bare number after a start with no finer unit is what it is alone" do
+      assert Interval.to(Tempo.from_iso8601!("2022/24")).time == [year: {:group, 2400..2499}]
+
+      assert Interval.to(Tempo.from_iso8601!("2022-02-15/203")).time == [
+               year: {:group, 2030..2039}
+             ]
+    end
+
+    test "a century or a decade is written with its designator" do
+      interval = Tempo.from_iso8601!("2022-02-15/24C")
+
+      assert Interval.to(interval).time == [year: {:group, 2400..2499}]
+    end
+
+    test "one digit ends an interval only after a day of the week" do
+      assert {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("2026-06-15/5")
     end
 
     test "a duration end is unaffected" do

@@ -2,9 +2,7 @@ defmodule Tempo.EnumerationWalk.Test do
   use ExUnit.Case, async: true
   import Tempo.Sigils
 
-  alias Calendrical.Gregorian
   alias Calendrical.Hebrew
-  alias Tempo.Clock.Test, as: ClockTest
   alias Tempo.Interval
   alias Tempo.IntervalSet
 
@@ -126,9 +124,10 @@ defmodule Tempo.EnumerationWalk.Test do
       assert length(days) == 10
       assert Enum.take(days, 2) == [~o"2020Y2M29D", ~o"2021Y2M28D"]
 
-      year = Date.utc_today().year
-      assert [%Tempo{time: [year: ^year, month: 2, day: last]}] = Enum.to_list(~o"X*Y2M-1D")
-      assert last == Gregorian.days_in_month(year, 2)
+      # An unspecified year is no year, so the last day of its February is the
+      # last February has in any year, as it is with no year written.
+      assert ~o"X*Y2M-1D" == ~o"X*Y2M29D"
+      assert ~o"2M-1D" == ~o"2M29D"
     end
 
     test "a day counted from the end of a month whose length varies by year in another calendar" do
@@ -196,9 +195,10 @@ defmodule Tempo.EnumerationWalk.Test do
     end
   end
 
-  describe "an interval whose ends differ in resolution counts as it walks" do
-    # count/1 counted the whole units between the ends cut to the unit, so it
-    # missed the step that starts after the end's own unit begins.
+  describe "an interval whose ends differ in resolution is walked by the finer of them" do
+    # An explicit span is iterated at the highest resolution of its boundaries,
+    # so its values are the interval and none runs past its end. It was walked
+    # by its start's unit, and the last value ran on to the end of that unit.
     for text <- [
           "1985/1986-06",
           "2026Y/2026Y6M15D",
@@ -220,10 +220,39 @@ defmodule Tempo.EnumerationWalk.Test do
       end
     end
 
-    test "the step the end's unit starts in is counted" do
-      assert Enum.count(~o"1985/1986-06") == 2
-      assert Enum.count(~o"2026Y/2026Y6M15D") == 1
-      assert Enum.at(~o"2026-06-15T10/2026-06-15T12:30", 2) == ~o"2026Y6M15DT12H"
+    test "the values are the interval, in the finer unit" do
+      assert Enum.to_list(~o"2026/2026-03") == [~o"2026Y1M", ~o"2026Y2M"]
+      assert Enum.count(~o"1985/1986-06") == 17
+      assert Enum.at(~o"1985/1986-06", 16) == ~o"1986Y5M"
+      assert Enum.count(~o"2026Y/2026Y6M15D") == 165
+      assert Enum.count(~o"2026-06-15T10/2026-06-15T12:30") == 150
+      assert Enum.at(~o"2026-06-15T10/2026-06-15T12:30", 149) == ~o"2026Y6M15DT12H29M"
+    end
+
+    test "an end that is the coarser is where the walk stops" do
+      hours = Enum.to_list(~o"2026-06-15T10/2026-06-16")
+
+      assert length(hours) == 14
+      assert List.last(hours) == ~o"2026Y6M15DT23H"
+    end
+
+    test "an interval written with a duration is walked to the end the duration gives" do
+      hours = Enum.to_list(~o"2026-06-15/PT36H")
+
+      assert length(hours) == 36
+      assert List.last(hours) == ~o"2026Y6M16DT11H"
+    end
+
+    test "ends on two axes, or in two zones, are ordered as the moments they are" do
+      days = Enum.to_list(~o"2026-W25/2026-07-01")
+
+      assert length(days) == 16
+      assert Enum.count(~o"2026-W25/2026-07-01") == 16
+
+      minutes = ~o"2026-06-15T10:00+02:00/2026-06-15T12:00Z"
+
+      assert Enum.count(minutes) == 240
+      assert length(Enum.to_list(minutes)) == 240
     end
   end
 
@@ -296,22 +325,35 @@ defmodule Tempo.EnumerationWalk.Test do
     end
   end
 
-  # An unspecified year was the current Gregorian year whatever the value's
-  # calendar, and read today without `Tempo.Clock`.
-  describe "an unspecified year is the current year in its calendar" do
-    setup do
-      Process.put({Tempo.Clock, :clock}, ClockTest)
-      ClockTest.put(~U[2026-10-03 12:00:00Z])
-      :ok
+  # ISO 8601-2 §4.6.2 reads `X*Y12M28D` as 28 December of an unspecified
+  # calendar year. The walk read the year as the current one, where every
+  # other operation read it as no year in particular.
+  describe "an unspecified year is no year in particular" do
+    test "the units after it are walked as they are with no year written" do
+      assert Enum.take(~o"X*Y12M28D", 2) == [~o"X*Y12M28DT0H", ~o"X*Y12M28DT1H"]
+      assert Enum.count(~o"X*Y6M") == Enum.count(~o"6M")
+      assert Enum.count(~o"X*Y2M") == 29
+      assert Enum.take(~o"X*YX*MX*D", 2) == [~o"X*Y1M1D", ~o"X*Y1M2D"]
     end
 
-    test "by the clock, in the value's own calendar" do
-      assert [%Tempo{time: [year: 5787]}] = Enum.to_list(Tempo.from_iso8601!("X*Y[u-ca=hebrew]"))
-      assert [%Tempo{time: [year: 1405]}] = Enum.to_list(Tempo.from_iso8601!("X*Y[u-ca=persian]"))
-      assert Enum.to_list(~o"X*Y") == [~o"2026Y"]
+    test "in a calendar whose months change with the year it is not listed, as with no year" do
+      assert_raise Tempo.UnanchoredError, fn ->
+        Enum.count(Tempo.from_iso8601!("X*Y6M[u-ca=hebrew]"))
+      end
 
-      ClockTest.put(~U[2031-01-01 00:00:00Z])
-      assert Enum.to_list(~o"X*Y") == [~o"2031Y"]
+      assert_raise Tempo.UnanchoredError, fn ->
+        Enum.count(Tempo.from_iso8601!("6M[u-ca=hebrew]"))
+      end
+    end
+
+    test "on its own it names nothing to list" do
+      assert_raise Tempo.UnanchoredError, fn -> Enum.to_list(~o"X*Y") end
+      assert {:error, %Tempo.UnanchoredError{}} = Tempo.to_interval(~o"X*Y")
+    end
+
+    test "it is not anchored, and is placed on a year" do
+      refute Tempo.anchored?(~o"X*Y6M")
+      assert Tempo.at(~o"2026", ~o"X*Y6M") == {:ok, ~o"2026Y6M"}
     end
   end
 
@@ -405,7 +447,13 @@ defmodule Tempo.EnumerationWalk.Test do
     test "to step from" do
       assert_raise Tempo.ConversionError, fn -> Enum.to_list(~o"{2026,2027}Y/2030Y") end
       assert_raise Tempo.ConversionError, fn -> Enum.to_list(~o"202XY/2040Y") end
-      assert_raise Tempo.ConversionError, fn -> Enum.take(~o"X*Y/2030Y", 2) end
+    end
+
+    test "nor ends with no line to share, one with a year and one with none" do
+      assert_raise Tempo.UnanchoredError, fn -> Enum.take(~o"X*Y/2030Y", 2) end
+      assert_raise Tempo.UnanchoredError, fn -> Enum.take(~o"X*Y6M15D/2030Y", 2) end
+
+      assert {:error, %Tempo.UnanchoredError{}} = Tempo.to_interval(~o"X*Y6M15D/2030Y")
     end
 
     test "but a selection is walked as the spans the interval converts to" do

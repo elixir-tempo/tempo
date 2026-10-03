@@ -122,14 +122,14 @@ Going the other way, you choose how much of the interval/zone information to kee
 # Paris is UTC+2 in summer; the wall reading is 10:30, not 08:30.
 paris = Tempo.from_elixir(DateTime.new!(~D[2022-06-15], ~T[10:30:00], "Europe/Paris"))
 Tempo.to_naive_datetime(paris)
-#=> {:ok, ~N[2022-06-15 10:30:00.000000]}
+#=> {:ok, ~N[2022-06-15 10:30:00]}
 ```
 
 When the zone matters, `to_datetime/1` is the lossless inverse of `from_elixir/2` on a `DateTime` — it preserves the named zone and re-derives the offset from the time-zone database:
 
 ```elixir
 Tempo.to_datetime(paris)
-#=> {:ok, #DateTime<2022-06-15 10:30:00.000000+02:00 CEST Europe/Paris>}
+#=> {:ok, #DateTime<2022-06-15 10:30:00+02:00 CEST Europe/Paris>}
 ```
 
 If you want UTC *wall* time rather than the local reading, normalise explicitly first:
@@ -137,7 +137,7 @@ If you want UTC *wall* time rather than the local reading, normalise explicitly 
 ```elixir
 {:ok, utc} = Tempo.shift_zone(paris, "Etc/UTC")
 Tempo.to_naive_datetime(utc)
-#=> {:ok, ~N[2022-06-15 08:30:00.000000]}
+#=> {:ok, ~N[2022-06-15 08:30:00]}
 ```
 
 Two caveats:

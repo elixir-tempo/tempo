@@ -35,6 +35,16 @@ defmodule Tempo.Validation do
 
   def validate(tempo, calendar \\ Calendrical.Gregorian)
 
+  # An unspecified year (`X*Y`) is some year and no year in particular: ISO
+  # 8601-2 §4.6.2 reads `X*Y12M28D` as 28 December of an unspecified calendar
+  # year. The units after it are read as they are with no year written, so
+  # the two cannot be read two ways, and the year is kept as it is written.
+  def validate(%Tempo{time: [{:year, :any} = year | [_ | _] = units]} = tempo, calendar) do
+    with {:ok, %Tempo{time: validated} = yearless} <- validate(%{tempo | time: units}, calendar) do
+      {:ok, %{yearless | time: [year | validated]}}
+    end
+  end
+
   def validate(%Tempo{time: units} = tempo, calendar) do
     with :ok <- validate_leap_second(units, tempo),
          :ok <- validate_time_shift(tempo.shift) do
@@ -127,8 +137,87 @@ defmodule Tempo.Validation do
   defp resolve_as_written(units, written, calendar),
     do: units |> resolve_units(written) |> convert_date(written, calendar)
 
-  defp resolve_units(units, calendar),
-    do: units |> resolve_fixed_extent_negatives(calendar) |> resolve(calendar)
+  defp resolve_units(units, calendar) do
+    units
+    |> first_of_skipped_date_units(calendar)
+    |> resolve_fixed_extent_negatives(calendar)
+    |> resolve(calendar)
+    |> settle_groups(calendar)
+  end
+
+  @clock_units [:hour, :minute, :second]
+  @units_of_days [:year, :month, :week]
+
+  # A time of day under a date with its month or its day left out is read on
+  # the first of what is left out: `2026YT17H` is 17:00 on 1 January and
+  # `2026Y6MT10H` 10:00 on 1 June, as a clock unit left out is read as zero
+  # (ISO 8601-2 §7.10). The value holds the units, so every reader sees a
+  # whole date. Under a group it is the first day of the group, since what
+  # follows a group is one instance within it (§5.4.2): `2026Y2G3MUT10H` is
+  # 10:00 on 1 April. A group of clock units is left as it is: it is
+  # counted in the unit before it (`2018Y20GT12HU`, the twentieth twelve
+  # hours of the year).
+  defp first_of_skipped_date_units(units, calendar) do
+    if skips_a_date_unit?(units), do: with_skipped_date_units(units, calendar), else: units
+  end
+
+  # Whether a clock unit follows a year, a month or a week directly. Most
+  # values skip nothing, and are left as the list they are.
+  defp skips_a_date_unit?([{unit, _}, {clock, value} | _rest])
+       when unit in @units_of_days and clock in @clock_units,
+       do: not match?({:group, _members}, value)
+
+  defp skips_a_date_unit?([_unit | rest]), do: skips_a_date_unit?(rest)
+  defp skips_a_date_unit?(_units), do: false
+
+  defp with_skipped_date_units([{unit, _} = date_unit, {clock, _value} = time | rest], calendar)
+       when unit in @units_of_days and clock in @clock_units,
+       do: first_day_of(date_unit, calendar) ++ [time | rest]
+
+  defp with_skipped_date_units([unit | rest], calendar),
+    do: [unit | with_skipped_date_units(rest, calendar)]
+
+  # A year's first day is the first of its first month, or of its first week
+  # in a calendar of weeks.
+  defp first_day_of({:year, year}, calendar) do
+    if Tempo.week_based_calendar?(calendar),
+      do: [year: group_start(year), week: 1, day_of_week: 1],
+      else: [year: group_start(year), month: 1, day: 1]
+  end
+
+  defp first_day_of({:month, month}, _calendar), do: [month: group_start(month), day: 1]
+  defp first_day_of({:week, week}, _calendar), do: [week: group_start(week), day_of_week: 1]
+
+  defp group_start({:group, %Range{first: first}}) when is_integer(first), do: first
+  defp group_start(value), do: value
+
+  # A unit after a group counts from the group's start (ISO 8601-2 §5.4.2),
+  # which makes the group one value. A group after a group is one value only
+  # once what follows it has made it so: in `2G10DU2GT6HU30M` the minutes
+  # make the hours one hour, and that hour then makes the days one day. So
+  # units that still hold a group before a whole unit are resolved again,
+  # until they stop changing.
+  defp settle_groups(units, calendar) when is_list(units) do
+    if group_before_whole_unit?(units),
+      do: resolve_again(units, calendar),
+      else: units
+  end
+
+  defp settle_groups(error, _calendar), do: error
+
+  defp resolve_again(units, calendar) do
+    case resolve(units, calendar) do
+      ^units -> units
+      resolved -> settle_groups(resolved, calendar)
+    end
+  end
+
+  defp group_before_whole_unit?([{_unit, {:group, %Range{}}}, {_finer, value} | _rest])
+       when is_integer(value),
+       do: true
+
+  defp group_before_whole_unit?([_unit | rest]), do: group_before_whole_unit?(rest)
+  defp group_before_whole_unit?([]), do: false
 
   # Each date unit of a converted date is worked out from all of the units it
   # was written with, so a qualification of the year, the month or the day it
@@ -319,13 +408,16 @@ defmodule Tempo.Validation do
   # Orderable: anchored (has a year, so a UTC start exists) and fully
   # concrete (every component is a plain integer or a microsecond
   # `{value, precision}` pair — no mask, group, range, or set).
-  defp orderable?(%Tempo{time: time}) do
-    Keyword.has_key?(time, :year) and Enum.all?(time, fn {_unit, value} -> concrete?(value) end)
-  end
+  defp orderable?(%Tempo{time: time}),
+    do: List.keymember?(time, :year, 0) and Enum.all?(time, &concrete?/1)
 
-  defp concrete?(value) when is_integer(value), do: true
-  defp concrete?({value, precision}) when is_integer(value) and is_integer(precision), do: true
-  defp concrete?(_value), do: false
+  # A group of a set is an entry of three elements, and no one number.
+  defp concrete?({_unit, value}) when is_integer(value), do: true
+
+  defp concrete?({_unit, {value, precision}}) when is_integer(value) and is_integer(precision),
+    do: true
+
+  defp concrete?(_several), do: false
 
   # Resolution is the process of pre-calculating concrete
   # time units from groups whereever possible.
@@ -1226,8 +1318,7 @@ defmodule Tempo.Validation do
 
       :month ->
         calendar
-        |> week_starts(year, @monday)
-        |> nth_week_start(week)
+        |> iso_week_start(year, week)
         |> date_in_week(day, calendar)
     end
   end
@@ -1265,9 +1356,39 @@ defmodule Tempo.Validation do
   def iso_weeks_in_year(year, calendar) do
     case calendar.calendar_base() do
       :week -> calendar_weeks_in_year(year, calendar)
-      :month -> length(week_starts(calendar, year, @monday))
+      :month -> iso_week_count(calendar, year)
     end
   end
+
+  # The weeks from the first day of a year's week 1 to the first day of the
+  # next year's, as Calendrical counts them: 52 or 53.
+  defp iso_week_count(calendar, year) do
+    with {:ok, first} <- first_week_start(calendar, year, @monday),
+         {:ok, next_first} <- first_week_start(calendar, year + 1, @monday),
+         weeks when is_integer(weeks) <- Calendrical.diff(first, next_first, :weeks) do
+      weeks
+    else
+      _no_first_week -> 0
+    end
+  end
+
+  # The first day of week `week` of `year`: that many weeks on from week 1's,
+  # by Calendrical's arithmetic, when the year has the week. It is reached in
+  # one step, where listing the year's weeks to find it took one for each.
+  defp iso_week_start(calendar, year, week) when is_integer(week) and week >= 1 do
+    with {:ok, first} <- first_week_start(calendar, year, @monday),
+         {:ok, next_first} <- first_week_start(calendar, year + 1, @monday),
+         {start_year, month, day} <-
+           calendar.plus(first.year, first.month, first.day, :weeks, week - 1),
+         {:ok, start} <- Date.new(start_year, month, day, calendar),
+         :lt <- Compare.compare_days(start, next_first) do
+      start
+    else
+      _no_such_week -> nil
+    end
+  end
+
+  defp iso_week_start(_calendar, _year, _week), do: nil
 
   @doc false
   # How many weeks `year` has in the calendar's own numbering (`w`), or 0
@@ -1308,11 +1429,6 @@ defmodule Tempo.Validation do
       {:error, _reason} -> :error
     end
   end
-
-  defp nth_week_start(week_starts, week) when is_integer(week) and week >= 1,
-    do: Enum.at(week_starts, week - 1)
-
-  defp nth_week_start(_week_starts, _week), do: nil
 
   # The `day`th day of the week that starts on `week_start`, from
   # Calendrical's arithmetic.
@@ -1675,15 +1791,25 @@ defmodule Tempo.Validation do
   # "2024-03-10", "2024-03-10T02") can't land in a gap because the
   # gap is smaller than the value's resolution.
   defp fully_anchored_datetime(time) do
-    with year when is_integer(year) <- Keyword.get(time, :year),
-         month when is_integer(month) <- Keyword.get(time, :month),
-         day when is_integer(day) <- Keyword.get(time, :day),
-         hour when is_integer(hour) <- Keyword.get(time, :hour),
-         minute when is_integer(minute) <- Keyword.get(time, :minute) do
-      second = integer_second(Keyword.get(time, :second, 0))
+    with year when is_integer(year) <- unit_value(time, :year),
+         month when is_integer(month) <- unit_value(time, :month),
+         day when is_integer(day) <- unit_value(time, :day),
+         hour when is_integer(hour) <- unit_value(time, :hour),
+         minute when is_integer(minute) <- unit_value(time, :minute) do
+      second = integer_second(unit_value(time, :second) || 0)
       {:ok, {{year, month, day}, {hour, minute, second}}}
     else
       _ -> :not_fully_anchored
+    end
+  end
+
+  # A unit's value, or `nil` where it is absent. A group of a set is held as
+  # three elements (`{:month, {:group, …}, 3}`), which `Keyword.get/2` raises
+  # on, and is no one value to read.
+  defp unit_value(time, unit) do
+    case List.keyfind(time, unit, 0) do
+      {^unit, value} -> value
+      _absent_or_a_group_of_a_set -> nil
     end
   end
 

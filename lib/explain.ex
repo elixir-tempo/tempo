@@ -476,18 +476,30 @@ defmodule Tempo.Explain do
   # An hour or a minute is written as a clock time, which a group, a span of
   # them, is not.
   defp writable_unit?({unit, value}) when unit in [:hour, :minute],
-    do: is_integer(value) or values?(value)
+    do: is_integer(value) or values?(unit, value)
 
-  defp writable_unit?({unit, value}) when unit in @headline_units, do: writable?(value)
+  defp writable_unit?({unit, value}) when unit in @headline_units, do: writable?(unit, value)
   defp writable_unit?({_other_unit, _value}), do: true
   defp writable_unit?(_group_of_groups), do: false
 
-  defp writable?(value) when is_integer(value), do: true
-  defp writable?({:group, %Range{}}), do: true
-  defp writable?(value), do: values?(value)
+  defp writable?(_unit, value) when is_integer(value), do: true
+  defp writable?(_unit, {:group, %Range{}}), do: true
+  defp writable?(unit, value), do: values?(unit, value)
 
-  defp values?([_ | _] = set), do: Enum.all?(set, &(is_integer(&1) or is_struct(&1, Range)))
-  defp values?(_margin_or_other), do: false
+  # A set whose every member is a value to name. A member counted from the
+  # end of a span the value does not fix (`{1..-1}M`, the months of no year
+  # in particular; `-1D`) is not one: only a year is written below zero.
+  defp values?(unit, [_ | _] = set), do: Enum.all?(set, &named_value?(unit, &1))
+  defp values?(_unit, _margin_or_other), do: false
+
+  defp named_value?(:year, value) when is_integer(value), do: true
+  defp named_value?(:year, %Range{} = range), do: Range.size(range) > 0
+  defp named_value?(_unit, value) when is_integer(value), do: value >= 0
+
+  defp named_value?(_unit, %Range{first: first, last: last} = range),
+    do: first >= 0 and last >= 0 and Range.size(range) > 0
+
+  defp named_value?(_unit, _other), do: false
 
   defp date_shape(time) do
     for {unit, _value} <- time, unit in @headline_date_units, do: unit

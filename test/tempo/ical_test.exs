@@ -580,7 +580,13 @@ defmodule Tempo.ICal.Test do
       """
 
       {:ok, events} = ICal.parse(ics)
-      work_hours = ~o"2022-06-15T09/2022-06-15T17"
+
+      # The events are in UTC, so the hours they are met with are too: a
+      # value with no zone and a zoned one are not combined.
+      work_hours = ~o"2022-06-15T09Z/2022-06-15T17Z"
+
+      assert {:error, %Tempo.FloatingTempoError{}} =
+               Tempo.intersection(events, ~o"2022-06-15T09/2022-06-15T17")
 
       {:ok, overlap} = Tempo.intersection(events, work_hours)
       assert length(overlap.intervals) == 1
@@ -609,7 +615,7 @@ defmodule Tempo.ICal.Test do
       """
 
       {:ok, events} = ICal.parse(ics)
-      break_time = ~o"2022-06-15T10/2022-06-15T11"
+      break_time = ~o"2022-06-15T10Z/2022-06-15T11Z"
 
       # Instant-level difference: the event member is trimmed into
       # the pre-break and post-break portions. Both carry the

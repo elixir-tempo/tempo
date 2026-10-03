@@ -96,6 +96,11 @@ defmodule Tempo.Iso8601.Tokenizer.Set do
                   parsec({Tempo.Iso8601.Tokenizer.Date, :qualified_endpoint})
                   |> ignore(string("/"))
                   |> choice([
+                    # An end with its higher order components left out, in
+                    # the two forms a value is not written in on its own.
+                    lookahead(integer(2) |> string("T"))
+                    |> parsec({Tempo.Iso8601.Tokenizer.Date, :day_and_time_endpoint}),
+                    parsec({Tempo.Iso8601.Tokenizer.Date, :bare_number_endpoint}),
                     parsec({Tempo.Iso8601.Tokenizer.Date, :qualified_endpoint}),
                     parsec({Tempo.Iso8601.Tokenizer.Set, :duration_parser}),
                     replace(string(".."), :undefined),
@@ -140,7 +145,7 @@ defmodule Tempo.Iso8601.Tokenizer.Set do
                   ])
                 ])
                 |> optional(parsec({Tempo.Iso8601.Tokenizer.Set, :repeat_rule}))
-                |> reduce(:adjust_interval)
+                |> post_traverse({Tempo.Iso8601.Tokenizer.Grammar, :adjust_interval, []})
                 |> unwrap_and_tag(:interval)
                 |> label("interval"),
                 export_combinator: true
