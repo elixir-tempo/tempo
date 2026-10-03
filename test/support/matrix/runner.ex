@@ -11,8 +11,12 @@ defmodule Tempo.Matrix.Runner do
 
   # A cell that has not answered in this long is a hang, unless its run
   # allows it longer: the exhaustive corpus holds values of tens of
-  # thousands of members, and writing one out takes seconds.
-  @time_limit 2_000
+  # thousands of members, and writing one out takes seconds. The limit tells
+  # a hang from an answer, not a slow answer from a quick one: the slowest
+  # cells of the default corpus take a third of a second alone and over a
+  # second beside fifteen others on sixteen cores, and a CI runner has four
+  # slower ones.
+  @time_limit 10_000
 
   # About 400 MB of 64-bit words: a cell that allocates more is killed.
   @heap_limit 50_000_000
