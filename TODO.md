@@ -6,8 +6,6 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ### Correctness
 
-* [ ] **An unspecified year is the current Gregorian year in every calendar** — `Enum.to_list(~o"X*Y[u-ca=hebrew]")` is the Hebrew year 2026, since the walk reads `Date.utc_today().year`. Found 2026-10-03.
-
 * [ ] **A day after a group of months under a set of years** — `{2026,2028}Y2G2MU15D` walks the 15th of each month of the group, four days, where `2026Y2G2MU15D` is the fifteenth day of the group, 15 March. Found 2026-10-03.
 
 * [ ] **A zone on a recurrence or a set is dropped** — `R/../P1Y/FL3M20DN[+09:00]` and a domain recurrence's `[zone]` suffix parse and vanish (the start value's suffix, `R/2026-03-20[+09:00]/P1Y`, is kept). Carry it as zoned occurrences, as the suffix means elsewhere, or refuse it. A set's suffix does the same: `{2026-06-15T10:00,2026-06-16T10:00}[Europe/Paris]` leaves its members floating and `[key=value]` tags vanish, where its `[u-ca=…]` is its members' calendar and an interval member's own zone is kept (found 2026-10-02).
@@ -117,6 +115,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **An unspecified year is the current Gregorian year in every calendar** — the walk takes today from `Tempo.Clock` and converts it to the value's calendar, so `X*Y[u-ca=hebrew]` is the current Hebrew year (5787 on 3 October 2026). 2026-10-03.
 
 * [x] **A month or a year added to a day of the week that names no week is that day again** — it is an `UnanchoredError` (`Tempo.shift(~o"7K", month: 1)`, and `R3/7K/P1M`), as a day of the year with no year is; weeks, days and the time of day still step a bare day of the week. 2026-10-03.
 

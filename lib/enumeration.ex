@@ -1,6 +1,7 @@
 defmodule Tempo.Enumeration do
   @moduledoc false
 
+  alias Tempo.Clock
   alias Tempo.Compare
   alias Tempo.ConversionError
   alias Tempo.InvalidDateError
@@ -329,9 +330,16 @@ defmodule Tempo.Enumeration do
   defp candidates({_unit, {:group, _members}, _size}, _ancestors, _calendar),
     do: {:error, :grouped_component}
 
-  # An unspecified year (`X*Y`) is the current year.
-  defp candidates({:year, :any}, _ancestors, _calendar),
-    do: {:ok, :year, [Date.utc_today().year]}
+  # An unspecified year (`X*Y`) is the current year in the value's calendar,
+  # by `Tempo.Clock`: the Hebrew year that holds today for `X*Y[u-ca=hebrew]`.
+  defp candidates({:year, :any}, _ancestors, calendar) do
+    today = Clock.utc_now() |> DateTime.to_date()
+
+    case Date.convert(today, calendar) do
+      {:ok, %Date{year: year}} -> {:ok, :year, [year]}
+      {:error, _incompatible} -> {:error, no_current_year_error(today, calendar)}
+    end
+  end
 
   defp candidates({unit, :any}, ancestors, calendar) do
     with {:ok, range} <- Mask.unspecified(unit, Enum.reverse(ancestors), calendar) do
@@ -398,6 +406,15 @@ defmodule Tempo.Enumeration do
   end
 
   defp group_values({_unit, {:group, %Range{} = range}}), do: Enum.to_list(range)
+
+  defp no_current_year_error(today, calendar) do
+    ConversionError.exception(
+      value: today,
+      reason:
+        "An unspecified year is the current year, and today (#{Date.to_iso8601(today)}) " <>
+          "does not convert to #{inspect(calendar)}."
+    )
+  end
 
   # The values of a resolved literal: whole numbers from zero, ranges of them,
   # and the fractions of a second.

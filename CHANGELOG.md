@@ -205,6 +205,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* An unspecified year (`X*Y`) walks as the current year in the value's own calendar, read from `Tempo.Clock`: `X*Y[u-ca=hebrew]` is the Hebrew year that holds today, where it was the Gregorian year's number in every calendar.
+
 * A month or a year added to a day of the week that names no week (`7K`) is a `Tempo.UnanchoredError`, since the day of the week it falls on depends on the date, where it was that day again; weeks, days and the time of day still step it.
 
 * A shift that reaches an unspecified month, day, hour, minute or second (`X*`) moves the block of values it stands for, as a mask of all its digits does: `Tempo.shift(~o"2026Y6MX*D", day: 1)` is one of 2 June to 1 July, where it was 1 July, and a shift back is no longer refused.

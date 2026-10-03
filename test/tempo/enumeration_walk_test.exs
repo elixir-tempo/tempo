@@ -4,6 +4,7 @@ defmodule Tempo.EnumerationWalk.Test do
 
   alias Calendrical.Gregorian
   alias Calendrical.Hebrew
+  alias Tempo.Clock.Test, as: ClockTest
   alias Tempo.IntervalSet
 
   # The walk of a value reads its components coarse to fine, and each names
@@ -277,6 +278,25 @@ defmodule Tempo.EnumerationWalk.Test do
     test "a shift that walks the candidates of a masked hour" do
       assert %IntervalSet{} = set = Tempo.shift(~o"2026Y6M15DT1XH30M", minute: 1)
       assert IntervalSet.count(set) == 10
+    end
+  end
+
+  # An unspecified year was the current Gregorian year whatever the value's
+  # calendar, and read today without `Tempo.Clock`.
+  describe "an unspecified year is the current year in its calendar" do
+    setup do
+      Process.put({Tempo.Clock, :clock}, ClockTest)
+      ClockTest.put(~U[2026-10-03 12:00:00Z])
+      :ok
+    end
+
+    test "by the clock, in the value's own calendar" do
+      assert [%Tempo{time: [year: 5787]}] = Enum.to_list(Tempo.from_iso8601!("X*Y[u-ca=hebrew]"))
+      assert [%Tempo{time: [year: 1405]}] = Enum.to_list(Tempo.from_iso8601!("X*Y[u-ca=persian]"))
+      assert Enum.to_list(~o"X*Y") == [~o"2026Y"]
+
+      ClockTest.put(~U[2031-01-01 00:00:00Z])
+      assert Enum.to_list(~o"X*Y") == [~o"2031Y"]
     end
   end
 
