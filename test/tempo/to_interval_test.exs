@@ -222,6 +222,40 @@ defmodule Tempo.ToInterval.Test do
       assert {minutes.from.time[:minute], minutes.to.time[:minute]} == {30, 40}
     end
 
+    # A day of the year (`O`), or a day written straight after its year, was
+    # left as the candidate it is: the first gave bounds that measured
+    # nothing (`2026Y30O/40O`), the second an `UnanchoredError` for a value
+    # that has a year.
+    test "a partly masked day of the year is the span of the dates it names" do
+      for masked <- [~o"2026Y3XD", ~o"2026Y3XO"] do
+        assert Tempo.to_interval(masked) == {:ok, ~o"2026Y1M30D/2026Y2M9D"}
+        assert Tempo.duration(masked) == ~o"P10D"
+      end
+
+      assert Tempo.to_interval(~o"2026Y1XXD") == {:ok, ~o"2026Y4M10D/2026Y7M19D"}
+      assert Tempo.to_interval(~o"2026Y36XD") == {:ok, ~o"2026Y12M26D/2027Y1M1D"}
+      assert Tempo.to_interval(~o"2024Y36XO") == {:ok, ~o"2024Y12M25D/2025Y1M1D"}
+    end
+
+    test "a partly masked day of the year in each of a set of years, and as an interval's end" do
+      {:ok, set} = Tempo.to_interval(~o"{2026,2027}Y3XD")
+
+      assert spans(set) == [
+               {ymd(2026, 1, 30), ymd(2026, 2, 9)},
+               {ymd(2027, 1, 30), ymd(2027, 2, 9)}
+             ]
+
+      assert Tempo.to_interval(~o"2026Y3XD/2026Y6M") == {:ok, ~o"2026Y1M30D/2026Y6M"}
+      assert Tempo.duration(~o"2026Y1M/2026Y3XO") == ~o"P29D"
+    end
+
+    test "a partly masked day of the year in another calendar" do
+      {:ok, interval} = Tempo.to_interval(Tempo.from_iso8601!("5786Y3XD[u-ca=hebrew]"))
+
+      assert {interval.from.time, interval.to.time} ==
+               {[year: 5786, month: 1, day: 30], [year: 5786, month: 2, day: 10]}
+    end
+
     test "a mask before a partly masked day is one span per candidate" do
       {:ok, set} = Tempo.to_interval(~o"2026-XX-1X")
       members = IntervalSet.members(set)

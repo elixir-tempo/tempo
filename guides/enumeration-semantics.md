@@ -179,7 +179,7 @@ Mask rules:
 
 * A **year mask** (`156X`, `-1XXX`) translates directly to a year range via `Tempo.Mask.mask_bounds/1`. The signed half-open upper bound is computed as `-magnitude_min + 1` for negative masks.
 
-* A **finer-unit mask** narrows to the values its digits allow in the calendar: `1985-06-1X` is the 10th to the 19th of June, `[1985-06-10, 1985-06-20)`, and `1985-06-3X` the 30th alone. A fully masked unit allows every value, so `1985-XX-XX` is the year and `1985-06-XX` the month, and a mask walks its own unit, as `156X` walks years. An unspecified unit other than the year (`1985Y6MX*D`) is read as a fully masked one: the month.
+* A **finer-unit mask** narrows to the values its digits allow in the calendar: `1985-06-1X` is the 10th to the 19th of June, `[1985-06-10, 1985-06-20)`, and `1985-06-3X` the 30th alone. A fully masked unit allows every value, so `1985-XX-XX` is the year and `1985-06-XX` the month, and a mask walks its own unit, as `156X` walks years. An unspecified unit other than the year (`1985Y6MX*D`) is read as a fully masked one: the month. A masked day of the year, written `O` or as a day straight after its year, is the dates it names: `2026Y3XO` and `2026Y3XD` are 30 January to 8 February, `[2026-01-30, 2026-02-09)`.
 
 * Candidates that are not consecutive (`1985-06-X5`, the 5th, 15th and 25th), or a mask with a narrower unit after it (`1985-XX-15`, the 15th of each month; `1985-XX-1X`, the 10th to the 19th of each), are an `IntervalSet` of a span each. A candidate the calendar has no room for drops out, as a set's does (`1985-XX-31` has no February), and a mask none of whose candidates fits (`1985-02-3X`) is an error.
 

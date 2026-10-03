@@ -8761,9 +8761,14 @@ defmodule Tempo do
 
   # The span of a mask's consecutive candidates: from the start of the first to
   # the end of the last. It walks the masked unit, as the mask does and as a
-  # year mask's span walks its years.
+  # year mask's span walks its years. Each end is a raw candidate, so it is
+  # read as a member is: a day of the year (`2026Y3XO`, or a day written
+  # straight after its year, `2026Y3XD`) is its month and day, and the span
+  # runs from 30 January to 9 February.
   defp masked_span(%Tempo{} = first, %Tempo{} = last) do
-    with {:ok, {lower, _upper}, _unit} <- Interval.next_unit_boundary(first),
+    with {:ok, first} <- normalise_member(first),
+         {:ok, last} <- normalise_member(last),
+         {:ok, {lower, _upper}, _unit} <- Interval.next_unit_boundary(first),
          {:ok, {_lower, upper}, _unit} <- Interval.next_unit_boundary(last) do
       {:ok, %Tempo.Interval{from: lower, to: upper}}
     end
