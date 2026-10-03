@@ -1216,6 +1216,7 @@ defmodule Tempo.Math do
   # touches a masked component, so the crisp path shifts around them and
   # keeps the masks intact (`2020-XX` + `P1Y` → `2021-XX`).
   defp route_general(%Tempo{} = tempo, %Tempo.Duration{time: duration_time} = duration) do
+    tempo = unspecified_as_masks(tempo, duration_time)
     masks = find_masks(tempo.time)
 
     if Enum.any?(masks, fn {unit, _mask} -> duration_reaches?(duration_time, unit) end) do
@@ -1408,6 +1409,24 @@ defmodule Tempo.Math do
   # Masks are only resolved on units the arithmetic understands; a mask on
   # any other unit falls through to the crisp path unchanged.
   @maskable_units [:year, :month, :day, :hour, :minute, :second]
+
+  # An unspecified unit other than the year (`X*D`, any day) is every value
+  # the unit takes, as a mask of all its digits is (`XXD`), and a shift that
+  # reaches it moves that block: `2026Y6MX*D` plus a day is one of 2 June to 1
+  # July, where it was read as the unit's last value. An unspecified year is
+  # any year, which a step carries as it is.
+  defp unspecified_as_masks(%Tempo{time: time} = tempo, duration_time) do
+    %{tempo | time: Enum.map(time, &unspecified_as_mask(&1, duration_time))}
+  end
+
+  defp unspecified_as_mask({unit, :any} = component, duration_time)
+       when unit in @maskable_units and unit != :year do
+    if duration_reaches?(duration_time, unit),
+      do: {unit, {:mask, [:X, :X]}},
+      else: component
+  end
+
+  defp unspecified_as_mask(component, _duration_time), do: component
 
   defp find_masks(time) do
     Enum.flat_map(time, fn

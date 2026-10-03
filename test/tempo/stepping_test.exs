@@ -283,4 +283,31 @@ defmodule Tempo.SteppingTest do
       assert starts_within("R/T22H/PT1H", "T20H/T23H") == [~o"T22H"]
     end
   end
+
+  # An unspecified unit (`X*`) was stepped as its last value, so a day after
+  # any day of June was 1 July, and a step back was refused.
+  describe "a shift that reaches an unspecified unit" do
+    test "moves the block of values the unit stands for" do
+      assert Tempo.shift(~o"2026Y6MX*D", day: 1) == Tempo.from_iso8601!("[2026Y6M2D..2026Y7M1D]")
+
+      assert Tempo.shift(~o"2026Y6MX*D", day: -1) ==
+               Tempo.from_iso8601!("[2026Y5M31D..2026Y6M29D]")
+
+      assert Tempo.shift(~o"2026Y6M15DTX*H", hour: 1) ==
+               Tempo.from_iso8601!("[2026Y6M15DT1H..2026Y6M16DT0H]")
+    end
+
+    test "under a concrete unit after it is the span of each value" do
+      assert %IntervalSet{} = set = Tempo.shift(~o"2026YX*M15D", month: 1)
+
+      starts = set |> IntervalSet.members() |> Enum.map(&Interval.from/1)
+      assert length(starts) == 12
+      assert hd(starts) == ~o"2026-02-15"
+      assert List.last(starts) == ~o"2027-01-15"
+    end
+
+    test "a shift coarser than the unit keeps it unspecified" do
+      assert Tempo.shift(~o"2026Y6MX*D", month: 1) == ~o"2026Y7MX*D"
+    end
+  end
 end
