@@ -104,6 +104,7 @@ defmodule Tempo do
   """
 
   alias Calendrical.Gregorian
+  alias Calendrical.Kday
   alias Tempo.Clock
   alias Tempo.Compare
   alias Tempo.ConversionError
@@ -5393,6 +5394,7 @@ defmodule Tempo do
           {:ok, Tempo.Interval.t() | Tempo.IntervalSet.t()} | {:error, error_reason()}
   def to_interval(value, opts \\ []) do
     with :ok <- check_bound_option(opts, "Tempo.to_interval/2"),
+         {:ok, value} <- placed_on_window(value, Keyword.get(opts, :within)),
          :one_start <- recurrence_from_each_value(value, opts),
          :ok <- walkable(value) do
       case open_window_start(Keyword.get(opts, :within)) do
@@ -5402,6 +5404,68 @@ defmodule Tempo do
       end
     end
   end
+
+  # A recurrence whose start has no year, given a dated window, starts on the
+  # window's first day, month or year, whichever its start lacks — as
+  # `at/2` places one value on another: `R/T22H/PT1H` within 15 June is from
+  # 22:00 on 15 June, and `R/12M31D/P1D` within 2026 from 31 December 2026.
+  defp placed_on_window(
+         %Interval{
+           recurrence: recurrence,
+           from: %__MODULE__{time: [{unit, _} | _] = time} = start
+         } =
+           interval,
+         within
+       )
+       when recurrence != 1 and not is_nil(within) do
+    with false <- on_the_time_line?(time),
+         %__MODULE__{time: window_time} = window_from <- bound_lower(within),
+         true <- on_the_time_line?(window_time),
+         {:ok, %__MODULE__{} = placed} <- placed_start(window_from, unit, start) do
+      {:ok, %{interval | from: placed}}
+    else
+      {:error, _reason} = error -> error
+      _not_placed -> {:ok, interval}
+    end
+  end
+
+  defp placed_on_window(value, _within), do: {:ok, value}
+
+  # A day of the week starts on the first such day on or after the window's
+  # start, in its week when the window is a calendar of weeks.
+  defp placed_start(
+         window_from,
+         :day_of_week,
+         %__MODULE__{time: [{:day_of_week, weekday} | finer]} = start
+       )
+       when is_integer(weekday) do
+    case at_resolution(window_from, :week) do
+      %__MODULE__{} = week -> at(week, start)
+      {:error, _no_week} -> weekday_on_or_after(window_from, weekday, finer)
+    end
+  end
+
+  defp placed_start(window_from, unit, start) do
+    with %__MODULE__{} = base <- at_resolution(window_from, placement_unit(unit)),
+         do: at(base, start)
+  end
+
+  defp weekday_on_or_after(window_from, weekday, finer) do
+    with %__MODULE__{} = day <- at_resolution(window_from, :day),
+         {:ok, date} <- to_date(day) do
+      first = date |> Kday.kday_on_or_after(weekday) |> from_date()
+      if finer == [], do: {:ok, first}, else: at(first, %{first | time: finer})
+    end
+  end
+
+  # The unit a start with no year is placed below: the window's day for a
+  # time of day, its year for a month, and so on.
+  defp placement_unit(:hour), do: :day
+  defp placement_unit(:minute), do: :hour
+  defp placement_unit(:second), do: :minute
+  defp placement_unit(:day), do: :month
+  defp placement_unit(:day_of_week), do: :week
+  defp placement_unit(_unit), do: :year
 
   # A recurrence from a start that holds a set or a range
   # (`R3/2026Y6M{1,15}D/P1M`, from the 1st and the 15th of June) is a

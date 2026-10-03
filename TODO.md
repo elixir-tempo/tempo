@@ -6,8 +6,6 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ### Correctness
 
-* [ ] **An unending recurrence with no year gives nothing in a dated window** — `Tempo.to_interval(~o"R/T22H/PT1H", within: ~o"2026-06-15/2026-06-16")` is an empty set, where the window's day has 22:00 and 23:00. Found 2026-10-03.
-
 * [ ] **An unspecified month or day is stepped as its last** — `Tempo.shift(~o"2026Y6MX*D", day: 1)` is `~o"2026Y7M1D"` and `2026YX*M15D` plus a month is `2027Y1M15D`: a step forward reads `X*` as the unit's last value, which ends the value's span where it should (`2026Y6MX*D/7M1D`) and gives a shift a value that has lost the unit, where a mask shifts to a one-of range. A step back is a `ConversionError`. Found 2026-10-02.
 
 * [ ] **A month or a year added to a day of the week that names no week is that day again** — `Tempo.shift(~o"7K", month: 1)` and `year: 1` are `~o"7K"`, though the day of the week a month or a year on depends on the date: by the rule for a value with no year it is an `UnanchoredError`, as a month added to a week date is a `ResolutionError`. Found 2026-10-02.
@@ -123,6 +121,10 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **An unending recurrence with no year gives nothing in a dated window** — a start with no year is placed on the window's first day, month or year (`at/2`), a day of the week on the first such day in the window, so `R/T22H/PT1H` within 15 June is 22:00 and 23:00. 2026-10-03.
+
+* [x] **The Calendrical and Localize locks moved** — Calendrical to `a60de7a` (composite years, Umm al-Qura and Persian dates outside their tables, `strftime/3`) and Localize to `208353f` (Hebrew-numeral years, calendar time formats, GMT offset digits, `-u-rg-` subdivisions, shared currency text). 2026-10-03.
 
 * [x] **`Date.compare/2` orders two dates of one calendar by their fields** — Tempo orders dates by their days (`Tempo.Compare.compare_days/2`, through `Date.diff/2`, as Calendrical does) in its twelve calls, and `compare_endpoints/2` compares the values of a calendar whose year does not begin on 1 January by their days. 2026-10-03.
 

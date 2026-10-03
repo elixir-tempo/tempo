@@ -205,6 +205,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A recurrence whose start has no year starts on a dated `:within` window, as `Tempo.at/2` places a value: `R/T22H/PT1H` within 15 June is 22:00 and 23:00 that day, and a day of the week starts on the first one in the window, where such a recurrence gave nothing.
+
 * Dates and values in a calendar whose year turns after its first month (Calendrical's Julian `March25`, `March1`, `Sept1` and `Dec25`) are ordered by their days, where they were ordered by their fields: a `Date.Range` from 31 December to 1 January of one such year converts to its two days, where it was refused as empty.
 
 * A value in a calendar of weeks takes day resolution as its day of the week, so `Tempo.at_resolution/2` to `:day` gives `2026-W25-1`, and a value's selection (`2026YL1K1IN`), a `:within` window and `select/2` select in it, where they gave the whole span or a `Tempo.ResolutionError`.

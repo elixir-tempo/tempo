@@ -247,4 +247,40 @@ defmodule Tempo.SteppingTest do
       assert {:error, %ConversionError{}} = Tempo.to_interval(Tempo.from_iso8601!("R3/202XY/P1Y"))
     end
   end
+
+  # A recurrence whose start has no year walked on its own axis and was
+  # compared with a dated window, so it gave nothing in one.
+  describe "a recurrence with no year in a dated window" do
+    defp starts_within(text, window) do
+      {:ok, set} =
+        Tempo.to_interval(Tempo.from_iso8601!(text), within: Tempo.from_iso8601!(window))
+
+      set |> IntervalSet.members() |> Enum.map(&Interval.from/1)
+    end
+
+    test "starts on the window's day, month or year" do
+      assert starts_within("R/T22H/PT1H", "2026-06-15/2026-06-16") ==
+               [~o"2026-06-15T22", ~o"2026-06-15T23"]
+
+      assert starts_within("R3/T22H/PT1H", "2026-06-15/2026-06-16") ==
+               [~o"2026-06-15T22", ~o"2026-06-15T23"]
+
+      assert starts_within("R/T09H/P1D", "2026-06-15/2026-06-18") ==
+               [~o"2026-06-15T09", ~o"2026-06-16T09", ~o"2026-06-17T09"]
+
+      assert starts_within("R/12M31D/P1D", "2026") == [~o"2026-12-31"]
+      assert starts_within("R/15D/P1M", "2026-06/2026-08") == [~o"2026-06-15", ~o"2026-07-15"]
+    end
+
+    test "a day of the week starts on the first one in the window" do
+      assert starts_within("R/6K/P1W", "2026-06/2026-07") ==
+               [~o"2026-06-06", ~o"2026-06-13", ~o"2026-06-20", ~o"2026-06-27"]
+
+      assert hd(starts_within("R/6KT10H/P1W", "2026-06/2026-07")) == ~o"2026-06-06T10"
+    end
+
+    test "a window with no year is the start's own axis" do
+      assert starts_within("R/T22H/PT1H", "T20H/T23H") == [~o"T22H"]
+    end
+  end
 end
