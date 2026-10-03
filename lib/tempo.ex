@@ -3364,6 +3364,8 @@ defmodule Tempo do
   twelve months — so the value's resolution rises while its span stays
   the same.
 
+  The months of a year and the days of a month depend on which year or month it is. Under a value naming several, they are written from the first to the last (`{1..-1}`), and each year or month is walked by its own.
+
   A second is written as its ten tenths and a fraction of a second as its next decimal place, down to a microsecond, which has no finer unit. Such a value inspects with the fractions as a set after the decimal sign (`45.{0..9}S`), a notation `from_iso8601/1` does not read.
 
   ### Arguments
@@ -3385,6 +3387,9 @@ defmodule Tempo do
 
       iex> Tempo.extend(~o"2026-06")
       {:ok, ~o"2026Y6M{1..30}D"}
+
+      iex> Tempo.extend(~o"2026Y{6,7}M")
+      {:ok, ~o"2026Y{6..7}M{1..-1}D"}
 
       iex> {:error, %Tempo.ResolutionError{}} = Tempo.extend(~o"2026-06-15T10:30:45.123456")
 

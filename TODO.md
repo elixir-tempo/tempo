@@ -16,7 +16,7 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **A count from the end with no year** — `~o"2M-1D"` is the 29th, the longest February, and `~o"-1M"` is a `ConversionError`, though every Gregorian year has twelve months. Decide what each is. Found 2026-10-03.
 
-* [ ] **The enumeration `extend/2` adds is not the one the parser reads** — `Tempo.extend(~o"2026Y{6,7}M")` holds its days as `1..-1//-1` and inspects as `2026Y{6..7}M{1..-1//-1}D`, where the same value parsed (`{1..-1}D`) holds `1..-1//1`: the two walk alike and are not equal. Found 2026-10-03.
+* [ ] **`extend/2` of a group writes a value nothing walks** — `Tempo.extend(~o"2026Y2G3MU")` is `{:ok, ~o"2026Y2G3MU{1..-1}D"}`, a range of days counted from the group's start, which `Enum` and `to_interval/2` refuse (`:counted_in_group`: a unit after a group takes one whole number), where every other extension walks as its value does. Decide whether such a range is walked (the ninety-one days of the quarter) or `extend/2` of a group is a named error. Found 2026-10-04.
 
 * [ ] **The days of a February with no year have two answers** — 29 written `2MX*D` or `2M{1..-1}D` or left to the walk of `2M`, as validation accepts a 29th that some year has, and an `UnanchoredError` written `2MXXD`, as a mask wants every candidate to fit the shortest month, so `XXMXXD` yields January and raises at February (`to_interval/2` of `2MXXD` is the month, `2M/3M`). The months of a year with none split the other way: `X*M` and `XXM` are the twelve the Gregorian calendar always has, `{1..-1}M` and `-1M` an error. Decide one rule. Found 2026-10-03.
 
@@ -88,6 +88,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **Workday adjustments: following, preceding and their modified forms** — the date-roll conventions of financial contracts: a day when it is a workday, otherwise the next (or the previous) one, and the modified forms that turn back when the adjusted day leaves the month. `nearest_workday/2` and `next_workday/2` are different rules; found comparing Tempo with bizdays' ANBIMA calendar, 2026-10-03. Analysis in [plans/anbima-calendar.md](plans/anbima-calendar.md).
 
+* [ ] **A week calendar's week in `to_string/2` reads as the locale's week of the year** — Localize `main` writes `%{year: 2026, month: 25, calendar: Calendrical.ISOWeek}` with CLDR's `yw`, "week 25 of 2026" ("Woche 25 des Jahres 2026" in `de`), and two weeks "week 25 of 2026 – week 26 of 2026", where the Blocked item below expects "2026-W25" (user, in the Localize session, 2026-10-04: "Calendrical is not about formatting, Localize is. For week based calendars we need to interpret `:month` as `:week` and pick the correct skeleton accordingly"). `format: "Y-'W'ww"` writes "2026-W25" for one week; an interval given a week format shows one end until Localize's Open item on it is done. Decide which text Tempo shows, then move the lock. Found in the Localize session, 2026-10-04.
+
 ### Release and housekeeping
 
 * [ ] **Livebooks install 2.0 at the release** — `getting-started`, `tempo_tour`, `scheduling-workbook` and `uncertain-dates-workbook` install `{:ex_tempo, "~> 1.6"}` and the Melbourne deck `~> 1.6.3`, while their code uses the 2.0 names: at the 2.0.0 release each installs `~> 2.0`, as `everyday-holidays` already does.
@@ -121,6 +123,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **The enumeration `extend/2` adds is the one the parser reads** — the months of several years and the days of several months are written `1..-1//1`, so `Tempo.extend(~o"2026Y{6,7}M")` equals `~o"2026Y{6,7}M{1..-1}D"` and inspects as it. 2026-10-04.
 
 * [x] **A group of a set has a span for each group** — `to_interval/2` gives a span for each group and the walk their values in turn (`2026Y{1,2}G3MU` is the first two quarters), a group from the end counted in what holds it. 2026-10-04.
 

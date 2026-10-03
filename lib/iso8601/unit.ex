@@ -34,10 +34,15 @@ defmodule Tempo.Iso8601.Unit do
 
   # A day named as a day of the week (a week's members) or of the year is
   # a day like any other, so its hours follow it.
+  #
+  # A unit whose count depends on the date (the months of a year, the days
+  # of a month) is every value from the first to the last, `1..-1//1`: the
+  # range the parser reads `{1..-1}` as, so a value `Tempo.extend/2` writes
+  # is equal to the same value read from text.
   @unit_after %{
-    year: {:month, 1..-1//-1},
-    month: {:day, 1..-1//-1},
-    traditional_month: {:day, 1..-1//-1},
+    year: {:month, 1..-1//1},
+    month: {:day, 1..-1//1},
+    traditional_month: {:day, 1..-1//1},
     week: {:day_of_week, 1..7},
     calendar_week: {:day_of_week, 1..7},
     day: {:hour, 0..23},
@@ -72,7 +77,7 @@ defmodule Tempo.Iso8601.Unit do
     if calendar.calendar_base() == :month do
       Map.get(@unit_after, unit)
     else
-      {:week, 1..-1//-1}
+      {:week, 1..-1//1}
     end
   end
 

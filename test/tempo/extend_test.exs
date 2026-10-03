@@ -24,6 +24,42 @@ defmodule Tempo.Extend.Test do
     end
   end
 
+  # The months of a year and the days of a month depend on which year or
+  # month it is, so under a value naming several they are written from the
+  # first to the last (`{1..-1}`), the range text is read as.
+  describe "a value naming several years or months" do
+    test "is written as the finer unit from its first to its last, as text is read" do
+      assert Tempo.extend(~o"2026Y{6,7}M") == {:ok, ~o"2026Y{6,7}M{1..-1}D"}
+      assert Tempo.extend(~o"{2026,2027}Y") == {:ok, ~o"{2026,2027}Y{1..-1}M"}
+      assert Tempo.extend(~o"{2024,2025}Y2M") == {:ok, ~o"{2024,2025}Y2M{1..-1}D"}
+      assert Tempo.extend(~o"202X") == {:ok, ~o"202XY{1..-1}M"}
+      assert Tempo.extend(~o"2026-1X") == {:ok, ~o"2026Y1XM{1..-1}D"}
+      assert Tempo.extend(~o"{6,7}M") == {:ok, ~o"{6,7}M{1..-1}D"}
+    end
+
+    test "in a calendar of weeks, and in one of other months" do
+      assert Tempo.extend(Tempo.from_iso8601!("{2026,2027}Y", Calendrical.ISOWeek)) ==
+               Tempo.from_iso8601("{2026,2027}Y{1..-1}W", Calendrical.ISOWeek)
+
+      assert Tempo.extend(Tempo.from_iso8601!("5786Y{6,7}M", Calendrical.Hebrew)) ==
+               Tempo.from_iso8601("5786Y{6,7}M{1..-1}D", Calendrical.Hebrew)
+    end
+
+    test "inspects as the text that reads back as it" do
+      {:ok, days} = Tempo.extend(~o"2026Y{6,7}M")
+
+      assert inspect(days) == ~s(~o"2026Y{6..7}M{1..-1}D")
+    end
+
+    test "covers the span of each" do
+      {:ok, days} = Tempo.extend(~o"2024Y{2,3}M")
+
+      assert Enum.count(days) == 29 + 31
+      assert hd(Enum.to_list(days)) == ~o"2024-02-01"
+      assert List.last(Enum.to_list(days)) == ~o"2024-03-31"
+    end
+  end
+
   describe "a second and a fraction of a second" do
     test "are written as their next decimal place" do
       {:ok, tenths} = Tempo.extend(~o"2026-06-15T10:30:45")
