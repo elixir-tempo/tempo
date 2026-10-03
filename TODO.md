@@ -28,6 +28,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ### Conformance and completeness
 
+* [ ] **A formal grammar the parser is held to** — an ABNF transcribed from ISO 8601 clause by clause, a recogniser and a generator that check `from_iso8601/1` against it in both directions, and the standard's 573 examples as a table, with a pilot on Part 1 clause 5 first. Plan in [plans/parser-formal-grammar.md](plans/parser-formal-grammar.md).
+
 * [ ] **Three §12 selection parses** — `2018Y9MTLT8H20MN3I` does not parse, `FL1KT10H0M0S1IN` misreads `0S1`, and `{1,3}K1I` merges where ISO 8601-2 §12.11.3 example 2 distributes.
 
 * [ ] **An interval's end of a day alone reads as a century** — `2026-06-15/20` is `2026-06-15/21G100YU`, the two digits read as a century, where `2026-06-15/07-20`, `2026-06/08` and `2026-06-15T10:00/11:00` take the units the end leaves out from the start. ISO 8601-1 §5.5.1 allows the omission "provided that the resulting expression is unambiguous": decide whether two digits after a whole date are its day. Found 2026-10-02.
