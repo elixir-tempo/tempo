@@ -5,6 +5,7 @@ defmodule Tempo.EnumerationWalk.Test do
   alias Calendrical.Gregorian
   alias Calendrical.Hebrew
   alias Tempo.Clock.Test, as: ClockTest
+  alias Tempo.Interval
   alias Tempo.IntervalSet
 
   # The walk of a value reads its components coarse to fine, and each names
@@ -425,7 +426,7 @@ defmodule Tempo.EnumerationWalk.Test do
                    ~r/`Enum.count\/1` needs every value of ~o"2026Y\/\.\."/,
                    fn -> Enum.count(~o"2026Y/..") end
 
-      {:ok, from_2026} = Tempo.Interval.new(from: ~o"2026Y")
+      {:ok, from_2026} = Interval.new(from: ~o"2026Y")
       assert_raise Tempo.IntervalEndpointsError, fn -> Enum.count(from_2026) end
     end
 
