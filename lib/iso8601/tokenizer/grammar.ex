@@ -58,8 +58,13 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     |> concat(parsec({Tempo.Iso8601.Tokenizer.Time, :extended_time_of_day_p}))
   end
 
+  # A month alone is a date here, as it is after a year (`2026Y6MT10H`):
+  # `explicit_date/0` leaves a month a time follows to this rule.
   def explicit_date_time do
-    parsec({Tempo.Iso8601.Tokenizer.Date, :explicit_date_p})
+    choice([
+      parsec({Tempo.Iso8601.Tokenizer.Date, :explicit_date_p}),
+      parsec({Tempo.Iso8601.Tokenizer.Date, :explicit_month_p}) |> lookahead(string("T"))
+    ])
     |> concat(parsec({Tempo.Iso8601.Tokenizer.Time, :explicit_time_of_day_p}))
   end
 

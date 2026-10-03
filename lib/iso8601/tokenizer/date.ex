@@ -58,6 +58,15 @@ defmodule Tempo.Iso8601.Tokenizer.Date do
                     |> replace(empty(), :__explicit_date__)
                   ])
                   |> post_traverse({:classify_explicit_date, []}),
+                  # A month alone with a time after it (`6MT10H`), which the
+                  # explicit date leaves to a date-time, as `2026Y6MT10H` is.
+                  # The time is written with its `T`: without one, `1M2S` is
+                  # a minute and a second.
+                  parsec({Tempo.Iso8601.Tokenizer.Date, :explicit_month_p})
+                  |> lookahead(string("T"))
+                  |> parsec({Tempo.Iso8601.Tokenizer.Time, :explicit_time_of_day_p})
+                  |> optional(parsec({Tempo.Iso8601.Tokenizer.Time, :explicit_time_shift_p}))
+                  |> tag(:datetime),
                   parsec({Tempo.Iso8601.Tokenizer.Date, :non_explicit_datetime_parser}),
                   parsec({Tempo.Iso8601.Tokenizer.Date, :date_parser}),
                   parsec({Tempo.Iso8601.Tokenizer.Time, :time_parser})

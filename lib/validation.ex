@@ -653,6 +653,17 @@ defmodule Tempo.Validation do
     end
   end
 
+  # A month followed by a time of day with no day between them
+  # (`2026Y-1MT10H`) is the month its year counts, and the time as it is.
+  def resolve([{:year, year}, {:month, months}, {unit, _value} = time | rest], calendar)
+      when is_integer(year) and unit in [:hour, :minute, :second] and
+             (is_list(months) or is_integer(months) or is_struct(months, Range)) do
+    with [{:year, year}, {:month, month}] <- resolve([{:year, year}, {:month, months}], calendar),
+         resolved when is_list(resolved) <- resolve([time | rest], calendar) do
+      [{:year, year}, {:month, month} | resolved]
+    end
+  end
+
   def resolve([{:year, year}, {:week, weeks}], calendar)
       when is_integer(year) and
              (is_list(weeks) or is_integer(weeks) or is_struct(weeks, Range)) do

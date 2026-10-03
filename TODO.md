@@ -6,8 +6,6 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ### Correctness
 
-* [ ] **A time after a month with no day** — `2G2MUT10H` and `2026Y-1MT10H` parse, where `6MT10H` does not; the second keeps `-1M` unresolved, and both walk to values that do not read back (`3MT10H`). Found 2026-10-03.
-
 * [ ] **A selected day is walked as a day and a selected hour by its minutes** — `to_interval/2` gives `2026Y4ML1K1IN` a day with no unit and `2026Y4ML1K1INT10H` an hour with `unit: :minute`, so `Enum.to_list/1` of the first is the day and of the second its sixty minutes. Found 2026-10-03.
 
 * [ ] **A group of a set raises outside `to_interval/2`** — a value holding one (`{1,2}G3MU`, the first and second groups of three months) keeps it as a three-element tuple the `Keyword` functions cannot read: `select/2`, `at/2`, `on/2`, `trunc/2` and `nearest_workday/2` raise, and `to_interval/2` and `Enum` are a `ConversionError` where they could give a span for each group. `Tempo.trunc/2` also raises for a value holding a selection (`~o"2026Y4ML1K1IN"`). Found 2026-10-02.
@@ -105,6 +103,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A time after a month with no day** — a month alone with a time written with its `T` parses (`6MT10H`), as after a year it did, so `2G2MUT10H` walks to `3MT10H` and `4MT10H` that read back, and validation resolves a month before a time against its year (`2026Y-1MT10H` is December). 2026-10-03.
 
 * [x] **A qualified set is written in a form that does not parse** — a qualification the members share is written once after the set, before any suffix, and a range member is qualified at both ends. 2026-10-03.
 

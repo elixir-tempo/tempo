@@ -77,6 +77,27 @@ defmodule Tempo.Iso8601.Parser.Test do
     end
   end
 
+  # A month alone with a time after it did not parse, though a year and a
+  # month with one did, so a group of months walked to values that did not
+  # read back; a month counted from the end under a year stayed unresolved.
+  describe "a time after a month with no day" do
+    test "parses after a month alone, as after a year and a month" do
+      assert {:ok, %Tempo{time: [month: 6, hour: 10]} = value} = Tempo.from_iso8601("6MT10H")
+      assert Tempo.from_iso8601(Tempo.to_iso8601!(value)) == {:ok, value}
+
+      assert {:ok, %Tempo{time: [month: 6, hour: 10, minute: 30]}} =
+               Tempo.from_iso8601("6MT10H30M")
+    end
+
+    test "a group of months walks to values that read back" do
+      assert Enum.to_list(~o"2G2MUT10H") == [~o"3MT10H", ~o"4MT10H"]
+    end
+
+    test "a month counted from the end is its year's" do
+      assert Tempo.from_iso8601("2026Y-1MT10H") == {:ok, ~o"2026Y12MT10H"}
+    end
+  end
+
   describe "ISO 8601-2 expanded year (±YYYYY)" do
     test "a signed year of five or more digits parses" do
       assert Tempo.from_iso8601("+12022") == {:ok, ~o"12022Y"}
