@@ -821,7 +821,13 @@ defmodule Tempo.Inspect do
       ?/,
       ?F,
       inspect_value(rule_time),
-      repeat_rule_calendar_trailer(repeat_rule)
+      # A recurrence with no start keeps a zone suffix on its rule, written
+      # after the whole recurrence in IXDTF's order: the zone, the calendar,
+      # then any other tags.
+      zone_id_trailer(repeat_rule.extended),
+      zone_offset_trailer(repeat_rule.extended),
+      repeat_rule_calendar_trailer(repeat_rule),
+      tags_trailer(repeat_rule.extended)
     ]
   end
 

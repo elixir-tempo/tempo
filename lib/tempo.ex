@@ -985,11 +985,25 @@ defmodule Tempo do
     %{
       interval
       | from: attach_extended(interval.from, extended),
-        to: attach_extended(interval.to, extended)
+        to: attach_extended(interval.to, extended),
+        repeat_rule: rule_extended(interval, extended)
     }
   end
 
   def attach_extended(other, _extended), do: other
+
+  # A recurrence with no start of its own (`R/../P1Y/FL3M20DN[+09:00]`) keeps
+  # the suffix on its rule, which gives it to the start a window supplies, so
+  # its occurrences are in the zone the suffix names.
+  defp rule_extended(%Tempo.Interval{from: %__MODULE__{}, repeat_rule: rule}, _extended), do: rule
+
+  # The calendar a suffix names is already the rule's calendar, so only the
+  # zone and the tags are kept on it.
+  defp rule_extended(%Tempo.Interval{from: from, repeat_rule: %__MODULE__{} = rule}, extended)
+       when from in [nil, :undefined],
+       do: attach_extended(rule, %{extended | calendar: nil})
+
+  defp rule_extended(%Tempo.Interval{repeat_rule: rule}, _extended), do: rule
 
   @doc """
   Bang variant of `from_iso8601/2`: the parsed value, or a raised
@@ -2753,7 +2767,6 @@ defmodule Tempo do
 
   ### Examples
 
-
       iex> Tempo.split(~o"2026-06-15T14:30:00")
       {~o"2026Y6M15D", ~o"T14H30M0S"}
 
@@ -3520,7 +3533,6 @@ defmodule Tempo do
   Convert a Tempo struct into a Time.
 
   ### Examples
-
 
       iex> Tempo.to_time(~o"T14:30:00")
       {:ok, ~T[14:30:00.000000]}
@@ -6149,8 +6161,11 @@ defmodule Tempo do
 
       within ->
         case window_start(within, interval) do
-          {:ok, start} -> materialise_from_bound(interval, start, within, opts)
-          {:error, _} = error -> error
+          {:ok, start} ->
+            materialise_from_bound(interval, in_rule_zone(start, interval), within, opts)
+
+          {:error, _} = error ->
+            error
         end
     end
   end
@@ -6298,6 +6313,15 @@ defmodule Tempo do
   defp materialise(value, _opts) do
     {:error, ConversionError.exception(value: value, target: Tempo.Interval)}
   end
+
+  # The start a window supplies takes the zone the rule's suffix names, unless
+  # the window is in one of its own.
+  defp in_rule_zone(%__MODULE__{extended: nil} = start, %Interval{
+         repeat_rule: %__MODULE__{extended: %{} = extended}
+       }),
+       do: %{start | extended: extended}
+
+  defp in_rule_zone(start, _interval), do: start
 
   # A recurrence with no end is ended by the caller's `:within` window; with
   # none it cannot be materialised. A window running back from each anchor
@@ -8672,7 +8696,6 @@ defmodule Tempo do
   See `Tempo.Operations.union/3` for full details.
   ### Examples
 
-
       iex> {:ok, either} = Tempo.union(~o"2026-01", ~o"2026-03")
       iex> either
       #Tempo.IntervalSet<[#Tempo.Interval<~o"2026Y1M/2M" unit: day>, #Tempo.Interval<~o"2026Y3M/4M" unit: day>]>
@@ -8687,7 +8710,6 @@ defmodule Tempo do
   `Tempo.Operations.intersection/3`.
   ### Examples
 
-
       iex> {:ok, both} = Tempo.intersection(~o"2026-06-15T09/2026-06-15T17", ~o"2026-06-15T14/2026-06-15T20")
       iex> both
       #Tempo.IntervalSet<[~o"2026Y6M15DT14H/T17H"]>
@@ -8701,7 +8723,6 @@ defmodule Tempo do
   required. See `Tempo.Operations.complement/2`.
 
   ### Examples
-
 
       iex> meeting = ~o"2026-06-15T10:00/2026-06-15T11:00"
       iex> {:ok, free} = Tempo.complement(meeting, within: ~o"2026-06-15T09:00/2026-06-15T17:00")
@@ -8718,7 +8739,6 @@ defmodule Tempo do
   `Tempo.Operations.difference/3`.
   ### Examples
 
-
       iex> workday = ~o"2026-06-15T09/2026-06-15T17"
       iex> lunch = ~o"2026-06-15T12/2026-06-15T13"
       iex> {:ok, working} = Tempo.difference(workday, lunch)
@@ -8734,7 +8754,6 @@ defmodule Tempo do
   `Tempo.Operations.symmetric_difference/3`.
   ### Examples
 
-
       iex> {:ok, exactly_one} = Tempo.symmetric_difference(~o"2026-06-15T09/2026-06-15T13", ~o"2026-06-15T11/2026-06-15T17")
       iex> exactly_one
       #Tempo.IntervalSet<[~o"2026Y6M15DT9H/T11H", ~o"2026Y6M15DT13H/T17H"]>
@@ -8748,7 +8767,6 @@ defmodule Tempo do
   metadata. Use this when the question is about *which events*
   hit the query window. See `Tempo.Operations.members_overlapping/3`.
   ### Examples
-
 
       iex> busy = Tempo.IntervalSet.new!([
       ...>   Tempo.to_interval!(~o"2026-06-15T10:00/2026-06-15T11:00"),
@@ -8770,7 +8788,6 @@ defmodule Tempo do
   `Tempo.Operations.members_outside/3`.
   ### Examples
 
-
       iex> busy = Tempo.IntervalSet.new!([
       ...>   Tempo.to_interval!(~o"2026-06-15T10:00/2026-06-15T11:00"),
       ...>   Tempo.to_interval!(~o"2026-06-16T14:00/2026-06-16T15:00")
@@ -8787,7 +8804,6 @@ defmodule Tempo do
   either operand that don't overlap any member of the other,
   kept whole. See `Tempo.Operations.members_in_exactly_one/3`.
   ### Examples
-
 
       iex> busy = Tempo.IntervalSet.new!([
       ...>   Tempo.to_interval!(~o"2026-06-15T10:00/2026-06-15T11:00"),
@@ -8806,7 +8822,6 @@ defmodule Tempo do
   See `Tempo.Operations.disjoint?/3`.
   ### Examples
 
-
       iex> Tempo.disjoint?(~o"2026-01", ~o"2026-03")
       true
 
@@ -8820,7 +8835,6 @@ defmodule Tempo do
   `true` when `a` and `b` share at least one instant.
   See `Tempo.Operations.overlaps?/3`.
   ### Examples
-
 
       iex> Tempo.overlaps?(~o"2026-06-15T10/2026-06-15T12", ~o"2026-06-15T11/2026-06-15T14")
       true
@@ -8836,7 +8850,6 @@ defmodule Tempo do
   `within?/3`. See `Tempo.Operations.contains?/3`.
   ### Examples
 
-
       iex> Tempo.contains?(~o"2026-06", ~o"2026-06-15")
       true
 
@@ -8850,7 +8863,6 @@ defmodule Tempo do
   `true` when `a` and `b` span the same instants (at their
   aligned resolution). See `Tempo.Operations.equal?/3`.
   ### Examples
-
 
       iex> Tempo.equal?(~o"2026-06", ~o"2026-06-01/2026-07-01")
       true
@@ -9297,7 +9309,6 @@ defmodule Tempo do
   (neither `:undefined` nor `nil`). See `Tempo.Interval.bounded?/1`.
   ### Examples
 
-
       iex> Tempo.bounded?(Tempo.to_interval!(~o"2026-06-15"))
       true
 
@@ -9312,7 +9323,6 @@ defmodule Tempo do
   `true` when the interval has zero length. See
   `Tempo.Interval.empty?/1`.
   ### Examples
-
 
       iex> Tempo.empty?(Tempo.to_interval!(~o"2026-06-15"))
       false
@@ -9360,7 +9370,6 @@ defmodule Tempo do
   (Allen's `:meets | :met_by`). See `Tempo.Interval.adjacent?/2`.
   ### Examples
 
-
       iex> Tempo.adjacent?(~o"2026-02", ~o"2026-01")
       true
 
@@ -9401,7 +9410,6 @@ defmodule Tempo do
   `±` margins. See `Tempo.Interval.overlap_certainty/2`.
   ### Examples
 
-
       iex> Tempo.overlap_certainty(~o"2026-06", ~o"2026-06-15")
       :certain
 
@@ -9418,7 +9426,6 @@ defmodule Tempo do
   The three-valued certainty that `a` falls within `b`, given their
   `±` margins. See `Tempo.Interval.within_certainty/2`.
   ### Examples
-
 
       iex> Tempo.within_certainty(~o"20XX", ~o"2000Y/2100Y")
       :certain
@@ -9437,7 +9444,6 @@ defmodule Tempo do
   See `Tempo.Interval.relation_certainty/3`.
   ### Examples
 
-
       iex> Tempo.relation_certainty(~o"20XX", ~o"2200", :precedes)
       :certain
 
@@ -9451,7 +9457,6 @@ defmodule Tempo do
   `true` when `a` and `b` intersect for *every* placement of their `±`
   margins. See `Tempo.Interval.certainly_overlaps?/2`.
   ### Examples
-
 
       iex> Tempo.certainly_overlaps?(~o"2000±1Y", ~o"2001±1Y")
       false
@@ -9467,7 +9472,6 @@ defmodule Tempo do
   `±` margins. See `Tempo.Interval.possibly_overlaps?/2`.
   ### Examples
 
-
       iex> Tempo.possibly_overlaps?(~o"2000±1Y", ~o"2001±1Y")
       true
 
@@ -9481,7 +9485,6 @@ defmodule Tempo do
   `true` when `a` falls within `b` for *every* placement of their `±`
   margins. See `Tempo.Interval.certainly_within?/2`.
   ### Examples
-
 
       iex> Tempo.certainly_within?(~o"2000±1Y", ~o"1990Y/2010Y")
       true
@@ -9497,7 +9500,6 @@ defmodule Tempo do
   `±` margins. See `Tempo.Interval.possibly_within?/2`.
   ### Examples
 
-
       iex> Tempo.possibly_within?(~o"2000±1Y", ~o"2000Y")
       true
 
@@ -9508,7 +9510,6 @@ defmodule Tempo do
   `true` when `a` ends before `b` starts for *every* placement of their
   `±` margins. See `Tempo.Interval.certainly_before?/2`.
   ### Examples
-
 
       iex> Tempo.certainly_before?(~o"2000±1Y", ~o"2010")
       true
@@ -9524,7 +9525,6 @@ defmodule Tempo do
   their `±` margins. See `Tempo.Interval.possibly_before?/2`.
   ### Examples
 
-
       iex> Tempo.possibly_before?(~o"2000±1Y", ~o"2001")
       true
 
@@ -9535,7 +9535,6 @@ defmodule Tempo do
   `true` when `a` starts after `b` ends for *every* placement of their
   `±` margins. See `Tempo.Interval.certainly_after?/2`.
   ### Examples
-
 
       iex> Tempo.certainly_after?(~o"2010±1Y", ~o"2000")
       true
@@ -9550,7 +9549,6 @@ defmodule Tempo do
   `true` when `a` *could* start after `b` ends for some placement of
   their `±` margins. See `Tempo.Interval.possibly_after?/2`.
   ### Examples
-
 
       iex> Tempo.possibly_after?(~o"2001±1Y", ~o"2000")
       true

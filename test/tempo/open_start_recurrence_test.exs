@@ -266,4 +266,34 @@ defmodule Tempo.OpenStartRecurrenceTest do
       assert {:ok, {_a, _b}} = Operations.align(bounded, unbounded)
     end
   end
+
+  # The `[zone]` suffix of a recurrence with no start was parsed and dropped,
+  # so its occurrences were floating.
+  describe "a zone suffix on a recurrence with no start" do
+    test "is kept, written back after the recurrence, and read again" do
+      for text <- [
+            "R/../P1Y/FL3M20DN[+09:00]",
+            "R/../P1Y/FL3M20DN[Europe/Paris]",
+            "R/../P1Y/FL3M20DN[Europe/Paris][u-ca=hebrew]"
+          ] do
+        value = Tempo.from_iso8601!(text)
+        written = Tempo.to_iso8601!(value)
+
+        assert written == text
+        assert Tempo.from_iso8601(written) == {:ok, value}
+      end
+    end
+
+    test "puts the occurrences a window gives in its zone" do
+      {:ok, set} =
+        Tempo.to_interval(Tempo.from_iso8601!("R/../P1D/FLT10HN[Asia/Tokyo]"),
+          within: ~o"2026-06-15/2026-06-17"
+        )
+
+      assert Enum.map(IntervalSet.members(set), &Interval.from/1) == [
+               Tempo.from_iso8601!("2026-06-15T10[Asia/Tokyo]"),
+               Tempo.from_iso8601!("2026-06-16T10[Asia/Tokyo]")
+             ]
+    end
+  end
 end

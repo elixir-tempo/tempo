@@ -205,6 +205,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* The `[zone]` suffix of a recurrence with no start (`R/../P1Y/FL3M20DN[+09:00]`) is kept on its rule, written back after the recurrence and given to the occurrences a `:within` window supplies, where it was parsed and dropped.
+
 * A unit after a group under a set, a range or a mask of years counts from the group's start, as it does under one year: `{2026,2028}Y2G2MU15D` is 15 March of each year, where it was the 15th of each month of the group.
 
 * An unspecified year (`X*Y`) walks as the current year in the value's own calendar, read from `Tempo.Clock`: `X*Y[u-ca=hebrew]` is the Hebrew year that holds today, where it was the Gregorian year's number in every calendar.
