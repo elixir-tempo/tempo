@@ -128,14 +128,14 @@ defmodule Tempo.Matrix.Corpus do
       "2026Y{6,7}MT10H"
     ],
     recurrence_exotic_start: ["R3/2026Y6MXXD/P1M", "R3/2026Y6M{1,15}D/P1M", "R3/T22H/PT1H"],
-    set_exotic: ["{2,6}M31D", "{2026-06-20..2026-06-15}", "{1,2}M"]
+    set_exotic: ["{2,6}M31D", "{2026-06-20..2026-06-15}", "{1,2}M"],
+    group_of_set: ["2026Y{1,2}G3MU", "2026Y{1..-1}G3MU", "2026Y6M{1,2}G10DU", "2026Y{1,2}G3MU15D"]
   ]
 
   # Shapes the walk or the conversion has no answer for yet, in at least one
   # of their values: a named error is their answer until the walk defines
   # one, and the matrix test holds the list to that.
   @open [
-    group_of_set: ["2026Y{1,2}G3MU"],
     unspecified_year: ["X*Y", "X*Y12M31D", "X*Y6MX*D"],
     interval_exotic_end: ["2026Y6MXXD/P1M", "2026Y6MX*D/2026Y8M", "20C/21C", "202X/2040"],
     no_year_masked: ["2MXXD", "XXM", "X*K", "6MX*D"]

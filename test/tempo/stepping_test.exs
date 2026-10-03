@@ -129,11 +129,8 @@ defmodule Tempo.SteppingTest do
 
   describe "a value no step can count from" do
     test "has no span, and to_interval/2 returns why" do
-      for text <- ["2026Y{1,2}G3MU15D", "2026Y6M{1,2}G7DU", "2026Y6M{1,2}G7DUT10H", "-1D"] do
-        assert {:error, %ConversionError{reason: :grouped_component}} =
-                 Tempo.to_interval(Tempo.from_iso8601!(text)),
-               text
-      end
+      assert {:error, %ConversionError{reason: :grouped_component}} =
+               Tempo.to_interval(Tempo.from_iso8601!("-1D"))
     end
 
     test "is shifted where the step passes the unit by" do

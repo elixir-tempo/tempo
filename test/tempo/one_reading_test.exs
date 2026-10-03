@@ -37,11 +37,16 @@ defmodule Tempo.OneReadingTest do
 
     test "a value whose span starts at no point is its conversion's error" do
       assert_raise Tempo.ConversionError, fn ->
-        Tempo.compare(~o"2026Y{1,2}G3MU", ~o"2026-06-15")
+        Tempo.compare(~o"2026Y[1,2]G3MU", ~o"2026-06-15")
       end
 
       assert {:error, %Tempo.ConversionError{}} =
-               Interval.new(~o"2026Y{1,2}G3MU", ~o"2026-06-15")
+               Interval.new(~o"2026Y[1,2]G3MU", ~o"2026-06-15")
+    end
+
+    test "a group of a set is the point its first group starts at" do
+      assert Tempo.compare(~o"2026Y{2,3}G3MU", ~o"2026-04-01") == :eq
+      assert Tempo.compare(~o"2026Y{2,3}G3MU", ~o"2026-06-15") == :lt
     end
 
     test "a year and a week of it are not one moment" do

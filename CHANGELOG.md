@@ -153,6 +153,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Added
 
+* A group of a set (`2026Y{1,2}G3MU`, the first and the second groups of three months) converts to a span for each group and walks the values of each, a unit after it counted from each group's start, where `Tempo.to_interval/2` and `Enum` returned a `Tempo.ConversionError`. A group counted from the end (`{1..-1}G3MU`) is counted in what holds it, and one of several groups (`[1,2]G3MU`) is no one span, as a one-of set is none.
+
 * [What each operation gives each value](guides/operation-matrix.md) is a table of every class of value against every kind of operation, generated from the code and checked by the test suite, so the named errors in it are the list of what is not yet built.
 
 * `Tempo.new/1` takes `:microsecond`, a fraction of a second as Elixir's types hold one (`{500_000, 1}` is `.5`), and so takes the map of a `Time` or a `NaiveDateTime` as it takes a `Date`'s.

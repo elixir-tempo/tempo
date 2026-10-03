@@ -177,6 +177,72 @@ defmodule Tempo.GroupResolution.Test do
     end
   end
 
+  # A group of a set (`{1,2}G3MU`, the first and the second groups of three
+  # months) names a span in each of its groups. `to_interval/2` and the
+  # walk refused it with a `ConversionError`.
+  describe "a group of a set" do
+    alias Tempo.IntervalSet
+
+    defp spans(value) do
+      {:ok, set} = Tempo.to_interval(value)
+      set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
+    end
+
+    test "converts to a span for each group" do
+      assert spans(~o"2026Y{1,2}G3MU") == ["2026Y1M/4M", "2026Y4M/7M"]
+      assert spans(~o"2026Y6M{1,2}G10DU") == ["2026Y6M1D/11D", "2026Y6M11D/21D"]
+      assert spans(~o"T{1,2}G6HU") == ["T0H/T6H", "T6H/T12H"]
+      assert spans(~o"2026Y{1,2}G4WU") == ["2026Y1W/5W", "2026Y5W/9W"]
+    end
+
+    test "walks the values of each group in turn" do
+      assert Enum.to_list(~o"2026Y{1,3}G3MU") ==
+               [~o"2026-01", ~o"2026-02", ~o"2026-03", ~o"2026-07", ~o"2026-08", ~o"2026-09"]
+
+      assert Enum.count(~o"2026Y6M{1,2}G10DU") == 20
+    end
+
+    test "counts a group from the end in what holds it" do
+      assert spans(~o"2026Y{1..-1}G3MU") ==
+               ["2026Y1M/4M", "2026Y4M/7M", "2026Y7M/10M", "2026Y10M/2027Y1M"]
+
+      assert Enum.to_list(~o"2026Y{-1}G3MU") == [~o"2026-10", ~o"2026-11", ~o"2026-12"]
+
+      # The third group of ten days in a February ends with the month.
+      assert List.last(spans(~o"2026Y2M{1..-1}G10DU")) == "2026Y2M21D/3M1D"
+
+      assert {:error, %Tempo.UnanchoredError{}} = Tempo.to_interval(~o"{1..-1}G3MU")
+    end
+
+    test "passes over a group its container lacks" do
+      assert spans(~o"2026Y{4,5}G3MU") == ["2026Y10M/2027Y1M"]
+      assert Enum.count(~o"2026Y{4,5}G3MU") == 3
+    end
+
+    test "counts a unit after it from the start of each group" do
+      assert spans(~o"2026Y{1,2}G3MU15D") == ["2026Y1M15D/16D", "2026Y4M15D/16D"]
+      assert Enum.to_list(~o"2026Y{1,2}G3MU15D") == [~o"2026-01-15", ~o"2026-04-15"]
+    end
+
+    test "is measured, compared and shown as the spans it names" do
+      quarters = ~o"2026Y{1,2}G3MU"
+
+      assert Tempo.duration(quarters) == ~o"P6M"
+      assert Tempo.overlaps?(quarters, ~o"2026-05")
+      refute Tempo.overlaps?(quarters, ~o"2026-08")
+
+      assert Tempo.to_string!(quarters) ==
+               "Jan\u2009\u2013\u2009Mar 2026 and Apr\u2009\u2013\u2009Jun 2026"
+    end
+
+    test "of one of several groups is no one span, and walks its candidates" do
+      assert {:error, %Tempo.ConversionError{reason: :one_of_set}} =
+               Tempo.to_interval(~o"2026Y[1,2]G3MU")
+
+      assert Enum.count(~o"2026Y[1,2]G3MU") == 6
+    end
+  end
+
   # A group of a set is kept as a three-element entry, which the functions
   # that read a value's units raised on (a `FunctionClauseError`, a
   # `CaseClauseError`).

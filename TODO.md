@@ -8,8 +8,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Correctness
 
-* [ ] **A group of a set has no span for each group** — `to_interval/2` and `Enum` are a `ConversionError` for a value holding one (`2026Y{1,2}G3MU`, the first and second groups of three months), where they could give a span for each group. The functions that need one value return the same error since 2026-10-03. Found 2026-10-02.
-
 * [ ] **A fraction of a minute or an hour is read to the second or the minute** — `T10:30.5` is the second 10:30:30 and `T10.5` the minute 10:30, where the text names a tenth of a minute and a tenth of an hour, six seconds and six minutes long. No value has such a resolution to hold it; decide between an interval and a named error. Found 2026-10-03.
 
 * [ ] **A Gregorian week's days are week dates from the walk and calendar dates from the parser** — `Enum.to_list(~o"2026-W25")` and `Tempo.shift(~o"2026-W25", day: 1)` give `2026Y25W2K`, a week and a day of it, which the parser and `Tempo.new/1` read as the calendar date `2026-06-16` (user, 2026-10-03), so the text of such a value reads back as another value of the same span. Decide whether the walk and the shift give the calendar date too. Found 2026-10-03.
@@ -123,6 +121,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A group of a set has a span for each group** — `to_interval/2` gives a span for each group and the walk their values in turn (`2026Y{1,2}G3MU` is the first two quarters), a group from the end counted in what holds it. 2026-10-04.
 
 * [x] **The Calendrical and Localize locks moved to their heads** — Calendrical `ad5ff77`, fourteen commits on from `a60de7a`, and Localize `6c5d4ef2`, ten on from `45f252e`; the suite and the matrix pass unchanged. 2026-10-03.
 

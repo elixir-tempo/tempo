@@ -72,7 +72,7 @@ Every value parses, validates and writes back at every level. The levels say wha
 |---|---|---|
 | Core | Dates and times at every resolution, week and ordinal dates, zones, calendars, intervals, durations, recurrences with selections, sets and ranges of whole values | Right, against the reference, for what it generates |
 | Extended | Masks, unspecified units, qualification, margins of error, significant digits, groups, counts from the end, selections in a value | Consistent, the walk being the definition |
-| Open | Groups of sets, and any shape the walk or the conversion has no answer for yet | A named error from every measuring operation |
+| Open | Any shape the walk or the conversion has no answer for yet (a group of a set was the first, until 2026-10-04) | A named error from every measuring operation |
 
 A class moves from open to extended when its meaning is defined in the walk, and the matrix then holds every operation to it. The matrix test holds the levels to what they say: every value of an extended class converts and can be walked, and an open class has a value that does not.
 

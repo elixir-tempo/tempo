@@ -151,6 +151,20 @@ defmodule Tempo.Enumeration do
   def next(%{stack: [{:error, exception}]}), do: {:error, exception}
   def next(%{stack: []} = walk), do: finished(walk)
 
+  # A group of a set (`{1,2}G3MU`) is walked group by group: each is the
+  # group it is, so its values, and a unit after it, are read as a single
+  # group's are.
+  def next(%{stack: [{ancestors, {:groups, unit, settled?}, [group], rest} | stack]} = walk),
+    do: descend(%{walk | stack: stack}, ancestors, [{{unit, {:group, group}}, settled?} | rest])
+
+  def next(
+        %{stack: [{ancestors, {:groups, unit, settled?} = groups, [group | more], rest} | stack]} =
+          walk
+      ) do
+    walk = %{walk | stack: [{ancestors, groups, more, rest} | stack]}
+    descend(walk, ancestors, [{{unit, {:group, group}}, settled?} | rest])
+  end
+
   # Each value of the last component is a value of the walk.
   def next(%{stack: [{ancestors, unit, values, []} | stack]} = walk),
     do: read(walk, stack, ancestors, unit, values)
@@ -236,6 +250,25 @@ defmodule Tempo.Enumeration do
         if counted_from_group_start?(unit, next_unit),
           do: {:error, exception(walk.tempo, :counted_in_group)},
           else: descend_into(walk, ancestors, components)
+    end
+  end
+
+  # A group of a set names each of its groups, in the order it names them.
+  # One counted from the end is counted in the units before it.
+  defp descend(
+         %{stack: stack} = walk,
+         ancestors,
+         [{{unit, {:group, {_kind, members}}, size}, settled?} | rest]
+       ) do
+    case Group.groups_of_set(unit, members, size, :lists.reverse(ancestors), walk.calendar) do
+      {:ok, []} ->
+        next(walk)
+
+      {:ok, groups} ->
+        next(%{walk | stack: [{ancestors, {:groups, unit, settled?}, groups, rest} | stack]})
+
+      {:error, reason} ->
+        {:error, exception(walk.tempo, reason)}
     end
   end
 
@@ -388,11 +421,6 @@ defmodule Tempo.Enumeration do
   # sequence, so it is kept as it is.
   defp candidates({:selection, selection}, _ancestors, _calendar),
     do: {:ok, :selection, [selection]}
-
-  # A group of a set (`{1,2}G3MU`) names a span in each of its groups, and
-  # nothing expands it to them, here or in `Tempo.to_interval/2`.
-  defp candidates({_unit, {:group, _members}, _size}, _ancestors, _calendar),
-    do: {:error, :grouped_component}
 
   defp candidates({unit, :any}, ancestors, calendar) do
     with {:ok, range} <- Mask.unspecified(unit, Enum.reverse(ancestors), calendar) do

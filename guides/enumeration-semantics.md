@@ -103,7 +103,7 @@ Significant-digits blocks are capped at **10 000 candidates**. Larger blocks (e.
 | Selection | `2022YL1MN` | "the 1st month of 2022": January 2022 |
 | Selection of days | `2026Y6ML2KN` | the five Tuesdays of June 2026 |
 
-A group is bounded by what holds it, so the last group of eleven days in February stops at the 28th. A value that holds a selection is walked as the spans `Tempo.to_interval/2` gives it. A group of a set (`2022Y{1,2}G3MU`) is not expanded to its groups, and walking it raises `Tempo.ConversionError` (§3.6).
+A group is bounded by what holds it, so the last group of eleven days in February stops at the 28th. A value that holds a selection is walked as the spans `Tempo.to_interval/2` gives it. A group of a set (`2022Y{1,2}G3MU`, the first and the second groups of three months) is walked group by group, its six months in turn, and a unit after it is counted from the start of each group.
 
 ### 2.7. Qualifications (EDTF Level 1 and Level 2)
 
@@ -297,7 +297,7 @@ A value can parse and still name nothing a walk could yield. `Enumerable.reduce/
 | A unit that needs a year the value lacks | `X*W`, `{1..-1}W`, `2MXXD` | `Tempo.UnanchoredError` |
 | A mask no value matches | `1985-02-3X` | `Tempo.InvalidDateError` |
 | A group that starts beyond what holds it | `{2026,2027}Y5G3MU` | `Tempo.InvalidDateError` |
-| A group of a set | `2022Y{1,2}G3MU` | `Tempo.ConversionError` |
+| A group of a set counted from the end of no year | `{1..-1}G3MU` | `Tempo.UnanchoredError` |
 | A masked traditional month | `2026Y1Xm` | `Tempo.ConversionError` |
 | An interval start with several values | `{2026,2027}Y/2030Y` | `Tempo.ConversionError` |
 | An interval end that is no one point | `2026Y/202XY`, `1M/-1M` | `Tempo.IntervalEndpointsError` |

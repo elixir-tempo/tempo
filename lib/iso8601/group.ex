@@ -328,6 +328,69 @@ defmodule Tempo.Iso8601.Group do
   defp bound_group(component, _prefix, _calendar), do: {:ok, component}
 
   @doc false
+  # The groups a group of a set names (`{1,2}G3MU`, `{1..-1}G3MU`), each as
+  # the range of the unit's values it covers: the first and the second
+  # groups of three months are `[1..3, 4..6]`. A group counted from the end
+  # (`-1`, the last, or a range that runs to it) is counted in its
+  # container, the components before it, and has no number where they do
+  # not fix how many groups there are.
+  @spec groups_of_set(atom(), [integer() | Range.t()], pos_integer(), list(), module()) ::
+          {:ok, [Range.t()]} | {:error, {:unresolved, atom()}}
+  def groups_of_set(unit, members, size, prefix, calendar) do
+    minimum = Math.unit_minimum(unit)
+
+    case group_numbers(members, group_count(prefix, unit, size, calendar)) do
+      {:ok, numbers} -> {:ok, Enum.map(numbers, &group_range(&1, size, minimum))}
+      :unresolved -> {:error, {:unresolved, unit}}
+    end
+  end
+
+  # The values the `number`th group of `size` covers, counted from the
+  # unit's first.
+  defp group_range(number, size, minimum) do
+    first = (number - 1) * size + minimum
+    first..(first + size - 1)//1
+  end
+
+  # How many groups of `size` the container holds, the last of them short
+  # where they do not divide it, or `nil` when the container is not fixed.
+  defp group_count(prefix, unit, size, calendar) do
+    case container_maximum(prefix, unit, calendar) do
+      nil -> nil
+      maximum -> div(maximum - Math.unit_minimum(unit) + size, size)
+    end
+  end
+
+  defp group_numbers(members, count) do
+    members
+    |> Enum.reduce_while([], fn member, numbers ->
+      case member_numbers(member, count) do
+        :unresolved -> {:halt, :unresolved}
+        found -> {:cont, [found | numbers]}
+      end
+    end)
+    |> case do
+      :unresolved -> :unresolved
+      numbers -> {:ok, numbers |> Enum.reverse() |> Enum.concat()}
+    end
+  end
+
+  defp member_numbers(number, _count) when is_integer(number) and number > 0, do: [number]
+  defp member_numbers(number, nil) when is_integer(number), do: :unresolved
+  defp member_numbers(number, count) when is_integer(number), do: [count + 1 + number]
+
+  defp member_numbers(%Range{first: first, last: last, step: step}, _count)
+       when first > 0 and last > 0,
+       do: Enum.to_list(first..last//step)
+
+  defp member_numbers(%Range{last: last}, nil) when last < 0, do: :unresolved
+
+  defp member_numbers(%Range{first: first, last: last, step: step}, count) when last < 0,
+    do: Enum.to_list(first..(count + 1 + last)//abs(step))
+
+  defp member_numbers(_other, _count), do: :unresolved
+
+  @doc false
   # The largest value `unit` takes within `prefix`, the components before
   # it, or `nil` when they do not bound it (a group of years, or a
   # container that is itself a set or a mask).

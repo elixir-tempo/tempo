@@ -9434,10 +9434,58 @@ defmodule Tempo do
   defp shaped_interval(%Tempo{} = tempo) do
     with {:ok, %Tempo{time: time} = tempo} <- crisp_reading(tempo) do
       cond do
-        group_of_set?(time) -> {:error, materialisation_error(tempo, :grouped_component)}
+        group_of_set?(time) -> spans_of_each_group(tempo)
         group_before_unit?(time) -> materialise_multi(tempo)
         true -> ungrouped_interval(tempo)
       end
+    end
+  end
+
+  # A group of a set (`2026Y{1,2}G3MU`, the first and the second groups of
+  # three months) names a span in each of its groups, and each is converted
+  # as the group it is, a unit after it counted from that group's start. A
+  # group its container lacks is passed over, as a set drops a member its
+  # context cannot hold. One of several groups (`[1,2]G3MU`) is no one
+  # span, as a one-of set is none.
+  defp spans_of_each_group(%Tempo{time: time, calendar: calendar} = tempo) do
+    {prefix, [{unit, {:group, {kind, members}}, size} | rest]} =
+      Enum.split_while(time, &(not match?({_unit, {:group, _members}, _size}, &1)))
+
+    calendar = Compare.effective_calendar(calendar)
+
+    with :all <- kind,
+         {:ok, groups} <- Group.groups_of_set(unit, members, size, prefix, calendar) do
+      groups
+      |> Enum.map(&%{tempo | time: prefix ++ [{unit, {:group, &1}} | rest]})
+      |> Enum.map(&group_spans(&1, calendar))
+      |> spans_of_groups_in_container()
+    else
+      :one -> {:error, materialisation_error(tempo, :one_of_set)}
+      {:error, {:unresolved, unit}} -> {:error, uncounted_group_error(tempo, unit)}
+    end
+  end
+
+  defp group_spans(%Tempo{} = group, calendar) do
+    with {:ok, %Tempo{} = read} <- Validation.validate(group, calendar), do: to_interval(read)
+  end
+
+  defp spans_of_groups_in_container(results) do
+    case Enum.reject(results, &match?({:error, %InvalidDateError{}}, &1)) do
+      [] when results != [] -> hd(results)
+      kept -> gather_members(kept)
+    end
+  end
+
+  defp uncounted_group_error(%Tempo{} = tempo, unit) do
+    if anchored?(tempo) do
+      ConversionError.exception(
+        value: tempo,
+        reason:
+          "Cannot convert #{inspect(tempo)}: its #{unit} group counts from the end of a " <>
+            "span the units before it do not fix."
+      )
+    else
+      UnanchoredError.exception(value: tempo)
     end
   end
 
@@ -9471,8 +9519,8 @@ defmodule Tempo do
   end
 
   # A group of a set (`2026Y{1,2}G3MU15D`) names a span in each of its
-  # groups, and nothing expands it to them. It is refused before anything
-  # reads the units around it, which a mask after it would (`{1,2}G3MUXD`).
+  # groups. It is taken apart into its groups before anything reads the
+  # units around it, which a mask after it would (`{1,2}G3MUXD`).
   defp group_of_set?(time),
     do: Enum.any?(time, &match?({_unit, {:group, _members}, _size}, &1))
 

@@ -5,6 +5,7 @@ defmodule Tempo.ValidatedCoreTest do
 
   alias Calendrical.ISOWeek
   alias Tempo.ConversionError
+  alias Tempo.Interval
   alias Tempo.IntervalEndpointsError
   alias Tempo.IntervalSet
 
@@ -170,15 +171,21 @@ defmodule Tempo.ValidatedCoreTest do
 
   describe "a group of a set" do
     # A mask after one reached the mask's reader, which took the group for a
-    # keyword pair: every operation raised.
-    test "is refused by name before a mask after it is read" do
-      for text <- ["2026Y{1,2}G3MUXD", "{1,2}G3MU1XD", "2026Y{1,2}G3MU15DTXH"] do
-        value = Tempo.from_iso8601!(text)
-
-        assert {:error, %ConversionError{reason: :grouped_component}} = Tempo.to_interval(value)
+    # keyword pair: every operation raised. Each group is read as a group
+    # alone is, so a masked day counted in it is refused by name, and a
+    # masked hour of a day counted in it is the hours it names.
+    test "with a mask after it is read as each of its groups is" do
+      for text <- ["2026Y{1,2}G3MUXD", "{1,2}G3MU1XD"] do
+        assert {:error, %ConversionError{reason: :counted_in_group}} =
+                 Tempo.to_interval(Tempo.from_iso8601!(text))
       end
 
-      assert {:error, %ConversionError{reason: :grouped_component}} =
+      assert {:ok, hours} = Tempo.to_interval(Tempo.from_iso8601!("2026Y{1,2}G3MU15DTXH"))
+
+      assert Enum.map(IntervalSet.members(hours), &Interval.from/1) ==
+               [~o"2026-01-15T00", ~o"2026-04-15T00"]
+
+      assert {:error, %ConversionError{reason: :counted_in_group}} =
                Tempo.overlap_certainty(Tempo.from_iso8601!("2026Y{1,2}G3MUXD"), ~o"2026-06-15")
     end
 

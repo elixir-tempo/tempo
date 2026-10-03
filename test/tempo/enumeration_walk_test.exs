@@ -284,9 +284,8 @@ defmodule Tempo.EnumerationWalk.Test do
       assert {:error, %Tempo.InvalidDateError{}} = Tempo.to_interval(~o"{2026,2027}Y5G3MU")
     end
 
-    test "a group of a set" do
-      assert_raise Tempo.ConversionError, fn -> Enum.take(~o"2026Y{1,2}G3MU", 1) end
-      assert_raise Tempo.ConversionError, fn -> Enum.count(~o"2026Y{1,2}G3MU") end
+    test "a group of a set counted from the end of no year" do
+      assert_raise Tempo.UnanchoredError, fn -> Enum.take(~o"{1..-1}G3MU", 1) end
     end
 
     test "a masked traditional month" do
