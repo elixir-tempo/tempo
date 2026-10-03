@@ -1,6 +1,8 @@
 # A formal grammar for the parser
 
-**Status:** planning, 2026-10-03
+**Status:** deferred, 2026-10-04
+
+Deferred by the user on 2026-10-04, who is wary of the speed a generalised ABNF parser would lose. What is chosen below keeps the tokenizer as it is and uses the grammar's recogniser as an oracle in test support, so the parser's speed is not at stake in it; generating the tokenizer from the grammar is the option that would cost speed, and it is set aside under Options considered. That is for the user to weigh when the plan is taken up again.
 
 Tempo's parser is checked today by examples someone thought to write. This plan gives it a written grammar, transcribed from ISO 8601 clause by clause, and tests that hold the parser to that grammar in both directions, so a parse defect is found by a generator in CI rather than by accident. It starts with a pilot on ISO 8601-1 clause 5, and decides the rest on what the pilot finds.
 

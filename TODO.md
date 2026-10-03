@@ -30,8 +30,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Conformance and completeness
 
-* [ ] **A formal grammar the parser is held to** — an ABNF transcribed from ISO 8601 clause by clause, a recogniser and a generator that check `from_iso8601/1` against it in both directions, and the standard's 573 examples as a table, with a pilot on Part 1 clause 5 first. Plan in [plans/parser-formal-grammar.md](plans/parser-formal-grammar.md).
-
 * [ ] **Three §12 selection parses** — `2018Y9MTLT8H20MN3I` does not parse, `FL1KT10H0M0S1IN` misreads `0S1`, and `{1,3}K1I` merges where ISO 8601-2 §12.11.3 example 2 distributes.
 
 * [ ] **An interval's end of several components in the basic format** — `20260615/0720` and `20260615T1030/1130` read the end as a year (720, 1130), where the extended forms (`/07-20`, `/11:30`) and a bare number (`/20`) take the units the end leaves out from the start. For the grammar of [plans/parser-formal-grammar.md](plans/parser-formal-grammar.md). Found 2026-10-03.
@@ -112,11 +110,13 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Blocked
 
-* [ ] **A span of two values with no year in `to_string/2`** — `Tempo.to_string(~o"6M/9M")` and `~o"6M15D/9M1D"` return Localize's `DateTimeIntervalFormatError` (`:mixed_endpoints`), where each end alone is shown ("Jun", "Jun 15"). Blocked on `Localize.Interval.to_string/3` taking a date with no year: `Localize.Interval.to_string(%{month: 6, calendar: Calendrical.Gregorian}, %{month: 8, calendar: Calendrical.Gregorian})` is that error, since its `date_value?/1` wants a `:year`. Found 2026-10-03.
+* [ ] **A span of two values with no year in `to_string/2`** — `Tempo.to_string(~o"6M/9M")` and `~o"6M15D/9M1D"` return Localize's `DateTimeIntervalFormatError` (`:mixed_endpoints`), where each end alone is shown ("Jun", "Jun 15"). Blocked on `Localize.Interval.to_string/3` taking a date with no year, the second Open item of its `TODO.md`: `Localize.Interval.to_string(%{month: 6, calendar: Calendrical.Gregorian}, %{month: 8, calendar: Calendrical.Gregorian})` is that error, since its `date_value?/1` wants a `:year`. Found 2026-10-03.
 
 * [ ] **A week calendar's week in `to_string/2`** — a week in a calendar of weeks reads "2026-W25", and a range of them "2026-W25 – 2026-W26" (user, 2026-10-02), where it is its first and last day today, "2026-W25-1 – 2026-W25-7". Blocked on Localize writing a year and a week in the calendar's notation, the first Open item of its `TODO.md`: `Localize.Date.to_string(%{year: 2026, month: 25, calendar: Calendrical.ISOWeek})` is "M06 2026 AD".
 
 ## Deferred
+
+* [ ] **A formal grammar the parser is held to** — an ABNF transcribed from ISO 8601 clause by clause, a recogniser and a generator that check `from_iso8601/1` against it in both directions, and the standard's 573 examples as a table, with a pilot on Part 1 clause 5 first. Deferred (user, 2026-10-04) over the speed a generalised ABNF parser would lose; the plan keeps the tokenizer and runs the grammar in test support, which is to be weighed when it is taken up again. Plan in [plans/parser-formal-grammar.md](plans/parser-formal-grammar.md).
 
 * [ ] **Set algebra over open-ended windows** — a research project for later (user, 2026-09-28): how far union, intersection, difference, complement and the predicates go on the lazy sets an open-ended window gives, a test of the whole algebra. Questions in [plans/open-ended-set-algebra.md](plans/open-ended-set-algebra.md).
 
