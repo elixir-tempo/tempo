@@ -319,8 +319,15 @@ defmodule Tempo.EnumerationWalk.Test do
 
     test "a value holding a selection is the values it selects" do
       assert Enum.to_list(~o"2026Y4ML1K1IN") == [~o"2026Y4M6D"]
-      assert Enum.take(~o"2026Y4ML1K1INT10H", 2) == [~o"2026Y4M6DT10H0M", ~o"2026Y4M6DT10H1M"]
       assert Enum.count(~o"2026Y6ML2KN") == 5
+
+      # A time after the selection is the hour it selects, not that hour's
+      # minutes: the span is walked as the day before it is.
+      assert Enum.to_list(~o"2026Y4ML1K1INT10H") == [~o"2026Y4M6DT10H"]
+      assert Enum.to_list(~o"2026Y4ML1K1INT10H30M") == [~o"2026Y4M6DT10H30M"]
+
+      {:ok, selected} = Tempo.to_interval(~o"2026Y4ML1K1INT10H")
+      assert Enum.map(IntervalSet.members(selected), & &1.unit) == [nil]
 
       assert_raise Tempo.UnboundedRecurrenceError, fn -> Enum.take(~o"X*YL5M7K2IN", 1) end
     end

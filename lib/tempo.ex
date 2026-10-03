@@ -8606,12 +8606,20 @@ defmodule Tempo do
       end
     end)
     |> case do
-      {:ok, intervals} -> IntervalSet.new(Enum.reverse(intervals))
-      {:error, _reason} = error -> error
+      {:ok, intervals} ->
+        intervals |> Enum.reverse() |> Enum.map(&selected_span/1) |> IntervalSet.new()
+
+      {:error, _reason} = error ->
+        error
     end
   end
 
   defp with_trailing_units({:error, _reason} = error, _trailing), do: error
+
+  # A span a selection picks is walked as the span it is, as the dates it
+  # picks are: the unit a value's own span is walked by, which
+  # `to_interval/1` gave it, is not the selection's.
+  defp selected_span(%Tempo.Interval{} = interval), do: %{interval | unit: nil}
 
   defp do_to_interval(%Tempo{} = tempo) do
     case mask_context_members(tempo) do

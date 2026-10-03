@@ -205,6 +205,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A value's selection with a time after it enumerates as the span it selects (`Enum.to_list(~o"2026Y4ML1K1INT10H")` is the one hour), as a selected day and a recurrence's occurrences do, where it was walked by its sixty minutes.
+
 * A month alone with a time after it (`6MT10H`) parses, as a year and a month with one does, so a group of months walks to values that read back, and a month counted from the end with a time after it is its year's month (`2026Y-1MT10H` is `2026Y12MT10H`).
 
 * A qualified set is written with its qualification once after the set (`{2026Y6M15D,2026Y6M16D}?`), where it was written on each member inside the braces, which does not parse, and a range member is qualified at both ends, where it lost the qualification.
