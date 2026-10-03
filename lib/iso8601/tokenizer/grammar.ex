@@ -708,9 +708,13 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     |> unwrap_and_tag(:decade)
   end
 
+  # A decimal fraction belongs to an hour, a minute or a second alone (ISO
+  # 8601-1 §5.3.1.4), so two digits with one (`09,5`, `23.5Z`) are an hour
+  # and its fraction, not a century.
   def implicit_century do
     maybe_negative_integer(2)
     |> lookahead_not(colon())
+    |> lookahead_not(ascii_char([?., ?,]))
     |> unwrap_and_tag(:century)
   end
 

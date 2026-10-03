@@ -35,11 +35,14 @@ defmodule Tempo.Iso8601.Parser.Test do
           "{19..20}J",
           "{1..-1}C",
           "20±1C",
-          "20S1J"
+          "20S1J",
+          "20.5C",
+          "201.5J",
+          "-20.5C"
         ] do
       test "#{text} is a parse error" do
         assert {:error, %Tempo.ParseError{} = error} = Tempo.from_iso8601(unquote(text))
-        assert Exception.message(error) =~ "is written as one number"
+        assert Exception.message(error) =~ "is written as one whole number"
       end
     end
 
@@ -57,6 +60,15 @@ defmodule Tempo.Iso8601.Parser.Test do
           ] do
         assert {:error, %Tempo.ParseError{}} = Tempo.from_iso8601(text)
       end
+    end
+
+    # A decimal fraction belongs to an hour, a minute or a second alone, so
+    # two digits with one are an hour, where they were read as a fraction of
+    # a century.
+    test "two digits with a fraction are an hour" do
+      assert Tempo.from_iso8601("09,5") == {:ok, ~o"T9H30M"}
+      assert Tempo.from_iso8601("09.5") == {:ok, ~o"T9H30M"}
+      assert {:ok, %Tempo{time: [hour: 23, minute: 30]}} = Tempo.from_iso8601("23.5Z")
     end
 
     test "a number is still its years" do

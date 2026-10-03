@@ -251,23 +251,26 @@ defmodule Tempo.Iso8601.Parser do
     [{:repeat_rule, parse_date(date)} | parse_date(rest)]
   end
 
-  def parse_date([{:century, century} | rest]) when is_number(century) do
-    parse_date([{:year, {:group, round(century * 100)..round((century + 1) * 100 - 1)}} | rest])
+  def parse_date([{:century, century} | rest]) when is_integer(century) do
+    parse_date([{:year, {:group, (century * 100)..((century + 1) * 100 - 1)}} | rest])
   end
 
-  def parse_date([{:decade, decade} | rest]) when is_number(decade) do
-    parse_date([{:year, {:group, round(decade * 10)..round((decade + 1) * 10 - 1)}} | rest])
+  def parse_date([{:decade, decade} | rest]) when is_integer(decade) do
+    parse_date([{:year, {:group, (decade * 10)..((decade + 1) * 10 - 1)}} | rest])
   end
 
-  # A century or a decade is the hundred or the ten years its number names.
-  # One written with unspecified digits (`1XC`, `X*J`), as a set or a range
-  # (`{19,20}C`) or with a margin of error or significant digits (`20±1C`)
-  # names no one run of years, so it is not a value.
+  # A century or a decade is the hundred or the ten years its whole number
+  # names. One written with a fraction (`20.5C`: ISO 8601 gives a decimal
+  # fraction to an hour, a minute or a second alone), unspecified digits
+  # (`1XC`, `X*J`), as a set or a range (`{19,20}C`) or with a margin of error
+  # or significant digits (`20±1C`) names no one run of years, so it is not a
+  # value.
   def parse_date([{unit, _not_one_number} | _rest]) when unit in [:century, :decade] do
     raise Tempo.ParseError,
-          "A #{unit} is written as one number (`20C`, `201J`), which names its years. " <>
-            "One with unspecified digits, a set, a range, a margin of error or significant " <>
-            "digits names no one run of years; unspecified digits are written on the year (`19XX`)."
+          "A #{unit} is written as one whole number (`20C`, `201J`), which names its years. " <>
+            "One with a fraction, unspecified digits, a set, a range, a margin of error or " <>
+            "significant digits names no one run of years; unspecified digits are written on " <>
+            "the year (`19XX`)."
   end
 
   def parse_date([{:group, group_1}, {:group, group_2} | rest]) do

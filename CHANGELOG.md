@@ -237,7 +237,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * An interval end written as a group, a mask or significant digits is read as the point its span starts at, so `Tempo.relation(~o"20C/21C", ~o"2050")` is `:contains` where it was `:preceded_by`, and `overlaps?/2`, `within?/2`, the set operations, `duration/1` and the length predicates answer by that point where they answered wrongly or raised. `Tempo.to_interval/1` gives such an interval its points (`2000Y/2100Y`), and an end that names several spans (a set, a selection) is a `Tempo.IntervalEndpointsError`.
 
-* `Tempo.from_iso8601/1` returns a `Tempo.ParseError` for a century or a decade that is not one number — unspecified digits (`1XC`, `X*J`), a set or a range (`{19,20}C`), a margin of error or significant digits — where it raised an `ArithmeticError`.
+* `Tempo.from_iso8601/1` returns a `Tempo.ParseError` for a century or a decade that is not one whole number — a fraction (`20.5C`), unspecified digits (`1XC`, `X*J`), a set or a range (`{19,20}C`), a margin of error or significant digits — where it raised an `ArithmeticError` or misread a fraction, and reads two digits with a fraction as an hour (`09,5` is 09:30).
 
 * `Enum` walks a value whose week, day of the week, day of the year, hour, minute or second is unspecified (`X*`) or masked, and a mask counted from the end (`2026Y-XM`, April to December), where it raised a `FunctionClauseError` or never returned. An unspecified hour, minute or second counts from 0, where it counted from 1, and `Tempo.to_interval/2` narrows a masked day of the week or of the year as it narrows a masked month.
 
