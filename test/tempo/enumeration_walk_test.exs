@@ -149,6 +149,18 @@ defmodule Tempo.EnumerationWalk.Test do
       assert units(~o"2026Y{2,6}M3G11DU", :day) == Enum.to_list(23..28) ++ Enum.to_list(23..30)
     end
 
+    # A day after a group of months counts from the group's start, which the
+    # walk read as the day of each month of the group under a set of years.
+    test "a day after a group of months under a set of years counts from the group's start" do
+      assert Enum.to_list(~o"{2026,2028}Y2G2MU15D") == [~o"2026Y3M15D", ~o"2028Y3M15D"]
+      assert Enum.to_list(~o"{2026,2028}Y2G2MU40D") == [~o"2026Y4M9D", ~o"2028Y4M9D"]
+
+      assert member_starts(Tempo.to_interval(~o"{2026,2028}Y2G2MU15D")) ==
+               [~o"2026Y3M15D", ~o"2028Y3M15D"]
+
+      assert length(Enum.to_list(~o"{2026,2028}Y2G2MU")) == 4
+    end
+
     test "a year with significant digits is each year of its block" do
       assert Enum.count(~o"1950S2Y{1,2}M") == 200
       assert Enum.take(~o"1950S2Y{1,2}M", 3) == [~o"1900Y1M", ~o"1900Y2M", ~o"1901Y1M"]

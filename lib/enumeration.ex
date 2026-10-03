@@ -202,9 +202,27 @@ defmodule Tempo.Enumeration do
       else: next(walk)
   end
 
+  # A group followed by a finer unit counts that unit from the group's start:
+  # `2026Y2G2MU15D` is 15 March, the fifteenth day of the second group of two
+  # months. Validation reads it so once the units before the group are
+  # concrete, as it reads it when the value is parsed with one year, and a
+  # group it leaves as it is is walked as its values.
+  defp descend(
+         walk,
+         [_ | _] = ancestors,
+         [{{_unit, {:group, %Range{}}}, _settled?}, _next | _] = components
+       ) do
+    case counted_from_group(walk.calendar, ancestors, components) do
+      {:ok, resolved} -> descend(walk, ancestors, resolved)
+      :as_written -> descend_into(walk, ancestors, components)
+    end
+  end
+
+  defp descend(walk, ancestors, components), do: descend_into(walk, ancestors, components)
+
   # With a component of any other kind, its values are a new frame: read at
   # once when it is the last component, and passed over when it has none.
-  defp descend(%{calendar: calendar, stack: stack} = walk, ancestors, [
+  defp descend_into(%{calendar: calendar, stack: stack} = walk, ancestors, [
          {component, settled?} | rest
        ]) do
     case candidates(component, ancestors, calendar, settled?) do
@@ -213,6 +231,21 @@ defmodule Tempo.Enumeration do
       {:ok, unit, values} -> next(%{walk | stack: [{ancestors, unit, values, rest} | stack]})
       {:unmatched, reason} -> next(unmatched(walk, reason))
       {:error, reason} -> {:error, exception(walk.tempo, reason)}
+    end
+  end
+
+  defp counted_from_group(calendar, ancestors, components) do
+    before = :lists.reverse(ancestors)
+    written = before ++ Enum.map(components, &elem(&1, 0))
+
+    with {:ok, %Tempo{time: validated}} <-
+           Validation.validate(%Tempo{time: written, calendar: calendar}, calendar),
+         {^before, [{_unit, value} | _] = after_ancestors} <-
+           Enum.split(validated, length(before)),
+         false <- match?({:group, _range}, value) do
+      {:ok, settled(after_ancestors, true)}
+    else
+      _as_written -> :as_written
     end
   end
 

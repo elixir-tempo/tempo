@@ -205,6 +205,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A unit after a group under a set, a range or a mask of years counts from the group's start, as it does under one year: `{2026,2028}Y2G2MU15D` is 15 March of each year, where it was the 15th of each month of the group.
+
 * An unspecified year (`X*Y`) walks as the current year in the value's own calendar, read from `Tempo.Clock`: `X*Y[u-ca=hebrew]` is the Hebrew year that holds today, where it was the Gregorian year's number in every calendar.
 
 * A month or a year added to a day of the week that names no week (`7K`) is a `Tempo.UnanchoredError`, since the day of the week it falls on depends on the date, where it was that day again; weeks, days and the time of day still step it.
