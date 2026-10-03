@@ -26,6 +26,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **What needs the last value of an interval with no end never returns** — `Enum.at(~o"2026Y/..", -1)` and `Enum.random/1` walk for ever: `Enumerable.slice/1` cannot tell them from `Enum.at/2` with a positive index and `Enum.empty?/1`, which the interval answers and a lazy interval set refuses (`UnboundedSetError`). Decide one rule for the two. Found 2026-10-03.
 
+* [ ] **A value's calendar is recorded twice, so equal values are not `==`** — a parse keeps the `[u-ca=…]` name in `extended` beside the calendar module, and a value made with a calendar argument, `new/1`, `from_elixir/1` or `to_calendar/2` has none, so `Tempo.from_iso8601!("5786Y6M", Calendrical.Hebrew)` is not `==` to its own inspected text read back (nor `~o"2026-06-15"` to `2026-06-15[u-ca=gregory]`), though `compare/2` is `:eq` and both write the same text. Decide whether the parser drops the name once it has resolved the module, which `inspect/1` derives the suffix from anyway. Found 2026-10-04.
+
 ### Conformance and completeness
 
 * [ ] **Three §12 selection parses** — `2018Y9MTLT8H20MN3I` does not parse, `FL1KT10H0M0S1IN` misreads `0S1`, and `{1,3}K1I` merges where ISO 8601-2 §12.11.3 example 2 distributes.
