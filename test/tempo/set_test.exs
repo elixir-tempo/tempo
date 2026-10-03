@@ -175,4 +175,35 @@ defmodule Tempo.SetTest do
              ]
     end
   end
+
+  # A qualification written after a set qualifies each member, and was
+  # written back on each member inside the braces, which does not parse; a
+  # range member lost it.
+  describe "a qualified set" do
+    test "is written with its qualification once after the set, and read again" do
+      for text <- [
+            "{2026Y6M15D,2026Y6M16D}?",
+            "{2026Y6M15D,2026Y6M16D}~",
+            "{2026Y6M15D,2026Y6M16D}%",
+            "[2026Y6M15D,2026Y6M16D]?",
+            "{2026Y6M15D,2026Y6M16D}?[Europe/Paris]",
+            "{2026Y6M15D..2026Y6M18D}~",
+            "{2020Y/2021Y,2023Y/2024Y}?",
+            "[..1984Y]?"
+          ] do
+        value = Tempo.from_iso8601!(text)
+
+        assert Tempo.to_iso8601!(value) == text
+        assert Tempo.from_iso8601(text) == {:ok, value}
+      end
+    end
+
+    test "qualifies each member, a range at both ends" do
+      %Tempo.Set{set: [%Tempo.Range{first: first, last: last}]} =
+        Tempo.from_iso8601!("{2026-06-15..2026-06-18}~")
+
+      assert first.qualification == :approximate
+      assert last.qualification == :approximate
+    end
+  end
 end

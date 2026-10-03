@@ -35,13 +35,29 @@ defmodule Tempo.Inspect do
   # calendar a bare ISO 8601 string reads as, or the ISO week calendar the
   # `W` sigil modifier gives.
   defp to_iodata(value, implied) do
+    {value, qualification} = hoist_shared_qualification(value)
     {value, zone, tags} = hoist_shared_zone(value)
 
     case value |> with_calendar_names(implied) |> hoist_calendar_name(implied) do
-      {value, []} -> [inspect_value(value), zone, tags]
-      {value, calendar} -> [inspect_value(value), zone, calendar, tags]
+      {value, []} -> [inspect_value(value), qualification, zone, tags]
+      {value, calendar} -> [inspect_value(value), qualification, zone, calendar, tags]
     end
   end
+
+  # A qualification written after a set qualifies each of its members, and a
+  # member's own inside the braces does not parse, so one the members share
+  # is written once, after the set, before any suffix.
+  defp hoist_shared_qualification(%Tempo.Set{} = set) do
+    case set |> named_values() |> Enum.map(& &1.qualification) |> Enum.uniq() do
+      [qualification] when not is_nil(qualification) ->
+        {map_named(set, &%{&1 | qualification: nil}), inspect_qualification(qualification)}
+
+      _none_or_several ->
+        {set, []}
+    end
+  end
+
+  defp hoist_shared_qualification(value), do: {value, []}
 
   # A suffix inside a set's braces does not parse, so the zone and tags a
   # set's members share are written once, after the set, where they read back

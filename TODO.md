@@ -6,8 +6,6 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ### Correctness
 
-* [ ] **A qualified set is written in a form that does not parse** — `{2026-06-15,2026-06-16}?` holds the qualification on each member, and `to_iso8601/1` and `inspect/1` write `{2026Y6M15D?,2026Y6M16D?}`, which the parser refuses. Write it once after the set, as the calendar is. Found 2026-10-02.
-
 * [ ] **A time after a month with no day** — `2G2MUT10H` and `2026Y-1MT10H` parse, where `6MT10H` does not; the second keeps `-1M` unresolved, and both walk to values that do not read back (`3MT10H`). Found 2026-10-03.
 
 * [ ] **A selected day is walked as a day and a selected hour by its minutes** — `to_interval/2` gives `2026Y4ML1K1IN` a day with no unit and `2026Y4ML1K1INT10H` an hour with `unit: :minute`, so `Enum.to_list/1` of the first is the day and of the second its sixty minutes. Found 2026-10-03.
@@ -107,6 +105,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A qualified set is written in a form that does not parse** — a qualification the members share is written once after the set, before any suffix, and a range member is qualified at both ends. 2026-10-03.
 
 * [x] **A fraction of a century or a decade is written back as the whole one** — it is not a value: ISO 8601 gives a decimal fraction to an hour, a minute or a second alone, so `20.5C` and `201.5J` are a `ParseError`, as a masked or set century is, and two digits with a fraction (`09,5`, `23.5Z`) are an hour, where the tokenizer read them as a century. 2026-10-03.
 

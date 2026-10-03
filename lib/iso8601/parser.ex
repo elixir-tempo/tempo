@@ -62,6 +62,15 @@ defmodule Tempo.Iso8601.Parser do
     %{s | set: Enum.map(set, &apply_complete_qualification(&1, qualification))}
   end
 
+  # A range member of a set is qualified at both ends, as an interval is.
+  defp apply_complete_qualification(%Tempo.Range{first: first, last: last} = range, qualification) do
+    %{
+      range
+      | first: apply_complete_qualification(first, qualification),
+        last: apply_complete_qualification(last, qualification)
+    }
+  end
+
   defp apply_complete_qualification(%Tempo.Duration{} = duration, _qualification), do: duration
 
   defp apply_complete_qualification(other, _qualification), do: other

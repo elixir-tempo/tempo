@@ -205,6 +205,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A qualified set is written with its qualification once after the set (`{2026Y6M15D,2026Y6M16D}?`), where it was written on each member inside the braces, which does not parse, and a range member is qualified at both ends, where it lost the qualification.
+
 * `Tempo.to_calendar/2` keeps a value's qualification, metadata, zone and tags, and a qualified year, month or day qualifies every unit of the converted date, where the converted value was rebuilt from a `Date` without them.
 
 * A set's `[zone]` and `[key=value]` suffix is each member's that has none of its own, and is written once after the set, as a recurrence's domain's is after the recurrence: `{2026-06-15T10:00,2026-06-16T10:00}[Europe/Paris]` is two times in Paris, where its members were floating and its tags dropped.
