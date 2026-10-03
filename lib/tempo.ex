@@ -5367,7 +5367,7 @@ defmodule Tempo do
   mask of years resolves one year at a time. A selection in an
   unspecified year (`~o"X*YL5M7K2IN"`) needs a `:within` window.
 
-  A mask is the span its digits allow: `~o"156X"` is the 1560s and `~o"2026-06-1X"` the 10th to the 19th of June 2026. Candidates that are not consecutive (`~o"2026-06-X5"`), or a mask with a narrower unit after it (`~o"1985-XX-15"`), are a span each, and a candidate the calendar has no room for drops out.
+  A mask is the span its digits allow: `~o"156X"` is the 1560s and `~o"2026-06-1X"` the 10th to the 19th of June 2026. Candidates that are not consecutive (`~o"2026-06-X5"`), or a mask with a narrower unit after it (`~o"1985-XX-15"`), are a span each, and a candidate the calendar has no room for drops out. An unspecified month, week, day, hour, minute or second (`~o"2026Y6MX*D"`, any day of June 2026) is read as the mask of all its digits is: the month.
 
   A recurrence is its occurrences however ISO 8601-1 §5.6.1 writes it: a start and a duration, a start and an end that are its first occurrence (each one after it starts where the one before ends and is as long), or a duration and an end that are its last.
 
@@ -7421,9 +7421,19 @@ defmodule Tempo do
 
   defp find_non_contiguous_mask([], _previous, _calendar), do: nil
 
-  defp find_non_contiguous_mask([{unit, {:mask, mask}} | rest], previous, calendar) do
-    prefix = Enum.reverse(previous)
+  defp find_non_contiguous_mask([{unit, {:mask, mask}} | rest], previous, calendar),
+    do: narrowed_mask(unit, mask, Enum.reverse(previous), rest, calendar)
 
+  # An unspecified unit other than the year (`X*D`, any day) is every value
+  # the unit takes, as one with every digit masked is (`XXD`).
+  defp find_non_contiguous_mask([{unit, :any} | rest], previous, calendar) when unit != :year,
+    do: narrowed_mask(unit, :any, Enum.reverse(previous), rest, calendar)
+
+  defp find_non_contiguous_mask([entry | rest], previous, calendar) do
+    find_non_contiguous_mask(rest, [entry | previous], calendar)
+  end
+
+  defp narrowed_mask(unit, mask, prefix, rest, calendar) do
     cond do
       tail_narrows?(rest) and tail_masked?(rest) ->
         mask_members(unit, mask, prefix, rest, calendar)
@@ -7439,15 +7449,22 @@ defmodule Tempo do
     end
   end
 
-  defp find_non_contiguous_mask([entry | rest], previous, calendar) do
-    find_non_contiguous_mask(rest, [entry | previous], calendar)
+  # The values a masked unit takes after the units before it, which for an
+  # unspecified unit are all it has there.
+  defp masked_values(unit, :any, prefix, calendar) do
+    with {:ok, range} <- Mask.unspecified(unit, prefix, calendar) do
+      {:ok, Enum.to_list(range)}
+    end
   end
+
+  defp masked_values(unit, mask, prefix, calendar),
+    do: Mask.valid_values(unit, mask, prefix, calendar)
 
   # Use a scalar when exactly one candidate survives the calendar
   # constraint; otherwise a list, which the multi path expands via
   # `Enumerable`.
   defp substitute_mask(unit, mask, prefix, rest, calendar) do
-    case Mask.valid_values(unit, mask, prefix, calendar) do
+    case masked_values(unit, mask, prefix, calendar) do
       {:ok, []} -> {:error, {:no_candidates, unit}}
       {:ok, [single]} -> {prefix ++ [{unit, single}] ++ rest}
       {:ok, many} -> {prefix ++ [{unit, many}] ++ rest}
@@ -7459,14 +7476,20 @@ defmodule Tempo do
   # own, so the later mask narrows within it rather than being walked value by
   # value (`2026-XX-1X` is twelve spans of ten days, not 120 days).
   defp mask_members(unit, mask, prefix, rest, calendar) do
-    case Mask.valid_values(unit, mask, prefix, calendar) do
+    case masked_values(unit, mask, prefix, calendar) do
       {:ok, []} -> {:error, {:no_candidates, unit}}
       {:ok, values} -> {:members, Enum.map(values, &(prefix ++ [{unit, &1}] ++ rest))}
       {:error, _reason} = error -> error
     end
   end
 
-  defp tail_masked?(rest), do: Enum.any?(rest, &match?({_unit, {:mask, _mask}}, &1))
+  defp tail_masked?(rest), do: Enum.any?(rest, &masked?/1)
+
+  # A unit some or all of whose digits are masked, which an unspecified unit
+  # other than the year is.
+  defp masked?({_unit, {:mask, _mask}}), do: true
+  defp masked?({unit, :any}), do: unit != :year
+  defp masked?(_component), do: false
 
   # A partly masked unit with nothing that narrows after it. Anything after it
   # is fully masked and widens, so it is dropped.
@@ -7488,6 +7511,7 @@ defmodule Tempo do
   end
 
   # A mask some of whose digits are given (`1X`, `X5`, `XXX{0,2,4,6,8}`).
+  defp partial_mask?(:any), do: false
   defp partial_mask?(mask), do: Enum.any?(mask, &(is_integer(&1) or is_list(&1)))
 
   # Whether anything after a mask narrows its span further.
@@ -8663,7 +8687,7 @@ defmodule Tempo do
   # is a context of its own, in which the mask narrows.
   defp mask_context_members(%Tempo{time: time} = tempo) do
     time
-    |> Enum.split_while(&(not match?({_unit, {:mask, _mask}}, &1)))
+    |> Enum.split_while(&(not masked?(&1)))
     |> context_members(tempo)
   end
 

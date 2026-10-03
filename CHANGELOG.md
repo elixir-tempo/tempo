@@ -205,6 +205,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.to_interval/2` reads an unspecified month, week, day, hour, minute or second (`X*`) as the mask of all its digits is: `~o"2026Y6MX*D"` is June 2026 and `~o"2026YX*M15D"` the 15th of each month, where the span started at the value itself and `Tempo.duration/1` and `Tempo.to_relative_string/2` raised. An interval end written so is the point its span starts at (`2026Y6MX*D/2026Y8M` is June and July).
+
 * `Tempo.shift/3` with `:skipping` returns a `Tempo.ConversionError` for a value that is not one moment — a set, a range, a group, unspecified digits or a selection — as a shift without `:skipping` does, where it raised.
 
 * A value holding a group of a set (`2026Y{1,2}G3MU`) returns a `Tempo.ConversionError` from `at/2`, `on/2`, `trunc/2`, `nearest_workday/2`, `at_resolution/2` and `extend_resolution/2`, where they raised. `Tempo.trunc/2` of a value holding a selection drops the selection at or above the units before it (`2026Y4M`), where it raised a `KeyError`.

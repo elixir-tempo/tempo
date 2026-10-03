@@ -8,13 +8,17 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **A group of a set has no span for each group** — `to_interval/2` and `Enum` are a `ConversionError` for a value holding one (`2026Y{1,2}G3MU`, the first and second groups of three months), where they could give a span for each group. The functions that need one value return the same error since 2026-10-03. Found 2026-10-02.
 
-* [ ] **An unspecified month or day is no point to measure from** — `Tempo.duration(~o"2026Y6MX*D")` and `Tempo.to_relative_string(~o"2026Y6MX*D")` raise a `FunctionClauseError` in Calendrical's `date_to_iso_date/4`: `to_interval/1` gives the value `2026Y6MX*D/7M1D`, whose start still holds the unspecified day, and an interval end written so (`2026Y6MX*D/2026Y8M`) is left as it is. Split from the grouped-ends item, 2026-10-03.
-
 * [ ] **`Tempo.extend/2` raises** — for a value at microsecond precision 6 it raises the `ArgumentError` the enumeration documents (`Tempo.extend(~o"2026-06-15T10:30:45.123456")`), where a function that returns tuples returns one. Found 2026-10-03.
 
 * [ ] **`Enum.count/1` and `Enum.member?/2` of an interval with no end never return** — `Enum.count(~o"2026Y/..")` walks for ever, where a lazy interval set refuses with an `UnboundedSetError`. Found 2026-10-03.
 
-* [ ] **`to_interval/2` of a day straight after a year says the value has no year** — `~o"2026YX*D"` and `~o"2026Y3XD"` return an `UnanchoredError` ("`~o"2026YX*D"` has none"), where their walk is the days of 2026 the value names. Found 2026-10-03.
+* [ ] **`to_interval/2` of a partly masked day straight after a year says the value has no year** — `~o"2026Y3XD"` returns an `UnanchoredError` ("`~o"2026Y3XD"` has none"), where its walk is the days of 2026 the value names. An unspecified one (`~o"2026YX*D"`) is the year since 2026-10-03, as `2026YXXXD` is. Found 2026-10-03.
+
+* [ ] **An interval or a recurrence from a masked start, written with a duration, keeps the mask in its ends** — `Tempo.to_interval(~o"2026Y6MXXD/P1M")` is `2026Y6MXXD/7MXXD`, and so for an unspecified day (`X*D`), a partly masked one (`1XD`) and each occurrence of `R3/2026Y6MXXD/P1M`, where an interval written with two ends is read as points (`2026Y6M/7M`): `Tempo.overlaps?/2` with 15 June is false, the intersection is empty and `Tempo.to_string/2` raises a `FunctionClauseError`. Found 2026-10-03.
+
+* [ ] **An unspecified year is no point to measure from** — `Tempo.duration(~o"X*Y12M31D")` is `P0D`, `Tempo.duration(~o"X*Y6M")` and `Tempo.to_relative_string(~o"X*Y12M31D")` raise a `FunctionClauseError`, and `Tempo.to_interval(~o"X*Y")` is `X*Y/X*Y`, where a value with no year is an `UnanchoredError`. A mask or an unspecified unit under one (`X*Y6MX*D`) is a `ConversionError` that names no value. Found 2026-10-03.
+
+* [ ] **The walk of an interval from an unspecified month or day steps it as its last value** — `Enum.count(~o"2026Y6MX*D/P1M")` is 32, the start and then July's days, where a start written as a mask (`2026Y6MXXD/P1M`) is a `ConversionError`, as a walk steps from one point. Found 2026-10-03.
 
 * [ ] **The days of a February with no year have two answers** — 29 written `2MX*D` or `2M{1..-1}D` or left to the walk of `2M`, as validation accepts a 29th that some year has, and an `UnanchoredError` written `2MXXD`, as a mask wants every candidate to fit the shortest month, so `XXMXXD` yields January and raises at February (`to_interval/2` of `2MXXD` is the month, `2M/3M`). The months of a year with none split the other way: `X*M` and `XXM` are the twelve the Gregorian calendar always has, `{1..-1}M` and `-1M` an error. Decide one rule. Found 2026-10-03.
 
@@ -53,6 +57,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **`explain/1` words a window of hours in ISO 8601** — `Tempo.explain(~o"R/2027-01-01/P1D/FLLT22HN/PT4HN")` says "the PT4H window from at 22:00" where it means the four hours from 22:00: `window_phrase/2` in `lib/explain.ex` words only a window of days or weeks, and a time-of-day selection's noun carries its "at".
 
 * [ ] **Explain weekday sets by name** — `explain/1` reads `{6..7}K` as "on a weekday [6..7]"; it should read "on a Saturday or Sunday", now that holiday recurrences carry weekday limits routinely.
+
+* [ ] **A mask with no unit before it names no value in its error** — `Tempo.to_interval/2` of `~o"XXM"`, `~o"X*M"` or `~o"TX*H"` returns a `ConversionError` whose `value` is `nil` ("Cannot convert a masked Tempo with no un-masked coarser unit to an interval"). Found 2026-10-03.
 
 ### Performance
 
@@ -101,6 +107,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **An unspecified month or day is no point to measure from** — `to_interval/2` reads an unspecified unit other than the year as the mask of all its digits is (`2026Y6MX*D` is June 2026, `2026YX*M15D` the 15th of each month), so `duration/1` and `to_relative_string/2` measure it and an interval end written so is the point its span starts at. 2026-10-03.
 
 * [x] **`Tempo.shift/3` with `:skipping` raises for a value that is not one moment** — a set, a range, a group, unspecified digits or a selection is a `ConversionError`, checked before the walk; a margin of error still shifts. 2026-10-03.
 

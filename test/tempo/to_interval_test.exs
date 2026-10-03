@@ -270,6 +270,83 @@ defmodule Tempo.ToInterval.Test do
     end
   end
 
+  # An unspecified unit (`X*D`, any day) was stepped as one value, so its
+  # span started at the value itself (`2026Y6MX*D/7M1D`), which is no point:
+  # `duration/1` and `to_relative_string/2` raised.
+  describe "an unspecified unit (the span a unit with every digit masked has)" do
+    test "with nothing narrower after it is the span of the units before it" do
+      assert Tempo.to_interval(~o"2026Y6MX*D") == {:ok, ~o"2026Y6M/2026Y7M"}
+      assert Tempo.to_interval(~o"2026YX*M") == {:ok, ~o"2026Y/2027Y"}
+      assert Tempo.to_interval(~o"2026YX*MX*D") == {:ok, ~o"2026Y/2027Y"}
+      assert Tempo.to_interval(~o"2026Y6M15DTX*H") == {:ok, ~o"2026Y6M15D/2026Y6M16D"}
+      assert Tempo.to_interval(~o"2026Y6M15DT10HX*M") == {:ok, ~o"2026Y6M15DT10H/2026Y6M15DT11H"}
+      assert Tempo.to_interval(~o"2026Y25WX*K") == {:ok, ~o"2026Y25W/2026Y26W"}
+      assert Tempo.to_interval(~o"2026YX*O") == {:ok, ~o"2026Y/2027Y"}
+    end
+
+    test "is read as the mask of all its digits is" do
+      for {unspecified, masked} <- [
+            {~o"2026Y6MX*D", ~o"2026Y6MXXD"},
+            {~o"2026YX*M15D", ~o"2026YXXM15D"},
+            {~o"2026YX*M1XD", ~o"2026YXXM1XD"},
+            {~o"2026Y6MX*DT10H", ~o"2026Y6MXXDT10H"},
+            {~o"2026Y{6,7}MX*D", ~o"2026Y{6,7}MXXD"},
+            {~o"2026YX*W3K", ~o"2026YXXW3K"},
+            {~o"2026YX*OT10H", ~o"2026YXXXOT10H"},
+            {~o"6MX*D", ~o"6MXXD"},
+            {~o"T10HX*M", ~o"T10HXXM"}
+          ] do
+        assert Tempo.to_interval(unspecified) == Tempo.to_interval(masked)
+      end
+    end
+
+    test "before a narrower unit is a span for each value it takes" do
+      {:ok, set} = Tempo.to_interval(~o"2026YX*M15D")
+
+      assert Enum.map(IntervalSet.members(set), & &1.from) ==
+               Enum.map(1..12, &%{~o"2026Y1M15D" | time: ymd(2026, &1, 15)})
+
+      {:ok, set} = Tempo.to_interval(~o"2026Y6MX*DT10H")
+      assert IntervalSet.count(set) == 30
+
+      {:ok, set} = Tempo.to_interval(~o"2026Y{6,7}MX*D")
+
+      assert spans(set) == [
+               {[year: 2026, month: 6], [year: 2026, month: 7]},
+               {[year: 2026, month: 7], [year: 2026, month: 8]}
+             ]
+    end
+
+    test "in another calendar and in a zone" do
+      {:ok, adar} = Tempo.to_interval(Tempo.from_iso8601!("5786Y6MX*D[u-ca=hebrew]"))
+      assert {adar.from.time, adar.to.time} == {[year: 5786, month: 6], [year: 5786, month: 7]}
+      assert adar.from.calendar == Calendrical.Hebrew
+
+      {:ok, paris} = Tempo.to_interval(Tempo.from_iso8601!("2026Y6MX*D[Europe/Paris]"))
+      assert paris.from.time == [year: 2026, month: 6]
+      assert paris.from.extended.zone_id == "Europe/Paris"
+    end
+
+    test "is a span that can be measured" do
+      assert Tempo.duration(~o"2026Y6MX*D") == ~o"P1M"
+      assert Tempo.duration(~o"2026YX*M") == ~o"P1Y"
+      assert Tempo.duration(~o"2026Y6M15DTX*H") == ~o"P1D"
+      assert Tempo.duration(~o"2026YX*M15D") == ~o"P12D"
+
+      assert Tempo.to_relative_string(~o"2026Y6MX*D", from: ~o"2026-10-03") ==
+               {:ok, "4 months ago"}
+
+      assert Tempo.relation(~o"2026Y6MX*D", ~o"2026Y9M") == :precedes
+      assert Tempo.within?(~o"2026-06-15", ~o"2026Y6MX*D")
+    end
+
+    test "alone, with no unit before it, has no span" do
+      for value <- [~o"X*M", ~o"X*D", ~o"X*W", ~o"X*K", ~o"TX*H"] do
+        assert {:error, %Tempo.ConversionError{}} = Tempo.to_interval(value)
+      end
+    end
+  end
+
   describe "sets of week dates" do
     test "a set of weeks or of days of the week is each date it names" do
       {:ok, set} = Tempo.to_interval(~o"2026-W{10,11}-3")

@@ -1068,6 +1068,13 @@ defmodule Tempo.Interval do
     {Enum.reverse(acc), unit, mask}
   end
 
+  # An unspecified unit other than the year (`X*D`, any day) is every value
+  # the unit takes, as one with every digit masked is (`XXD`), so it widens
+  # to the units before it.
+  defp find_first_mask([{unit, :any} | _rest], acc) when unit != :year do
+    {Enum.reverse(acc), unit, :any}
+  end
+
   defp find_first_mask([entry | rest], acc) do
     find_first_mask(rest, [entry | acc])
   end

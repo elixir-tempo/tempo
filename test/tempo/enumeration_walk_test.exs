@@ -277,9 +277,11 @@ defmodule Tempo.EnumerationWalk.Test do
       assert IntervalSet.count(set) == 14
     end
 
+    # Every minute of an hour is the hour, as a minute with every digit
+    # masked is, so the two hours are a span each.
     test "an unspecified minute after a set of hours" do
-      assert {:ok, set} = Tempo.to_interval(~o"2026Y6M15DT{9,17}HX*M")
-      assert IntervalSet.count(set) == 120
+      assert member_starts(Tempo.to_interval(~o"2026Y6M15DT{9,17}HX*M")) ==
+               [~o"2026Y6M15DT9H", ~o"2026Y6M15DT17H"]
     end
 
     test "the weeks of each of a set of years" do

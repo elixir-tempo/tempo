@@ -211,6 +211,19 @@ defmodule Tempo.IntervalRegressionTest do
       assert Tempo.at_least?(~o"20C/2150", ~o"P1D")
     end
 
+    test "an unspecified month or day" do
+      assert Tempo.to_interval(~o"2026Y6MX*D/2026Y8M") == {:ok, ~o"2026Y6M/2026Y8M"}
+      assert Tempo.to_interval(~o"2026Y1M/2026Y6MX*D") == {:ok, ~o"2026Y1M/2026Y6M"}
+      assert Tempo.duration(~o"2026Y6MX*D/2026Y8M") == ~o"P2M"
+      assert Tempo.duration(~o"2026YX*M/2028Y") == ~o"P2Y"
+      assert Tempo.relation(~o"2026Y6MX*D/2026Y8M", ~o"2026-07-15") == :contains
+
+      assert {:error, %Tempo.IntervalEndpointsError{} = error} =
+               Tempo.to_interval(~o"2026YX*M15D/2027Y")
+
+      assert Exception.message(error) =~ ~s(~o"2026YX*M15D" names several spans)
+    end
+
     test "a margin of error is measured as the value it annotates" do
       assert Tempo.relation(~o"2018±2Y/2060", ~o"2050") == :contains
       assert %Tempo.Duration{} = Tempo.duration(~o"2018±2Y/2060")
