@@ -439,11 +439,9 @@ defmodule Tempo.Operations do
   ## resolution, convert year/month/day via `Date.convert!/2`, and
   ## preserve hour/minute/second (those don't change under
   ## calendar conversion). The converted struct's `:calendar` is
-  ## updated to match the target, and its IXDTF `u-ca` tag
-  ## (`extended.calendar`) is re-tagged to stay truthful — dropped
-  ## for a Gregorian target, set to the target's CLDR calendar
-  ## type otherwise — so `to_iso8601/1` output re-parses in the
-  ## same calendar.
+  ## updated to match the target, which is the one record of its
+  ## calendar: `to_iso8601/1` writes the `u-ca` suffix from it, so
+  ## the output re-parses in the same calendar.
 
   defp convert_calendar(%IntervalSet{} = b_set, %IntervalSet{} = a_set) do
     convert_calendar_first(b_set, IntervalSet.first(b_set), IntervalSet.first(a_set))
@@ -536,9 +534,7 @@ defmodule Tempo.Operations do
          {:ok, date} <- Date.convert(source_date, target_calendar) do
       time = Tempo.date_units(date.year, date.month, date.day, target_calendar) ++ time_of_day
 
-      {:ok,
-       %{extended | time: time, calendar: target_calendar}
-       |> retag_extended_calendar(target_calendar)}
+      {:ok, %{extended | time: time, calendar: target_calendar}}
     else
       {:error, %{__exception__: true}} = error ->
         error
@@ -551,59 +547,6 @@ defmodule Tempo.Operations do
   # The day unit a value extends to: the day of the week on a week axis.
   defp day_unit(%Tempo{time: time}),
     do: if(Keyword.has_key?(time, :week), do: :day_of_week, else: :day)
-
-  @empty_extended %{
-    calendar: nil,
-    zone_id: nil,
-    zone_offset: nil,
-    zone_critical: false,
-    tags: %{}
-  }
-
-  # A calendar conversion invalidates any IXDTF `u-ca` tag riding on
-  # `:extended` — the tag still names the source calendar while the
-  # time units are now in the target calendar, so the `to_iso8601/1`
-  # form would re-parse in the wrong calendar. Keep the tag in step
-  # with the units: drop it when the target is the default Gregorian
-  # (tagless strings already parse as Gregorian), otherwise set it to
-  # the target's CLDR calendar type so a round trip resolves the same
-  # calendar.
-  defp retag_extended_calendar(%Tempo{} = tempo, Calendrical.Gregorian) do
-    put_extended_calendar(tempo, nil)
-  end
-
-  defp retag_extended_calendar(%Tempo{} = tempo, target_calendar) do
-    put_extended_calendar(tempo, faithful_calendar_type(target_calendar))
-  end
-
-  # The CLDR calendar type naming `calendar`, provided that type maps
-  # back to the same module (so a re-parse reconstructs this exact
-  # calendar). `Calendrical.ISOWeek` (whose type is `:gregorian`) and
-  # calendars without a CLDR type return `nil` — no tag beats a tag
-  # naming a different calendar.
-  defp faithful_calendar_type(calendar) do
-    with true <- Code.ensure_loaded?(calendar),
-         true <- function_exported?(calendar, :cldr_calendar_type, 0),
-         calendar_type = calendar.cldr_calendar_type(),
-         {:ok, ^calendar} <- Calendrical.calendar_from_cldr_calendar_type(calendar_type) do
-      calendar_type
-    else
-      _other -> nil
-    end
-  end
-
-  defp put_extended_calendar(%Tempo{extended: nil} = tempo, nil), do: tempo
-
-  defp put_extended_calendar(%Tempo{extended: nil} = tempo, calendar_type) do
-    %{tempo | extended: %{@empty_extended | calendar: calendar_type}}
-  end
-
-  defp put_extended_calendar(%Tempo{extended: extended} = tempo, calendar_type) do
-    case Map.put(extended, :calendar, calendar_type) do
-      updated when updated == @empty_extended -> %{tempo | extended: nil}
-      updated -> %{tempo | extended: updated}
-    end
-  end
 
   ## Axis canonicalisation — week-axis endpoints
   ## (`[year, week, day_of_week]`) have no common unit vocabulary

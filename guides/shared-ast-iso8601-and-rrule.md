@@ -96,7 +96,7 @@ RRULE's UNTIL uses the RFC 3339 basic format — four-digit years only. Years ou
 
 ### Time zones and calendars (via IXDTF)
 
-Tempo's IXDTF support attaches `[Europe/Paris]`, `[u-ca=hebrew]`, or arbitrary elective tags to a datetime, storing them on the `:extended` field. `Tempo.RRule.to_string/1` does **not** emit these — iCalendar handles zones and calendars via `TZID` and `CALSCALE` at the calendar-object level, not inside `RRULE`.
+Tempo's IXDTF support attaches `[Europe/Paris]`, `[u-ca=hebrew]`, or arbitrary elective tags to a datetime: a zone and tags are stored on the `:extended` field, and a calendar is the value's `:calendar`. `Tempo.RRule.to_string/1` does **not** emit these — iCalendar handles zones and calendars via `TZID` and `CALSCALE` at the calendar-object level, not inside `RRULE`.
 
 ## RRULE features and how they map to ISO 8601
 

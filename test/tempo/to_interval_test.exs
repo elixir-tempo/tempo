@@ -730,13 +730,13 @@ defmodule Tempo.ToInterval.Test do
       assert interval.to.qualifications == %{month: :uncertain}
     end
 
-    test "IXDTF extended info (zone + calendar) propagates" do
+    test "an IXDTF zone, and the calendar a suffix names, propagate" do
       {:ok, tempo} = Tempo.from_iso8601("2022-06-15T10:30[Europe/Paris][u-ca=hebrew]")
       {:ok, interval} = Tempo.to_interval(tempo)
       assert interval.from.extended.zone_id == "Europe/Paris"
-      assert interval.from.extended.calendar == :hebrew
+      assert interval.from.calendar == Calendrical.Hebrew
       assert interval.to.extended.zone_id == "Europe/Paris"
-      assert interval.to.extended.calendar == :hebrew
+      assert interval.to.calendar == Calendrical.Hebrew
     end
 
     test "calendar propagates" do

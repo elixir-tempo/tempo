@@ -110,6 +110,8 @@ These keep their names and change their meaning:
 
 * **Ordinal days** — a day of the year that does not resolve to a date (`350O`, `2020Y{100,200}O`) holds a `:day_of_year`, written back as `O`, where 1.x held a `:day` written `D`, so a match on `[day: _]` for one now matches `[day_of_year: _]`.
 
+* **A value's `extended` map** — a zone, an offset and tags only, and `nil` with none of them: the calendar a `[u-ca=…]` suffix names is the value's `:calendar` module alone, where 1.x also kept its name as `extended.calendar`. A value read with a suffix now equals the same value made with a calendar module, and a Gregorian value read with `[u-ca=gregory]` is written without the suffix.
+
 ## Updating the dependency
 
 ```elixir
@@ -123,7 +125,7 @@ end
 A search for the removed names finds the renames:
 
 ```bash
-grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(meets|during)\?|Interval\.(meets|during)\?|(Tempo|Interval)\.compose|Tempo\.anchor[(/]|(NonAnchored|RequiresAnchor)Error|:unanchored|grounded\?|GroundedTempoError|(to|from)_(naive_)?date_time|from_(ical|jscalendar)|available_from_ical|to_rrule|MaterialisationError|Expander.expand|working_days?|Tempo\.weekend\(|weekends\(from|IntervalSet\.(to_list|overlapping)|RecurrenceSet\.new\(|Tempo\.to_iso8601[(/]|beginning_of_|end_of_(day|month)|tighten\(|Schedule\.Slot|earliest:|(add_period|TimePeriod\.new)\([^)]*(start|end):' lib test
+grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(meets|during)\?|Interval\.(meets|during)\?|(Tempo|Interval)\.compose|Tempo\.anchor[(/]|(NonAnchored|RequiresAnchor)Error|:unanchored|grounded\?|GroundedTempoError|(to|from)_(naive_)?date_time|from_(ical|jscalendar)|available_from_ical|to_rrule|MaterialisationError|Expander.expand|working_days?|Tempo\.weekend\(|weekends\(from|IntervalSet\.(to_list|overlapping)|RecurrenceSet\.new\(|Tempo\.to_iso8601[(/]|beginning_of_|end_of_(day|month)|tighten\(|Schedule\.Slot|earliest:|extended\.calendar|(add_period|TimePeriod\.new)\([^)]*(start|end):' lib test
 ```
 
 The changes of meaning need a read rather than a replace: every `before?`, `after?` and their `certainly_` and `possibly_` forms, every duration read as a count of seconds, every shift of a zoned value by hours, every `duration/1` of a set, every window, every `:metadata` passed to `Tempo.new/1`, every `select/2` across a span longer than one period, every `:skipping` shift of a day by days or weeks, every `round/2`, every `shift_zone/2` of a value coarser than a second, every conversion to an Elixir time compared with a literal, every `Tempo.new/1` of a week and a weekday, every set operation on a value with no zone and one with a zone, and every `RecurrenceSet.new/2` and `to_iso8601/1`, which the search finds.

@@ -26,8 +26,8 @@ defmodule Tempo.CalendarTest do
     test "[u-ca=hebrew] swaps the struct's calendar to Calendrical.Hebrew" do
       {:ok, tempo} = Tempo.from_iso8601("5786-09-30[u-ca=hebrew]")
       assert tempo.calendar == Calendrical.Hebrew
-      # The extended metadata still captures the raw tag value.
-      assert tempo.extended.calendar == :hebrew
+      # The name is the calendar and is not kept beside it.
+      assert tempo.extended == nil
     end
 
     test "Islamic variants resolve to their nested Calendrical modules" do
@@ -54,10 +54,11 @@ defmodule Tempo.CalendarTest do
       assert tempo.calendar == Calendrical.Ethiopic.AmeteAlem
     end
 
-    test "[u-ca=gregory] is accepted as an alias for :gregorian" do
+    test "[u-ca=gregory] names the Gregorian calendar, and the value is the one written without it" do
       {:ok, tempo} = Tempo.from_iso8601("2026-06-15[u-ca=gregory]")
       assert tempo.calendar == Calendrical.Gregorian
-      assert tempo.extended.calendar == :gregorian
+      assert tempo == Tempo.from_iso8601!("2026-06-15")
+      assert inspect(tempo) == ~s(~o"2026Y6M15D")
     end
 
     test "Persian, Buddhist, and other simple calendars resolve directly" do
@@ -74,7 +75,7 @@ defmodule Tempo.CalendarTest do
       # `additional_calendars/0`, which the resolver consults ahead of CLDR.
       {:ok, tempo} = Tempo.from_iso8601("1900-12-25[u-ca=julian]")
       assert tempo.calendar == Calendrical.Julian
-      assert tempo.extended.calendar == :julian
+      assert tempo == Tempo.from_iso8601!("1900-12-25", Calendrical.Julian)
     end
 
     test "[u-ca=julian] round-trips losslessly through to_iso8601/1" do
@@ -474,13 +475,67 @@ defmodule Tempo.CalendarTest do
     test "explicit Gregorian overrides [u-ca=hebrew]" do
       {:ok, tempo} = Tempo.from_iso8601("2022-06-15[u-ca=hebrew]", Calendrical.Gregorian)
       assert tempo.calendar == Calendrical.Gregorian
-      # The hint is still recorded on extended for inspection.
-      assert tempo.extended.calendar == :hebrew
+      # The name the argument overrides is not kept: the value is the
+      # Gregorian day, as written without a suffix.
+      assert tempo == Tempo.from_iso8601!("2022-06-15")
     end
 
     test "explicit Hebrew stays Hebrew without any IXDTF suffix" do
       {:ok, tempo} = Tempo.from_iso8601("5786-09-30", Calendrical.Hebrew)
       assert tempo.calendar == Calendrical.Hebrew
+    end
+  end
+
+  # A value's calendar is its `:calendar` module and nothing else: the name
+  # an IXDTF suffix gives it is not kept beside the module, so the same value
+  # is equal however it was made, and equal to its own text read back.
+  describe "a value's calendar is recorded once" do
+    test "a value read with a suffix equals the one made with a calendar module" do
+      hebrew = Calendrical.Hebrew
+      parsed = Tempo.from_iso8601!("5786-06-15[u-ca=hebrew]")
+
+      assert parsed == Tempo.from_iso8601!("5786-06-15", hebrew)
+      assert parsed == Tempo.from_iso8601!("5786-06-15[u-ca=hebrew]", hebrew)
+      assert {:ok, parsed} == Tempo.new(year: 5786, month: 6, day: 15, calendar: hebrew)
+      assert parsed == Tempo.from_elixir(Date.new!(5786, 6, 15, hebrew))
+    end
+
+    test "a converted value equals the one read in that calendar" do
+      gregorian = Tempo.from_iso8601!("2026-06-15")
+
+      assert Tempo.to_calendar(gregorian, Calendrical.Hebrew) ==
+               Tempo.from_iso8601("5786-09-30[u-ca=hebrew]")
+    end
+
+    test "a zoned value keeps its zone and no calendar name" do
+      parsed = Tempo.from_iso8601!("5786-09-30T10:00[Asia/Jerusalem][u-ca=hebrew]")
+
+      assert parsed == Tempo.from_iso8601!("5786-09-30T10:00[Asia/Jerusalem]", Calendrical.Hebrew)
+
+      assert parsed.extended ==
+               %{zone_id: "Asia/Jerusalem", zone_offset: nil, zone_critical: false, tags: %{}}
+    end
+
+    test "every value is equal to its own text read back" do
+      for value <- [
+            Tempo.from_iso8601!("5786-06-15", Calendrical.Hebrew),
+            Tempo.from_iso8601!("5786-06-15/5786-07-01", Calendrical.Hebrew),
+            Tempo.from_iso8601!("{5786-06-15,5786-07-01}", Calendrical.Hebrew),
+            Tempo.from_iso8601!("R3/5787Y3M25D/P1Y", Calendrical.Hebrew),
+            Tempo.from_iso8601!("2026-06-01[u-ca=gregory]/5786-10-01[u-ca=hebrew]"),
+            Tempo.from_iso8601!("1447Y9M1D[u-ca=islamic-civil]/2026Y6M1D")
+          ] do
+        assert Tempo.from_iso8601(Tempo.to_iso8601!(value)) == {:ok, value}
+      end
+    end
+
+    test "what a value gives is equal however the value was made" do
+      parsed = Tempo.from_iso8601!("5786-06[u-ca=hebrew]")
+      built = Tempo.from_iso8601!("5786-06", Calendrical.Hebrew)
+
+      assert Enum.to_list(parsed) == Enum.to_list(built)
+      assert Tempo.to_interval(parsed) == Tempo.to_interval(built)
+      assert Tempo.shift(parsed, month: 1) == Tempo.shift(built, month: 1)
     end
   end
 

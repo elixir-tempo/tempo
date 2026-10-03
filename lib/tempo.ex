@@ -168,19 +168,20 @@ defmodule Tempo do
   @type time_shift :: [{:hour, integer()} | {:minute, integer()}] | nil
 
   @typedoc """
-  Extended information parsed from an IXDTF suffix.
+  A value's zone and tags, as an IXDTF suffix writes them. `nil` for a value with no zone, offset or tag.
 
-  * `:calendar` — calendar identifier atom derived from `u-ca=`.
+  A `[u-ca=NAME]` suffix names the value's calendar, which is its `:calendar` module: the name is not kept here.
 
   * `:zone_id` — IANA time zone name such as `"Europe/Paris"`.
 
   * `:zone_offset` — numeric offset in minutes from `[+HH:MM]`.
 
+  * `:zone_critical` — whether the zone was written as critical (`[!Europe/Paris]`).
+
   * `:tags` — map of non-`u-ca` elective tagged suffixes.
 
   """
   @type extended_info :: %{
-          calendar: atom() | nil,
           zone_id: String.t() | nil,
           zone_offset: integer() | nil,
           zone_critical: boolean(),
@@ -744,7 +745,7 @@ defmodule Tempo do
   defp new_extended(nil, tags) when map_size(tags) == 0, do: nil
 
   defp new_extended(zone, tags) do
-    %{calendar: nil, zone_id: zone, zone_offset: nil, zone_critical: false, tags: tags}
+    %{zone_id: zone, zone_offset: nil, zone_critical: false, tags: tags}
   end
 
   # Defer to `Tempo.Validation.validate/2` for calendar-aware range
@@ -809,7 +810,9 @@ defmodule Tempo do
 
   * `{:ok, value}` — a `t:t/0`, `t:Tempo.Interval.t/0`,
     `t:Tempo.Duration.t/0` or `t:Tempo.Set.t/0` — whose `:extended`
-    field is populated when an IXDTF suffix was parsed.
+    field holds the zone and tags of an IXDTF suffix. The calendar a
+    suffix names is the value's `:calendar`, so a value read from
+    text is equal to the same value made with a calendar module.
 
   * `{:error, reason}` when the string cannot be parsed or a
     critical IXDTF suffix is unrecognised.
@@ -829,8 +832,11 @@ defmodule Tempo do
       Calendrical.Hebrew
 
       iex> {:ok, tempo} = Tempo.from_iso8601("2022-11-20T10:30:00Z[Europe/Paris][u-ca=hebrew]")
-      iex> {tempo.extended.zone_id, tempo.extended.calendar, tempo.calendar}
-      {"Europe/Paris", :hebrew, Calendrical.Hebrew}
+      iex> {tempo.extended.zone_id, tempo.calendar}
+      {"Europe/Paris", Calendrical.Hebrew}
+
+      iex> Tempo.from_iso8601("5786-09-30[u-ca=hebrew]") == Tempo.from_iso8601("5786-09-30", Calendrical.Hebrew)
+      true
 
       iex> {:error, %Tempo.UnknownZoneError{zone_id: "Continent/Imaginary"}} =
       ...>   Tempo.from_iso8601("2022-11-20T10:30:00Z[!Continent/Imaginary]")
@@ -863,9 +869,8 @@ defmodule Tempo do
   end
 
   def from_iso8601(string, calendar) when is_binary(string) do
-    # Explicit user calendar always wins — IXDTF `[u-ca=NAME]` is
-    # recorded on `extended.calendar` for metadata but does not
-    # override the user's choice. This keeps the existing
+    # Explicit user calendar always wins — an IXDTF `[u-ca=NAME]` does
+    # not override the user's choice. This keeps the existing
     # `Tempo.from_iso8601(string, Calendrical.Hebrew)` idiom
     # working unchanged.
     do_from_iso8601(string, calendar)
@@ -901,7 +906,41 @@ defmodule Tempo do
          propagated = propagate_endpoint_frame(attached),
          :ok <- Validation.validate_zone_existence(propagated),
          :ok <- enforce_critical_zone_offset(propagated) do
-      {:ok, propagated}
+      {:ok, without_calendar_names(propagated)}
+    end
+  end
+
+  # A `[u-ca=NAME]` suffix names a calendar, and by here it has: the value's
+  # `:calendar` is the module the name resolves to, each endpoint's is its
+  # own, and a trailing suffix has reached the start it is also written for.
+  # The name is dropped, so a value's calendar is recorded once, as its
+  # module, and a value read from text is equal to the same value made with a
+  # calendar module. What is left of a suffix is its zone and its tags, or
+  # `nil` when it had neither.
+  defp without_calendar_names(%__MODULE__{extended: %{} = extended} = tempo),
+    do: %{tempo | extended: zone_and_tags(extended)}
+
+  defp without_calendar_names(%Tempo.Interval{} = interval) do
+    %{
+      interval
+      | from: without_calendar_names(interval.from),
+        to: without_calendar_names(interval.to),
+        repeat_rule: without_calendar_names(interval.repeat_rule)
+    }
+  end
+
+  defp without_calendar_names(%Tempo.Set{} = set),
+    do: map_members(set, &without_calendar_names/1)
+
+  defp without_calendar_names(%Tempo.Range{first: first, last: last} = range),
+    do: %{range | first: without_calendar_names(first), last: without_calendar_names(last)}
+
+  defp without_calendar_names(other), do: other
+
+  defp zone_and_tags(extended) do
+    case Map.delete(extended, :calendar) do
+      %{zone_id: nil, zone_offset: nil, tags: tags} when map_size(tags) == 0 -> nil
+      kept -> kept
     end
   end
 
@@ -931,7 +970,7 @@ defmodule Tempo do
   # interpreted in the default calendar while its tag claims another,
   # breaking the serialise/re-parse round trip. Applies only when the
   # caller didn't choose a calendar explicitly: an explicit calendar
-  # always wins and `u-ca` stays metadata-only.
+  # always wins.
   defp maybe_resolve_endpoint_calendars(%Tempo.Interval{} = interval, :from_ixdtf_or_default) do
     %{
       interval
@@ -2243,7 +2282,6 @@ defmodule Tempo do
       extended: %{
         zone_id: time_zone,
         zone_offset: nil,
-        calendar: nil,
         zone_critical: false,
         tags: %{}
       }
@@ -3062,13 +3100,14 @@ defmodule Tempo do
         Map.take(extended || %{}, [:zone_id, :zone_offset, :zone_critical])
       )
 
-  # The zone of a value's annotations, without its calendar and tags, which
-  # stay its own.
+  # The zone of a value's annotations, without its tags, which stay its own.
   defp zone_alone(nil), do: nil
+
+  defp zone_alone(%{zone_id: nil, zone_offset: nil}), do: nil
 
   defp zone_alone(extended) do
     Map.merge(
-      %{calendar: nil, tags: %{}, zone_id: nil, zone_offset: nil, zone_critical: false},
+      %{tags: %{}, zone_id: nil, zone_offset: nil, zone_critical: false},
       Map.take(extended, [:zone_id, :zone_offset, :zone_critical])
     )
   end
@@ -4341,11 +4380,9 @@ defmodule Tempo do
 
   # A zone and tags carry across; a value with neither has nothing to carry.
   defp carried_extended(%{} = extended) do
-    carried = Map.put(extended, :calendar, nil)
-
-    if is_binary(carried[:zone_id]) or is_integer(carried[:zone_offset]) or
-         map_size(carried[:tags] || %{}) > 0,
-       do: carried
+    if is_binary(extended[:zone_id]) or is_integer(extended[:zone_offset]) or
+         map_size(extended[:tags] || %{}) > 0,
+       do: extended
   end
 
   defp carried_extended(_none), do: nil
@@ -4667,8 +4704,8 @@ defmodule Tempo do
   end
 
   # A zoned value's wall-clock reading with its zone and offset removed — its
-  # floating form. A calendar or tags it carries stay.
-  defp drop_zone(%__MODULE__{extended: %{calendar: nil, tags: tags}} = tempo)
+  # floating form. Tags it carries stay.
+  defp drop_zone(%__MODULE__{extended: %{tags: tags}} = tempo)
        when map_size(tags) == 0,
        do: %{tempo | shift: nil, extended: nil}
 
@@ -4745,7 +4782,7 @@ defmodule Tempo do
   def in_zone(value, _zone), do: {:error, not_one_value("in_zone/2", value)}
 
   defp put_zone_id(nil, zone),
-    do: %{zone_id: zone, zone_offset: nil, calendar: nil, zone_critical: false, tags: %{}}
+    do: %{zone_id: zone, zone_offset: nil, zone_critical: false, tags: %{}}
 
   defp put_zone_id(%{} = extended, zone), do: %{extended | zone_id: zone}
 
@@ -5070,7 +5107,7 @@ defmodule Tempo do
   # critical flag belonged to the zone it replaces.
   defp in_zone_extended(extended, zone) do
     Map.merge(
-      extended || %{calendar: nil, tags: %{}},
+      extended || %{tags: %{}},
       %{zone_id: zone, zone_offset: nil, zone_critical: false}
     )
   end
@@ -7122,7 +7159,7 @@ defmodule Tempo do
        when calendar not in [nil, Calendrical.Gregorian, Calendrical.ISOWeek] do
     with {:ok, %Tempo{} = converted} <- to_calendar(start, calendar),
          %Tempo{} = aligned <- aligned_to_cadence(converted, cadence) do
-      tag_start_calendar(aligned, calendar)
+      aligned
     else
       _other -> start
     end
@@ -7146,55 +7183,6 @@ defmodule Tempo do
     with {unit, _span} <- resolution(start),
          %Tempo{} = period <- at_resolution(start, freq_of(cadence)) do
       at_resolution(period, unit)
-    end
-  end
-
-  # Attach the calendar's IXDTF `u-ca` identifier to the synthesised start's
-  # extended metadata, so each materialised occurrence round-trips as
-  # `[u-ca=tag]` — the same self-describing form a written calendared start
-  # gives its occurrences. A calendar with no faithful identifier is left as is.
-  defp tag_start_calendar(%Tempo{} = start, calendar) do
-    case repeat_calendar_tag(calendar) do
-      nil ->
-        start
-
-      tag ->
-        attach_extended(start, %{
-          calendar: tag,
-          zone_id: nil,
-          zone_offset: nil,
-          zone_critical: false,
-          tags: %{}
-        })
-    end
-  end
-
-  # A calendar module's IXDTF `u-ca` identifier: a non-CLDR calendar Calendrical
-  # resolves (`Calendrical.Julian` → `:julian`) through its additional-calendar
-  # registry, otherwise the CLDR type — but only when that type round-trips back
-  # to the same module, so a calendar whose type names a different one
-  # (`Calendrical.ISOWeek`, typed `:gregorian`) stays untagged rather than
-  # mis-tagged.
-  defp repeat_calendar_tag(calendar) do
-    case additional_calendar_tag(calendar) do
-      nil -> faithful_cldr_tag(calendar)
-      tag -> tag
-    end
-  end
-
-  defp additional_calendar_tag(calendar) do
-    Enum.find_value(Calendrical.additional_calendars(), fn {tag, module} ->
-      if module == calendar, do: tag
-    end)
-  end
-
-  defp faithful_cldr_tag(calendar) do
-    with true <- function_exported?(calendar, :cldr_calendar_type, 0),
-         calendar_type = calendar.cldr_calendar_type(),
-         {:ok, ^calendar} <- Calendrical.calendar_from_cldr_calendar_type(calendar_type) do
-      calendar_type
-    else
-      _other -> nil
     end
   end
 

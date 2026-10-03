@@ -178,7 +178,7 @@ Tempo implements the [IXDTF draft](https://www.ietf.org/archive/id/draft-ietf-se
 |---|---|---|
 | IANA time zone | `[Europe/Paris]` | `extended.zone_id` |
 | Numeric offset | `[+08:45]`, `[-03:30]`, `[+0530]` | `extended.zone_offset` (minutes from UTC) |
-| Calendar (`u-ca=`) | `[u-ca=hebrew]`, `[u-ca=gregory]` | `extended.calendar` (atom) |
+| Calendar (`u-ca=`) | `[u-ca=hebrew]`, `[u-ca=gregory]` | `calendar` (the module it names) |
 | Generic tag | `[_foo=bar-baz]` | `extended.tags` (`%{"key" => ["value", ...]}`) |
 
 Each bracket may be prefixed with `!` to mark it **critical**. Unrecognised critical tags cause the parse to fail; unrecognised elective tags are retained verbatim in `extended.tags`.

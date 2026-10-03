@@ -224,12 +224,21 @@ defmodule Tempo.Iso8601.Extended.Test do
   ## Tempo.from_iso8601 integration
 
   describe "from_iso8601 integration" do
-    test "extended info attached to the Tempo struct" do
+    test "the zone is kept on the Tempo struct, and the calendar a suffix names is its calendar" do
       assert {:ok, tempo} =
                Tempo.from_iso8601("2022-11-20T10:30:00Z[Europe/Paris][u-ca=hebrew]")
 
       assert tempo.extended.zone_id == "Europe/Paris"
-      assert tempo.extended.calendar == :hebrew
+      assert tempo.calendar == Calendrical.Hebrew
+      refute Map.has_key?(tempo.extended, :calendar)
+    end
+
+    test "a suffix that names a calendar alone leaves no extended info" do
+      assert {:ok, tempo} = Tempo.from_iso8601("5786-09-30[u-ca=hebrew]")
+      assert tempo.extended == nil
+
+      assert {:ok, unknown} = Tempo.from_iso8601("2022-11-20[u-ca=klingon]")
+      assert unknown.extended == nil
     end
 
     test "error propagates for unknown critical zone" do
@@ -484,9 +493,9 @@ defmodule Tempo.Iso8601.Extended.Test do
                )
 
       assert interval.from.extended.zone_id == "Europe/Paris"
-      assert interval.from.extended.calendar == :hebrew
+      assert interval.from.calendar == Calendrical.Hebrew
       assert interval.to.extended.zone_id == "Europe/Paris"
-      assert interval.to.extended.calendar == nil
+      assert interval.to.calendar == Calendrical.Gregorian
 
       # Regression (OTP ≤ 28): the Hebrew-read units resolve to a
       # pre-common-era Gregorian instant (year −1738), which used to

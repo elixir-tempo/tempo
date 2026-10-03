@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A value's calendar is recorded once, as its `:calendar` module: its `extended` map has no `:calendar` key and is `nil` for a value with no zone, offset or tag, so `Tempo.from_iso8601!("5786-09-30[u-ca=hebrew]")` equals the same date made with `Calendrical.Hebrew`, `Tempo.new/1`, `Tempo.from_elixir/1` or `Tempo.to_calendar/2`, and every value equals its own text read back. A Gregorian value read with `[u-ca=gregory]` is written without the suffix, and `Tempo.explain/1` no longer prints an "IXDTF calendar hint".
+
 * A day of the year that does not resolve to a date (`350O`, `2020Y{100,200}O`) is its own unit, `:day_of_year`, written back as `O`, where it was a `:day` written `D`, and a day of the year never follows a month. A `D` with no month is still read as a day of the year where a year resolves it: `2026Y32D` is 1 February.
 
 Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name that changed to its 2.0 form, and the [migration guide](guides/migration.md) shows each change with examples.

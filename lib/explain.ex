@@ -20,7 +20,7 @@ defmodule Tempo.Explanation do
     * `:span` — bounded interval in `[from, to)` form.
     * `:margin` — `±` uncertainty margin and the span its groundings cover.
     * `:qualification` — EDTF qualifier description.
-    * `:extended` — IXDTF metadata (zone, calendar, tags).
+    * `:extended` — IXDTF zone and offset.
     * `:calendar` — non-default calendar.
     * `:enumeration` — iteration granularity.
     * `:hint` — pointer to relevant function.
@@ -786,8 +786,7 @@ defmodule Tempo.Explain do
     parts =
       [
         extended[:zone_id] && "Timezone: #{extended.zone_id}.",
-        extended[:zone_offset] && "UTC offset: #{extended.zone_offset} minutes.",
-        extended[:calendar] && "IXDTF calendar hint: #{extended.calendar}."
+        extended[:zone_offset] && "UTC offset: #{extended.zone_offset} minutes."
       ]
       |> Enum.reject(&(&1 in [nil, false]))
 

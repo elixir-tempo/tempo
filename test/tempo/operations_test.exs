@@ -783,12 +783,14 @@ defmodule Tempo.Operations.Test do
 
   describe "cross-calendar round-trip fidelity" do
     # Every cross-calendar set-op result must serialise and re-parse
-    # back to the same instants: the IXDTF `u-ca` tag on each endpoint
-    # has to stay in step with the endpoint's (converted) units.
+    # back to the same value: the IXDTF `u-ca` suffix each endpoint is
+    # written with is its calendar's, whichever calendar it was
+    # converted to.
     defp assert_round_trips(%IntervalSet{} = set) do
       for interval <- IntervalSet.members(set) do
         for endpoint <- [interval.from, interval.to] do
           assert {:ok, reparsed} = Tempo.from_iso8601(Tempo.to_iso8601!(endpoint))
+          assert reparsed == endpoint
           assert Tempo.relation(endpoint, reparsed) == :equals
         end
 
@@ -808,14 +810,14 @@ defmodule Tempo.Operations.Test do
       assert_round_trips(result)
     end
 
-    test "conversion to a non-Gregorian calendar tags converted endpoints with its u-ca" do
+    test "conversion to a non-Gregorian calendar writes converted endpoints with its u-ca" do
       # Islamic-civil 1447 spans into Gregorian 2026, so the trimmed
       # `from` endpoint comes from the converted (Gregorian) operand.
       {:ok, result} = Tempo.intersection(~o"1447[u-ca=islamic-civil]", ~o"2026")
 
       [interval] = IntervalSet.members(result)
       assert interval.from.calendar == Calendrical.Islamic.Civil
-      assert interval.from.extended.calendar == :islamic_civil
+      assert interval.from.extended == nil
       assert Tempo.to_iso8601!(interval.from) =~ "[u-ca=islamic-civil]"
 
       assert_round_trips(result)
@@ -848,8 +850,9 @@ defmodule Tempo.Operations.Test do
 
       assert interval.from.calendar == Calendrical.Gregorian
       assert interval.to.calendar == Calendrical.Gregorian
-      # The tag stays as metadata even though it doesn't drive parsing.
-      assert interval.from.extended.calendar == :islamic_civil
+      # The name the argument overrides is not kept.
+      assert interval.from.extended == nil
+      assert interval.to.extended == nil
     end
   end
 

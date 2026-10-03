@@ -189,11 +189,36 @@ defmodule Tempo.Matrix.Checks do
     end
   end
 
+  # The value read back writes the same text and holds the same calendar,
+  # zone and tags in every value it is made of: a calendar is recorded as its
+  # module alone, so one a suffix names and one given as a module are the
+  # same. It is not yet `again == value`: a qualification on every component
+  # is held on each and written, and read back, as the value's (`2026?Y` is
+  # `2026Y?`), an item of its own in `TODO.md`.
   defp same_value(value, again, text, name) do
-    if Tempo.to_iso8601(again) == Tempo.to_iso8601(value),
-      do: same_cover_of(value, again, "the value", "#{text} read back"),
-      else: {:fail, "#{name} writes #{text}, which reads as #{inspect(again)}"}
+    cond do
+      Tempo.to_iso8601(again) != Tempo.to_iso8601(value) ->
+        {:fail, "#{name} writes #{text}, which reads as #{inspect(again)}"}
+
+      frames(again) != frames(value) ->
+        {:fail, "#{name} writes #{text}, which reads back with another calendar, zone or tags"}
+
+      true ->
+        same_cover_of(value, again, "the value", "#{text} read back")
+    end
   end
+
+  defp frames(%Tempo{calendar: calendar, extended: extended, shift: shift}),
+    do: [{calendar, extended, shift}]
+
+  defp frames(%Interval{from: from, to: to, repeat_rule: rule}),
+    do: frames(from) ++ frames(to) ++ frames(rule)
+
+  defp frames(%Tempo.Set{set: members, except: except}),
+    do: Enum.flat_map(members ++ except, &frames/1)
+
+  defp frames(%Tempo.Range{first: first, last: last}), do: frames(first) ++ frames(last)
+  defp frames(_other), do: []
 
   defp same_cover_of(a, b, a_name, b_name) do
     with {:ok, a_extent} <- cover(a),

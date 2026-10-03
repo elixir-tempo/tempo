@@ -79,7 +79,7 @@ defmodule Tempo.EnumerationConformance.Test do
 
     test "IXDTF calendar (u-ca) survives enumeration" do
       assert {:ok, list} = take("2022-06-15T10:30[u-ca=hebrew]")
-      assert Enum.all?(list, fn v -> v.extended && v.extended.calendar == :hebrew end)
+      assert Enum.all?(list, fn v -> v.calendar == Calendrical.Hebrew and v.extended == nil end)
     end
 
     test "expression-level qualification survives enumeration" do
@@ -457,7 +457,7 @@ defmodule Tempo.EnumerationConformance.Test do
       tempo = %Tempo{
         time: [year: 2022, month: [1, 2]],
         calendar: Calendrical.Gregorian,
-        extended: %{zone_id: "UTC", zone_offset: nil, calendar: nil, tags: %{}}
+        extended: %{zone_id: "UTC", zone_offset: nil, zone_critical: false, tags: %{}}
       }
 
       assert {:ok, list} = take_tempo(tempo)

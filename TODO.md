@@ -26,7 +26,7 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **What needs the last value of an interval with no end never returns** — `Enum.at(~o"2026Y/..", -1)` and `Enum.random/1` walk for ever: `Enumerable.slice/1` cannot tell them from `Enum.at/2` with a positive index and `Enum.empty?/1`, which the interval answers and a lazy interval set refuses (`UnboundedSetError`). Decide one rule for the two. Found 2026-10-03.
 
-* [ ] **A value's calendar is recorded twice, so equal values are not `==`** — a parse keeps the `[u-ca=…]` name in `extended` beside the calendar module, and a value made with a calendar argument, `new/1`, `from_elixir/1` or `to_calendar/2` has none, so `Tempo.from_iso8601!("5786Y6M", Calendrical.Hebrew)` is not `==` to its own inspected text read back (nor `~o"2026-06-15"` to `2026-06-15[u-ca=gregory]`), though `compare/2` is `:eq` and both write the same text. Decide whether the parser drops the name once it has resolved the module, which `inspect/1` derives the suffix from anyway. Found 2026-10-04.
+* [ ] **A qualification on every component is recorded two ways** — `2026?Y`, `6~M` and `2026?Y6?M` hold it on each component (`qualifications: %{year: :uncertain}`) and are written in the complete form (`2026Y?`), which reads back as the value's own (`qualification: :uncertain`): one value, not `==` to its own text. Read a qualification that every component shares as the value's, as the writer already treats it; the matrix's read-back check (`same_value/4` in `test/support/matrix/checks.ex`) can then be `==`. Found 2026-10-04.
 
 ### Conformance and completeness
 
@@ -92,6 +92,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **A week calendar's week in `to_string/2` reads as the locale's week of the year** — Localize `main` writes `%{year: 2026, month: 25, calendar: Calendrical.ISOWeek}` with CLDR's `yw`, "week 25 of 2026" ("Woche 25 des Jahres 2026" in `de`), and two weeks "week 25 of 2026 – week 26 of 2026", where the Blocked item below expects "2026-W25" (user, in the Localize session, 2026-10-04: "Calendrical is not about formatting, Localize is. For week based calendars we need to interpret `:month` as `:week` and pick the correct skeleton accordingly"). `format: "Y-'W'ww"` writes "2026-W25" for one week; an interval given a week format shows one end until Localize's Open item on it is done. Decide which text Tempo shows, then move the lock. Found in the Localize session, 2026-10-04.
 
+* [ ] **A span with no year in `to_string/2` can take Localize's interval** — Localize `main` writes an interval of two dates with no year in CLDR's interval format for the fields they hold: `%{month: 6}` to `%{month: 8}` is "Jun – Aug", and with a day on each end "Jun 15 – Sep 1", or "Jun 15 – 20" in one month. Both ends must hold the same fields, and no order is asked of them, so November to February is written too. It unblocks the Blocked item below once the lock moves. Found in the Localize session, 2026-10-04.
+
 ### Release and housekeeping
 
 * [ ] **Livebooks install 2.0 at the release** — `getting-started`, `tempo_tour`, `scheduling-workbook` and `uncertain-dates-workbook` install `{:ex_tempo, "~> 1.6"}` and the Melbourne deck `~> 1.6.3`, while their code uses the 2.0 names: at the 2.0.0 release each installs `~> 2.0`, as `everyday-holidays` already does.
@@ -125,6 +127,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A value's calendar is recorded once** — the name a `[u-ca=…]` suffix gives is the value's calendar module and is not kept in `extended`, which holds a zone and tags or is `nil`, so a value equals the same value however it was made, and its own text read back. 2026-10-04.
 
 * [x] **The enumeration `extend/2` adds is the one the parser reads** — the months of several years and the days of several months are written `1..-1//1`, so `Tempo.extend(~o"2026Y{6,7}M")` equals `~o"2026Y{6,7}M{1..-1}D"` and inspects as it. 2026-10-04.
 

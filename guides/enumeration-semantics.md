@@ -119,7 +119,7 @@ Qualifications describe epistemic state (`?` uncertain, `~` approximate, `%` bot
 
 ### 2.8. IXDTF metadata
 
-Time zone, calendar, and tagged suffixes attach to the `:extended` field and flow through enumeration unchanged.
+Time zone and tagged suffixes attach to the `:extended` field, and a calendar suffix names the value's `:calendar`. Each flows through enumeration unchanged.
 
 | Construct | Example |
 |---|---|

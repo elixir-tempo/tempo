@@ -204,7 +204,7 @@ defmodule Tempo.Iso8601.Qualification.Test do
     test "complete qualification followed by an IXDTF suffix" do
       assert {:ok, tempo} = Tempo.from_iso8601("2022-06-15?[u-ca=hebrew]")
       assert tempo.qualification == :uncertain
-      assert tempo.extended.calendar == :hebrew
+      assert tempo.calendar == Calendrical.Hebrew
     end
 
     test "per-endpoint qualification in an interval" do

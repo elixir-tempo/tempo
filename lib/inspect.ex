@@ -247,7 +247,7 @@ defmodule Tempo.Inspect do
   defp written_name(%Tempo{extended: %{calendar: name}}), do: name
   defp written_name(%Tempo{}), do: nil
 
-  defp rule_names(%Tempo{} = rule, implied), do: [calendar_name(%{rule | extended: nil}, implied)]
+  defp rule_names(%Tempo{} = rule, implied), do: [calendar_name(rule, implied)]
   defp rule_names(_no_rule, _implied), do: []
 
   defp with_calendar_name(%Tempo{} = tempo, implied) do
@@ -257,20 +257,16 @@ defmodule Tempo.Inspect do
     end
   end
 
-  # The identifier a value's calendar is written as: the one it was parsed
-  # with when that names the same calendar, none for the Gregorian calendar
-  # or the one the rendering implies, or else the name in Calendrical's
-  # registry or the CLDR calendar type — whichever reads back as this
-  # calendar, since several calendars share a CLDR type.
-  defp calendar_name(%Tempo{calendar: calendar, extended: extended}, implied \\ Gregorian) do
+  # The identifier a value's calendar is written as: none for the Gregorian
+  # calendar or the one the rendering implies, or else the name in
+  # Calendrical's registry or the CLDR calendar type — whichever reads back as
+  # this calendar, since several calendars share a CLDR type. It is worked
+  # out from the calendar module, the one record a value keeps of its
+  # calendar, and carried in the `extended` of the copy being written.
+  defp calendar_name(%Tempo{calendar: calendar}, implied \\ Gregorian) do
     calendar = calendar || Gregorian
-    parsed = extended && Map.get(extended, :calendar)
 
-    cond do
-      is_atom(parsed) and not is_nil(parsed) and names?(parsed, calendar) -> parsed
-      calendar in [Gregorian, implied] -> nil
-      true -> faithful_name(calendar)
-    end
+    if calendar in [Gregorian, implied], do: nil, else: faithful_name(calendar)
   end
 
   defp week_based?(calendar) do

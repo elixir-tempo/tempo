@@ -399,7 +399,10 @@ defmodule Tempo.Interval do
   # The calendar's rule is the parser's alone. In text a trailing `[u-ca=…]`
   # is how both ends are written; two values given to `new/1` are each in the
   # calendar they have, and naming the start's units as the end's calendar
-  # would make 1 January 2025 a day of the Hebrew year 2025.
+  # would make 1 January 2025 a day of the Hebrew year 2025. The rule reads
+  # the name a suffix gave an endpoint, which an endpoint holds only while
+  # its text is being read: the parser drops it once the calendars are
+  # settled, so for any other pair of values this rule does nothing.
   def propagate_endpoint_frame(%Tempo{} = from, %Tempo{} = to) do
     {from, to}
     |> propagate_zone()
@@ -457,7 +460,7 @@ defmodule Tempo.Interval do
   end
 
   defp put_calendar_field(target_extended, calendar) do
-    %{target_extended | calendar: calendar}
+    Map.put(target_extended, :calendar, calendar)
   end
 
   # Overlay `source`'s zone frame — its numeric `shift` and the zone
@@ -469,12 +472,15 @@ defmodule Tempo.Interval do
 
   defp put_zone_fields(target_extended, nil), do: target_extended
 
+  # A source whose frame is its numeric shift alone has no zone to give a
+  # target that has no annotations.
+  defp put_zone_fields(nil, %{zone_id: nil, zone_offset: nil}), do: nil
+
   defp put_zone_fields(nil, %{zone_id: zone_id, zone_offset: zone_offset} = source) do
     %{
       zone_id: zone_id,
       zone_offset: zone_offset,
       zone_critical: Map.get(source, :zone_critical, false),
-      calendar: nil,
       tags: %{}
     }
   end
