@@ -1083,7 +1083,7 @@ defmodule Tempo.Inspect do
     [
       inspect_list(second),
       ?.,
-      Microsecond.to_digits_string(microsecond),
+      fraction_digits(microsecond),
       inspect_qualification(qualifier),
       ?S
     ]
@@ -1119,7 +1119,7 @@ defmodule Tempo.Inspect do
   end
 
   defp inspect_value({:second, {:micro, second, microsecond}}),
-    do: [inspect_list(second), ?., Microsecond.to_digits_string(microsecond), ?S]
+    do: [inspect_list(second), ?., fraction_digits(microsecond), ?S]
 
   defp inspect_value({:second, second}), do: [inspect_list(second), ?S]
   defp inspect_value({:day_of_week, day}), do: [inspect_list(day), ?K]
@@ -1282,6 +1282,39 @@ defmodule Tempo.Inspect do
   defp fold_microsecond([head | rest]), do: [head | fold_microsecond(rest)]
   defp fold_microsecond([]), do: []
   defp fold_microsecond(other), do: other
+
+  # The digits of a fraction of a second. The fractions an enumeration of a
+  # second holds (`Tempo.extend/2` writes a second as its ten tenths) are a
+  # set after the decimal sign: `45.{0..9}S`, and `45.{120..129}S` for the
+  # thousandths of `45.12`.
+  defp fraction_digits(fractions) when is_list(fractions) do
+    digits = Enum.map(fractions, &Microsecond.to_digits_string/1)
+    [open(:all), fraction_set(fractions, digits), close(:all)]
+  end
+
+  defp fraction_digits(fraction), do: Microsecond.to_digits_string(fraction)
+
+  # Fractions that run on from one another are written from the first to the
+  # last, and any others one by one.
+  defp fraction_set(_fractions, []), do: []
+  defp fraction_set(_fractions, [digits]), do: digits
+
+  defp fraction_set(fractions, digits) do
+    if run_of_fractions?(fractions),
+      do: [hd(digits), "..", List.last(digits)],
+      else: Enum.intersperse(digits, ?,)
+  end
+
+  defp run_of_fractions?([{first, precision} | rest]) do
+    step = Integer.pow(10, 6 - precision)
+
+    rest
+    |> Enum.reduce_while(first, fn
+      {value, ^precision}, previous when value == previous + step -> {:cont, value}
+      _fraction, _previous -> {:halt, :scattered}
+    end)
+    |> is_integer()
+  end
 
   defp inspect_list(list) when is_list(list) do
     elements = Enum.map_join(list, ",", &inspect_value/1)

@@ -58,6 +58,9 @@ defmodule Tempo.Enumeration do
   # day of the week (`Tempo.Iso8601.Unit.value_range/2`).
   @fixed_extent_units [:day_of_week, :hour, :minute, :second, :microsecond]
 
+  # The decimal places of a second a microsecond has: no fraction is finer.
+  @finest_precision 6
+
   @doc false
   # The walk of a value as it is written. A value with no set, range, mask or
   # group in it is walked as the one value it is.
@@ -663,54 +666,78 @@ defmodule Tempo.Enumeration do
   defp names_several?([_component | rest]), do: names_several?(rest)
   defp names_several?([]), do: false
 
-  def add_implicit_enumeration(%Tempo{time: time, calendar: calendar} = tempo) do
+  # The value written with the unit below its own as an enumeration, which a
+  # walk yields. Raises for a value with no finer unit to walk by, as
+  # `Enum` has no error to return.
+  def add_implicit_enumeration(%Tempo{} = tempo) do
+    case implicit_enumeration(tempo) do
+      {:ok, enumerated} ->
+        enumerated
+
+      {:finest, :microsecond} ->
+        raise ArgumentError,
+              "Cannot enumerate a Tempo at microsecond precision 6 " <>
+                "— that is the finest representable ulp. Got: #{inspect(tempo)}"
+
+      {:finest, unit} ->
+        raise ArgumentError,
+              "Cannot enumerate a Tempo at #{inspect(unit)} resolution " <>
+                "— no finer unit is defined. Got: #{inspect(tempo)}"
+    end
+  end
+
+  @doc false
+  # The value written with the unit below its own as an enumeration
+  # (`2026Y` as `2026Y{1..12}M`), or `{:finest, unit}` for one with no finer
+  # unit: a fraction of a second at microsecond precision, or a value with no
+  # unit to count below.
+  def implicit_enumeration(%Tempo{time: time, calendar: calendar} = tempo) do
     {unit, _span} = Tempo.resolution(tempo)
 
     cond do
       # Sub-second value: subdivide its microsecond ulp into ten
       # sub-points at +1 precision. `~o"...45.5"` (precision 1) →
       # `[.50, .51, …, .59]` at precision 2. At microsecond precision
-      # 6 there is no finer ulp, so we raise.
+      # 6 there is no finer ulp.
       unit == :microsecond ->
-        {parent_value, parent_precision} = Keyword.fetch!(time, :microsecond)
-        subdivide_microsecond(tempo, parent_value, parent_precision)
+        subdivide_microsecond(tempo, Keyword.fetch!(time, :microsecond))
 
       # Second resolution now has a finer unit (microsecond at
       # precision 1 — decisecond). `~o"...10:00:00"` → ten sub-points
       # at decisecond resolution `[.0, .1, …, .9]`.
       unit == :second ->
         enum_values = sub_second_enumeration(0, 1)
-        %{tempo | time: time ++ [{:microsecond, enum_values}]}
+        {:ok, %{tempo | time: time ++ [{:microsecond, enum_values}]}}
 
       true ->
-        case Unit.implicit_enumerator(unit, calendar) do
-          nil ->
-            raise ArgumentError,
-                  "Cannot enumerate a Tempo at #{inspect(unit)} resolution " <>
-                    "— no finer unit is defined. Got: #{inspect(tempo)}"
-
-          {enum_unit, range} ->
-            %{tempo | time: time ++ [{enum_unit, [range]}]}
+        case Unit.implicit_enumerator(unit, Compare.effective_calendar(calendar)) do
+          nil -> {:finest, unit}
+          {enum_unit, range} -> {:ok, %{tempo | time: time ++ [{enum_unit, [range]}]}}
         end
     end
   end
 
-  defp subdivide_microsecond(%Tempo{} = tempo, _parent_value, parent_precision)
-       when parent_precision >= 6 do
-    raise ArgumentError,
-          "Cannot enumerate a Tempo at microsecond precision 6 " <>
-            "— that is the finest representable ulp. Got: #{inspect(tempo)}"
-  end
+  # A fraction of a second, or the fractions an enumeration of one holds
+  # (a second written as its ten tenths), each as its ten finer ones.
+  defp subdivide_microsecond(%Tempo{time: time} = tempo, fractions) do
+    fractions = List.wrap(fractions)
 
-  defp subdivide_microsecond(%Tempo{time: time} = tempo, parent_value, parent_precision) do
-    enum_values = sub_second_enumeration(parent_value, parent_precision + 1)
-    %{tempo | time: Keyword.replace(time, :microsecond, enum_values)}
+    if Enum.all?(fractions, fn {_value, precision} -> precision < @finest_precision end) do
+      finer =
+        Enum.flat_map(fractions, fn {value, precision} ->
+          sub_second_enumeration(value, precision + 1)
+        end)
+
+      {:ok, %{tempo | time: Keyword.replace(time, :microsecond, finer)}}
+    else
+      {:finest, :microsecond}
+    end
   end
 
   # Ten `{value, precision}` sub-points starting at `parent_value`,
   # stepping by `10^(6 - precision)` microseconds.
   defp sub_second_enumeration(parent_value, precision) do
-    step = Integer.pow(10, 6 - precision)
+    step = Integer.pow(10, @finest_precision - precision)
     Enum.map(0..9, fn i -> {parent_value + i * step, precision} end)
   end
 

@@ -3114,6 +3114,8 @@ defmodule Tempo do
   twelve months — so the value's resolution rises while its span stays
   the same.
 
+  A second is written as its ten tenths and a fraction of a second as its next decimal place, down to a microsecond, which has no finer unit. Such a value inspects with the fractions as a set after the decimal sign (`45.{0..9}S`), a notation `from_iso8601/1` does not read.
+
   ### Arguments
 
   * `tempo` is a `t:t/0`.
@@ -3124,7 +3126,7 @@ defmodule Tempo do
 
   * `{:ok, tempo}` with the finer enumeration added.
 
-  * `{:error, reason}` when the result fails validation.
+  * `{:error, exception}` — a `Tempo.ResolutionError` for a value with no finer unit to be written in (a fraction of a second at microsecond precision), an `ArgumentError` for a value that is not a `t:t/0` or a `unit` that is not `nil`, and the validation error when the result fails validation.
 
   ### Examples
 
@@ -3134,16 +3136,54 @@ defmodule Tempo do
       iex> Tempo.extend(~o"2026-06")
       {:ok, ~o"2026Y6M{1..30}D"}
 
+      iex> {:error, %Tempo.ResolutionError{}} = Tempo.extend(~o"2026-06-15T10:30:45.123456")
+
   """
 
   @spec extend(t(), nil) :: {:ok, t()} | {:error, error_reason()}
   def extend(tempo, unit \\ nil)
 
-  def extend(%Tempo{} = tempo, nil) do
-    tempo
-    |> Enumeration.add_implicit_enumeration()
-    |> Validation.validate(calendar_of(tempo))
+  def extend(%Tempo{time: time} = tempo, nil) when is_list(time) do
+    case Enumeration.implicit_enumeration(tempo) do
+      {:ok, enumerated} -> Validation.validate(enumerated, calendar_of(tempo))
+      {:finest, unit} -> {:error, no_finer_unit_error(tempo, unit)}
+    end
   end
+
+  def extend(%Tempo{time: time}, unit) when is_list(time) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.extend/2 writes a value by the unit below its own: its second argument is " <>
+         "reserved and must be nil, got #{inspect(unit)}."
+     )}
+  end
+
+  def extend(value, _unit) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.extend/2 writes one date or time value by its next finer unit, and " <>
+         "#{inspect(value)} is not one."
+     )}
+  end
+
+  defp no_finer_unit_error(tempo, unit) do
+    ResolutionError.exception(
+      operation: :extend,
+      current: unit,
+      calendar: calendar_of(tempo),
+      reason: no_finer_unit(tempo, unit)
+    )
+  end
+
+  defp no_finer_unit(tempo, :none), do: "Cannot extend #{inspect(tempo)}: it names no unit."
+
+  defp no_finer_unit(tempo, :microsecond) do
+    "Cannot extend #{inspect(tempo)}: a microsecond is the finest unit there is, so it has " <>
+      "no finer one to be written in."
+  end
+
+  defp no_finer_unit(tempo, unit),
+    do: "Cannot extend #{inspect(tempo)}: no unit finer than its #{unit} is defined."
 
   @doc """
   Bang variant of `extend/2`: the extended value, or a raised exception.
@@ -3158,6 +3198,10 @@ defmodule Tempo do
 
   * The extended `t:t/0`.
 
+  ### Raises
+
+  * The exception `extend/2` returns.
+
   ### Examples
 
       iex> Tempo.extend!(~o"2020")
@@ -3165,7 +3209,7 @@ defmodule Tempo do
 
   """
   @spec extend!(t(), nil) :: t()
-  def extend!(%Tempo{} = tempo, unit \\ nil) do
+  def extend!(tempo, unit \\ nil) do
     case extend(tempo, unit) do
       {:ok, zoomed} -> zoomed
       {:error, exception} -> raise exception
