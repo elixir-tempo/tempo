@@ -205,6 +205,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A value holding a group of a set (`2026Y{1,2}G3MU`) returns a `Tempo.ConversionError` from `at/2`, `on/2`, `trunc/2`, `nearest_workday/2`, `at_resolution/2` and `extend_resolution/2`, where they raised. `Tempo.trunc/2` of a value holding a selection drops the selection at or above the units before it (`2026Y4M`), where it raised a `KeyError`.
+
 * A value's selection with a time after it enumerates as the span it selects (`Enum.to_list(~o"2026Y4ML1K1INT10H")` is the one hour), as a selected day and a recurrence's occurrences do, where it was walked by its sixty minutes.
 
 * A month alone with a time after it (`6MT10H`) parses, as a year and a month with one does, so a group of months walks to values that read back, and a month counted from the end with a time after it is its year's month (`2026Y-1MT10H` is `2026Y12MT10H`).

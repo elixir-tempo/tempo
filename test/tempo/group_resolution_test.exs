@@ -176,4 +176,44 @@ defmodule Tempo.GroupResolution.Test do
       assert {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("1G3KU")
     end
   end
+
+  # A group of a set is kept as a three-element entry, which the functions
+  # that read a value's units raised on (a `FunctionClauseError`, a
+  # `CaseClauseError`).
+  describe "a value holding a group of a set" do
+    alias Tempo.ConversionError
+
+    test "is refused by the functions that need one value" do
+      grouped = ~o"2026Y{1,2}G3MU"
+
+      for result <- [
+            Tempo.trunc(grouped, :year),
+            Tempo.at(~o"{1,2}G3MU", ~o"2026"),
+            Tempo.on(~o"{1,2}G3MU", ~o"2026"),
+            Tempo.nearest_workday(grouped),
+            Tempo.at_resolution(grouped, :day),
+            Tempo.extend_resolution(grouped, :day)
+          ] do
+        assert {:error, %ConversionError{reason: :grouped_component}} = result
+      end
+    end
+
+    test "has no one month to read" do
+      assert Tempo.month(~o"2026Y{1,2}G3MU") == nil
+      assert Tempo.year(~o"2026Y{1,2}G3MU") == 2026
+    end
+  end
+
+  # A selection has no place among the units `trunc/2` orders, and raised a
+  # `KeyError`.
+  describe "trunc/2 of a value holding a selection" do
+    test "drops the selection at or above the units before it, and keeps it below them" do
+      first_monday = ~o"2026Y4ML1K1IN"
+
+      assert Tempo.trunc(first_monday, :month) == ~o"2026Y4M"
+      assert Tempo.trunc(first_monday, :year) == ~o"2026Y"
+      assert Tempo.trunc(first_monday, :day) == first_monday
+      assert Tempo.at_resolution(first_monday, :day) == first_monday
+    end
+  end
 end

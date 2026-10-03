@@ -2451,10 +2451,11 @@ defmodule Tempo do
   # from its time keyword list — nil if absent. An Interval checks
   # unambiguity via the span resolution and raises otherwise.
   defp component(%__MODULE__{time: time}, unit) do
-    case Keyword.get(time, unit) do
-      value when is_integer(value) -> value
-      nil -> nil
-      _other -> nil
+    # A group of a set is a three-element entry, which `Keyword.get/2` cannot
+    # read: it is no one number, as a set is none.
+    case List.keyfind(time, unit, 0) do
+      {^unit, value} when is_integer(value) -> value
+      _absent_or_several -> nil
     end
   end
 
@@ -2631,10 +2632,22 @@ defmodule Tempo do
   """
   @spec trunc(tempo :: t, truncate_to :: time_unit()) :: t | {:error, error_reason()}
   def trunc(%__MODULE__{} = tempo, truncate_to \\ :day) do
-    with {:ok, truncate_to} <- validate_unit(truncate_to) do
+    with {:ok, truncate_to} <- validate_unit(truncate_to),
+         :ok <- one_value(tempo) do
       truncate(tempo, truncate_to)
     end
   end
+
+  # A group of a set (`{1,2}G3MU`) is kept as a three-element entry that names
+  # a span in each of its groups, so a value that holds one is no one value to
+  # truncate, to place or to read a day from.
+  defp one_value(%__MODULE__{time: time} = tempo) when is_list(time) do
+    if Enum.any?(time, &match?({_unit, {:group, _members}, _size}, &1)),
+      do: {:error, materialisation_error(tempo, :grouped_component)},
+      else: :ok
+  end
+
+  defp one_value(_value), do: :ok
 
   # A value already on the week axis holds `:week` as a component, so
   # the ordinary rule applies.
@@ -2673,7 +2686,9 @@ defmodule Tempo do
   end
 
   defp take_units(%__MODULE__{time: time} = tempo, truncate_to) do
-    case Enum.take_while(time, &(Unit.compare(&1, truncate_to) in [:gt, :eq])) do
+    {dated, selection} = Enum.split_while(time, &(not match?({:selection, _selection}, &1)))
+
+    case Enum.take_while(dated, &(Unit.compare(&1, truncate_to) in [:gt, :eq])) do
       [] ->
         {:error,
          ResolutionError.exception(
@@ -2683,9 +2698,20 @@ defmodule Tempo do
            reason: :empty_resolution
          )}
 
-      other ->
-        %{tempo | time: other}
+      kept ->
+        %{tempo | time: kept_with_selection(kept, dated, selection, truncate_to)}
     end
+  end
+
+  # A selection (`2026Y4ML1K1IN`, the first Monday of April) is finer than the
+  # units before it. Truncating to one of them drops it (`2026Y4M`), and
+  # truncating to a unit finer than them all leaves the value as it is.
+  defp kept_with_selection(kept, _dated, [], _truncate_to), do: kept
+
+  defp kept_with_selection(kept, dated, selection, truncate_to) do
+    if kept == dated and Unit.compare(List.last(dated), truncate_to) == :gt,
+      do: dated ++ selection,
+      else: kept
   end
 
   # Units that belong to one calendar axis and no other. `:year`,
@@ -2895,7 +2921,10 @@ defmodule Tempo do
   @spec at(t() | Interval.t(), t() | Interval.t()) ::
           {:ok, t() | Interval.t()} | {:error, error_reason()}
   def at(%__MODULE__{} = value, %__MODULE__{} = other) do
-    place(value, other, anchored?(value), anchored?(other))
+    with :ok <- one_value(value),
+         :ok <- one_value(other) do
+      place(value, other, anchored?(value), anchored?(other))
+    end
   end
 
   def at(%Interval{} = interval, %__MODULE__{} = other), do: place_interval(interval, other)
@@ -3336,7 +3365,8 @@ defmodule Tempo do
   @spec extend_resolution(tempo :: t, target_unit :: time_unit()) ::
           t | {:error, error_reason()}
   def extend_resolution(%Tempo{time: time, calendar: calendar} = tempo, target_unit) do
-    with {:ok, target_unit} <- validate_unit(target_unit) do
+    with {:ok, target_unit} <- validate_unit(target_unit),
+         :ok <- one_value(tempo) do
       {current_unit, _span} = resolution(tempo)
 
       case Unit.compare(target_unit, current_unit) do
@@ -10102,7 +10132,8 @@ defmodule Tempo do
   def nearest_workday(tempo, territory \\ nil)
 
   def nearest_workday(%Tempo{} = tempo, territory) do
-    with {:ok, days_off} <- days_off(territory),
+    with :ok <- one_value(tempo),
+         {:ok, days_off} <- days_off(territory),
          {:ok, off?} <- day_off?(tempo, days_off, :nearest_workday) do
       if off?, do: nearest_workday_from(tempo, days_off, 1), else: tempo
     end
