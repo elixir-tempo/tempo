@@ -28,7 +28,7 @@ defmodule Tempo.Inspect do
       "2022Y11M20D"
 
   """
-  @spec to_iodata(term()) :: iodata()
+  @spec to_iodata(term()) :: iolist()
   def to_iodata(value), do: to_iodata(value, Gregorian)
 
   # The encoding with a value in `implied` left unnamed: the Gregorian
