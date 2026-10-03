@@ -28,7 +28,7 @@ defmodule Tempo.Inspect do
       "2022Y11M20D"
 
   """
-  @spec to_iodata(term()) :: iolist()
+  @spec to_iodata(term()) :: iodata()
   def to_iodata(value), do: to_iodata(value, Gregorian)
 
   # The encoding with a value in `implied` left unnamed: the Gregorian
@@ -39,9 +39,14 @@ defmodule Tempo.Inspect do
     {value, zone, tags} = hoist_shared_zone(value)
 
     case value |> with_calendar_names(implied) |> hoist_calendar_name(implied) do
-      {value, []} -> [inspect_value(value), qualification, zone, tags]
-      {value, calendar} -> [inspect_value(value), qualification, zone, calendar, tags]
+      {value, calendar} ->
+        with_trailers(inspect_value(value), [qualification, zone, calendar, tags])
     end
+  end
+
+  # A value with nothing written after it is its body alone.
+  defp with_trailers(body, trailers) do
+    if Enum.all?(trailers, &(&1 == [])), do: body, else: [body | trailers]
   end
 
   # A qualification written after a set qualifies each of its members, and a
