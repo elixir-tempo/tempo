@@ -6,8 +6,6 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ### Correctness
 
-* [ ] **`to_calendar/2` drops a value's qualification, metadata and tags** — `Tempo.to_calendar(~o"2026-06-15?", Calendrical.Hebrew)` is unqualified and carries no metadata or tags, since the converted value is rebuilt from a `Date`; an interval's own metadata is kept. A date written for a calendar of weeks keeps all three, a qualified year, month or day qualifying the whole date. Found 2026-10-02.
-
 * [ ] **A fraction of a century or a decade is written back as the whole one** — `20.5C` is the hundred years from 2050 (`year: {:group, 2050..2149}`, the span `2050Y/2150Y`), and `to_iso8601/1` and `inspect/1` write it `21G100YU`, which reads back as 2000 to 2099. Decide whether a fraction of a century is a value at all. Found 2026-10-03.
 
 * [ ] **A qualified set is written in a form that does not parse** — `{2026-06-15,2026-06-16}?` holds the qualification on each member, and `to_iso8601/1` and `inspect/1` write `{2026Y6M15D?,2026Y6M16D?}`, which the parser refuses. Write it once after the set, as the calendar is. Found 2026-10-02.
@@ -111,6 +109,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **`to_calendar/2` drops a value's qualification, metadata and tags** — the converted date keeps them (its zone too; not the calendar it was in), and a qualified year, month or day qualifies every unit of it, as a week-calendar date converts. 2026-10-03.
 
 * [x] **A zone on a set or a recurrence's domain is dropped** — a set's zone and tags are each member's that has none (a range's at both ends), and a zone the members share is written once after the set, or after a domain's recurrence, in IXDTF's order. 2026-10-03.
 

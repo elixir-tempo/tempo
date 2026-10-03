@@ -403,4 +403,39 @@ defmodule Tempo.FromElixir.Test do
                Tempo.to_calendar(~o"2026-06-15T10:30:00", Calendrical.Hebrew)
     end
   end
+
+  # A converted value was rebuilt from a Date, so it lost its qualification,
+  # its metadata and its tags.
+  describe "to_calendar/2 keeps what a value says of its date" do
+    test "its qualification" do
+      assert {:ok, %Tempo{qualification: :uncertain}} =
+               Tempo.to_calendar(~o"2026-06-15?", Calendrical.Hebrew)
+
+      assert {:ok, %Tempo{qualification: :approximate}} =
+               Tempo.to_calendar(~o"2026-06-15~", Calendrical.ISOWeek)
+    end
+
+    test "a qualified year, month or day qualifies every unit of the converted date" do
+      assert {:ok, %Tempo{qualifications: qualifications}} =
+               Tempo.to_calendar(Tempo.from_iso8601!("2026-?06-15"), Calendrical.Hebrew)
+
+      assert qualifications == %{year: :uncertain, month: :uncertain, day: :uncertain}
+    end
+
+    test "its tags and its metadata" do
+      assert {:ok, converted} =
+               Tempo.to_calendar(Tempo.from_iso8601!("2026-06-15[foo=bar]"), Calendrical.Hebrew)
+
+      assert converted.extended.tags == %{"foo" => ["bar"]}
+      assert Tempo.to_iso8601!(converted) == "5786Y9M30D[u-ca=hebrew][foo=bar]"
+
+      {:ok, named} = Tempo.new(year: 2026, month: 6, day: 15, metadata: %{name: "Day"})
+      assert Tempo.to_calendar!(named, Calendrical.Hebrew).metadata == %{name: "Day"}
+    end
+
+    test "and nothing of the calendar it was in" do
+      hebrew = Tempo.from_iso8601!("5786Y9M30D[u-ca=hebrew]")
+      assert Tempo.to_calendar(hebrew, Calendrical.Gregorian) == {:ok, ~o"2026Y6M15D"}
+    end
+  end
 end

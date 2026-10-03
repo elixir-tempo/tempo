@@ -3914,12 +3914,51 @@ defmodule Tempo do
   defp convert_date(value, date_in_source, calendar) do
     with {:ok, in_source} <- date_in_source,
          {:ok, converted} <- Date.convert(in_source, calendar) do
-      {:ok, from_elixir(converted)}
+      {:ok, carried_across(from_elixir(converted), value)}
     else
       {:error, reason} ->
         {:error, ConversionError.exception(value: value, target: calendar, reason: reason)}
     end
   end
+
+  # A converted date keeps what its value says of it: its qualification, its
+  # metadata, and its zone and tags (its calendar is now the one converted
+  # to). Each unit of the converted date is worked out from all of the units
+  # it was written with, so a qualified year, month or day qualifies every
+  # unit of it, as a date written for a calendar of weeks converts.
+  defp carried_across(%__MODULE__{time: time} = converted, %__MODULE__{} = value) do
+    %{
+      converted
+      | qualification: value.qualification,
+        qualifications: converted_qualifications(value.qualifications, time),
+        metadata: value.metadata,
+        extended: carried_extended(value.extended)
+    }
+  end
+
+  # A zone and tags carry across; a value with neither has nothing to carry.
+  defp carried_extended(%{} = extended) do
+    carried = Map.put(extended, :calendar, nil)
+
+    if is_binary(carried[:zone_id]) or is_integer(carried[:zone_offset]) or
+         map_size(carried[:tags] || %{}) > 0,
+       do: carried
+  end
+
+  defp carried_extended(_none), do: nil
+
+  defp converted_qualifications(%{} = qualifications, time) do
+    case Map.values(qualifications) do
+      [] ->
+        nil
+
+      [first | rest] ->
+        qualification = Enum.reduce(rest, first, &AST.combine_qualification/2)
+        Map.new(time, fn {unit, _value} -> {unit, qualification} end)
+    end
+  end
+
+  defp converted_qualifications(_none, _time), do: nil
 
   @doc """
   Raising version of `to_calendar/2`.

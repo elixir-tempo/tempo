@@ -205,6 +205,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.to_calendar/2` keeps a value's qualification, metadata, zone and tags, and a qualified year, month or day qualifies every unit of the converted date, where the converted value was rebuilt from a `Date` without them.
+
 * A set's `[zone]` and `[key=value]` suffix is each member's that has none of its own, and is written once after the set, as a recurrence's domain's is after the recurrence: `{2026-06-15T10:00,2026-06-16T10:00}[Europe/Paris]` is two times in Paris, where its members were floating and its tags dropped.
 
 * The `[zone]` suffix of a recurrence with no start (`R/../P1Y/FL3M20DN[+09:00]`) is kept on its rule, written back after the recurrence and given to the occurrences a `:within` window supplies, where it was parsed and dropped.
