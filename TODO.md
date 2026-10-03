@@ -8,8 +8,6 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **A group of a set has no span for each group** — `to_interval/2` and `Enum` are a `ConversionError` for a value holding one (`2026Y{1,2}G3MU`, the first and second groups of three months), where they could give a span for each group. The functions that need one value return the same error since 2026-10-03. Found 2026-10-02.
 
-* [ ] **`Tempo.shift/3` with `:skipping` raises for a value that is not one moment** — `Tempo.shift(~o"2026Y6M{1,15}D", ~o"PT1H", skipping: busy)` raises a `FunctionClauseError` in Calendrical's `date_to_iso_date/4`, where a shift without `:skipping` returns a `ConversionError`; a value holding a group or a mask was recorded doing the same. Split from the grouped-ends item, 2026-10-03.
-
 * [ ] **An unspecified month or day is no point to measure from** — `Tempo.duration(~o"2026Y6MX*D")` and `Tempo.to_relative_string(~o"2026Y6MX*D")` raise a `FunctionClauseError` in Calendrical's `date_to_iso_date/4`: `to_interval/1` gives the value `2026Y6MX*D/7M1D`, whose start still holds the unspecified day, and an interval end written so (`2026Y6MX*D/2026Y8M`) is left as it is. Split from the grouped-ends item, 2026-10-03.
 
 * [ ] **`Tempo.extend/2` raises** — for a value at microsecond precision 6 it raises the `ArgumentError` the enumeration documents (`Tempo.extend(~o"2026-06-15T10:30:45.123456")`), where a function that returns tuples returns one. Found 2026-10-03.
@@ -103,6 +101,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **`Tempo.shift/3` with `:skipping` raises for a value that is not one moment** — a set, a range, a group, unspecified digits or a selection is a `ConversionError`, checked before the walk; a margin of error still shifts. 2026-10-03.
 
 * [x] **A group of a set raises outside `to_interval/2`** — `at/2`, `on/2`, `trunc/2`, `nearest_workday/2` and the resolution functions return a `ConversionError` for a value holding one, the accessors read no one number from it, and `trunc/2` of a value holding a selection no longer raises. A span for each group remains, as its own item. 2026-10-03.
 

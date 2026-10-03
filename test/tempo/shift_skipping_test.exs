@@ -215,4 +215,31 @@ defmodule Tempo.ShiftSkippingTest do
       assert Tempo.shift(~o"2026-06-18", ~o"P3D", skipping: weekends) == ~o"2026Y6M23D"
     end
   end
+
+  # A value that is not one moment reached the seconds it is walked by, and
+  # raised a `FunctionClauseError` in Calendrical.
+  describe "a value that is not one moment" do
+    test "is the error a shift without :skipping gives it" do
+      busy = ~o"2026-06-01T00/2026-06-01T02"
+
+      for value <- [
+            ~o"2026Y6M{1,15}D",
+            ~o"2026Y6M{1..3}D",
+            ~o"2026Y6M1XD",
+            ~o"2026Y6MX*D",
+            ~o"2026Y2G3MU",
+            ~o"2026Y{1,2}G3MU",
+            ~o"2026Y4ML1K1IN"
+          ] do
+        assert {:error, %Tempo.ConversionError{reason: :grouped_component}} =
+                 Tempo.shift(value, ~o"PT1H", skipping: busy)
+      end
+    end
+
+    test "a margin of error still shifts" do
+      busy = ~o"2026-06-01T00/2026-06-01T02"
+
+      assert %Tempo{} = Tempo.shift(~o"2018±2Y", ~o"PT1H", skipping: busy)
+    end
+  end
 end

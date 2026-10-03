@@ -2197,6 +2197,7 @@ defmodule Tempo.Math do
   # time" has no fixed length to consume.
   def shift_skipping(%Tempo{} = origin, %Tempo.Duration{} = duration, busy) do
     with :ok <- validate_anchored_origin(origin),
+         :ok <- validate_one_moment(origin),
          :ok <- validate_exact_skipping(duration),
          {:ok, seconds} <- Duration.to_unit(duration, :second),
          {:ok, busy_set} <- normalize_busy(busy),
@@ -2227,6 +2228,25 @@ defmodule Tempo.Math do
     {unit, _precision} = Tempo.resolution(origin)
     unit in [:day, :day_of_week, :day_of_year]
   end
+
+  # Skipping walks free time from one moment. A value that holds several — a
+  # set, a range, a group, unspecified digits, a selection — has no one moment
+  # to walk from, and is the error a shift without `:skipping` gives it.
+  defp validate_one_moment(%Tempo{time: time} = origin) do
+    if Enum.all?(time, &one_number?/1),
+      do: :ok,
+      else: {:error, ConversionError.exception(value: origin, reason: :grouped_component)}
+  end
+
+  defp one_number?({:year, year}) when is_integer(year), do: true
+  defp one_number?({_unit, value}) when is_integer(value) and value >= 0, do: true
+
+  defp one_number?({:microsecond, {value, precision}})
+       when is_integer(value) and is_integer(precision),
+       do: true
+
+  defp one_number?({_unit, {value, [margin_of_error: _margin]}}) when is_integer(value), do: true
+  defp one_number?(_component), do: false
 
   defp validate_anchored_origin(origin) do
     if Tempo.anchored?(origin) do
