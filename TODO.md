@@ -76,6 +76,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 * [ ] **Create a glossary guide** — a guide that tables every term Tempo uses (span, window, occurrence, resolution, floating, zoned, anchored, …) and defines it, so it doubles as the reference future development checks its vocabulary against (user, 2026-09-28). The decisions in [plans/vocabulary.md](plans/vocabulary.md) are its starting point.
 
+* [ ] **Workday adjustments: following, preceding and their modified forms** — the date-roll conventions of financial contracts: a day when it is a workday, otherwise the next (or the previous) one, and the modified forms that turn back when the adjusted day leaves the month. `nearest_workday/2` and `next_workday/2` are different rules; found comparing Tempo with bizdays' ANBIMA calendar, 2026-10-03. Analysis in [plans/anbima-calendar.md](plans/anbima-calendar.md).
+
 ### Release and housekeeping
 
 * [ ] **Livebooks install 2.0 at the release** — `getting-started`, `tempo_tour`, `scheduling-workbook` and `uncertain-dates-workbook` install `{:ex_tempo, "~> 1.6"}` and the Melbourne deck `~> 1.6.3`, while their code uses the 2.0 names: at the 2.0.0 release each installs `~> 2.0`, as `everyday-holidays` already does.
