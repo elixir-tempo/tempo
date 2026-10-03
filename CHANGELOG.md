@@ -205,6 +205,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* Dates and values in a calendar whose year turns after its first month (Calendrical's Julian `March25`, `March1`, `Sept1` and `Dec25`) are ordered by their days, where they were ordered by their fields: a `Date.Range` from 31 December to 1 January of one such year converts to its two days, where it was refused as empty.
+
 * A value in a calendar of weeks takes day resolution as its day of the week, so `Tempo.at_resolution/2` to `:day` gives `2026-W25-1`, and a value's selection (`2026YL1K1IN`), a `:within` window and `select/2` select in it, where they gave the whole span or a `Tempo.ResolutionError`.
 
 * A recurrence's selection by day of the week applies in a calendar of weeks: in `Calendrical.ISOWeek`, `R3/2026-W01-1/P1W/FL2KN` is each week's Tuesday and `R3/2026-W25-1/P1Y/FL25W2KN` the Tuesday of week 25, where they gave each week's Monday and nothing.

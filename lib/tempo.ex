@@ -1976,7 +1976,7 @@ defmodule Tempo do
   def from_date_range(range, options \\ [])
 
   def from_date_range(%Date.Range{step: 1, first: first, last: last} = range, options) do
-    if Date.compare(first, last) == :gt do
+    if Compare.compare_days(first, last) == :gt do
       {:error,
        ConversionError.exception(
          value: range,

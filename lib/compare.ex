@@ -143,6 +143,22 @@ defmodule Tempo.Compare do
   def unit_minimum(:day_of_week), do: 1
   def unit_minimum(_), do: 0
 
+  @doc false
+  # Which of two dates is the earlier day, by the days their calendars count
+  # (`Date.diff/2`), as Calendrical orders them. `Date.compare/2` orders two
+  # dates of one calendar by their fields without asking the calendar, and
+  # the fields are not in the order of the days where a year turns after its
+  # first month: in `Calendrical.Julian.March25`, 1 January follows 31
+  # December of the same year.
+  @spec compare_days(Date.t(), Date.t()) :: :lt | :eq | :gt
+  def compare_days(%Date{} = date, %Date{} = other) do
+    case Date.diff(date, other) do
+      0 -> :eq
+      days when days < 0 -> :lt
+      _days -> :gt
+    end
+  end
+
   @doc """
   Return `:earlier`, `:later`, or `:same` for two `%Tempo{}`
   endpoints comparing by their UTC-projected start-moments.
@@ -175,9 +191,10 @@ defmodule Tempo.Compare do
     # comparing years alone and mixed-axis endpoints all read `:same`.
     # Values in different calendars, or anchored values on different
     # sub-year axes, are compared by projecting both to the shared
-    # absolute UTC frame, which resolves each axis to a real date.
+    # absolute UTC frame, which resolves each axis to a real date. So are
+    # values in a calendar whose fields are not in the order of its days.
     if a.calendar == b.calendar and zones_compatible?(a, b) and
-         comparable_axes?(a.time, b.time) do
+         comparable_axes?(a.time, b.time) and fields_in_day_order?(a) do
       case compare_time(a.time, b.time) do
         :lt -> :earlier
         :gt -> :later
@@ -185,6 +202,22 @@ defmodule Tempo.Compare do
       end
     else
       compare_via_utc(a, b)
+    end
+  end
+
+  # Whether a value's fields run in the order of its days: whether its year
+  # begins on its first month's first day. A Julian calendar whose year turns
+  # on 25 March numbers 1 January after 31 December of the same year, so its
+  # values are compared by their days. A value with no year has no days to
+  # count and is compared by its fields.
+  defp fields_in_day_order?(%Tempo{calendar: calendar})
+       when calendar in [Gregorian, Calendar.ISO],
+       do: true
+
+  defp fields_in_day_order?(%Tempo{calendar: calendar, time: time}) do
+    case Keyword.get(time, :year) do
+      year when is_integer(year) -> calendar.day_of_year(year, 1, 1) == 1
+      _no_year -> true
     end
   end
 

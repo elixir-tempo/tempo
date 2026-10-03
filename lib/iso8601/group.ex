@@ -2,6 +2,7 @@ defmodule Tempo.Iso8601.Group do
   @moduledoc false
 
   alias Calendrical.Gregorian
+  alias Tempo.Compare
   alias Tempo.InvalidDateError
   alias Tempo.Iso8601.Group
   alias Tempo.Iso8601.Parser
@@ -464,7 +465,7 @@ defmodule Tempo.Iso8601.Group do
   defp nth_day_of_season(_start_date, end_date, day), do: season_day_error(day, end_date)
 
   defp season_date_before({:ok, date}, end_date, day) do
-    case Date.compare(date, end_date) do
+    case Compare.compare_days(date, end_date) do
       :lt -> {:ok, date}
       _on_or_after -> season_day_error(day, end_date)
     end
@@ -631,8 +632,8 @@ defmodule Tempo.Iso8601.Group do
 
   defp starting_within({:ok, start_date, _end_date} = season, first, last) do
     cond do
-      Date.compare(start_date, first) == :lt -> {:cont, :none}
-      Date.compare(start_date, last) == :gt -> {:halt, :none}
+      Compare.compare_days(start_date, first) == :lt -> {:cont, :none}
+      Compare.compare_days(start_date, last) == :gt -> {:halt, :none}
       true -> {:halt, season}
     end
   end

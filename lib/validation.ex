@@ -1286,7 +1286,7 @@ defmodule Tempo.Validation do
   defp consecutive_week_starts({:ok, first}, {:ok, next_first}) do
     first
     |> Stream.iterate(&Calendrical.next(&1, :week))
-    |> Enum.take_while(&(Date.compare(&1, next_first) == :lt))
+    |> Enum.take_while(&(Compare.compare_days(&1, next_first) == :lt))
   end
 
   defp consecutive_week_starts(_first, _next_first), do: []

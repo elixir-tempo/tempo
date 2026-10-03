@@ -96,4 +96,21 @@ defmodule Tempo.FromDateRangeTest do
       end
     end
   end
+
+  # `Date.compare/2` orders two dates of one calendar by their fields, and in
+  # a calendar whose year turns after its first month the fields are not in
+  # the order of the days.
+  describe "a calendar whose year turns on 25 March" do
+    test "a range across 31 December is the days it holds" do
+      first = Date.new!(2022, 12, 31, Calendrical.Julian.March25)
+      last = Date.new!(2022, 1, 1, Calendrical.Julian.March25)
+
+      assert Date.diff(last, first) == 1
+      assert {:ok, interval} = Tempo.from_date_range(Date.range(first, last))
+      assert Interval.from(interval) == Tempo.from_date(first)
+
+      assert Interval.to(interval) ==
+               Tempo.from_date(Date.new!(2022, 1, 2, Calendrical.Julian.March25))
+    end
+  end
 end

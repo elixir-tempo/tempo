@@ -843,7 +843,7 @@ defmodule Tempo.Select do
     do: {{date.year, date.month, date.day}, Calendrical.next(date, :day)}
 
   defp next_day(%Date{} = date, end_date) do
-    case Date.compare(date, end_date) do
+    case Compare.compare_days(date, end_date) do
       :lt -> {{date.year, date.month, date.day}, Calendrical.next(date, :day)}
       _on_or_after_the_end -> nil
     end

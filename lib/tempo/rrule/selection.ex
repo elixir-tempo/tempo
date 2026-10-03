@@ -422,19 +422,19 @@ defmodule Tempo.RRule.Selection do
   # The dates from `lo` up to, not including, `hi`, each the day
   # Calendrical gives after the one before.
   defp window_dates(lo, hi) do
-    if Date.compare(lo, hi) == :eq do
+    if Compare.compare_days(lo, hi) == :eq do
       [lo, Calendrical.previous(lo, :day)]
     else
       lo
       |> Stream.iterate(&Calendrical.next(&1, :day))
-      |> Enum.take_while(&(Date.compare(&1, hi) == :lt))
+      |> Enum.take_while(&(Compare.compare_days(&1, hi) == :lt))
     end
   end
 
   # Half-open `[lo, hi)`: `lo` is the earlier of start / shifted endpoint, `hi`
   # the later. A forward duration keeps the start; a backward one excludes it.
   defp window_bounds(%Date{} = start_date, %Date{} = shifted_date) do
-    if Date.compare(start_date, shifted_date) == :gt do
+    if Compare.compare_days(start_date, shifted_date) == :gt do
       {shifted_date, start_date}
     else
       {start_date, shifted_date}
@@ -958,7 +958,7 @@ defmodule Tempo.RRule.Selection do
     %Date{year: week_year} = week_start |> seven_days_from() |> Enum.at(3)
     week_starts = Validation.week_starts(calendar, week_year, wkst)
 
-    case Enum.find_index(week_starts, &(Date.compare(&1, week_start) == :eq)) do
+    case Enum.find_index(week_starts, &(Compare.compare_days(&1, week_start) == :eq)) do
       nil -> :error
       index -> {:ok, index + 1, length(week_starts)}
     end
@@ -1701,7 +1701,7 @@ defmodule Tempo.RRule.Selection do
   # (e.g. `5MO` in a month with only 4 Mondays). Clamp by
   # checking the period boundaries.
   defp date_in_period?(%Date{} = date, %Date{} = start_date, %Date{} = end_date) do
-    Date.compare(date, start_date) != :lt and Date.compare(date, end_date) != :gt
+    Compare.compare_days(date, start_date) != :lt and Compare.compare_days(date, end_date) != :gt
   end
 
   ## ------------------------------------------------------------
