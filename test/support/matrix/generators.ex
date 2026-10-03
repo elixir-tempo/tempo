@@ -296,14 +296,25 @@ defmodule Tempo.Matrix.Generators do
   second, and the point a count of its last unit after it, written in the
   same units.
 
+  A property that wants one kind of start names its generator, and does
+  not filter what this one gives: a filter in the head of `check all` gives
+  up after ten values in a row are refused, which one start in two being
+  the wrong kind does about once in ten runs.
+
+  ### Arguments
+
+  * `start` is the generator of the interval's start. The default is a
+    date, or a date and time, with no zone.
+
   ### Returns
 
   * A generator of `{from, to, count}`.
 
   """
-  @spec interval() :: StreamData.t({Reference.point(), Reference.point(), pos_integer()})
-  def interval do
-    {filter(floating(), &is_nil(&1.fraction)), integer(1..40)}
+  @spec interval(StreamData.t(Reference.point())) ::
+          StreamData.t({Reference.point(), Reference.point(), pos_integer()})
+  def interval(start \\ floating()) do
+    {map(start, &%{&1 | fraction: nil}), integer(1..40)}
     |> map(fn {from, count} -> {from, Reference.stepped(from, count), count} end)
     |> filter(fn {_from, %{date: [{:year, year} | _rest]}, _count} -> year in 1..9998 end)
   end

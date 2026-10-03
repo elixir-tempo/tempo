@@ -201,7 +201,7 @@ defmodule Tempo.Reference.Test do
     end
 
     property "resolution/1 is the last unit written" do
-      check all(point <- Generators.dated(), point.fraction == nil) do
+      check all(point <- map(Generators.dated(), &%{&1 | fraction: nil})) do
         {unit, _value} = List.last(point.date ++ point.time)
         expected = if unit in [:day_of_week, :day_of_year], do: :day, else: unit
 
@@ -724,7 +724,7 @@ defmodule Tempo.Reference.Test do
     end
 
     property "of a range is each value from its first to its last" do
-      check all({from, to, count} <- Generators.interval(), from.time == []) do
+      check all({from, to, count} <- Generators.interval(Generators.date())) do
         text = "{#{Spellings.text(from, :explicit)}..#{Spellings.text(to, :explicit)}}"
 
         expected =
@@ -899,8 +899,7 @@ defmodule Tempo.Reference.Test do
               first <- day_as_date(),
               days <- integer(1..800),
               {from_hour, to_hour} <- tuple({integer(0..23), integer(0..23)}),
-              {from_unit, to_unit} <- tuple({member_of(units), member_of(units)}),
-              from_unit != to_unit
+              {from_unit, to_unit} <- member_of(for a <- units, b <- units, a != b, do: {a, b})
             ) do
         from = unit_start(first, from_hour, from_unit)
         to = unit_start(Date.add(first, days), to_hour, to_unit)
