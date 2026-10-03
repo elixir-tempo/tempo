@@ -6,8 +6,6 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 
 ### Correctness
 
-* [ ] **A month or a year added to a day of the week that names no week is that day again** — `Tempo.shift(~o"7K", month: 1)` and `year: 1` are `~o"7K"`, though the day of the week a month or a year on depends on the date: by the rule for a value with no year it is an `UnanchoredError`, as a month added to a week date is a `ResolutionError`. Found 2026-10-02.
-
 * [ ] **An unspecified year is the current Gregorian year in every calendar** — `Enum.to_list(~o"X*Y[u-ca=hebrew]")` is the Hebrew year 2026, since the walk reads `Date.utc_today().year`. Found 2026-10-03.
 
 * [ ] **A day after a group of months under a set of years** — `{2026,2028}Y2G2MU15D` walks the 15th of each month of the group, four days, where `2026Y2G2MU15D` is the fifteenth day of the group, 15 March. Found 2026-10-03.
@@ -119,6 +117,8 @@ Open work on Tempo. The analysis behind each item, and the record of every decis
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A month or a year added to a day of the week that names no week is that day again** — it is an `UnanchoredError` (`Tempo.shift(~o"7K", month: 1)`, and `R3/7K/P1M`), as a day of the year with no year is; weeks, days and the time of day still step a bare day of the week. 2026-10-03.
 
 * [x] **An unspecified month or day is stepped as its last** — a shift that reaches an unspecified unit other than the year reads it as the full mask it stands for (`X*D` as `XXD`), so it moves the block: `2026Y6MX*D` plus a day is one of 2 June to 1 July, and a shift back is no longer refused. 2026-10-03.
 

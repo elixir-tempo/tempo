@@ -205,6 +205,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A month or a year added to a day of the week that names no week (`7K`) is a `Tempo.UnanchoredError`, since the day of the week it falls on depends on the date, where it was that day again; weeks, days and the time of day still step it.
+
 * A shift that reaches an unspecified month, day, hour, minute or second (`X*`) moves the block of values it stands for, as a mask of all its digits does: `Tempo.shift(~o"2026Y6MX*D", day: 1)` is one of 2 June to 1 July, where it was 1 July, and a shift back is no longer refused.
 
 * A recurrence whose start has no year starts on a dated `:within` window, as `Tempo.at/2` places a value: `R/T22H/PT1H` within 15 June is 22:00 and 23:00 that day, and a day of the week starts on the first one in the window, where such a recurrence gave nothing.

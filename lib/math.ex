@@ -908,12 +908,19 @@ defmodule Tempo.Math do
   def add(%Tempo{time: [{:day_of_year, _day} | _units]} = tempo, %Tempo.Duration{} = duration),
     do: {:error, UnanchoredError.exception(value: tempo, duration: duration)}
 
-  def add(%Tempo{time: time} = tempo, %Tempo.Duration{time: duration_time} = duration) do
-    case unit_the_rule_lacks(time, duration_time) do
-      nil -> add_to_value(tempo, duration)
-      unit -> {:error, rule_unit_error(tempo, unit)}
-    end
+  # A day of the week that names no week (`7K`) steps on its own axis by
+  # weeks, days and the time of day, but the day of the week a month or a
+  # year on falls on depends on the date it has none of.
+  def add(
+        %Tempo{time: [{:day_of_week, _day} | _units]} = tempo,
+        %Tempo.Duration{time: duration_time} = duration
+      ) do
+    if Enum.any?(duration_time, &month_or_year_step?/1),
+      do: {:error, UnanchoredError.exception(value: tempo, duration: duration)},
+      else: add_rule_or_value(tempo, duration)
   end
+
+  def add(%Tempo{} = tempo, %Tempo.Duration{} = duration), do: add_rule_or_value(tempo, duration)
 
   def add(tempo, duration) do
     {:error,
@@ -922,6 +929,18 @@ defmodule Tempo.Math do
          "#{inspect(duration)} to #{inspect(tempo)}."
      )}
   end
+
+  defp add_rule_or_value(
+         %Tempo{time: time} = tempo,
+         %Tempo.Duration{time: duration_time} = duration
+       ) do
+    case unit_the_rule_lacks(time, duration_time) do
+      nil -> add_to_value(tempo, duration)
+      unit -> {:error, rule_unit_error(tempo, unit)}
+    end
+  end
+
+  defp month_or_year_step?({unit, amount}), do: unit in [:year, :month] and amount != 0
 
   defp add_to_value(tempo, duration) do
     case wall_zone(tempo) do

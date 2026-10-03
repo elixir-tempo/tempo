@@ -37,6 +37,17 @@ defmodule Tempo.SteppingTest do
       assert Tempo.shift(~o"1KT0H", hour: -1) == ~o"7KT23H"
     end
 
+    # The day of the week a month or a year on falls on depends on the date,
+    # which a day of the week alone has none of; it was left as it was.
+    test "has no day of the week a month or a year on" do
+      for shift <- [[month: 1], [year: 1], [month: -1]] do
+        assert {:error, %UnanchoredError{}} = Tempo.shift(~o"7K", shift)
+      end
+
+      assert {:error, %UnanchoredError{}} = Tempo.shift(~o"7KT10H", month: 1)
+      assert {:error, %UnanchoredError{}} = Tempo.to_interval(Tempo.from_iso8601!("R3/7K/P1M"))
+    end
+
     test "starts or ends the span a duration gives" do
       assert span(Tempo.from_iso8601!("7K/P1D")) == {~o"7K", ~o"1K"}
       assert span(Tempo.from_iso8601!("P1D/1K")) == {~o"7K", ~o"1K"}
