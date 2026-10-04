@@ -364,42 +364,77 @@ defmodule Tempo.Operations do
   # IntervalSet} or {:error, _}.
 
   defp anchor_to_days(%IntervalSet{} = unanchored_set, %IntervalSet{} = window_set) do
-    materialised =
-      for window_interval <- IntervalSet.members(window_set),
-          day_tempo <- days_in(window_interval),
-          na_interval <- IntervalSet.members(unanchored_set) do
-        anchor_interval_to_day(na_interval, day_tempo)
-      end
+    times_of_day = IntervalSet.members(unanchored_set)
 
-    IntervalSet.new(materialised)
+    window_set
+    |> IntervalSet.members()
+    |> Enum.reduce_while({:ok, []}, fn window, {:ok, placed} ->
+      case placed_on(times_of_day, window) do
+        {:ok, on_window} -> {:cont, {:ok, [on_window | placed]}}
+        {:error, _exception} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, placed} -> placed |> Enum.reverse() |> Enum.concat() |> IntervalSet.new()
+      {:error, _exception} = error -> error
+    end
+  end
+
+  defp placed_on(times_of_day, %Interval{} = window) do
+    with {:ok, days} <- days_in(window) do
+      {:ok, for(day <- days, time <- times_of_day, do: anchor_interval_to_day(time, day))}
+    end
   end
 
   # The days a window touches, its last included when the window ends part
-  # of the way through it. Each yielded value is a %Tempo{} with
-  # year/month/day filled in.
+  # of the way through it. Each is a value of whole units down to its day:
+  # a calendar date, or in a calendar of weeks a week and a day of it. The
+  # window's ends may be written in any units (a year, a month, a week, a
+  # day of the year): a day is read from where the end is, not from a month
+  # and a day it may not hold.
   defp days_in(%Interval{from: from, to: to}) do
-    from_day = trunc_to_day(from)
-    calendar = from.calendar
+    with {:ok, first} <- day_of(from) do
+      {:ok, first |> Stream.unfold(&day_before(&1, to)) |> Enum.to_list()}
+    end
+  end
 
-    Stream.unfold(from_day, fn day ->
-      if Compare.compare_time(day.time, to.time) == :lt do
-        # `from_day` is `trunc_to_day/1` of a concrete endpoint, so the
-        # year is always present and the step cannot need a year.
-        {:ok, next_time} = Math.add_unit(day.time, :day, calendar)
-        {day, %{day | time: next_time}}
-      else
-        nil
+  defp day_before(%Tempo{time: time, calendar: calendar} = day, to) do
+    if Compare.compare_endpoints(day, to) == :earlier do
+      # A day of a window is a concrete date, so the step cannot need a year.
+      {:ok, next} = Math.add_unit(time, day_step(time), calendar)
+      {day, %{day | time: next}}
+    end
+  end
+
+  # The day an end of a window is in.
+  defp day_of(%Tempo{calendar: calendar} = endpoint) do
+    if Tempo.week_based_calendar?(calendar) do
+      {:ok, %{endpoint | time: week_date(endpoint.time)}}
+    else
+      with {:ok, %Tempo{time: time} = dated} <- month_axis_endpoint(endpoint) do
+        {:ok, %{dated | time: calendar_date(time)}}
       end
-    end)
-    |> Enum.to_list()
+    end
   end
 
-  defp trunc_to_day(%Tempo{time: time} = tempo) do
-    year = Keyword.fetch!(time, :year)
-    month = Keyword.get(time, :month, 1)
-    day = Keyword.get(time, :day, 1)
-    %{tempo | time: [year: year, month: month, day: day]}
+  defp calendar_date(time) do
+    [
+      year: Keyword.fetch!(time, :year),
+      month: Keyword.get(time, :month, 1),
+      day: Keyword.get(time, :day, 1)
+    ]
   end
+
+  defp week_date(time) do
+    [
+      year: Keyword.fetch!(time, :year),
+      week: Keyword.get(time, :week, 1),
+      day_of_week: Keyword.get(time, :day_of_week, 1)
+    ]
+  end
+
+  # The unit a day is stepped by: the day of the week where the day is one.
+  defp day_step(time), do: if(Keyword.has_key?(time, :day_of_week), do: :day_of_week, else: :day)
 
   defp anchor_interval_to_day(
          %Interval{from: na_from, to: na_to},
@@ -409,7 +444,7 @@ defmodule Tempo.Operations do
       # Unanchored interval like `T23:30/T01:00` anchored to
       # day D → `[D T23:30, (D+1) T01:00)`. Advance `to`'s day.
       # The anchoring day is a concrete date, so this step is total.
-      {:ok, next_day_time} = Math.add_unit(day_time, :day, calendar)
+      {:ok, next_day_time} = Math.add_unit(day_time, day_step(day_time), calendar)
       new_from = on_day(na_from, day_time, day)
       new_to = on_day(na_to, next_day_time, day)
       %Interval{from: new_from, to: new_to}
@@ -420,10 +455,11 @@ defmodule Tempo.Operations do
 
   # A time of day placed on a day is in the day's zone when it has none of
   # its own, as `Tempo.at/2` places it: 10:00 on a day in Paris is 10:00 in
-  # Paris.
-  defp on_day(%Tempo{time: time} = time_of_day, day_time, %Tempo{} = day) do
-    {_day, placed} =
-      Interval.propagate_endpoint_frame(day, %{time_of_day | time: day_time ++ time})
+  # Paris. It is a date and time of the day's calendar, whose units the day
+  # is written in: no calendar numbers a time of day.
+  defp on_day(%Tempo{time: time} = time_of_day, day_time, %Tempo{calendar: calendar} = day) do
+    placed = %{time_of_day | time: day_time ++ time, calendar: calendar}
+    {_day, placed} = Interval.propagate_endpoint_frame(day, placed)
 
     placed
   end

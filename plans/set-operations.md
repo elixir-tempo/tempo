@@ -80,8 +80,6 @@ The matrix measures the time covered, with one plain partner at a time. The meas
 
 By reading the code and probing what the reading suggested. Each is reproduced. The measure found one more, since fixed: `covered/2` cut a region where one member ended as another began, and lost a member with no year that ran to or through its cycle's end. Beside that fix, and fixed too: `covered?/2` raised for a point asked of a member that runs through its cycle's end, and a tree raised on a member with no year where `new/2` returns its refusals.
 
-* **A time of day placed on a week gives nothing** — `Tempo.intersection(~o"T09/T17", ~o"2026-W25", within: ~o"2026-W25")` is empty, where the same week written as dates (`2026-06-15/2026-06-22`) gives its seven days' hours; and `Tempo.complement(~o"T09/T17", within: ~o"2026-W25")` is the whole week, the hours not taken from it. `days_in/1` takes the window's days from its month and day, and a week's ends hold neither.
-
 * **A set operation across a week calendar's resolutions is refused** — `Tempo.difference/2` of an ISO week year and one of its weeks is a `ResolutionError`. Already an item of `TODO.md`.
 
 ## Decided
@@ -94,8 +92,6 @@ Both by the user, 2026-10-04.
 
 ## Tasks
 
-* [ ] **A time of day on a week window** — the window's days are those of its span, whatever axis it is written on.
-
 * [ ] **The measure widened** — a `:within` window that places a time of day, for each operation; the forms that take a list of operands and the `:metadata` option; a lazy set within a window.
 
 * [ ] **One answer to whether two spans overlap** — a property that the sweeps, the backends, Allen's relation and a window's bound agree on every generated pair; then whether any is to be read through another.
@@ -103,6 +99,8 @@ Both by the user, 2026-10-04.
 * [ ] **A time of day placed inside its window** — placed on the part of each day the window holds; the measure widened to a window that opens and closes within a day.
 
 ### Done
+
+* [x] **A time of day on a week window** — the window's days are those of its span, whatever units it is written in, and the time of day is placed in the day's calendar. 2026-10-04.
 
 * [x] **An intersection of one part for each pair** — `sweep_pairs/4` holds every member of the second still open against each member of the first; the measure holds `intersection/2` part for part on every pair of sets, with a year and without. 2026-10-04.
 

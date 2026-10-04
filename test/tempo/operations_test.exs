@@ -472,6 +472,52 @@ defmodule Tempo.Operations.Test do
     end
   end
 
+  # A window's days are those of its span, whatever units it is written in.
+  # They were read from the month and the day of its ends, so a window
+  # written as a week, whose ends hold neither, had none, and one in another
+  # calendar had its numbers read in the time of day's.
+  describe "a time of day placed on a window written in other units" do
+    defp texts({:ok, set}), do: set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
+
+    test "a Gregorian week is its seven days" do
+      week = ~o"2026-W25"
+      dates = ~o"2026-06-15/2026-06-22"
+
+      assert texts(Tempo.intersection(~o"T09/T17", week, within: week)) ==
+               texts(Tempo.intersection(~o"T09/T17", dates, within: dates))
+
+      assert length(texts(Tempo.intersection(~o"T09/T17", week, within: week))) == 7
+
+      assert texts(Tempo.complement(~o"T09/T17", within: week)) ==
+               texts(Tempo.complement(~o"T09/T17", within: dates))
+    end
+
+    test "a week of a calendar of weeks is its seven days, in that calendar" do
+      week = Tempo.from_iso8601!("2026Y25W", Calendrical.ISOWeek)
+
+      assert {:ok, hours} = Tempo.intersection(~o"T09/T17", week, within: week)
+      assert IntervalSet.count(hours) == 7
+
+      assert hd(texts({:ok, hours})) == "2026Y25W1KT9H/T17H[u-ca=iso-week]"
+    end
+
+    test "a month of another calendar is its days, in that calendar" do
+      month = Tempo.from_iso8601!("5786Y6M", Calendrical.Hebrew)
+
+      assert {:ok, hours} = Tempo.intersection(~o"T09/T17", month, within: month)
+      assert IntervalSet.count(hours) == 29
+      assert hd(texts({:ok, hours})) == "5786Y6M1DT9H/T17H[u-ca=hebrew]"
+    end
+
+    test "a year, a month and a day of the year are their days" do
+      assert {:ok, year} = Tempo.intersection(~o"T09/T17", ~o"2026", within: ~o"2026")
+      assert IntervalSet.count(year) == 365
+
+      assert {:ok, day} = Tempo.intersection(~o"T09/T17", ~o"2026-166", within: ~o"2026-166")
+      assert texts({:ok, day}) == ["2026Y6M15DT9H/T17H"]
+    end
+  end
+
   describe "cross-axis with a window" do
     test "anchored ∩ unanchored within a single-day window → trimmed time slot" do
       # Trimmed intersection gives the minute slot inside the day

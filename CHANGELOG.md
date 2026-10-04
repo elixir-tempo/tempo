@@ -269,6 +269,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A time of day is placed on each day of a `:within` window whatever units the window is written in: `Tempo.intersection(~o"T09/T17", ~o"2026-W25", within: ~o"2026-W25")` is the hours of the week's seven days, where it was empty, and `Tempo.complement/2` there the time outside them, where it was the whole week. In a window of another calendar the time is placed on that calendar's days (a Hebrew month's twenty-nine, a week calendar's week dates), where the day's numbers were read in the Gregorian calendar and nothing was placed.
+
 * A set's members written out of order beside a count from the end are joined as far as they run on: `{0,2,1..7,-1}` is `{0..7,-1}`, where one pass of the joining left `0` beside `1..7`.
 
 * `Tempo.intersection/3` gives one part for each pair of members that overlap, as its documentation says, where an operand whose members overlapped each other lost pairs: a member intersected with two that both cover it gave one part, and `metadata: {:merge, fun}` never saw the second. The time covered is unchanged, and `Tempo.IntervalSet.coalesce/1` merges parts that overlap.

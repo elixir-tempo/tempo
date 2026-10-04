@@ -8,8 +8,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Correctness
 
-* [ ] **A time of day placed on a week gives nothing** — `Tempo.intersection(~o"T09/T17", ~o"2026-W25", within: ~o"2026-W25")` is empty and `Tempo.complement(~o"T09/T17", within: ~o"2026-W25")` the whole week, where the same week written as dates gives its seven days' hours: the window's days are taken from its month and day (`days_in/1` in `lib/operations.ex`), and a week's ends hold neither. Found 2026-10-04.
-
 * [ ] **A `:within` window bounds where a time of day is placed** — a time of day is placed on the part of each day the window holds, for every operation alike, where it is placed on the whole of every day the window touches: with a window from noon to noon `Tempo.union(~o"T09/T17", window, within: window)` starts at 09:00, before it opens, and an intersection with a meeting at 10:00 that day returns the meeting. The other operand is not cut. Decided 2026-10-04.
 
 * [ ] **A month with days missing is walked, read and stepped as `1..n`** — `Calendrical.Reform.England`'s September 1752 has the days 1, 2 and 14 to 30: the walk of `1752Y9M` yields 1 to 19, `1752Y9M3D` is read and `1752Y9M20D` is an `InvalidDateError`, since Tempo takes a month's days to be `1..days_in_month/2`. Its 1751 is shorter still, the legal year beginning on 25 March: no January or February (`days_in_month/2` is 0) and a March of the days 25 to 31. A step follows the same count: `1752-08-25` plus a month is the 19th where the 25th exists, `1752-03-15` less thirteen months is `1751Y2M0D`, and `Tempo.shift/2` of `1752YX*M15D` by `month: -13` raises an `ArgumentError` on that day 0. Calendrical lists a month's dates (`Calendrical.Interval.month/3`, `valid_date?/3`), so the fix is Tempo's, and it has one place to go: the reading, the masks and the step all ask `Tempo.UnitValues` for a unit's values, its first and last, and what follows and precedes a value. Found 2026-10-04.
@@ -121,6 +119,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A time of day is placed on a window's days whatever units it is written in** — a window's days are read from where its ends are (`day_of/1`), so a week, a year, a day of the year and a week of a calendar of weeks have theirs, where a window whose ends held no month and day had none; and the time is placed in the day's calendar, where a window of another calendar had its numbers read in the Gregorian and nothing was placed. 2026-10-04.
 
 * [x] **An intersection is one part for each pair of members that overlap** — the sweep holds every member of the second still open against each member of the first, where it advanced whichever ended first and skipped pairs when an operand's members overlapped each other (1,947 of 4,356 small pairs), so `metadata: {:merge, fun}` sees every pair. The measure holds `intersection/2` part for part on every pair of sets. 2026-10-04.
 
