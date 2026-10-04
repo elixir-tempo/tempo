@@ -10,6 +10,7 @@ defmodule Tempo.Matrix.Corpus do
   """
 
   alias Calendrical.ISOWeek
+  alias Tempo.Matrix.Selections
   alias Tempo.Matrix.Shapes
 
   @type level :: :core | :extended | :open | :generated | :exhaustive
@@ -177,8 +178,9 @@ defmodule Tempo.Matrix.Corpus do
   end
 
   @doc """
-  The entries `Tempo.Matrix.Shapes` generates: each shape in each position
-  of each form. Its class is the shape, and a text the parser refuses is
+  The entries `Tempo.Matrix.Shapes` generates, each shape in each position
+  of each form, and the selections `Tempo.Matrix.Selections` generates,
+  each part written each way in each period. A text the parser refuses is
   no value and is left out when the corpus is read.
 
   ### Returns
@@ -188,9 +190,12 @@ defmodule Tempo.Matrix.Corpus do
   """
   @spec generated() :: [entry()]
   def generated do
-    for {shape, text} <- Shapes.texts() ++ Shapes.zoned() ++ Shapes.in_calendar() do
-      %{class: shape, level: :generated, text: text, calendar: nil}
-    end
+    shapes =
+      for {shape, text} <- Shapes.texts() ++ Shapes.zoned() ++ Shapes.in_calendar() do
+        %{class: shape, level: :generated, text: text, calendar: nil}
+      end
+
+    shapes ++ Selections.entries()
   end
 
   @doc """

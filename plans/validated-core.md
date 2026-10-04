@@ -1,6 +1,6 @@
 # A validated core
 
-**Status:** implemented (v2.0.0), 2026-10-03
+**Status:** in progress, 2026-10-04
 
 All five stages are done and the six objectives hold, the fourth by the checks that keep two paths in step rather than by one path replacing the other (see One reader). What the plan leaves open is the four questions at the end of Findings, which are the user's, and the rows of the published table that name an error, which are features to build.
 
@@ -300,6 +300,14 @@ The finished tree, against Calendrical `ad5ff77` and Localize `6c5d4ef2`, their 
 
 What it costs: over 39 walks and conversions timed at the branch's base and at its end, the branch is six percent slower on average. A walk is up to sixteen percent slower and the conversion of a set of two up to a quarter, the readings every value now passes through being a fixed cost; the walk of a week is a quarter faster. A value of whole numbers is converted at once, which keeps `to_interval/2` of a plain value, and of a set of hundreds, where it was.
 
+### Selections, 2026-10-04
+
+The matrix did not measure a selection, for two reasons, and fixing one count from the end in a selection found four defects beside it. Its corpus held five selections written by hand, all in a Gregorian month or year, and `Tempo.Matrix.Shapes` writes each shape in each position of a value, not of a selection, which is a language of its own (the units it names, how each is written, the period, the calendar, and whether it is a value's, a recurrence's rule or `Tempo.select/2`'s). And its checks could not see a wrong selection: a value that holds a selection is walked as the spans `to_interval/2` gives it, so the walk agreed with the conversion by definition, and a selection that selects nothing, or the wrong day, is a value and not an error.
+
+`Tempo.Matrix.Selections` is both halves. It writes one part of a selection in each of seven ways (a number, a count from the end, a set, a range, a range that reaches the end, the first and the last, a value no period has) in each of 31 periods, in the Gregorian and Hebrew calendars and a calendar of weeks: 217 values, and every operation runs on each. And it works out what each selects from its parts alone, with `Date`, `:calendar` and the calendar's own functions and none of Tempo's: the days of the period that every part names. Three checks hold the library to it: `to_interval/2` of the value, a recurrence of the period with the same parts as its rule, and `Tempo.select/2` of the period with the same parts.
+
+The first run failed 135 cells of 55,986, five causes, which the baseline lists and `TODO.md` names. The months, the days, the days of the year, the weeks of a Gregorian year, the hours, the minutes and the positions agree with the reference in every way they are written, in both month calendars.
+
 ### Open questions
 
 Found and not decided, since each is the user's.
@@ -314,7 +322,11 @@ Found and not decided, since each is the user's.
 
 ## Tasks
 
+* [ ] **Selections** — the 135 cells the baseline lists, five causes, named in `TODO.md` under In progress; then the form left out (a day with no month in a year) once it is decided, and a recurrence with no year.
+
 ### Done
+
+* [x] **Selections measured** — `Tempo.Matrix.Selections`: 217 generated selections, a reference for what each selects, and three checks. 2026-10-04.
 
 * [x] **Published** — the table of [guides/operation-matrix.md](../guides/operation-matrix.md), generated from a run and checked by the matrix test with its errors and its levels; what reading it found, fixed; `TODO.md`, the CHANGELOG and the migration guide; every CI step clean on the finished tree. 2026-10-03.
 

@@ -18,12 +18,14 @@ defmodule Tempo.Matrix.Checks do
   import Tempo.Sigils
 
   alias Calendrical.Hebrew
+  alias Calendrical.ISOWeek
   alias Tempo.Duration
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.Matrix.Corpus
   alias Tempo.Matrix.Extent
   alias Tempo.Matrix.Runner
+  alias Tempo.Matrix.Selections
 
   @microseconds 1_000_000
   @hour 3_600 * @microseconds
@@ -54,7 +56,10 @@ defmodule Tempo.Matrix.Checks do
       {"duration/1 measures what to_interval/2 covers", fn _entry, value -> measure(value) end},
       {"empty?/1 and bounded?/1 agree with to_interval/2",
        fn _entry, value -> empty_and_bounded(value) end},
-      {"the length predicates agree with to_interval/2", fn _entry, value -> lengths(value) end}
+      {"the length predicates agree with to_interval/2", fn _entry, value -> lengths(value) end},
+      {"a selection selects what its parts name", &selection/2},
+      {"a recurrence's rule selects what the selection does", &selection_as_rule/2},
+      {"select/2 selects what the selection does", &selection_as_select/2}
     ] ++ bangs()
   end
 
@@ -691,6 +696,106 @@ defmodule Tempo.Matrix.Checks do
       _several_or_refused -> :none
     end
   end
+
+  ## A selection
+
+  # A generated selection holds its datum, and what it selects is worked out
+  # from the datum by `Tempo.Matrix.Selections` with none of the library's
+  # code: the conversion gives those spans, each once and in order, or the
+  # two read the selection two ways.
+  defp selection(%{selection: datum}, value),
+    do: selected(Tempo.to_interval(value), datum, "to_interval/2")
+
+  defp selection(_entry, _value), do: :skip
+
+  # The same parts as the rule of a recurrence of the period, within the
+  # period: the two are resolved by one resolver from two starting points.
+  # A year's weeks reach into the years beside it, which the window cuts
+  # off, so they are not asked.
+  defp selection_as_rule(%{selection: datum} = entry, _value) do
+    if reaches_past_period?(datum) do
+      :skip
+    else
+      period = Selections.period_text(datum)
+      rule = "R/#{period}/#{cadence(datum.period)}/FL#{Selections.parts_text(datum.parts)}N"
+
+      with {:ok, recurrence} <- Corpus.read(%{entry | text: rule}),
+           {:ok, window} <- Corpus.read(%{entry | text: period}) do
+        selected(Tempo.to_interval(recurrence, within: window), datum, "the rule #{rule}")
+      else
+        {:error, exception} -> {:fail, "#{rule} is not read: #{message(exception)}"}
+      end
+    end
+  end
+
+  defp selection_as_rule(_entry, _value), do: :skip
+
+  defp reaches_past_period?(%{calendar: calendar, period: [year: _year], parts: parts}),
+    do: calendar == ISOWeek or Keyword.has_key?(parts, :week)
+
+  defp reaches_past_period?(_datum), do: false
+
+  defp cadence(period) do
+    case List.last(period) do
+      {:year, _year} -> "P1Y"
+      {:month, _month} -> "P1M"
+      {:week, _week} -> "P1W"
+      {:day, _day} -> "P1D"
+      {:hour, _hour} -> "PT1H"
+    end
+  end
+
+  # The same parts as the constraint of `Tempo.select/2` on the period. A
+  # position is a selection's alone, parts that are no value's text
+  # (`6M3K`) cannot be asked, and `select/2` keeps what lies in its base,
+  # so a year's weeks, which reach into the years beside it, are not asked
+  # either.
+  defp selection_as_select(%{selection: %{parts: parts} = datum} = entry, _value) do
+    if Keyword.has_key?(parts, :instance) or reaches_past_period?(datum) do
+      :skip
+    else
+      period = Selections.period_text(datum)
+      constraint = Selections.parts_text(parts)
+
+      with {:ok, base} <- Corpus.read(%{entry | text: period}),
+           {:ok, selector} <- Corpus.read(%{entry | text: constraint}) do
+        selected(Tempo.select(base, selector), datum, "select/2 of #{constraint}")
+      else
+        {:error, _not_a_value} -> :skip
+      end
+    end
+  end
+
+  defp selection_as_select(_entry, _value), do: :skip
+
+  defp selected({:ok, converted}, datum, name) do
+    expected = Enum.map(Selections.extents(datum), & &1.spans)
+
+    case Extent.members(converted) do
+      {:ok, members} ->
+        same_members(expected, Enum.map(members, & &1.spans), name)
+
+      :none ->
+        {:fail, "#{name} gives #{short(converted)}, which has no place to compare"}
+    end
+  end
+
+  defp selected({:error, exception}, datum, name) do
+    {:fail,
+     "#{name} refuses it (#{message(exception)}), and its parts name " <>
+       "#{length(Selections.extents(datum))} spans"}
+  end
+
+  defp same_members(expected, expected, _name), do: :ok
+
+  defp same_members(expected, given, name) do
+    {:fail,
+     "its parts name #{length(expected)} spans #{member_spans(expected)}, and #{name} gives " <>
+       "#{length(given)} #{member_spans(given)}"}
+  end
+
+  defp member_spans(members),
+    do: spans(%{line: :floating, spans: List.flatten(members)})
 
   ## Extents and answers
 
