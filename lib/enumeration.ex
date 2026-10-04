@@ -696,7 +696,8 @@ defmodule Tempo.Enumeration do
       # context (12 months in a common Hebrew year, 28 days in a
       # non-leap February). A range that reaches past them names those
       # of its own values the context has, rather than none.
-      {:error, %InvalidDateError{valid_range: %Range{} = valid}} when is_struct(raw, Range) ->
+      {:error, %InvalidDateError{valid_range: valid}}
+      when is_struct(raw, Range) and (is_struct(valid, Range) or is_list(valid)) ->
         {:ok, values_as_written(raw, valid)}
 
       {:error, _reason} ->
@@ -724,7 +725,7 @@ defmodule Tempo.Enumeration do
 
   # The values a range names among those the unit can hold, read by
   # `Tempo.UnitValues` as every range and count from the end is.
-  defp values_as_written(%Range{} = range, %Range{} = valid), do: UnitValues.named(range, valid)
+  defp values_as_written(%Range{} = range, valid), do: UnitValues.named(range, valid)
 
   # A count from the end is resolved by the calendar for date units and by
   # the unit's fixed extent for clock units, both in `Tempo.Validation`. A
@@ -893,12 +894,31 @@ defmodule Tempo.Enumeration do
         {:ok, %{tempo | time: time ++ [{:microsecond, enum_values}]}}
 
       true ->
-        case Unit.implicit_enumerator(unit, Compare.effective_calendar(calendar)) do
-          nil -> {:finest, unit}
-          {enum_unit, range} -> {:ok, %{tempo | time: time ++ [{enum_unit, [range]}]}}
+        calendar = Compare.effective_calendar(calendar)
+
+        case Unit.implicit_enumerator(unit, calendar) do
+          nil ->
+            {:finest, unit}
+
+          {enum_unit, range} ->
+            {:ok, %{tempo | time: time ++ [every(enum_unit, range, time, calendar)]}}
         end
     end
   end
+
+  # Every value of the unit below a value's own, as an enumeration of it. A
+  # unit whose count depends on the date runs from its first value to its
+  # last (`1..-1`), and its first is asked for: a composite calendar's month
+  # or year can begin after the first (March 1751 in
+  # `Calendrical.Reform.England` begins on the 25th, and its year in March).
+  defp every(unit, %Range{first: 1, last: -1, step: 1} = range, time, calendar) do
+    case UnitValues.first(unit, time, calendar) do
+      {:ok, first} when first > 1 -> {unit, [first..-1//1]}
+      _from_the_first -> {unit, [range]}
+    end
+  end
+
+  defp every(unit, %Range{} = range, _time, _calendar), do: {unit, [range]}
 
   # A fraction of a second, or the fractions an enumeration of one holds
   # (a second written as its ten tenths), each as its ten finer ones.

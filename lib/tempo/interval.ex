@@ -2196,8 +2196,8 @@ defmodule Tempo.Interval do
   # different zones can be a day out on their dates, so the count is
   # fitted on the time line and what is left is counted in days.
   defp calendar_parts(from, to, unit) do
-    case months_as_counted(from, to, unit) do
-      months when is_integer(months) -> {:ok, [month: months], to}
+    case units_as_counted(from, to, unit) do
+      count when is_integer(count) -> {:ok, [{unit, count}], to}
       :by_dates -> calendar_parts_by_dates(from, to, unit)
     end
   end
@@ -2210,31 +2210,39 @@ defmodule Tempo.Interval do
     end
   end
 
-  # Two ends written to the month or the year are a number of months apart,
-  # counted in the months themselves where a year does not begin with its
-  # first month: the calendar counts such a year's months from the day it
-  # begins, so the first days of two that follow one another are not a
-  # month of days apart (25 March and 1 April, in a year that begins on 25
-  # March).
-  defp months_as_counted(
+  # Two ends written to the month or the year are a number of months or of
+  # years apart, counted in the units themselves where the calendar steps a
+  # date itself (`Tempo.UnitValues.stepped_by_calendar?/2`). In a year that
+  # does not begin with its first month the calendar counts the months from
+  # the day the year begins, so the first days of two that follow one
+  # another are not a month of days apart (25 March and 1 April, in a year
+  # that begins on 25 March); and a composite calendar's year can be short
+  # of a year of days (1751 in `Calendrical.Reform.England`, from 25 March).
+  defp units_as_counted(
          %Tempo{time: [{:year, from_year} | _], calendar: calendar} = from,
          %Tempo{time: [{:year, to_year} | _]} = to,
-         :month
+         unit
        )
-       when is_integer(from_year) and is_integer(to_year) do
+       when is_integer(from_year) and is_integer(to_year) and unit in [:year, :month] do
     calendar = Compare.effective_calendar(calendar)
 
-    if UnitValues.year_begins_with_first_month?(from_year, calendar) and
-         UnitValues.year_begins_with_first_month?(to_year, calendar) do
-      :by_dates
-    else
-      months_between(from, to, calendar)
-    end
+    if UnitValues.stepped_by_calendar?(from_year, calendar) or
+         UnitValues.stepped_by_calendar?(to_year, calendar),
+       do: units_between(from, to, unit, calendar),
+       else: :by_dates
   end
 
-  defp months_as_counted(_from, _to, _unit), do: :by_dates
+  defp units_as_counted(_from, _to, _unit), do: :by_dates
 
-  defp months_between(from, to, calendar) do
+  defp units_between(
+         %Tempo{time: [year: from_year]},
+         %Tempo{time: [year: to_year]},
+         :year,
+         _calendar
+       ),
+       do: to_year - from_year
+
+  defp units_between(from, to, :month, calendar) do
     from = Steps.fill_to_unit(from, :month, calendar)
     to = Steps.fill_to_unit(to, :month, calendar)
 
@@ -2243,6 +2251,8 @@ defmodule Tempo.Interval do
       :not_supported -> :by_dates
     end
   end
+
+  defp units_between(_from, _to, _unit, _calendar), do: :by_dates
 
   defp counted_parts(_from, to, unit, count, true = _same_frame), do: {:ok, [{unit, count}], to}
 

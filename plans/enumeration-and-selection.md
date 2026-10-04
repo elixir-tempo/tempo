@@ -1,6 +1,6 @@
 # Enumeration and selection in every calendar
 
-**Status:** in progress, 2026-10-04
+**Status:** in progress, 2026-10-05
 
 Enumeration and selection are core capabilities of Tempo, and the requirement (user, 2026-10-04) is confidence that they work correctly for all calendar types, at all resolutions, on all full and partial date and time combinations. This document says what that space is, what in it is verified, what is wrong, what is missing and what has not been measured yet, and sets the order of the work. It continues [plans/validated-core.md](validated-core.md), whose matrix it extends.
 
@@ -65,7 +65,7 @@ So for a date or a time with a year, in the fifteen calendars of whole months th
 | One implementation of a unit's values and of a count from the end | Done |
 | A selection in a calendar of weeks | Open |
 | A weekday selected in a Gregorian week | Done |
-| A month whose days are not `1..n` (a reform) | Open |
+| A month whose days are not `1..n` (a reform) | Done |
 | A year that starts within the months | Done for values, Open for selections |
 | A value with no year in a calendar other than the Gregorian | In progress |
 | `inspect/1` and `to_iso8601/1` on a selection under an hour | Open |
@@ -78,7 +78,7 @@ So for a date or a time with a year, in the fifteen calendars of whole months th
 
 Each is a wrong answer, a raise or two functions that disagree, with the cells it accounts for.
 
-* **A month with days missing** — `Reform.England`'s September 1752 has the days 1, 2 and 14 to 30. The walk of `1752Y9M` yields 1 to 19, `1752Y9M3D` is read though no such day existed, and `1752Y9M20D` is an `InvalidDateError` though it did. Tempo takes a month's days to be `1..days_in_month/2`, here 19. Six cells.
+* **A month with days missing** — `Reform.England`'s September 1752 has the days 1, 2 and 14 to 30. The walk of `1752Y9M` yielded 1 to 19, `1752Y9M3D` was read though no such day existed, and `1752Y9M20D` was an `InvalidDateError` though it did: Tempo took a month's days to be `1..days_in_month/2`, here 19. Six cells. Done 2026-10-05: in a composite calendar `Tempo.UnitValues` lists a month's days and a year's months from the calendar, its values may be several ranges, and a date is stepped by the calendar (`test/tempo/composite_calendar_test.exs`). England's years before 1751, whose months the composite numbers as their dates do, are an item of `TODO.md`.
 
 * **A year that starts within the months** — in `Julian.March25` the year 2026 runs from 25 March to the next 24 March. The walk of `2026Y` yielded months 1 to 12 as the Julian months of those numbers, the first three of which are in the year after the fourth, and March was one month though the year turns within it. Decided 2026-10-04 (a month is the nth month of the year as Calendrical's `month/2` counts, and a date keeps its month's own number) and done 2026-10-05 for values in the four Julian calendars: the year, its months, their dates, steps, durations, quarters, groups, masks, set operations and text are held to Calendrical's `year/1` and `month/2` in `test/tempo/year_start_test.exs`. The twelve selection cells of that calendar, which the census's own answer also got wrong, are still wrong, and need one more decision (`TODO.md`, "Selections in a year that does not begin with its first month").
 
@@ -164,7 +164,7 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 
 * [ ] **The measure widened** — shapes, intervals, recurrences and rules in every calendar; a calendar-generic answer for a week, for `NRF`; the astronomical calendars with a time limit that suits them.
 
-* [ ] **A month with days missing** — the days of such a month come from Calendrical (`Calendrical.Interval.month/3`), not from `1..days_in_month/2`, and a unit's values stop being a run: `in_period/3`'s range, the counts `named/2`, `resolve/2` and `from_end/2` make in it, and `first/3`, `last/3`, `following/4` and `preceding/4`, are the places to change, and their callers none. `Reform.England` is the measure: September 1752 (1, 2, 14 to 30), and 1751, which has no January or February and a March of the days 25 to 31. Timed, since a step asks on every value.
+* [x] **A month with days missing** — the days of such a month come from Calendrical (its `valid_date?/3`, since `month/2` of a year that begins on 25 March lists a part of March), not from `1..days_in_month/2`, and a unit's values stop being a run: `in_period/3`'s range, the counts `named/2`, `resolve/2` and `from_end/2` make in it, and `first/3`, `last/3`, `following/4` and `preceding/4`, are the places to change, and their callers none. `Reform.England` is the measure: September 1752 (1, 2, 14 to 30), and 1751, which has no January or February and a March of the days 25 to 31. Timed, since a step asks on every value.
 
 * [x] **A year that starts within the months** — the walk, and everything else that reads a value, follows Calendrical's `month/2` and `year/1`: `Tempo.UnitValues.year_begins_with_first_month?/2`, `first_date/2`, `dates_of_month/3` and `month_of_date/4`. Selections there are an item of `TODO.md`.
 

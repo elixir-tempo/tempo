@@ -673,8 +673,8 @@ defmodule Tempo.Validation do
       when is_integer(year) and is_integer(month) do
     with {:ok, months} <- values_in(:month, [year: year], calendar),
          {:ok, month} <- conform(month, months),
-         {:ok, %Range{last: max_days}} <- days_of_month(calendar, year, month) do
-      case resolve_day_group(days, max_days, rest, calendar) do
+         {:ok, days_of_month} <- days_of_month(calendar, year, month) do
+      case resolve_day_group(days, last_value(days_of_month), rest, calendar) do
         {:error, reason} -> {:error, reason}
         resolved -> [{:year, year}, {:month, month} | resolved]
       end
@@ -1136,6 +1136,11 @@ defmodule Tempo.Validation do
   defp days_of_month(calendar, year, month) do
     case UnitValues.in_period(:day, [year: year, month: month], calendar) do
       {:ok, %Range{last: last} = days} when last > 0 ->
+        {:ok, days}
+
+      # The days a calendar lists apart from one another: those of a month
+      # with days missing in it.
+      {:ok, [%Range{} | _] = days} ->
         {:ok, days}
 
       _no_such_month ->
@@ -1658,7 +1663,15 @@ defmodule Tempo.Validation do
   # end counted, a range and a list kept as they are written, and a value the
   # unit does not take an `InvalidDateError`. The reading is
   # `Tempo.UnitValues.resolve/2`; this names its refusal.
-  def conform(written, %Range{} = valid) do
+  def conform(written, %Range{} = valid), do: conform_to(written, valid)
+
+  # Values a calendar lists apart from one another: the days of a month with
+  # days missing in it.
+  def conform(written, [%Range{} | _] = valid), do: conform_to(written, valid)
+
+  def conform(written, not_values), do: not_valid_error(written, not_values, nil)
+
+  defp conform_to(written, valid) do
     case UnitValues.resolve(written, valid) do
       {:ok, resolved} -> {:ok, as_its_numbers(written, resolved)}
       {:error, {:not_taken, value, counted}} -> normalized_error(value, counted, valid)
@@ -1668,7 +1681,17 @@ defmodule Tempo.Validation do
     end
   end
 
-  def conform(written, not_a_range), do: not_valid_error(written, not_a_range, nil)
+  defp last_value(%Range{last: last}), do: last
+  defp last_value(ranges) when is_list(ranges), do: ranges |> List.last() |> last_value()
+
+  # The values a unit takes, as an error names them: a range, or the ranges
+  # of a month with days missing in it (`1..2 and 14..30`).
+  defp values_text(%Range{} = range), do: inspect(range)
+
+  defp values_text([%Range{} | _] = ranges),
+    do: Enum.map_join(ranges, " and ", &inspect/1)
+
+  defp values_text(other), do: inspect(other)
 
   # A set that held a count from the end is, once the count is taken, the
   # set written with the numbers: in order, its neighbours joined and none
@@ -1703,7 +1726,7 @@ defmodule Tempo.Validation do
      InvalidDateError.exception(
        value: value,
        valid_range: valid_range,
-       reason: "#{inspect(value)} is not valid. The valid values are #{inspect(valid)}"
+       reason: "#{inspect(value)} is not valid. The valid values are #{values_text(valid)}"
      )}
   end
 
@@ -1714,7 +1737,7 @@ defmodule Tempo.Validation do
        valid_range: range,
        reason:
          "#{inspect(value)} is not valid. The normalized value of " <>
-           "#{inspect(normalized)} is outside the range #{inspect(range)}"
+           "#{inspect(normalized)} is outside the range #{values_text(range)}"
      )}
   end
 

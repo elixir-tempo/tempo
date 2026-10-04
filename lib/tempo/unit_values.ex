@@ -19,6 +19,11 @@ defmodule Tempo.UnitValues do
   """
   @type written :: integer() | Range.t() | [integer() | Range.t()]
 
+  @typedoc """
+  The values a unit takes: a range counted up by one, or, where the calendar lists values that do not run on from one another, the ranges of them in order. September 1752 in `Calendrical.Reform.England` has the days `[1..2, 14..30]`.
+  """
+  @type values :: Range.t() | [Range.t(), ...]
+
   @doc """
   Returns the values a unit takes in the period the units before it name.
 
@@ -32,7 +37,7 @@ defmodule Tempo.UnitValues do
 
   ### Returns
 
-  * `{:ok, range}`, the values from the first to the last, counted up by one.
+  * `{:ok, values}`, a `t:values/0`: the values from the first to the last, counted up by one, as a range. A composite calendar is asked which days a month has and which months a year has, so a month it cut short starts or ends where it does, and one with days missing in it is the ranges of the days it has.
 
   * `{:error, :unanchored}` when the answer depends on a unit the context does not hold as one whole number: the days of a month with no year, which `in_any_year/3` answers.
 
@@ -60,14 +65,150 @@ defmodule Tempo.UnitValues do
       iex> Tempo.UnitValues.in_period(:day, [year: 2026, month: 13], Calendrical.Gregorian)
       {:error, :no_period}
 
+      iex> Tempo.UnitValues.in_period(:day, [year: 1752, month: 9], Calendrical.Reform.England)
+      {:ok, [1..2, 14..30]}
+
+      iex> Tempo.UnitValues.in_period(:month, [year: 1751], Calendrical.Reform.England)
+      {:ok, 3..12}
+
   """
   @spec in_period(atom(), keyword(), module()) ::
-          {:ok, Range.t()} | {:error, :unanchored | :uncounted | :no_period}
+          {:ok, values()} | {:error, :unanchored | :uncounted | :no_period}
   def in_period(unit, context, calendar) do
+    case listed(unit, context, calendar) do
+      :counted -> counted_in_period(unit, context, calendar)
+      listed -> listed
+    end
+  end
+
+  defp counted_in_period(unit, context, calendar) do
     with {:ok, last} <- last_in_period(unit, context, calendar) do
       {:ok, first_value(unit)..last//1}
     end
   end
+
+  # The values a calendar lists for a unit, where they are not the count from
+  # the unit's first value that every other calendar's are. A composite
+  # calendar changes from one calendar to another on a day, and the month and
+  # the year that day is in have the days and the months that are left: no
+  # 3 to 13 September 1752 in `Calendrical.Reform.England`, and no January or
+  # February 1751. So its days are those that are dates (`valid_date?/3`),
+  # and its months those that have days.
+  defp listed(:day, context, calendar) do
+    with true <- composite?(calendar),
+         year when is_integer(year) <- whole(context, :year),
+         month when is_integer(month) <- whole(context, :month) do
+      listed_days(year, month, calendar)
+    else
+      _counted -> :counted
+    end
+  end
+
+  defp listed(:month, context, calendar) do
+    with true <- composite?(calendar),
+         year when is_integer(year) <- whole(context, :year) do
+      listed_months(year, calendar)
+    else
+      _counted -> :counted
+    end
+  end
+
+  defp listed(_unit, _context, _calendar), do: :counted
+
+  defp listed_days(year, month, calendar) do
+    if month_of_year?(month, year, calendar) do
+      1..last_day_number(year, month, calendar)//1
+      |> Enum.filter(&calendar.valid_date?(year, month, &1))
+      |> as_values()
+    else
+      {:error, :no_period}
+    end
+  end
+
+  # The greatest number a day of the month can have: how many days it has,
+  # or the day its last date is where days are missing before it.
+  defp last_day_number(year, month, calendar) do
+    count = last_month_day(calendar.days_in_month(year, month))
+
+    case month_range(year, month, calendar) do
+      {:ok, %Date.Range{last: %Date{day: day}}} -> max(count, day)
+      {:error, :no_period} -> count
+    end
+  end
+
+  defp last_month_day(count) when is_integer(count), do: count
+  defp last_month_day(_cannot_say), do: 0
+
+  defp listed_months(year, calendar) do
+    1..last_month(year, calendar)//1
+    |> Enum.filter(&(last_month_day(calendar.days_in_month(year, &1)) > 0))
+    |> as_values()
+  end
+
+  # Whole numbers in order, as the values they are: one range where they run
+  # on from one another, and the ranges of them where they do not.
+  defp as_values([]), do: {:error, :no_period}
+
+  defp as_values([first | rest]) do
+    case runs_of_numbers(rest, first, first) do
+      [range] -> {:ok, range}
+      ranges -> {:ok, ranges}
+    end
+  end
+
+  defp runs_of_numbers([number | rest], first, last) when number == last + 1,
+    do: runs_of_numbers(rest, first, number)
+
+  defp runs_of_numbers([number | rest], first, last),
+    do: [first..last//1 | runs_of_numbers(rest, number, number)]
+
+  defp runs_of_numbers([], first, last), do: [first..last//1]
+
+  # Whether a calendar is a composite of others, which Calendrical says, and
+  # which is asked of each calendar once and kept: every count of a month's
+  # days asks it.
+  @composite_key {__MODULE__, :composite}
+
+  defp composite?(calendar) when calendar in [Calendrical.Gregorian, Calendar.ISO], do: false
+
+  defp composite?(calendar) do
+    case :persistent_term.get({@composite_key, calendar}, nil) do
+      nil ->
+        composite? = Common.composite?(calendar)
+        :persistent_term.put({@composite_key, calendar}, composite?)
+        composite?
+
+      composite? ->
+        composite?
+    end
+  end
+
+  @doc false
+  # Whether a date of a year is stepped by its calendar, and not by counting
+  # on through the values of its units: in a year that does not begin with
+  # its first month, whose dates are not in the order of their numbers, and
+  # in a composite calendar, whose years and months change where its
+  # calendars do.
+  @spec stepped_by_calendar?(integer(), module()) :: boolean()
+  def stepped_by_calendar?(year, calendar),
+    do: composite?(calendar) or not year_begins_with_first_month?(year, calendar)
+
+  ## Values that do not run on from one another
+
+  # The ranges a unit's values are, the first and the last of them, each of
+  # them in order, and whether a number is one.
+  defp ranges(%Range{} = range), do: [range]
+  defp ranges(ranges) when is_list(ranges), do: ranges
+
+  defp first_of(%Range{first: first}), do: first
+  defp first_of([%Range{first: first} | _rest]), do: first
+
+  defp last_of(%Range{last: last}), do: last
+  defp last_of(ranges) when is_list(ranges), do: ranges |> List.last() |> last_of()
+
+  defp numbers(values), do: values |> ranges() |> Enum.flat_map(&Enum.to_list/1)
+
+  defp taken?(value, values), do: Enum.any?(ranges(values), &(value in &1))
 
   # The units that take a run of values.
   @counted [
@@ -309,7 +450,13 @@ defmodule Tempo.UnitValues do
 
   """
   @spec first(atom(), keyword(), module()) :: {:ok, integer()} | {:error, :uncounted}
-  def first(unit, _context, _calendar) when unit in @counted, do: {:ok, first_value(unit)}
+  def first(unit, context, calendar) when unit in @counted do
+    case listed(unit, context, calendar) do
+      {:ok, values} -> {:ok, first_of(values)}
+      _counted_from_the_first -> {:ok, first_value(unit)}
+    end
+  end
+
   def first(_unit, _context, _calendar), do: {:error, :uncounted}
 
   @doc """
@@ -350,6 +497,14 @@ defmodule Tempo.UnitValues do
   @spec last(atom(), keyword(), module()) ::
           {:ok, integer()} | {:error, :unanchored | :uncounted | :no_period}
   def last(unit, context, calendar) do
+    case listed(unit, context, calendar) do
+      {:ok, values} -> {:ok, last_of(values)}
+      {:error, _no_period} = error -> error
+      :counted -> counted_last(unit, context, calendar)
+    end
+  end
+
+  defp counted_last(unit, context, calendar) do
     case last_in_any_year(unit, context, calendar) do
       {:ok, last, last} -> {:ok, last}
       _by_the_year_or_cannot_say -> last_in_period(unit, context, calendar)
@@ -404,6 +559,25 @@ defmodule Tempo.UnitValues do
   @spec following(atom(), integer() | :any, keyword(), module()) ::
           {:ok, integer()} | :last | {:error, :unanchored | :uncounted | :no_period}
   def following(unit, value, context, calendar) do
+    case listed(unit, context, calendar) do
+      {:ok, values} -> following_among(values, value)
+      {:error, _no_period} = error -> error
+      :counted -> counted_following(unit, value, context, calendar)
+    end
+  end
+
+  # The value after a value among those a calendar lists: the next it has,
+  # which is not the next number where days are missing between them.
+  defp following_among(_values, :any), do: :last
+
+  defp following_among(values, value) do
+    case Enum.find(numbers(values), &(&1 > value)) do
+      nil -> :last
+      next -> {:ok, next}
+    end
+  end
+
+  defp counted_following(unit, value, context, calendar) do
     case last_in_any_year(unit, context, calendar) do
       {:ok, fewest, _most} when is_integer(value) and value < fewest -> {:ok, value + 1}
       {:ok, _fewest, most} when value == :any or value >= most -> :last
@@ -462,6 +636,23 @@ defmodule Tempo.UnitValues do
   @spec at_or_before(atom(), integer(), keyword(), module()) ::
           {:ok, integer()} | {:error, :unanchored | :uncounted | :no_period}
   def at_or_before(unit, value, context, calendar) when is_integer(value) do
+    case listed(unit, context, calendar) do
+      {:ok, values} -> {:ok, at_or_before_among(values, value)}
+      {:error, _no_period} = error -> error
+      :counted -> counted_at_or_before(unit, value, context, calendar)
+    end
+  end
+
+  # The last of the values a calendar lists that is not after a value, and
+  # the first of them where every one is.
+  defp at_or_before_among(values, value) do
+    values
+    |> numbers()
+    |> Enum.take_while(&(&1 <= value))
+    |> List.last(first_of(values))
+  end
+
+  defp counted_at_or_before(unit, value, context, calendar) do
     case last_in_any_year(unit, context, calendar) do
       {:ok, fewest, _most} when value <= fewest -> {:ok, value}
       {:ok, last, last} -> {:ok, last}
@@ -512,11 +703,25 @@ defmodule Tempo.UnitValues do
   """
   @spec preceding(atom(), integer(), keyword(), module()) ::
           {:ok, integer()} | :first | {:error, :uncounted}
-  def preceding(unit, value, _context, _calendar) when is_integer(value) and unit in @counted do
-    if value > first_value(unit), do: {:ok, value - 1}, else: :first
+  def preceding(unit, value, context, calendar) when is_integer(value) and unit in @counted do
+    case listed(unit, context, calendar) do
+      {:ok, values} -> preceding_among(values, value)
+      _counted_from_the_first -> counted_preceding(unit, value)
+    end
   end
 
   def preceding(_unit, _value, _context, _calendar), do: {:error, :uncounted}
+
+  defp counted_preceding(unit, value) do
+    if value > first_value(unit), do: {:ok, value - 1}, else: :first
+  end
+
+  defp preceding_among(values, value) do
+    case values |> numbers() |> Enum.take_while(&(&1 < value)) |> List.last() do
+      nil -> :first
+      previous -> {:ok, previous}
+    end
+  end
 
   @doc """
   Returns the values a written value names among those a unit takes, in order and once each.
@@ -527,7 +732,7 @@ defmodule Tempo.UnitValues do
 
   * `written` is a `t:written/0`.
 
-  * `values` is the range of values the unit takes, as `in_period/3` gives it.
+  * `values` is the values the unit takes, a `t:values/0` as `in_period/3` gives it.
 
   ### Returns
 
@@ -545,8 +750,8 @@ defmodule Tempo.UnitValues do
       [23]
 
   """
-  @spec named(written(), Range.t()) :: [integer()]
-  def named(written, %Range{} = values) do
+  @spec named(written(), values()) :: [integer()]
+  def named(written, values) when is_struct(values, Range) or is_list(values) do
     written
     |> List.wrap()
     |> Enum.flat_map(&values_named(&1, values))
@@ -562,12 +767,12 @@ defmodule Tempo.UnitValues do
 
   defp values_named(%Range{first: first, last: last, step: step}, values) do
     named = Range.new(from_end(first, values), from_end(last, values), step)
-    Enum.filter(values, &(&1 in named))
+    values |> numbers() |> Enum.filter(&(&1 in named))
   end
 
   defp values_named(index, values) when is_integer(index) do
     value = from_end(index, values)
-    if value in values, do: [value], else: []
+    if taken?(value, values), do: [value], else: []
   end
 
   defp values_named(_not_a_number, _values), do: []
@@ -581,11 +786,11 @@ defmodule Tempo.UnitValues do
 
   * `written` is a `t:written/0`, or a float for a fraction of a unit.
 
-  * `values` is the range of values the unit takes, as `in_period/3` gives it.
+  * `values` is the values the unit takes, a `t:values/0` as `in_period/3` gives it.
 
   ### Returns
 
-  * `{:ok, resolved}`, where a whole number counted from the end is the value it names, a range has each end so counted and counts up by its own step, and a list has each of its members so resolved.
+  * `{:ok, resolved}`, where a whole number counted from the end is the value it names, a range has each end so counted and counts up by its own step, and a list has each of its members so resolved. A range that runs through values the unit does not take, in a month with days missing, is the ranges of those it names.
 
   * `{:error, {:not_taken, value}}` for the first written value, or end of a range, that is not one of `values`.
 
@@ -610,8 +815,14 @@ defmodule Tempo.UnitValues do
       iex> Tempo.UnitValues.resolve(-1..1//1, 1..30//1)
       {:error, {:backwards, -1..1//1, 30..1//1}}
 
+      iex> Tempo.UnitValues.resolve(1..-1//1, [1..2, 14..30])
+      {:ok, [1..2, 14..30]}
+
+      iex> Tempo.UnitValues.resolve(3, [1..2, 14..30])
+      {:error, {:not_taken, 3}}
+
   """
-  @spec resolve(written() | float(), Range.t()) ::
+  @spec resolve(written() | float(), values()) ::
           {:ok, written() | float()}
           | {:error,
              {:not_taken, term()}
@@ -667,6 +878,74 @@ defmodule Tempo.UnitValues do
 
   def resolve(value, %Range{}), do: {:error, {:not_taken, value}}
 
+  # Values that do not run on from one another: a number is one of them or
+  # it is not, a count from the end is counted among them, and a range is
+  # the ranges of them it names, which are several where it runs through
+  # values the calendar does not have.
+  def resolve(written, [%Range{} | _] = values), do: resolve_listed(written, values)
+
+  defp resolve_listed(value, values) when is_integer(value) and value >= 0 do
+    if taken?(value, values), do: {:ok, value}, else: {:error, {:not_taken, value}}
+  end
+
+  defp resolve_listed(value, values) when is_float(value) do
+    if Enum.any?(values, &(value >= &1.first and value <= &1.last)),
+      do: {:ok, value},
+      else: {:error, {:not_taken, value}}
+  end
+
+  defp resolve_listed(value, values) when is_integer(value) do
+    counted = from_end(value, values)
+
+    if taken?(counted, values),
+      do: {:ok, counted},
+      else: {:error, {:not_taken, value, counted}}
+  end
+
+  defp resolve_listed(%Range{step: step} = range, _values) when step < 1,
+    do: {:error, {:backwards, range}}
+
+  defp resolve_listed(%Range{first: from, last: to, step: step} = range, values) do
+    with {:ok, from} <- resolve_listed(from, values),
+         {:ok, to} <- resolve_listed(to, values) do
+      if from <= to,
+        do: {:ok, taken_within(from..to//step, values)},
+        else: {:error, {:backwards, range, from..to//step}}
+    end
+  end
+
+  defp resolve_listed(written, values) when is_list(written) do
+    written
+    |> Enum.reduce_while({:ok, []}, fn member, {:ok, resolved} ->
+      case resolve_listed(member, values) do
+        {:ok, value} -> {:cont, {:ok, [value | resolved]}}
+        {:error, _not_taken} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, resolved} -> {:ok, resolved |> Enum.reverse() |> List.flatten()}
+      {:error, _not_taken} = error -> error
+    end
+  end
+
+  defp resolve_listed(value, _values), do: {:error, {:not_taken, value}}
+
+  # The values a range names among those listed: the range where it runs
+  # through none that is missing, and otherwise the ranges of those it names.
+  defp taken_within(%Range{step: 1} = range, values) do
+    case for(%Range{} = run <- values, within = overlap(range, run), do: within) do
+      [one] -> one
+      several -> several
+    end
+  end
+
+  defp taken_within(%Range{} = range, values), do: Enum.filter(range, &taken?(&1, values))
+
+  defp overlap(%Range{first: first, last: last}, %Range{first: run_first, last: run_last}) do
+    if max(first, run_first) <= min(last, run_last),
+      do: max(first, run_first)..min(last, run_last)//1
+  end
+
   @doc """
   Returns the value a count from the end names among those a unit takes.
 
@@ -674,7 +953,7 @@ defmodule Tempo.UnitValues do
 
   * `index` is a whole number: negative, it is counted back from the last value, `-1` being the last; otherwise it is returned as it is.
 
-  * `values` is the range of values the unit takes.
+  * `values` is the values the unit takes, a `t:values/0`. Among values that do not run on from one another the count is of the values themselves.
 
   ### Returns
 
@@ -691,12 +970,29 @@ defmodule Tempo.UnitValues do
       iex> Tempo.UnitValues.from_end(15, 1..30//1)
       15
 
+      iex> Tempo.UnitValues.from_end(-18, [1..2, 14..30])
+      2
+
   """
-  @spec from_end(integer(), Range.t()) :: integer()
+  @spec from_end(integer(), values()) :: integer()
   def from_end(index, %Range{last: last}) when is_integer(index) and index < 0,
     do: last + 1 + index
 
   def from_end(index, %Range{}) when is_integer(index), do: index
+
+  # Among values that do not run on from one another the count is of the
+  # values themselves: the last but seventeen of `[1..2, 14..30]` is the 2nd.
+  # A count that reaches past the first names a number before it.
+  def from_end(index, [%Range{} | _] = values) when is_integer(index) and index < 0 do
+    numbers = numbers(values)
+
+    case Enum.at(numbers, index) do
+      nil -> first_of(values) + length(numbers) + index
+      value -> value
+    end
+  end
+
+  def from_end(index, [%Range{} | _]) when is_integer(index), do: index
 
   ## A year that does not begin with its first month
   #
@@ -771,7 +1067,7 @@ defmodule Tempo.UnitValues do
   defp year_start_of(calendar, year) do
     cond do
       not exported?(calendar, :day_of_year, 3) -> :every_year
-      Common.composite?(calendar) -> :by_year
+      composite?(calendar) -> :by_year
       true -> calendar |> first_day_of_first_month?(year) |> year_start_from()
     end
   end

@@ -1074,7 +1074,7 @@ defmodule Tempo.RRule.Selection do
   defp expand_weekdays_in_year(%Interval{} = candidate, weekdays) do
     with year when is_integer(year) <- enclosing_year(candidate),
          {:ok, months} <- period_values(:month, candidate) do
-      Enum.flat_map(months, &weekdays_of_month(candidate, year, &1, weekdays))
+      months |> each_value() |> Enum.flat_map(&weekdays_of_month(candidate, year, &1, weekdays))
     else
       nil -> [candidate]
       {:error, _cannot_count} -> []
@@ -1132,12 +1132,17 @@ defmodule Tempo.RRule.Selection do
          weekdays
        ) do
     matching =
-      for day <- days,
+      for day <- each_value(days),
           normalise_day_of_week(calendar.day_of_week(year, month, day, :monday)) in weekdays,
           do: {year, month, day}
 
     swap_dates(candidate, matching)
   end
+
+  # Each value of those a unit takes: a range's, or where a calendar lists
+  # values apart from one another (a month with days missing) each range's.
+  defp each_value(%Range{} = values), do: values
+  defp each_value(ranges) when is_list(ranges), do: Enum.flat_map(ranges, &Enum.to_list/1)
 
   # Build the week around the candidate's date as seven
   # `{year, month, day, weekday}` tuples in chronological order,

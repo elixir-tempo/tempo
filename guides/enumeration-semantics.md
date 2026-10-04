@@ -44,6 +44,8 @@ A week's days are the dates they name: `Enum.to_list(~o"2026-W25")` is `~o"2026-
 
 A calendar whose year turns on another day than the first of its first month (Calendrical's Julian `March25`, `March1`, `Sept1` and `Dec25`) starts its year on that day and counts the year's months from it: the first month of a `March25` year is 25 to 31 March and its twelfth 1 February to 24 March, so `1750Y1M` is walked by seven dates and `1750Y12M` by fifty-two. A date there keeps the number its calendar gives its month (`1750Y3M25D`, the first day of 1750), so a month's number is not the month of its dates.
 
+A month of a composite calendar has the days its calendar has: September 1752 in `Calendrical.Reform.England`, the month England adopted the Gregorian calendar, is walked by the 1st, the 2nd and the 14th to the 30th, the day after the 2nd is the 14th, and `1752Y9M3D` is no date.
+
 ### 2.2. Explicit ranges and sets
 
 Any component may carry a range, a range with step, a set of values, or a cartesian product of the above.

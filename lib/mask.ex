@@ -253,7 +253,10 @@ defmodule Tempo.Mask do
   # `Tempo.UnitValues` asks the calendar for.
   defp range_in_period(unit, context, calendar) do
     case UnitValues.in_period(unit, context, calendar) do
-      {:ok, values} -> {:ok, values}
+      {:ok, %Range{} = values} -> {:ok, values}
+      # Values a calendar lists apart from one another (a month with days
+      # missing), as the numbers they are.
+      {:ok, ranges} -> {:ok, Enum.flat_map(ranges, &Enum.to_list/1)}
       {:error, _cannot_count} -> {:error, :unanchored}
     end
   end

@@ -190,12 +190,14 @@ defmodule Tempo.Math do
   # the next month after the last, which `Tempo.UnitValues` counts. In a
   # year that does not begin with its first month the days do not run in
   # the order of their numbers (1 January follows 31 December of the same
-  # year, and the year turns within a month), so the day after a date there,
-  # and the day before, are the calendar's to say.
+  # year, and the year turns within a month), and in a composite calendar a
+  # month or a year is cut short where its calendars change, so the day
+  # after a date there, and the day before, are the calendar's to say.
 
   defp day_by_the_calendar([{:year, year}, {:month, month}, {:day, day} | rest], by, calendar)
        when is_integer(year) and is_integer(month) and month > 0 and is_integer(day) and day > 0 do
-    with false <- UnitValues.year_begins_with_first_month?(year, calendar),
+    with true <- UnitValues.stepped_by_calendar?(year, calendar),
+         true <- calendar.valid_date?(year, month, day),
          {year, month, day} <- calendar.plus(year, month, day, :days, by) do
       {:ok, [{:year, year}, {:month, month}, {:day, day} | rest]}
     else
@@ -1894,20 +1896,26 @@ defmodule Tempo.Math do
   # number changes from year to year. A year shift keeps the traditional
   # month, as the calendar's own `plus/6` does it: Nisan stays Nisan, and a
   # leap month the new year lacks becomes the month it follows or precedes.
+  #
+  # A date in a composite calendar, or in a year that does not begin with
+  # its first month, is a year on where its calendar says: 10 March 1750 in
+  # `Calendrical.Reform.England` is in the year that ends on 24 March, and a
+  # year after it is 10 March 1752.
   defp apply_n_units(time, :year, n, calendar) do
-    case shift_years_by_calendar(time, n, calendar) do
+    case date_by_the_calendar(time, :years, n, calendar) do
       {:ok, new_time} -> {:ok, new_time}
-      {:error, _reason} = error -> error
-      :fallback -> step_n_units(time, :year, n, calendar)
+      :by_count -> years_by_count(time, n, calendar)
     end
   end
 
   # A date's months are stepped in the order of their numbers, the last of
   # a year followed by the first of the next. In a year that does not begin
   # with its first month they are not in that order (the January after a
-  # December is in the same year), so the calendar steps them.
+  # December is in the same year), and a composite calendar's years and
+  # months are cut short where its calendars change, so the calendar steps
+  # a date there.
   defp apply_n_units(time, :month, n, calendar) do
-    case months_by_the_calendar(time, n, calendar) do
+    case date_by_the_calendar(time, :months, n, calendar) do
       {:ok, new_time} -> {:ok, new_time}
       :by_count -> step_n_units(time, :month, n, calendar)
     end
@@ -1915,18 +1923,31 @@ defmodule Tempo.Math do
 
   defp apply_n_units(time, unit, n, calendar), do: step_n_units(time, unit, n, calendar)
 
-  defp months_by_the_calendar([{:year, year}, {:month, month}, {:day, day} | rest], n, calendar)
+  defp date_by_the_calendar(
+         [{:year, year}, {:month, month}, {:day, day} | rest],
+         date_part,
+         n,
+         calendar
+       )
        when is_integer(year) and is_integer(month) and month > 0 and is_integer(day) and day > 0 do
-    with false <- UnitValues.year_begins_with_first_month?(year, calendar),
+    with true <- UnitValues.stepped_by_calendar?(year, calendar),
          true <- calendar.valid_date?(year, month, day),
-         {year, month, day} <- calendar.plus(year, month, day, :months, n) do
+         {year, month, day} <- calendar.plus(year, month, day, date_part, n) do
       {:ok, [{:year, year}, {:month, month}, {:day, day} | rest]}
     else
       _by_count -> :by_count
     end
   end
 
-  defp months_by_the_calendar(_time, _n, _calendar), do: :by_count
+  defp date_by_the_calendar(_time, _date_part, _n, _calendar), do: :by_count
+
+  defp years_by_count(time, n, calendar) do
+    case shift_years_by_calendar(time, n, calendar) do
+      {:ok, new_time} -> {:ok, new_time}
+      {:error, _reason} = error -> error
+      :fallback -> step_n_units(time, :year, n, calendar)
+    end
+  end
 
   # Only the year and month change; the day is clamped to the new month
   # once every unit has been applied (`maybe_clamp/3`).

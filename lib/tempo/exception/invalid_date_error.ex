@@ -15,7 +15,7 @@ defmodule Tempo.InvalidDateError do
   @type t :: %__MODULE__{
           unit: atom() | nil,
           value: integer() | nil,
-          valid_range: Range.t() | nil,
+          valid_range: Range.t() | [Range.t()] | nil,
           year: integer() | nil,
           month: integer() | nil,
           day: integer() | nil,

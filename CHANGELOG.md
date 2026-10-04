@@ -275,6 +275,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A month with days missing, and a year with months missing, are read, walked and stepped as their calendar has them: in `Calendrical.Reform.England` `1752Y9M` is walked by the 1st, the 2nd and the 14th to the 30th, `1752Y9M3D` is an `InvalidDateError` and `1752Y9M20D` is read, and 1751 has the months from March and a March from the 25th, where a month's days were taken to be `1..19` and `1..7` and the year to have twelve months. A date of a composite calendar is stepped by the calendar, so 2 September 1752 plus a day is the 14th and 25 August plus a month the 25th of September, where the step counted on to the 19th, or to a day 0 in a month the year does not have.
+
 * A year of a composite calendar that begins on another day than the first of its first month (`Calendrical.Reform.England` before 1752, whose year began on 25 March) starts on that day, where it started on 1 January and held none of the days before it.
 
 * `Tempo.extend/2` writes a value that ends in a group as the values the group names: `Tempo.extend(~o"2026Y2G3MU")` is `{:ok, ~o"2026Y{4..6}M"}`, the months its walk yields, where it wrote the unit below (`2026Y2G3MU{1..-1}D`), which is counted from the group's start and was read as no value of the group. A group stops where its container does (`2026Y2M3G10DU` is `2026Y2M{21..28}D`), and one that names other values in each of several years or months is a `Tempo.ConversionError`.
