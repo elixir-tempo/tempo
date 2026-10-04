@@ -269,6 +269,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.intersection/3` gives one part for each pair of members that overlap, as its documentation says, where an operand whose members overlapped each other lost pairs: a member intersected with two that both cover it gave one part, and `metadata: {:merge, fun}` never saw the second. The time covered is unchanged, and `Tempo.IntervalSet.coalesce/1` merges parts that overlap.
+
 * A span with no year that runs through its cycle's end is one member to the set operations: `Tempo.union(~o"T22/T02", ~o"T03/T04")` has the two members it was given, where it had three, `Tempo.members_outside/3` and `Tempo.members_overlapping/3` keep or drop it whole, where a part of it was returned, and `Tempo.difference/3` and `Tempo.intersection/3` cut it only where the other operand does. The whole day less two hours is one span round midnight (`T12H/T10H`), where it was two.
 
 * `Tempo.IntervalSet.covered?/2` answers for a set with no year whose member runs through its cycle's end: `~o"T00:30"` is covered by a set holding `~o"T22/T02"`, where the question raised a `Tempo.IntervalEndpointsError`. `Tempo.IntervalSet.new/2` returns the tree backend's refusal of a member with no year as `{:error, %ArgumentError{}}`, where it raised it.

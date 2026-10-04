@@ -27,7 +27,7 @@ All are in `lib/operations.ex` and are what `Tempo` delegates to. Each brings it
 | Function | Answers | Computed by |
 |---|---|---|
 | `union/3` | The members of both | The two lists joined |
-| `intersection/3` | The time both cover | `sweep_intersection/3` |
+| `intersection/3` | Each member of the first cut to each member of the second it overlaps | `sweep_intersection/3` |
 | `difference/3` | The time the first covers and the second does not | `sweep_difference/2` |
 | `symmetric_difference/3` | The time exactly one covers | Two `difference/3` |
 | `complement/2` | The window's time the value does not cover | `sweep_difference/2` of the window and the merged value |
@@ -60,7 +60,7 @@ None is a second algebra. But "do these two spans overlap" has four answers in t
 
 * **The matrix** — `Tempo.Matrix.Checks.binary/0` runs each hand-written value of the corpus with six plain Gregorian values and each generated one with one of them, in both orders, and each with itself: about 1,100 values. For `union/2`, `intersection/2`, `difference/2`, `symmetric_difference/2` and `complement/2` it compares the time the result covers with what `Tempo.Matrix.Extent` works out from the two operands' own spans; for `members_overlapping/2` and `members_outside/2` the time the kept members cover; for the five predicates their answer. That is an answer worked out apart from the library, and no cell of it fails.
 
-* **The measure** — `test/tempo/set_operations_measure_test.exs` builds two sets from spans between the numbered points of a line, reads each answer back as positions on that line with `Tempo.Matrix.Extent`, and compares it with what `Tempo.Matrix.Sets` makes of the same spans by arithmetic on whole numbers. What is compared is the members an answer holds, each with the mark of the member it is or was cut from, and that they come in the order of their starts; not only the time they cover. It runs every pair of sets of up to two members between five points (4,356 pairs: every way two members of each side precede, meet, overlap, nest and repeat), a fifth of them again on a tree, and generated sets of up to six members of days, of hours, of the two mixed, of hours in two zones, and of days of the Hebrew, the Persian and the Gregorian calendars. It holds `union/2`, `difference/2`, `symmetric_difference/2`, `complement/2` with a set as its window, `members_overlapping/2`, `members_outside/2`, `members_in_exactly_one/2`, the five predicates, `coalesce/1`, `covered/2`'s regions, `covered?/2`, and an answer used as an operand again. Of `intersection/2` it holds the time covered and that each part is a member of the first cut to a member of the second, and the parts one for one where no two members of a side overlap each other. For two sets with no year it holds each operation to the cells of the cycle their members hold, a member that runs through the cycle's end being one member, and for one such set `coalesce/1`, `covered/2` and `covered?/2` to arcs of the set's cycle: every set of up to two spans between five hours of the day, and generated sets of the day's hours, the week's days, the year's months and its days. `Tempo.Matrix.Sets` is itself held to each operation's definition, cell by cell. Every sweep agrees with it.
+* **The measure** — `test/tempo/set_operations_measure_test.exs` builds two sets from spans between the numbered points of a line, reads each answer back as positions on that line with `Tempo.Matrix.Extent`, and compares it with what `Tempo.Matrix.Sets` makes of the same spans by arithmetic on whole numbers. What is compared is the members an answer holds, each with the mark of the member it is or was cut from, and that they come in the order of their starts; not only the time they cover. It runs every pair of sets of up to two members between five points (4,356 pairs: every way two members of each side precede, meet, overlap, nest and repeat), a fifth of them again on a tree, and generated sets of up to six members of days, of hours, of the two mixed, of hours in two zones, and of days of the Hebrew, the Persian and the Gregorian calendars. It holds `union/2`, `difference/2`, `symmetric_difference/2`, `complement/2` with a set as its window, `members_overlapping/2`, `members_outside/2`, `members_in_exactly_one/2`, the five predicates, `coalesce/1`, `covered/2`'s regions, `covered?/2`, and an answer used as an operand again. Of `intersection/2` it holds one part for each pair of members that overlap, the first's cut to the second's. For two sets with no year it holds each operation to the cells of the cycle their members hold, a member that runs through the cycle's end being one member, and for one such set `coalesce/1`, `covered/2` and `covered?/2` to arcs of the set's cycle: every set of up to two spans between five hours of the day, and generated sets of the day's hours, the week's days, the year's months and its days. `Tempo.Matrix.Sets` is itself held to each operation's definition, cell by cell. Every sweep agrees with it.
 
 * **Examples** — `test/tempo/operations_test.exs` (113 tests, one property), `test/tempo/interval_set_test.exs` (59), and 29 for the three backends.
 
@@ -71,8 +71,6 @@ The matrix measures the time covered, with one plain partner at a time. The meas
 * **A `:within` window that places a time of day** — the matrix measures it for `complement/2` alone, in a window with no zone; the measure gives `complement/2` a set as its window and places nothing on it.
 
 * **The forms that take a list of operands, the `:metadata` option, and a recurrence set as an operand** — held to no answer worked out apart from the library.
-
-* **How many parts the intersection of overlapping members has** — held to the time covered and to each part being a pair's, until the sweep gives one for each pair (below).
 
 * **The lazy backend** — the measure builds lists and trees. What an operation gives of an unending lazy set is the deferred [plans/open-ended-set-algebra.md](plans/open-ended-set-algebra.md).
 
@@ -102,11 +100,11 @@ Both by the user, 2026-10-04.
 
 * [ ] **One answer to whether two spans overlap** — a property that the sweeps, the backends, Allen's relation and a window's bound agree on every generated pair; then whether any is to be read through another.
 
-* [ ] **An intersection of one part for each pair** — a sweep that holds every member of the second still open against each member of the first; then the measure holds `intersection/2` part for part on every pair of sets.
-
 * [ ] **A time of day placed inside its window** — placed on the part of each day the window holds; the measure widened to a window that opens and closes within a day.
 
 ### Done
+
+* [x] **An intersection of one part for each pair** — `sweep_pairs/4` holds every member of the second still open against each member of the first; the measure holds `intersection/2` part for part on every pair of sets, with a year and without. 2026-10-04.
 
 * [x] **A span that crosses its cycle's end is one member** — each member of a set with no year is swept by its own parts (`turns/1`) and what an operation leaves of it is written back as the span it is; member operations keep or drop it whole, and an intersection there is one part for each pair of members. The measure holds every operation of two sets with no year on four cycles. 2026-10-04.
 

@@ -903,9 +903,13 @@ defmodule Tempo.Operations do
   Intersection of two operands — every instant present in both
   operands, returned as one or more trimmed intervals.
 
-  Each result interval is the portion of an `a` member trimmed
-  to its overlap with some `b` member. Members of `a` can be
-  split into multiple fragments if `b` covers only part of them.
+  There is one result interval for each pair of members that
+  overlap: the `a` member trimmed to its overlap with the `b`
+  member. So a member of `a` gives several intervals when several
+  members of `b` overlap it, and where the members of an operand
+  overlap each other so do the results (two bookings of one room,
+  each within the opening hours, are two results); call
+  `Tempo.IntervalSet.coalesce/1` for the time they cover.
 
   This is the canonical set-theoretic intersection: `A ∩ B`.
   Use it when the question is about *covered time* — "the parts
@@ -1058,40 +1062,53 @@ defmodule Tempo.Operations do
     sweep_members(a_rest, b_list, mode)
   end
 
-  # Sweep-line instant-level intersection. Each step finds the
-  # overlap between the current A and current B interval; if
-  # non-empty, emit; advance whichever ends first. `resolve` decides
-  # what metadata the emitted fragment carries — see
-  # `metadata_resolver/1`.
+  # The intersection of two lists of members, each in the order of its
+  # starts: for each pair of members that overlap, the first's cut to the
+  # second's, with the metadata `resolve` gives the pair (see
+  # `metadata_resolver/1`).
+  #
+  # The members of either list may overlap each other (two bookings of one
+  # room), so a member of B is not done with once one member of A has passed
+  # it: each A is met with every B that is still open when it starts. A B is
+  # opened once some A reaches its start, and closed for good once an A
+  # starts at or after its end, since every later A starts no earlier. Two
+  # lists with no overlap of their own are swept in one pass, and a list
+  # whose members overlap costs a comparison for each B open at each A.
 
   defp keep_left_metadata(a_metadata, _b_metadata), do: a_metadata
 
-  defp sweep_intersection([], _b, _resolve), do: []
-  defp sweep_intersection(_a, [], _resolve), do: []
+  defp sweep_intersection(a_list, b_list, resolve),
+    do: sweep_pairs(a_list, [], b_list, resolve)
 
-  defp sweep_intersection([%Interval{} = a | a_rest], [%Interval{} = b | b_rest], resolve) do
-    overlap_from = later_endpoint(a.from, b.from)
-    overlap_to = earlier_endpoint(a.to, b.to)
+  defp sweep_pairs([], _open, _unopened, _resolve), do: []
+  defp sweep_pairs(_a_list, [], [], _resolve), do: []
 
-    case Compare.compare_endpoints(overlap_from, overlap_to) do
-      :earlier ->
-        result = %Interval{
-          from: overlap_from,
-          to: overlap_to,
-          metadata: resolve.(a.metadata, b.metadata)
-        }
+  defp sweep_pairs([%Interval{} = a | a_rest], open, unopened, resolve) do
+    {opened, unopened} = Enum.split_while(unopened, &starts_before_end?(&1, a))
+    open = Enum.reject(open ++ opened, &ends_by_start?(&1, a))
 
-        [result | advance(a, a_rest, b, b_rest, resolve)]
-
-      _ ->
-        advance(a, a_rest, b, b_rest, resolve)
-    end
+    shared_with(a, open, resolve) ++ sweep_pairs(a_rest, open, unopened, resolve)
   end
 
-  defp advance(a, a_rest, b, b_rest, resolve) do
-    case Compare.compare_endpoints(a.to, b.to) do
-      :later -> sweep_intersection([a | a_rest], b_rest, resolve)
-      _ -> sweep_intersection(a_rest, [b | b_rest], resolve)
+  # A B that starts before this A ends is one this A may reach; the Bs are in
+  # the order of their starts, so the first that does not ends the run.
+  defp starts_before_end?(%Interval{from: b_from}, %Interval{to: a_to}),
+    do: Compare.compare_endpoints(b_from, a_to) == :earlier
+
+  # A B that ends at or before this A starts shares no time with it, nor
+  # with any A after it.
+  defp ends_by_start?(%Interval{to: b_to}, %Interval{from: a_from}),
+    do: Compare.compare_endpoints(b_to, a_from) != :later
+
+  # A B is open from an earlier A that may have ended later than this one,
+  # so each is asked whether it starts before this A ends.
+  defp shared_with(%Interval{} = a, open, resolve) do
+    for %Interval{} = b <- open, starts_before_end?(b, a) do
+      %Interval{
+        from: later_endpoint(a.from, b.from),
+        to: earlier_endpoint(a.to, b.to),
+        metadata: resolve.(a.metadata, b.metadata)
+      }
     end
   end
 

@@ -197,24 +197,17 @@ defmodule Tempo.SetOperationsMeasureTest do
            "the complement of the complement, of #{named}"
   end
 
-  # The time an intersection covers is what both cover, and each part of it
-  # is a member of the first cut to a member of the second, with the first's
-  # mark. Where no two members of either side overlap each other, there is
-  # one part for each pair that overlaps. Where they do, whether there is
-  # one for each pair or one for each stretch of time is to be decided
-  # (`plans/set-operations.md`).
+  # An intersection is one part for each pair of members that overlap: a
+  # member of the first cut to a member of the second, with the first's
+  # mark (decided 2026-10-04). The sweep took neither operand's members to
+  # overlap each other, and skipped pairs where they did.
   defp assert_intersection(a, b, in_a, in_b, named) do
     parts = read(Tempo.intersection(a, b))
-    pairs = Sets.pairwise(in_a, in_b)
+
+    assert parts == Sets.pairwise(in_a, in_b), "intersection of #{named}"
 
     assert Sets.cover(parts) == Sets.shared(in_a, in_b),
            "the time intersection covers, of #{named}"
-
-    assert parts -- pairs == [], "intersection of #{named} gives a part no pair of members makes"
-
-    unless Sets.overlap_each_other?(in_a) or Sets.overlap_each_other?(in_b) do
-      assert parts == pairs, "intersection of #{named}"
-    end
   end
 
   defp assert_predicates(a, b, in_a, in_b, named) do

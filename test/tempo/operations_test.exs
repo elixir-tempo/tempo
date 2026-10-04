@@ -1231,6 +1231,46 @@ defmodule Tempo.Operations.Test do
       assert [%{free: ["Alice", "Bob"]}] = metadata_of(both)
     end
 
+    # One part for each pair of members that overlap (decided 2026-10-04).
+    # The sweep took an operand's members not to overlap each other, and
+    # passed over a pair where they did: Carol was left out below.
+    test "{:merge, fun} sees every pair, where an operand's members overlap", context do
+      carol =
+        Interval.new!(
+          from: ~o"2026-06-15T10:00:00",
+          to: ~o"2026-06-15T17:00:00",
+          metadata: %{free: ["Carol"]}
+        )
+
+      others = IntervalSet.new!([context.bob, carol])
+      accumulate = fn a, b -> Map.merge(a, b, fn _key, x, y -> x ++ y end) end
+
+      {:ok, pairs} =
+        Operations.intersection(context.alice, others, metadata: {:merge, accumulate})
+
+      assert pairs |> metadata_of() |> Enum.map(& &1.free) |> Enum.sort() ==
+               [["Alice", "Bob"], ["Alice", "Carol"]]
+
+      assert pairs
+             |> IntervalSet.coalesce()
+             |> IntervalSet.members()
+             |> Enum.map(&Tempo.to_iso8601!/1) ==
+               ["2026Y6M15DT10H0M0S/T12H0M0S"]
+    end
+
+    test "two members of the first that overlap one of the second are a part each" do
+      early = Interval.new!(from: ~o"2026-06-15T08", to: ~o"2026-06-15T11", metadata: %{id: 1})
+      late = Interval.new!(from: ~o"2026-06-15T09", to: ~o"2026-06-15T13", metadata: %{id: 2})
+
+      {:ok, parts} =
+        Operations.intersection(IntervalSet.new!([early, late]), ~o"2026-06-15T10/2026-06-15T12")
+
+      assert Enum.map(IntervalSet.members(parts), &{&1.from.time[:hour], &1.to.time[:hour]}) ==
+               [{10, 11}, {10, 12}]
+
+      assert metadata_of(parts) == [%{id: 1}, %{id: 2}]
+    end
+
     test "an invalid :metadata option is an error, not a crash", context do
       assert {:error, message} =
                Operations.intersection(context.alice, context.bob, metadata: :both)
