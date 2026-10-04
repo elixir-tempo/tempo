@@ -26,8 +26,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **`extend/2` of a group writes what the group walks** — `Tempo.extend(~o"2026Y2G3MU")` is `{:ok, ~o"2026Y{4..6}M"}`, the months the group yields, where it writes `2026Y2G3MU{1..-1}D`, a range of days counted from the group's start that nothing reads (`:counted_in_group`). Groups of days and of hours each need their writing. Decided 2026-10-04.
 
-* [ ] **An interval with no end refuses what needs its end, as a lazy set does** — `Enum.at/2`, `Enum.empty?/1`, `Enum.random/1` and `Enum.slice/2` of `~o"2026Y/.."` raise a `Tempo.UnboundedSetError`, where `Enum.at(_, -1)` and `Enum.random/1` walk for ever and the first two answer; `Enum.take/2` and streams answer. Decided 2026-10-04: an answer that needs an unbounded walk refuses and never hangs.
-
 * [ ] **A qualification is held per component alone** — `2026?` and `?2026` are one value (ISO 8601-2 §8.2.4), written in the preferred form, where the first holds `qualification: :uncertain` and the second `qualifications: %{year: :uncertain}`, the two are not `==`, and the walk of the first yields uncertain months (`2026Y1M?`). A unit a walk adds is not qualified, and `trunc/2` drops the qualifier of a unit it drops. The matrix's read-back check (`same_value/4` in `test/support/matrix/checks.ex`) is then `==`. Decided 2026-10-04.
 
 ### Conformance and completeness
@@ -131,6 +129,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **An interval with no end refuses what needs its end** — `Enum.at/2`, `Enum.fetch/2`, `Enum.empty?/1`, `Enum.random/1`, `Enum.slice/2` and `Enum.take/2` with a negative count raise the interval's own `Tempo.IntervalEndpointsError`, as its `Enum.count/1` did, where two of them walked for ever; a lazy set refuses the same with its `UnboundedSetError`. 2026-10-04.
 
 * [x] **A value is placed only on a value of its own calendar** — `Tempo.at/2` and `on/2` return a `ConversionError` naming both calendars where two values that hold date units are of different ones (`~o"6M15D"` or `~o"25W2K"` on a Hebrew or an ISO week year), where the numbers were read in the other's calendar; a time of day is placed on any. `Tempo.select/2` still reads a selector's numbers in the span's calendar, a question for the user. 2026-10-04.
 

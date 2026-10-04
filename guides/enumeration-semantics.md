@@ -154,7 +154,7 @@ A span with no year lies on an axis that comes round again — the hours of a da
 
 A walk steps from one point and stops at another. An interval whose start or end holds several values (`{2026,2027}Y/2030Y`, `2026Y/202XY`) cannot be walked (§3.6), and one whose end holds a selection (`2026Y6ML2KN/P1D`) is walked as the spans `Tempo.to_interval/2` gives it.
 
-An interval with no end (`1985/..`) is walked as far as it is asked: `Enum.take/2`, `Enum.at/2` and `Enum.take_while/2` read what they need and stop. It has no count, so `Enum.count/1` raises a `Tempo.IntervalEndpointsError` (§3.6) rather than walk for ever. `Enum.member?/2` is answered without the whole walk where the start has a year — `~o"2030Y" in ~o"1985/.."` is true and `~o"1980Y" in ~o"1985/.."` false — and refused, with the same error, where it has none: `T10H/..` comes round the clock for ever and has no order to stop a search by. What needs every value (`Enum.to_list/1`, `Enum.at/2` with a negative index) never returns, as for any stream with no end.
+An interval with no end (`1985/..`) is walked as far as it is asked: `Enum.take/2`, `Enum.take_while/2`, `Enum.find/2` and the `Stream` functions read what they need and stop. It has no count, so `Enum.count/1` raises a `Tempo.IntervalEndpointsError` (§3.6) rather than walk for ever, and so do the functions a slice answers (`Enum.at/2`, `Enum.fetch/2`, `Enum.empty?/1`, `Enum.random/1`, `Enum.slice/2`), which cannot tell a question about the start from one that needs the last value: `Tempo.Interval.empty?/1` says whether it is empty, and `Enum.take/2` gives its first values. A lazy interval set refuses the same. `Enum.member?/2` is answered without the whole walk where the start has a year — `~o"2030Y" in ~o"1985/.."` is true and `~o"1980Y" in ~o"1985/.."` false — and refused, with the same error, where it has none: `T10H/..` comes round the clock for ever and has no order to stop a search by. What walks every value (`Enum.to_list/1`, `Enum.reverse/1`) never returns, as for any stream with no end.
 
 ### 2.10. Implicit-to-explicit conversion (`Tempo.to_interval/1`)
 
@@ -304,6 +304,7 @@ A value can parse and still name nothing a walk could yield. `Enumerable.reduce/
 | A step that depends on a missing year | `2M28D/P1D` | `Tempo.UnanchoredError` |
 | An unbounded recurrence | `R/2022-01-01/P1M` | `Tempo.UnboundedRecurrenceError` |
 | The count of an interval with no end | `Enum.count(~o"2026Y/..")` | `Tempo.IntervalEndpointsError` |
+| A slice of an interval with no end | `Enum.at(~o"2026Y/..", 3)`, `Enum.empty?(~o"2026Y/..")` | `Tempo.IntervalEndpointsError` |
 | A search of an interval with no end and no year | `Enum.member?(~o"T10H/..", ~o"T12H")` | `Tempo.IntervalEndpointsError` |
 
 ```elixir

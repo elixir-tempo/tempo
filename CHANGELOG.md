@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* An interval with no end refuses what needs its end, as a lazy interval set does: `Enum.at/2`, `Enum.fetch/2`, `Enum.empty?/1`, `Enum.random/1` and `Enum.slice/2` of `~o"2026Y/.."` raise a `Tempo.IntervalEndpointsError`, where `Enum.at(_, -1)` and `Enum.random/1` walked for ever and `Enum.at/2` with a positive index and `Enum.empty?/1` answered. `Enum.take/2`, `Enum.take_while/2`, `Enum.find/2` and the `Stream` functions read what they need, and `Tempo.Interval.empty?/1` says whether it is empty.
+
 * `Tempo.at/2` and `Tempo.on/2` place a value that holds a month, a week or a day only on a value of its own calendar: `Tempo.on(~o"6M15D", hebrew_year)` returns a `Tempo.ConversionError` naming both calendars, where it read the 6 and the 15 in the Hebrew calendar. A value read in the year's calendar is placed as before (`Tempo.from_iso8601("6M-1D", Calendrical.Hebrew)` on 5786 is its 29th), and a time of day is placed on a value of any calendar.
 
 * A week with no year has no week after it and no span: `Tempo.shift(~o"25W", week: 1)` and `Tempo.to_interval(~o"25W")` return a `Tempo.UnanchoredError`, where a week below 52 stepped to the next in every calendar, a count that holds for a Gregorian year alone. It is still read, walked by its days and stepped back, and it is checked and stepped by its year once it has one.

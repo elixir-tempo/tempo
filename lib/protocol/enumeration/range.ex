@@ -138,6 +138,18 @@ defimpl Enumerable, for: Tempo.Interval do
     )
   end
 
+  defp endless_slice_error(interval) do
+    Tempo.IntervalEndpointsError.exception(
+      interval: interval,
+      operation: "Enum.slice/2",
+      reason:
+        "`Enum.at/2`, `Enum.empty?/1`, `Enum.random/1` and `Enum.slice/2` are not answered " <>
+          "for #{inspect(interval)}, which has no end: what needs its last value would walk " <>
+          "it for ever. Take the values you need with `Enum.take/2` or `Enum.take_while/2`, " <>
+          "or give the interval an end."
+    )
+  end
+
   defp stepped_member?(element, from, to, unit, calendar) do
     cond do
       Tempo.Compare.compare_endpoints(element, from) == :earlier ->
@@ -169,6 +181,16 @@ defimpl Enumerable, for: Tempo.Interval do
       {n, from, unit} when is_integer(n) and n >= 0 -> {:ok, n, slicer(from, unit, calendar)}
       _not_counted -> {:error, __MODULE__}
     end
+  end
+
+  # A slice is what `Enum.at/2`, `Enum.fetch/2`, `Enum.empty?/1`,
+  # `Enum.random/1` and `Enum.slice/2` ask for, and it cannot tell one that
+  # needs the start from one that needs the last value, which an interval
+  # with no end never reaches. So it is refused, as a lazy interval set
+  # refuses it, where the walk they fall back to would never end.
+  def slice(%Tempo.Interval{from: %Tempo{}, to: to, duration: nil} = interval)
+      when to in [nil, :undefined] do
+    raise endless_slice_error(interval)
   end
 
   def slice(_interval), do: {:error, __MODULE__}

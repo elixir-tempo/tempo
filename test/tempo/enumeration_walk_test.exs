@@ -656,8 +656,38 @@ defmodule Tempo.EnumerationWalk.Test do
     end
 
     test "is walked as far as it is asked" do
-      assert Enum.at(~o"2026Y/..", 3) == ~o"2029Y"
-      refute Enum.empty?(~o"2026Y/..")
+      assert Enum.take(~o"2026Y/..", 3) == [~o"2026Y", ~o"2027Y", ~o"2028Y"]
+      assert ~o"2026Y/.." |> Stream.drop(3) |> Enum.take(1) == [~o"2029Y"]
+      assert Enum.find(~o"2026Y/..", &(Tempo.year(&1) == 2028)) == ~o"2028Y"
+      refute Interval.empty?(~o"2026Y/..")
+    end
+
+    # An answer that needs an unbounded walk refuses and never hangs (decided
+    # 2026-10-04): `Enum.at/2` with a positive index and `Enum.empty?/1` were
+    # answered, and `Enum.at(_, -1)` and `Enum.random/1` walked for ever.
+    test "refuses what a slice answers, as a lazy interval set does" do
+      {:ok, weekends} = Tempo.select(~o"2026-06-15/..", Tempo.weekends(:US))
+
+      for endless <- [~o"2026Y/..", ~o"2026Y6M15DT10H/..", ~o"T10H/.."] do
+        for ask <- [
+              &Enum.at(&1, 3),
+              &Enum.at(&1, -1),
+              &Enum.fetch(&1, 0),
+              &Enum.empty?/1,
+              &Enum.random/1,
+              &Enum.slice(&1, 0, 2),
+              &Enum.take(&1, -2)
+            ] do
+          assert_raise Tempo.IntervalEndpointsError, ~r/has no end/, fn -> ask.(endless) end
+          assert_raise Tempo.UnboundedSetError, fn -> ask.(weekends) end
+        end
+      end
+    end
+
+    test "with an end answers them" do
+      assert Enum.at(~o"2026Y/2030Y", 3) == ~o"2029Y"
+      assert Enum.at(~o"2026Y/2030Y", -1) == ~o"2029Y"
+      refute Enum.empty?(~o"2026Y/2030Y")
     end
   end
 end
