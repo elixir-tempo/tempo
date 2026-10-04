@@ -8,8 +8,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Correctness
 
-* [ ] **A set with no year in `covered?/2` and in a tree** — `Tempo.IntervalSet.covered?/2` raises a `Tempo.IntervalEndpointsError` for any point asked of a set with a member that runs through its cycle's end (`~o"T22/T02"` and `~o"T00:30"`, `~o"6K/2K"` and `~o"7K"`), where `Tempo.contains?/2` of the same two is `true`: it asks `Tempo.Interval.within?/2` of the member whole, which refuses a span that is two in one turn of its cycle. And `Tempo.IntervalSet.new/2` raises an `ArgumentError` for a member with no year given `backend: :tree`, where it returns an error for every other member it refuses. Found beside the fix of `covered/2`, 2026-10-04.
-
 * [ ] **A span that crosses its cycle's end comes back from a set operation in two** — `~o"T22/T02"` is one member, cut at midnight to be swept and not joined again: `Tempo.union(~o"T22/T02", ~o"T03/T04")` has three members where two were given, and `Tempo.members_outside(~o"T22/T02", ~o"T03/T04")`, the value kept whole, is `T0H/T2H` and `T22H/T0H`; `12M20D/1M10D` likewise. The time covered is right and `coalesce/1` joins them, so the matrix, which compares time, passes. Found 2026-10-04.
 
 * [ ] **A time of day placed on a week gives nothing** — `Tempo.intersection(~o"T09/T17", ~o"2026-W25", within: ~o"2026-W25")` is empty and `Tempo.complement(~o"T09/T17", within: ~o"2026-W25")` the whole week, where the same week written as dates gives its seven days' hours: the window's days are taken from its month and day (`days_in/1` in `lib/operations.ex`), and a week's ends hold neither. Found 2026-10-04.
@@ -127,6 +125,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A set with no year in `covered?/2` and in a tree** — `covered?/2` asks each part of a member a cycle cuts in two, so a point either side of the cycle's end is covered where the question raised, and a backend says what members it holds before its state is built (`accepts/1`), so a tree's refusal of a member with no year is `new/2`'s error and not a raise; the measure holds `covered?/2` on four cycles. 2026-10-04.
 
 * [x] **A qualification is held per component alone** — the `:qualification` field is gone from the struct, a qualifier of a whole value is each component's (`Tempo.Qualification`, internal), and `Tempo.qualification/1` and `/2` read it; `2026?` and `?2026` are equal and walk alike, `trunc/2`, `round/2` and `split/1` drop a dropped unit's qualifier, and the matrix's read-back check requires `==`. `tempo_sql` matches on the removed field (`lib/tempo/sql/conversion.ex:465`), to change with its move to 2.0. 2026-10-04.
 

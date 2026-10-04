@@ -17,9 +17,10 @@ defmodule Tempo.IntervalSet.Backend.Tree do
   zones.
 
   Because that projection needs a year, **members must be anchored**
-  (and bounded, as every set member already is). Building a tree from
-  unanchored members (`~o"T10:00/T11:00"`) raises an
-  `ArgumentError` — keep those sets on the default list backend.
+  (and bounded, as every set member already is). A tree of unanchored
+  members (`~o"T10:00/T11:00"`) is refused: `Tempo.IntervalSet.new/2`
+  returns an `ArgumentError` — keep those sets on the default list
+  backend.
 
   Choose this backend for large, query-heavy sets — multi-year
   calendar feeds probed with `Tempo.IntervalSet.covered?/2` or used as
@@ -37,6 +38,19 @@ defmodule Tempo.IntervalSet.Backend.Tree do
   # State: `{:tree, count, root}` where a node is
   # `{interval, from_s, to_s, max_end, left, right}` and an empty
   # subtree is `nil`.
+
+  @impl true
+  def accepts(intervals) do
+    case Enum.find(intervals, &(not indexable?(&1))) do
+      nil -> :ok
+      interval -> {:error, ArgumentError.exception(tree_requires_anchored(interval))}
+    end
+  end
+
+  defp indexable?(%Interval{from: %Tempo{} = from, to: %Tempo{} = to}),
+    do: Tempo.anchored?(from) and Tempo.anchored?(to)
+
+  defp indexable?(_interval), do: false
 
   @impl true
   def from_list(intervals, _options) do

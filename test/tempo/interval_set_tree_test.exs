@@ -49,6 +49,10 @@ defmodule Tempo.IntervalSetTreeTest do
       assert_raise ArgumentError, ~r/requires anchored/, fn ->
         IntervalSet.new!([time_of_day], backend: :tree)
       end
+
+      # The constructor returns the refusal: it raised it from the tree.
+      assert {:error, %ArgumentError{} = error} = IntervalSet.new([time_of_day], backend: :tree)
+      assert Exception.message(error) =~ "requires anchored"
     end
   end
 

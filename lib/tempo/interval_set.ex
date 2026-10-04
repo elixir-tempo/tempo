@@ -147,7 +147,8 @@ defmodule Tempo.IntervalSet do
   * `{:ok, interval_set}` where `interval_set` is a `t:t/0`, or
 
   * `{:error, reason}` when an input interval is open-ended or
-    otherwise cannot participate in a set.
+    otherwise cannot participate in a set, or is one the backend cannot
+    hold: an interval tree holds members with a year.
 
   ### Examples
 
@@ -164,15 +165,17 @@ defmodule Tempo.IntervalSet do
   def new(intervals, opts \\ []) when is_list(intervals) do
     intervals = Enum.map(intervals, &Interval.resolve_duration_form/1)
 
+    backend = resolve_backend(Keyword.get(opts, :backend, Backend.List))
+
     with :ok <- validate_all_bounded(intervals),
-         :ok <- validate_one_order(intervals) do
+         :ok <- validate_one_order(intervals),
+         :ok <- held_by_backend(backend, intervals) do
       # `coalesce: false` is the default: IntervalSet preserves
       # member identity by design. Callers who want canonical
       # instant-set form (touching or overlapping intervals merged
       # into larger spans) must either pass `coalesce: true` here
       # or apply `coalesce/1` explicitly after construction.
       coalesce? = Keyword.get(opts, :coalesce, false)
-      backend = resolve_backend(Keyword.get(opts, :backend, Backend.List))
 
       sorted = Enum.sort(intervals, &compare_from/2)
       final = if coalesce?, do: coalesce_intervals(sorted), else: sorted
@@ -203,6 +206,15 @@ defmodule Tempo.IntervalSet do
   end
 
   defp validate_one_order(_intervals), do: :ok
+
+  # A backend that cannot hold a member says so before its state is built,
+  # so the member is the constructor's error and not a raise from the
+  # backend. One that does not say holds any members.
+  defp held_by_backend(backend, intervals) do
+    if Code.ensure_loaded?(backend) and function_exported?(backend, :accepts, 1),
+      do: backend.accepts(intervals),
+      else: :ok
+  end
 
   defp resolve_backend(:list), do: Backend.List
   defp resolve_backend(:tree), do: Backend.Tree
@@ -978,6 +990,9 @@ defmodule Tempo.IntervalSet do
   at least one member span. For the common booking/scheduling
   question "is this slot occupied?", this is the right predicate.
 
+  A set with no year is on its cycle: a member that runs through the
+  cycle's end (`T22H/T2H`) covers the points on both sides of it.
+
   ### Arguments
 
   * `set` is a `t:t/0`.
@@ -998,6 +1013,12 @@ defmodule Tempo.IntervalSet do
       iex> Tempo.IntervalSet.covered?(set, ~o"2026-06-25")
       false
 
+      iex> night_shift = Tempo.IntervalSet.new!([~o"T22/T02"])
+      iex> Tempo.IntervalSet.covered?(night_shift, ~o"T00:30")
+      true
+      iex> Tempo.IntervalSet.covered?(night_shift, ~o"T12:30")
+      false
+
   """
   @spec covered?(t(), Tempo.t()) :: boolean()
   def covered?(%__MODULE__{backend: backend, intervals: state} = set, %Tempo{} = point) do
@@ -1011,7 +1032,17 @@ defmodule Tempo.IntervalSet do
         :error -> members(set)
       end
 
-    Enum.any?(candidates, fn interval -> Interval.within?(point, interval) end)
+    Enum.any?(candidates, &holds?(&1, point))
+  end
+
+  # A member with no year may run through its cycle's end (`T22H/T2H`), and
+  # is then two spans in any one turn of the cycle: it holds a point that
+  # either holds. A member no cycle can be cut for is asked whole.
+  defp holds?(%Interval{} = member, point) do
+    case Cycle.parts(member) do
+      {:ok, parts} -> Enum.any?(parts, &Interval.within?(point, &1))
+      {:error, _exception} -> Interval.within?(point, member)
+    end
   end
 
   defp point_span_seconds(%Tempo{} = point) do

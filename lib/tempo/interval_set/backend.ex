@@ -119,9 +119,24 @@ defmodule Tempo.IntervalSet.Backend do
   """
   @callback overlapping(state(), {number(), number()}) :: [Interval.t()]
 
+  @doc """
+  Whether the backend can hold these members.
+
+  `Tempo.IntervalSet.new/2` asks before it builds the state, so a
+  backend that cannot hold a member refuses it with an error and does
+  not raise: an interval tree indexes positions on the time line, and a
+  member with no year has none. The default holds any members.
+  """
+  @callback accepts([Interval.t()]) :: :ok | {:error, Exception.t()}
+
+  @optional_callbacks accepts: 1
+
   defmacro __using__(_opts) do
     quote do
       @behaviour Tempo.IntervalSet.Backend
+
+      @impl true
+      def accepts(_intervals), do: :ok
 
       @impl true
       def count(state), do: state |> to_list() |> length()
@@ -135,7 +150,7 @@ defmodule Tempo.IntervalSet.Backend do
       @impl true
       def overlapping(state, _seconds_range), do: to_list(state)
 
-      defoverridable count: 1, empty?: 1, first: 1, overlapping: 2
+      defoverridable accepts: 1, count: 1, empty?: 1, first: 1, overlapping: 2
     end
   end
 end

@@ -23,8 +23,9 @@ defmodule Tempo.SetOperationsMeasureTest do
   the second does, and so on, cell by cell.
 
   A set with no year is on a cycle: the day, the week, the year. The time
-  such a set covers, and the time at least so many of its members cover, are
-  held to arcs of the cycle worked out the same way. Two operands with no
+  such a set covers, the time at least so many of its members cover, and
+  whether a point is covered, are held to arcs of the cycle worked out the
+  same way. Two operands with no
   year are not here: a span that crosses its cycle's end comes back from an
   operation in two, an open item of `TODO.md`.
   """
@@ -485,6 +486,31 @@ defmodule Tempo.SetOperationsMeasureTest do
   ## A point in a set
 
   describe "covered?/2" do
+    # A member with no year may run through its cycle's end, and holds the
+    # points either side of it. `covered?/2` asked the member whole, which
+    # raised.
+    for {line, what} <- [
+          day_hours: "hours of the day",
+          weekdays: "days of the week",
+          months: "months of the year",
+          year_days: "days of the year"
+        ] do
+      property "is whether an arc holds the point, of #{what}" do
+        {points, _length} = cycle(unquote(line))
+
+        check all(slots <- arcs_between(points), max_runs: 60) do
+          set = set(slots, unquote(line), :a, [])
+
+          for slot <- 0..(points - 1) do
+            held? = Enum.any?(slots, &(slot in cells_round(&1, points)))
+
+            assert IntervalSet.covered?(set, point(unquote(line), slot)) == held?,
+                   "#{inspect(slots)} at #{slot} of #{unquote(line)}"
+          end
+        end
+      end
+    end
+
     property "is whether a member holds the whole of the point, on a list and on a tree" do
       check all(slots <- spans_on(:days, 8), backend <- member_of([:list, :tree]), max_runs: 60) do
         set = set(slots, :days, :a, backend: backend)

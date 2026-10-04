@@ -269,6 +269,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.IntervalSet.covered?/2` answers for a set with no year whose member runs through its cycle's end: `~o"T00:30"` is covered by a set holding `~o"T22/T02"`, where the question raised a `Tempo.IntervalEndpointsError`. `Tempo.IntervalSet.new/2` returns the tree backend's refusal of a member with no year as `{:error, %ArgumentError{}}`, where it raised it.
+
 * A value's qualifiers follow its components: `Tempo.trunc/2`, `Tempo.round/2` and `Tempo.split/1` drop the qualifier of a unit they drop (`2015-?02-28` truncated to its year is `2015`, where it kept an uncertain month), a value placed with `Tempo.at/2` brings its own (`T10~` on a date is an approximate hour, where the qualifier was lost), and a date written again in other units is qualified in each (`2026-W25-1?` is `2026-06-15?`). An interval's end written without its year or month is qualified as the same end written in full.
 
 * A set none of whose values exists names no date, as a mask no value matches does: `~o"2026Y{2,6}M31D"` returns a `Tempo.InvalidDateError` from `Tempo.to_interval/2` and every function that converts it, and raises it from a walk, where it converted to an empty set and walked nothing. A set one of whose values exists still gives those: `~o"2026Y{1,2}M31D"` is 31 January.
