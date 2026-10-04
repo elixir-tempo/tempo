@@ -52,6 +52,13 @@ defmodule Tempo.Iso8601.Unit do
     minute: {:second, 0..59}
   }
 
+  # The values of each unit whose extent is fixed, read once from
+  # `@unit_after`: the hours of a day, the minutes of an hour.
+  @value_ranges for {_parent, {unit, %Range{first: first, last: last} = range}} <- @unit_after,
+                    first >= 0 and last >= 0,
+                    into: %{},
+                    do: {unit, range}
+
   @units Map.keys(@sort_keys)
 
   def units do
@@ -129,14 +136,10 @@ defmodule Tempo.Iso8601.Unit do
   def value_range(:day_of_week, calendar), do: {:ok, 1..calendar.days_in_week()}
 
   def value_range(unit, _calendar) do
-    Enum.find_value(@unit_after, :unknown, fn
-      {_parent, {^unit, %Range{first: first, last: last} = range}}
-      when first >= 0 and last >= 0 ->
-        {:ok, range}
-
-      _other ->
-        false
-    end)
+    case @value_ranges do
+      %{^unit => range} -> {:ok, range}
+      _depends_on_the_date -> :unknown
+    end
   end
 
   @doc """

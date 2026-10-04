@@ -140,7 +140,7 @@ Counting from the end was written five times, each copy covering a different par
 | `lib/tempo/rrule/selection.ex` | moved to `Tempo.UnitValues` | A selection |
 | `lib/explain.ex:1758` | `ordinals_phrase/1`, `expand_int/1` | `Tempo.explain/1` |
 
-`Tempo.Iso8601.Unit.value_range/2` is a sixth piece: the values a clock unit and a weekday take, with `:unknown` for every unit that depends on the date.
+`Tempo.Iso8601.Unit.value_range/2` is a sixth piece: the values a clock unit and a weekday take, with `:unknown` for every unit that depends on the date. Only `Tempo.UnitValues` reads it now.
 
 With no year the calendar was asked in five modules, each reading its three answers (a count, the counts its years run over, or none) its own way: the reading of a value, the masks, the stepper, rounding and `explain/1`. All five take `in_any_year/3` now, and no other module calls a calendar's `days_in_month/1` or `months_in_year/0`. What needs a year is one rule, read against its two ranges: a value below the last every year has is followed by the next; the last value of the year that has the most is the last in every year that has it, and is followed by the first of the next period; a value between the two is followed by one or the other by the year, and is an `UnanchoredError`. So a reform calendar, which answers nothing with no year, has a day whose hours are walked and whose span is refused: the hours ask nothing of the calendar, and the span asks for the day after.
 
@@ -154,7 +154,7 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 
 ## Tasks
 
-* [ ] **One implementation** — `Tempo.UnitValues`, then each of the five callers moved to it in turn, the matrix green after each. Moved: a selection's resolver, `Tempo.select/2`'s count from the end and its weekdays, and the walk's reading of a range that reaches past a period's values (the walk reads everything else through the reading of a value). `Tempo.Validation.conform/2` is `resolve/2`, and a set or a range of a clock unit is held to the unit's values. What a unit takes with no year is `in_any_year/3`, for every module that asked. To move: the values a unit takes in a year at each of the places a value is read, stepped or selected (`1..calendar.days_in_month(year, month)` and its kin, in `validation.ex`, `mask.ex`, `math.ex`, `group.ex` and `selection.ex`), `Tempo.explain/1`'s count from the end; then `Tempo.Iso8601.Unit.value_range/2` and the week counts of `Tempo.Validation` come into it.
+* [ ] **One implementation** — `Tempo.UnitValues`, then each of the five callers moved to it in turn, the matrix green after each. Moved: a selection's resolver, `Tempo.select/2`'s count from the end and its weekdays, and the walk's reading of a range that reaches past a period's values (the walk reads everything else through the reading of a value). `Tempo.Validation.conform/2` is `resolve/2`, and a set or a range of a clock unit is held to the unit's values. What a unit takes with no year is `in_any_year/3`, for every module that asked. The reading of a value and its masks take a unit's values in a year from `in_period/3` (`validation.ex`, `mask.ex`, the calendar weeks of `group.ex`). To move: a step from a value, which asks the calendar where it steps and borrows (`math.ex`, about twelve places on the path of every walk, so each is timed), a selection's own expansions (`selection.ex`, five), `Tempo.explain/1`'s count from the end; then the week counts of `Tempo.Validation` come into the module. Not to move: the arithmetic of a group and of a fraction (the nth day of a group of months, half of a year), which counts a period's units, where the calendar's own count is the answer.
 
 * [ ] **The census in the matrix** — every calendar module as a generated class of `Tempo.Matrix.Corpus`, with the calendar-only answer as a check, so that the table above is a test.
 
@@ -171,6 +171,8 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 * [ ] **A year that starts within the months** — once what a month of such a year is has been decided, the walk follows Calendrical's `month/2` and `year/1`.
 
 ### Done
+
+* [x] **The reading and the masks take a unit's values in a year from `in_period/3`** — sixteen places that wrote `1..calendar.days_in_month(year, month)` and its kin. Two probes hold it to the same answers: 24,484 cells of values with a year (months, days, days of the year and weeks, in and out of range, read, spanned and walked in thirteen calendars) and the 13,951 with none; none changed. `in_period/3` checks that a year has the month before it asks for the month's days: asked for a thirteenth month's, a Gregorian calendar answers 31, a Julian raises and a Hebrew answers 0. Timed against the commit before: a date read is unchanged, a walk of a year's days 9% slower and a walk of a month's hours 12% faster. 2026-10-04.
 
 * [x] **With no year, one place asks the calendar** — `Tempo.UnitValues.in_any_year/3`, taken by the reading of a value, the masks, the stepper, rounding and `explain/1`. Of 13,951 cells of a probe of values with no year in eleven calendars (the reading, the span, the walk, eight steps, rounding and `explain/1`), 75 changed, each a thirteenth month of a Hebrew or a Chinese year that was refused and is answered. 2026-10-04.
 

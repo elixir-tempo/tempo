@@ -8,6 +8,7 @@ defmodule Tempo.Iso8601.Group do
   alias Tempo.Iso8601.Parser
   alias Tempo.Math
   alias Tempo.ParseError
+  alias Tempo.UnitValues
   alias Tempo.Validation
 
   @hours_per_day 24
@@ -753,10 +754,10 @@ defmodule Tempo.Iso8601.Group do
 
   # A negative week counts back from the year's last, as `-1W` does.
   defp month_calendar_week(year, week, rest, calendar) do
-    case Validation.conform(week, 1..Validation.calendar_weeks_in_year(year, calendar)//1) do
-      {:ok, week} ->
-        calendar_week_days(year, week, rest, calendar)
-
+    with {:ok, weeks} <- UnitValues.in_period(:calendar_week, [year: year], calendar),
+         {:ok, week} <- Validation.conform(week, weeks) do
+      calendar_week_days(year, week, rest, calendar)
+    else
       {:error, _reason} ->
         {:error,
          InvalidDateError.exception(
@@ -769,7 +770,8 @@ defmodule Tempo.Iso8601.Group do
   # does in an ISO 8601 week.
   defp calendar_week_days(year, week, [{:day_of_week, day} | rest], calendar)
        when is_integer(day) do
-    with {:ok, day} <- Validation.conform(day, 1..7//1),
+    with {:ok, days} <- UnitValues.in_period(:day_of_week, [], calendar),
+         {:ok, day} <- Validation.conform(day, days),
          {:ok, date} <- Validation.date_from_calendar_week(year, week, day, calendar) do
       [{:year, date.year}, {:month, date.month}, {:day, date.day} | rest]
     else

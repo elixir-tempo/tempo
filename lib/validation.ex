@@ -425,9 +425,8 @@ defmodule Tempo.Validation do
   # time units from groups whereever possible.
 
   def resolve([{:day_of_week, day} | rest], calendar) when is_integer(day) do
-    days_in_week = calendar.days_in_week()
-
-    with {:ok, day} <- conform(day, 1..days_in_week) do
+    with {:ok, days} <- values_in(:day_of_week, [], calendar),
+         {:ok, day} <- conform(day, days) do
       case resolve(rest, calendar) do
         {:error, reason} -> {:error, reason}
         resolved -> [{:day_of_week, day} | resolved]
@@ -534,7 +533,8 @@ defmodule Tempo.Validation do
   #     calendar's own week and day.
   def resolve([{:year, year}, {:week, week}, {:day_of_week, day} | rest], calendar)
       when is_integer(year) and is_integer(week) and is_integer(day) do
-    with {:ok, week} <- conform(week, 1..iso_weeks_in_year(year, calendar)//1),
+    with {:ok, weeks} <- values_in(:week, [year: year], calendar),
+         {:ok, week} <- conform(week, weeks),
          [day_of_week: day] <- resolve([day_of_week: day], calendar) do
       year_week_day(year, week, day, rest, calendar.calendar_base(), calendar)
     end
@@ -542,9 +542,8 @@ defmodule Tempo.Validation do
 
   def resolve([{:year, year}, {:day, day_of_year} | rest], calendar)
       when is_integer(year) and is_integer(day_of_year) do
-    days_in_year = calendar.days_in_year(year)
-
-    with {:ok, day_of_year} <- conform(day_of_year, 1..days_in_year) do
+    with {:ok, days} <- values_in(:day_of_year, [year: year], calendar),
+         {:ok, day_of_year} <- conform(day_of_year, days) do
       %{year: year, month: month, day: day} =
         Calendrical.date_from_day_of_year(year, day_of_year, calendar)
 
@@ -561,7 +560,8 @@ defmodule Tempo.Validation do
 
   def resolve([{:year, year}, {:day_of_year, days}], calendar)
       when is_integer(year) and (is_list(days) or is_struct(days, Range)) do
-    with {:ok, days} <- conform(days, 1..calendar.days_in_year(year)) do
+    with {:ok, days_of_year} <- values_in(:day_of_year, [year: year], calendar),
+         {:ok, days} <- conform(days, days_of_year) do
       [{:year, year}, {:day_of_year, days}]
     end
   end
@@ -629,11 +629,9 @@ defmodule Tempo.Validation do
         calendar
       )
       when is_integer(year) and is_integer(month) do
-    months_in_year = calendar.months_in_year(year)
-
-    with {:ok, month} <- conform(month, 1..months_in_year) do
-      max_days = calendar.days_in_month(year, month)
-
+    with {:ok, months} <- values_in(:month, [year: year], calendar),
+         {:ok, month} <- conform(month, months),
+         {:ok, %Range{last: max_days}} <- days_of_month(calendar, year, month) do
       case resolve_day_group(days, max_days, rest, calendar) do
         {:error, reason} -> {:error, reason}
         resolved -> [{:year, year}, {:month, month} | resolved]
@@ -721,8 +719,8 @@ defmodule Tempo.Validation do
       when is_integer(year) and is_integer(month) and
              (is_number(day) or is_struct(day, Range) or is_list(day)) do
     with [{:year, year}, {:month, month}] <- resolve([{:year, year}, {:month, month}], calendar),
-         {:ok, days_in_month} <- month_length(calendar, year, month),
-         {:ok, day} <- conform(day, 1..days_in_month) do
+         {:ok, days} <- days_of_month(calendar, year, month),
+         {:ok, day} <- conform(day, days) do
       prepend_year_month(year, month, resolve([{:day, day} | rest], calendar))
     end
   end
@@ -740,9 +738,8 @@ defmodule Tempo.Validation do
   def resolve([{:year, year}, {:month, months}], calendar)
       when is_integer(year) and
              (is_list(months) or is_integer(months) or is_struct(months, Range)) do
-    months_in_year = calendar.months_in_year(year)
-
-    with {:ok, month} <- conform(months, 1..months_in_year) do
+    with {:ok, months_of_year} <- values_in(:month, [year: year], calendar),
+         {:ok, month} <- conform(months, months_of_year) do
       [{:year, year}, {:month, month}]
     end
   end
@@ -761,16 +758,16 @@ defmodule Tempo.Validation do
   def resolve([{:year, year}, {:week, weeks}], calendar)
       when is_integer(year) and
              (is_list(weeks) or is_integer(weeks) or is_struct(weeks, Range)) do
-    with {:ok, weeks} <- conform(weeks, 1..iso_weeks_in_year(year, calendar)//1) do
+    with {:ok, weeks_of_year} <- values_in(:week, [year: year], calendar),
+         {:ok, weeks} <- conform(weeks, weeks_of_year) do
       [{:year, year}, {:week, weeks}]
     end
   end
 
   def resolve([{:year, year}, {:day, days}], calendar)
       when is_integer(year) and (is_list(days) or is_integer(days) or is_struct(days, Range)) do
-    days_in_year = calendar.days_in_year(year)
-
-    with {:ok, day} <- conform(days, 1..days_in_year) do
+    with {:ok, days_of_year} <- values_in(:day_of_year, [year: year], calendar),
+         {:ok, day} <- conform(days, days_of_year) do
       [{:year, year}, {:day, day}]
     end
   end
@@ -1091,12 +1088,12 @@ defmodule Tempo.Validation do
   defp prepend_year_month(year, month, resolved),
     do: [{:year, year}, {:month, month} | resolved]
 
-  # A calendar may report a month as having no days — e.g. the Hebrew Adar I
-  # (month 6) does not exist in an ordinary year. Report the missing month
-  # clearly rather than building a confusing `1..0` empty day range.
-  defp month_length(calendar, year, month) do
-    case calendar.days_in_month(year, month) do
-      days when is_integer(days) and days > 0 ->
+  # The days of a month of a year, which `Tempo.UnitValues` counts. A month
+  # the year does not have (a thirteenth, in a Hebrew year of twelve) is
+  # reported as missing, and not as a month of no days.
+  defp days_of_month(calendar, year, month) do
+    case UnitValues.in_period(:day, [year: year, month: month], calendar) do
+      {:ok, %Range{last: last} = days} when last > 0 ->
         {:ok, days}
 
       _no_such_month ->
@@ -1105,6 +1102,26 @@ defmodule Tempo.Validation do
            year: year,
            month: month,
            reason: "month #{month} does not exist in #{inspect(calendar)} year #{year}"
+         )}
+    end
+  end
+
+  # The values a unit takes in the period the units before it name: the
+  # months, the weeks or the days of a year, the days of a week. It is
+  # `Tempo.UnitValues` that asks the calendar, and a calendar that cannot
+  # count them leaves no value to be valid.
+  defp values_in(unit, context, calendar) do
+    case UnitValues.in_period(unit, context, calendar) do
+      {:ok, values} ->
+        {:ok, values}
+
+      {:error, _cannot_count} ->
+        {:error,
+         InvalidDateError.exception(
+           unit: unit,
+           calendar: calendar,
+           reason:
+             "#{inspect(calendar)} does not count the values of #{unit} in #{inspect(context)}"
          )}
     end
   end

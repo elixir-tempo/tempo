@@ -122,6 +122,37 @@ defmodule Tempo.UnitValuesTest do
     test "a unit that takes no run of values is uncounted" do
       assert UnitValues.in_period(:year, [], Calendrical.Gregorian) == {:error, :uncounted}
     end
+
+    # Asked for the days of a month its year does not have, one calendar
+    # answers as if the months went round, one with no days, and one raises.
+    test "the days of a month its year does not have are no period" do
+      for calendar <- @calendars, year <- years(calendar) do
+        months = calendar.months_in_year(year)
+
+        for month <- [0, months + 1, months + 2, -1] do
+          assert UnitValues.in_period(:day, [year: year, month: month], calendar) ==
+                   {:error, :no_period},
+                 "#{inspect(calendar)} #{year}-#{month}"
+        end
+      end
+    end
+
+    test "a date of a calendar of weeks holds its week where a month is held" do
+      {2026, weeks} = :calendar.iso_week_number({2026, 12, 28})
+
+      for calendar <- [Calendrical.ISOWeek, Calendrical.NRF] do
+        assert UnitValues.in_period(:day, [year: 2026, month: 25], calendar) == {:ok, 1..7//1}
+
+        assert UnitValues.in_period(:day, [year: 2026, month: 0], calendar) ==
+                 {:error, :no_period}
+      end
+
+      assert UnitValues.in_period(:day, [year: 2026, month: weeks], Calendrical.ISOWeek) ==
+               {:ok, 1..7//1}
+
+      assert UnitValues.in_period(:day, [year: 2026, month: weeks + 1], Calendrical.ISOWeek) ==
+               {:error, :no_period}
+    end
   end
 
   describe "in_any_year/3" do

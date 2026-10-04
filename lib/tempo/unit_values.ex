@@ -6,7 +6,7 @@ defmodule Tempo.UnitValues do
 
   This module is the one place where either is worked out, so that there is one place to verify. `in_period/3` gives the run, and `in_any_year/3` the run a unit takes with no year to count it in; `named/2` lists the values a written value names in it, and `resolve/2` reads a written value against it in the shape it is written in; `from_end/2` is the count from the end that all rest on. How many values a unit takes is always asked of the calendar, which is Calendrical's to answer: nothing here is calendar arithmetic.
 
-  A selection's resolver (`Tempo.RRule.Selection`), `Tempo.select/2`, the walk and the reading of a value (`Tempo.Validation`) count through it. `Tempo.explain/1` still holds a count from the end of its own and is to follow (`plans/enumeration-and-selection.md`).
+  A selection's resolver (`Tempo.RRule.Selection`), `Tempo.select/2`, the walk, the reading of a value (`Tempo.Validation`) and its masks (`Tempo.Mask`) count through it. A step from a value still asks the calendar for a year's or a month's count where it steps, and `Tempo.explain/1` still holds a count from the end of its own; both are to follow (`plans/enumeration-and-selection.md`).
 
   """
 
@@ -35,6 +35,8 @@ defmodule Tempo.UnitValues do
 
   * `{:error, :unanchored}` when the answer depends on a unit the context does not hold as one whole number: the days of a month with no year, which `in_any_year/3` answers.
 
+  * `{:error, :no_period}` when the units before it name a period the calendar does not have: the days of a thirteenth month in a year of twelve.
+
   * `{:error, :uncounted}` for a unit that takes no run of values, such as a year.
 
   ### Examples
@@ -54,9 +56,12 @@ defmodule Tempo.UnitValues do
       iex> Tempo.UnitValues.in_period(:day, [month: 2], Calendrical.Gregorian)
       {:error, :unanchored}
 
+      iex> Tempo.UnitValues.in_period(:day, [year: 2026, month: 13], Calendrical.Gregorian)
+      {:error, :no_period}
+
   """
   @spec in_period(atom(), keyword(), module()) ::
-          {:ok, Range.t()} | {:error, :unanchored | :uncounted}
+          {:ok, Range.t()} | {:error, :unanchored | :uncounted | :no_period}
   def in_period(:month, context, calendar),
     do: counted(whole(context, :year), &calendar.months_in_year/1)
 
@@ -70,9 +75,13 @@ defmodule Tempo.UnitValues do
     do: counted(whole(context, :year), &calendar.days_in_year/1)
 
   def in_period(:day, context, calendar) do
-    case whole(context, :month) do
-      nil -> {:error, :unanchored}
-      month -> counted(whole(context, :year), &calendar.days_in_month(&1, month))
+    year = whole(context, :year)
+    month = whole(context, :month)
+
+    cond do
+      is_nil(year) or is_nil(month) -> {:error, :unanchored}
+      month_of_year?(month, year, calendar) -> counted(year, &calendar.days_in_month(&1, month))
+      true -> {:error, :no_period}
     end
   end
 
@@ -90,6 +99,36 @@ defmodule Tempo.UnitValues do
     case List.keyfind(context, unit, 0) do
       {^unit, value} when is_integer(value) -> value
       _absent_or_several -> nil
+    end
+  end
+
+  # Whether a year has the month, which a calendar is asked before it is
+  # asked for the month's days: for a month its year does not have one
+  # calendar answers as if the months went round, one with no days, and one
+  # not at all. A date of a calendar of weeks holds its week where a month is
+  # held, and has the weeks its year has. A month every year has needs no
+  # count of the year's months, which an astronomical calendar works out from
+  # its new moons.
+  defp month_of_year?(month, year, calendar) when month >= 1 do
+    case calendar.calendar_base() do
+      :week -> month <= Validation.calendar_weeks_in_year(year, calendar)
+      _month -> month <= fewest_months(calendar) or month <= last_month(year, calendar)
+    end
+  end
+
+  defp month_of_year?(_month, _year, _calendar), do: false
+
+  defp fewest_months(calendar) do
+    case months_in_any_year(calendar) do
+      {:ok, %Range{last: fewest}, _longest} -> fewest
+      {:error, _cannot_say} -> 0
+    end
+  end
+
+  defp last_month(year, calendar) do
+    case calendar.months_in_year(year) do
+      months when is_integer(months) -> months
+      _cannot_say -> 0
     end
   end
 
@@ -144,10 +183,9 @@ defmodule Tempo.UnitValues do
   @spec in_any_year(atom(), keyword(), module()) ::
           {:ok, every :: Range.t(), longest :: Range.t()} | {:error, :unanchored | :uncounted}
   def in_any_year(:month, _context, calendar) do
-    # `months_in_year/0` is an optional callback of a calendar, and
     # `function_exported?/3` is false for a module that is not yet loaded.
-    if Code.ensure_loaded?(calendar) and function_exported?(calendar, :months_in_year, 0),
-      do: counted_in_any_year(calendar.months_in_year()),
+    if Code.ensure_loaded?(calendar),
+      do: months_in_any_year(calendar),
       else: {:error, :unanchored}
   end
 
@@ -168,6 +206,14 @@ defmodule Tempo.UnitValues do
     with {:ok, values} <- in_period(unit, context, calendar) do
       {:ok, values, values}
     end
+  end
+
+  # `months_in_year/0` is an optional callback of a calendar. The module is
+  # taken to be loaded, as one a function has been called on is.
+  defp months_in_any_year(calendar) do
+    if function_exported?(calendar, :months_in_year, 0),
+      do: counted_in_any_year(calendar.months_in_year()),
+      else: {:error, :unanchored}
   end
 
   # What a calendar answers with no year: a count, the counts its years run

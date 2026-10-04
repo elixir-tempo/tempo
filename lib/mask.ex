@@ -3,10 +3,8 @@ defmodule Tempo.Mask do
 
   alias Tempo.ConversionError
   alias Tempo.InvalidDateError
-  alias Tempo.Iso8601.Unit
   alias Tempo.UnanchoredError
   alias Tempo.UnitValues
-  alias Tempo.Validation
 
   @doc false
   # The values a masked unit takes when a value is walked, after the concrete
@@ -177,7 +175,7 @@ defmodule Tempo.Mask do
   # year, and `:unanchored` says so.
   defp valid_range(:month, previous, calendar) do
     case unit_value(previous, :year) do
-      year when is_integer(year) -> {:ok, 1..calendar.months_in_year(year)}
+      year when is_integer(year) -> range_in_period(:month, [year: year], calendar)
       _no_concrete_year -> range_in_any_year(:month, [], calendar)
     end
   end
@@ -189,33 +187,35 @@ defmodule Tempo.Mask do
     month = unit_value(previous, :month)
 
     cond do
-      is_integer(year) and counted?(month) -> {:ok, 1..calendar.days_in_month(year, month)}
-      counted?(month) -> range_in_any_year(:day, [month: month], calendar)
-      is_integer(year) and is_nil(month) -> {:ok, 1..calendar.days_in_year(year)}
-      true -> {:error, :unanchored}
+      is_integer(year) and counted?(month) ->
+        range_in_period(:day, [year: year, month: month], calendar)
+
+      counted?(month) ->
+        range_in_any_year(:day, [month: month], calendar)
+
+      is_integer(year) and is_nil(month) ->
+        range_in_period(:day_of_year, [year: year], calendar)
+
+      true ->
+        {:error, :unanchored}
     end
   end
 
-  defp valid_range(:day_of_year, previous, calendar) do
+  # A day of the year and a week are counted in their year, and no calendar
+  # counts them without one.
+  defp valid_range(unit, previous, calendar) when unit in [:day_of_year, :week] do
     case unit_value(previous, :year) do
-      year when is_integer(year) -> {:ok, 1..calendar.days_in_year(year)}
-      _no_concrete_year -> {:error, :unanchored}
-    end
-  end
-
-  defp valid_range(:week, previous, calendar) do
-    case unit_value(previous, :year) do
-      year when is_integer(year) -> {:ok, 1..Validation.iso_weeks_in_year(year, calendar)}
+      year when is_integer(year) -> range_in_period(unit, [year: year], calendar)
       _no_concrete_year -> {:error, :unanchored}
     end
   end
 
   # The day of the week and the clock units have the same extent wherever they
-  # are, which `Tempo.Iso8601.Unit.value_range/2` gives.
+  # are.
   defp valid_range(unit, _previous, calendar) do
-    case Unit.value_range(unit, calendar) do
+    case UnitValues.in_period(unit, [], calendar) do
       {:ok, range} -> {:ok, range}
-      :unknown -> {:error, {:unmaskable, unit}}
+      {:error, _takes_no_run_of_values} -> {:error, {:unmaskable, unit}}
     end
   end
 
@@ -233,6 +233,15 @@ defmodule Tempo.Mask do
   # A month counted from the first, rather than one still counting from the
   # end of a year the value does not have.
   defp counted?(month), do: is_integer(month) and month > 0
+
+  # The values a unit takes in the period the units before it name, which
+  # `Tempo.UnitValues` asks the calendar for.
+  defp range_in_period(unit, context, calendar) do
+    case UnitValues.in_period(unit, context, calendar) do
+      {:ok, values} -> {:ok, values}
+      {:error, _cannot_count} -> {:error, :unanchored}
+    end
+  end
 
   # The values a unit takes with no year, which `Tempo.UnitValues` asks the
   # calendar for: one range where every year has as many, and otherwise the
