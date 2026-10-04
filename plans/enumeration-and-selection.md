@@ -82,7 +82,7 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 
 * **A year that starts within the months** — in `Julian.March25` the year 2026 runs from 25 March to the next 24 March. The walk of `2026Y` yields months 1 to 12 in that order, the first three of which are in the year after the fourth, and March is one month though the year turns within it. Three cells, and the twelve selection cells of that calendar, which the census's own answer also gets wrong.
 
-* **With no year, what needs a year is decided twice** — the walk refuses where a unit's values depend on the year and the conversion where the span's end does, each in its own code. At Calendrical `6bbb560` every calendar is read by the Gregorian's rule: a month of one length is converted and walked; a month whose length differs from year to year (February, a Hebrew `6M`, the Coptic thirteenth, every Umm al-Qura and Chinese month) is converted to its span and its walk is an `UnanchoredError`, which is the February decision of `TODO.md`. Two cells are left where one answers and the other refuses with no reason in the calendar: a Hebrew `13M`, walked (29 days) and not converted though its span always ends at the first month, and a reform calendar's `6M15D`, whose hours are walked while it is not converted, since such a calendar answers no month's length with no year.
+* **The weeks of a year with no year** — no calendar counts them without a year, so the stepper holds a literal 52, `53W` has no span and `54W` is read. An item of `TODO.md`, with a decision: a count from Calendrical, or a week with no year that is neither bounded nor stepped.
 
 * **A selection in a calendar of weeks** — a week selected in a year is the whole year, and a year's weekdays stop at its twelfth week, in `ISOWeek` and `NRF` alike. Fifteen cells of the matrix, and eight of the census's in `ISOWeek`.
 
@@ -130,7 +130,7 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 
 ## The one implementation
 
-Counting from the end was written five times, each copy covering a different part of the space. `Tempo.UnitValues` is the one implementation (2026-10-04): `in_period/3` for the values a unit takes and `named/2` for the values a written value names, verified in `test/tempo/unit_values_test.exs` against the calendar asked another way in fourteen calendars. A selection, `Tempo.select/2`, the walk and the reading of a value count through it; `Tempo.explain/1`'s copy is still where it was:
+Counting from the end was written five times, each copy covering a different part of the space. `Tempo.UnitValues` is the one implementation (2026-10-04): `in_period/3` for the values a unit takes, `in_any_year/3` for those it takes with no year (the values every year has, and those of the year that has the most) and `named/2` for the values a written value names, verified in `test/tempo/unit_values_test.exs` against the calendar asked another way in fourteen calendars: with no year, against the fewest and the most each of 121 years gives. A selection, `Tempo.select/2`, the walk and the reading of a value count through it; `Tempo.explain/1`'s copy is still where it was:
 
 | Where | Function | Used by |
 |---|---|---|
@@ -142,6 +142,8 @@ Counting from the end was written five times, each copy covering a different par
 
 `Tempo.Iso8601.Unit.value_range/2` is a sixth piece: the values a clock unit and a weekday take, with `:unknown` for every unit that depends on the date.
 
+With no year the calendar was asked in five modules, each reading its three answers (a count, the counts its years run over, or none) its own way: the reading of a value, the masks, the stepper, rounding and `explain/1`. All five take `in_any_year/3` now, and no other module calls a calendar's `days_in_month/1` or `months_in_year/0`. What needs a year is one rule, read against its two ranges: a value below the last every year has is followed by the next; the last value of the year that has the most is the last in every year that has it, and is followed by the first of the next period; a value between the two is followed by one or the other by the year, and is an `UnanchoredError`. So a reform calendar, which answers nothing with no year, has a day whose hours are walked and whose span is refused: the hours ask nothing of the calendar, and the span asks for the day after.
+
 They become one module with two questions, each asked of Calendrical and of nothing else:
 
 * **The values a unit takes** — given a unit, the units before it and the calendar: the months of a year, the days of a month, the days and weeks of a year, the days of a week, the hours of a day. With no year it is the values every year has, or that the answer waits for a year. It is where a month with days missing and a year that starts within the months are answered once, for every caller.
@@ -152,7 +154,7 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 
 ## Tasks
 
-* [ ] **One implementation** — `Tempo.UnitValues`, then each of the five callers moved to it in turn, the matrix green after each. Moved: a selection's resolver, `Tempo.select/2`'s count from the end and its weekdays, and the walk's reading of a range that reaches past a period's values (the walk reads everything else through the reading of a value). `Tempo.Validation.conform/2` is `resolve/2`, and a set or a range of a clock unit is held to the unit's values. To move: the values a unit takes at each of the thirty places a value is read (`1..calendar.days_in_month(year, month)` and its kin, and the values of a unit with no year), `Tempo.explain/1`; then `Tempo.Iso8601.Unit.value_range/2` and the week counts of `Tempo.Validation` come into it.
+* [ ] **One implementation** — `Tempo.UnitValues`, then each of the five callers moved to it in turn, the matrix green after each. Moved: a selection's resolver, `Tempo.select/2`'s count from the end and its weekdays, and the walk's reading of a range that reaches past a period's values (the walk reads everything else through the reading of a value). `Tempo.Validation.conform/2` is `resolve/2`, and a set or a range of a clock unit is held to the unit's values. What a unit takes with no year is `in_any_year/3`, for every module that asked. To move: the values a unit takes in a year at each of the places a value is read, stepped or selected (`1..calendar.days_in_month(year, month)` and its kin, in `validation.ex`, `mask.ex`, `math.ex`, `group.ex` and `selection.ex`), `Tempo.explain/1`'s count from the end; then `Tempo.Iso8601.Unit.value_range/2` and the week counts of `Tempo.Validation` come into it.
 
 * [ ] **The census in the matrix** — every calendar module as a generated class of `Tempo.Matrix.Corpus`, with the calendar-only answer as a check, so that the table above is a test.
 
@@ -169,6 +171,8 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 * [ ] **A year that starts within the months** — once what a month of such a year is has been decided, the walk follows Calendrical's `month/2` and `year/1`.
 
 ### Done
+
+* [x] **With no year, one place asks the calendar** — `Tempo.UnitValues.in_any_year/3`, taken by the reading of a value, the masks, the stepper, rounding and `explain/1`. Of 13,951 cells of a probe of values with no year in eleven calendars (the reading, the span, the walk, eight steps, rounding and `explain/1`), 75 changed, each a thirteenth month of a Hebrew or a Chinese year that was refused and is answered. 2026-10-04.
 
 * [x] **With no year, every calendar is read as the Gregorian is** — Tempo locks Calendrical `6bbb560`, whose `days_in_month/1` and `months_in_year/0` answer with no year in every calendar built on its behaviour and in the Julian calendars: a month of one length is converted and walked, and a day of a month converted, in the Julian, Persian, Coptic, Ethiopic, Indian, Islamic and Hebrew calendars, where the walk raised or the conversion refused. Of the fourteen calendars probed, no month of the Umm al-Qura or the Chinese has one length, a reform calendar answers nothing with no year, and a calendar of weeks reads no month. The census of full forms and selections is unchanged at the new lock (489 of 498, 514 of 550). 2026-10-04.
 

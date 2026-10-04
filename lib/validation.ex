@@ -1178,16 +1178,14 @@ defmodule Tempo.Validation do
   end
 
   # The maximum day number a month can hold across all years — the
-  # bound for validating a yearless partial. `days_in_month/1` returns
-  # an integer for a fixed-length month, `{:ambiguous, lo..hi}` for one
-  # that varies (February's `28..29`, whose leap-year `hi` is the
-  # maximum), or an error when the length can't be bounded without a
-  # year (many lunisolar months), in which case the day is not checked.
+  # bound for validating a yearless partial: the last day of the year the
+  # month is longest in (February's 29th), which `Tempo.UnitValues` asks the
+  # calendar for. Where the calendar cannot say without a year, the day is
+  # not checked.
   defp max_day_in_month(calendar, month) do
-    case calendar.days_in_month(month) do
-      days when is_integer(days) and days > 0 -> {:ok, days}
-      {:ambiguous, first..last//_step} -> {:ok, max(first, last)}
-      _unbounded -> :unknown
+    case UnitValues.in_any_year(:day, [month: month], calendar) do
+      {:ok, _every_year, %Range{last: longest}} -> {:ok, longest}
+      {:error, _cannot_say} -> :unknown
     end
   end
 
@@ -1249,8 +1247,10 @@ defmodule Tempo.Validation do
   # Whether a yearless month's day is the same day in every year: one counted
   # from the month's start always is, and one counted from its end is where
   # the month is as long in every year.
-  defp counted_in_any_year?(day, month, calendar),
-    do: not counts_from_end?(day) or is_integer(calendar.days_in_month(month))
+  defp counted_in_any_year?(day, month, calendar) do
+    not counts_from_end?(day) or
+      match?({:ok, days, days}, UnitValues.in_any_year(:day, [month: month], calendar))
+  end
 
   defp names_zero?(0), do: true
   defp names_zero?(%Range{first: first, last: last}), do: first == 0 or last == 0
@@ -1294,19 +1294,15 @@ defmodule Tempo.Validation do
     end
   end
 
-  # The most months a year of the calendar has, which `months_in_year/0`
-  # answers without a year: a count, or the counts a lunisolar calendar's
-  # years run over (12 or 13 for the Hebrew calendar).
+  # The most months a year of the calendar has, which `Tempo.UnitValues`
+  # asks the calendar for without a year: the months of every year, or of
+  # the longest a lunisolar calendar has (13 for the Hebrew calendar).
   defp max_months_in_year(calendar) do
-    if Code.ensure_loaded?(calendar) and function_exported?(calendar, :months_in_year, 0),
-      do: max_count(calendar.months_in_year()),
-      else: :unknown
+    case UnitValues.in_any_year(:month, [], calendar) do
+      {:ok, _every_year, %Range{last: most}} -> {:ok, most}
+      {:error, _cannot_say} -> :unknown
+    end
   end
-
-  defp max_count(count) when is_integer(count) and count > 0, do: {:ok, count}
-  defp max_count({:ambiguous, %Range{first: first, last: last}}), do: {:ok, max(first, last)}
-  defp max_count({:ambiguous, [_ | _] = counts}), do: {:ok, Enum.max(counts)}
-  defp max_count(_undefined), do: :unknown
 
   defp months_within?(month, max) when is_integer(month), do: abs(month) <= max
 

@@ -4,7 +4,7 @@ defmodule Tempo.UnitValues do
 
   A date or a time is counted in units, and each unit takes a run of values that the units before it and the calendar decide: the months of a year, the days of a month, the hours of a day. A value is written against that run as a number, as a count from its end (`-1`, the last), as a range from one of its values to another (`{28..-1}`), or as several of these.
 
-  This module is the one place where either is worked out, so that there is one place to verify. `in_period/3` gives the run; `named/2` lists the values a written value names in it, and `resolve/2` reads a written value against it in the shape it is written in; `from_end/2` is the count from the end that all rest on. How many values a unit takes is always asked of the calendar, which is Calendrical's to answer: nothing here is calendar arithmetic.
+  This module is the one place where either is worked out, so that there is one place to verify. `in_period/3` gives the run, and `in_any_year/3` the run a unit takes with no year to count it in; `named/2` lists the values a written value names in it, and `resolve/2` reads a written value against it in the shape it is written in; `from_end/2` is the count from the end that all rest on. How many values a unit takes is always asked of the calendar, which is Calendrical's to answer: nothing here is calendar arithmetic.
 
   A selection's resolver (`Tempo.RRule.Selection`), `Tempo.select/2`, the walk and the reading of a value (`Tempo.Validation`) count through it. `Tempo.explain/1` still holds a count from the end of its own and is to follow (`plans/enumeration-and-selection.md`).
 
@@ -33,7 +33,7 @@ defmodule Tempo.UnitValues do
 
   * `{:ok, range}`, the values from the first to the last, counted up by one.
 
-  * `{:error, :unanchored}` when the answer depends on a unit the context does not hold as one whole number: the days of a month with no year.
+  * `{:error, :unanchored}` when the answer depends on a unit the context does not hold as one whole number: the days of a month with no year, which `in_any_year/3` answers.
 
   * `{:error, :uncounted}` for a unit that takes no run of values, such as a year.
 
@@ -101,6 +101,91 @@ defmodule Tempo.UnitValues do
   end
 
   defp counted(_no_year, _count), do: {:error, :unanchored}
+
+  @doc """
+  Returns the values a unit takes with no year to count them in: those it takes in every year, and those it takes in the year that has the most.
+
+  A month, or a day of a month, written with no year (`6M`, `2M29D`) is that month or day of any year, and how many there are may depend on the year: a Gregorian February has 28 days or 29, a Hebrew year 12 months or 13. The calendar answers without a year (`days_in_month/1` and `months_in_year/0`), and this is the one place it is asked, so that the reading of a value, its walk, its span and a step from it all take one answer.
+
+  ### Arguments
+
+  * `unit` is the unit counted, as for `in_period/3`.
+
+  * `context` is a keyword list of the units before it. Only the month is read, for a day; a year it holds is not.
+
+  * `calendar` is the calendar module the units are counted in.
+
+  ### Returns
+
+  * `{:ok, every, longest}`, two ranges counted up by one from the unit's first value: the values every year has, and the values of the year that has the most. They are one range where the count does not depend on the year.
+
+  * `{:error, :unanchored}` when the calendar cannot say without a year: a day with no month, a week or a day of the year, and a month or a day in a calendar that does not answer for it.
+
+  * `{:error, :uncounted}` for a unit that takes no run of values, such as a year.
+
+  ### Examples
+
+      iex> Tempo.UnitValues.in_any_year(:day, [month: 2], Calendrical.Gregorian)
+      {:ok, 1..28, 1..29}
+
+      iex> Tempo.UnitValues.in_any_year(:day, [month: 6], Calendrical.Gregorian)
+      {:ok, 1..30, 1..30}
+
+      iex> Tempo.UnitValues.in_any_year(:month, [], Calendrical.Hebrew)
+      {:ok, 1..12, 1..13}
+
+      iex> Tempo.UnitValues.in_any_year(:hour, [], Calendrical.Gregorian)
+      {:ok, 0..23, 0..23}
+
+      iex> Tempo.UnitValues.in_any_year(:week, [], Calendrical.Gregorian)
+      {:error, :unanchored}
+
+  """
+  @spec in_any_year(atom(), keyword(), module()) ::
+          {:ok, every :: Range.t(), longest :: Range.t()} | {:error, :unanchored | :uncounted}
+  def in_any_year(:month, _context, calendar) do
+    # `months_in_year/0` is an optional callback of a calendar, and
+    # `function_exported?/3` is false for a module that is not yet loaded.
+    if Code.ensure_loaded?(calendar) and function_exported?(calendar, :months_in_year, 0),
+      do: counted_in_any_year(calendar.months_in_year()),
+      else: {:error, :unanchored}
+  end
+
+  def in_any_year(:day, context, calendar) do
+    month = whole(context, :month)
+
+    if is_integer(month) and month > 0 and Code.ensure_loaded?(calendar) and
+         function_exported?(calendar, :days_in_month, 1),
+       do: counted_in_any_year(calendar.days_in_month(month)),
+       else: {:error, :unanchored}
+  end
+
+  def in_any_year(unit, _context, _calendar)
+      when unit in [:week, :calendar_week, :day_of_year],
+      do: {:error, :unanchored}
+
+  def in_any_year(unit, context, calendar) do
+    with {:ok, values} <- in_period(unit, context, calendar) do
+      {:ok, values, values}
+    end
+  end
+
+  # What a calendar answers with no year: a count, the counts its years run
+  # over (a range or a list of them), or that it cannot say.
+  defp counted_in_any_year(count) when is_integer(count) and count > 0,
+    do: {:ok, 1..count//1, 1..count//1}
+
+  defp counted_in_any_year({:ambiguous, %Range{first: first, last: last}})
+       when is_integer(first) and is_integer(last) and first > 0 and last > 0,
+       do: {:ok, 1..min(first, last)//1, 1..max(first, last)//1}
+
+  defp counted_in_any_year({:ambiguous, [_ | _] = counts}) do
+    if Enum.all?(counts, &(is_integer(&1) and &1 > 0)),
+      do: {:ok, 1..Enum.min(counts)//1, 1..Enum.max(counts)//1},
+      else: {:error, :unanchored}
+  end
+
+  defp counted_in_any_year(_cannot_say), do: {:error, :unanchored}
 
   @doc """
   Returns the values a written value names among those a unit takes, in order and once each.

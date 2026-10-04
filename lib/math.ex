@@ -14,6 +14,7 @@ defmodule Tempo.Math do
   alias Tempo.ResolutionError
   alias Tempo.TimeZoneDatabase
   alias Tempo.UnanchoredError
+  alias Tempo.UnitValues
   alias Tempo.Validation
 
   @doc """
@@ -340,7 +341,7 @@ defmodule Tempo.Math do
         add_month_anchored(time, year, month, calendar)
 
       _none_or_several ->
-        advance_month_present(time, month, months_in_year_unanchored(calendar))
+        advance_month_present(time, month, UnitValues.in_any_year(:month, [], calendar))
     end
   end
 
@@ -361,7 +362,8 @@ defmodule Tempo.Math do
         add_day_anchored(time, year, month, day, calendar)
 
       _none_or_several ->
-        advance_day_in_month(time, month, day, calendar.days_in_month(month), calendar)
+        days = UnitValues.in_any_year(:day, [month: month], calendar)
+        advance_day_in_month(time, month, day, days, calendar)
     end
   end
 
@@ -439,9 +441,10 @@ defmodule Tempo.Math do
   #   return `%Tempo.UnanchoredError{}` when the result would depend on the
   #   year. Never raise.
   #
-  # The calendar answers via the year-less `days_in_month/1` and
-  # `months_in_year/0`, which return `{:ambiguous, range}` where a count varies
-  # with the year. Applying the principle (Gregorian examples):
+  # The calendar answers without a year, and `Tempo.UnitValues.in_any_year/3`
+  # is where it is asked: the values a unit takes in every year, and those of
+  # the year that has the most. `place/3` reads a value against the two, for
+  # a day and a month alike. Applying the principle (Gregorian examples):
   #
   #   * A whole-year step is a **no-op** — the untracked year moves, the
   #     month/day/time does not (`1M31D` + `P1Y` = `1M31D`). Exception: a value
@@ -464,28 +467,28 @@ defmodule Tempo.Math do
   # `UnanchoredError` naming the value and the duration, so callers see a
   # value or a clean error, never a crash.
 
-  defp advance_day_in_month(time, month, day, count, calendar) when is_integer(count) do
-    if before?(day, count),
-      do: {:ok, put_component(time, :day, day + 1)},
-      else: start_of_next_month_unanchored(time, month, calendar)
-  end
-
-  defp advance_day_in_month(time, month, day, {:ambiguous, range}, calendar) do
-    cond do
-      before?(day, Enum.min(range)) ->
-        {:ok, put_component(time, :day, day + 1)}
-
-      day == :any or day >= Enum.max(range) ->
-        start_of_next_month_unanchored(time, month, calendar)
-
-      true ->
-        {:error, :unanchored}
+  defp advance_day_in_month(time, month, day, {:ok, every_year, longest}, calendar) do
+    case place(day, every_year, longest) do
+      :before_the_last -> {:ok, put_component(time, :day, day + 1)}
+      :the_last -> start_of_next_month_unanchored(time, month, calendar)
+      :by_the_year -> {:error, :unanchored}
     end
   end
 
-  defp advance_day_in_month(_time, _month, _day, _undefined, _calendar) do
-    {:error, :unanchored}
-  end
+  defp advance_day_in_month(_time, _month, _day, {:error, _cannot_say}, _calendar),
+    do: {:error, :unanchored}
+
+  # Where a value stands among those its unit takes with no year: before the
+  # last in every year, the last in every year that has it, or one or the
+  # other by the year (28 February, which the 29th follows in a leap year).
+  # An unspecified unit counts as its last value, so its step carries.
+  defp place(value, %Range{last: fewest}, _longest) when is_integer(value) and value < fewest,
+    do: :before_the_last
+
+  defp place(value, _every_year, %Range{last: most}) when value == :any or value >= most,
+    do: :the_last
+
+  defp place(_value, _every_year, _longest), do: :by_the_year
 
   # Day-only value (no month): the day advances while it stays valid in
   # *every* month; at the shortest month's length the roll-over depends on
@@ -519,9 +522,9 @@ defmodule Tempo.Math do
   # below this exists in every month (safe to advance); at or above it the
   # roll-over depends on which month, which the value doesn't carry.
   defp shortest_month(calendar) do
-    case months_in_year_unanchored(calendar) do
-      count when is_integer(count) -> shortest_of_months(calendar, 1..count)
-      _undefined_or_ambiguous -> {:error, :unanchored}
+    case UnitValues.in_any_year(:month, [], calendar) do
+      {:ok, months, months} -> shortest_of_months(calendar, months)
+      _by_the_year_or_cannot_say -> {:error, :unanchored}
     end
   end
 
@@ -538,51 +541,39 @@ defmodule Tempo.Math do
   defp min_length(shortest, length), do: min(shortest, length)
 
   defp shortest_month_length(calendar, month) do
-    case calendar.days_in_month(month) do
-      count when is_integer(count) -> {:ok, count}
-      {:ambiguous, range} -> {:ok, Enum.min(range)}
-      _undefined -> {:error, :unanchored}
+    case UnitValues.in_any_year(:day, [month: month], calendar) do
+      {:ok, %Range{last: fewest}, _longest} -> {:ok, fewest}
+      {:error, _cannot_say} -> {:error, :unanchored}
     end
   end
 
   defp start_of_next_month_unanchored(time, month, calendar) do
     with {:ok, advanced} <-
-           advance_month_present(time, month, months_in_year_unanchored(calendar)) do
+           advance_month_present(time, month, UnitValues.in_any_year(:month, [], calendar)) do
       {:ok, put_component(advanced, :day, 1)}
     end
   end
 
-  defp advance_month_present(time, month, count) when is_integer(count) do
-    cond do
-      before?(month, count) -> {:ok, put_component(time, :month, month + 1)}
-      year_of(time) == :several -> {:error, :grouped_component}
-      true -> {:ok, put_component(time, :month, 1)}
+  # The month after one of no year. The last month a year can have is
+  # followed by the first of the next year in every year that has it (a
+  # Hebrew year's thirteenth), as the last day a month can have is by the
+  # first of the next month; the month every year has and only some end on
+  # (its twelfth) is followed by one or the other by the year.
+  defp advance_month_present(time, month, {:ok, every_year, longest}) do
+    case place(month, every_year, longest) do
+      :before_the_last -> {:ok, put_component(time, :month, month + 1)}
+      :the_last -> first_month_of_the_next_year(time)
+      :by_the_year -> {:error, :unanchored}
     end
   end
 
-  defp advance_month_present(time, month, {:ambiguous, range}) do
-    if before?(month, Enum.min(range)),
-      do: {:ok, put_component(time, :month, month + 1)},
-      else: {:error, :unanchored}
-  end
+  defp advance_month_present(_time, _month, {:error, _cannot_say}),
+    do: {:error, :unanchored}
 
-  defp advance_month_present(_time, _month, _undefined) do
-    {:error, :unanchored}
-  end
-
-  # `months_in_year/0` is an optional calendar callback — a calendar
-  # that can't state its month count without a year simply doesn't
-  # implement it, so guard the call and treat its absence as "needs
-  # a year".
-  defp months_in_year_unanchored(calendar) do
-    # `function_exported?/3` returns false for a module that has not been loaded
-    # yet, so force a load first — otherwise the result is non-deterministic
-    # (the year-less month count would appear absent on a cold module).
-    if Code.ensure_loaded?(calendar) and function_exported?(calendar, :months_in_year, 0) do
-      calendar.months_in_year()
-    else
-      {:error, :undefined}
-    end
+  defp first_month_of_the_next_year(time) do
+    if year_of(time) == :several,
+      do: {:error, :grouped_component},
+      else: {:ok, put_component(time, :month, 1)}
   end
 
   # Mirrors of the advance helpers for `subtract_unit/3`.
@@ -604,9 +595,9 @@ defmodule Tempo.Math do
   end
 
   defp last_month_unanchored(time, calendar) do
-    case months_in_year_unanchored(calendar) do
-      count when is_integer(count) -> {:ok, put_component(time, :month, count)}
-      _undefined -> {:error, :unanchored}
+    case UnitValues.in_any_year(:month, [], calendar) do
+      {:ok, %Range{last: last} = months, months} -> {:ok, put_component(time, :month, last)}
+      _by_the_year_or_cannot_say -> {:error, :unanchored}
     end
   end
 
@@ -639,22 +630,27 @@ defmodule Tempo.Math do
     do: last_day_of_month_unanchored(time, month - 1, calendar)
 
   defp end_of_previous_month_unanchored(time, _first_month, calendar) do
-    case {year_of(time), months_in_year_unanchored(calendar)} do
-      {:several, _count} -> {:error, :grouped_component}
-      {_none, count} when is_integer(count) -> last_day_of_month_unanchored(time, count, calendar)
-      _undefined -> {:error, :unanchored}
+    case {year_of(time), UnitValues.in_any_year(:month, [], calendar)} do
+      {:several, _months} ->
+        {:error, :grouped_component}
+
+      {_none, {:ok, %Range{last: last} = months, months}} ->
+        last_day_of_month_unanchored(time, last, calendar)
+
+      _by_the_year_or_cannot_say ->
+        {:error, :unanchored}
     end
   end
 
   defp last_day_of_month_unanchored(time, month, calendar) do
-    case calendar.days_in_month(month) do
-      count when is_integer(count) ->
+    case UnitValues.in_any_year(:day, [month: month], calendar) do
+      {:ok, %Range{last: last} = days, days} ->
         {:ok,
          time
          |> put_component(:month, month)
-         |> put_component(:day, count)}
+         |> put_component(:day, last)}
 
-      _ambiguous_or_undefined ->
+      _by_the_year_or_cannot_say ->
         {:error, :unanchored}
     end
   end
@@ -2097,18 +2093,12 @@ defmodule Tempo.Math do
     end
   end
 
-  # The fewest days `month` has in any year, as the calendar's yearless
-  # `days_in_month/1` reports it; 0 when it cannot say.
+  # The fewest days `month` has in any year, as the calendar answers with no
+  # year; 0 when it cannot say.
   defp fewest_days_in_month(calendar, month) do
-    if function_exported?(calendar, :days_in_month, 1) do
-      case calendar.days_in_month(month) do
-        days when is_integer(days) -> days
-        {:ambiguous, first..last//_step} -> min(first, last)
-        {:ambiguous, [_ | _] = lengths} -> Enum.min(lengths)
-        _unbounded -> 0
-      end
-    else
-      0
+    case UnitValues.in_any_year(:day, [month: month], calendar) do
+      {:ok, %Range{last: fewest}, _longest} -> fewest
+      {:error, _cannot_say} -> 0
     end
   end
 
@@ -2117,14 +2107,14 @@ defmodule Tempo.Math do
   # anything whose validity depends on the missing year (a 29th/30th of
   # a variable-length month) is `{:error, :unanchored}`.
   defp clamp_day_to_month_unanchored(time, month, day, calendar) do
-    case calendar.days_in_month(month) do
-      count when is_integer(count) ->
+    case UnitValues.in_any_year(:day, [month: month], calendar) do
+      {:ok, %Range{last: count} = days, days} ->
         {:ok, if(day > count, do: put_component(time, :day, count), else: time)}
 
-      {:ambiguous, range} ->
-        if day <= Enum.min(range), do: {:ok, time}, else: {:error, :unanchored}
+      {:ok, %Range{last: fewest}, _longest} ->
+        if day <= fewest, do: {:ok, time}, else: {:error, :unanchored}
 
-      _undefined ->
+      {:error, _cannot_say} ->
         {:error, :unanchored}
     end
   end

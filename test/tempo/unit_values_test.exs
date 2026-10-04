@@ -44,6 +44,14 @@ defmodule Tempo.UnitValuesTest do
     (year - 6)..(year + 6)
   end
 
+  # Long enough a run of years for a month to take every length it has: a
+  # Hebrew year's lengths repeat within nineteen years, an Islamic one's
+  # within thirty.
+  defp many_years(calendar) do
+    %Date{year: year} = Date.convert!(~D[2026-06-15], calendar)
+    (year - 60)..(year + 60)
+  end
+
   describe "in_period/3" do
     test "the months of a year are the months the calendar calls valid" do
       for calendar <- @calendars, year <- years(calendar) do
@@ -113,6 +121,85 @@ defmodule Tempo.UnitValuesTest do
 
     test "a unit that takes no run of values is uncounted" do
       assert UnitValues.in_period(:year, [], Calendrical.Gregorian) == {:error, :uncounted}
+    end
+  end
+
+  describe "in_any_year/3" do
+    test "the months of any year are the fewest and the most its years have" do
+      for calendar <- @calendars do
+        counts = Enum.map(many_years(calendar), &calendar.months_in_year/1)
+
+        assert UnitValues.in_any_year(:month, [], calendar) ==
+                 {:ok, 1..Enum.min(counts)//1, 1..Enum.max(counts)//1},
+               inspect(calendar)
+      end
+    end
+
+    test "the days of a month of any year are the fewest and the most its years give it" do
+      for calendar <- @calendars do
+        years = many_years(calendar)
+        most_months = years |> Enum.map(&calendar.months_in_year/1) |> Enum.max()
+
+        for month <- 1..most_months do
+          lengths =
+            for year <- years, month <= calendar.months_in_year(year) do
+              calendar.days_in_month(year, month)
+            end
+
+          assert UnitValues.in_any_year(:day, [month: month], calendar) ==
+                   {:ok, 1..Enum.min(lengths)//1, 1..Enum.max(lengths)//1},
+                 "#{inspect(calendar)} month #{month}"
+        end
+      end
+    end
+
+    test "a unit of the clock and a weekday take the same values in every year" do
+      assert UnitValues.in_any_year(:hour, [], Calendrical.Hebrew) == {:ok, 0..23//1, 0..23//1}
+
+      assert UnitValues.in_any_year(:minute, [month: 2], Calendrical.Gregorian) ==
+               {:ok, 0..59//1, 0..59//1}
+
+      assert UnitValues.in_any_year(:day_of_week, [], Calendrical.ISOWeek) ==
+               {:ok, 1..7//1, 1..7//1}
+    end
+
+    test "a year in the context is not read" do
+      assert UnitValues.in_any_year(:day, [year: 2027, month: 2], Calendrical.Gregorian) ==
+               {:ok, 1..28//1, 1..29//1}
+    end
+
+    test "a day with no month, or in a month that is no one month of a year, is unanchored" do
+      assert UnitValues.in_any_year(:day, [], Calendrical.Gregorian) == {:error, :unanchored}
+
+      for month <- [0, -1, 13, [1, 2], 1..2, :any] do
+        assert UnitValues.in_any_year(:day, [month: month], Calendrical.Gregorian) ==
+                 {:error, :unanchored},
+               inspect(month)
+      end
+    end
+
+    test "a week and a day of the year are unanchored: no calendar counts them without a year" do
+      for unit <- [:week, :calendar_week, :day_of_year] do
+        assert UnitValues.in_any_year(unit, [], Calendrical.Gregorian) == {:error, :unanchored}
+        assert UnitValues.in_any_year(unit, [], Calendrical.ISOWeek) == {:error, :unanchored}
+      end
+    end
+
+    test "a calendar that cannot say without a year is unanchored" do
+      # A reform calendar's months change length at the reform.
+      assert UnitValues.in_any_year(:day, [month: 6], Calendrical.Reform.England) ==
+               {:error, :unanchored}
+
+      assert UnitValues.in_any_year(:month, [], Calendrical.Reform.England) ==
+               {:error, :unanchored}
+
+      # Elixir's own calendar answers neither question without a year.
+      assert UnitValues.in_any_year(:day, [month: 6], Calendar.ISO) == {:error, :unanchored}
+      assert UnitValues.in_any_year(:month, [], Calendar.ISO) == {:error, :unanchored}
+    end
+
+    test "a unit that takes no run of values is uncounted" do
+      assert UnitValues.in_any_year(:year, [], Calendrical.Gregorian) == {:error, :uncounted}
     end
   end
 

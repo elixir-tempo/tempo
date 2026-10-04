@@ -73,6 +73,7 @@ defmodule Tempo.Explain do
   alias Tempo.Mask
   alias Tempo.RecurrenceSet
   alias Tempo.RecurrenceSet.Conditional
+  alias Tempo.UnitValues
   alias Tempo.Validation
 
   @doc """
@@ -1534,10 +1535,8 @@ defmodule Tempo.Explain do
       else: :no_one_name
   end
 
-  defp same_months_every_year?(calendar) do
-    Code.ensure_loaded?(calendar) and function_exported?(calendar, :months_in_year, 0) and
-      is_integer(calendar.months_in_year())
-  end
+  defp same_months_every_year?(calendar),
+    do: match?({:ok, months, months}, UnitValues.in_any_year(:month, [], calendar))
 
   # What names the months of a rule's selection: its calendar and no year,
   # since it selects in each.

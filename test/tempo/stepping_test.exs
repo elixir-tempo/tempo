@@ -6,6 +6,7 @@ defmodule Tempo.SteppingTest do
 
   import Tempo.Sigils
 
+  alias Calendrical.Hebrew
   alias Tempo.ConversionError
   alias Tempo.Interval
   alias Tempo.IntervalSet
@@ -72,6 +73,50 @@ defmodule Tempo.SteppingTest do
       # The week before week 1 is the 52nd or the 53rd of the year before.
       assert {:error, %UnanchoredError{}} = Tempo.shift(~o"1W", week: -1)
       assert {:error, %UnanchoredError{}} = Tempo.shift(~o"1W1K", day: -1)
+    end
+  end
+
+  # A Hebrew year has twelve months or thirteen, and its thirteenth has 29
+  # days in every year that has one.
+  describe "the last month a year can have, with no year" do
+    defp hebrew(text), do: Tempo.from_iso8601!(text, Hebrew)
+
+    test "is followed by the first month, as it is in every year that has it" do
+      assert span(hebrew("13M")) == {hebrew("13M"), hebrew("1M")}
+      assert span(hebrew("13M29D")) == {hebrew("13M29D"), hebrew("1M1D")}
+      assert Tempo.shift(hebrew("13M"), month: 1) == hebrew("1M")
+      assert Tempo.shift(hebrew("13M15D"), month: 1) == hebrew("1M15D")
+      assert Tempo.shift(hebrew("13M29D"), day: 1) == hebrew("1M1D")
+      assert Tempo.shift(hebrew("13M28D"), week: 1) == hebrew("1M6D")
+    end
+
+    test "is what each year that has a thirteenth month gives" do
+      leap_years = Enum.filter(5770..5830, &(Hebrew.months_in_year(&1) == 13))
+      assert length(leap_years) > 20
+
+      for year <- leap_years do
+        last_day = Date.new!(year, 13, 29, Hebrew)
+        assert Date.add(last_day, 1) == Date.new!(year + 1, 1, 1, Hebrew)
+
+        assert span(hebrew("#{year}Y13M")) == {hebrew("#{year}Y13M"), hebrew("#{year + 1}Y1M")}
+      end
+    end
+
+    test "is spanned and walked alike" do
+      assert Enum.count(hebrew("13M")) == 29
+      assert Enum.to_list(hebrew("13M")) == Enum.map(1..29, &hebrew("13M#{&1}D"))
+    end
+
+    test "leaves the month only some years end on to the year" do
+      # The twelfth month is followed by the thirteenth in a leap year and
+      # by the first of the next year in any other.
+      assert {:error, %UnanchoredError{}} = Tempo.to_interval(hebrew("12M"))
+      assert {:error, %UnanchoredError{}} = Tempo.shift(hebrew("12M"), month: 1)
+      assert Tempo.shift(hebrew("11M"), month: 1) == hebrew("12M")
+    end
+
+    test "is not stepped back to from the first month" do
+      assert {:error, %UnanchoredError{}} = Tempo.shift(hebrew("1M"), month: -1)
     end
   end
 

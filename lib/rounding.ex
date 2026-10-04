@@ -19,6 +19,7 @@ defmodule Tempo.Rounding do
   alias Tempo.Iso8601.Unit
   alias Tempo.RoundingError
   alias Tempo.UnanchoredError
+  alias Tempo.UnitValues
 
   @microseconds 1_000_000
   @day 86_400 * @microseconds
@@ -166,20 +167,14 @@ defmodule Tempo.Rounding do
   defp lengths(:week, _time, calendar), do: [calendar.days_in_week() * @day]
 
   defp lengths(:month, time, calendar) do
-    case List.keyfind(time, :month, 0) do
-      {:month, month} when is_integer(month) -> month_lengths(calendar.days_in_month(month))
-      _no_month -> []
+    case UnitValues.in_any_year(:day, time, calendar) do
+      {:ok, days, days} -> [Range.size(days) * @day]
+      {:ok, every_year, longest} -> [Range.size(every_year) * @day, Range.size(longest) * @day]
+      {:error, _cannot_say} -> []
     end
   end
 
   defp lengths(_unit, _time, _calendar), do: []
-
-  defp month_lengths(days) when is_integer(days), do: [days * @day]
-
-  defp month_lengths({:ambiguous, %Range{first: first, last: last}}),
-    do: [min(first, last) * @day, max(first, last) * @day]
-
-  defp month_lengths(_undefined), do: []
 
   defp finer_error(tempo, resolution, unit) do
     RoundingError.exception(

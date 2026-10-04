@@ -5,6 +5,7 @@ defmodule Tempo.Mask do
   alias Tempo.InvalidDateError
   alias Tempo.Iso8601.Unit
   alias Tempo.UnanchoredError
+  alias Tempo.UnitValues
   alias Tempo.Validation
 
   @doc false
@@ -45,7 +46,7 @@ defmodule Tempo.Mask do
   def unspecified(unit, previous, calendar) do
     case valid_range(unit, previous, calendar) do
       {:ok, range} -> {:ok, range}
-      {:ambiguous, %Range{first: first, last: last}} -> {:ok, 1..max(first, last)//1}
+      {:ambiguous, _every_year, longest} -> {:ok, longest}
       {:error, _reason} = error -> error
     end
   end
@@ -145,19 +146,24 @@ defmodule Tempo.Mask do
     width = length(mask)
 
     case valid_range(unit, previous, calendar) do
-      {:ok, range} -> {:ok, Enum.filter(range, &padded_matches_mask?(&1, mask, width))}
-      {:ambiguous, lengths} -> candidates_in_every_length(mask, width, lengths)
-      {:error, _reason} = error -> error
+      {:ok, range} ->
+        {:ok, Enum.filter(range, &padded_matches_mask?(&1, mask, width))}
+
+      {:ambiguous, every_year, longest} ->
+        candidates_in_every_year(mask, width, every_year, longest)
+
+      {:error, _reason} = error ->
+        error
     end
   end
 
   # A range whose length depends on the missing year — February's 28 or 29
   # days, a Hebrew year's 12 or 13 months. The candidates are known when every
-  # one fits the shortest length (`1X` days are 10 to 19 in any February).
-  defp candidates_in_every_length(mask, width, shortest..longest//_step) do
-    candidates = Enum.filter(1..longest, &padded_matches_mask?(&1, mask, width))
+  # one is a value every year has (`1X` days are 10 to 19 in any February).
+  defp candidates_in_every_year(mask, width, %Range{} = every_year, %Range{} = longest) do
+    candidates = Enum.filter(longest, &padded_matches_mask?(&1, mask, width))
 
-    if Enum.all?(candidates, &(&1 <= shortest)),
+    if Enum.all?(candidates, &(&1 in every_year)),
       do: {:ok, candidates},
       else: {:error, :unanchored}
   end
@@ -166,13 +172,13 @@ defmodule Tempo.Mask do
   # ask the calendar about, and `Keyword.fetch!/2` raised a bare
   # `KeyError` from four frames down. The calendars answer the
   # unanchored question too: Gregorian always has 12 months, so the
-  # candidates are exact, while Hebrew reports `{:ambiguous, 12..13}`
-  # because a leap year adds one — there the answer really does depend
-  # on the missing year, and `:unanchored` says so.
+  # candidates are exact, while a Hebrew year has 12 or 13 because a leap
+  # year adds one — there the answer really does depend on the missing
+  # year, and `:unanchored` says so.
   defp valid_range(:month, previous, calendar) do
     case unit_value(previous, :year) do
       year when is_integer(year) -> {:ok, 1..calendar.months_in_year(year)}
-      _no_concrete_year -> unanchored_range(calendar.months_in_year())
+      _no_concrete_year -> range_in_any_year(:month, [], calendar)
     end
   end
 
@@ -184,7 +190,7 @@ defmodule Tempo.Mask do
 
     cond do
       is_integer(year) and counted?(month) -> {:ok, 1..calendar.days_in_month(year, month)}
-      counted?(month) -> unanchored_range(calendar.days_in_month(month))
+      counted?(month) -> range_in_any_year(:day, [month: month], calendar)
       is_integer(year) and is_nil(month) -> {:ok, 1..calendar.days_in_year(year)}
       true -> {:error, :unanchored}
     end
@@ -228,9 +234,16 @@ defmodule Tempo.Mask do
   # end of a year the value does not have.
   defp counted?(month), do: is_integer(month) and month > 0
 
-  defp unanchored_range(count) when is_integer(count), do: {:ok, 1..count}
-  defp unanchored_range({:ambiguous, %Range{} = lengths}), do: {:ambiguous, lengths}
-  defp unanchored_range(_undefined), do: {:error, :unanchored}
+  # The values a unit takes with no year, which `Tempo.UnitValues` asks the
+  # calendar for: one range where every year has as many, and otherwise the
+  # values every year has and those of the year that has the most.
+  defp range_in_any_year(unit, context, calendar) do
+    case UnitValues.in_any_year(unit, context, calendar) do
+      {:ok, values, values} -> {:ok, values}
+      {:ok, every_year, longest} -> {:ambiguous, every_year, longest}
+      {:error, _cannot_say} -> {:error, :unanchored}
+    end
+  end
 
   # Pad candidate to the mask's width with leading zeros, then
   # compare digit-by-digit: `:X` matches any digit, a digit set
