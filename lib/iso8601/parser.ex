@@ -422,11 +422,11 @@ defmodule Tempo.Iso8601.Parser do
   end
 
   def parse_date([{component, {:all_of, list}} | rest]) do
-    [{component, reduce_list(list)} | parse_date(rest)]
+    [{component, reduce_members(component, list)} | parse_date(rest)]
   end
 
   def parse_date([{component, list} | rest]) when is_list(list) do
-    [{component, reduce_list(list)} | parse_date(rest)]
+    [{component, reduce_members(component, list)} | parse_date(rest)]
   end
 
   def parse_date([{component, {:mask, :"X*"}} | rest]) do
@@ -578,9 +578,12 @@ defmodule Tempo.Iso8601.Parser do
 
   # Number or range list. Sort ascending before consolidating so consecutive
   # values merge into ranges — but only when every member is non-negative. A
-  # negative member is a sentinel (`BYMONTHDAY=1,-1` = the first and *last* day)
-  # or a BCE year, where position carries meaning, so the list is left in source
-  # order; sorting it would reorder occurrences and break round-tripping.
+  # negative member counts from the end (`{1,-1}D`, the first and the *last*
+  # day), and where it falls among the others is not known until it is
+  # counted, so the list is left in the order it is written: the reading of
+  # the value puts it in order once the count is taken
+  # (`Tempo.Validation.conform/2`). A year below zero is a year and not a
+  # count, so a set of years is put in order here (`reduce_members/2`).
   def reduce_list(list) when is_list(list) do
     list
     |> sort_unless_signed()
@@ -590,6 +593,22 @@ defmodule Tempo.Iso8601.Parser do
   def reduce_list(other) do
     other
   end
+
+  # The members of a unit's set. A set of years is in order whatever the
+  # signs of its years; any other is `reduce_list/1`'s to order.
+  defp reduce_members(:year, [first | _rest] = years)
+       when is_integer(first) or is_struct(first, Range) do
+    if Enum.all?(years, &number_or_range?/1),
+      do: years |> Enum.sort_by(&first_value/1) |> consolidate_ranges(),
+      else: reduce_list(years)
+  end
+
+  defp reduce_members(_component, members), do: reduce_list(members)
+
+  defp number_or_range?(member), do: is_integer(member) or is_struct(member, Range)
+
+  defp first_value(%Range{first: first}), do: first
+  defp first_value(number), do: number
 
   defp sort_unless_signed(list) do
     if Enum.any?(list, &signed_member?/1) do
@@ -629,80 +648,91 @@ defmodule Tempo.Iso8601.Parser do
       else: value
   end
 
-  # Consolidate overlapping, adjacent and enclosing
-  # ranges. Remove integers that fit within or are
-  # adjacent to ranges. Collapse sequences of integers
-  # into a range.
+  # Consolidate a list of whole numbers and ranges: a member another holds
+  # is dropped, and neighbours that run on from one another become one range.
+  #
+  # Two members are joined only when both count from the start or both from
+  # the end, and both count up by one. A negative member counts from the end
+  # (`-1`, the last), so `-1` and `0` are the last and the first and not
+  # neighbours, where `-2` and `-1` are the last two; and `{1..9//2}` does not
+  # run on into 10. A list with a negative member is left in the order it is
+  # written (`sort_unless_signed/1`), so nothing here takes its members to be
+  # in ascending order: one is held by another only when both its ends are.
+  def consolidate_ranges([]), do: []
+  def consolidate_ranges([member]), do: [member]
 
-  def consolidate_ranges([]) do
-    []
-  end
-
-  def consolidate_ranges([h]) do
-    [h]
-  end
-
-  def consolidate_ranges([a, a | rest]) do
-    consolidate_ranges([a | rest])
-  end
-
-  def consolidate_ranges([a, b | rest]) when a + 1 == b do
-    consolidate_ranges([a..b | rest])
-  end
-
-  def consolidate_ranges([a, b | rest]) when is_integer(a) and is_integer(b) do
-    [a | consolidate_ranges([b | rest])]
-  end
-
-  def consolidate_ranges([a, %Range{first: first, last: last} = range | rest])
-      when is_integer(a) do
-    cond do
-      a >= first && a <= last ->
-        consolidate_ranges([range | rest])
-
-      a + 1 == first ->
-        consolidate_ranges([%{range | first: a} | rest])
-
-      true ->
-        [a | consolidate_ranges([range | rest])]
+  def consolidate_ranges([first, second | rest]) do
+    case joined(first, second) do
+      {:ok, one} -> consolidate_ranges([one | rest])
+      :apart -> [first | consolidate_ranges([second | rest])]
     end
   end
 
-  def consolidate_ranges([%Range{last: last} = range, b | rest]) when is_integer(b) do
+  defp joined(member, member), do: {:ok, member}
+
+  defp joined(first, second) when is_integer(first) and is_integer(second) do
+    if first + 1 == second and same_end?(first, second),
+      do: {:ok, first..second},
+      else: :apart
+  end
+
+  defp joined(number, %Range{first: first} = range) when is_integer(number) do
     cond do
-      b <= last ->
-        consolidate_ranges([range | rest])
-
-      last + 1 == b ->
-        consolidate_ranges([%{range | last: b} | rest])
-
-      true ->
-        [range | consolidate_ranges([b | rest])]
+      held?(number, range) -> {:ok, range}
+      runs_on?(number, first) and by_ones?(range) -> {:ok, %{range | first: number}}
+      true -> :apart
     end
   end
 
-  def consolidate_ranges([%Range{step: step} = r1, %Range{step: step} = r2 | rest]) do
+  defp joined(%Range{last: last} = range, number) when is_integer(number) do
     cond do
-      # Overlapping
-      r1.last >= r2.first && r1.last <= r2.last ->
-        consolidate_ranges([%{r1 | last: r2.last} | rest])
-
-      # Adjacent
-      r1.last + 1 == r2.first ->
-        consolidate_ranges([%{r1 | last: r2.last} | rest])
-
-      # Enclosing
-      r1.last >= r2.last ->
-        [r1 | consolidate_ranges(rest)]
-
-      true ->
-        [r1 | consolidate_ranges([r2 | rest])]
+      held?(number, range) -> {:ok, range}
+      runs_on?(last, number) and by_ones?(range) -> {:ok, %{range | last: number}}
+      true -> :apart
     end
   end
 
-  def consolidate_ranges([struct | rest]) when is_struct(struct) do
-    [struct | consolidate_ranges(rest)]
+  defp joined(%Range{} = first, %Range{} = second) do
+    if by_ones?(first) and by_ones?(second) and same_end?(first.first, second.first),
+      do: joined_ranges(first, second),
+      else: :apart
   end
+
+  defp joined(_first, _second), do: :apart
+
+  # Two ranges that count up by one from the same end: one that holds the
+  # other, or the second beginning within the first or just after it.
+  defp joined_ranges(first, second) do
+    cond do
+      second.first >= first.first and second.last <= first.last ->
+        {:ok, first}
+
+      first.first >= second.first and first.last <= second.last ->
+        {:ok, second}
+
+      second.first >= first.first and second.first <= first.last + 1 ->
+        {:ok, %{first | last: second.last}}
+
+      true ->
+        :apart
+    end
+  end
+
+  # A range holds a number when both its ends and the number count from one
+  # end: a range from the start to the end (`{1..-1}`) holds values only
+  # once it is counted.
+  defp held?(number, %Range{first: first, last: last} = range),
+    do: same_end?(first, last) and same_end?(number, first) and number in range
+
+  # The second is the value after the first, counted from the same end.
+  defp runs_on?(first, second), do: first + 1 == second and same_end?(first, second)
+
+  # Both count from the start, or both from the end.
+  defp same_end?(first, second), do: first < 0 == second < 0
+
+  # A range from one value up to another by ones, both counted from one end.
+  defp by_ones?(%Range{first: first, last: last, step: step}),
+    do: step == 1 and first <= last and same_end?(first, last)
 
   # Ranges must have the same keys. Assumption
   # is that ranges can be in either direction

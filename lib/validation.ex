@@ -11,6 +11,7 @@ defmodule Tempo.Validation do
   alias Tempo.InvalidTimeError
   alias Tempo.Iso8601.AST
   alias Tempo.Iso8601.Group
+  alias Tempo.Iso8601.Parser
   alias Tempo.Microsecond
   alias Tempo.ParseError
   alias Tempo.TimeZoneDatabase
@@ -1523,13 +1524,27 @@ defmodule Tempo.Validation do
   # `Tempo.UnitValues.resolve/2`; this names its refusal.
   def conform(written, %Range{} = valid) do
     case UnitValues.resolve(written, valid) do
-      {:ok, resolved} -> {:ok, resolved}
+      {:ok, resolved} -> {:ok, as_its_numbers(written, resolved)}
       {:error, {:not_taken, value, counted}} -> normalized_error(value, counted, valid)
       {:error, {:not_taken, value}} -> not_valid_error(value, valid, valid)
     end
   end
 
   def conform(written, not_a_range), do: not_valid_error(written, not_a_range, nil)
+
+  # A set that held a count from the end is, once the count is taken, the
+  # set written with the numbers: in order, its neighbours joined and none
+  # twice, as the parser reads one. `{28..30,-1}D` in January is `{28..31}D`,
+  # and `T{-1,0}H` is `T{0,23}H`.
+  defp as_its_numbers(written, resolved) when is_list(written) do
+    if counts_from_end?(written) and Enum.all?(resolved, &number_or_range?/1),
+      do: Parser.reduce_list(resolved),
+      else: resolved
+  end
+
+  defp as_its_numbers(_written, resolved), do: resolved
+
+  defp number_or_range?(member), do: is_integer(member) or is_struct(member, Range)
 
   defp not_valid_error(value, valid, valid_range) do
     {:error,

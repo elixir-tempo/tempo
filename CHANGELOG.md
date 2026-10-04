@@ -257,6 +257,10 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A set that holds a count from the end keeps every member and is read as the set of its numbers: `~o"2026Y1M{28..30,-1}D"` is the 28th to the 31st, where it lost the 31st, and `~o"T{-1,0}H"` is hours 0 and 23, where it was a range from the last hour to the first, which named none. A range with a step is not run on into its neighbour (`{1..9//2,10}D` lost the 10th), and a set of years is in order whatever the signs of its years.
+
+* With no year, the Julian, Persian, Coptic, Ethiopic, Indian, Islamic and Hebrew calendars are read as the Gregorian is, now that Calendrical answers a month's length with no year in each: `6M` in the Persian calendar walks its thirty-one days, where its walk raised a `Tempo.UnanchoredError`, and `Tempo.to_interval/2` converts `6M15D`, which it refused. A month whose length differs from year to year is walked only once it has a year, as February is.
+
 * A set or a range of hours, minutes, seconds or days of the week that names a value the unit does not have is a `Tempo.InvalidDateError` when it is read, as one of days or months is: `~o"2026Y6M15DT{22..25}H"` was read, its walk yielded hours 24 and 25 and `Tempo.to_interval/2` refused it. A set with such a member (`T{22,25}H`) was read with the member passed over, and is that error too.
 
 * A range with a step that reaches past the days one of its months has keeps its own steps there: the walk of `~o"{1,2}M{31..1//-7}D"` yields the 24th, 17th, 10th and 3rd of February, the days of the range February has, where it yielded the 29th, 22nd, 15th, 8th and 1st.

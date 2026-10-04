@@ -67,7 +67,7 @@ So for a date or a time with a year, in the fifteen calendars of whole months th
 | A weekday selected in a Gregorian week | Open |
 | A month whose days are not `1..n` (a reform) | Open |
 | A year that starts within the months | Open |
-| A value with no year in a calendar other than the Gregorian | Open |
+| A value with no year in a calendar other than the Gregorian | In progress |
 | `inspect/1`, `to_iso8601/1` and `explain/1` on a selection | Open |
 | `Tempo.select/2` against the selection | Done |
 | A recurrence with no year and a rule | Done |
@@ -82,7 +82,7 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 
 * **A year that starts within the months** — in `Julian.March25` the year 2026 runs from 25 March to the next 24 March. The walk of `2026Y` yields months 1 to 12 in that order, the first three of which are in the year after the fourth, and March is one month though the year turns within it. Three cells, and the twelve selection cells of that calendar, which the census's own answer also gets wrong.
 
-* **A value with no year, in a calendar other than the Gregorian** — the conversion and the walk disagree in both directions. In `Persian`, `Coptic`, `Ethiopic`, `Indian`, `Islamic.*` and `Hebrew` a month (`6M`) converts and its walk raises an `UnanchoredError`, and a month and day (`6M15D`) is refused by the conversion and walked. In `Julian` it is the other way round: `6M` is refused and walked. It is so in each of the ten month calendars probed, and none of the 122 cells with no year is verified.
+* **With no year, what needs a year is decided twice** — the walk refuses where a unit's values depend on the year and the conversion where the span's end does, each in its own code. At Calendrical `6bbb560` every calendar is read by the Gregorian's rule: a month of one length is converted and walked; a month whose length differs from year to year (February, a Hebrew `6M`, the Coptic thirteenth, every Umm al-Qura and Chinese month) is converted to its span and its walk is an `UnanchoredError`, which is the February decision of `TODO.md`. Two cells are left where one answers and the other refuses with no reason in the calendar: a Hebrew `13M`, walked (29 days) and not converted though its span always ends at the first month, and a reform calendar's `6M15D`, whose hours are walked while it is not converted, since such a calendar answers no month's length with no year.
 
 * **A selection in a calendar of weeks** — a week selected in a year is the whole year, and a year's weekdays stop at its twelfth week, in `ISOWeek` and `NRF` alike. Fifteen cells of the matrix, and eight of the census's in `ISOWeek`.
 
@@ -93,8 +93,6 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 * **`Tempo.explain/1` on a range that reaches the end** — a `CaseClauseError` or a `MatchError`. 19 cells.
 
 ## Feature gaps
-
-* **A month's length with no year** — Calendrical answered `{:error, :undefined}` for every month of twelve calendars and the Julian calendars answered unlike the Gregorian. Both were recorded in its `TODO.md` and are fixed there at `6bbb560` (2026-10-04); Tempo locks `ad5ff77`, so its own work with no year starts with moving the lock.
 
 * **What Calendrical already answers** — two things first thought missing there are not. It lists the days a month has (`Calendrical.Interval.month/3` is the range of September 1752's nineteen dates in `Reform.England`, and `valid_date?/3` answers each), and it counts the months of a year that starts within them from the year's start (`month/2` of a Julian year-start variant, and `year/1` for its days in order). Both bugs are Tempo's, and the second needs a decision: what a month of such a year is.
 
@@ -162,7 +160,7 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 
 * [ ] **A selection under an hour, and `explain/1` on a range to the end** — 54 cells of the baseline.
 
-* [ ] **A value with no year, measured** — Tempo's lock moved to Calendrical's `6bbb560`, which answers a month's length with no year in every calendar; then an answer worked out apart from the library, and the walk and the conversion made to agree in every calendar.
+* [ ] **A value with no year, measured** — an answer worked out apart from the library for a value with no year, in every calendar (Calendrical's `days_in_month/1` and `months_in_year/0` are what it is worked out from), and the walk and the conversion asking one place what needs a year. Nothing holds either to an answer of its own yet.
 
 * [ ] **The measure widened** — shapes, intervals, recurrences and rules in every calendar; a calendar-generic answer for a week, for `NRF`; the astronomical calendars with a time limit that suits them.
 
@@ -171,6 +169,8 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 * [ ] **A year that starts within the months** — once what a month of such a year is has been decided, the walk follows Calendrical's `month/2` and `year/1`.
 
 ### Done
+
+* [x] **With no year, every calendar is read as the Gregorian is** — Tempo locks Calendrical `6bbb560`, whose `days_in_month/1` and `months_in_year/0` answer with no year in every calendar built on its behaviour and in the Julian calendars: a month of one length is converted and walked, and a day of a month converted, in the Julian, Persian, Coptic, Ethiopic, Indian, Islamic and Hebrew calendars, where the walk raised or the conversion refused. Of the fourteen calendars probed, no month of the Umm al-Qura or the Chinese has one length, a reform calendar answers nothing with no year, and a calendar of weeks reads no month. The census of full forms and selections is unchanged at the new lock (489 of 498, 514 of 550). 2026-10-04.
 
 * [x] **The reading of a value counts through the one implementation** — `conform/2` is `Tempo.UnitValues.resolve/2`; a set or a range of hours, minutes, seconds or weekdays past the unit's values is an `InvalidDateError`, as one of days is. 2026-10-04.
 

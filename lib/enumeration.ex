@@ -482,10 +482,26 @@ defmodule Tempo.Enumeration do
     resolve = &resolve_candidate(unit, &1, ancestors, calendar)
 
     case flat_map_resolved(raw_candidates(literal), resolve) do
-      {:ok, values} -> {:ok, unit, values}
+      {:ok, values} -> {:ok, unit, as_its_numbers(literal, values)}
       :unresolved -> {:error, {:unresolved, unit}}
     end
   end
+
+  # A set that holds a count from the end is, once the count is taken in the
+  # units before it, the set of its numbers: in order and none twice, as the
+  # same set is when it is read with one year (`Tempo.Validation.conform/2`).
+  # `{2026,2028}Y2M{28,-1}D` is the 28th of the first February once, and the
+  # 28th and 29th of the second.
+  defp as_its_numbers(literal, values) do
+    if counts_from_end?(literal) and Enum.all?(values, &is_integer/1),
+      do: values |> Enum.uniq() |> Enum.sort(),
+      else: values
+  end
+
+  defp counts_from_end?(value) when is_integer(value), do: value < 0
+  defp counts_from_end?(%Range{first: first, last: last}), do: first < 0 or last < 0
+  defp counts_from_end?(values) when is_list(values), do: Enum.any?(values, &counts_from_end?/1)
+  defp counts_from_end?(_value), do: false
 
   defp group_values({_unit, {:group, %Range{} = range}}), do: Enum.to_list(range)
 
