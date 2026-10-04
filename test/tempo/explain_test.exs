@@ -186,6 +186,139 @@ defmodule Tempo.Explain.Test do
     end
   end
 
+  # What a selection selects, in words. A weekday, an hour, a minute and a
+  # second take the same values wherever they are, so a count from the end
+  # is the value it names; a day, a week and a position are counted in a
+  # period the selection alone does not fix, so theirs is worded as written.
+  describe "a selection's values" do
+    defp selects(iso), do: iso |> Tempo.from_iso8601!() |> selects_line()
+    defp selects(iso, calendar), do: iso |> Tempo.from_iso8601!(calendar) |> selects_line()
+
+    defp selects_line(value) do
+      value
+      |> Tempo.explain()
+      |> String.split("\n")
+      |> Enum.find(&(&1 =~ ~r/[Ss]elects/))
+    end
+
+    test "a range that reaches the end of its period is worded by its ends" do
+      assert selects("R/../P1M/FL{28..-1}DN") == "Selects: on the 28th to the last."
+      assert selects("R/../P1M/FL{2..-2}DN") == "Selects: on the 2nd to the 2nd-to-last."
+
+      assert selects("R/../P1M/FL{1..-1//7}DN") ==
+               "Selects: on every 7th from the 1st to the last."
+
+      assert selects("R/../P1M/FL{1,28..-1}DN") ==
+               "Selects: on the 1st and the 28th to the last."
+
+      assert selects("R/../P1Y/FL{52..-1}WN") == "Selects: in the 52nd to the last ISO week."
+
+      assert selects("R/../P1Y/FL{364..-1}ON") ==
+               "Selects: on the 364th to the last day of the year."
+
+      assert selects("R/../P1M/FL1K{2..-1}IN") == "Selects: on the 2nd to the last Monday."
+
+      assert selects("R/../P1M/FL{1..5}K{2..-1}IN") ==
+               "Selects: on a Monday, Tuesday, Wednesday, Thursday or Friday, " <>
+                 "keeping the 2nd to the last occurrence."
+    end
+
+    test "a count from the end follows those counted from the start" do
+      assert selects("R/../P1M/FL-1DN") == "Selects: on the last."
+      assert selects("R/../P1M/FL{1,15,-1}DN") == "Selects: on the 1st, 15th, and last."
+      assert selects("R/../P1M/FL{-3..-1}DN") == "Selects: on the 3rd-to-last–last."
+      assert selects("R/../P1M/FL5K-1IN") == "Selects: on the last Friday."
+    end
+
+    test "weekdays are named, a set of them and one counted from the end" do
+      assert selects("R/../P1W/FL{1,3}KN") == "Selects: on a Monday or Wednesday."
+      assert selects("R/../P1W/FL{6..7}KN") == "Selects: on a Saturday or Sunday."
+      assert selects("R/../P1W/FL{6..-1}KN") == "Selects: on a Saturday or Sunday."
+      assert selects("R/../P1W/FL-1KN") == "Selects: on a Sunday."
+
+      assert selects("R/../P1M/FL{1,5}K-1IN") ==
+               "Selects: on a Monday or Friday, keeping the last occurrence."
+    end
+
+    test "a month counted from the end is named where a year's months can be counted" do
+      assert selects("R/../P1Y/FL-1MN") == "Selects: in December."
+      assert selects("R/../P1Y/FL{11..-1}MN") == "Selects: in November or December."
+      assert selects("R/../P1Y/FL{1..-1//3}MN") == "Selects: in January, April, July or October."
+
+      # A Hebrew year has twelve months or thirteen, and its last is Elul.
+      assert selects("5787YL-1MN", Calendrical.Hebrew) == "In 5787, selects in Elul."
+      assert selects("5786YL-1MN", Calendrical.Hebrew) == "In 5786, selects in Elul."
+
+      # A rule selects in every year, and which month is the last depends on the year.
+      assert selects("R/../P1Y/FL-1MN[u-ca=hebrew]") == "Selects: in the last month."
+
+      assert selects("R/../P1Y/FL{11..-1}MN[u-ca=hebrew]") ==
+               "Selects: in month 11 to the last month."
+    end
+
+    test "a time of day is each hour with each minute and second" do
+      assert selects("R/../P1D/FLT9HN") == "Selects: at 09:00."
+      assert selects("R/../P1D/FLT10H30MN") == "Selects: at 10:30."
+      assert selects("R/../P1D/FLT10H30M15SN") == "Selects: at 10:30:15."
+      assert selects("R/../P1D/FLT{9,17}H30MN") == "Selects: at 09:30 or 17:30."
+      assert selects("R/../P1D/FLT-1HN") == "Selects: at 23:00."
+      assert selects("R/../P1D/FLT{22..-1}HN") == "Selects: at 22:00 or 23:00."
+      assert selects("R/../P1D/FLT10H-1MN") == "Selects: at 10:59."
+
+      assert selects("R/../P1D/FLT{9..17}H{0,30}MN") ==
+               "Selects: at 18 times of day from 09:00 to 17:30."
+    end
+
+    test "a minute or a second with no hour is that of each hour or minute" do
+      assert selects("R/../P1D/FLT30MN") == "Selects: at minute 30 of each hour."
+      assert selects("R/../P1D/FLT{0,30}MN") == "Selects: at minute 0 or 30 of each hour."
+      assert selects("R/../P1D/FLT30M15SN") == "Selects: at 30:15 past each hour."
+      assert selects("R/../P1D/FLT15SN") == "Selects: at second 15 of each minute."
+    end
+
+    test "a value the unit does not take is worded as it is written" do
+      assert selects("R/../P1D/FLT25HN") == "Selects: at hour 25."
+      assert selects("R/../P1W/FL8KN") == "Selects: on a weekday 8."
+      assert selects("R/../P1Y/FL13MN") == "Selects: in month 13."
+    end
+
+    test "the period a value's selection is in is named" do
+      assert selects("2026YL15DN") == "In 2026, selects on the 15th."
+      assert selects("2026Y6ML15DN") == "In June 2026, selects on the 15th."
+      assert selects("2026Y6M15DLT9HN") == "On June 15, 2026, selects at 09:00."
+      assert selects("2026Y25WL1KN") == "In week 25 of 2026, selects on a Monday."
+      assert selects("2026Y{6,7}ML15DN") == "In June and July 2026, selects on the 15th."
+      assert selects("6ML15DN") == "In June, in any year, selects on the 15th."
+
+      assert selects("2026Y6M15DT10HLT30MN") ==
+               "On June 15, 2026 at 10:00, selects at minute 30 of each hour."
+
+      assert selects("5787Y6ML{28..-1}DN", Calendrical.Hebrew) ==
+               "In Adar I 5787, selects on the 28th to the last."
+    end
+  end
+
+  describe "a count from the end in a value with no year" do
+    test "is worded by its place from the end" do
+      assert headline("-1D") == "The last day of any month (no year or month — it recurs)."
+      assert headline("-2D") == "The 2nd-to-last day of any month (no year or month — it recurs)."
+      assert headline("2M-1D") == "The last day of February, in any year (no year — it recurs)."
+      assert headline("-1M") == "The last month, in any year (no year — it recurs)."
+
+      assert headline("-1M-1D") ==
+               "The last day of the last month, in any year (no year — it recurs)."
+
+      assert headline("-1M15D") == "Day 15 of the last month, in any year (no year — it recurs)."
+      assert headline("-1W") == "The last week of any year (no year — it recurs)."
+      assert headline("-1O") == "The last day of any year (no year — it recurs)."
+    end
+
+    test "is the value it names where that is the same in every year" do
+      assert headline("6M-1D") == "June 30, in any year (no year — it recurs)."
+      assert headline("-1K") == "Sunday of any week (no year or week — it recurs)."
+    end
+  end
+
   describe "values holding a set or a group" do
     test "a set is each of its members" do
       assert headline("2026-{06,07}") == "June and July 2026."

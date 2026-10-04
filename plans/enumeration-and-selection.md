@@ -62,13 +62,13 @@ So for a date or a time with a year, in the fifteen calendars of whole months th
 | Selections in a year and a month, in a calendar of whole months | Done |
 | Full dates and times in a calendar of weeks | Done |
 | Every shape of a Gregorian value (the matrix) | Done |
-| One implementation of a unit's values and of a count from the end | In progress |
+| One implementation of a unit's values and of a count from the end | Done |
 | A selection in a calendar of weeks | Open |
 | A weekday selected in a Gregorian week | Open |
 | A month whose days are not `1..n` (a reform) | Open |
 | A year that starts within the months | Open |
 | A value with no year in a calendar other than the Gregorian | In progress |
-| `inspect/1`, `to_iso8601/1` and `explain/1` on a selection | Open |
+| `inspect/1` and `to_iso8601/1` on a selection under an hour | Open |
 | `Tempo.select/2` against the selection | Done |
 | A recurrence with no year and a rule | Done |
 | The astronomical calendars | In progress |
@@ -89,8 +89,6 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 * **A weekday selected in a Gregorian week** — `2026Y25WL3KN` is the week's Monday whatever the weekday, in a value and in a recurrence's rule. 42 cells.
 
 * **A selection under an hour cannot be written** — `inspect/1` and `Tempo.to_iso8601/1` raise a `FunctionClauseError` on `2026Y6M15DT10HLT30MN`. 35 cells.
-
-* **`Tempo.explain/1` on a range that reaches the end** — a `CaseClauseError` or a `MatchError`. 19 cells.
 
 ## Feature gaps
 
@@ -130,7 +128,7 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 
 ## The one implementation
 
-Counting from the end was written five times, each copy covering a different part of the space. `Tempo.UnitValues` is the one implementation (2026-10-04): `in_period/3` for the values a unit takes, `in_any_year/3` for those it takes with no year (the values every year has, and those of the year that has the most) and `named/2` for the values a written value names, verified in `test/tempo/unit_values_test.exs` against the calendar asked another way in fourteen calendars: with no year, against the fewest and the most each of 121 years gives. A selection, `Tempo.select/2`, the walk and the reading of a value count through it; `Tempo.explain/1`'s copy is still where it was:
+Counting from the end was written five times, each copy covering a different part of the space. `Tempo.UnitValues` is the one implementation (2026-10-04): `in_period/3` for the values a unit takes, `in_any_year/3` for those it takes with no year (the values every year has, and those of the year that has the most) and `named/2` for the values a written value names, verified in `test/tempo/unit_values_test.exs` against the calendar asked another way in fourteen calendars: with no year, against the fewest and the most each of 121 years gives. A selection, `Tempo.select/2`, the walk, the reading of a value and `Tempo.explain/1` count through it:
 
 | Where | Function | Used by |
 |---|---|---|
@@ -138,7 +136,7 @@ Counting from the end was written five times, each copy covering a different par
 | `lib/enumeration.ex` | moved to `Tempo.UnitValues` | The walk |
 | `lib/tempo/select.ex` | moved to `Tempo.UnitValues` | `Tempo.select/2` |
 | `lib/tempo/rrule/selection.ex` | moved to `Tempo.UnitValues` | A selection |
-| `lib/explain.ex:1758` | `ordinals_phrase/1`, `expand_int/1` | `Tempo.explain/1` |
+| `lib/explain.ex` | counts through `Tempo.UnitValues` where a unit's values are fixed | `Tempo.explain/1` |
 
 `Tempo.Iso8601.Unit.value_range/2` is a sixth piece: the values a clock unit and a weekday take, with `:unknown` for every unit that depends on the date. Only `Tempo.UnitValues` reads it now.
 
@@ -154,13 +152,13 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 
 ## Tasks
 
-* [ ] **One implementation** — `Tempo.UnitValues`, then each of the five callers moved to it in turn, the matrix green after each. Moved: a selection's resolver, `Tempo.select/2`'s count from the end and its weekdays, and the walk's reading of a range that reaches past a period's values (the walk reads everything else through the reading of a value). `Tempo.Validation.conform/2` is `resolve/2`, and a set or a range of a clock unit is held to the unit's values. What a unit takes with no year is `in_any_year/3`, for every module that asked. The reading of a value and its masks take a unit's values in a year from `in_period/3` (`validation.ex`, `mask.ex`, the calendar weeks of `group.ex`). A step from a value asks `following/4` and `preceding/4` what comes after and before a value, `first/3` and `last/3` for the value a carry or a borrow lands on, and `at_or_before/4` for the day a step of months lands on (`math.ex`, which has no count of its own left but the weeks of a year with no year and a fraction of a year in months). A selection's resolver takes a month's days, a year's months and their ends from it too (`selection.ex`). To move: `Tempo.explain/1`'s count from the end; then the week counts of `Tempo.Validation` come into the module. Still arithmetic of its own in the resolver: the nearest weekday of cron's `W`, which steps a day or two within a month. Not to move: the arithmetic of a group and of a fraction (the nth day of a group of months, half of a year), which counts a period's units, where the calendar's own count is the answer.
+* [ ] **One implementation** — `Tempo.UnitValues`, then each of the five callers moved to it in turn, the matrix green after each. Moved: a selection's resolver, `Tempo.select/2`'s count from the end and its weekdays, and the walk's reading of a range that reaches past a period's values (the walk reads everything else through the reading of a value). `Tempo.Validation.conform/2` is `resolve/2`, and a set or a range of a clock unit is held to the unit's values. What a unit takes with no year is `in_any_year/3`, for every module that asked. The reading of a value and its masks take a unit's values in a year from `in_period/3` (`validation.ex`, `mask.ex`, the calendar weeks of `group.ex`). A step from a value asks `following/4` and `preceding/4` what comes after and before a value, `first/3` and `last/3` for the value a carry or a borrow lands on, and `at_or_before/4` for the day a step of months lands on (`math.ex`, which has no count of its own left but the weeks of a year with no year and a fraction of a year in months). A selection's resolver takes a month's days, a year's months and their ends from it too (`selection.ex`). `Tempo.explain/1` expanded a range as Elixir's, which names nothing where the range reaches the end; it counts a weekday, an hour, a minute and a second, and a month where a year's months can be counted, through `resolve/2` and `named/2`, and words a day, a week and a position, whose period a rule selects in each of, as they are written. To move: the week counts of `Tempo.Validation` into the module. Still arithmetic of its own in the resolver: the nearest weekday of cron's `W`, which steps a day or two within a month. Not to move: the arithmetic of a group and of a fraction (the nth day of a group of months, half of a year), which counts a period's units, where the calendar's own count is the answer.
 
 * [ ] **The census in the matrix** — every calendar module as a generated class of `Tempo.Matrix.Corpus`, with the calendar-only answer as a check, so that the table above is a test.
 
 * [ ] **A week selected in a year of a calendar of weeks, and a weekday in a Gregorian week** — 48 cells of the baseline.
 
-* [ ] **A selection under an hour, and `explain/1` on a range to the end** — 54 cells of the baseline.
+* [ ] **A selection under an hour** — `inspect/1` and `to_iso8601/1`, 35 cells of the baseline.
 
 * [ ] **A value with no year, measured** — an answer worked out apart from the library for a value with no year, in every calendar (Calendrical's `days_in_month/1` and `months_in_year/0` are what it is worked out from), and the walk and the conversion asking one place what needs a year. Nothing holds either to an answer of its own yet.
 
@@ -171,6 +169,8 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 * [ ] **A year that starts within the months** — once what a month of such a year is has been decided, the walk follows Calendrical's `month/2` and `year/1`.
 
 ### Done
+
+* [x] **`Tempo.explain/1` on the one implementation** — the last of the five callers. A range that reaches the end is worded by its ends, a weekday, a month and a time of day are counted and named, and a selection's minutes, seconds and the month of its period are worded where they were left out. A probe of 1,288 explanations (selections and rules, 72 parts on seven periods and five recurrences, four calendars) raised in 356 and raises in none; the baseline's nineteen `explain/1` cells are fixed, and it lists 83. 2026-10-04.
 
 * [x] **A selection's resolver asks the one implementation** — the weekdays of a month and of a year, the clamp of a day to its month, the nearest weekday, a day of the year and the bounds of a month and a year. The months of a year are those the resolver's own `period_values/2` gives, which for a calendar of weeks are its weeks, so a year's weekdays no longer stop at week twelve: nine cells of the baseline, which lists 102. A probe of 5,892 selections, rules, RRULE strings and cron expressions in eight calendars changed in 33 cells, all of them those; four rules timed the same. 2026-10-04.
 

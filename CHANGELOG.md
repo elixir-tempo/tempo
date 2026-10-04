@@ -257,6 +257,10 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.explain/1` words a selection whose range reaches the end of its period ("on the 28th to the last"), where it raised a `CaseClauseError` or a `MatchError`, and words a count from the end in a value with no year by its place ("The last day of February, in any year").
+
+* `Tempo.explain/1` says what a selection names in full: `{6..7}K` is "on a Saturday or Sunday", `-1M` "in December" and `T10H30M` "at 10:30", where the minutes were left out, and a selection in June 2026 is "In June 2026" where it was "In 2026".
+
 * A month or a week followed by a selection is held to its year: `2027Y53WL1KN` and a Hebrew `5786Y13ML1KN` are a `Tempo.InvalidDateError`, where a week or a month the year does not have was read and, in a calendar of weeks, `Tempo.to_interval/2` raised a `FunctionClauseError`. A count from the end there is counted in its year, so `2026Y-1ML1KN` is the Mondays of December.
 
 * A weekday selected in a year of a calendar of weeks is that day of each of the year's weeks: `2026YL1KN` in `Calendrical.ISOWeek` is the year's 53 Mondays, where it was the first twelve, and its last Friday is in week 53.

@@ -232,11 +232,7 @@ defmodule Tempo.Explain do
   end
 
   defp selection_parts(%Tempo{} = tempo, time, selection) do
-    scope =
-      case find_unit(time, :year) do
-        year when is_integer(year) -> "In #{year}, selects"
-        _no_year -> "Selects"
-      end
+    scope = selection_scope(tempo, time)
 
     [
       {:headline, "A selection — a rule naming which occurrences are wanted."},
@@ -245,6 +241,58 @@ defmodule Tempo.Explain do
       {:hint, "Pair it with a recurrence (`R/../P1Y/FL…N`) to list its occurrences."}
     ]
     |> Enum.reject(&is_nil/1)
+  end
+
+  # The period a selection selects in, which the units before it name: "In
+  # 2026", "In June 2026", "On June 15, 2026". A value that is only a
+  # selection selects in whatever it is paired with.
+  defp selection_scope(%Tempo{} = tempo, time) do
+    case Enum.take_while(time, &(not match?({:selection, _parts}, &1))) do
+      [] -> "Selects"
+      [{:year, year}] when is_integer(year) -> "In #{year}, selects"
+      period -> period_scope(%{tempo | time: period}, period)
+    end
+  end
+
+  # The period by the headline it has as a value, within a sentence. A
+  # period the headline has no words for is its year alone.
+  defp period_scope(%Tempo{} = period_value, period) do
+    case scalar_headline(period_value) do
+      "A Tempo " <> _no_words_for_it -> year_scope(period)
+      headline -> "#{period_preposition(period)} #{within_a_sentence(headline)}, selects"
+    end
+  end
+
+  defp year_scope(period) do
+    case find_unit(period, :year) do
+      year when is_integer(year) -> "In #{year}, selects"
+      _no_one_year -> "Selects"
+    end
+  end
+
+  defp period_preposition(period) do
+    cond do
+      Enum.any?(period, &unit_in?(&1, [:day, :day_of_week, :day_of_year])) -> "On"
+      Enum.all?(period, &unit_in?(&1, [:hour, :minute, :second])) -> "At"
+      true -> "In"
+    end
+  end
+
+  defp unit_in?({unit, _value}, units), do: unit in units
+  defp unit_in?(_group_of_a_set, _units), do: false
+
+  # A headline as a phrase: with no full stop, no aside in brackets, and no
+  # capital on a first word that is not a name.
+  defp within_a_sentence(headline) do
+    phrase = headline |> String.trim_trailing(".") |> String.replace(~r/ \([^)]*\)/, "")
+
+    case String.split(phrase, " ", parts: 2) do
+      [first, rest] when first in ~w(The Week Weeks Day Days Month Months) ->
+        String.downcase(first) <> " " <> rest
+
+      _starts_with_a_name ->
+        phrase
+    end
   end
 
   defp scalar_value_parts(%Tempo{} = tempo) do
@@ -370,38 +418,55 @@ defmodule Tempo.Explain do
   # No year at all: a recurring day-and-month (a birthday), a month, a bare
   # day, a week or a day of the week — values in their own right, not partial
   # anchored ones.
+  # A value with no year keeps a count from the end as it is written where
+  # what it counts in depends on the year (`2M-1D`, `-1M`), and it is worded
+  # by its place from the end: "the last day of February", "the last month".
   defp yearless_headline(:yearless_date, %Tempo{time: time} = tempo) do
     day = find_unit(time, :day)
+    month = find_unit(time, :month)
 
-    case named_month(tempo) do
-      {:ok, name} ->
-        "#{name} #{day}, in any year (no year — it recurs)."
+    date =
+      case named_month(tempo) do
+        {:ok, name} when day > 0 -> "#{name} #{day}"
+        {:ok, name} -> "#{placed("day", day)} of #{name}"
+        :error -> "#{placed("day", day)} of #{placed("month", month)}"
+      end
 
-      :error ->
-        "Day #{day} of month #{find_unit(time, :month)}, in any year (no year — it recurs)."
-    end
+    capitalised("#{date}, in any year (no year — it recurs).")
   end
 
   defp yearless_headline(:yearless_month, %Tempo{time: time} = tempo) do
     case named_month(tempo) do
-      {:ok, name} -> "#{name}, in any year (no year — it recurs)."
-      :error -> "Month #{find_unit(time, :month)}, in any year (no year — it recurs)."
+      {:ok, name} ->
+        "#{name}, in any year (no year — it recurs)."
+
+      :error ->
+        capitalised(
+          "#{placed("month", find_unit(time, :month))}, in any year (no year — it recurs)."
+        )
     end
   end
 
-  defp yearless_headline(:day_only, %Tempo{time: time}),
-    do: "Day #{find_unit(time, :day)} of any month (no year or month — it recurs)."
+  defp yearless_headline(:day_only, %Tempo{time: time}) do
+    capitalised(
+      "#{placed("day", find_unit(time, :day))} of any month (no year or month — it recurs)."
+    )
+  end
 
-  defp yearless_headline(:day_of_year_only, %Tempo{time: time}),
-    do: "Day #{find_unit(time, :day_of_year)} of any year (no year — it recurs)."
+  defp yearless_headline(:day_of_year_only, %Tempo{time: time}) do
+    capitalised(
+      "#{placed("day", find_unit(time, :day_of_year))} of any year (no year — it recurs)."
+    )
+  end
 
   defp yearless_headline(:yearless_week_date, %Tempo{time: time} = tempo) do
-    "#{yearless_weekday(tempo)} of week #{find_unit(time, :week)}, " <>
+    "#{yearless_weekday(tempo)} of #{placed("week", find_unit(time, :week))}, " <>
       "in any year (no year — it recurs)."
   end
 
-  defp yearless_headline(:yearless_week, %Tempo{time: time}),
-    do: "Week #{find_unit(time, :week)} of any year (no year — it recurs)."
+  defp yearless_headline(:yearless_week, %Tempo{time: time}) do
+    capitalised("#{placed("week", find_unit(time, :week))} of any year (no year — it recurs).")
+  end
 
   defp yearless_headline(:weekday_only, %Tempo{} = tempo),
     do: "#{yearless_weekday(tempo)} of any week (no year or week — it recurs)."
@@ -410,6 +475,13 @@ defmodule Tempo.Explain do
     {unit, _scale} = Tempo.resolution(tempo)
     "A Tempo value at #{inspect(unit)} resolution."
   end
+
+  # A unit by its number, or by its place from the end where it is counted
+  # from there: "day 15", "the last day", "the 2nd-to-last month".
+  defp placed(noun, value) when is_integer(value) and value < 0,
+    do: "the #{ordinal(value)} #{noun}"
+
+  defp placed(noun, value), do: "#{noun} #{value}"
 
   # Without a year there is no date to ask for its weekday. ISO 8601 numbers a
   # month-based calendar's days of the week from Monday; a calendar of weeks'
@@ -1593,6 +1665,7 @@ defmodule Tempo.Explain do
     selection
     |> Enum.reject(fn {key, _value} -> key == :origin_day end)
     |> fuse_ordinal_weekday()
+    |> fuse_time_of_day()
     |> Enum.flat_map(fn entry -> List.wrap(selection_clause(entry, naming)) end)
     |> Enum.join(", ")
   end
@@ -1687,13 +1760,39 @@ defmodule Tempo.Explain do
   defp fuse_ordinal_weekday([entry | rest]), do: [entry | fuse_ordinal_weekday(rest)]
   defp fuse_ordinal_weekday([]), do: []
 
+  # Each position with the weekday. A range of positions that reaches the
+  # end of its period ("the 2nd to the last Monday") is kept as it is: which
+  # positions it names depends on the period.
   defp ordinal_weekday_pairs(weekday, positions) do
-    positions |> List.wrap() |> Enum.flat_map(&expand_int/1) |> Enum.map(&{&1, weekday})
+    positions |> List.wrap() |> Enum.flat_map(&positions_of/1) |> Enum.map(&{&1, weekday})
   end
 
-  # A month is named in the selection's calendar; no other clause needs it.
-  defp selection_clause({:month, m}, naming),
-    do: "in #{names_phrase(m, &month_name(&1, naming))}"
+  defp positions_of(%Range{} = range),
+    do: if(reaches_the_end?(range), do: [range], else: Enum.to_list(range))
+
+  defp positions_of(position), do: [position]
+
+  # The hours, minutes and seconds of a selection are one time of day.
+  defp fuse_time_of_day([{unit, _value} = first | rest]) when unit in [:hour, :minute, :second] do
+    {finer, rest} = Enum.split_while(rest, &unit_in?(&1, [:minute, :second]))
+    [{:time_of_day, [first | finer]} | fuse_time_of_day(rest)]
+  end
+
+  defp fuse_time_of_day([entry | rest]), do: [entry | fuse_time_of_day(rest)]
+  defp fuse_time_of_day([]), do: []
+
+  # A month is named in the selection's calendar, and a weekday and a time
+  # of day are counted in it; no other clause needs it.
+  defp selection_clause({:month, months}, naming), do: "in #{months_phrase(months, naming)}"
+
+  defp selection_clause({:day_of_week, weekdays}, {calendar, _year}),
+    do: "on a #{weekdays_phrase(weekdays, calendar)}"
+
+  defp selection_clause({:byday, pairs}, {calendar, _year}),
+    do: "on #{byday_phrase(pairs, calendar)}"
+
+  defp selection_clause({:time_of_day, clock}, {calendar, _year}),
+    do: "at #{time_of_day_phrase(clock, calendar)}"
 
   defp selection_clause(entry, _naming), do: selection_clause(entry)
 
@@ -1705,9 +1804,6 @@ defmodule Tempo.Explain do
 
   defp selection_clause({:wkst, w}), do: "with weeks starting on #{weekday_name(w)}"
   defp selection_clause({:day, d}), do: "on #{ordinals_phrase(d)}"
-  defp selection_clause({:day_of_week, wd}), do: "on a #{weekday_name(wd)}"
-  defp selection_clause({:byday, pairs}), do: "on #{byday_phrase(pairs)}"
-  defp selection_clause({:hour, h}), do: "at #{names_phrase(h, fn n -> "#{two_digit(n)}:00" end)}"
   defp selection_clause({:week, w}), do: "in #{ordinals_phrase(w)} ISO week"
   defp selection_clause({:calendar_week, w}), do: "in #{ordinals_phrase(w)} calendar week"
   defp selection_clause({:day_of_year, d}), do: "on #{ordinals_phrase(d)} day of the year"
@@ -1743,38 +1839,198 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp byday_phrase(pairs) do
+  defp byday_phrase(pairs, calendar) do
     pairs
     |> Enum.map(fn
-      {nil, wd} -> "a #{weekday_name(wd)}"
-      {ord, wd} -> "the #{ordinal(ord)} #{weekday_name(wd)}"
+      {nil, weekday} ->
+        "a #{weekdays_phrase(weekday, calendar)}"
+
+      {position, weekday} ->
+        "the #{position_phrase(position)} #{weekdays_phrase(weekday, calendar)}"
     end)
     |> or_join()
   end
 
-  # Ordinal-list phrase — a contiguous run collapses to a range:
-  # `[2..8]` → "the 2nd–8th"; `[1, 15]` → "the 1st and 15th".
-  defp ordinals_phrase(value) do
-    ints = value |> List.wrap() |> Enum.flat_map(&expand_int/1) |> Enum.sort()
+  defp position_phrase(%Range{first: first, last: last}),
+    do: "#{ordinal(first)} to the #{ordinal(last)}"
 
-    case ints do
+  defp position_phrase(position), do: ordinal(position)
+
+  # ── What a selection's values are called ──────────────────────
+  #
+  # A weekday, an hour, a minute and a second take the same values whatever
+  # comes before them, so `Tempo.UnitValues` counts what is written: a count
+  # from the end is the value it names (`-1K` is Sunday) and a range that
+  # reaches the end is each of its values (`T{22..-1}H` is 22:00 and 23:00).
+  # A month is counted where its year's months can be. A day, a week, a day
+  # of the year and a position are counted in a period the selection alone
+  # does not fix (a rule selects in each), so a count from the end is worded
+  # as it is written: "the last", "the 28th to the last".
+
+  # The values a written value names among those a unit always takes, or
+  # `:as_written` where it names one the unit does not take.
+  defp counted(written, unit, calendar) do
+    case UnitValues.in_period(unit, [], calendar) do
+      {:ok, values} -> counted_among(written, values)
+      {:error, _depends_on_the_date} -> :as_written
+    end
+  end
+
+  defp counted_among(written, values) do
+    with {:ok, _each_is_taken} <- UnitValues.resolve(List.wrap(written), values),
+         [_ | _] = named <- UnitValues.named(written, values) do
+      {:ok, named}
+    else
+      _one_is_not_taken -> :as_written
+    end
+  end
+
+  defp weekdays_phrase(written, calendar) do
+    case counted(written, :day_of_week, calendar) do
+      {:ok, weekdays} -> weekdays |> Enum.map(&weekday_name/1) |> or_join()
+      :as_written -> weekday_name(written)
+    end
+  end
+
+  # The months a selection names, by name where the calendar counts the
+  # months of the selection's year, or of every year alike.
+  defp months_phrase(written, {calendar, year} = naming) do
+    with {:ok, months_of_year} <- months_of(calendar, year),
+         {:ok, months} <- counted_among(written, months_of_year) do
+      months |> Enum.map(&month_name(&1, naming)) |> or_join()
+    else
+      _counted_by_the_year ->
+        written |> List.wrap() |> Enum.flat_map(&month_as_written(&1, naming)) |> or_join()
+    end
+  end
+
+  defp months_of(calendar, year) when is_integer(year),
+    do: UnitValues.in_period(:month, [year: year], calendar)
+
+  defp months_of(calendar, _no_year) do
+    case UnitValues.in_any_year(:month, [], calendar) do
+      {:ok, months, months} -> {:ok, months}
+      _by_the_year_or_cannot_say -> :error
+    end
+  end
+
+  defp month_as_written(month, naming) when is_integer(month) and month > 0,
+    do: [month_name(month, naming)]
+
+  defp month_as_written(month, _naming) when is_integer(month),
+    do: ["the #{ordinal(month)} month"]
+
+  defp month_as_written(%Range{first: first, last: last, step: step} = range, naming) do
+    cond do
+      not reaches_the_end?(range) ->
+        range |> Enum.to_list() |> Enum.flat_map(&month_as_written(&1, naming))
+
+      step == 1 ->
+        ["#{month_name(first, naming)} to the #{ordinal(last)} month"]
+
+      true ->
+        [
+          "every #{ordinal(step)} month from #{month_name(first, naming)} to the #{ordinal(last)} month"
+        ]
+    end
+  end
+
+  defp month_as_written(other, naming), do: [month_name(other, naming)]
+
+  # A time of day: each hour with each minute and second, "09:30 or 17:30".
+  # A selection with no hour selects in each: "minute 30 of each hour".
+  defp time_of_day_phrase(clock, calendar) do
+    counted = Enum.map(clock, fn {unit, written} -> {unit, counted(written, unit, calendar)} end)
+
+    if Enum.all?(counted, &match?({_unit, {:ok, _values}}, &1)),
+      do:
+        counted |> Enum.map(fn {unit, {:ok, values}} -> {unit, values} end) |> clock_phrase_of(),
+      else:
+        Enum.map_join(clock, ", ", fn {unit, written} -> "#{unit} #{written_phrase(written)}" end)
+  end
+
+  defp clock_phrase_of([{:hour, hours} | finer]) do
+    times =
+      for hour <- hours, rest <- finer_times(finer) do
+        Enum.map_join([hour | rest], ":", &two_digit/1) <> if(rest == [], do: ":00", else: "")
+      end
+
+    times_phrase(times, "times of day")
+  end
+
+  defp clock_phrase_of([{:minute, minutes}]),
+    do: "minute #{number_list(minutes)} of each hour"
+
+  defp clock_phrase_of([{:minute, _minutes}, {:second, _seconds}] = finer) do
+    times = for time <- finer_times(finer), do: Enum.map_join(time, ":", &two_digit/1)
+    times_phrase(times, "times") <> " past each hour"
+  end
+
+  defp clock_phrase_of([{:second, seconds}]),
+    do: "second #{number_list(seconds)} of each minute"
+
+  # Each minute with each second, as the numbers that follow an hour.
+  defp finer_times([]), do: [[]]
+
+  defp finer_times([{_unit, values} | finer]),
+    do: for(value <- values, rest <- finer_times(finer), do: [value | rest])
+
+  # A handful of times are each named, and more are counted.
+  defp times_phrase(times, _noun) when length(times) <= 12, do: or_join(times)
+
+  defp times_phrase(times, noun),
+    do: "#{length(times)} #{noun} from #{hd(times)} to #{List.last(times)}"
+
+  defp number_list(numbers), do: numbers |> Enum.map(&Integer.to_string/1) |> or_join()
+
+  defp written_phrase(written) when is_list(written),
+    do: written |> Enum.map(&written_phrase/1) |> and_join()
+
+  defp written_phrase(%Range{first: first, last: last, step: 1}), do: "#{first} to #{last}"
+
+  defp written_phrase(%Range{first: first, last: last, step: step}),
+    do: "#{first} to #{last} by #{step}"
+
+  defp written_phrase(other), do: inspect(other)
+
+  # Ordinal-list phrase — a contiguous run collapses to a range:
+  # `[2..8]` → "the 2nd–8th"; `[1, 15]` → "the 1st and 15th". Those counted
+  # from the end follow those counted from the start ("the 1st, 15th, and
+  # last"), and a range that reaches the end is worded by its ends ("the
+  # 28th to the last").
+  defp ordinals_phrase(value) do
+    {reaching, plain} = value |> List.wrap() |> Enum.split_with(&reaches_the_end?/1)
+
+    and_join(plain_ordinals(plain) ++ Enum.map(reaching, &reaching_ordinals/1))
+  end
+
+  defp plain_ordinals(members) do
+    case members |> Enum.flat_map(&expand_int/1) |> Enum.sort_by(&{&1 < 0, &1}) do
+      [] ->
+        []
+
       [n] ->
-        "the #{ordinal(n)}"
+        ["the #{ordinal(n)}"]
 
       [lo | _] = list ->
         hi = List.last(list)
 
-        if length(list) > 2 and hi - lo + 1 == length(list) do
-          "the #{ordinal(lo)}–#{ordinal(hi)}"
-        else
-          "the " <> and_join(Enum.map(list, &ordinal/1))
-        end
+        if length(list) > 2 and hi - lo + 1 == length(list),
+          do: ["the #{ordinal(lo)}–#{ordinal(hi)}"],
+          else: ["the " <> and_join(Enum.map(list, &ordinal/1))]
     end
   end
 
-  defp names_phrase(value, name_fun) do
-    value |> List.wrap() |> Enum.flat_map(&expand_int/1) |> Enum.map(name_fun) |> or_join()
-  end
+  # Whether a range runs from a value counted from the start to one counted
+  # from the end, so that the values it names depend on the period.
+  defp reaches_the_end?(%Range{first: first, last: last}), do: first >= 0 and last < 0
+  defp reaches_the_end?(_member), do: false
+
+  defp reaching_ordinals(%Range{first: first, last: last, step: 1}),
+    do: "the #{ordinal(first)} to the #{ordinal(last)}"
+
+  defp reaching_ordinals(%Range{first: first, last: last, step: step}),
+    do: "every #{ordinal(step)} from the #{ordinal(first)} to the #{ordinal(last)}"
 
   defp expand_int(%Range{} = range), do: Enum.to_list(range)
   defp expand_int(n) when is_integer(n), do: [n]
@@ -1800,6 +2056,7 @@ defmodule Tempo.Explain do
   defp weekday_name(n) when is_integer(n) and n in 1..7, do: Enum.at(@weekdays, n - 1)
   defp weekday_name(other), do: "weekday #{inspect(other)}"
 
+  defp or_join([]), do: "nothing"
   defp or_join([one]), do: one
 
   defp or_join(list) do
@@ -1807,6 +2064,7 @@ defmodule Tempo.Explain do
     Enum.join(init, ", ") <> " or " <> last
   end
 
+  defp and_join([]), do: "nothing"
   defp and_join([one]), do: one
   defp and_join([first, second]), do: "#{first} and #{second}"
 
