@@ -112,6 +112,10 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 | **Year-zero** (`0000`, `-0000`) | Parses as year 0. Interpretation per astronomical convention (year 0 = 1 BCE) is the caller's responsibility. |
 | **Day of the year** (§4.3.4) | `350O`, `1985Y102O` (12 April 1985) |
 
+### Partial or divergent
+
+* **A time of day selected in a month or a year (§12.11.1 example 2)** — the standard reads `2018Y9MTLT8H20MN3I` as the third instance of 08:20 in September 2018, 08:20 on 3 September: a time of day selected in a month is that time on each of its days. Tempo reads a time of day under a month or a year on its first day, in a selection as in a value (see "Partial or divergent" under Part 1), so `2018Y9MLT8H20MN` is 08:20 on 1 September and has no third instance. The days are named to select among them: `2018Y9ML{1..30}DT8H20M3IN` is 08:20 on 3 September. The example's own text is not read, since it writes the position after the selection's `N`, where §12.9 makes a position one of the selection's rules.
+
 ### Not supported
 
 | Feature | Example | Reason |

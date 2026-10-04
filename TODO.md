@@ -26,8 +26,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Conformance and completeness
 
-* [ ] **The third instance of a time of day, §12.11.1 example 2** — the standard's text `2018Y9MTLT8H20MN3I` writes the position after the selection's `N`, which does not parse; written inside it (`2018Y9MTLT8H20M3IN`) it parses and converts to an empty set, where the standard reads it as 08:20 on 3 September: a time of day selected in a month is that time on each of its days there, and on the first day alone in Tempo (`2018Y9MLT8H20MN` is one value, 08:20 on 1 September), as a recurrence's rule reads it from its start's day, as RFC 5545 does. Decide whether a selection follows the first-day decision (a time of day under a year or a month stays on its first day, user, 2026-10-04), the example then a documented divergence, or matches each day. Found 2026-10-04.
-
 * [ ] **A count from the end in a selection selects nothing** — a month from the end in a recurrence's rule (`R4/2026-01-01/P1Y/FL-1M-1DN`, `FL-1M31DN`) gives no occurrences, where `FL12M-1DN` gives 31 December of each year and `Tempo.select(~o"2026", ~o"-1M-1D")` selects it; and a range of days to the end (`2026Y6ML{1..-1}DN`) selects none, where `L{1..30}DN` selects thirty and `L-1DN` the last. Found 2026-10-04.
 
 * [ ] **A position after a set of weekdays, where the standard contradicts itself** — `L{1,3}K1IN` is the first of the Mondays and Wednesdays taken together, as §12.9 defines a position (the i-th of the occurrences the rules before it select, `{1..5}K-1I` the last workday), where §12.11.3 example 2 calls `2018Y9ML{1,3}K1IN/P5D` identical to `{2018Y9ML1K1IN/P5D, 2018Y9ML3K1IN/P5D}`, each weekday's first. Decide whether Tempo keeps §12.9's rule, which RRULE's `BYSETPOS` is read as. Found 2026-10-04.
@@ -127,6 +125,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A time of day selected in a month is on its first day, a divergence** — a selection follows the first-day rule (user's decision): `2018Y9MLT8H20MN` is 08:20 on 1 September and has no third instance, where ISO 8601-2 §12.11.1 example 2 reads the third as 3 September; recorded in the conformance guide with the form that names the days (`2018Y9ML{1..30}DT8H20M3IN`). 2026-10-04.
 
 * [x] **A fraction of a minute or an hour is read to the second or the minute** — the reading stands (user's decision): `T10:30.5` is the second 10:30:30 and `T10.5` the minute 10:30, as ISO 8601-2 §7.12 reads them; a fraction that does not land on a whole minute or second is the one the time falls in (`T10.51` is 10:30), where the value held a fractional minute nothing could read. 2026-10-04.
 

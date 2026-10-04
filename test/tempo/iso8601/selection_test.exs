@@ -161,6 +161,35 @@ defmodule Tempo.Parser.Selection.Test do
     assert Exception.message(e) =~ ":month is greater than the selection max of :day"
   end
 
+  # A time of day selected in a month is on the month's first day, as a time
+  # of day under a month is in a value (user, 2026-10-04). ISO 8601-2
+  # §12.11.1 example 2 reads it on each day, the third instance of 08:20 in
+  # September being 3 September: a divergence, recorded in the conformance
+  # guide. The days are named to select among them.
+  describe "a time of day selected in a month" do
+    defp starts(text) do
+      {:ok, set} = text |> Tempo.from_iso8601!() |> Tempo.to_interval()
+      Enum.map(IntervalSet.members(set), &Interval.from/1)
+    end
+
+    test "is that time on the month's first day" do
+      assert starts("2018Y9MLT8H20MN") == [Tempo.from_iso8601!("2018-09-01T08:20")]
+      assert starts("2018YLT8H20MN") == [Tempo.from_iso8601!("2018-01-01T08:20")]
+    end
+
+    test "has no third instance" do
+      assert starts("2018Y9MTLT8H20M3IN") == []
+    end
+
+    test "is selected among the days that are named" do
+      assert starts("2018Y9ML{1..30}DT8H20M3IN") == [Tempo.from_iso8601!("2018-09-03T08:20")]
+    end
+
+    test "is not read with its position after the selection's N" do
+      assert {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("2018Y9MTLT8H20MN3I")
+    end
+  end
+
   # A clock second takes no significant digits, and neither does a position
   # (ISO 8601-2 §4.4.3, §12.9), so the `S` after a second is its designator
   # whatever follows it: `0S1I` was read as position 0 to one significant
