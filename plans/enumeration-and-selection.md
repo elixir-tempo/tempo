@@ -66,7 +66,7 @@ So for a date or a time with a year, in the fifteen calendars of whole months th
 | A selection in a calendar of weeks | Open |
 | A weekday selected in a Gregorian week | Done |
 | A month whose days are not `1..n` (a reform) | Open |
-| A year that starts within the months | Open |
+| A year that starts within the months | Done for values, Open for selections |
 | A value with no year in a calendar other than the Gregorian | In progress |
 | `inspect/1` and `to_iso8601/1` on a selection under an hour | Open |
 | `Tempo.select/2` against the selection | Done |
@@ -80,7 +80,7 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 
 * **A month with days missing** — `Reform.England`'s September 1752 has the days 1, 2 and 14 to 30. The walk of `1752Y9M` yields 1 to 19, `1752Y9M3D` is read though no such day existed, and `1752Y9M20D` is an `InvalidDateError` though it did. Tempo takes a month's days to be `1..days_in_month/2`, here 19. Six cells.
 
-* **A year that starts within the months** — in `Julian.March25` the year 2026 runs from 25 March to the next 24 March. The walk of `2026Y` yields months 1 to 12 in that order, the first three of which are in the year after the fourth, and March is one month though the year turns within it. Three cells, and the twelve selection cells of that calendar, which the census's own answer also gets wrong.
+* **A year that starts within the months** — in `Julian.March25` the year 2026 runs from 25 March to the next 24 March. The walk of `2026Y` yielded months 1 to 12 as the Julian months of those numbers, the first three of which are in the year after the fourth, and March was one month though the year turns within it. Decided 2026-10-04 (a month is the nth month of the year as Calendrical's `month/2` counts, and a date keeps its month's own number) and done 2026-10-05 for values in the four Julian calendars: the year, its months, their dates, steps, durations, quarters, groups, masks, set operations and text are held to Calendrical's `year/1` and `month/2` in `test/tempo/year_start_test.exs`. The twelve selection cells of that calendar, which the census's own answer also got wrong, are still wrong, and need one more decision (`TODO.md`, "Selections in a year that does not begin with its first month").
 
 * **The weeks of a year with no year** — no calendar counts them without a year, so the stepper holds a literal 52, `53W` has no span and `54W` is read. An item of `TODO.md`, with a decision: a count from Calendrical, or a week with no year that is neither bounded nor stepped.
 
@@ -166,7 +166,7 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 
 * [ ] **A month with days missing** — the days of such a month come from Calendrical (`Calendrical.Interval.month/3`), not from `1..days_in_month/2`, and a unit's values stop being a run: `in_period/3`'s range, the counts `named/2`, `resolve/2` and `from_end/2` make in it, and `first/3`, `last/3`, `following/4` and `preceding/4`, are the places to change, and their callers none. `Reform.England` is the measure: September 1752 (1, 2, 14 to 30), and 1751, which has no January or February and a March of the days 25 to 31. Timed, since a step asks on every value.
 
-* [ ] **A year that starts within the months** — once what a month of such a year is has been decided, the walk follows Calendrical's `month/2` and `year/1`.
+* [x] **A year that starts within the months** — the walk, and everything else that reads a value, follows Calendrical's `month/2` and `year/1`: `Tempo.UnitValues.year_begins_with_first_month?/2`, `first_date/2`, `dates_of_month/3` and `month_of_date/4`. Selections there are an item of `TODO.md`.
 
 ### Done
 

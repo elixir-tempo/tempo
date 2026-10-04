@@ -31,6 +31,7 @@ defmodule Tempo.Interval.Steps do
   alias Tempo.Iso8601.AST
   alias Tempo.Iso8601.Unit
   alias Tempo.TimeZoneDatabase
+  alias Tempo.UnitValues
 
   @seconds_per_minute 60
   @seconds_per_hour 3_600
@@ -50,13 +51,27 @@ defmodule Tempo.Interval.Steps do
   @spec fill_to_unit(Tempo.t(), atom() | nil, module()) :: Tempo.t()
   def fill_to_unit(%Tempo{} = tempo, nil, _calendar), do: tempo
 
-  def fill_to_unit(%Tempo{time: time} = tempo, unit, calendar) do
+  # A year is filled below its months from its first day, which the calendar
+  # is asked for where the year does not begin with its first month.
+  def fill_to_unit(%Tempo{time: [{:year, year}] = time} = tempo, unit, calendar)
+      when is_integer(year) and unit not in [:year, :month, :week] do
+    with false <- UnitValues.year_begins_with_first_month?(year, calendar),
+         {:ok, {year, month, day}} <- UnitValues.start_date(time, calendar) do
+      fill_to_unit(%Tempo{tempo | time: [year: year, month: month, day: day]}, unit, calendar)
+    else
+      _from_its_first_month -> fill_by_unit(tempo, unit, calendar)
+    end
+  end
+
+  def fill_to_unit(%Tempo{} = tempo, unit, calendar), do: fill_by_unit(tempo, unit, calendar)
+
+  defp fill_by_unit(%Tempo{time: time} = tempo, unit, calendar) do
     {resolution_unit, _span} = Tempo.resolution(tempo)
 
     with :lt <- Unit.compare(unit, resolution_unit),
          {next_unit, range} <- Unit.implicit_enumerator(resolution_unit, calendar) do
-      filled = %Tempo{tempo | time: time ++ [{next_unit, range_first(range)}]}
-      fill_to_unit(filled, unit, calendar)
+      filled = %Tempo{tempo | time: with_first(time, next_unit, range_first(range), calendar)}
+      fill_by_unit(filled, unit, calendar)
     else
       # :eq / :gt — already at or finer than the requested unit; nil —
       # no finer unit exists to fill with (the chain bottoms out).
@@ -65,6 +80,11 @@ defmodule Tempo.Interval.Steps do
   end
 
   defp range_first(%Range{first: first}), do: first
+
+  # A month's first day is asked of the calendar, which counts a year's
+  # months from the day the year begins (`Tempo.UnitValues.with_first_day/2`).
+  defp with_first(time, :day, 1, calendar), do: UnitValues.with_first_day(time, calendar)
+  defp with_first(time, unit, minimum, _calendar), do: time ++ [{unit, minimum}]
 
   @doc """
   Count the number of `unit`-wide steps in the half-open span
@@ -370,6 +390,21 @@ defmodule Tempo.Interval.Steps do
       value when is_integer(value) -> value
     end
   end
+
+  @doc false
+  # The months from one month to another, each written to the month with one
+  # year: the count of the months themselves, in the months each year has.
+  @spec months_apart(Tempo.t(), Tempo.t(), module()) :: integer() | :not_supported
+  def months_apart(
+        %Tempo{time: [{:year, from_year}, {:month, from_month}]},
+        %Tempo{time: [{:year, to_year}, {:month, to_month}]},
+        calendar
+      )
+      when is_integer(from_year) and is_integer(from_month) and is_integer(to_year) and
+             is_integer(to_month) and from_year <= to_year,
+      do: months_between(from_year, from_month, to_year, to_month, calendar)
+
+  def months_apart(%Tempo{}, %Tempo{}, _calendar), do: :not_supported
 
   # Calendar-aware month difference. For calendars with constant 12
   # months per year (Gregorian, Julian, Coptic, Ethiopic, Persian),

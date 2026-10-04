@@ -373,14 +373,24 @@ defmodule Tempo.Explain do
     end
   end
 
+  # A month is named, where its calendar names the months of a year as it
+  # counts them. In a year that does not begin with its first month the
+  # month counted is not the month named (the first of a
+  # `Calendrical.Julian.March25` year is 25 to 31 March), so it is given by
+  # its number.
   defp month_phrase(%Tempo{time: time} = tempo) do
     year = find_unit(time, :year)
 
-    case named_month(tempo) do
+    case counted_as_named?(year, calendar_of(tempo)) and named_month(tempo) do
       {:ok, name} -> "#{name} #{year}"
-      :error -> "month #{find_unit(time, :month)} of #{year}"
+      _no_name -> "month #{find_unit(time, :month)} of #{year}"
     end
   end
+
+  defp counted_as_named?(year, calendar) when is_integer(year),
+    do: UnitValues.year_begins_with_first_month?(year, calendar)
+
+  defp counted_as_named?(_no_one_year, _calendar), do: true
 
   defp clock_phrase(time),
     do: "#{two_digit(find_unit(time, :hour))}:#{two_digit(find_unit(time, :minute) || 0)}"
@@ -1466,9 +1476,23 @@ defmodule Tempo.Explain do
     week = find_unit(time, :week)
 
     cond do
-      is_integer(month) -> month_date(year, month, find_unit(time, :day))
+      is_integer(month) -> month_start(year, month, find_unit(time, :day), calendar)
       is_integer(week) -> week_date(year, week, find_unit(time, :day_of_week), calendar)
       true -> year_start(year, calendar)
+    end
+  end
+
+  # The day a month, or a day of one, starts on. A month's first day is
+  # asked of the calendar, which counts the months of a year that does not
+  # begin with its first month from the day it begins
+  # (`Tempo.UnitValues.start_date/2`).
+  defp month_start(year, month, day, _calendar) when is_integer(day),
+    do: month_date(year, month, day)
+
+  defp month_start(year, month, _no_plain_day, calendar) do
+    case UnitValues.start_date([year: year, month: month], calendar) do
+      {:ok, {year, month, day}} -> month_date(year, month, day)
+      :error -> month_date(year, month, nil)
     end
   end
 
@@ -1494,7 +1518,16 @@ defmodule Tempo.Explain do
   # A year's first day, which in a calendar of weeks is the first day of its
   # first week.
   defp year_start(year, calendar) do
-    if Tempo.week_based_calendar?(calendar), do: "#{year}-W01-1", else: "#{year}-01-01"
+    if Tempo.week_based_calendar?(calendar),
+      do: "#{year}-W01-1",
+      else: first_day_of_year(year, calendar)
+  end
+
+  defp first_day_of_year(year, calendar) do
+    case UnitValues.start_date([year: year], calendar) do
+      {:ok, {year, month, day}} -> month_date(year, month, day)
+      :error -> "#{year}-01-01"
+    end
   end
 
   # ISO 8601 writes a yearless date `--MM-DD`, a yearless month `--MM`,

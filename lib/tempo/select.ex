@@ -875,13 +875,12 @@ defmodule Tempo.Select do
   # An endpoint in another calendar than the span's start.
   defp tempo_to_date(_endpoint, _calendar), do: :error
 
+  # The day a span's end starts on: its day, or the first day of its month
+  # or its year, which the calendar is asked for where the year does not
+  # begin with its first month (`Tempo.UnitValues.start_date/2`).
   defp month_time_to_date(time, calendar) do
-    with year when is_integer(year) <- Keyword.get(time, :year),
-         month when is_integer(month) <- Keyword.get(time, :month, 1),
-         day when is_integer(day) <- Keyword.get(time, :day, 1) do
+    with {:ok, {year, month, day}} <- UnitValues.start_date(time, calendar) do
       Date.new(year, month, day, calendar)
-    else
-      _ -> :error
     end
   end
 

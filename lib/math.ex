@@ -111,15 +111,9 @@ defmodule Tempo.Math do
   end
 
   def add_unit(time, :day, calendar) when is_list(time) do
-    case {forward(time, :day), forward(time, :month)} do
-      # The value does not track days, so the carry lands on an axis it
-      # never had — nothing to change.
-      {:untracked, _month} -> {:ok, time}
-      {{:ok, day}, {:ok, month}} when is_integer(month) -> add_day(time, month, day, calendar)
-      {{:ok, day}, :untracked} -> advance_day_no_month(time, day, calendar)
-      {{:ok, day}, _several_months} -> advance_day_in_any_month(time, day, calendar)
-      # The day after depends on which of its days.
-      {:several, _month} -> no_one_value(time, :day)
+    case day_by_the_calendar(time, 1, calendar) do
+      {:ok, _stepped} = stepped -> stepped
+      :by_count -> add_day_by_count(time, calendar)
     end
   end
 
@@ -188,6 +182,57 @@ defmodule Tempo.Math do
     raise ArgumentError,
           "Cannot increment a Tempo at #{inspect(unit)} resolution — " <>
             "no increment rule is defined for this unit."
+  end
+
+  # ── A day's step ──────────────────────────────────────────────
+  #
+  # The day after a day is the next of its month's days, and the first of
+  # the next month after the last, which `Tempo.UnitValues` counts. In a
+  # year that does not begin with its first month the days do not run in
+  # the order of their numbers (1 January follows 31 December of the same
+  # year, and the year turns within a month), so the day after a date there,
+  # and the day before, are the calendar's to say.
+
+  defp day_by_the_calendar([{:year, year}, {:month, month}, {:day, day} | rest], by, calendar)
+       when is_integer(year) and is_integer(month) and month > 0 and is_integer(day) and day > 0 do
+    with false <- UnitValues.year_begins_with_first_month?(year, calendar),
+         {year, month, day} <- calendar.plus(year, month, day, :days, by) do
+      {:ok, [{:year, year}, {:month, month}, {:day, day} | rest]}
+    else
+      _by_count -> :by_count
+    end
+  end
+
+  defp day_by_the_calendar(_time, _by, _calendar), do: :by_count
+
+  defp add_day_by_count(time, calendar) do
+    case {forward(time, :day), forward(time, :month)} do
+      # The value does not track days, so the carry lands on an axis it
+      # never had — nothing to change.
+      {:untracked, _month} -> {:ok, time}
+      {{:ok, day}, {:ok, month}} when is_integer(month) -> add_day(time, month, day, calendar)
+      {{:ok, day}, :untracked} -> advance_day_no_month(time, day, calendar)
+      {{:ok, day}, _several_months} -> advance_day_in_any_month(time, day, calendar)
+      # The day after depends on which of its days.
+      {:several, _month} -> no_one_value(time, :day)
+    end
+  end
+
+  defp subtract_day_by_count(time, calendar) do
+    case {backward(time, :day), backward(time, :month)} do
+      # The value does not track days, so the borrow comes from an axis it
+      # never had — nothing to change.
+      {:untracked, _month} -> {:ok, time}
+      {{:ok, day}, {:ok, _month}} -> previous_day(time, day, calendar)
+      # In several months, or in none, the day before a day past the first
+      # is the same in whatever month.
+      {{:ok, day}, _no_one_month} when day > 1 -> {:ok, put_component(time, :day, day - 1)}
+      # Day-only value: the 1st's predecessor is the last day of an unknown
+      # month, so it needs a year.
+      {{:ok, _first_day}, :untracked} -> {:error, :unanchored}
+      # The day before depends on which of its days, or on which of its months.
+      _several -> {:error, :grouped_component}
+    end
   end
 
   # ── What a unit holds ─────────────────────────────────────────
@@ -612,19 +657,9 @@ defmodule Tempo.Math do
   end
 
   def subtract_unit(time, :day, calendar) when is_list(time) do
-    case {backward(time, :day), backward(time, :month)} do
-      # The value does not track days, so the borrow comes from an axis it
-      # never had — nothing to change.
-      {:untracked, _month} -> {:ok, time}
-      {{:ok, day}, {:ok, _month}} -> previous_day(time, day, calendar)
-      # In several months, or in none, the day before a day past the first
-      # is the same in whatever month.
-      {{:ok, day}, _no_one_month} when day > 1 -> {:ok, put_component(time, :day, day - 1)}
-      # Day-only value: the 1st's predecessor is the last day of an unknown
-      # month, so it needs a year.
-      {{:ok, _first_day}, :untracked} -> {:error, :unanchored}
-      # The day before depends on which of its days, or on which of its months.
-      _several -> {:error, :grouped_component}
+    case day_by_the_calendar(time, -1, calendar) do
+      {:ok, _stepped} = stepped -> stepped
+      :by_count -> subtract_day_by_count(time, calendar)
     end
   end
 
@@ -1867,7 +1902,31 @@ defmodule Tempo.Math do
     end
   end
 
+  # A date's months are stepped in the order of their numbers, the last of
+  # a year followed by the first of the next. In a year that does not begin
+  # with its first month they are not in that order (the January after a
+  # December is in the same year), so the calendar steps them.
+  defp apply_n_units(time, :month, n, calendar) do
+    case months_by_the_calendar(time, n, calendar) do
+      {:ok, new_time} -> {:ok, new_time}
+      :by_count -> step_n_units(time, :month, n, calendar)
+    end
+  end
+
   defp apply_n_units(time, unit, n, calendar), do: step_n_units(time, unit, n, calendar)
+
+  defp months_by_the_calendar([{:year, year}, {:month, month}, {:day, day} | rest], n, calendar)
+       when is_integer(year) and is_integer(month) and month > 0 and is_integer(day) and day > 0 do
+    with false <- UnitValues.year_begins_with_first_month?(year, calendar),
+         true <- calendar.valid_date?(year, month, day),
+         {year, month, day} <- calendar.plus(year, month, day, :months, n) do
+      {:ok, [{:year, year}, {:month, month}, {:day, day} | rest]}
+    else
+      _by_count -> :by_count
+    end
+  end
+
+  defp months_by_the_calendar(_time, _n, _calendar), do: :by_count
 
   # Only the year and month change; the day is clamped to the new month
   # once every unit has been applied (`maybe_clamp/3`).

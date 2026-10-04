@@ -82,8 +82,29 @@ defmodule Tempo.Enumeration do
 
     if explicitly_enumerable?(tempo),
       do: start(tempo, walked_as_written(tempo, calendar), calendar),
-      else: start(tempo, walked_by_finer_unit(tempo, calendar), calendar)
+      else: walk_by_finer_unit(tempo, calendar)
   end
+
+  # A month is walked by its days, which are counted from one in a year that
+  # begins with its first month. In one that does not, the calendar lists
+  # the month's dates, and they are in other months than the one counted:
+  # the twelfth month of a `Calendrical.Julian.March25` year is walked from
+  # 1 February to 24 March.
+  defp walk_by_finer_unit(%Tempo{time: [{:year, year}, {:month, month}]} = tempo, calendar)
+       when is_integer(year) and is_integer(month) do
+    with false <- UnitValues.year_begins_with_first_month?(year, calendar),
+         {:ok, runs} <- UnitValues.dates_of_month(year, month, calendar) do
+      %{tempo: tempo, calendar: calendar, stack: Enum.map(runs, &days_frame/1), status: :empty}
+    else
+      _counted_from_one -> start(tempo, walked_by_finer_unit(tempo, calendar), calendar)
+    end
+  end
+
+  defp walk_by_finer_unit(tempo, calendar),
+    do: start(tempo, walked_by_finer_unit(tempo, calendar), calendar)
+
+  defp days_frame({year, month, %Range{} = days}),
+    do: {[{:month, month}, {:year, year}], :day, Enum.to_list(days), []}
 
   # A value of whole numbers, sets and ranges alone is read as it stands:
   # each was resolved, or left for the walk, when the value was read. Any

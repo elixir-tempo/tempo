@@ -4,12 +4,13 @@ defmodule Tempo.UnitValues do
 
   A date or a time is counted in units, and each unit takes a run of values that the units before it and the calendar decide: the months of a year, the days of a month, the hours of a day. A value is written against that run as a number, as a count from its end (`-1`, the last), as a range from one of its values to another (`{28..-1}`), or as several of these.
 
-  This module is the one place where either is worked out, so that there is one place to verify. `in_period/3` gives the run, and `in_any_year/3` the run a unit takes with no year to count it in; `first/3`, `last/3`, `following/4`, `preceding/4` and `at_or_before/4` are what a step asks of it; `named/2` lists the values a written value names in it, and `resolve/2` reads a written value against it in the shape it is written in; `from_end/2` is the count from the end that all rest on. How many values a unit takes is always asked of the calendar, which is Calendrical's to answer: nothing here is calendar arithmetic.
+  This module is the one place where either is worked out, so that there is one place to verify. It is also where a calendar is asked how its year begins: in one whose year turns on another day than the first of its first month, a year's and a month's first date, a month's dates and the month a date is in are the calendar's to say (`year_begins_with_first_month?/2`, `first_date/2`, `dates_of_month/3`, `month_of_date/4`). `in_period/3` gives the run, and `in_any_year/3` the run a unit takes with no year to count it in; `first/3`, `last/3`, `following/4`, `preceding/4` and `at_or_before/4` are what a step asks of it; `named/2` lists the values a written value names in it, and `resolve/2` reads a written value against it in the shape it is written in; `from_end/2` is the count from the end that all rest on. How many values a unit takes is always asked of the calendar, which is Calendrical's to answer: nothing here is calendar arithmetic.
 
   A selection's resolver (`Tempo.RRule.Selection`), `Tempo.select/2`, the walk, the reading of a value (`Tempo.Validation`) and its masks (`Tempo.Mask`), a step from a value and `Tempo.explain/1` count through it. What stays with the calendar's own counts is the arithmetic of a group and of a fraction (the nth day of a group of months, half of a year), which counts a period's units.
 
   """
 
+  alias Calendrical.Base.Common
   alias Tempo.Iso8601.Unit
   alias Tempo.Validation
 
@@ -696,4 +697,349 @@ defmodule Tempo.UnitValues do
     do: last + 1 + index
 
   def from_end(index, %Range{}) when is_integer(index), do: index
+
+  ## A year that does not begin with its first month
+  #
+  # A value's units are numbers, and in most calendars a year's dates run in
+  # the order of those numbers: the year begins on the first day of its first
+  # month, a month's days are counted from one, and the last day of the last
+  # month ends the year. A calendar whose year turns on another day keeps its
+  # months' numbers (Calendrical's Julian `March25`, `March1`, `Sept1` and
+  # `Dec25`: 1 January comes after 31 December of the same year), and counts
+  # the months of the year from the day it begins (`month/2`). So where a
+  # year begins, which days a month of it holds and which month holds a day
+  # are asked of the calendar, here, and nothing is taken from the numbers.
+
+  @doc """
+  Returns whether a year begins on the first day of its first month.
+
+  Where it does, the year's dates run in the order of their numbers, the month a date is in is the month it names, and a month's days are counted from one. Where it does not, each is asked of the calendar: `first_date/2`, `dates_of_month/3` and `month_of_date/4`.
+
+  ### Arguments
+
+  * `year` is the year, in the calendar's own numbering.
+
+  * `calendar` is the calendar module the year is counted in.
+
+  ### Returns
+
+  * `true` or `false`. A calendar that cannot say (one with no `day_of_year/3`, or a year it does not have) is taken to begin its year with its first month.
+
+  ### Examples
+
+      iex> Tempo.UnitValues.year_begins_with_first_month?(2026, Calendrical.Gregorian)
+      true
+
+      iex> Tempo.UnitValues.year_begins_with_first_month?(5786, Calendrical.Hebrew)
+      true
+
+      iex> Tempo.UnitValues.year_begins_with_first_month?(1750, Calendrical.Julian.March25)
+      false
+
+  """
+  @spec year_begins_with_first_month?(integer(), module()) :: boolean()
+  def year_begins_with_first_month?(_year, calendar)
+      when calendar in [Calendrical.Gregorian, Calendar.ISO],
+      do: true
+
+  def year_begins_with_first_month?(year, calendar) when is_integer(year) and is_atom(calendar) do
+    case year_start(calendar, year) do
+      :every_year -> true
+      :no_year -> false
+      # A year with no first day of a first month does not begin on one.
+      :by_year -> first_day_of_first_month?(calendar, year) == true
+    end
+  end
+
+  def year_begins_with_first_month?(_year, _calendar), do: true
+
+  # How a calendar begins its years is asked once of each calendar and kept:
+  # the question is asked wherever two values are compared, and the first
+  # day of a year takes an astronomical calendar hundreds of microseconds to
+  # find. A calendar of one rule begins every year alike, so one year
+  # answers for them all. A composite calendar begins a year as the calendar
+  # in effect then does, so each of its years is asked.
+  @year_start_key {__MODULE__, :year_start}
+
+  defp year_start(calendar, year) do
+    case :persistent_term.get({@year_start_key, calendar}, nil) do
+      nil -> calendar |> year_start_of(year) |> kept_year_start(calendar)
+      year_start -> year_start
+    end
+  end
+
+  defp year_start_of(calendar, year) do
+    cond do
+      not exported?(calendar, :day_of_year, 3) -> :every_year
+      Common.composite?(calendar) -> :by_year
+      true -> calendar |> first_day_of_first_month?(year) |> year_start_from()
+    end
+  end
+
+  defp year_start_from(true), do: :every_year
+  defp year_start_from(false), do: :no_year
+  # A year the calendar does not have answers for no other.
+  defp year_start_from(:unknown), do: :unknown
+
+  defp kept_year_start(:unknown, _calendar), do: :every_year
+
+  defp kept_year_start(year_start, calendar) do
+    :persistent_term.put({@year_start_key, calendar}, year_start)
+    year_start
+  end
+
+  defp first_day_of_first_month?(calendar, year) do
+    case calendar.day_of_year(year, 1, 1) do
+      1 -> true
+      day when is_integer(day) -> false
+      _no_such_day -> :unknown
+    end
+  end
+
+  @doc """
+  Returns the first date of a year, or of a month of a year, as the calendar counts them.
+
+  A year's first date is the first of the days its calendar gives it (`year/1`), and a month's the first of the days its calendar gives the month counted from the year's start (`month/2`). In a calendar whose year turns on another day than the first of its first month the date is in another month than the one counted: the first month of a `Calendrical.Julian.March25` year begins on 25 March.
+
+  ### Arguments
+
+  * `context` is `[year: year]` or `[year: year, month: month]`, each a whole number.
+
+  * `calendar` is the calendar module the units are counted in.
+
+  ### Returns
+
+  * `{:ok, {year, month, day}}`, the date in the calendar's own numbers.
+
+  * `{:error, :no_period}` when the calendar has no such year or month, or lists no days for one.
+
+  ### Examples
+
+      iex> Tempo.UnitValues.first_date([year: 1750], Calendrical.Julian.March25)
+      {:ok, {1750, 3, 25}}
+
+      iex> Tempo.UnitValues.first_date([year: 1750, month: 2], Calendrical.Julian.March25)
+      {:ok, {1750, 4, 1}}
+
+      iex> Tempo.UnitValues.first_date([year: 2026, month: 6], Calendrical.Gregorian)
+      {:ok, {2026, 6, 1}}
+
+  """
+  @spec first_date(keyword(), module()) ::
+          {:ok, {integer(), pos_integer(), pos_integer()}} | {:error, :no_period}
+  def first_date([{:year, year}], calendar) when is_integer(year) do
+    case Calendrical.first_day_of_year(year, calendar) do
+      %Date{year: year, month: month, day: day} -> {:ok, {year, month, day}}
+      _no_such_year -> {:error, :no_period}
+    end
+  end
+
+  def first_date([{:year, year}, {:month, month}], calendar)
+      when is_integer(year) and is_integer(month) do
+    with {:ok, %Date.Range{first: first}} <- month_range(year, month, calendar) do
+      {:ok, {first.year, first.month, first.day}}
+    end
+  end
+
+  def first_date(_context, _calendar), do: {:error, :no_period}
+
+  @doc false
+  # The date a value written to its year, its month or its day starts on:
+  # the day, the first of the month, or the first of the year's first month,
+  # and where the year does not begin with its first month the first date
+  # the calendar gives the year or the month (`first_date/2`). `:error` for a
+  # time list with no one year, or a month or a day that is no one number.
+  @spec start_date(list(), module()) ::
+          {:ok, {integer(), pos_integer(), pos_integer()}} | :error
+  def start_date(time, calendar) when is_list(time) do
+    case {whole(time, :year), one(time, :month), one(time, :day)} do
+      {nil, _month, _day} -> :error
+      {year, {:ok, month}, {:ok, day}} -> {:ok, {year, month, day}}
+      {year, {:ok, month}, :none} -> {:ok, first_of(year, month, calendar)}
+      {year, :none, :none} -> {:ok, first_of(year, nil, calendar)}
+      _no_one_start -> :error
+    end
+  end
+
+  defp one(time, unit) do
+    case List.keyfind(time, unit, 0) do
+      {^unit, value} when is_integer(value) and value > 0 -> {:ok, value}
+      nil -> :none
+      _several -> :several
+    end
+  end
+
+  defp first_of(year, month, calendar) do
+    context = if month, do: [year: year, month: month], else: [year: year]
+
+    with false <- year_begins_with_first_month?(year, calendar),
+         {:ok, first} <- first_date(context, calendar) do
+      first
+    else
+      _first_of_the_month -> {year, month || 1, 1}
+    end
+  end
+
+  @doc false
+  # A time list written to its month, with the month's first day: the first
+  # of the month, or where the year does not begin with its first month the
+  # first date the calendar gives the month, written with that date's own
+  # month. It is what a month is extended to when it is written to the day.
+  @spec with_first_day(list(), module()) :: list()
+  def with_first_day([{:year, year}, {:month, month}] = time, calendar)
+      when is_integer(year) and is_integer(month) do
+    with false <- year_begins_with_first_month?(year, calendar),
+         {:ok, {year, month, day}} <- first_date(time, calendar) do
+      [year: year, month: month, day: day]
+    else
+      _counted_from_one -> time ++ [day: 1]
+    end
+  end
+
+  def with_first_day(time, _calendar), do: time ++ [day: 1]
+
+  @doc """
+  Returns the dates of a month of a year, as the calendar lists them.
+
+  The dates are given as runs of days, each in one month of the calendar's own numbering: one run for a month whose days are counted from one to its last, and more where the calendar lists others. The twelfth month of a `Calendrical.Julian.March25` year runs from 1 February to 24 March, which is two.
+
+  ### Arguments
+
+  * `year` is the year, in the calendar's own numbering.
+
+  * `month` is the month, counted as the calendar's `month/2` counts it.
+
+  * `calendar` is the calendar module the units are counted in.
+
+  ### Returns
+
+  * `{:ok, runs}`, a list of `{year, month, first_day..last_day}` in the order of their days.
+
+  * `{:error, :no_period}` when the calendar has no such month, or lists no days for it.
+
+  ### Examples
+
+      iex> Tempo.UnitValues.dates_of_month(2026, 2, Calendrical.Gregorian)
+      {:ok, [{2026, 2, 1..28}]}
+
+      iex> Tempo.UnitValues.dates_of_month(1750, 1, Calendrical.Julian.March25)
+      {:ok, [{1750, 3, 25..31}]}
+
+      iex> Tempo.UnitValues.dates_of_month(1750, 12, Calendrical.Julian.March25)
+      {:ok, [{1750, 2, 1..28}, {1750, 3, 1..24}]}
+
+  """
+  @spec dates_of_month(integer(), pos_integer(), module()) ::
+          {:ok, [{integer(), pos_integer(), Range.t()}]} | {:error, :no_period}
+  def dates_of_month(year, month, calendar) when is_integer(year) and is_integer(month) do
+    with {:ok, %Date.Range{} = dates} <- month_range(year, month, calendar) do
+      {:ok, dates |> Enum.to_list() |> runs_of_days()}
+    end
+  end
+
+  @doc false
+  # How many days a month of a year has, the month counted as the calendar's
+  # `month/2` counts it: the days of the month named, or in a year that does
+  # not begin with its first month the dates the calendar lists for it.
+  @spec days_in_counted_month(integer(), pos_integer(), module()) :: non_neg_integer()
+  def days_in_counted_month(year, month, calendar) do
+    with false <- year_begins_with_first_month?(year, calendar),
+         {:ok, runs} <- dates_of_month(year, month, calendar) do
+      runs |> Enum.map(fn {_year, _month, days} -> Range.size(days) end) |> Enum.sum()
+    else
+      _the_month_named -> calendar.days_in_month(year, month)
+    end
+  end
+
+  # Dates that run on from one another in one month, as a run of its days.
+  defp runs_of_days([]), do: []
+
+  defp runs_of_days([%Date{year: year, month: month, day: day} | dates]),
+    do: runs_of_days(dates, {year, month, day, day})
+
+  defp runs_of_days(
+         [%Date{year: year, month: month, day: day} | dates],
+         {year, month, first, last}
+       )
+       when day == last + 1,
+       do: runs_of_days(dates, {year, month, first, day})
+
+  defp runs_of_days([%Date{year: year, month: month, day: day} | dates], run),
+    do: [run_of_days(run) | runs_of_days(dates, {year, month, day, day})]
+
+  defp runs_of_days([], run), do: [run_of_days(run)]
+
+  defp run_of_days({year, month, first, last}), do: {year, month, first..last//1}
+
+  @doc """
+  Returns the month of its year that holds a date, as the calendar counts its months.
+
+  It is the month the date names wherever the calendar counts a year's months as its dates number them. Where it counts them from the day the year begins, it is the place of the date's month in the year: 10 March 1750 in `Calendrical.Julian.March25` is in the twelfth month of its year, which runs from 1 February to 24 March.
+
+  ### Arguments
+
+  * `year`, `month` and `day` are the date, in the calendar's own numbers.
+
+  * `calendar` is the calendar module the date is in.
+
+  ### Returns
+
+  * `{:ok, month}`, the month counted as the calendar's `month/2` counts it.
+
+  * `{:error, :no_period}` when the date is not one of the calendar's, or no month of its year holds it.
+
+  ### Examples
+
+      iex> Tempo.UnitValues.month_of_date(1750, 3, 25, Calendrical.Julian.March25)
+      {:ok, 1}
+
+      iex> Tempo.UnitValues.month_of_date(1750, 3, 10, Calendrical.Julian.March25)
+      {:ok, 12}
+
+      iex> Tempo.UnitValues.month_of_date(2026, 6, 15, Calendrical.Gregorian)
+      {:ok, 6}
+
+  """
+  @spec month_of_date(integer(), pos_integer(), pos_integer(), module()) ::
+          {:ok, pos_integer()} | {:error, :no_period}
+  def month_of_date(year, month, day, calendar)
+      when is_integer(year) and is_integer(month) and is_integer(day) do
+    with {:ok, date} <- date(year, month, day, calendar),
+         {:ok, months} <- in_period(:month, [year: year], calendar) do
+      [month | Enum.to_list(months) -- [month]]
+      |> Enum.find(&holds?(month_range(year, &1, calendar), date))
+      |> held_by()
+    else
+      _no_such_date -> {:error, :no_period}
+    end
+  end
+
+  defp held_by(nil), do: {:error, :no_period}
+  defp held_by(month), do: {:ok, month}
+
+  # Days are compared by their count: `Date.compare/2` orders two dates of
+  # one calendar by their fields, which is not the order of the days of a
+  # year that does not begin with its first month.
+  defp holds?({:ok, %Date.Range{first: first, last: last}}, %Date{} = date),
+    do: Date.diff(date, first) >= 0 and Date.diff(last, date) >= 0
+
+  defp holds?(_no_such_month, _date), do: false
+
+  defp date(year, month, day, calendar) do
+    case Date.new(year, month, day, calendar) do
+      {:ok, date} -> {:ok, date}
+      {:error, _reason} -> {:error, :no_period}
+    end
+  end
+
+  # The days the calendar gives a month of a year: its `month/2`, a callback
+  # of the `Calendrical` behaviour.
+  defp month_range(year, month, calendar) do
+    with true <- exported?(calendar, :month, 2),
+         %Date.Range{} = dates <- calendar.month(year, month) do
+      {:ok, dates}
+    else
+      _no_such_month -> {:error, :no_period}
+    end
+  end
 end

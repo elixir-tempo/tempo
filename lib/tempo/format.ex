@@ -49,6 +49,7 @@ defmodule Tempo.Format do
   alias Tempo.TimeZoneDatabase
   alias Tempo.UnanchoredError
   alias Tempo.UnboundedSetError
+  alias Tempo.UnitValues
   alias Tempo.UnknownZoneError
   alias Tempo.Validation
 
@@ -533,8 +534,15 @@ defmodule Tempo.Format do
   # single-value path which routes to Localize.Time.
   defp expand_as_closed_interval?(unit, tempo, options)
 
+  # A year whose months are not the months named (`named_unit/2`) is shown
+  # as the year it is: its first and last days carry one year's number in
+  # the calendar's own dates, the last a day before the first.
+  defp expand_as_closed_interval?(:year, %Tempo{} = tempo, options) do
+    named_unit(:month, tempo) == :month and expandable_format?(Keyword.get(options, :format))
+  end
+
   defp expand_as_closed_interval?(unit, %Tempo{time: time}, options)
-       when unit in [:year, :month, :week] do
+       when unit in [:month, :week] do
     Keyword.has_key?(time, :year) and expandable_format?(Keyword.get(options, :format))
   end
 
@@ -557,7 +565,7 @@ defmodule Tempo.Format do
   # iteration unit (one level finer than the Tempo's resolution),
   # then hand off to Localize.Interval.
   defp render_tempo_as_closed_interval(%Tempo{} = tempo, unit, options) do
-    iter_unit = next_finer_unit(unit)
+    iter_unit = unit |> next_finer_unit() |> named_unit(tempo)
 
     case Tempo.to_interval(tempo) do
       {:ok, %Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to, unit: unit}} ->
@@ -565,6 +573,7 @@ defmodule Tempo.Format do
         # 2026" for a year), so fill the own-resolution bounds down to
         # the interval's iteration unit before truncating.
         calendar = Compare.effective_calendar(from.calendar)
+        unit = named_unit(unit, tempo)
         from = Steps.fill_to_unit(from, unit, calendar)
         to = Steps.fill_to_unit(to, unit, calendar)
         shown_unit = duration_unit(iter_unit)
@@ -589,6 +598,20 @@ defmodule Tempo.Format do
         render_single_value(tempo, options)
     end
   end
+
+  # A span is shown from its first value to its last in the unit it is walked
+  # by, and a month is shown by its name. In a year that does not begin with
+  # its first month the months the calendar counts are not the months named
+  # (the first of a `Calendrical.Julian.March25` year is 25 to 31 March), so
+  # a year and a span of months there are shown by their days.
+  defp named_unit(:month, %Tempo{time: [{:year, year} | _rest], calendar: calendar})
+       when is_integer(year) do
+    if UnitValues.year_begins_with_first_month?(year, Compare.effective_calendar(calendar)),
+      do: :month,
+      else: :day
+  end
+
+  defp named_unit(unit, %Tempo{}), do: unit
 
   defp next_finer_unit(:year), do: :month
   defp next_finer_unit(:month), do: :day
@@ -732,6 +755,7 @@ defmodule Tempo.Format do
 
     time
     |> week_date_as_day(calendar)
+    |> counted_month_as_named(calendar)
     |> Enum.reduce(%{}, fn
       {k, v}, acc when is_integer(v) -> Map.put(acc, k, v)
       _other, acc -> acc
@@ -753,6 +777,22 @@ defmodule Tempo.Format do
       _not_a_week_date -> time
     end
   end
+
+  # A month written with no day, in a year that does not begin with its first
+  # month, is the month the calendar counts from the year's start, and is
+  # named as the month its first day is in: the first month of a
+  # `Calendrical.Julian.March25` year is in March.
+  defp counted_month_as_named([{:year, year}, {:month, month}] = time, calendar)
+       when is_integer(year) and is_integer(month) do
+    with false <- UnitValues.year_begins_with_first_month?(year, calendar),
+         {:ok, {year, month, _day}} <- UnitValues.first_date(time, calendar) do
+      [year: year, month: month]
+    else
+      _named_as_counted -> time
+    end
+  end
+
+  defp counted_month_as_named(time, _calendar), do: time
 
   defp default_format_for_unit(:year, _tempo), do: :y
   # A month of no particular year is its name alone.
@@ -906,7 +946,7 @@ defmodule Tempo.Format do
       {%Tempo{} = from, %Tempo{} = to} ->
         calendar = Compare.effective_calendar(from.calendar)
         {from, to} = on_one_axis(from, to, calendar)
-        unit = shown_unit(%Tempo.Interval{interval | from: from, to: to})
+        unit = %Tempo.Interval{interval | from: from, to: to} |> shown_unit() |> named_unit(from)
         {:ok, Steps.fill_to_unit(from, unit, calendar), Steps.fill_to_unit(to, unit, calendar)}
 
       {from, _to} ->

@@ -42,6 +42,8 @@ Every resolved Tempo at coarser-than-finest resolution is enumerable via implici
 
 A week's days are the dates they name: `Enum.to_list(~o"2026-W25")` is `~o"2026-06-15"` to `~o"2026-06-21"`, the values a week date is read as (`2026-W25-2` is `~o"2026-06-16"`), so `~o"2026-06-16" in ~o"2026-W25"` is true. A step of days or hours from a week lands on a date too (`Tempo.shift(~o"2026-W25", day: 1)` is `~o"2026-06-16"`), and a step of whole weeks on a week. A calendar of weeks, which has no months, keeps its week and its day of the week (`2026Y25W2K`), and so does a week with no year.
 
+A calendar whose year turns on another day than the first of its first month (Calendrical's Julian `March25`, `March1`, `Sept1` and `Dec25`) starts its year on that day and counts the year's months from it: the first month of a `March25` year is 25 to 31 March and its twelfth 1 February to 24 March, so `1750Y1M` is walked by seven dates and `1750Y12M` by fifty-two. A date there keeps the number its calendar gives its month (`1750Y3M25D`, the first day of 1750), so a month's number is not the month of its dates.
+
 ### 2.2. Explicit ranges and sets
 
 Any component may carry a range, a range with step, a set of values, or a cartesian product of the above.

@@ -141,6 +141,7 @@ defmodule Tempo do
   alias Tempo.UnanchoredError
   alias Tempo.UnboundedRecurrenceError
   alias Tempo.UnboundedSetError
+  alias Tempo.UnitValues
   alias Tempo.UnknownZoneError
   alias Tempo.Validation
   alias Tempo.ZonedTempoError
@@ -2804,6 +2805,25 @@ defmodule Tempo do
     end
   end
 
+  # The month a date is in is the month it names in a year that begins with
+  # its first month. In one that does not the calendar counts the year's
+  # months from the day it begins, and is asked which holds the date: 10
+  # March 1750 in `Calendrical.Julian.March25` is in its year's twelfth.
+  defp truncate(
+         %__MODULE__{time: [{:year, year}, {:month, month}, {:day, day} | _rest]} = tempo,
+         :month
+       )
+       when is_integer(year) and is_integer(month) and is_integer(day) do
+    calendar = calendar_of(tempo)
+
+    with false <- UnitValues.year_begins_with_first_month?(year, calendar),
+         {:ok, month_of_year} <- UnitValues.month_of_date(year, month, day, calendar) do
+      take_units(%{tempo | time: [year: year, month: month_of_year]}, :month)
+    else
+      _the_month_it_names -> take_units(tempo, :month)
+    end
+  end
+
   defp truncate(%__MODULE__{time: time} = tempo, truncate_to) do
     with :ok <- same_axis(time, truncate_to, tempo) do
       take_units(tempo, truncate_to)
@@ -3534,10 +3554,44 @@ defmodule Tempo do
      )}
   end
 
-  defp extend_by_finer_unit(tempo) do
+  # A month is written by its days. In a year that begins with its first
+  # month they are counted from one; in one that does not, the calendar
+  # lists the month's dates, which are in another month than the one
+  # counted, and in two where the year turns within a month.
+  defp extend_by_finer_unit(%Tempo{time: [{:year, year}, {:month, month}]} = tempo)
+       when is_integer(year) and is_integer(month) do
+    calendar = calendar_of(tempo)
+
+    with false <- UnitValues.year_begins_with_first_month?(year, calendar),
+         {:ok, runs} <- UnitValues.dates_of_month(year, month, calendar) do
+      month_by_its_dates(tempo, runs, calendar)
+    else
+      _counted_from_one -> extend_by_enumeration(tempo)
+    end
+  end
+
+  defp extend_by_finer_unit(tempo), do: extend_by_enumeration(tempo)
+
+  defp extend_by_enumeration(tempo) do
     case Enumeration.implicit_enumeration(tempo) do
       {:ok, enumerated} -> Validation.validate(enumerated, calendar_of(tempo))
       {:finest, unit} -> {:error, no_finer_unit_error(tempo, unit)}
+    end
+  end
+
+  defp month_by_its_dates(tempo, [{year, month, _days} | _rest] = runs, calendar) do
+    if Enum.all?(runs, &match?({^year, ^month, _days}, &1)) do
+      days = Enum.map(runs, fn {_year, _month, days} -> days end)
+      Validation.validate(%{tempo | time: [year: year, month: month, day: days]}, calendar)
+    else
+      {:error,
+       ConversionError.exception(
+         value: tempo,
+         reason:
+           "Cannot write #{inspect(tempo)} by its days: they are in two months of " <>
+             "#{inspect(calendar)}, whose year does not begin with its first month, and " <>
+             "one value names the days of one."
+       )}
     end
   end
 
@@ -3859,7 +3913,23 @@ defmodule Tempo do
     {:ok, time ++ [microsecond: {0, 6}]}
   end
 
-  defp fill_to_resolution(time, current_unit, target_unit, calendar) do
+  # A year is extended below its months from its first day, which the
+  # calendar is asked for where the year does not begin with its first
+  # month (`Tempo.UnitValues.start_date/2`).
+  defp fill_to_resolution([{:year, year}] = time, :year, target_unit, calendar)
+       when is_integer(year) and target_unit not in [:year, :month, :week] do
+    with false <- UnitValues.year_begins_with_first_month?(year, calendar),
+         {:ok, {year, month, day}} <- UnitValues.start_date(time, calendar) do
+      fill_to_resolution([year: year, month: month, day: day], :day, target_unit, calendar)
+    else
+      _from_its_first_month -> fill_by_unit(time, :year, target_unit, calendar)
+    end
+  end
+
+  defp fill_to_resolution(time, current_unit, target_unit, calendar),
+    do: fill_by_unit(time, current_unit, target_unit, calendar)
+
+  defp fill_by_unit(time, current_unit, target_unit, calendar) do
     case Unit.implicit_enumerator(current_unit, calendar) do
       nil ->
         {:error,
@@ -3872,13 +3942,19 @@ defmodule Tempo do
          )}
 
       {next_unit, range} ->
-        min_value = range_first(range)
-        new_time = time ++ [{next_unit, min_value}]
+        new_time = with_first(time, next_unit, range_first(range), calendar)
         fill_to_resolution(new_time, next_unit, target_unit, calendar)
     end
   end
 
   defp range_first(%Range{first: first}), do: first
+
+  # A unit is extended to the first value of the unit below it. A month's
+  # first day is asked of the calendar: it is the first of the month, or in
+  # a year that does not begin with its first month the first date of the
+  # month the calendar counts (`Tempo.UnitValues.with_first_day/2`).
+  defp with_first(time, :day, 1, calendar), do: UnitValues.with_first_day(time, calendar)
+  defp with_first(time, unit, minimum, _calendar), do: time ++ [{unit, minimum}]
 
   @doc """
   Return a Tempo at the specified resolution, dispatching to
@@ -5573,10 +5649,14 @@ defmodule Tempo do
 
   """
   @spec days_in_month(t()) :: pos_integer()
-  def days_in_month(%Tempo{} = tempo) do
+  def days_in_month(%Tempo{time: time} = tempo) do
     year = whole!(tempo, :year, "days_in_month")
     month = whole!(tempo, :month, "days_in_month")
-    calendar_of(tempo).days_in_month(year, month)
+    calendar = calendar_of(tempo)
+
+    if List.keymember?(time, :day, 0),
+      do: calendar.days_in_month(year, month),
+      else: UnitValues.days_in_counted_month(year, month, calendar)
   end
 
   def days_in_month(value), do: raise(not_one_value("days_in_month/1", value))
@@ -5610,7 +5690,23 @@ defmodule Tempo do
       week = whole!(tempo, :week, function)
       week_date_ymd!(tempo, function, {year, week, whole!(tempo, :day_of_week, function, 1)})
     else
-      {year, whole!(tempo, :month, function, 1), whole!(tempo, :day, function, default_day)}
+      month = whole!(tempo, :month, function, 1)
+      day = whole!(tempo, :day, function, default_day)
+
+      if List.keymember?(time, :day, 0),
+        do: {year, month, day},
+        else: first_ymd(time, {year, month, day}, calendar_of(tempo))
+    end
+  end
+
+  # The first day of a year or a month written with no day is the first of
+  # its first month, or of the month, and where the year does not begin with
+  # its first month the first date the calendar gives it
+  # (`Tempo.UnitValues.start_date/2`).
+  defp first_ymd(time, default, calendar) do
+    case UnitValues.start_date(time, calendar) do
+      {:ok, ymd} -> ymd
+      :error -> default
     end
   end
 
@@ -8361,6 +8457,16 @@ defmodule Tempo do
       (prefix != [] and calendar.calendar_base() != :week)
   end
 
+  # Every day of a month is not the month in a year that does not begin with
+  # its first month: a date's month is the month it names, and the month the
+  # calendar counts from the year's start is another span. So a mask of all
+  # of a month's days there is the span from its first day to its last.
+  defp spans_its_values?(:day, mask, [{:year, year}, {:month, month}] = prefix, calendar)
+       when is_integer(year) and is_integer(month) do
+    narrowing_mask?(:day, mask, prefix) or
+      not UnitValues.year_begins_with_first_month?(year, calendar)
+  end
+
   defp spans_its_values?(unit, mask, prefix, _calendar), do: narrowing_mask?(unit, mask, prefix)
 
   # The values a masked unit takes after the units before it: those the walk
@@ -8428,19 +8534,44 @@ defmodule Tempo do
   # is fully masked and widens, so it is dropped.
   defp narrow_mask(unit, mask, prefix, calendar) do
     case masked_values(unit, mask, prefix, calendar) do
-      {:ok, []} -> {:error, {:no_candidates, unit}}
-      {:ok, [single]} -> {prefix ++ [{unit, single}]}
-      {:ok, [first | _] = values} -> consecutive_or_scattered(unit, first, values, prefix)
-      {:error, _reason} = error -> error
+      {:ok, []} ->
+        {:error, {:no_candidates, unit}}
+
+      {:ok, [single]} ->
+        {prefix ++ [{unit, single}]}
+
+      {:ok, [first | _] = values} ->
+        consecutive_or_scattered(unit, first, values, prefix, calendar)
+
+      {:error, _reason} = error ->
+        error
     end
   end
 
-  defp consecutive_or_scattered(unit, first, values, prefix) do
+  defp consecutive_or_scattered(unit, first, values, prefix, calendar) do
     last = List.last(values)
 
-    if last - first + 1 == length(values),
+    if last - first + 1 == length(values) and one_run?(unit, first, last, prefix, calendar),
       do: {:span, prefix ++ [{unit, first}], prefix ++ [{unit, last}]},
       else: {prefix ++ [{unit, values}]}
+  end
+
+  # Values that follow one another in number follow one another in time,
+  # but for the days of a month that a year turns within: 24 March is the
+  # last day of a `Calendrical.Julian.March25` year and 25 March its first.
+  defp one_run?(:day, first, last, [{:year, year}, {:month, month}], calendar)
+       when is_integer(year) and is_integer(month) do
+    UnitValues.year_begins_with_first_month?(year, calendar) or
+      days_between(year, month, first, last, calendar) == last - first
+  end
+
+  defp one_run?(_unit, _first, _last, _prefix, _calendar), do: true
+
+  defp days_between(year, month, first, last, calendar) do
+    with {:ok, from} <- Date.new(year, month, first, calendar),
+         {:ok, to} <- Date.new(year, month, last, calendar) do
+      Date.diff(to, from)
+    end
   end
 
   # A mask some of whose digits are given (`1X`, `X5`, `XXX{0,2,4,6,8}`).

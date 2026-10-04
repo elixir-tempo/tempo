@@ -35,6 +35,7 @@ defmodule Tempo.Compare do
   alias Tempo.IntervalSet
   alias Tempo.TimeZoneDatabase
   alias Tempo.UnanchoredError
+  alias Tempo.UnitValues
   alias Tempo.Validation
   alias Tempo.ZoneOffsetMismatchError
 
@@ -466,7 +467,7 @@ defmodule Tempo.Compare do
 
   defp fields_in_day_order?(%Tempo{calendar: calendar, time: time}) do
     case Keyword.get(time, :year) do
-      year when is_integer(year) -> calendar.day_of_year(year, 1, 1) == 1
+      year when is_integer(year) -> UnitValues.year_begins_with_first_month?(year, calendar)
       _no_year -> true
     end
   end
@@ -1005,10 +1006,19 @@ defmodule Tempo.Compare do
         |> gregorian_ymd(year)
 
       true ->
-        to_gregorian_ymd(
-          {year, Keyword.get(time, :month, 1), Keyword.get(time, :day, 1)},
-          calendar
-        )
+        time |> start_ymd(year, calendar) |> to_gregorian_ymd(calendar)
+    end
+  end
+
+  # The date a year, a month or a day of one starts on: the day itself, the
+  # month's first, or the first of the year's first month. Where the year
+  # does not begin with its first month the calendar is asked for the first
+  # date of the year or of the month (`Tempo.UnitValues.start_date/2`): the
+  # first month of a `Calendrical.Julian.March25` year begins on 25 March.
+  defp start_ymd(time, year, calendar) do
+    case UnitValues.start_date(time, calendar) do
+      {:ok, ymd} -> ymd
+      :error -> {year, Keyword.get(time, :month, 1), Keyword.get(time, :day, 1)}
     end
   end
 

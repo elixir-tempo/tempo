@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* In a calendar whose year does not begin with its first month (Calendrical's Julian `March25`, `March1`, `Sept1` and `Dec25`) a year starts on its first day and a value written to its month is the month the calendar counts from there, as its `year/1` and `month/2` give them: in `March25` `1750Y` starts on 25 March, `1750Y1M` is 25 to 31 March and `1750Y12M` 1 February to 24 March, where the year started on 1 January and a month was the Julian month of that number. A date keeps its month's own number, so the walk of a month yields its dates (`1750Y3M25D`), `Tempo.trunc/2` gives the month that holds a date, and a shift, a duration, a quarter, a day counted in a group of months, the set operations, `Tempo.to_string/2` and `Tempo.explain/1` follow the calendar.
+
 * A week's days are calendar dates in a calendar of months wherever a value gives one, as a week date is read: `Enum.to_list(~o"2026-W25")` is `~o"2026-06-15"` to `~o"2026-06-21"` and `Tempo.shift(~o"2026-W25", day: 1)` is `~o"2026-06-16"`, where each gave a week and a day of it (`2026Y25W2K`) and `~o"2026-06-16" in ~o"2026-W25"` was false. `Tempo.extend_resolution/2`, an interval's end counted by a duration (`2026-W25/P3D`), a recurrence's occurrences and a set operation's members are written so too, while a step of whole weeks gives a week and a calendar of weeks keeps its week dates.
 
 * A `:within` window bounds where a time of day is placed: on a window from noon to noon `~o"T09/T17"` is noon to five on the first day and nine to noon on the last, for every set operation, where it was placed on the whole of every day the window touches and a union or an intersection reached outside the window. A dated window places every operand with no year, with an empty or a time-of-day partner too, and each placed span keeps its time of day's metadata.
@@ -272,6 +274,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* A year of a composite calendar that begins on another day than the first of its first month (`Calendrical.Reform.England` before 1752, whose year began on 25 March) starts on that day, where it started on 1 January and held none of the days before it.
 
 * `Tempo.extend/2` writes a value that ends in a group as the values the group names: `Tempo.extend(~o"2026Y2G3MU")` is `{:ok, ~o"2026Y{4..6}M"}`, the months its walk yields, where it wrote the unit below (`2026Y2G3MU{1..-1}D`), which is counted from the group's start and was read as no value of the group. A group stops where its container does (`2026Y2M3G10DU` is `2026Y2M{21..28}D`), and one that names other values in each of several years or months is a `Tempo.ConversionError`.
 

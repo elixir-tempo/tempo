@@ -55,6 +55,7 @@ defmodule Tempo.Interval do
   alias Tempo.Duration
   alias Tempo.FloatingTempoError
   alias Tempo.Interval.Cycle
+  alias Tempo.Interval.Steps
   alias Tempo.IntervalEndpointsError
   alias Tempo.IntervalSet
   alias Tempo.InvalidUnitError
@@ -66,6 +67,7 @@ defmodule Tempo.Interval do
   alias Tempo.Math
   alias Tempo.Qualification
   alias Tempo.UnanchoredError
+  alias Tempo.UnitValues
 
   @type t :: %__MODULE__{
           recurrence: non_neg_integer() | :infinity,
@@ -2194,10 +2196,51 @@ defmodule Tempo.Interval do
   # different zones can be a day out on their dates, so the count is
   # fitted on the time line and what is left is counted in days.
   defp calendar_parts(from, to, unit) do
+    case months_as_counted(from, to, unit) do
+      months when is_integer(months) -> {:ok, [month: months], to}
+      :by_dates -> calendar_parts_by_dates(from, to, unit)
+    end
+  end
+
+  defp calendar_parts_by_dates(from, to, unit) do
     with {:ok, from_date} <- first_date(from),
          {:ok, to_date} <- first_date(to),
          count when is_integer(count) <- Calendrical.diff(from_date, to_date, date_part(unit)) do
       counted_parts(from, to, unit, count, frame(from) == frame(to))
+    end
+  end
+
+  # Two ends written to the month or the year are a number of months apart,
+  # counted in the months themselves where a year does not begin with its
+  # first month: the calendar counts such a year's months from the day it
+  # begins, so the first days of two that follow one another are not a
+  # month of days apart (25 March and 1 April, in a year that begins on 25
+  # March).
+  defp months_as_counted(
+         %Tempo{time: [{:year, from_year} | _], calendar: calendar} = from,
+         %Tempo{time: [{:year, to_year} | _]} = to,
+         :month
+       )
+       when is_integer(from_year) and is_integer(to_year) do
+    calendar = Compare.effective_calendar(calendar)
+
+    if UnitValues.year_begins_with_first_month?(from_year, calendar) and
+         UnitValues.year_begins_with_first_month?(to_year, calendar) do
+      :by_dates
+    else
+      months_between(from, to, calendar)
+    end
+  end
+
+  defp months_as_counted(_from, _to, _unit), do: :by_dates
+
+  defp months_between(from, to, calendar) do
+    from = Steps.fill_to_unit(from, :month, calendar)
+    to = Steps.fill_to_unit(to, :month, calendar)
+
+    case Steps.months_apart(from, to, calendar) do
+      months when is_integer(months) -> months
+      :not_supported -> :by_dates
     end
   end
 
