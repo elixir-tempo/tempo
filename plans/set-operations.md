@@ -74,7 +74,7 @@ The matrix measures the time covered, with one plain partner at a time. The meas
 
 * **The forms that take a list of operands, the `:metadata` option, and a recurrence set as an operand** — held to no answer worked out apart from the library.
 
-* **How many parts the intersection of overlapping members has** — held to the time covered and to each part being a pair's, until it is decided (below).
+* **How many parts the intersection of overlapping members has** — held to the time covered and to each part being a pair's, until the sweep gives one for each pair (below).
 
 * **The lazy backend** — the measure builds lists and trees. What an operation gives of an unending lazy set is the deferred [plans/open-ended-set-algebra.md](plans/open-ended-set-algebra.md).
 
@@ -92,11 +92,13 @@ By reading the code and probing what the reading suggested. Each is reproduced. 
 
 * **A set operation across a week calendar's resolutions is refused** — `Tempo.difference/2` of an ISO week year and one of its weeks is a `ResolutionError`. Already an item of `TODO.md`.
 
-## To decide
+## Decided
 
-* **Whether `:within` bounds the result** — a time of day is placed on every day the window touches, so `Tempo.union(~o"T09/T17", window, within: window)` for a window from noon to noon includes 09:00 to 12:00 before it opens. For `intersection/3` and `complement/2` the window cuts that off; for `union/3` nothing does.
+Both by the user, 2026-10-04.
 
-* **What the intersection of overlapping members is** — the sweep emits one fragment for each stretch of time it reaches, so two members of the first operand that both overlap one of the second give one fragment, with the first's metadata. The time is right. If a fragment is "a member of the first cut to a member of the second", as the function's documentation says, there should be two, and `metadata: {:merge, fun}` would then see both.
+* **A `:within` window bounds where a time of day is placed** — a time of day is placed on the part of each day the window holds, for every operation alike, and the other operand is not cut. It was placed on the whole of every day the window touches: with a window from noon to noon `Tempo.union(~o"T09/T17", window, within: window)` started at 09:00, before the window opened, and `Tempo.intersection/3` of the hours and a meeting at 10:00 that day returned the meeting.
+
+* **An intersection is one part for each pair of members that overlap** — each member of the first cut to each member of the second it overlaps, as the function's documentation says, so that `metadata: {:merge, fun}` sees every pair. `sweep_intersection/3` advances whichever member ends first, which is right only where no member of an operand overlaps another: where one does it skips pairs, and which parts come back depends on which member ends first. Of the 4,356 pairs of sets of up to two members between five points, 1,947 are not one part a pair, and `[Alice 0–1]` with `[Bob 0–1, Carol 0–1]` gives Alice and Bob alone. The time covered is right throughout. An earlier reading here, that the sweep gave one fragment for each stretch of time, was wrong.
 
 ## Tasks
 
@@ -110,7 +112,9 @@ By reading the code and probing what the reading suggested. Each is reproduced. 
 
 * [ ] **One answer to whether two spans overlap** — a property that the sweeps, the backends, Allen's relation and a window's bound agree on every generated pair; then whether any is to be read through another.
 
-* [ ] **The two decisions** — whether `:within` bounds a union, and what the intersection of overlapping members is.
+* [ ] **An intersection of one part for each pair** — a sweep that holds every member of the second still open against each member of the first; then the measure holds `intersection/2` part for part on every pair of sets.
+
+* [ ] **A time of day placed inside its window** — placed on the part of each day the window holds; the measure widened to a window that opens and closes within a day.
 
 ### Done
 
