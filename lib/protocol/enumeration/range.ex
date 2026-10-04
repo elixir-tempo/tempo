@@ -4,6 +4,7 @@ defimpl Enumerable, for: Tempo.Interval do
   alias Tempo.Enumeration.Zone
   alias Tempo.Interval.Steps
   alias Tempo.Math
+  alias Tempo.Validation
 
   # An interval represents a span on the time line. Enumerating it
   # walks forward one unit at a time from the `:from` endpoint. This
@@ -491,8 +492,10 @@ defimpl Enumerable, for: Tempo.Interval do
             do_reduce({:after, current}, to, {:cont, acc}, fun)
 
           {:ambiguous, first_shift, second_shift} ->
+            yielded = yielded(current)
+
             emit_fold(
-              [%{current | shift: first_shift}, %{current | shift: second_shift}],
+              [%{yielded | shift: first_shift}, %{yielded | shift: second_shift}],
               current,
               to,
               acc,
@@ -500,13 +503,18 @@ defimpl Enumerable, for: Tempo.Interval do
             )
 
           :ok ->
-            do_reduce({:after, current}, to, fun.(current, acc), fun)
+            do_reduce({:after, current}, to, fun.(yielded(current), acc), fun)
         end
     end
   end
 
   defp reached({:at, value}), do: value
   defp reached({:after, value}), do: increment(value)
+
+  # The value a step gives. A week of a calendar of months is stepped by its
+  # own days, a week and a day of it, and each is given as the date it names,
+  # as the walk of the week gives it and a value read is held.
+  defp yielded(%Tempo{} = value), do: Validation.calendar_date_from_week_date(value)
 
   # A whole turn ends where it starts, so its first value is given before
   # the walk can be past its end.

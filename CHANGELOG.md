@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A week's days are calendar dates in a calendar of months wherever a value gives one, as a week date is read: `Enum.to_list(~o"2026-W25")` is `~o"2026-06-15"` to `~o"2026-06-21"` and `Tempo.shift(~o"2026-W25", day: 1)` is `~o"2026-06-16"`, where each gave a week and a day of it (`2026Y25W2K`) and `~o"2026-06-16" in ~o"2026-W25"` was false. `Tempo.extend_resolution/2`, an interval's end counted by a duration (`2026-W25/P3D`), a recurrence's occurrences and a set operation's members are written so too, while a step of whole weeks gives a week and a calendar of weeks keeps its week dates.
+
 * A `:within` window bounds where a time of day is placed: on a window from noon to noon `~o"T09/T17"` is noon to five on the first day and nine to noon on the last, for every set operation, where it was placed on the whole of every day the window touches and a union or an intersection reached outside the window. A dated window places every operand with no year, with an empty or a time-of-day partner too, and each placed span keeps its time of day's metadata.
 
 * A qualification is held per component alone: the `:qualification` field of `t:Tempo.t/0` is removed, a qualifier written after a whole value (`2026-06?`) is recorded for each of its components in `:qualifications`, and `Tempo.qualification/1` reads the qualifier every component shares, `Tempo.qualification/2` one component's. `2026?` and `?2026`, which ISO 8601-2 §8.2.4 calls one meaning, are one value, where they were not equal, and the walk of either yields months of an uncertain year (`2026?Y1M`), where the first yielded uncertain months.
@@ -271,6 +273,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A week kept whole by a set operation beside a date is walked by its seven days, where the first member of `Tempo.union(~o"2026-W25", ~o"2026-06-20")` walked its 168 hours. A weekday selected in a Gregorian week (`2026Y25WL3KN`) is that day, in a value and in a recurrence's rule, where it was the week's Monday.
+
 * A time of day is placed on each day of a `:within` window whatever units the window is written in: `Tempo.intersection(~o"T09/T17", ~o"2026-W25", within: ~o"2026-W25")` is the hours of the week's seven days, where it was empty, and `Tempo.complement/2` there the time outside them, where it was the whole week. In a window of another calendar the time is placed on that calendar's days (a Hebrew month's twenty-nine, a week calendar's week dates), where the day's numbers were read in the Gregorian calendar and nothing was placed.
 
 * A set's members written out of order beside a count from the end are joined as far as they run on: `{0,2,1..7,-1}` is `{0..7,-1}`, where one pass of the joining left `0` beside `1..7`.
@@ -321,7 +325,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.to_relative_string/2` counts to where an interval written as a duration and an end starts (`P1M/2026-07-01`), and to the first occurrence of a counted recurrence written so, where each was an error.
 
-* A year of a calendar of weeks is shifted by weeks and days and has a length in them (`Tempo.exactly?(year, ~o"P53W")`), where each was a `Tempo.ResolutionError`. `:day` truncates, rounds and extends a week date to its day of the week, in a calendar of weeks and for a Gregorian week.
+* A year of a calendar of weeks is shifted by weeks and days and has a length in them (`Tempo.exactly?(year, ~o"P53W")`), where each was a `Tempo.ResolutionError`. `:day` truncates, rounds and extends a week date of a calendar of weeks to its day of the week.
 
 * `Tempo.duration/1` measures a set written as its members (`{2026Y,2030Y}`) as it measures the same set written in one value, where it returned an `ArgumentError`.
 

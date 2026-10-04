@@ -202,7 +202,16 @@ defmodule Tempo.Parser.Selection.Test do
       assert :calendar.iso_week_number({2026, 12, 28}) == {2026, 53}
       assert :calendar.iso_week_number({2027, 12, 28}) == {2027, 52}
 
-      assert [%Tempo{time: [year: 2026, week: 53, day_of_week: 1]}] = starts("2026Y53WL1KN")
+      # The Monday of the last week of 2026, a date in a calendar of months.
+      assert starts("2026Y53WL1KN") == [Tempo.from_iso8601!("2026-12-28")]
+
+      assert [%Tempo{time: [year: 2026, week: 53, day_of_week: 1]}] =
+               "2026Y53WL1KN"
+               |> Tempo.from_iso8601!(Calendrical.ISOWeek)
+               |> Tempo.to_interval()
+               |> elem(1)
+               |> IntervalSet.members()
+               |> Enum.map(&Interval.from/1)
 
       for calendar <- [Calendrical.Gregorian, Calendrical.ISOWeek] do
         assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("2027Y53WL1KN", calendar)

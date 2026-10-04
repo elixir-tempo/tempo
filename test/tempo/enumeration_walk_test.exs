@@ -23,9 +23,14 @@ defmodule Tempo.EnumerationWalk.Test do
     end
 
     test "a masked and an unspecified day of the week" do
-      assert units(~o"2026Y25WXK", :day_of_week) == Enum.to_list(1..7)
-      assert units(~o"2026Y25WX*K", :day_of_week) == Enum.to_list(1..7)
+      # The days of a week of a calendar of months are the dates they name:
+      # 2026-W25 runs from Monday 15 June to Sunday 21 June.
+      assert units(~o"2026Y25WXK", :day) == Enum.to_list(15..21)
+      assert units(~o"2026Y25WX*K", :day) == Enum.to_list(15..21)
       assert Enum.to_list(~o"X*K") == [~o"1K", ~o"2K", ~o"3K", ~o"4K", ~o"5K", ~o"6K", ~o"7K"]
+
+      week = Tempo.from_iso8601!("2026Y25WX*K", Calendrical.ISOWeek)
+      assert units(week, :day_of_week) == Enum.to_list(1..7)
     end
 
     test "a masked and an unspecified day of the year" do

@@ -126,7 +126,7 @@ defmodule Tempo.Operations do
          {:ok, b_set} <- convert_calendar(b_set, a_set),
          {:ok, a_set, b_set} <- canonicalize_axes(a_set, b_set),
          {:ok, a_set, b_set} <- align_resolution(a_set, b_set) do
-      {:ok, {a_set, b_set}}
+      {:ok, {walked_by_dates(a_set), walked_by_dates(b_set)}}
     end
   end
 
@@ -848,6 +848,29 @@ defmodule Tempo.Operations do
         other -> [other]
       end)
     end
+  end
+
+  # An end on the week axis becomes a date where the other operand is written
+  # in dates (`canonicalize_axes/2`) and where it is extended below its week
+  # in a calendar of months (`Tempo.extend_resolution/2`). A member walked by
+  # the days of its week, as a week converted to an interval is, is then
+  # walked by days: the days of the week are a unit of the week axis alone.
+  # Whole weeks stay weeks, and a calendar of weeks keeps its own.
+  defp walked_by_dates(%IntervalSet{} = set) do
+    members = IntervalSet.members(set)
+
+    if Enum.any?(members, &walked_by_weekdays_of_dates?/1),
+      do: IntervalSet.with_intervals(set, Enum.map(members, &walked_by_days/1)),
+      else: set
+  end
+
+  defp walked_by_weekdays_of_dates?(%Interval{unit: :day_of_week, from: from, to: to}),
+    do: not (week_axis_endpoint?(from) or week_axis_endpoint?(to))
+
+  defp walked_by_weekdays_of_dates?(%Interval{}), do: false
+
+  defp walked_by_days(%Interval{} = member) do
+    if walked_by_weekdays_of_dates?(member), do: %{member | unit: :day}, else: member
   end
 
   ## Resolution alignment — extend the coarser operand's endpoints

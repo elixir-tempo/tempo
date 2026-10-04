@@ -37,8 +37,10 @@ Every resolved Tempo at coarser-than-finest resolution is enumerable via implici
 | Year-month-day | `2022-06-15` | 24 hours |
 | Hour | `2022-06-15T10` | 60 minutes |
 | Minute | `2022-06-15T10:30` | 60 seconds |
-| Week | `2022-W24` | 7 days |
+| Week | `2022-W24` | its 7 days, the dates 13 to 19 June |
 | Ordinal date | `2022-166` | 24 hours |
+
+A week's days are the dates they name: `Enum.to_list(~o"2026-W25")` is `~o"2026-06-15"` to `~o"2026-06-21"`, the values a week date is read as (`2026-W25-2` is `~o"2026-06-16"`), so `~o"2026-06-16" in ~o"2026-W25"` is true. A step of days or hours from a week lands on a date too (`Tempo.shift(~o"2026-W25", day: 1)` is `~o"2026-06-16"`), and a step of whole weeks on a week. A calendar of weeks, which has no months, keeps its week and its day of the week (`2026Y25W2K`), and so does a week with no year.
 
 ### 2.2. Explicit ranges and sets
 
@@ -73,7 +75,7 @@ A digit marked `X` means "any value in this position", and `X*` an unspecified u
 | Month only masked | `1985-XX-15` | the 15th of each month |
 | A day some months lack | `1985-XX-31` | the 31st of the seven months with one |
 | Week masked | `2026-W2X` | weeks 20 to 29 of 2026 |
-| Day of the week masked | `2026-W25-X` | the seven days of week 25 |
+| Day of the week masked | `2026-W25-X` | the seven days of week 25, 15 to 21 June |
 | Day of the year masked | `2026Y1XXO` | days 100 to 199 of 2026 |
 | Hour masked | `T1XH` | hours 10 to 19 |
 | Unspecified month | `2026YX*M` | the 12 months of 2026 |
@@ -138,7 +140,7 @@ The endpoint iteration starts from (`from`) provides the metadata carried on eac
 | Closed month | `1985-12/1986-02` | Dec 1985, Jan 1986 |
 | Closed week | `2022-W05/2022-W08` | W5, W6, W7 |
 | Ends of two resolutions | `1985/1986-06` | Jan 1985 to May 1986, by the finer end's unit |
-| Ends on two axes | `2026-W25/2026-07-01` | the sixteen days from 15 June, as days of their weeks |
+| Ends on two axes | `2026-W25/2026-07-01` | the sixteen days from 15 June, as dates |
 | Open upper | `1985/..` | 1985, 1986, 1987, … (use `Enum.take/2`) |
 | Open upper, hour | `1985-01-01T10/..` | 10:00, 11:00, 12:00, … |
 | No year, round the clock | `T22H/T2H` | 22:00, 23:00, 00:00, 01:00 |

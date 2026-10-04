@@ -2765,9 +2765,10 @@ defmodule Tempo do
   `:day_of_week`, `:day_of_year` against a Gregorian value — return a
   `t:Tempo.ResolutionError.t/0` rather than an unrelated coarser unit.
 
-  A week numbers each of its days, so the day of a week date, in a
-  calendar of weeks or of a Gregorian week, is its day of the week:
-  `:day` truncates such a value to it, as it extends and rounds one to it.
+  A week numbers each of its days, so the day of a week date in a
+  calendar of weeks is its day of the week: `:day` truncates such a
+  value to it, as it extends and rounds one to it. A week of a calendar
+  of months is extended to the date of its first day.
 
   """
   @spec trunc(tempo :: t, truncate_to :: time_unit()) :: t | {:error, error_reason()}
@@ -3768,10 +3769,31 @@ defmodule Tempo do
       iex> Tempo.extend_resolution(~o"2020Y6M", :hour)
       ~o"2020Y6M1DT0H"
 
+  A week of a calendar of months is extended to the date of its first
+  day, and a week of a calendar of weeks to its first day of the week:
+
+      iex> Tempo.extend_resolution(~o"2026-W25", :day)
+      ~o"2026Y6M15D"
+
   """
   @spec extend_resolution(tempo :: t, target_unit :: time_unit()) ::
           t | {:error, error_reason()}
-  def extend_resolution(%Tempo{time: time, calendar: calendar} = tempo, target_unit) do
+  def extend_resolution(%Tempo{} = tempo, target_unit) do
+    with %Tempo{} = extended <- extend_resolution_as_written(tempo, target_unit),
+         do: Validation.calendar_date_from_week_date(extended)
+  end
+
+  def extend_resolution(value, _target_unit),
+    do: {:error, not_one_value("extend_resolution/2", value)}
+
+  @doc false
+  # `extend_resolution/2` in the units the value is written in: a week is
+  # extended to a day of it in every calendar, the unit a step of days is
+  # counted on (`Tempo.Math`), where `extend_resolution/2` gives the date that
+  # day is in a calendar of months.
+  @spec extend_resolution_as_written(tempo :: t, target_unit :: time_unit()) ::
+          t | {:error, error_reason()}
+  def extend_resolution_as_written(%Tempo{time: time, calendar: calendar} = tempo, target_unit) do
     with {:ok, target_unit} <- validate_unit(target_unit),
          :ok <- one_value(tempo) do
       target_unit = day_unit(target_unit, tempo)
@@ -3794,9 +3816,6 @@ defmodule Tempo do
       end
     end
   end
-
-  def extend_resolution(value, _target_unit),
-    do: {:error, not_one_value("extend_resolution/2", value)}
 
   defp apply_filled_time(tempo, {:ok, new_time}), do: %{tempo | time: new_time}
   defp apply_filled_time(_tempo, {:error, _} = err), do: err
@@ -3895,7 +3914,8 @@ defmodule Tempo do
   # axis is its day of the week (`K`), in a calendar of weeks and for a
   # Gregorian week alike: a week date at day resolution is
   # `[year, week, day_of_week]`. Truncating, extending and rounding to
-  # `:day` all read the unit here.
+  # `:day` all read the unit here. A Gregorian week extended to it is then
+  # written as the date it names (`extend_resolution/2`).
   defp day_unit(:day, %__MODULE__{time: time, calendar: calendar}) do
     if List.keymember?(time, :week, 0) or week_based_calendar?(calendar),
       do: :day_of_week,
@@ -5727,6 +5747,15 @@ defmodule Tempo do
 
       iex> match?({:error, %Tempo.UnanchoredError{}}, Tempo.shift(~o"1M31D", ~o"P1M"))
       true
+
+  A week steps by weeks to a week, and by days or hours to the date it
+  lands on, as a week date is read (`2026-W25-2` is 16 June):
+
+      iex> Tempo.shift(~o"2026-W25", week: 1)
+      ~o"2026Y26W"
+
+      iex> Tempo.shift(~o"2026-W25", day: 1)
+      ~o"2026Y6M16D"
 
   The 15th of June and of July, a day on and a month on:
 

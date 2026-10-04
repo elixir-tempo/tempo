@@ -567,11 +567,15 @@ defmodule Tempo.Format do
         calendar = Compare.effective_calendar(from.calendar)
         from = Steps.fill_to_unit(from, unit, calendar)
         to = Steps.fill_to_unit(to, unit, calendar)
-        one_less = Tempo.Duration.build([{duration_unit(iter_unit), 1}])
+        shown_unit = duration_unit(iter_unit)
+        one_less = Tempo.Duration.build([{shown_unit, 1}])
 
+        # The day before a week's end is a date in a calendar of months and
+        # a day of the week in a calendar of weeks, and `:day` is the day of
+        # either.
         with %Tempo{} = last <- Math.subtract(to, one_less),
-             %Tempo{} = first <- Tempo.trunc(from, iter_unit),
-             %Tempo{} = closed_last <- Tempo.trunc(last, iter_unit) do
+             %Tempo{} = first <- Tempo.trunc(from, shown_unit),
+             %Tempo{} = closed_last <- Tempo.trunc(last, shown_unit) do
           options = with_default_interval_options(options, first, closed_last)
           format_interval(first, closed_last, options)
         else

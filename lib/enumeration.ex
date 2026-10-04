@@ -182,7 +182,9 @@ defmodule Tempo.Enumeration do
   # The walk's values for the first of a last component's values, at least
   # one, on the frames in `stack`. Those still to read are a frame.
   defp read(%{tempo: tempo} = walk, stack, ancestors, unit, values) do
-    case read_ahead(values, @read_ahead, ancestors, unit, tempo, []) do
+    {tempo, dated} = dated_before(tempo, ancestors)
+
+    case read_ahead(values, @read_ahead, dated, unit, tempo, []) do
       {read, []} ->
         {:ok, read, %{walk | stack: stack, status: :yielded}}
 
@@ -192,19 +194,48 @@ defmodule Tempo.Enumeration do
   end
 
   defp read_ahead([value | values], count, ancestors, unit, tempo, read) when count > 0 do
-    value = %{tempo | time: :lists.reverse(ancestors, [{unit, value}])}
+    value = yielded(tempo, :lists.reverse(ancestors, [{unit, value}]))
     read_ahead(values, count - 1, ancestors, unit, tempo, [value | read])
   end
 
   defp read_ahead(left, _count, _ancestors, _unit, _tempo, read),
     do: {:lists.reverse(read), left}
 
+  # The components before the one read, and the value they are read into, as
+  # every value read after them holds them. Where they name a week and a day
+  # of it, a calendar of months has the date of that day, which is found
+  # once for the hours, minutes or seconds read under it.
+  defp dated_before(tempo, ancestors) do
+    if List.keymember?(ancestors, :day_of_week, 0),
+      do: dated_day_of_week(tempo, ancestors),
+      else: {tempo, ancestors}
+  end
+
+  defp dated_day_of_week(tempo, ancestors) do
+    case yielded(tempo, :lists.reverse(ancestors)) do
+      %Tempo{time: [{:year, _year}, {:month, _month} | _rest] = dated} = dated_tempo ->
+        {dated_tempo, :lists.reverse(dated)}
+
+      _a_week_and_its_day_still ->
+        {tempo, ancestors}
+    end
+  end
+
+  # A value of the walk: the components read, as the value walked holds them.
+  # A week and a day of it are the date they name in a calendar of months, as
+  # they are when a value is read, so the days of a Gregorian week are walked
+  # as the dates they are and a calendar of weeks keeps its own.
+  defp yielded(tempo, [{:year, _year}, {:week, _week}, {:day_of_week, _day} | _rest] = time),
+    do: Validation.calendar_date_from_week_date(%{tempo | time: time})
+
+  defp yielded(tempo, time), do: %{tempo | time: time}
+
   # With no component left to read, the components read are a value of the
   # walk; a value with no components has no values.
   defp descend(walk, [], []), do: next(walk)
 
   defp descend(%{tempo: tempo} = walk, ancestors, []),
-    do: {:ok, [%{tempo | time: :lists.reverse(ancestors)}], %{walk | status: :yielded}}
+    do: {:ok, [yielded(tempo, :lists.reverse(ancestors))], %{walk | status: :yielded}}
 
   # An unspecified year (`X*Y`) is some year, and not one to list: ISO 8601-2
   # §4.6.2 reads `X*Y12M28D` as 28 December of an unspecified year. It is

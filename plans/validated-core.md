@@ -152,7 +152,7 @@ Taken without the user, by instruction, and flagged here.
 
 * **An interval is shown in the unit it is walked by** — `Tempo.to_string/2` names its first and last values in the finer of its ends' units, and a week beside a date as the date its first day is.
 
-* **The day of a week date is its day of the week** — `:day` truncates, rounds and extends a value on the week axis to it, in a calendar of weeks and for a Gregorian week, and every value of a calendar of weeks is on that axis, its year included.
+* **The day of a week date is its day of the week** — `:day` truncates, rounds and extends a value on the week axis to it in a calendar of weeks, and every value of a calendar of weeks is on that axis, its year included. A Gregorian week is extended to the date of its first day (the user's decision of 2026-10-04, below).
 
 * **Significant digits are their mask in every position** — every digit significant is the value itself (`1950S4` is 1950), and a count of none (`1950S0`) is a parse error, the count being a positive integer (ISO 8601-2 §4.4.3).
 
@@ -312,7 +312,7 @@ The first run failed 135 cells of 55,986, five causes, which the baseline lists 
 
 Found and not decided, since each is the user's.
 
-* **A Gregorian week's days** — the walk of `2026-W25`, and that week shifted by a day, give `2026Y25W2K`, a week and a day of it, which the parser and the constructor read as the calendar date. The two are one span and two values, and the text of the first reads back as the second.
+* **A Gregorian week's days** — decided 2026-10-04 and done 2026-10-05: the walk of `2026-W25`, that week shifted by a day, `extend_resolution/2`, an interval's end counted by a duration and a set operation's members give the calendar date (`2026Y6M16D`), as the parser and the constructor read `2026Y25W2K`. One converter, `Tempo.Validation.calendar_date_from_week_date/1`, is applied where such a value leaves the library; a calendar of weeks and a week with no year keep their day of the week.
 
 * **A time of day under a year or a month** — read on the first day (Mine, above), where ISO 8601-2 §7.7.1 wants the date of a date and time complete, and where "17:00 in June" could as well be that time on each day. `select/2` of a time of day in a month gives the first day too.
 

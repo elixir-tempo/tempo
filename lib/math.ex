@@ -15,6 +15,7 @@ defmodule Tempo.Math do
   alias Tempo.TimeZoneDatabase
   alias Tempo.UnanchoredError
   alias Tempo.UnitValues
+  alias Tempo.Validation
 
   @doc """
   Advance a `%Tempo{}` or a keyword-list time representation by
@@ -857,7 +858,7 @@ defmodule Tempo.Math do
          %Tempo.Duration{time: duration_time} = duration
        ) do
     case unit_the_rule_lacks(time, duration_time) do
-      nil -> add_to_value(tempo, duration)
+      nil -> tempo |> add_to_value(duration) |> Validation.calendar_date_from_week_date()
       unit -> {:error, rule_unit_error(tempo, unit)}
     end
   end
@@ -1641,7 +1642,7 @@ defmodule Tempo.Math do
     if finest == nil do
       tempo
     else
-      case Tempo.extend_resolution(tempo, finest) do
+      case Tempo.extend_resolution_as_written(tempo, finest) do
         %Tempo{} = extended ->
           extended
 

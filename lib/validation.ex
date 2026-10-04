@@ -1385,6 +1385,34 @@ defmodule Tempo.Validation do
     prepend_year(year, resolve([{:week, week}, {:day_of_week, day} | rest], calendar))
   end
 
+  @doc false
+  # A value that names a week of a year and a day of it, as the date it names
+  # in a calendar of months: what reading it gives (`resolve/2`), for a value
+  # an operation counted in the week's own units, as the walk of a week and a
+  # step of days from one do. A calendar of weeks keeps its week and its day,
+  # and so does a value with no year, one whose year, week or day is not one
+  # whole number, and one that names a day its year's weeks do not hold.
+  @spec calendar_date_from_week_date(value) :: value when value: term()
+  def calendar_date_from_week_date(
+        %Tempo{
+          time: [{:year, year}, {:week, week}, {:day_of_week, day} | rest],
+          calendar: calendar
+        } = tempo
+      )
+      when is_integer(year) and is_integer(week) and is_integer(day) do
+    calendar = Compare.effective_calendar(calendar)
+
+    with false <- Tempo.week_based_calendar?(calendar),
+         {:ok, %Date{} = date} <- date_from_iso_week(year, week, day, calendar) do
+      dated = [{:year, date.year}, {:month, date.month}, {:day, date.day} | rest]
+      %{Qualification.rewritten(tempo, dated) | time: dated}
+    else
+      _a_calendar_of_weeks_or_no_such_day -> tempo
+    end
+  end
+
+  def calendar_date_from_week_date(value), do: value
+
   defp prepend_year(_year, {:error, reason}), do: {:error, reason}
   defp prepend_year(year, resolved), do: [{:year, year} | resolved]
 

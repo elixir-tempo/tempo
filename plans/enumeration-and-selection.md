@@ -64,7 +64,7 @@ So for a date or a time with a year, in the fifteen calendars of whole months th
 | Every shape of a Gregorian value (the matrix) | Done |
 | One implementation of a unit's values and of a count from the end | Done |
 | A selection in a calendar of weeks | Open |
-| A weekday selected in a Gregorian week | Open |
+| A weekday selected in a Gregorian week | Done |
 | A month whose days are not `1..n` (a reform) | Open |
 | A year that starts within the months | Open |
 | A value with no year in a calendar other than the Gregorian | In progress |
@@ -86,7 +86,7 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 
 * **A selection in a calendar of weeks** — a week selected in a year is the whole year, in `ISOWeek` and `NRF` alike. Six cells of the matrix. A year's weekdays, which stopped at its twelfth week, are those of each of its weeks since 2026-10-04 (nine cells).
 
-* **A weekday selected in a Gregorian week** — `2026Y25WL3KN` is the week's Monday whatever the weekday, in a value and in a recurrence's rule. 42 cells.
+* **A weekday selected in a Gregorian week** — `2026Y25WL3KN` was the week's Monday whatever the weekday, in a value and in a recurrence's rule (42 cells). Fixed 2026-10-05 with the days of a Gregorian week being given as calendar dates: the day selected was a week and a day of it, which the conversion to a span cut back to its week.
 
 * **A selection under an hour cannot be written** — `inspect/1` and `Tempo.to_iso8601/1` raise a `FunctionClauseError` on `2026Y6M15DT10HLT30MN`. 35 cells.
 
@@ -156,7 +156,7 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 
 * [ ] **The census in the matrix** — every calendar module as a generated class of `Tempo.Matrix.Corpus`, with the calendar-only answer as a check, so that the table above is a test.
 
-* [ ] **A week selected in a year of a calendar of weeks, and a weekday in a Gregorian week** — 48 cells of the baseline.
+* [ ] **A week selected in a year of a calendar of weeks** — 6 cells of the baseline. The weekday in a Gregorian week, 42 more, is fixed (2026-10-05).
 
 * [ ] **A selection under an hour** — `inspect/1` and `to_iso8601/1`, 35 cells of the baseline.
 
