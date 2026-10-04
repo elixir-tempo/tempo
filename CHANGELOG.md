@@ -257,6 +257,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A fraction of an hour or a minute that does not land on a whole minute or second is read to the minute, or the second, the time falls in: `T10.51` is 10:30 and `T10:30.51` is 10:30:30. The value held the fractional minute or second, which `Tempo.to_interval/2` and `Tempo.compare/2` refused, `Enum` raised on, and its own text read back as another value.
+
 * Within a set a comma separates the members and is never a decimal sign: `{2023,2020/2021}` is a year and an interval, where `2023,2020` was read as a number and the set, or a recurrence's domain (`R/{2020,2022/2024}/P1Y`), was one interval from part way through 2023, and `{2020/2021,2023/2024}` parses. A fraction in a set's member is written with a full stop, so `{P1,5Y}` is a `Tempo.ParseError`.
 
 * In a selection a second followed by a position is read as both: `L1KT10H0M30S1IN` is second 30 and position 1, where the `S` was taken for the significant-digit marker and the value was position 30 with no second. A duration's seconds take significant digits and a set (`PT1230S2S`, `PT{1,2}S`), where each raised a `FunctionClauseError`; a position, and a fraction no exponent has scaled (`2026.5S1Y`), take no significant digits and are a `Tempo.ParseError`.

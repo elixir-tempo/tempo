@@ -544,6 +544,25 @@ defmodule Tempo.Iso8601.Parser.Test do
              {:ok, %Tempo{calendar: Calendrical.Gregorian, time: [year: {:group, 300..399}]}}
   end
 
+  # A fraction of an hour is read to the minute and of a minute to the second
+  # (user, 2026-10-04, as §7.12's examples read them). One that does not land
+  # on a whole minute or second is the minute, or the second, the time falls
+  # in. It left a fractional minute in the value (`minute: 30.6`), which no
+  # operation read and whose own text read back as another value.
+  test "a fraction of an hour or a minute that does not land on a whole unit" do
+    assert Tempo.from_iso8601("T10.5") == Tempo.from_iso8601("T10:30")
+    assert Tempo.from_iso8601("T10.51") == Tempo.from_iso8601("T10:30")
+    assert Tempo.from_iso8601("T10:30.5") == Tempo.from_iso8601("T10:30:30")
+    assert Tempo.from_iso8601("T10:30.51") == Tempo.from_iso8601("T10:30:30")
+    assert Tempo.from_iso8601("T23.999") == Tempo.from_iso8601("T23:59")
+
+    {:ok, value} = Tempo.from_iso8601("2026-06-15T10.51")
+
+    assert Tempo.from_iso8601(Tempo.to_iso8601!(value)) == {:ok, value}
+    assert {:ok, %Tempo.Interval{}} = Tempo.to_interval(value)
+    assert Tempo.compare(value, Tempo.from_iso8601!("2026-06-15T10:30")) == :eq
+  end
+
   test "Section 7.12 Fractions for time" do
     # Section 7.12 Example 1
     assert Tempo.from_iso8601("2018Y8M8DT0,5H") ==

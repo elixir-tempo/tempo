@@ -8,8 +8,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Correctness
 
-* [ ] **A fraction of a minute or an hour is read to the second or the minute** — `T10:30.5` is the second 10:30:30 and `T10.5` the minute 10:30, where the text names a tenth of a minute and a tenth of an hour, six seconds and six minutes long. No value has such a resolution to hold it; decide between an interval and a named error. Found 2026-10-03. Decision: Its an interval. `T10:30.5` is the second 10:30:30 and `T10.5` the minute 10:30 are both correct.
-
 * [ ] **A Gregorian week's days are week dates from the walk and calendar dates from the parser** — `Enum.to_list(~o"2026-W25")` and `Tempo.shift(~o"2026-W25", day: 1)` give `2026Y25W2K`, a week and a day of it, which the parser and `Tempo.new/1` read as the calendar date `2026-06-16` (user, 2026-10-03), so the text of such a value reads back as another value of the same span. Decide whether the walk and the shift give the calendar date too. Found 2026-10-03.
 
 * [ ] **A count from the end of a month of fixed length is counted before the value is placed** — `~o"6M-1D"` is `6M30D`, as June always has thirty days, so placed on a Hebrew year whose sixth month has twenty-nine it is an `InvalidDateError`, where the same text read in the Hebrew calendar is that month's 29th. Decide whether a count from the end is ever counted before the value has a year. Found 2026-10-04.
@@ -129,6 +127,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A fraction of a minute or an hour is read to the second or the minute** — the reading stands (user's decision): `T10:30.5` is the second 10:30:30 and `T10.5` the minute 10:30, as ISO 8601-2 §7.12 reads them; a fraction that does not land on a whole minute or second is the one the time falls in (`T10.51` is 10:30), where the value held a fractional minute nothing could read. 2026-10-04.
 
 * [x] **A time of day under a year or a month is on its first day, a divergence** — it stays the first day (user's decision) and is recorded as a divergence from ISO 8601-1 §5.4.1 and ISO 8601-2 §7.7.1 in the conformance guide, the migration guide and `at/2`, with the form that names each day (`2026Y6M{1..-1}DT17H`). 2026-10-04.
 

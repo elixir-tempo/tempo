@@ -874,6 +874,13 @@ defmodule Tempo.Validation do
     end
   end
 
+  # A fraction of an hour is read to the minute, and a fraction of a minute
+  # to the second, as ISO 8601-2 §7.12 reads them: `0,5H` is 00:30 "with
+  # minute precision" and `30.5M` thirty seconds past "with second
+  # precision". A fraction that does not land on a whole minute or second is
+  # the minute or the second the time falls in (`T10.51` is 10:30), so the
+  # value holds whole numbers: a fractional minute left in it was a value no
+  # operation could read, and one its own text read back as another.
   def resolve([{:hour, hour}], _calendar) when is_float(hour) and hour > 0 do
     int_hour = trunc(hour)
     fraction_of_hour = hour - int_hour
@@ -882,8 +889,7 @@ defmodule Tempo.Validation do
       [{:hour, int_hour}]
     else
       minutes = Math.round(60 * fraction_of_hour, @rounding_precision)
-      minutes = if trunc(minutes) == minutes, do: trunc(minutes), else: minutes
-      [{:hour, int_hour}, {:minute, minutes}]
+      [{:hour, int_hour}, {:minute, trunc(minutes)}]
     end
   end
 
@@ -895,8 +901,7 @@ defmodule Tempo.Validation do
       [{:minute, int_minute}]
     else
       seconds = Math.round(60 * fraction_of_minute, @rounding_precision)
-      seconds = if trunc(seconds) == seconds, do: trunc(seconds), else: seconds
-      [{:minute, int_minute}, {:second, seconds}]
+      [{:minute, int_minute}, {:second, trunc(seconds)}]
     end
   end
 
