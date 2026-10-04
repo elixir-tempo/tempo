@@ -3145,7 +3145,10 @@ defmodule Tempo do
 
   A time of day is a time of one day, so placed on a year, a month or a
   week it is on the first day of it: `~o"2026-06" |> Tempo.at(~o"T17")`
-  is 17:00 on 1 June, as `~o"2026-06T17"` is read.
+  is 17:00 on 1 June, as `~o"2026-06T17"` is read. ISO 8601 wants the
+  date of a date and time complete (ISO 8601-1 §5.4.1), so this reading
+  is Tempo's own. That time on each day is written with the days named:
+  `~o"2026Y6M{1..-1}DT17H"` is 17:00 on each day of June.
 
   A value with a year is checked against its calendar, so
   `~o"2026-02" |> Tempo.on(~o"29D")` is an error: 2026 is not a leap

@@ -71,6 +71,8 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 
 * **Truncated representations** (`--06-15`, `85-06-15` — 2-digit year) were deprecated in the 2019 edition and are not accepted. Modernise your input.
 
+* **A date and time whose date is not complete** — ISO 8601-1 §5.4.1 and ISO 8601-2 §7.7.1 both say that the date part of a date and time expression shall be complete, so `2026-06T17` and `2026T17` are not ISO 8601. Tempo reads them, as that time on the first day of what is written, and holds the day in the value: `2026-06T17` is `2026Y6M1DT17H`, `2026T17` is 17:00 on 1 January, and `2026-W25T17` is 17:00 on the week's Monday. `Tempo.at/2` places a time of day on a year, a month or a week the same way, and under a group it is the group's first day. A time of day is a time of one day, and the day left out is read as the first as a clock unit left out is read as zero. That time on each day is written with the days named: `2026Y6M{1..-1}DT17H` is 17:00 on each day of June.
+
 * **Fractional seconds** are preserved as a `:microsecond {value, precision}` component (not truncated to whole seconds). The digit count is significant — `T10:30:00.120` is millisecond resolution and `T10:30:00.12` is centisecond resolution, two distinct interval widths. ISO 8601 permits an unbounded number of fractional digits; Tempo caps precision at 6 (microsecond), matching Elixir's `Time`/`DateTime`. Input with more than 6 fractional digits is truncated to microsecond. Fractional minutes and hours (`T10:30,5`, `T10,5`) still cascade to a coarser-unit remainder as before.
 
 ### Not supported
@@ -205,11 +207,11 @@ These syntaxes are Tempo conveniences, not part of any standard:
 
 * **Repeat rule** — `/F` combinator inside a parsed expression.
 
-* **A time of day under a year, a month or a week** — `2026T17`, `2026-06T17` and `6MT10H` are that time on the first day of what is written, and are held with the day (`2026Y1M1DT17H`). ISO 8601-2 §7.7.1 wants the date of a date and time complete; Tempo reads a day left out as its first, as §7.10 reads a clock unit left out as zero.
+* **A time of day under a year, a month or a week** — `2026T17`, `2026-06T17` and `6MT10H` are that time on the first day of what is written, and are held with the day (`2026Y1M1DT17H`). This one diverges from the standard, which wants the date of a date and time complete: see "Partial or divergent" under Part 1.
 
 * **Selection position** — `L…N` with an `I` modifier for the nth occurrence of the resolved set, written weekday-then-position (`1K2I` = "the 2nd Monday"). `I` is the ISO 8601-2 §12.9 position designator, not a Tempo invention — it is listed here only for completeness and described in full below.
 
-None of these break ISO 8601 compatibility — Tempo accepts the standard forms too.
+None of these changes how a standard form is read — Tempo accepts the standard forms too.
 
 #### The lowercase-designator convention
 

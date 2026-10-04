@@ -876,3 +876,5 @@ iex> Tempo.shift(~o"2026YT17H", day: 1)
 ```
 
 > *"Five o'clock in June 2026 is five o'clock on the first of June. Five o'clock in 2026 is on the first of January, and a day later is the second."*
+
+ISO 8601 wants the date of a date and time complete, so reading such text at all is Tempo's own: the divergence is recorded in the [ISO 8601 conformance guide](iso8601-conformance.md). That time on each day of a month is written with the days named, `~o"2026Y6M{1..-1}DT17H"`.
