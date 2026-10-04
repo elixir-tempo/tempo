@@ -135,7 +135,10 @@ defmodule Tempo.Matrix.Corpus do
       "2026Y{6,7}MT10H"
     ],
     recurrence_exotic_start: ["R3/2026Y6MXXD/P1M", "R3/2026Y6M{1,15}D/P1M", "R3/T22H/PT1H"],
-    set_exotic: ["{2,6}M31D", "{1,2}M"],
+    # A set drops the values its context cannot hold, here 31 February. One
+    # none of whose values exists (`{2,6}M31D`) names no date, and is not a
+    # value to measure.
+    set_exotic: ["{1,2}M31D", "{1,2}M"],
     group_of_set: ["2026Y{1,2}G3MU", "2026Y{1..-1}G3MU", "2026Y6M{1,2}G10DU", "2026Y{1,2}G3MU15D"]
   ]
 

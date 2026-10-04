@@ -224,7 +224,7 @@ defmodule Tempo.Enumeration do
 
     if settled? != false or valid_after?(literals, ancestors, walk.calendar),
       do: descend(walk, literals ++ ancestors, rest),
-      else: next(walk)
+      else: next(unmatched(walk, :no_members))
   end
 
   # A group followed by a finer unit counts that unit from the group's start
@@ -263,7 +263,7 @@ defmodule Tempo.Enumeration do
        ) do
     case Group.groups_of_set(unit, members, size, :lists.reverse(ancestors), walk.calendar) do
       {:ok, []} ->
-        next(walk)
+        next(unmatched(walk, :no_members))
 
       {:ok, groups} ->
         next(%{walk | stack: [{ancestors, {:groups, unit, settled?}, groups, rest} | stack]})
@@ -291,7 +291,7 @@ defmodule Tempo.Enumeration do
          {component, settled?} | rest
        ]) do
     case candidates(component, ancestors, calendar, settled?) do
-      {:ok, _unit, []} -> next(walk)
+      {:ok, _unit, []} -> next(unmatched(walk, :no_members))
       {:ok, unit, values} when rest == [] -> read(walk, stack, ancestors, unit, values)
       {:ok, unit, values} -> next(%{walk | stack: [{ancestors, unit, values, rest} | stack]})
       {:unmatched, reason} -> next(unmatched(walk, reason))
@@ -336,8 +336,9 @@ defmodule Tempo.Enumeration do
 
   # A mask that matches nothing in one context, or a group that starts beyond
   # it, is passed over, as a set drops the values its context cannot hold
-  # (`1985-XX-3X` has no February). A walk that ends having matched nothing
-  # anywhere names no date (`1985-02-3X`), and the first reason is its error.
+  # (`1985-XX-3X` has no February, and `2026Y{1,2}M31D` no 31 February). A
+  # walk that ends having matched nothing anywhere names no date
+  # (`1985-02-3X`, `2026Y{2,6}M31D`), and the first reason is its error.
   defp finished(%{status: {:unmatched, reason}, tempo: tempo}),
     do: {:error, exception(tempo, reason)}
 
@@ -681,6 +682,13 @@ defmodule Tempo.Enumeration do
     ArgumentError.exception(
       "Cannot enumerate a significant-digits block of #{size} candidates " <>
         "(limit: #{@significant_digits_limit}). Source: #{inspect(value)}S#{digits}"
+    )
+  end
+
+  # A set, a range or a group none of whose values exists where it is written.
+  defp exception(tempo, :no_members) do
+    InvalidDateError.exception(
+      reason: "#{inspect(tempo)} names no date: none of the values it is written with exists."
     )
   end
 

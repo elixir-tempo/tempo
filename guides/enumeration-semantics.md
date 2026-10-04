@@ -80,7 +80,7 @@ A digit marked `X` means "any value in this position", and `X*` an unspecified u
 | Unspecified hour | `TX*H` | hours 0 to 23 |
 | Counted from the end | `2026Y-XM` | the last nine months, April to December |
 
-A mask is read in each context it lands in: `1985-XX-3X` is the 30th and 31st of January, then of March, and no day of February. A value none of whose candidates fits (`1985-02-3X`) names no date, and a unit whose values depend on a year the value does not have (`X*W`, the weeks of no year) cannot be listed; walking either raises a named error (§3.6). An unspecified year (`X*Y`) is some year and no year in particular, so the units after it are walked as they are with no year written (`X*Y12M28D` is the hours of 28 December, each still of an unspecified year), and on its own it names nothing to list.
+A mask is read in each context it lands in: `1985-XX-3X` is the 30th and 31st of January, then of March, and no day of February. A value none of whose candidates fits (`1985-02-3X`) names no date, as a set none of whose values exists does (`2026Y{2,6}M31D`, where `2026Y{1,2}M31D` is 31 January), and a unit whose values depend on a year the value does not have (`X*W`, the weeks of no year) cannot be listed; walking any of them raises a named error (§3.6). An unspecified year (`X*Y`) is some year and no year in particular, so the units after it are walked as they are with no year written (`X*Y12M28D` is the hours of 28 December, each still of an unspecified year), and on its own it names nothing to list.
 
 ### 2.5. EDTF long-year shapes
 

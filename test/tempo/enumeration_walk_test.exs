@@ -538,6 +538,56 @@ defmodule Tempo.EnumerationWalk.Test do
     end
   end
 
+  # A set drops the values its context cannot hold (`2026Y{1,2}M31D` is 31
+  # January). One none of whose values exists names no date, as a mask no
+  # value matches does (decided 2026-10-04): it walked nothing and converted
+  # to an empty set.
+  describe "a set none of whose values exists" do
+    test "names no date, in the walk and in the conversion" do
+      for text <- [
+            "2026Y{2,6}M31D",
+            "{2,6}M31D",
+            "2026Y{2,4,6}M31D",
+            "{2026,2027}Y2M29D",
+            "{2027,2028}Y53W",
+            "{2026,2027}Y366O"
+          ] do
+        value = Tempo.from_iso8601!(text)
+
+        assert {:error, %Tempo.InvalidDateError{} = error} = Tempo.to_interval(value), text
+        assert Exception.message(error) =~ "names no date"
+        assert {:error, %Tempo.InvalidDateError{}} = Tempo.to_interval_set(value), text
+        assert_raise Tempo.InvalidDateError, ~r/names no date/, fn -> Enum.to_list(value) end
+      end
+    end
+
+    test "is refused in another calendar's terms too" do
+      value = Tempo.from_iso8601!("{5786,5788}Y13M1D", Calendrical.Hebrew)
+
+      assert {:error, %Tempo.InvalidDateError{}} = Tempo.to_interval(value)
+    end
+
+    test "is what a mask no value matches is" do
+      set = ~o"2026Y{2,6}M31D"
+      mask = Tempo.from_iso8601!("1985-02-3X")
+
+      for value <- [set, mask] do
+        assert {:error, %Tempo.InvalidDateError{}} = Tempo.to_interval(value)
+        assert {:error, %Tempo.InvalidDateError{}} = Tempo.to_string(value)
+        assert {:error, %Tempo.InvalidDateError{}} = Tempo.duration(value)
+        assert {:error, %Tempo.InvalidDateError{}} = Tempo.union(value, ~o"2026-07")
+        assert_raise Tempo.InvalidDateError, fn -> Enum.count(value) end
+      end
+    end
+
+    test "one of whose values exists still names those" do
+      assert Enum.to_list(~o"2026Y{1,2}M31D") == [~o"2026Y1M31D"]
+      assert Enum.to_list(~o"2026Y{1,2}M{30..31}D") == [~o"2026Y1M30D", ~o"2026Y1M31D"]
+      assert Enum.to_list(~o"{2026,2028}Y2M29D") == [~o"2028Y2M29D"]
+      assert Enum.to_list(~o"{2026,2027}Y53W") == [~o"2026Y53W"]
+    end
+  end
+
   describe "an interval with no end" do
     test "has no count" do
       assert_raise Tempo.IntervalEndpointsError,

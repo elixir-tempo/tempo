@@ -32,8 +32,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **An unspecified day follows the count with no year** — `Enum.to_list(~o"2MX*D")` is a `Tempo.UnanchoredError`, as the walk of `2M`, `2M{1..-1}D` and `2MXXD` are, where it lists 29 days; its span stays the month. `X*M` and `XXM` are still the twelve months a Gregorian year always has. Decided 2026-10-04: with no year, what depends on the year is refused.
 
-* [ ] **A set none of whose members exists is an `InvalidDateError`** — `~o"2026Y{2,6}M31D"` names no date and is an error, as a mask no value matches (`1985-02-3X`) is, where it walks nothing and converts to an empty set. A set some of whose members exist still gives those (`2026Y{1,2}M31D` is 31 January). Decided 2026-10-04.
-
 * [ ] **An interval with no end refuses what needs its end, as a lazy set does** — `Enum.at/2`, `Enum.empty?/1`, `Enum.random/1` and `Enum.slice/2` of `~o"2026Y/.."` raise a `Tempo.UnboundedSetError`, where `Enum.at(_, -1)` and `Enum.random/1` walk for ever and the first two answer; `Enum.take/2` and streams answer. Decided 2026-10-04: an answer that needs an unbounded walk refuses and never hangs.
 
 * [ ] **A qualification is held per component alone** — `2026?` and `?2026` are one value (ISO 8601-2 §8.2.4), written in the preferred form, where the first holds `qualification: :uncertain` and the second `qualifications: %{year: :uncertain}`, the two are not `==`, and the walk of the first yields uncertain months (`2026Y1M?`). A unit a walk adds is not qualified, and `trunc/2` drops the qualifier of a unit it drops. The matrix's read-back check (`same_value/4` in `test/support/matrix/checks.ex`) is then `==`. Decided 2026-10-04.
@@ -139,6 +137,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A set none of whose members exists is an `InvalidDateError`** — `~o"2026Y{2,6}M31D"`, `{2026,2027}Y2M29D` and their like are read, as a mask no value matches is, and name no date: the walk raises the error and `to_interval/2` and what rests on it return it, where the walk yielded nothing and the conversion an empty set. One of whose members exists gives those. 2026-10-04.
 
 * [x] **A range written backwards is a parse error** — `{2026-06-20..2026-06-15}`, `2026Y6M{20..15}D` and every other range whose first value is after its last are a `Tempo.ParseError` when read, in a value, a set, a group, a selection or a rule, and one whose ends are counted to a first after its last (`{-1..1}D`) an `InvalidDateError`; the walk of a range downwards, and the negative step in `Tempo.UnitValues`, are gone. 2026-10-04.
 

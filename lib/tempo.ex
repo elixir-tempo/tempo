@@ -6038,7 +6038,8 @@ defmodule Tempo do
     each value it names.
 
   * `{:error, %Tempo.InvalidDateError{}}` when a mask names no date —
-    `~o"2026-02-3X"`, as February has no 30th or 31st.
+    `~o"2026-02-3X"`, as February has no 30th or 31st — or a set none
+    of whose values exists does, `~o"2026Y{2,6}M31D"`.
 
   ### Examples
 

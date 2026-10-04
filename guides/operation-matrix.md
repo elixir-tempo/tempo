@@ -123,7 +123,7 @@ The three tables are three levels of guarantee.
 | Mask of fewer digits `2026YXM` | 4 of 11 | all | all | all | all | 9 of 11 | 2 of 8 | all | 14 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.ResolutionError`, `Tempo.RoundingError` |
 | Time on a year or month `2026YT17H` | 4 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
 | Recurrence from a masked day `R3/2026Y6MXXD/P1M` | 3 of 11 | all | 2 of 9 | 6 of 21 | all | 2 of 11 | 2 of 8 | all | 2 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
-| Set with a day a month lacks `{2,6}M31D` | 4 of 11 | all | 7 of 9 | 5 of 21 | all | 9 of 11 | 2 of 8 | 4 of 5 | 13 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.RoundingError`, `Tempo.UnanchoredError` |
+| Set with a day a month lacks `{1,2}M31D` | 4 of 11 | all | 2 of 9 | all | all | 9 of 11 | 2 of 8 | 4 of 5 | 13 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.RoundingError`, `Tempo.UnanchoredError` |
 | Group of a set `2026Y{1,2}G3MU` | 4 of 11 | all | 8 of 9 | 6 of 21 | all | 3 of 11 | 2 of 8 | 4 of 5 | 14 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.IntervalEndpointsError`, `Tempo.ResolutionError`, `Tempo.RoundingError` |
 
 ### Open

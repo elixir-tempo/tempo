@@ -259,6 +259,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A set none of whose values exists names no date, as a mask no value matches does: `~o"2026Y{2,6}M31D"` returns a `Tempo.InvalidDateError` from `Tempo.to_interval/2` and every function that converts it, and raises it from a walk, where it converted to an empty set and walked nothing. A set one of whose values exists still gives those: `~o"2026Y{1,2}M31D"` is 31 January.
+
 * `Tempo.IntervalSet.covered/2` gives each region as long as it can be: members that meet are one region at any threshold, where a member ending as another began cut it in two. A set with no year is read on its cycle, as `coalesce/1` reads it, so a member that runs to or through the cycle's end (`T23H/T0H`, `T22H/T2H`) is covered where it was lost, and one no cycle can be cut for (`25D/5D`) is a `Tempo.UnanchoredError` where it gave nothing.
 
 * `Tempo.explain/1` words a selection whose range reaches the end of its period ("on the 28th to the last"), where it raised a `CaseClauseError` or a `MatchError`, and words a count from the end in a value with no year by its place ("The last day of February, in any year").
