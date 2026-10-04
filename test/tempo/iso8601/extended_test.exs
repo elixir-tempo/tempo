@@ -480,9 +480,9 @@ defmodule Tempo.Iso8601.Extended.Test do
       assert {:ok, interval} =
                Tempo.from_iso8601("2022?[Europe/Paris]/2023~[Europe/London]")
 
-      assert interval.from.qualification == :uncertain
+      assert Tempo.qualification(interval.from) == :uncertain
       assert interval.from.extended.zone_id == "Europe/Paris"
-      assert interval.to.qualification == :approximate
+      assert Tempo.qualification(interval.to) == :approximate
       assert interval.to.extended.zone_id == "Europe/London"
     end
 

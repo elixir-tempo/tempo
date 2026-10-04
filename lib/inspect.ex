@@ -11,6 +11,7 @@ defmodule Tempo.Inspect do
   alias Tempo.Iso8601EncodeError
   alias Tempo.Math
   alias Tempo.Microsecond
+  alias Tempo.Qualification
 
   @from_iso8601 "Tempo.from_iso8601!(\""
   @sigil_o "~o\""
@@ -53,9 +54,9 @@ defmodule Tempo.Inspect do
   # member's own inside the braces does not parse, so one the members share
   # is written once, after the set, before any suffix.
   defp hoist_shared_qualification(%Tempo.Set{} = set) do
-    case set |> named_values() |> Enum.map(& &1.qualification) |> Enum.uniq() do
+    case set |> named_values() |> Enum.map(&Qualification.whole/1) |> Enum.uniq() do
       [qualification] when not is_nil(qualification) ->
-        {map_named(set, &%{&1 | qualification: nil}), inspect_qualification(qualification)}
+        {map_named(set, &%{&1 | qualifications: nil}), inspect_qualification(qualification)}
 
       _none_or_several ->
         {set, []}
@@ -1194,45 +1195,16 @@ defmodule Tempo.Inspect do
 
   defp written_as_pair(component), do: component
 
-  @qualifiable_units [
-    :year,
-    :month,
-    :day,
-    :day_of_year,
-    :week,
-    :day_of_week,
-    :hour,
-    :minute,
-    :second
-  ]
-
   # ISO 8601-2 §8.2.4: when every present component carries the same
   # qualifier, prefer the compact *complete* form (one trailing
   # qualifier) over per-component qualifiers — `2004%Y6%M11%D` reduces
   # to `2004Y6M11D%`. The explicit (designator) output form has no
   # *group* representation, so complete is the only available collapse.
-  defp canonical_qualifications(%Tempo{
-         qualification: nil,
-         qualifications: qualifications,
-         time: time
-       })
-       when is_map(qualifications) and map_size(qualifications) > 0 do
-    present = for {unit, _value} <- time, unit in @qualifiable_units, do: unit
-    values = Enum.map(present, &Map.get(qualifications, &1))
-
-    if present != [] and map_size(qualifications) == length(present) and
-         match?([_single], Enum.uniq(values)) and hd(values) != nil do
-      {hd(values), nil}
-    else
-      {nil, qualifications}
+  defp canonical_qualifications(%Tempo{qualifications: qualifications} = tempo) do
+    case Qualification.whole(tempo) do
+      nil -> {nil, qualifications}
+      qualification -> {qualification, nil}
     end
-  end
-
-  defp canonical_qualifications(%Tempo{
-         qualification: qualification,
-         qualifications: qualifications
-       }) do
-    {qualification, qualifications}
   end
 
   # ISO 8601-2 §8.3 explicit component qualification: tag each unit
@@ -1438,7 +1410,9 @@ defmodule Tempo.Inspect do
         # are not those the start implies: `27W` after a date would be
         # read in the start's June.
         :another_axis -> to
-        remaining -> %{to | time: remaining}
+        # The end is written with the qualifiers of the components it
+        # writes: those of the ones left out are the start's.
+        remaining -> Qualification.only(%{to | time: remaining})
       end
     else
       to
@@ -1449,7 +1423,7 @@ defmodule Tempo.Inspect do
 
   defp implied_by?(%Tempo{} = to, %Tempo{} = from) do
     to.shift == from.shift and to.calendar == from.calendar and
-      to.qualification == from.qualification and to.qualifications == from.qualifications
+      to.qualifications == from.qualifications
   end
 
   # The components of the end from the first that differs from the start's.

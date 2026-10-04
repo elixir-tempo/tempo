@@ -5,6 +5,7 @@ defmodule Tempo.Iso8601.Parser do
   alias Tempo.Iso8601.AST
   alias Tempo.Iso8601.Unit
   alias Tempo.ParseError
+  alias Tempo.Qualification
 
   def parse(tokens, calendar) do
     case backwards_range(tokens) do
@@ -97,14 +98,13 @@ defmodule Tempo.Iso8601.Parser do
 
   defp pop_trailing_qualification(tokens), do: {nil, tokens}
 
-  # Complete qualification (§8.2.1) — the whole expression. For an
-  # interval it attaches to both endpoints so every sub-value carries
-  # it; callers can read the aggregate off either endpoint.
+  # Complete qualification (§8.2.1) — the whole expression, which is each
+  # of its components. For an interval it attaches to both endpoints so
+  # every sub-value carries it.
   defp apply_complete_qualification(result, nil), do: result
 
-  defp apply_complete_qualification(%Tempo{} = tempo, qualification) do
-    %{tempo | qualification: combine_qualification(tempo.qualification, qualification)}
-  end
+  defp apply_complete_qualification(%Tempo{} = tempo, qualification),
+    do: Qualification.with_complete(tempo, qualification)
 
   defp apply_complete_qualification(%Tempo.Interval{} = interval, qualification) do
     %{
@@ -149,7 +149,7 @@ defmodule Tempo.Iso8601.Parser do
             tempo.qualifications || %{},
             unit,
             qualification,
-            &combine_qualification(&1, qualification)
+            &Qualification.combine(&1, qualification)
           )
 
         %{tempo | qualifications: qualifications}
@@ -159,10 +159,6 @@ defmodule Tempo.Iso8601.Parser do
   defp apply_leading_qualification(other, qualification) do
     apply_complete_qualification(other, qualification)
   end
-
-  defp combine_qualification(nil, qualification), do: qualification
-  defp combine_qualification(qualification, qualification), do: qualification
-  defp combine_qualification(_a, _b), do: :uncertain_and_approximate
 
   def parse([{type, tokens}]) when type in [:date, :time_of_day, :datetime] do
     if has_one_of_component?(tokens) do

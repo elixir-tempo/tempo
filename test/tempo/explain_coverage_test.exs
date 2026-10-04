@@ -61,12 +61,17 @@ defmodule Tempo.ExplainCoverageTest do
   end
 
   describe "qualifications and alternate calendars" do
+    # A qualified year alone is a wholly qualified value, however it is
+    # written, and is worded as one; a qualifier of one component of several
+    # is named with its component.
     test "an approximate qualifier" do
-      assert Tempo.explain(~o"2020~Y") =~ "%{year: :approximate}"
+      assert Tempo.explain(~o"2020~Y") =~ "approximate (EDTF ~)"
+      assert Tempo.explain(~o"2020~Y6M") =~ "%{year: :approximate}"
     end
 
     test "an uncertain-and-approximate qualifier" do
-      assert Tempo.explain(~o"2020%Y") =~ "%{year: :uncertain_and_approximate}"
+      assert Tempo.explain(~o"2020%Y") =~ "both uncertain and approximate (EDTF %)"
+      assert Tempo.explain(~o"2020%Y6M") =~ "%{year: :uncertain_and_approximate}"
     end
 
     test "a non-ISO calendar is named" do

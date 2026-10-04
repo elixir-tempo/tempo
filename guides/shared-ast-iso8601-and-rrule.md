@@ -48,7 +48,7 @@ ISO 8601-2 and IXDTF were designed to be descriptive. RRULE was designed to be p
 
 ### Uncertainty, approximation, qualification
 
-ISO 8601-2 gives you `?`, `~`, and `%` to mark a value as uncertain, approximate, or both. An archaeologist writing `1850~` says "around 1850, give or take". This lives on Tempo's `:qualification` field (expression-level) and `:qualifications` field (per-component, for forms like `2022-?06-15`).
+ISO 8601-2 gives you `?`, `~`, and `%` to mark a value as uncertain, approximate, or both. An archaeologist writing `1850~` says "around 1850, give or take". Tempo holds it per component, a qualifier of a whole value being each component's, and `Tempo.qualification/1` and `Tempo.qualification/2` read it.
 
 RRULE has no equivalent. A `COUNT=10` means exactly ten occurrences, no hedging.
 

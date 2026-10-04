@@ -7,8 +7,8 @@ defmodule Tempo.SigilMatchTest do
   # Phase ① behaviour of `~o[…]` used on the LHS of a match —
   # `match?/2`, `case`, function-head patterns. The sigil expands
   # to a `%Tempo{time: [{u1, v1}, …, {un, vn} | _]}` pattern,
-  # leaving `calendar`, `shift`, `extended`, `qualification`, and
-  # `qualifications` unconstrained.
+  # leaving `calendar`, `shift`, `extended` and `qualifications`
+  # unconstrained.
 
   describe "match?/2 with ~o[...]" do
     test "year-only sigil matches any Tempo starting with that year" do

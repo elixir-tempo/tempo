@@ -99,7 +99,7 @@ defmodule Tempo.WeekCalendarTest do
       both = Tempo.from_iso8601!("2026?-06-~15", ISOWeek)
       assert both.qualifications[:week] == :uncertain_and_approximate
 
-      assert Tempo.from_iso8601!("2026-06-15~", ISOWeek).qualification == :approximate
+      assert Tempo.qualification(Tempo.from_iso8601!("2026-06-15~", ISOWeek)) == :approximate
     end
 
     test "converts at each end of an interval and at a recurrence's start" do

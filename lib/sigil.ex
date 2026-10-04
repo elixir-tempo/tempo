@@ -53,7 +53,7 @@ defmodule Tempo.Sigils do
   keyword list becomes a cons-pattern terminated by a wildcard,
   so the sigil matches any value whose `:time` *starts with* the
   listed `{unit, value}` pairs. Other struct fields
-  (`:calendar`, `:shift`, `:extended`, `:qualification`, …) are
+  (`:calendar`, `:shift`, `:extended`, `:qualifications`, …) are
   left unconstrained — a Gregorian-looking sigil matches a
   Hebrew-calendar value just as happily, because the intent of
   the sigil is purely temporal.

@@ -719,8 +719,8 @@ defmodule Tempo.ToInterval.Test do
     test "expression-level qualification propagates to both endpoints" do
       {:ok, tempo} = Tempo.from_iso8601("2022Y?")
       {:ok, interval} = Tempo.to_interval(tempo)
-      assert interval.from.qualification == :uncertain
-      assert interval.to.qualification == :uncertain
+      assert Tempo.qualification(interval.from) == :uncertain
+      assert Tempo.qualification(interval.to) == :uncertain
     end
 
     test "component-level qualifications propagate" do

@@ -129,6 +129,7 @@ defmodule Tempo do
   alias Tempo.Mask
   alias Tempo.Math
   alias Tempo.ParseError
+  alias Tempo.Qualification
   alias Tempo.RecurrenceSet.Conditional
   alias Tempo.ResolutionError
   alias Tempo.Rounding
@@ -144,7 +145,7 @@ defmodule Tempo do
   alias Tempo.Validation
   alias Tempo.ZonedTempoError
 
-  defstruct [:time, :shift, :calendar, :extended, :qualification, :qualifications, metadata: %{}]
+  defstruct [:time, :shift, :calendar, :extended, :qualifications, metadata: %{}]
 
   # TODO refine this to be more specific
   @type token :: integer() | list() | tuple()
@@ -189,26 +190,28 @@ defmodule Tempo do
         }
 
   @typedoc """
-  ISO 8601-2 / EDTF date qualification.
+  An ISO 8601-2 / EDTF qualifier of a component.
 
-  * `:uncertain` — the value is uncertain (`?`).
+  * `:uncertain` — the component is uncertain (`?`).
 
-  * `:approximate` — the value is approximate (`~`), e.g. "circa".
+  * `:approximate` — the component is approximate (`~`), e.g. "circa".
 
   * `:uncertain_and_approximate` — both (`%`).
 
-  * `nil` when no qualification was supplied.
+  * `nil` when the component is not qualified.
 
   """
   @type qualification ::
           :uncertain | :approximate | :uncertain_and_approximate | nil
 
   @typedoc """
-  Per-component qualifications parsed from an EDTF Level 2 date.
+  A value's qualifications (ISO 8601-2 §8), held per component.
 
-  A map from the component unit (`:year`, `:month`, `:day`) to its
-  qualification atom. `nil` when no component-level qualification
-  was present in the parsed string.
+  A map from a component's unit (`:year`, `:month`, `:day`, …) to its
+  qualifier, naming only units the value holds. A qualifier written
+  after a whole value (`2026-06?`) qualifies each of its components,
+  and is recorded for each. `nil` when no component is qualified. Read
+  it with `qualification/1` and `qualification/2`.
 
   """
   @type qualifications :: %{optional(atom()) => qualification()} | nil
@@ -218,7 +221,6 @@ defmodule Tempo do
           shift: time_shift(),
           calendar: Calendar.calendar() | nil,
           extended: extended_info() | nil,
-          qualification: qualification(),
           qualifications: qualifications(),
           metadata: map()
         }
@@ -348,9 +350,9 @@ defmodule Tempo do
   * `:shift` is a manual UTC offset expressed as `[hour: n]` or
     `[hour: n, minute: m]`.
 
-  * `:qualification` marks the value's EDTF qualification.
-    One of `:uncertain`, `:approximate`, or
-    `:uncertain_and_approximate`.
+  * `:qualification` marks the whole value with an EDTF qualifier,
+    which qualifies each of its components. One of `:uncertain`,
+    `:approximate`, or `:uncertain_and_approximate`.
 
   * `:metadata` is a map of the caller's own data carried with the
     value (a holiday name, a source), read with `metadata/1`. It is
@@ -735,8 +737,7 @@ defmodule Tempo do
        shift: shift,
        calendar: calendar,
        extended: new_extended(zone, tags),
-       qualification: qualification,
-       qualifications: nil,
+       qualifications: Qualification.complete(ordered_time, qualification),
        metadata: Keyword.get(options, :metadata, %{})
      }}
   end
@@ -2775,7 +2776,7 @@ defmodule Tempo do
   def trunc(%__MODULE__{} = tempo, truncate_to) do
     with {:ok, truncate_to} <- validate_unit(truncate_to),
          :ok <- one_value(tempo) do
-      truncate(tempo, day_unit(truncate_to, tempo))
+      tempo |> truncate(day_unit(truncate_to, tempo)) |> qualified_as_it_stands()
     end
   end
 
@@ -2971,11 +2972,16 @@ defmodule Tempo do
   def round(%__MODULE__{} = tempo, round_to) do
     with {:ok, round_to} <- validate_unit(round_to),
          :ok <- one_to_round(tempo, round_to) do
-      Rounding.round(tempo, round_to)
+      tempo |> Rounding.round(round_to) |> qualified_as_it_stands()
     end
   end
 
   def round(value, _round_to), do: {:error, not_one_value("round/2", value)}
+
+  # A value's qualifications name the units it holds, so one that has dropped
+  # a unit has dropped its qualifier.
+  defp qualified_as_it_stands(%__MODULE__{} = tempo), do: Qualification.only(tempo)
+  defp qualified_as_it_stands(other), do: other
 
   # Rounding reads each unit as the one number it is, so a value that holds
   # several (a set, a mask, an unspecified unit, a group) is none to round.
@@ -3025,9 +3031,14 @@ defmodule Tempo do
   @spec split(t()) :: {t() | nil, t() | nil}
   def split(%__MODULE__{time: time} = tempo) when is_list(time) do
     case Split.split(time) do
-      {date, []} -> {%{tempo | time: date}, nil}
-      {[], time} -> {nil, %{tempo | time: time}}
-      {date, time} -> {%{tempo | time: date}, %{tempo | time: time}}
+      {date, []} ->
+        {%{tempo | time: date}, nil}
+
+      {[], time} ->
+        {nil, %{tempo | time: time}}
+
+      {date, time} ->
+        {Qualification.only(%{tempo | time: date}), Qualification.only(%{tempo | time: time})}
     end
   end
 
@@ -3055,9 +3066,12 @@ defmodule Tempo do
 
   defp merge_in(base, from, calendar) do
     units = Enumeration.merge(base.time, from.time)
+    qualifications = Qualification.merge(base.qualifications, from.qualifications)
 
     with {:ok, framed} <- in_one_frame(base, from) do
-      case Validation.validate(%{framed | time: units}, calendar) do
+      placed = Qualification.only(%{framed | time: units, qualifications: qualifications})
+
+      case Validation.validate(placed, calendar) do
         {:ok, tempo} -> tempo
         other -> other
       end
@@ -4426,8 +4440,7 @@ defmodule Tempo do
   defp carried_across(%__MODULE__{time: time} = converted, %__MODULE__{} = value) do
     %{
       converted
-      | qualification: value.qualification,
-        qualifications: converted_qualifications(value.qualifications, time),
+      | qualifications: converted_qualifications(value.qualifications, time),
         metadata: value.metadata,
         extended: carried_extended(value.extended)
     }
@@ -4448,8 +4461,8 @@ defmodule Tempo do
         nil
 
       [first | rest] ->
-        qualification = Enum.reduce(rest, first, &AST.combine_qualification/2)
-        Map.new(time, fn {unit, _value} -> {unit, qualification} end)
+        qualification = Enum.reduce(rest, first, &Qualification.combine/2)
+        Qualification.complete(time, qualification)
     end
   end
 
@@ -5170,6 +5183,80 @@ defmodule Tempo do
   ## ---------------------------------------------------------
   ## Metadata — the caller's own data on any value
   ## ---------------------------------------------------------
+
+  @doc """
+  The qualifier a whole value carries: uncertain, approximate or both.
+
+  ISO 8601-2 §8 qualifies a value component by component, and a
+  qualifier written after a whole value (`2004-06-11~`) qualifies each
+  of its components. So a value is qualified as a whole when every
+  component it holds carries the same qualifier, however that was
+  written: `2026?` and `?2026` are the same uncertain year.
+
+  ### Arguments
+
+  * `value` is a `t:t/0`.
+
+  ### Returns
+
+  * `:uncertain`, `:approximate` or `:uncertain_and_approximate` when
+    every component of the value carries that qualifier.
+
+  * `nil` when no component is qualified, or when they are not all
+    qualified alike: `qualification/2` reads one component.
+
+  ### Examples
+
+      iex> Tempo.qualification(~o"2004-06-11~")
+      :approximate
+
+      iex> Tempo.qualification(~o"2004-06~-11")
+      nil
+
+      iex> Tempo.qualification(~o"2004-06-11")
+      nil
+
+  """
+  @spec qualification(t()) :: qualification()
+  def qualification(%__MODULE__{} = value), do: Qualification.whole(value)
+
+  @doc """
+  The qualifier one component of a value carries.
+
+  A qualifier to the right of a component qualifies it and each
+  component before it (`2004-06~-11` is an approximate June of an
+  approximate 2004, on the 11th), and one to its left that component
+  alone (`2004-?06-11`).
+
+  ### Arguments
+
+  * `value` is a `t:t/0`.
+
+  * `unit` is the component's unit, such as `:year`, `:month` or `:day`.
+
+  ### Returns
+
+  * `:uncertain`, `:approximate` or `:uncertain_and_approximate`, or
+    `nil` when the component is not qualified or the value does not
+    hold it.
+
+  ### Examples
+
+      iex> Tempo.qualification(~o"2004-06~-11", :month)
+      :approximate
+
+      iex> Tempo.qualification(~o"2004-06~-11", :day)
+      nil
+
+      iex> Tempo.qualification(~o"2004-?06-11", :year)
+      nil
+
+  """
+  @spec qualification(t(), atom()) :: qualification()
+  def qualification(%__MODULE__{qualifications: nil}, unit) when is_atom(unit), do: nil
+
+  def qualification(%__MODULE__{qualifications: qualifications}, unit) when is_atom(unit),
+    do: Map.get(qualifications, unit)
 
   @doc """
   Returns a value's metadata: the caller's own data carried with it (a holiday

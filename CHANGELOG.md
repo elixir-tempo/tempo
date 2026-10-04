@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A qualification is held per component alone: the `:qualification` field of `t:Tempo.t/0` is removed, a qualifier written after a whole value (`2026-06?`) is recorded for each of its components in `:qualifications`, and `Tempo.qualification/1` reads the qualifier every component shares, `Tempo.qualification/2` one component's. `2026?` and `?2026`, which ISO 8601-2 §8.2.4 calls one meaning, are one value, where they were not equal, and the walk of either yields months of an uncertain year (`2026?Y1M`), where the first yielded uncertain months.
+
 * An interval with no end refuses what needs its end, as a lazy interval set does: `Enum.at/2`, `Enum.fetch/2`, `Enum.empty?/1`, `Enum.random/1` and `Enum.slice/2` of `~o"2026Y/.."` raise a `Tempo.IntervalEndpointsError`, where `Enum.at(_, -1)` and `Enum.random/1` walked for ever and `Enum.at/2` with a positive index and `Enum.empty?/1` answered. `Enum.take/2`, `Enum.take_while/2`, `Enum.find/2` and the `Stream` functions read what they need, and `Tempo.Interval.empty?/1` says whether it is empty.
 
 * `Tempo.at/2` and `Tempo.on/2` place a value that holds a month, a week or a day only on a value of its own calendar: `Tempo.on(~o"6M15D", hebrew_year)` returns a `Tempo.ConversionError` naming both calendars, where it read the 6 and the 15 in the Hebrew calendar. A value read in the year's calendar is placed as before (`Tempo.from_iso8601("6M-1D", Calendrical.Hebrew)` on 5786 is its 29th), and a time of day is placed on a value of any calendar.
@@ -266,6 +268,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* A value's qualifiers follow its components: `Tempo.trunc/2`, `Tempo.round/2` and `Tempo.split/1` drop the qualifier of a unit they drop (`2015-?02-28` truncated to its year is `2015`, where it kept an uncertain month), a value placed with `Tempo.at/2` brings its own (`T10~` on a date is an approximate hour, where the qualifier was lost), and a date written again in other units is qualified in each (`2026-W25-1?` is `2026-06-15?`). An interval's end written without its year or month is qualified as the same end written in full.
 
 * A set none of whose values exists names no date, as a mask no value matches does: `~o"2026Y{2,6}M31D"` returns a `Tempo.InvalidDateError` from `Tempo.to_interval/2` and every function that converts it, and raises it from a walk, where it converted to an empty set and walked nothing. A set one of whose values exists still gives those: `~o"2026Y{1,2}M31D"` is 31 January.
 

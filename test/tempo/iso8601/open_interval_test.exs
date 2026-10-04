@@ -72,14 +72,14 @@ defmodule Tempo.Iso8601.OpenInterval.Test do
       assert {:ok, %Tempo.Interval{from: from, to: :undefined}} =
                Tempo.from_iso8601("1984?/..")
 
-      assert from.qualification == :uncertain
+      assert Tempo.qualification(from) == :uncertain
     end
 
     test "open lower with qualified endpoint" do
       assert {:ok, %Tempo.Interval{from: :undefined, to: to}} =
                Tempo.from_iso8601("../1984?")
 
-      assert to.qualification == :uncertain
+      assert Tempo.qualification(to) == :uncertain
     end
   end
 end

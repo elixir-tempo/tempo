@@ -44,7 +44,7 @@ match?(~o[2025Y], today)          #=> false — year disagrees
 
 ### Other fields are free
 
-Because the pattern targets `:time` only, the matched value's `:calendar`, `:shift`, `:extended`, `:qualification`, and `:qualifications` fields are unconstrained.
+Because the pattern targets `:time` only, the matched value's `:calendar`, `:shift`, `:extended` and `:qualifications` fields are unconstrained.
 
 ```elixir
 hebrew = Tempo.new!(

@@ -261,7 +261,7 @@ defmodule Tempo.ShiftZoneTest do
       {:ok, new_york} = Tempo.shift_zone(paris, "America/New_York")
 
       assert Tempo.metadata(new_york) == %{event: "launch"}
-      assert new_york.qualification == :uncertain
+      assert Tempo.qualification(new_york) == :uncertain
       assert new_york.extended.tags == %{"foo" => ["bar"]}
     end
 

@@ -82,9 +82,12 @@ defmodule Tempo.EnumerationConformance.Test do
       assert Enum.all?(list, fn v -> v.calendar == Calendrical.Hebrew and v.extended == nil end)
     end
 
-    test "expression-level qualification survives enumeration" do
+    # A qualification is held per component (decided 2026-10-04), so the
+    # month a walk adds to an uncertain year is not itself uncertain.
+    test "a qualified year stays qualified in each value its walk yields" do
       assert {:ok, list} = take("2022Y?")
-      assert Enum.all?(list, fn v -> v.qualification == :uncertain end)
+      assert Enum.all?(list, fn v -> Tempo.qualification(v, :year) == :uncertain end)
+      assert Enum.all?(list, fn v -> Tempo.qualification(v, :month) == nil end)
     end
 
     test "component-level qualifications survive enumeration" do
@@ -391,8 +394,8 @@ defmodule Tempo.EnumerationConformance.Test do
 
       # The endpoints themselves are individually enumerable and
       # retain their qualifications (Step 2 confirmation).
-      assert interval.from.qualification == :uncertain
-      assert interval.to.qualification == :approximate
+      assert Tempo.qualification(interval.from) == :uncertain
+      assert Tempo.qualification(interval.to) == :approximate
     end
   end
 

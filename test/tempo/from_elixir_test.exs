@@ -408,11 +408,11 @@ defmodule Tempo.FromElixir.Test do
   # its metadata and its tags.
   describe "to_calendar/2 keeps what a value says of its date" do
     test "its qualification" do
-      assert {:ok, %Tempo{qualification: :uncertain}} =
-               Tempo.to_calendar(~o"2026-06-15?", Calendrical.Hebrew)
+      assert {:ok, hebrew} = Tempo.to_calendar(~o"2026-06-15?", Calendrical.Hebrew)
+      assert Tempo.qualification(hebrew) == :uncertain
 
-      assert {:ok, %Tempo{qualification: :approximate}} =
-               Tempo.to_calendar(~o"2026-06-15~", Calendrical.ISOWeek)
+      assert {:ok, week_date} = Tempo.to_calendar(~o"2026-06-15~", Calendrical.ISOWeek)
+      assert Tempo.qualification(week_date) == :approximate
     end
 
     test "a qualified year, month or day qualifies every unit of the converted date" do

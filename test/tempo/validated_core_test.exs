@@ -147,7 +147,7 @@ defmodule Tempo.ValidatedCoreTest do
       {date, time} = Tempo.split(value)
 
       assert date == Tempo.put_metadata(~o"2026-06-15?[Europe/Paris]", %{event: "launch"})
-      assert {time.extended.zone_id, time.qualification} == {"Europe/Paris", :uncertain}
+      assert {time.extended.zone_id, Tempo.qualification(time)} == {"Europe/Paris", :uncertain}
       assert Tempo.at(date, time) == {:ok, value}
     end
 

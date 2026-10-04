@@ -76,7 +76,7 @@ Ecto schemas with `:utc_datetime` columns — use `DateTime`. Phoenix controller
 
 ### You're in a hot loop where allocation matters
 
-Tempo values carry more fields than stdlib values (`:calendar`, `:extended`, `:qualification`, `:qualifications`). For high-frequency per-event work (log processing at millions of events per second, sensor streams), stdlib's lighter structs pay off. If you then need interval operations, promote *after* aggregation.
+Tempo values carry more fields than stdlib values (`:calendar`, `:extended`, `:qualifications`). For high-frequency per-event work (log processing at millions of events per second, sensor streams), stdlib's lighter structs pay off. If you then need interval operations, promote *after* aggregation.
 
 ## The interop contract
 

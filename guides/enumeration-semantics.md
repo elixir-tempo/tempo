@@ -107,15 +107,15 @@ A group is bounded by what holds it, so the last group of eleven days in Februar
 
 ### 2.7. Qualifications (EDTF Level 1 and Level 2)
 
-Qualifications describe epistemic state (`?` uncertain, `~` approximate, `%` both) and never affect whether a value is enumerable. They propagate verbatim to every yielded value.
+Qualifications describe epistemic state (`?` uncertain, `~` approximate, `%` both) and never affect whether a value is enumerable. A qualifier is held per component (ISO 8601-2 §8), one written after a whole value being each component's, so each yielded value keeps the qualifiers of the components it was walked from, and the unit the walk adds is not qualified.
 
 | Construct | Example | Each yielded value carries |
 |---|---|---|
-| Expression-level | `2022Y?` | `qualification: :uncertain` |
-| Leading | `?2022-06-15` | `qualification: :uncertain` |
-| Approximate | `~2022` | `qualification: :approximate` |
-| Component-level | `2022-?06-15` | `qualifications: %{month: :uncertain}` |
-| Mixed components | `2022?-?06-%15` | per-component map |
+| Whole value | `2022Y?` | an uncertain year (`2022?Y1M`) |
+| Leading | `?2022-06-15` | an uncertain year |
+| Approximate | `~2022` | an approximate year |
+| Component-level | `2022-?06-15` | an uncertain month |
+| Mixed components | `2022?-?06-%15` | each component's own |
 
 ### 2.8. IXDTF metadata
 
@@ -158,7 +158,7 @@ An interval with no end (`1985/..`) is walked as far as it is asked: `Enum.take/
 
 ### 2.10. Implicit-to-explicit conversion (`Tempo.to_interval/1`)
 
-Every enumerable `%Tempo{}` has an explicit equivalent — either a single `%Tempo.Interval{}` (contiguous span) or a `%Tempo.IntervalSet{}` (sorted, member-preserving list of intervals). `Tempo.to_interval/1` converts to the appropriate form under the half-open `[from, to)` convention. The conversion preserves every piece of source metadata (`:qualification`, `:qualifications`, `:extended`, `:shift`, `:calendar`) on both endpoints.
+Every enumerable `%Tempo{}` has an explicit equivalent — either a single `%Tempo.Interval{}` (contiguous span) or a `%Tempo.IntervalSet{}` (sorted, member-preserving list of intervals). `Tempo.to_interval/1` converts to the appropriate form under the half-open `[from, to)` convention. The conversion preserves every piece of source metadata (`:qualifications`, `:extended`, `:shift`, `:calendar`) on both endpoints.
 
 The bounds keep the **value's own resolution** — *resolution = meaning*, so a day converts to `[day, day+1)`, not as drilled `T0H` endpoints. The iteration granularity of the implicit span (the next-finer unit) travels separately on the interval's **`:unit` field**, and the walk fills its anchor down to that unit at iteration time. So the converted interval enumerates exactly like its implicit twin (`Enum.count` of both `~o"2026-01-15"` and its interval is 24 hours) while its endpoints state only what the source stated. An interval whose `:unit` is set inspects with a decoration — `#Tempo.Interval<~o"2026-01-15/2026-01-16" unit: hour>` — because the unit is non-syntactic state the bare sigil would not round-trip.
 
@@ -332,7 +332,7 @@ Three similar-sounding situations have distinct enumeration meanings:
 
 * **Unknown digit (`X` mask).** `156X` declares "this position is any valid digit." The mask expands to a **range** of candidate values (§2.4). **Fully enumerable.**
 
-* **Qualified (`?`, `~`, `%`).** `2022Y?` is a concrete, fully-specified value — the year 2022 — annotated with uncertainty about the source. The qualification attaches to metadata; it does not change what is iterated (§2.7). **Fully enumerable.**
+* **Qualified (`?`, `~`, `%`).** `2022Y?` is a concrete, fully-specified value — the year 2022 — annotated with uncertainty about the source. The qualification is held beside the value's components; it does not change what is iterated (§2.7). **Fully enumerable.**
 
 These three are semantically distinct and should not be conflated:
 
@@ -340,21 +340,21 @@ These three are semantically distinct and should not be conflated:
 |---|---|---|
 | "Some year in the 1560s" | `156X` | each year 1560..1569 |
 | "All of the year 1560" | `1560` | each month of 1560 |
-| "The year 1560, uncertainly" | `1560?` | each month of 1560, every yielded value flagged uncertain |
+| "The year 1560, uncertainly" | `1560?` | each month of 1560, the year of every yielded value flagged uncertain |
 
 ### 5.2. Qualification propagation on intervals
 
-Per-endpoint qualifiers attach to that endpoint's `%Tempo{}` struct, not to the interior values.
+Per-endpoint qualifiers attach to that endpoint's value, not to the interior values.
 
 ```elixir
 iex> {:ok, interval} = Tempo.from_iso8601("1984?/2004~")
-iex> Tempo.Interval.from(interval).qualification
+iex> interval |> Tempo.Interval.from() |> Tempo.qualification()
 :uncertain
-iex> Tempo.Interval.to(interval).qualification
+iex> interval |> Tempo.Interval.to() |> Tempo.qualification()
 :approximate
 ```
 
-When the interval is enumerated forward from `:from`, each yielded value inherits `:from`'s qualification. The `:to` endpoint's qualifier is a property of the boundary, not the interior.
+When the interval is enumerated forward from its start, each yielded value keeps the start's qualifiers. The end's qualifier is a property of the boundary, not the interior.
 
 ### 5.3. IXDTF metadata propagation on intervals
 

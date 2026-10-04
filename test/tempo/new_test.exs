@@ -165,7 +165,7 @@ defmodule Tempo.NewTest do
 
     test "qualification" do
       {:ok, t} = Tempo.new(year: 2026, qualification: :approximate)
-      assert t.qualification == :approximate
+      assert Tempo.qualification(t) == :approximate
     end
 
     test "metadata is the value's own, not part of its ISO 8601 form" do

@@ -15,6 +15,7 @@ defmodule Tempo.Iso8601.AST do
 
   alias Tempo.Duration
   alias Tempo.Interval
+  alias Tempo.Qualification
 
   @doc """
   Build a `%Tempo{}` from tokenizer output.
@@ -23,7 +24,8 @@ defmodule Tempo.Iso8601.AST do
 
     * a keyword list (possibly containing `:time_shift`,
       `:qualification`, `:extended`, and `:<unit>_qualification` keys
-      that route to specific struct fields);
+      that route to specific struct fields, a `:qualification` to the
+      qualifications of each component);
 
     * `{:range, [first_tokens, last_tokens]}` — produces a
       `%Tempo.Range{}` (via `Tempo.Range.new/3`);
@@ -52,13 +54,20 @@ defmodule Tempo.Iso8601.AST do
     {extended, tokens} = Keyword.pop(tokens, :extended)
     {individual, group, time} = pop_qualifier_tokens(tokens)
 
+    # A qualifier after the whole value (§8.2.1) qualifies each of its
+    # components, and is recorded for each as a group or an individual
+    # qualifier is, so one meaning is held one way (§8.2.4).
+    qualifications =
+      individual
+      |> resolve_qualifications(group, time)
+      |> Qualification.merge(Qualification.complete(time, qualification))
+
     %Tempo{
       time: time,
       shift: shift,
       calendar: calendar,
       extended: extended,
-      qualification: qualification,
-      qualifications: resolve_qualifications(individual, group, time)
+      qualifications: qualifications
     }
   end
 
@@ -124,13 +133,13 @@ defmodule Tempo.Iso8601.AST do
     map =
       Enum.reduce(group, %{}, fn {unit, qualifier}, acc ->
         Enum.reduce(group_target_units(unit, present), acc, fn target, inner ->
-          Map.update(inner, target, qualifier, &combine_qualification(&1, qualifier))
+          Map.update(inner, target, qualifier, &Qualification.combine(&1, qualifier))
         end)
       end)
 
     map =
       Enum.reduce(individual, map, fn {unit, qualifier}, acc ->
-        Map.update(acc, unit, qualifier, &combine_qualification(&1, qualifier))
+        Map.update(acc, unit, qualifier, &Qualification.combine(&1, qualifier))
       end)
 
     if map_size(map) == 0, do: nil, else: map
@@ -145,11 +154,4 @@ defmodule Tempo.Iso8601.AST do
     |> Enum.take(index + 1)
     |> Enum.filter(&(&1 in present))
   end
-
-  # `?` (uncertain) and `~` (approximate) on the same component
-  # combine to `%` (uncertain and approximate); identical qualifiers
-  # are idempotent.
-  @doc false
-  def combine_qualification(qualifier, qualifier), do: qualifier
-  def combine_qualification(_a, _b), do: :uncertain_and_approximate
 end

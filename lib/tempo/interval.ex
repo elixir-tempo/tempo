@@ -64,6 +64,7 @@ defmodule Tempo.Interval do
   alias Tempo.LeapSeconds
   alias Tempo.Mask
   alias Tempo.Math
+  alias Tempo.Qualification
   alias Tempo.UnanchoredError
 
   @type t :: %__MODULE__{
@@ -720,17 +721,40 @@ defmodule Tempo.Interval do
   # `compare_endpoints/2` resolves it contextually and reports it equal
   # to the anchored form. One value, two answers, and the failure
   # surfaces far from the parse that caused it.
-  defp inherit_from_start(%Tempo{time: to_units} = to, %Tempo{time: from_units})
+  defp inherit_from_start(%Tempo{time: to_units} = to, %Tempo{time: from_units} = from)
        when is_list(to_units) and is_list(from_units) do
     with [{coarsest, _value} | _rest] <- to_units,
          rank when is_integer(rank) <- unit_rank(coarsest) do
-      %{to | time: higher_order_than(from_units, rank) ++ to_units}
+      borrowed = higher_order_than(from_units, rank)
+      qualified_with_start(%{to | time: borrowed ++ to_units}, to, from, Keyword.keys(borrowed))
     else
       _not_inheritable -> to
     end
   end
 
   defp inherit_from_start(to, _from), do: to
+
+  # The components an end takes from its start come as the start holds them,
+  # qualified or not. An end qualified as a whole (`…/07-20?`, ISO 8601-2
+  # §8.2.1) is qualified in every component, those it takes from the start
+  # among them, as the same end written in full is.
+  defp qualified_with_start(%Tempo{time: time} = completed, written, from, borrowed) do
+    case Qualification.whole(written) do
+      nil ->
+        taken = Map.take(from.qualifications || %{}, borrowed)
+
+        %{
+          completed
+          | qualifications: nil_if_empty(Map.merge(taken, written.qualifications || %{}))
+        }
+
+      qualification ->
+        %{completed | qualifications: Qualification.complete(time, qualification)}
+    end
+  end
+
+  defp nil_if_empty(qualifications) when map_size(qualifications) == 0, do: nil
+  defp nil_if_empty(qualifications), do: qualifications
 
   # Only components strictly coarser than the end's own coarsest unit
   # are borrowed, and only while they remain plain values: a group, a

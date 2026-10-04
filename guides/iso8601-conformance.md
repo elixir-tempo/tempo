@@ -132,11 +132,11 @@ Without a year, a day, a day of the year or a week is checked only against what 
 
 ### Component qualification (ISO 8601-2 §8)
 
-A `?` (uncertain), `~` (approximate), or `%` (both) qualifier's **position** sets its scope, per §8.2. Tempo honours all three scopes for implicit-form dates, storing whole-value qualification on `:qualification` and per-component qualification on the `:qualifications` map (keyed by unit):
+A `?` (uncertain), `~` (approximate), or `%` (both) qualifier's **position** sets its scope, per §8.2. Tempo honours all three scopes for implicit-form dates and holds each the same way, per component (the `:qualifications` map, keyed by unit), so that texts of one meaning (§8.2.4) are one value: `2015-02-28?` and `2015-02?-?28` are equal. `Tempo.qualification/1` reads the qualifier every component shares and `Tempo.qualification/2` one component's:
 
 | Position | §8 scope | Example | Result |
 |---|---|---|---|
-| Rightmost end | §8.2.1 **complete** | `2004-06-11%` | `qualification: :uncertain_and_approximate` |
+| Rightmost end | §8.2.1 **complete** — every component | `2004-06-11%` | `qualifications: %{year: :uncertain_and_approximate, month: :uncertain_and_approximate, day: :uncertain_and_approximate}` |
 | Right of a component | §8.2.2 **group** — that component and every coarser one to its left | `2004-06~-11` | `qualifications: %{year: :approximate, month: :approximate}` |
 | Left of a component | §8.2.3 **individual** — that component only | `2004-?06-11` | `qualifications: %{month: :uncertain}` |
 | Leading (left of the first component) | §8.2.3 **individual** | `?2004-06-11` | `qualifications: %{year: :uncertain}` |
@@ -453,7 +453,7 @@ A few ISO 8601 constructs are genuinely ambiguous; Tempo resolves them as follow
 | A season in a non-Gregorian year (`5787-25[u-ca=hebrew]`) | Seasons are defined on the Gregorian year | The Gregorian season of that kind that **starts within the year**, the first if two do, with endpoints in the value's calendar. A year that holds none, as a 354-day Islamic year can, is an error. |
 | `Z` without offset | "UTC is known, local offset unknown" (per RFC 5322 / IXDTF) | Stored as `shift: [hour: 0]`. No distinction from `+00:00`. |
 | `-00:00` | ISO 8601:2000 forbade; ISO 8601:2019 permits | Permitted; equivalent to `Z`. |
-| Leading qualifier on a date (`?2022-06-15`) | §8.2.3: left of a component qualifies that component | Individual qualification of the leftmost (coarsest) component — `?2022-06-15` stamps `%{year: :uncertain}` on `:qualifications`, not the whole value. See §3 "Component qualification". |
+| Leading qualifier on a date (`?2022-06-15`) | §8.2.3: left of a component qualifies that component | Individual qualification of the leftmost (coarsest) component — `?2022-06-15` qualifies the year alone (`%{year: :uncertain}`), not the whole value. See §3 "Component qualification". |
 
 ## 7. Test coverage
 

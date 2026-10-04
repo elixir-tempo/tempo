@@ -88,7 +88,7 @@ iex> ~o"1984%"
 # Both uncertain and approximate (equivalent to ISO 8601-2 `%`)
 ```
 
-The qualification is stored on the value's `:qualification` field; the span stays the same calendar year.
+`Tempo.qualification/1` reads the qualifier back; the span stays the same calendar year.
 
 ---
 
@@ -98,19 +98,23 @@ The **position** of the `?` / `~` / `%` decides its scope, following ISO 8601-2 
 
 ```elixir
 # LEFT of a component → that component only (individual)
-iex> Tempo.from_iso8601!("2004-?06-11").qualifications
-%{month: :uncertain}
+iex> some_june = Tempo.from_iso8601!("2004-?06-11")
+iex> {Tempo.qualification(some_june, :year), Tempo.qualification(some_june, :month)}
+{nil, :uncertain}
 
 # RIGHT of a component → that component AND every coarser one (group)
-iex> Tempo.from_iso8601!("2004-06~-11").qualifications
-%{year: :approximate, month: :approximate}
+iex> about_june = Tempo.from_iso8601!("2004-06~-11")
+iex> {Tempo.qualification(about_june, :year), Tempo.qualification(about_june, :month)}
+{:approximate, :approximate}
+iex> Tempo.qualification(about_june, :day)
+nil
 
 # At the very END → the whole value (complete)
-iex> Tempo.from_iso8601!("2004-06-11~").qualification
+iex> Tempo.qualification(Tempo.from_iso8601!("2004-06-11~"))
 :approximate
 ```
 
-So `2004-06~-11` reads as *"approximately June 2004, on the 11th"* — the `~` sits to the right of the month, so it covers the month **and the year it belongs to**, but not the day. Per-component qualifiers land on the `:qualifications` map (keyed by unit); a whole-value qualifier on `:qualification`. The span is unchanged either way — the marker is metadata, not a widening of the date.
+So `2004-06~-11` reads as *"approximately June 2004, on the 11th"* — the `~` sits to the right of the month, so it covers the month **and the year it belongs to**, but not the day. A qualifier is held per component: `Tempo.qualification/2` reads one component's, and `Tempo.qualification/1` the one every component shares, which is what a qualifier at the very end says. The span is unchanged either way — the marker is metadata, not a widening of the date.
 
 The full rule — group / individual / complete, the explicit `2004~Y6~M11D` form, and how it round-trips — is in the [ISO 8601 conformance guide](iso8601-conformance.md#component-qualification-iso-8601-2-8).
 
@@ -742,7 +746,7 @@ iex> ~o"1984?/2004~"
 # Uncertain lower bound, approximate upper bound.
 ```
 
-Each endpoint carries its own `:qualification` in addition to any expression-level one.
+Each endpoint carries its own qualifiers, which `Tempo.qualification/1` reads from the value `Tempo.Interval.from/1` or `Tempo.Interval.to/1` gives.
 
 ---
 

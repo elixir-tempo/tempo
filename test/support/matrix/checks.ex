@@ -194,12 +194,11 @@ defmodule Tempo.Matrix.Checks do
     end
   end
 
-  # The value read back writes the same text and holds the same calendar,
-  # zone and tags in every value it is made of: a calendar is recorded as its
-  # module alone, so one a suffix names and one given as a module are the
-  # same. It is not yet `again == value`: a qualification on every component
-  # is held on each and written, and read back, as the value's (`2026?Y` is
-  # `2026Y?`), an item of its own in `TODO.md`.
+  # The value read back is the value: it writes the same text, holds the same
+  # calendar, zone and tags in every value it is made of (a calendar is
+  # recorded as its module alone, so one a suffix names and one given as a
+  # module are the same), and is equal to it. The first two are asked first
+  # for what they say of a failure.
   defp same_value(value, again, text, name) do
     cond do
       Tempo.to_iso8601(again) != Tempo.to_iso8601(value) ->
@@ -207,6 +206,9 @@ defmodule Tempo.Matrix.Checks do
 
       frames(again) != frames(value) ->
         {:fail, "#{name} writes #{text}, which reads back with another calendar, zone or tags"}
+
+      again != value ->
+        {:fail, "#{name} writes #{text}, which reads back as another value of the same text"}
 
       true ->
         same_cover_of(value, again, "the value", "#{text} read back")

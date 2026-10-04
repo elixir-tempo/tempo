@@ -198,7 +198,7 @@ defmodule Tempo.RoundTripTest do
 
     test "a complete qualifier still encodes at the rightmost end" do
       {:ok, ast} = Tempo.from_iso8601("2004-06-11%")
-      assert ast.qualification == :uncertain_and_approximate
+      assert Tempo.qualification(ast) == :uncertain_and_approximate
 
       assert Tempo.to_iso8601!(ast) == "2004Y6M11D%"
     end

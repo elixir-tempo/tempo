@@ -9,11 +9,11 @@ defmodule Tempo.Validation do
   alias Tempo.IntervalEndpointsError
   alias Tempo.InvalidDateError
   alias Tempo.InvalidTimeError
-  alias Tempo.Iso8601.AST
   alias Tempo.Iso8601.Group
   alias Tempo.Iso8601.Parser
   alias Tempo.Microsecond
   alias Tempo.ParseError
+  alias Tempo.Qualification
   alias Tempo.TimeZoneDatabase
   alias Tempo.UnitValues
   alias Tempo.ZoneGapError
@@ -250,32 +250,34 @@ defmodule Tempo.Validation do
   defp group_before_whole_unit?([_unit | rest]), do: group_before_whole_unit?(rest)
   defp group_before_whole_unit?([]), do: false
 
-  # Each date unit of a converted date is worked out from all of the units it
-  # was written with, so a qualification of the year, the month or the day it
-  # was written with qualifies every one of them: `2026-?06-15` in a calendar
-  # of weeks is `2026-W25-1?`. A qualified time of day is its own.
-  defp qualify_converted(tempo, _resolved, calendar, calendar), do: tempo
+  # Each date unit of a date written again in other units is worked out from
+  # all of the units it was written with, so a qualification of any of them
+  # qualifies every one: `2026-?06-15` in a calendar of weeks is
+  # `2026-W25-1?`, and a week date a value holds as a calendar date
+  # (`2026-W25-1?`) is `2026-06-15?`. A qualified time of day is its own.
+  #
+  # A value qualified as a whole (`T10H30S~`, ISO 8601-2 §8.2.1) is qualified
+  # in each unit it is read with, the ones its text leaves out among them:
+  # the minute of `T10H30S~`, the month and the day of `2026YT17H?`.
+  defp qualify_converted(%Tempo{qualifications: %{}} = tempo, resolved, written, calendar)
+       when is_list(resolved) do
+    case Qualification.whole(tempo) do
+      nil ->
+        if written != calendar or qualified_unit_gone?(tempo, resolved),
+          do: Qualification.rewritten(tempo, resolved),
+          else: tempo
 
-  defp qualify_converted(
-         %Tempo{qualifications: %{} = qualifications} = tempo,
-         resolved,
-         _written,
-         _calendar
-       ) do
-    {written, kept} = Map.split(qualifications, [:year, :month, :day, :day_of_year])
-
-    case Map.values(written) do
-      [] ->
-        tempo
-
-      [first | rest] ->
-        qualification = Enum.reduce(rest, first, &AST.combine_qualification/2)
-        date_units = resolved |> Enum.take(3) |> Keyword.keys()
-        %{tempo | qualifications: Map.merge(kept, Map.new(date_units, &{&1, qualification}))}
+      qualification ->
+        %{tempo | qualifications: Qualification.complete(resolved, qualification)}
     end
   end
 
   defp qualify_converted(tempo, _resolved, _written, _calendar), do: tempo
+
+  defp qualified_unit_gone?(%Tempo{qualifications: qualifications}, resolved) do
+    units = for entry <- resolved, is_tuple(entry), do: elem(entry, 0)
+    Enum.any?(Map.keys(qualifications), &(&1 not in units))
+  end
 
   # The calendar a value's units are written in: the one its calendar is read
   # in when they hold a month or a day, and otherwise its own.

@@ -26,8 +26,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **`extend/2` of a group writes what the group walks** — `Tempo.extend(~o"2026Y2G3MU")` is `{:ok, ~o"2026Y{4..6}M"}`, the months the group yields, where it writes `2026Y2G3MU{1..-1}D`, a range of days counted from the group's start that nothing reads (`:counted_in_group`). Groups of days and of hours each need their writing. Decided 2026-10-04.
 
-* [ ] **A qualification is held per component alone** — `2026?` and `?2026` are one value (ISO 8601-2 §8.2.4), written in the preferred form, where the first holds `qualification: :uncertain` and the second `qualifications: %{year: :uncertain}`, the two are not `==`, and the walk of the first yields uncertain months (`2026Y1M?`). A unit a walk adds is not qualified, and `trunc/2` drops the qualifier of a unit it drops. The matrix's read-back check (`same_value/4` in `test/support/matrix/checks.ex`) is then `==`. Decided 2026-10-04.
-
 ### Conformance and completeness
 
 * [ ] **A day with no month selected in a year is a day of the year** — `2026YL-1DN` is 31 December and `2026YL45DN` 14 February, as the value `2026Y-1D` and `Tempo.select(~o"2026", ~o"-1D")` read it, where the selection reads the day in the year's first month (31 January). An RRULE's `BYMONTHDAY` keeps its own rule, DTSTART's month. Decided 2026-10-04; with it a constraint of `select/2` and a selection go through one resolver, and the matrix's selections take the form in.
@@ -129,6 +127,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A qualification is held per component alone** — the `:qualification` field is gone from the struct, a qualifier of a whole value is each component's (`Tempo.Qualification`, internal), and `Tempo.qualification/1` and `/2` read it; `2026?` and `?2026` are equal and walk alike, `trunc/2`, `round/2` and `split/1` drop a dropped unit's qualifier, and the matrix's read-back check requires `==`. `tempo_sql` matches on the removed field (`lib/tempo/sql/conversion.ex:465`), to change with its move to 2.0. 2026-10-04.
 
 * [x] **An interval with no end refuses what needs its end** — `Enum.at/2`, `Enum.fetch/2`, `Enum.empty?/1`, `Enum.random/1`, `Enum.slice/2` and `Enum.take/2` with a negative count raise the interval's own `Tempo.IntervalEndpointsError`, as its `Enum.count/1` did, where two of them walked for ever; a lazy set refuses the same with its `UnboundedSetError`. 2026-10-04.
 

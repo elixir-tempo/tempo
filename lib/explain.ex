@@ -71,6 +71,7 @@ defmodule Tempo.Explain do
   alias Tempo.IntervalSet
   alias Tempo.Iso8601.Unit
   alias Tempo.Mask
+  alias Tempo.Qualification
   alias Tempo.RecurrenceSet
   alias Tempo.RecurrenceSet.Conditional
   alias Tempo.UnitValues
@@ -836,20 +837,19 @@ defmodule Tempo.Explain do
   defp unit_word(unit, 1), do: "#{unit}"
   defp unit_word(unit, _margin), do: "#{unit}s"
 
-  defp qualification_text(%Tempo{qualification: nil, qualifications: nil}), do: nil
+  # A qualifier every component carries is the whole value's, which is how it
+  # is written (ISO 8601-2 §8.2.1); otherwise each qualified component is
+  # named.
+  defp qualification_text(%Tempo{qualifications: nil}), do: nil
 
-  defp qualification_text(%Tempo{qualification: q, qualifications: qs}) do
-    parts =
-      [
-        q &&
-          "Expression-level qualification: #{qualification_word(q)} (EDTF #{qualification_symbol(q)}).",
-        qs && map_size(qs) > 0 && "Per-component qualifications: #{inspect(qs)}."
-      ]
-      |> Enum.reject(&(&1 in [nil, false]))
+  defp qualification_text(%Tempo{qualifications: qualifications} = tempo) do
+    case Qualification.whole(tempo) do
+      nil ->
+        "Per-component qualifications: #{inspect(qualifications)}."
 
-    case parts do
-      [] -> nil
-      _ -> Enum.join(parts, " ")
+      whole ->
+        "Expression-level qualification: #{qualification_word(whole)} " <>
+          "(EDTF #{qualification_symbol(whole)})."
     end
   end
 

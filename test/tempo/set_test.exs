@@ -202,8 +202,8 @@ defmodule Tempo.SetTest do
       %Tempo.Set{set: [%Tempo.Range{first: first, last: last}]} =
         Tempo.from_iso8601!("{2026-06-15..2026-06-18}~")
 
-      assert first.qualification == :approximate
-      assert last.qualification == :approximate
+      assert Tempo.qualification(first) == :approximate
+      assert Tempo.qualification(last) == :approximate
     end
   end
 end
