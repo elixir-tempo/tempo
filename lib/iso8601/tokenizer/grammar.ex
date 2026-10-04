@@ -931,12 +931,13 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     |> label("date, time, interval, duration or range")
   end
 
-  # Ranges here split into two semantics:
+  # Ranges here split into two kinds:
   #
-  # * **Iterable ranges** (integer set `{5..1}M`, date range
-  #   `2024Y..2022Y`): when `last < first`, the user intends a
-  #   **descending** sequence — use step `-1`. When `last >= first`,
-  #   use step `1`.
+  # * **Ranges of values** (integer set `{1..5}M`, date range
+  #   `2022Y..2024Y`): from the first value up to the last, step `1`.
+  #   One written backwards (`{5..1}M`) is given step `-1` here, which
+  #   is how the parser knows it and refuses it
+  #   (`Tempo.Iso8601.Parser.parse/2`).
   #
   # * **Sentinel ranges** (`first..-last`, e.g. `{1..-5}` meaning
   #   "first to the 5th-from-end"): `.last` carries a negative
@@ -981,9 +982,8 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   end
 
   # Used by the `range/1` clauses above for forms where the user
-  # supplies no step: descending first..last iterates `-1`, ascending
-  # iterates `1`. Explicit so Elixir 1.20's `..` default doesn't emit
-  # a warning and the step is the one the user would intuitively want.
+  # supplies no step: ascending first..last counts up by `1`, and one
+  # written backwards is marked with `-1` for the parser to refuse.
   defp iterable_range(first, last) when last >= first, do: first..last//1
   defp iterable_range(first, last), do: first..last//-1
 

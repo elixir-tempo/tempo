@@ -369,7 +369,7 @@ defmodule Tempo.OneReadingTest do
 
     test "is read where every value is one the unit has" do
       assert Enum.map(~o"2026Y6M15DT{22..-1}H", &Tempo.hour/1) == [22, 23]
-      assert Enum.map(~o"2026Y6M15DT{23..20}H", &Tempo.hour/1) == [23, 22, 21, 20]
+      assert Enum.map(~o"2026Y6M15DT{20..23}H", &Tempo.hour/1) == [20, 21, 22, 23]
       assert Enum.map(~o"2026Y6M15DT10H{0..-1//15}M", &Tempo.minute/1) == [0, 15, 30, 45]
       assert Enum.count(~o"2026Y6M15DT10H30M{0..59}S") == 60
     end

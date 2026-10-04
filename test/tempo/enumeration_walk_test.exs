@@ -531,14 +531,10 @@ defmodule Tempo.EnumerationWalk.Test do
                [~o"2026Y2M27D", ~o"2026Y2M28D", ~o"2028Y2M27D", ~o"2028Y2M28D", ~o"2028Y2M29D"]
     end
 
-    test "keeps the order it is written in" do
-      assert Enum.to_list(~o"{4,6}M{31..29}D") == [~o"4M30D", ~o"4M29D", ~o"6M30D", ~o"6M29D"]
-    end
-
     test "keeps its own steps" do
-      # The 31st and every seventh day back: 31, 24, 17, 10 and 3, of which
-      # February has the last four.
-      assert units(~o"{1,2}M{31..1//-7}D", :day) == [31, 24, 17, 10, 3, 24, 17, 10, 3]
+      # The 3rd and every seventh day on: 3, 10, 17, 24 and 31, of which
+      # February has the first four.
+      assert units(~o"{1,2}M{3..31//7}D", :day) == [3, 10, 17, 24, 31, 3, 10, 17, 24]
     end
   end
 

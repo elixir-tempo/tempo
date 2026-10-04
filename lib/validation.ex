@@ -1570,6 +1570,8 @@ defmodule Tempo.Validation do
       {:ok, resolved} -> {:ok, as_its_numbers(written, resolved)}
       {:error, {:not_taken, value, counted}} -> normalized_error(value, counted, valid)
       {:error, {:not_taken, value}} -> not_valid_error(value, valid, valid)
+      {:error, {:backwards, range}} -> backwards_error(range, range, valid)
+      {:error, {:backwards, range, counted}} -> backwards_error(range, counted, valid)
     end
   end
 
@@ -1588,6 +1590,20 @@ defmodule Tempo.Validation do
   defp as_its_numbers(_written, resolved), do: resolved
 
   defp number_or_range?(member), do: is_integer(member) or is_struct(member, Range)
+
+  # A range runs up from its first value, as an interval does. One whose
+  # ends are counted to a first value after its last (`{-1..1}D`, the last
+  # day to the first) is refused as one written so is by the parser.
+  defp backwards_error(%Range{} = range, %Range{first: first, last: last}, valid) do
+    {:error,
+     InvalidDateError.exception(
+       value: range,
+       valid_range: valid,
+       reason:
+         "#{inspect(range)} is a range written backwards, from #{first} down to #{last}: " <>
+           "a range runs from its first value up to its last"
+     )}
+  end
 
   defp not_valid_error(value, valid, valid_range) do
     {:error,

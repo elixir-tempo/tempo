@@ -554,7 +554,11 @@ defmodule Tempo.UnitValues do
   end
 
   # A range's members are looked for among the unit's own values, so a range
-  # far longer than them (`{1..999999999}D`) costs no more than they do.
+  # far longer than them (`{1..999999999}D`) costs no more than they do. A
+  # range runs up from its first value: one that counts down names nothing,
+  # as one whose ends are counted to a first after its last does.
+  defp values_named(%Range{step: step}, _values) when step < 1, do: []
+
   defp values_named(%Range{first: first, last: last, step: step}, values) do
     named = Range.new(from_end(first, values), from_end(last, values), step)
     Enum.filter(values, &(&1 in named))
@@ -586,6 +590,8 @@ defmodule Tempo.UnitValues do
 
   * `{:error, {:not_taken, value, counted}}` for the first count from the end that reaches past their start, with the value it counts to.
 
+  * `{:error, {:backwards, range}}` for a range that counts down, and `{:error, {:backwards, range, counted}}` for one whose ends are counted to a first value after its last, with the range they are counted to.
+
   ### Examples
 
       iex> Tempo.UnitValues.resolve(-1, 1..30//1)
@@ -600,10 +606,17 @@ defmodule Tempo.UnitValues do
       iex> Tempo.UnitValues.resolve(-31, 1..30//1)
       {:error, {:not_taken, -31, 0}}
 
+      iex> Tempo.UnitValues.resolve(-1..1//1, 1..30//1)
+      {:error, {:backwards, -1..1//1, 30..1//1}}
+
   """
   @spec resolve(written() | float(), Range.t()) ::
           {:ok, written() | float()}
-          | {:error, {:not_taken, term()} | {:not_taken, integer(), integer()}}
+          | {:error,
+             {:not_taken, term()}
+             | {:not_taken, integer(), integer()}
+             | {:backwards, Range.t()}
+             | {:backwards, Range.t(), Range.t()}}
   def resolve(value, %Range{first: first, last: last})
       when is_integer(value) and value in first..last//1,
       do: {:ok, value}
@@ -621,14 +634,19 @@ defmodule Tempo.UnitValues do
       else: {:error, {:not_taken, value, counted}}
   end
 
+  def resolve(%Range{step: step} = range, %Range{}) when step < 1,
+    do: {:error, {:backwards, range}}
+
   def resolve(%Range{first: from, last: to} = range, %Range{first: first, last: last})
-      when from in first..last//1 and to in first..last//1,
+      when from <= to and from in first..last//1 and to in first..last//1,
       do: {:ok, range}
 
-  def resolve(%Range{first: from, last: to, step: step}, %Range{} = values) do
+  def resolve(%Range{first: from, last: to, step: step} = range, %Range{} = values) do
     with {:ok, from} <- resolve(from, values),
          {:ok, to} <- resolve(to, values) do
-      {:ok, from..to//abs(step)}
+      if from <= to,
+        do: {:ok, from..to//step},
+        else: {:error, {:backwards, range, from..to//step}}
     end
   end
 

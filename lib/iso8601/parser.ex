@@ -4,8 +4,64 @@ defmodule Tempo.Iso8601.Parser do
   alias Tempo.Duration
   alias Tempo.Iso8601.AST
   alias Tempo.Iso8601.Unit
+  alias Tempo.ParseError
 
   def parse(tokens, calendar) do
+    case backwards_range(tokens) do
+      nil -> parse_tokens(tokens, calendar)
+      range -> {:error, ParseError.exception(reason: backwards_reason(range))}
+    end
+  end
+
+  # A range runs from its first value up to its last, as an interval does.
+  # One written backwards (`{20..15}D`, `{2026-06-20..2026-06-15}`) is
+  # refused here, wherever it is written: in a value, a set, a group, a
+  # selection or a rule. The tokenizer gives a range whose first is after
+  # its last a step of -1, and a range that counts from the start to the end
+  # (`{1..-1}D`) is not backwards: its ends are counted from different ends,
+  # and are compared once they are counted (`Tempo.UnitValues.resolve/2`).
+  defp backwards_range(%Range{} = range), do: if(backwards?(range), do: range)
+
+  defp backwards_range({:range, [{_from_tag, from}, {_to_tag, to}]} = range)
+       when is_list(from) and is_list(to) do
+    if backwards_values?(from, to), do: range, else: backwards_range([from, to])
+  end
+
+  defp backwards_range(tokens) when is_list(tokens),
+    do: Enum.find_value(tokens, &backwards_range/1)
+
+  defp backwards_range(token) when is_tuple(token),
+    do: token |> Tuple.to_list() |> backwards_range()
+
+  defp backwards_range(_token), do: nil
+
+  defp backwards?(%Range{step: step}) when step < 0, do: true
+  defp backwards?(%Range{first: first, last: last}), do: first > last and first < 0 == last < 0
+
+  # Two values of the same units, each one whole number, are compared unit
+  # by unit from the coarsest.
+  defp backwards_values?(from, to) do
+    Keyword.keyword?(from) and Keyword.keyword?(to) and Keyword.keys(from) == Keyword.keys(to) and
+      Enum.all?(Keyword.values(from) ++ Keyword.values(to), &is_integer/1) and
+      Keyword.values(from) > Keyword.values(to)
+  end
+
+  defp backwards_reason(%Range{first: first, last: last}) when first > last do
+    "The range #{first}..#{last} is written backwards: a range runs from its first value " <>
+      "up to its last"
+  end
+
+  defp backwards_reason(%Range{first: first, last: last, step: step}) do
+    "The range #{first}..#{last}//#{step} counts down: a range runs from its first value " <>
+      "up to its last"
+  end
+
+  defp backwards_reason({:range, [{_from_tag, from}, {_to_tag, to}]}) do
+    "The range #{inspect(from)}..#{inspect(to)} is written backwards: a range runs from " <>
+      "its first value up to its last"
+  end
+
+  defp parse_tokens(tokens, calendar) do
     # A top-level qualifier's position carries its ISO 8601-2 §8
     # meaning: at the rightmost end it is *complete* (§8.2.1); at the
     # leftmost end, left of the first component, it is *individual*
@@ -20,7 +76,7 @@ defmodule Tempo.Iso8601.Parser do
     |> apply_leading_qualification(leading)
     |> wrap(:ok)
   rescue
-    e in Tempo.ParseError ->
+    e in ParseError ->
       {:error, e}
   end
 
@@ -275,7 +331,7 @@ defmodule Tempo.Iso8601.Parser do
   # or significant digits (`20±1C`) names no one run of years, so it is not a
   # value.
   def parse_date([{unit, _not_one_number} | _rest]) when unit in [:century, :decade] do
-    raise Tempo.ParseError,
+    raise ParseError,
           "A #{unit} is written as one whole number (`20C`, `201J`), which names its years. " <>
             "One with a fraction, unspecified digits, a set, a range, a margin of error or " <>
             "significant digits names no one run of years; unspecified digits are written on " <>
@@ -287,7 +343,7 @@ defmodule Tempo.Iso8601.Parser do
     {min_2, _max} = group_min_max(group_2)
 
     if Unit.compare(max_1, min_2) == :lt do
-      raise Tempo.ParseError,
+      raise ParseError,
             "Group max of #{inspect(group_1)} is less than the group min of #{inspect(group_2)}"
     else
       [{:group, parse_date(group_1)} | parse_date([{:group, group_2} | rest])]
@@ -302,7 +358,7 @@ defmodule Tempo.Iso8601.Parser do
   # own units instead, mirroring the group/group clause above.
   def parse_date([{:selection, selection}, {:group, group} | rest]) do
     unless Unit.ordered?(selection) do
-      raise Tempo.ParseError,
+      raise ParseError,
             "Selection time units must be in decreasing time scale order. Found #{inspect(selection)}."
     end
 
@@ -310,7 +366,7 @@ defmodule Tempo.Iso8601.Parser do
     {min_2, _max} = group_min_max(group)
 
     if Unit.compare(max_1, min_2) == :lt do
-      raise Tempo.ParseError,
+      raise ParseError,
             "selection #{inspect(selection)} is finer than the following group #{inspect(group)}"
     else
       selection = parse_date(selection) |> reduce_list()
@@ -323,7 +379,7 @@ defmodule Tempo.Iso8601.Parser do
     {min_2, _max} = selection_min_max(selection)
 
     if Unit.compare(max_1, min_2) == :lt do
-      raise Tempo.ParseError,
+      raise ParseError,
             "group #{inspect(group)} is finer than the following selection #{inspect(selection)}"
     else
       [{:group, parse_date(group)} | parse_date([{:selection, selection} | rest])]
@@ -337,7 +393,7 @@ defmodule Tempo.Iso8601.Parser do
     {min, _max} = group_min_max(group)
 
     if Unit.fetch_sort_key(unit_1) != :error and Unit.compare(unit_1, min) == :lt do
-      raise Tempo.ParseError, "#{inspect(unit_1)} is less than the group min of #{inspect(min)}"
+      raise ParseError, "#{inspect(unit_1)} is less than the group min of #{inspect(min)}"
     else
       [parse_date({unit_1, value_1}) | parse_date([{:group, group} | rest])]
     end
@@ -351,7 +407,7 @@ defmodule Tempo.Iso8601.Parser do
     {_min, max} = group_min_max(group)
 
     if Unit.fetch_sort_key(unit_2) != :error and Unit.compare(max, unit_2) == :lt do
-      raise Tempo.ParseError,
+      raise ParseError,
             "#{inspect(unit_2)} is greater than the group max of #{inspect(max)}"
     else
       [{:group, parse_date(group)} | parse_date([{unit_2, value_2} | rest])]
@@ -362,7 +418,7 @@ defmodule Tempo.Iso8601.Parser do
     {min, _max} = selection_min_max(selection)
 
     if Unit.compare(unit_1, min) == :lt do
-      raise Tempo.ParseError,
+      raise ParseError,
             "#{inspect(unit_1)} is less than the selection min of #{inspect(min)}"
     else
       [parse_date({unit_1, value_1}) | parse_date([{:selection, selection} | rest])]
@@ -373,12 +429,12 @@ defmodule Tempo.Iso8601.Parser do
     {_min, max} = selection_min_max(selection)
 
     unless Unit.ordered?(selection) do
-      raise Tempo.ParseError,
+      raise ParseError,
             "Selection time units must be in decreasing time scale order. Found #{inspect(selection)}."
     end
 
     if Unit.compare(max, unit_2) == :lt do
-      raise Tempo.ParseError,
+      raise ParseError,
             "#{inspect(unit_2)} is greater than the selection max of #{inspect(max)}"
     else
       selection = parse_date(selection) |> reduce_list()
@@ -388,7 +444,7 @@ defmodule Tempo.Iso8601.Parser do
 
   def parse_date([{:selection, selection} | rest]) do
     unless Unit.ordered?(selection) do
-      raise Tempo.ParseError,
+      raise ParseError,
             "Selection time units must be in decreasing time scale order. Found #{inspect(selection)}."
     end
 
@@ -508,7 +564,7 @@ defmodule Tempo.Iso8601.Parser do
     if Enum.all?(components, &alternative_format_component?/1) do
       second_with_fraction(components)
     else
-      raise Tempo.ParseError,
+      raise ParseError,
             "#{inspect(components)} is not a duration in the alternative format, " <>
               "which is a calendar or ordinal date and a time of day"
     end
@@ -720,9 +776,10 @@ defmodule Tempo.Iso8601.Parser do
 
   # A range holds a number when both its ends and the number count from one
   # end: a range from the start to the end (`{1..-1}`) holds values only
-  # once it is counted.
-  defp held?(number, %Range{first: first, last: last} = range),
-    do: same_end?(first, last) and same_end?(number, first) and number in range
+  # once it is counted. A range that counts down names nothing
+  # (`Tempo.UnitValues.named/2`), and so holds nothing.
+  defp held?(number, %Range{first: first, last: last, step: step} = range),
+    do: step > 0 and same_end?(first, last) and same_end?(number, first) and number in range
 
   # The second is the value after the first, counted from the same end.
   defp runs_on?(first, second), do: first + 1 == second and same_end?(first, second)
@@ -734,15 +791,14 @@ defmodule Tempo.Iso8601.Parser do
   defp by_ones?(%Range{first: first, last: last, step: step}),
     do: step == 1 and first <= last and same_end?(first, last)
 
-  # Ranges must have the same keys. Assumption
-  # is that ranges can be in either direction
-  # (ie increasing or decreasing)
+  # Ranges must have the same keys. One written backwards never reaches
+  # here (`backwards_range/1`).
 
   defp validate_range(from, to) do
     if Keyword.keys(from) == Keyword.keys(to) do
       {:range, [from, to]}
     else
-      raise Tempo.ParseError,
+      raise ParseError,
             "Time ranges must have the same time units on both sides. Found #{inspect(from)}..#{inspect(to)}"
     end
   end

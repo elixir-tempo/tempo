@@ -236,56 +236,47 @@ defmodule Tempo.Enumeration.Test do
     assert Enum.to_list(~o"{1970,1980,1990}") == [~o"1970", ~o"1980", ~o"1990"]
   end
 
-  test "Enumeration in the negative direction" do
-    assert Enum.to_list(~o"{5..1}M") == [~o"5M", ~o"4M", ~o"3M", ~o"2M", ~o"1M"]
+  # A range runs from its first value up to its last, as an interval does
+  # (decided 2026-10-04): one written backwards was walked from the later
+  # value down, and is a parse error.
+  test "A range written backwards is a parse error" do
+    for text <- [
+          "{5..1}M",
+          "{5..1}M{4..1}D",
+          "2026Y6M{20..15}D",
+          "2026Y{12..1}M",
+          "T{17..9}H",
+          "2026Y6M{20..15//1}D",
+          "2026Y6M{15..20//-1}D",
+          "2026Y6M{-1..-3}D",
+          "{2026..2020}Y",
+          "{-3..-5}Y",
+          "{2024Y..2022Y}",
+          "{2026-06-20..2026-06-15}",
+          "[2026-06-20..2026-06-15]",
+          "2026Y6ML{5..1}KN",
+          "R3/2026Y/P1M/FL{5..1}KN",
+          "2026Y{3..1}G3MU",
+          "2026Y6M{1,20..15}D"
+        ] do
+      assert {:error, %Tempo.ParseError{} = error} = Tempo.from_iso8601(text), text
+      assert Exception.message(error) =~ "a range runs from its first value up to its last"
+    end
+  end
 
-    assert Enum.to_list(~o"{5..1}M{4..1}D") ==
-             [
-               ~o"5M4D",
-               ~o"5M3D",
-               ~o"5M2D",
-               ~o"5M1D",
-               ~o"4M4D",
-               ~o"4M3D",
-               ~o"4M2D",
-               ~o"4M1D",
-               ~o"3M4D",
-               ~o"3M3D",
-               ~o"3M2D",
-               ~o"3M1D",
-               ~o"2M4D",
-               ~o"2M3D",
-               ~o"2M2D",
-               ~o"2M1D",
-               ~o"1M4D",
-               ~o"1M3D",
-               ~o"1M2D",
-               ~o"1M1D"
-             ]
+  test "A range whose ends are counted to a first value after its last is refused" do
+    for text <- ["2026Y6M{-1..1}D", "2026Y6M{-5..3}D", "2026Y6M{20..-15}D"] do
+      assert {:error, %Tempo.InvalidDateError{} = error} = Tempo.from_iso8601(text), text
+      assert Exception.message(error) =~ "is a range written backwards"
+    end
+  end
 
-    assert Enum.to_list(~o"{5..1}M{1..4}D") ==
-             [
-               ~o"5M1D",
-               ~o"5M2D",
-               ~o"5M3D",
-               ~o"5M4D",
-               ~o"4M1D",
-               ~o"4M2D",
-               ~o"4M3D",
-               ~o"4M4D",
-               ~o"3M1D",
-               ~o"3M2D",
-               ~o"3M3D",
-               ~o"3M4D",
-               ~o"2M1D",
-               ~o"2M2D",
-               ~o"2M3D",
-               ~o"2M4D",
-               ~o"1M1D",
-               ~o"1M2D",
-               ~o"1M3D",
-               ~o"1M4D"
-             ]
+  test "A range that counts from the start to the end is not backwards" do
+    assert ~o"2026Y6M{1..-1}D" == ~o"2026Y6M{1..30}D"
+    assert ~o"2026Y6M{-3..-1}D" == ~o"2026Y6M{28..30}D"
+    assert {:ok, _years_before_the_era} = Tempo.from_iso8601("{-5..-3}Y")
+    assert {:ok, _one_day} = Tempo.from_iso8601("2026Y6M{15..15}D")
+    assert {:ok, _open} = Tempo.from_iso8601("{2026..}")
   end
 
   test "Enumerating with a step != 1" do

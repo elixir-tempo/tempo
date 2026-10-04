@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A range written backwards is a parse error: `{2026-06-20..2026-06-15}` and `2026Y6M{20..15}D` return a `Tempo.ParseError`, as an interval written backwards is an error, where the first converted to nothing and the second was walked from the 20th down. A range whose ends are counted to a first value after its last (`{-1..1}D` in a month) is a `Tempo.InvalidDateError`, and one that counts from the start to the end (`{1..-1}D`) is read as before.
+
 * With no year, a day counted from the end of a month whose length depends on the year is kept as written until the value is placed on one: `~o"2M-1D"` on 2027 is 28 February and `Tempo.select(~o"2026", ~o"2M-1D")` selects it, where it was read as the 29th, an error on 2027 and an empty selection in 2026. A February with no year is no longer walked (`Enum.to_list(~o"2M")` raises a `Tempo.UnanchoredError`, where it listed 29 days), and `Tempo.to_interval/2` of a count from the end with no year returns that error, where it was a `Tempo.ConversionError` about several values.
 
 * A value's calendar is recorded once, as its `:calendar` module: its `extended` map has no `:calendar` key and is `nil` for a value with no zone, offset or tag, so `Tempo.from_iso8601!("5786-09-30[u-ca=hebrew]")` equals the same date made with `Calendrical.Hebrew`, `Tempo.new/1`, `Tempo.from_elixir/1` or `Tempo.to_calendar/2`, and every value equals its own text read back. A Gregorian value read with `[u-ca=gregory]` is written without the suffix, and `Tempo.explain/1` no longer prints an "IXDTF calendar hint".
@@ -274,8 +276,6 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * With no year, the Julian, Persian, Coptic, Ethiopic, Indian, Islamic and Hebrew calendars are read as the Gregorian is, now that Calendrical answers a month's length with no year in each: `6M` in the Persian calendar walks its thirty-one days, where its walk raised a `Tempo.UnanchoredError`, and `Tempo.to_interval/2` converts `6M15D`, which it refused. A month whose length differs from year to year is walked only once it has a year, as February is.
 
 * A set or a range of hours, minutes, seconds or days of the week that names a value the unit does not have is a `Tempo.InvalidDateError` when it is read, as one of days or months is: `~o"2026Y6M15DT{22..25}H"` was read, its walk yielded hours 24 and 25 and `Tempo.to_interval/2` refused it. A set with such a member (`T{22,25}H`) was read with the member passed over, and is that error too.
-
-* A range with a step that reaches past the days one of its months has keeps its own steps there: the walk of `~o"{1,2}M{31..1//-7}D"` yields the 24th, 17th, 10th and 3rd of February, the days of the range February has, where it yielded the 29th, 22nd, 15th, 8th and 1st.
 
 * `Tempo.select/2` reads a set or a range of weekdays (`~o"{6..-1}K"`, `~o"{1,-1}K"`), where it selected one of the days or none, and selects a time of day written after a weekday on each of the days (`~o"1KT10H"`), where the time was dropped.
 

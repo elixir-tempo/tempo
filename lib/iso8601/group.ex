@@ -387,7 +387,7 @@ defmodule Tempo.Iso8601.Group do
   defp member_numbers(%Range{last: last}, nil) when last < 0, do: :unresolved
 
   defp member_numbers(%Range{first: first, last: last, step: step}, count) when last < 0,
-    do: Enum.to_list(first..(count + 1 + last)//abs(step))
+    do: Enum.to_list(first..(count + 1 + last)//step)
 
   defp member_numbers(_other, _count), do: :unresolved
 

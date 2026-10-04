@@ -521,6 +521,12 @@ defmodule Tempo.UnitValuesTest do
             assert value in ends(written)
             assert counted == UnitValues.from_end(value, values)
             refute counted in values
+
+          {:error, {:backwards, %Range{first: first, last: last} = range, counted}} ->
+            assert range in written
+            assert counted.first == UnitValues.from_end(first, values)
+            assert counted.last == UnitValues.from_end(last, values)
+            assert counted.first > counted.last
         end
       end
     end
@@ -532,7 +538,20 @@ defmodule Tempo.UnitValuesTest do
     end
 
     test "a range within the unit's values is kept as it is written" do
-      assert UnitValues.resolve(23..20//-1, 0..23//1) == {:ok, 23..20//-1}
+      assert UnitValues.resolve(20..23//1, 0..23//1) == {:ok, 20..23//1}
+      assert UnitValues.resolve(0..23//6, 0..23//1) == {:ok, 0..23//6}
+    end
+
+    test "a range that counts down, or is counted to a first value after its last, is refused" do
+      assert UnitValues.resolve(23..20//-1, 0..23//1) == {:error, {:backwards, 23..20//-1}}
+      assert UnitValues.resolve(1..-1//-1, 1..30//1) == {:error, {:backwards, 1..-1//-1}}
+      assert UnitValues.resolve(-1..1//1, 1..30//1) == {:error, {:backwards, -1..1//1, 30..1//1}}
+
+      assert UnitValues.resolve(20..-15//1, 1..30//1) ==
+               {:error, {:backwards, 20..-15//1, 20..16//1}}
+
+      assert UnitValues.named(23..20//-1, 0..23//1) == []
+      assert UnitValues.named(-1..1//1, 1..30//1) == []
     end
 
     test "a fraction within the unit's values is kept" do

@@ -598,12 +598,7 @@ defmodule Tempo.Enumeration do
   defp restated_candidate(_unit, raw, _ancestors, _calendar), do: integers(raw)
 
   # The values a range names among those the unit can hold, read by
-  # `Tempo.UnitValues` as every range and count from the end is, in the
-  # order the range is written: a descending range (`{31..29}`) yields them
-  # descending.
-  defp values_as_written(%Range{step: step} = range, %Range{} = valid) when step < 0,
-    do: range |> UnitValues.named(valid) |> Enum.reverse()
-
+  # `Tempo.UnitValues` as every range and count from the end is.
   defp values_as_written(%Range{} = range, %Range{} = valid), do: UnitValues.named(range, valid)
 
   # A count from the end is resolved by the calendar for date units and by
@@ -613,9 +608,8 @@ defmodule Tempo.Enumeration do
   # nothing, which would turn the question into an empty answer silently.
   defp integers(%Range{first: first, last: last}) when first < 0 or last < 0, do: :unresolved
 
-  # `Enum.to_list/1` respects the range's step, so a descending range
-  # enumerates descending and a range whose step cannot reach its end
-  # is empty.
+  # `Enum.to_list/1` respects the range's step, so a range whose step
+  # cannot reach its end is empty.
   defp integers(%Range{} = range), do: {:ok, Enum.to_list(range)}
   defp integers(value) when is_list(value), do: flat_map_resolved(value, &integers/1)
   defp integers(value), do: {:ok, [value]}

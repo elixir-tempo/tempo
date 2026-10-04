@@ -34,8 +34,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **A set none of whose members exists is an `InvalidDateError`** — `~o"2026Y{2,6}M31D"` names no date and is an error, as a mask no value matches (`1985-02-3X`) is, where it walks nothing and converts to an empty set. A set some of whose members exist still gives those (`2026Y{1,2}M31D` is 31 January). Decided 2026-10-04.
 
-* [ ] **A range written backwards is a parse error** — `{2026-06-20..2026-06-15}` and `2026Y6M{20..15}D` are refused when read, as an interval written backwards is, where the first converts to nothing and the second is read as `{20..15//-1}D` and walked from the 20th down. A count from the end is not backwards (`{1..-1}D`). With it the negative step goes from every reader of a range (`Tempo.UnitValues.resolve/2` and `named/2` read one two ways). Decided 2026-10-04.
-
 * [ ] **An interval with no end refuses what needs its end, as a lazy set does** — `Enum.at/2`, `Enum.empty?/1`, `Enum.random/1` and `Enum.slice/2` of `~o"2026Y/.."` raise a `Tempo.UnboundedSetError`, where `Enum.at(_, -1)` and `Enum.random/1` walk for ever and the first two answer; `Enum.take/2` and streams answer. Decided 2026-10-04: an answer that needs an unbounded walk refuses and never hangs.
 
 * [ ] **A qualification is held per component alone** — `2026?` and `?2026` are one value (ISO 8601-2 §8.2.4), written in the preferred form, where the first holds `qualification: :uncertain` and the second `qualifications: %{year: :uncertain}`, the two are not `==`, and the walk of the first yields uncertain months (`2026Y1M?`). A unit a walk adds is not qualified, and `trunc/2` drops the qualifier of a unit it drops. The matrix's read-back check (`same_value/4` in `test/support/matrix/checks.ex`) is then `==`. Decided 2026-10-04.
@@ -47,6 +45,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **An interval's end of several components in the basic format** — `20260615/0720` and `20260615T1030/1130` read the end as a year (720, 1130), where the extended forms (`/07-20`, `/11:30`) and a bare number (`/20`) take the units the end leaves out from the start. For the grammar of [plans/parser-formal-grammar.md](plans/parser-formal-grammar.md). Found 2026-10-03.
 
 * [ ] **A §12.10 window shorter than the unit selected in it is an error** — `FL11MLL1K1IN/PT12HN1K1IN` and a window of no length (`/P0DN…`) are refused when the value is read, where they walk the anchor day and the day before it (a reversed range). A window of twelve hours that selects hours is read. Decided 2026-10-04.
+
+* [ ] **A range of years before the era is read and not listed** — `Enum.to_list(~o"{-5..-3}Y")` is a `ConversionError` ("its year counts from the end of a span the units before it do not fix"): the walk takes a negative end of a range for a count from the end, where a year below zero is a year. A set of them (`{-5,-3}Y`) is listed. Found 2026-10-04.
 
 * [ ] **Sets the parser does not read** — a qualified member (`{2026-06-15?,2026-06~}`); the fractions of a second as a set (`T10H30M45.{0..9}S`), the form `extend/2` gives a second and `inspect/1` writes; and a fraction before a comma or the closing brace (`{T10:30:45.5,T11:00}`, `{2021-06-15.5}`), which the lookahead after a fraction's digits refuses, so a set's member has no fraction of a second. Found 2026-10-02 to 2026-10-04.
 
@@ -139,6 +139,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A range written backwards is a parse error** — `{2026-06-20..2026-06-15}`, `2026Y6M{20..15}D` and every other range whose first value is after its last are a `Tempo.ParseError` when read, in a value, a set, a group, a selection or a rule, and one whose ends are counted to a first after its last (`{-1..1}D`) an `InvalidDateError`; the walk of a range downwards, and the negative step in `Tempo.UnitValues`, are gone. 2026-10-04.
 
 * [x] **A position after a set of weekdays follows §12.9** — decided: `L{1,3}K1IN` stays the first of the Mondays and Wednesdays taken together, as the normative clause and RRULE's `BYSETPOS` read it, and not each weekday's first, as an example of §12.11.3 has it, which is written as a set of two selections. 2026-10-04.
 
