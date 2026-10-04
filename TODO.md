@@ -8,8 +8,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Correctness
 
-* [ ] **A span that crosses its cycle's end comes back from a set operation in two** — `~o"T22/T02"` is one member, cut at midnight to be swept and not joined again: `Tempo.union(~o"T22/T02", ~o"T03/T04")` has three members where two were given, and `Tempo.members_outside(~o"T22/T02", ~o"T03/T04")`, the value kept whole, is `T0H/T2H` and `T22H/T0H`; `12M20D/1M10D` likewise. The time covered is right and `coalesce/1` joins them, so the matrix, which compares time, passes. Found 2026-10-04.
-
 * [ ] **A time of day placed on a week gives nothing** — `Tempo.intersection(~o"T09/T17", ~o"2026-W25", within: ~o"2026-W25")` is empty and `Tempo.complement(~o"T09/T17", within: ~o"2026-W25")` the whole week, where the same week written as dates gives its seven days' hours: the window's days are taken from its month and day (`days_in/1` in `lib/operations.ex`), and a week's ends hold neither. Found 2026-10-04.
 
 * [ ] **An intersection is one part for each pair of members that overlap** — `sweep_intersection/3` assumes that no member of an operand overlaps another and skips pairs when one does: of the 4,356 pairs of small sets 1,947 are not one part a pair, and `metadata: {:merge, fun}` misses a member that contributed (`[Alice 0–1]` and `[Bob 0–1, Carol 0–1]` give Alice and Bob alone). The time covered is right. Decided 2026-10-04: each member of the first cut to each member of the second it overlaps, as the documentation says. In [plans/set-operations.md](plans/set-operations.md).
@@ -125,6 +123,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A span that crosses its cycle's end is one member to the set operations** — each member of a set with no year is swept by its own parts and written back as the span it is: a union keeps it, `members_outside/3` and `members_overlapping/3` keep or drop it whole (a member that overlapped before midnight was returned as its part after it), and `difference/3`, `intersection/3` and `complement/2` cut it only where the other operand does. The measure holds every operation of two sets with no year, member by member, on four cycles. 2026-10-04.
 
 * [x] **A set with no year in `covered?/2` and in a tree** — `covered?/2` asks each part of a member a cycle cuts in two, so a point either side of the cycle's end is covered where the question raised, and a backend says what members it holds before its state is built (`accepts/1`), so a tree's refusal of a member with no year is `new/2`'s error and not a raise; the measure holds `covered?/2` on four cycles. 2026-10-04.
 

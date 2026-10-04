@@ -93,6 +93,17 @@ defmodule Tempo.Operations do
                | IntervalSet.t()
                | Tempo.Set.t()
   def align(a, b, opts \\ []) do
+    with {:ok, {a_set, b_set}} <- align_members(a, b, opts),
+         {:ok, a_set} <- split_crossers(a_set),
+         {:ok, b_set} <- split_crossers(b_set) do
+      {:ok, {a_set, b_set}}
+    end
+  end
+
+  # The operands as the operations take them: aligned, and each member whole.
+  # A span with no year that runs through its cycle's end is one member here,
+  # and is cut where its cycle ends only to be swept (`turns/1`).
+  defp align_members(a, b, opts) do
     # A `%Tempo.RecurrenceSet{}` operand is materialised against the other
     # operand (its window), so `intersection(diary, holidays)` needs no explicit
     # `:within` — the diary supplies it. An explicit `:within` still wins.
@@ -111,7 +122,6 @@ defmodule Tempo.Operations do
          {:ok, a_set} <- to_aligned_set(a, class_a, opts),
          {:ok, b_set} <- to_aligned_set(b, class_b, opts),
          {:ok, a_set, b_set} <- maybe_anchor_to_window(a_set, b_set, class_a, class_b, opts),
-         {:ok, a_set, b_set} <- maybe_split_midnight_crossers(a_set, b_set, class_a, class_b),
          {:ok, b_set} <- convert_calendar(b_set, a_set),
          {:ok, a_set, b_set} <- canonicalize_axes(a_set, b_set),
          {:ok, a_set, b_set} <- align_resolution(a_set, b_set) do
@@ -119,49 +129,178 @@ defmodule Tempo.Operations do
     end
   end
 
-  ## Midnight-crossing normalisation for time-of-day set ops.
+  ## Spans with no year, on their cycle.
   ##
   ## An unanchored interval like `T23:30/T01:00` represents a
   ## 1.5-hour span that wraps around midnight on the time-of-day
-  ## axis. For set operations to sweep-line cleanly, split any
-  ## such interval into two non-wrapping sub-intervals:
+  ## axis. A sweep orders ends, so such a span is swept as the two
+  ## spans it is in one turn of its cycle:
   ##
   ##     [T23:30, T24:00) ∪ [T00:00, T01:00)
   ##
-  ## The split only runs when both operands are unanchored.
   ## Anchored intervals that cross midnight (after materialisation
   ## to a specific day) are already concrete — they live on the
   ## universal time line and their endpoints don't wrap.
-
+  ##
   ## The same holds on every cycle a value with no year lies on: the
   ## year for a month and a day (`12M31D`, whose span ends at the turn
   ## of the year), the week for a day of the week.
   ## `Tempo.Interval.Cycle.parts/1` cuts each such span at its cycle's
   ## end.
+  ##
+  ## The span is still one member. So each member of a set with no year
+  ## is swept by its own parts (`turns/1`), and what an operation leaves
+  ## of it on both sides of the cycle's end is written back as the one
+  ## span it is (`Tempo.Interval.Cycle.joined/1`): a member comes back
+  ## whole where an operation keeps it, and cut only where the other
+  ## operand cuts it.
 
-  defp maybe_split_midnight_crossers(a, b, :unanchored, :unanchored) do
-    with {:ok, a} <- split_crossers(a),
-         {:ok, b} <- split_crossers(b) do
-      {:ok, a, b}
+  defp on_cycle?(%IntervalSet{} = set) do
+    case IntervalSet.first(set) do
+      nil -> false
+      first -> Cycle.cyclic?(first)
     end
   end
 
-  defp maybe_split_midnight_crossers(a, b, _class_a, _class_b), do: {:ok, a, b}
-
-  defp split_crossers(%IntervalSet{} = set) do
+  # Each member of a set with the parts it is swept by, in the members'
+  # order, each member's parts in the order of their starts.
+  defp turns(%IntervalSet{} = set) do
     set
     |> IntervalSet.members()
-    |> Enum.reduce_while({:ok, []}, fn member, {:ok, parts} ->
+    |> Enum.reduce_while({:ok, []}, fn member, {:ok, turns} ->
       case Cycle.parts(member) do
-        {:ok, member_parts} -> {:cont, {:ok, member_parts ++ parts}}
+        {:ok, parts} -> {:cont, {:ok, [{member, in_order(parts)} | turns]}}
         {:error, _exception} = error -> {:halt, error}
       end
     end)
     |> case do
-      {:ok, parts} -> IntervalSet.new(parts, metadata: IntervalSet.metadata(set))
+      {:ok, turns} -> {:ok, Enum.reverse(turns)}
       {:error, _exception} = error -> error
     end
   end
+
+  # Every part of a set's members, in the order of their starts, as a sweep
+  # takes its second operand.
+  defp parts(%IntervalSet{} = set) do
+    with {:ok, turns} <- turns(set) do
+      {:ok, turns |> Enum.flat_map(fn {_member, parts} -> parts end) |> in_order()}
+    end
+  end
+
+  defp in_order(parts),
+    do: Enum.sort(parts, &(Compare.compare_endpoints(&1.from, &2.from) != :later))
+
+  # A set with each member that runs through its cycle's end cut there, as
+  # `align/3` returns it.
+  defp split_crossers(%IntervalSet{} = set) do
+    if on_cycle?(set) do
+      with {:ok, parts} <- parts(set),
+           do: IntervalSet.new(parts, metadata: IntervalSet.metadata(set))
+    else
+      {:ok, set}
+    end
+  end
+
+  # Each member of the first set cut by the second: one sweep of the two for
+  # sets with a year, and a sweep of each member's own parts for a set with
+  # none.
+  defp cut_members(%IntervalSet{} = a_set, %IntervalSet{} = b_set, sweep) do
+    if on_cycle?(a_set) or on_cycle?(b_set) do
+      with {:ok, a_turns} <- turns(a_set),
+           {:ok, b_parts} <- parts(b_set) do
+        {:ok, Enum.flat_map(a_turns, &cut_member(&1, b_parts, sweep))}
+      end
+    else
+      {:ok, sweep.(IntervalSet.members(a_set), IntervalSet.members(b_set))}
+    end
+  end
+
+  # A member the other operand does not cut is the member, as it is written.
+  defp cut_member({member, parts}, b_parts, sweep) do
+    left = sweep.(parts, b_parts)
+    if same_spans?(left, parts), do: [member], else: as_spans(left)
+  end
+
+  # The members of the first set that overlap the second, or that do not,
+  # each kept whole: one of a set with no year overlaps where a part of it
+  # does.
+  defp kept_members(%IntervalSet{} = a_set, %IntervalSet{} = b_set, mode) do
+    if on_cycle?(a_set) or on_cycle?(b_set),
+      do: kept_on_cycle(a_set, b_set, mode),
+      else: {:ok, sweep_members(IntervalSet.members(a_set), IntervalSet.members(b_set), mode)}
+  end
+
+  defp kept_on_cycle(a_set, b_set, mode) do
+    with {:ok, a_turns} <- turns(a_set),
+         {:ok, b_parts} <- parts(b_set) do
+      kept =
+        for {member, parts} <- a_turns,
+            overlaps_a_part?(parts, b_parts) == (mode == :overlapping),
+            do: member
+
+      {:ok, kept}
+    end
+  end
+
+  # Each member of the first set cut to each member of the second it
+  # overlaps, in a set with no year, where a pair's parts on both sides of
+  # the cycle's end are one span. A member that lies within the other is cut
+  # nowhere, and is written as it is.
+  defp shared_on_cycle(%IntervalSet{} = a_set, %IntervalSet{} = b_set, resolve) do
+    with {:ok, a_turns} <- turns(a_set),
+         {:ok, b_turns} <- turns(b_set) do
+      shared =
+        for {member, a_parts} <- a_turns,
+            {_b_member, b_parts} <- b_turns,
+            part <- shared_by_pair(member, a_parts, b_parts, resolve),
+            do: part
+
+      {:ok, shared}
+    end
+  end
+
+  defp shared_by_pair(member, a_parts, b_parts, resolve) do
+    case sweep_intersection(a_parts, b_parts, resolve) do
+      [%Interval{metadata: metadata} | _rest] = shared ->
+        if same_spans?(shared, a_parts),
+          do: [%Interval{from: member.from, to: member.to, metadata: metadata}],
+          else: as_spans(shared)
+
+      [] ->
+        []
+    end
+  end
+
+  # Whether a sweep has left a member's parts as they were, wherever the
+  # other operand's own parts end within them.
+  defp same_spans?(left, parts) do
+    left = joined_where_they_meet(left)
+    parts = joined_where_they_meet(parts)
+
+    length(left) == length(parts) and
+      left |> Enum.zip(parts) |> Enum.all?(&same_extent?/1)
+  end
+
+  # What a sweep leaves of one member, or of one pair of members, as the
+  # spans it is: its parts in one turn of the cycle joined where they meet,
+  # within the turn (a whole turn that starts within it is two parts that
+  # meet there) and through the cycle's end.
+  defp as_spans(fragments), do: fragments |> joined_where_they_meet() |> Cycle.joined()
+
+  defp joined_where_they_meet([first | rest]) do
+    rest
+    |> Enum.reduce([first], fn fragment, [last | spans] ->
+      if Compare.compare_endpoints(last.to, fragment.from) == :same,
+        do: [%{last | to: fragment.to} | spans],
+        else: [fragment, last | spans]
+    end)
+    |> Enum.reverse()
+  end
+
+  defp joined_where_they_meet([]), do: []
+
+  defp overlaps_a_part?(parts, b_parts),
+    do: sweep_members(parts, b_parts, :overlapping) != []
 
   ## Cross-axis materialisation — when one operand is
   ## unanchored and a `:within` window is supplied, anchor the
@@ -753,8 +892,8 @@ defmodule Tempo.Operations do
   end
 
   def union(a, b, opts) do
-    with {:ok, {a_set, b_set}} <- align(a, b, opts) do
-      written(IntervalSet.members(a_set) ++ IntervalSet.members(b_set),
+    with {:ok, {a_set, b_set}} <- align_members(a, b, opts) do
+      IntervalSet.new(IntervalSet.members(a_set) ++ IntervalSet.members(b_set),
         metadata: a_set.metadata
       )
     end
@@ -833,12 +972,17 @@ defmodule Tempo.Operations do
 
   def intersection(a, b, opts) do
     with {:ok, resolve} <- metadata_resolver(Keyword.get(opts, :metadata, :left)),
-         {:ok, {a_set, b_set}} <- align(a, b, opts) do
-      written(
-        sweep_intersection(IntervalSet.members(a_set), IntervalSet.members(b_set), resolve),
-        metadata: a_set.metadata
-      )
+         {:ok, {a_set, b_set}} <- align_members(a, b, opts),
+         {:ok, shared} <- shared(a_set, b_set, resolve) do
+      IntervalSet.new(shared, metadata: a_set.metadata)
     end
+  end
+
+  defp shared(a_set, b_set, resolve) do
+    if on_cycle?(a_set) or on_cycle?(b_set),
+      do: shared_on_cycle(a_set, b_set, resolve),
+      else:
+        {:ok, sweep_intersection(IntervalSet.members(a_set), IntervalSet.members(b_set), resolve)}
   end
 
   @doc """
@@ -865,9 +1009,9 @@ defmodule Tempo.Operations do
           {:ok, IntervalSet.t()} | {:error, term()}
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
   def members_overlapping(a, b, opts \\ []) do
-    with {:ok, {a_set, b_set}} <- align(a, b, opts) do
-      result = sweep_members(IntervalSet.members(a_set), IntervalSet.members(b_set), :overlapping)
-      written(result, metadata: a_set.metadata)
+    with {:ok, {a_set, b_set}} <- align_members(a, b, opts),
+         {:ok, kept} <- kept_members(a_set, b_set, :overlapping) do
+      IntervalSet.new(kept, metadata: a_set.metadata)
     end
   end
 
@@ -1037,19 +1181,13 @@ defmodule Tempo.Operations do
   end
 
   defp complement_within(set, within, opts) do
-    with {:ok, {window_set, input_set}} <- align(within, set, opts) do
-      # Coalesce the input so gaps are computed against the
-      # union-of-covered-instants, not against overlapping
-      # members individually.
-      coalesced_input = IntervalSet.merged(input_set)
-
-      written(
-        sweep_difference(
-          IntervalSet.members(window_set),
-          IntervalSet.members(coalesced_input)
-        ),
-        metadata: window_set.metadata
-      )
+    # The input is coalesced so gaps are computed against the
+    # union-of-covered-instants, not against overlapping members
+    # individually.
+    with {:ok, {window_set, input_set}} <- align_members(within, set, opts),
+         covered = IntervalSet.coalesce(input_set),
+         {:ok, gaps} <- cut_members(window_set, covered, &sweep_difference/2) do
+      IntervalSet.new(gaps, metadata: window_set.metadata)
     end
   end
 
@@ -1102,24 +1240,11 @@ defmodule Tempo.Operations do
   end
 
   def difference(a, b, opts) do
-    with {:ok, {a_set, b_set}} <- align(a, b, opts) do
-      written(sweep_difference(IntervalSet.members(a_set), IntervalSet.members(b_set)),
-        metadata: a_set.metadata
-      )
+    with {:ok, {a_set, b_set}} <- align_members(a, b, opts),
+         {:ok, left} <- cut_members(a_set, b_set, &sweep_difference/2) do
+      IntervalSet.new(left, metadata: a_set.metadata)
     end
   end
-
-  # The result of an operation, as a set. Spans with no year were cut at
-  # their cycle's end to be swept (`maybe_split_midnight_crossers/4`), and one
-  # that ends there is written as `Tempo.to_interval/2` writes it: `T23H/T0H`,
-  # the end of the day being the start of the next.
-  defp written([%Interval{} = first | _rest] = intervals, options) do
-    if Cycle.cyclic?(first),
-      do: intervals |> Enum.map(&Cycle.wrapped/1) |> IntervalSet.new(options),
-      else: IntervalSet.new(intervals, options)
-  end
-
-  defp written(intervals, options), do: IntervalSet.new(intervals, options)
 
   # N-ary set operations: the second argument may be a *list* of
   # operands, folded left-to-right. A list is never itself a valid
@@ -1140,7 +1265,7 @@ defmodule Tempo.Operations do
   # Coerce a lone operand to its `IntervalSet` form using the same
   # preflight every operation runs.
   defp as_set(a, opts) do
-    with {:ok, {a_set, _b_set}} <- align(a, a, opts) do
+    with {:ok, {a_set, _b_set}} <- align_members(a, a, opts) do
       {:ok, a_set}
     end
   end
@@ -1170,9 +1295,9 @@ defmodule Tempo.Operations do
           {:ok, IntervalSet.t()} | {:error, term()}
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
   def members_outside(a, b, opts \\ []) do
-    with {:ok, {a_set, b_set}} <- align(a, b, opts) do
-      result = sweep_members(IntervalSet.members(a_set), IntervalSet.members(b_set), :outside)
-      written(result, metadata: a_set.metadata)
+    with {:ok, {a_set, b_set}} <- align_members(a, b, opts),
+         {:ok, kept} <- kept_members(a_set, b_set, :outside) do
+      IntervalSet.new(kept, metadata: a_set.metadata)
     end
   end
 

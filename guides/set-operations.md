@@ -349,7 +349,7 @@ Note that `≡` here is covered-instant equality (via `Tempo.equal?/2`), not mem
 | Cross-zone operands | Compared via UTC; the result is in the first operand's zone |
 | A value with no zone and one with a zone | A `Tempo.FloatingTempoError` |
 | A value with a year and one with none | A `Tempo.UnanchoredError` |
-| A span with no year that runs through its cycle's end (`T23:30/T01:00`) | Cut at midnight into `T23:30/T00:00` and `T00:00/T01:00`, and swept as two |
+| A span with no year that runs through its cycle's end (`T23:30/T01:00`) | One member: swept as the two spans it is in one turn of the cycle, and written back as one |
 | A span with no year that ends where it starts (`T00/T00`) | Once round its cycle: the whole day |
 
 Each error is returned by the operations that return a set, and raised by the predicates, which have only `true` and `false` to give.

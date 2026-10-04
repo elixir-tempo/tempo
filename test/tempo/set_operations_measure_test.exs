@@ -25,9 +25,8 @@ defmodule Tempo.SetOperationsMeasureTest do
   A set with no year is on a cycle: the day, the week, the year. The time
   such a set covers, the time at least so many of its members cover, and
   whether a point is covered, are held to arcs of the cycle worked out the
-  same way. Two operands with no
-  year are not here: a span that crosses its cycle's end comes back from an
-  operation in two, an open item of `TODO.md`.
+  same way; and so is each operation of two such sets, a member that runs
+  through its cycle's end being one member, in the answer as in the set.
   """
   use ExUnit.Case, async: true
   use ExUnitProperties
@@ -450,6 +449,109 @@ defmodule Tempo.SetOperationsMeasureTest do
   end
 
   ## A set with no year
+
+  # The members of a set with no year as arcs of its cycle in the line's own
+  # points, with their marks: a member is read at the points it is written
+  # between, and one that ends where its cycle does ends at point 0.
+  defp arcs(%IntervalSet{} = set, line) do
+    {points, _length} = cycle(line)
+    point_at = Map.new(0..(points - 1), &{position(point(line, &1)), &1})
+
+    for {from, to, id} <- read(set) do
+      {Map.fetch!(point_at, from), Map.fetch!(point_at, to), id}
+    end
+    |> Sets.ordered()
+  end
+
+  defp arcs({:ok, %IntervalSet{} = set}, line), do: arcs(set, line)
+
+  # Every operation of two sets with no year, held to the answer worked out
+  # from the cells of the cycle their members hold. A member that runs
+  # through its cycle's end is one member: it came back from an operation as
+  # the two spans it is swept by.
+  defp assert_operations_on_cycle(a_slots, b_slots, line) do
+    {cells, _length} = cycle(line)
+    a = set(a_slots, line, :a, [])
+    b = set(b_slots, line, :b, [])
+    in_a = arcs(a, line)
+    in_b = arcs(b, line)
+    named = "#{inspect(a_slots)} and #{inspect(b_slots)} on #{line}"
+
+    assert arcs(Tempo.union(a, b), line) == Sets.union(in_a, in_b), "union of #{named}"
+
+    assert arcs(Tempo.difference(a, b), line) == Sets.difference_on_cycle(in_a, in_b, cells),
+           "difference of #{named}"
+
+    assert arcs(Tempo.symmetric_difference(a, b), line) ==
+             Sets.ordered(
+               Sets.difference_on_cycle(in_a, in_b, cells) ++
+                 Sets.difference_on_cycle(in_b, in_a, cells)
+             ),
+           "symmetric_difference of #{named}"
+
+    assert arcs(Tempo.intersection(a, b), line) == Sets.pairwise_on_cycle(in_a, in_b, cells),
+           "intersection of #{named}"
+
+    assert arcs(Tempo.members_overlapping(a, b), line) ==
+             Sets.members_on_cycle(in_a, in_b, cells, :overlapping),
+           "members_overlapping of #{named}"
+
+    assert arcs(Tempo.members_outside(a, b), line) ==
+             Sets.members_on_cycle(in_a, in_b, cells, :outside),
+           "members_outside of #{named}"
+
+    assert_predicates_on_cycle(a, b, in_a, in_b, cells, named)
+  end
+
+  defp assert_predicates_on_cycle(a, b, in_a, in_b, cells, named) do
+    held = fn arcs -> arcs |> Enum.flat_map(&Sets.arc_cells(&1, cells)) |> MapSet.new() end
+    {a_cells, b_cells} = {held.(in_a), held.(in_b)}
+
+    assert Tempo.overlaps?(a, b) == not MapSet.disjoint?(a_cells, b_cells),
+           "overlaps? of #{named}"
+
+    assert Tempo.within?(a, b) == MapSet.subset?(a_cells, b_cells), "within? of #{named}"
+    assert Tempo.contains?(a, b) == MapSet.subset?(b_cells, a_cells), "contains? of #{named}"
+    assert Tempo.equal?(a, b) == MapSet.equal?(a_cells, b_cells), "equal? of #{named}"
+  end
+
+  describe "two sets with no year, on their cycle" do
+    test "every pair of sets of up to two spans between four hours of the day" do
+      hours = [0, 1, 22, 23]
+      arcs = for from <- hours, to <- hours, do: {from, to}
+
+      pairs =
+        for {first, index} <- Enum.with_index(arcs), second <- Enum.drop(arcs, index) do
+          [first, second]
+        end
+
+      sets = [[]] ++ Enum.map(arcs, &[&1]) ++ pairs
+      assert length(sets) == 153
+
+      for a_slots <- sets, b_slots <- Enum.take_every(sets, 5) do
+        assert_operations_on_cycle(a_slots, b_slots, :day_hours)
+      end
+    end
+
+    for {line, what} <- [
+          day_hours: "hours of the day",
+          weekdays: "days of the week",
+          months: "months of the year",
+          year_days: "days of the year"
+        ] do
+      property "generated sets of #{what}" do
+        {points, _length} = cycle(unquote(line))
+
+        check all(
+                a_slots <- arcs_between(points),
+                b_slots <- arcs_between(points),
+                max_runs: 80
+              ) do
+          assert_operations_on_cycle(a_slots, b_slots, unquote(line))
+        end
+      end
+    end
+  end
 
   describe "a set with no year, on its cycle" do
     test "every set of up to two spans between five hours of the day" do

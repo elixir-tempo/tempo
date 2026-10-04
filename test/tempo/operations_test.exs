@@ -917,14 +917,45 @@ defmodule Tempo.Operations.Test do
     end
 
     test "time-of-day union: crossing ∪ non-crossing (member-preserving)" do
-      # After midnight-split: crossing becomes two members
-      # (pre-midnight + post-midnight); morning stays one. Union
-      # is all three members.
+      # A span that runs through midnight is one member, and a union keeps
+      # the members it is given: it came back with the crossing span cut at
+      # midnight, three members for two.
       {:ok, crossing} = Tempo.from_iso8601("T23:00/T01:00")
       {:ok, morning} = Tempo.from_iso8601("T00:30/T02:00")
 
       {:ok, r} = Tempo.union(crossing, morning)
-      assert length(r.intervals) == 3
+      assert IntervalSet.members(r) == [~o"T0H30M/T2H0M", ~o"T23H0M/T1H0M"]
+    end
+
+    test "a member that runs through midnight is kept or dropped whole" do
+      night = ~o"T22/T02"
+
+      assert {:ok, outside} = Tempo.members_outside(night, ~o"T03/T04")
+      assert IntervalSet.members(outside) == [~o"T22H/T2H"]
+
+      # It overlaps a span before midnight, so it is no member outside it,
+      # where the part after midnight was returned.
+      assert {:ok, none} = Tempo.members_outside(night, ~o"T23/T23:30")
+      assert IntervalSet.empty?(none)
+
+      assert {:ok, hit} = Tempo.members_overlapping(night, ~o"T23/T23:30")
+      assert IntervalSet.members(hit) == [~o"T22H0M/T2H0M"]
+    end
+
+    test "a member that runs through midnight is cut only where the other operand cuts it" do
+      night = ~o"T22/T02"
+
+      assert {:ok, untouched} = Tempo.difference(night, ~o"T12/T13")
+      assert IntervalSet.members(untouched) == [~o"T22H/T2H"]
+
+      assert {:ok, cut} = Tempo.difference(night, ~o"T23/T23:30")
+      assert IntervalSet.members(cut) == [~o"T22H0M/T23H0M", ~o"T23H30M/T2H0M"]
+
+      assert {:ok, shared} = Tempo.intersection(night, ~o"T21/T03")
+      assert IntervalSet.members(shared) == [~o"T22H/T2H"]
+
+      assert {:ok, new_year} = Tempo.union(~o"12M20D/1M10D", ~o"3M1D/4M1D")
+      assert IntervalSet.members(new_year) == [~o"3M1D/4M1D", ~o"12M20D/1M10D"]
     end
 
     test "time-of-day intersection: crossing ∩ non-crossing" do
@@ -949,12 +980,13 @@ defmodule Tempo.Operations.Test do
     end
 
     test "an unanchored interval that ends where it starts is the whole day" do
-      # `T12:00/T12:00` is once round the clock from noon, cut at midnight
-      # to be swept as any span that runs through it is.
+      # `T12:00/T12:00` is once round the clock from noon. It is cut at
+      # midnight to be swept, as any span that runs through it is, and comes
+      # back as the one span it is.
       {:ok, day} = Tempo.from_iso8601("T12:00/T12:00")
       {:ok, r} = Tempo.intersection(day, day)
 
-      assert r.intervals == [~o"T0H0M/T12H0M", ~o"T12H0M/T0H0M"]
+      assert IntervalSet.members(r) == [~o"T12H0M/T12H0M"]
       assert Tempo.equal?(r, ~o"T0H/T0H")
     end
   end

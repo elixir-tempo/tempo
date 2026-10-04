@@ -168,8 +168,10 @@ defmodule Tempo.Interval.CycleTest do
       assert Tempo.relation(~o"T0H/T0H", ~o"T10H") == :contains
       assert Tempo.overlaps?(~o"T10H/T10H", ~o"T3H")
 
+      # What is left of the whole day is one span, from noon round to ten:
+      # it came back cut at midnight, in two.
       assert {:ok, free} = Tempo.difference(~o"T0H/T0H", ~o"T10H/T12H")
-      assert IntervalSet.members(free) == [~o"T0H/T10H", ~o"T12H/T0H"]
+      assert IntervalSet.members(free) == [~o"T12H/T10H"]
     end
 
     test "coalesce/1 writes a set that covers the cycle as it" do

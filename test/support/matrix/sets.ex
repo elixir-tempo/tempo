@@ -309,6 +309,130 @@ defmodule Tempo.Matrix.Sets do
     |> Enum.sort()
   end
 
+  @doc """
+  The cells of a cycle an arc holds, going round from its start.
+
+  ### Arguments
+
+  * `arc` is `{from, to}` or `{from, to, id}`, in whole cells of the
+    cycle. An arc that ends where it starts is once round.
+
+  * `cells` is how many cells the cycle has.
+
+  ### Returns
+
+  * A list of cells, in the order the arc goes through them.
+
+  """
+  @spec arc_cells(tuple(), pos_integer()) :: [non_neg_integer()]
+  def arc_cells(arc, cells) do
+    from = elem(arc, 0)
+    reach = reach(from, elem(arc, 1), cells)
+
+    for step <- 0..(reach - 1)//1, do: Integer.mod(from + step, cells)
+  end
+
+  @doc """
+  Each member of the first list of arcs without the cells the second
+  holds.
+
+  ### Arguments
+
+  * `a` and `b` are lists of arcs `{from, to, id}`, in whole cells.
+
+  * `cells` is how many cells the cycle has.
+
+  ### Returns
+
+  * A list of arcs: a member the second holds no cell of as it is written,
+    and otherwise what is left of it, each part as long as it can be, with
+    the member's mark.
+
+  """
+  @spec difference_on_cycle([span()], [span()], pos_integer()) :: [span()]
+  def difference_on_cycle(a, b, cells) do
+    taken = b |> Enum.flat_map(&arc_cells(&1, cells)) |> MapSet.new()
+
+    ordered(
+      for {_from, _to, id} = member <- a,
+          {part_from, part_to} <- kept_of(member, &(&1 not in taken), cells),
+          do: {part_from, part_to, id}
+    )
+  end
+
+  @doc """
+  Each member of the first list of arcs cut to each member of the second
+  it shares a cell with.
+
+  ### Arguments
+
+  * `a` and `b` are lists of arcs `{from, to, id}`, in whole cells.
+
+  * `cells` is how many cells the cycle has.
+
+  ### Returns
+
+  * A list of arcs, for each pair of members the cells both hold, each part
+    as long as it can be, with the mark of the first's member. A member
+    that lies within the other is as it is written.
+
+  """
+  @spec pairwise_on_cycle([span()], [span()], pos_integer()) :: [span()]
+  def pairwise_on_cycle(a, b, cells) do
+    ordered(
+      for {_from, _to, id} = member <- a,
+          other <- b,
+          held = MapSet.new(arc_cells(other, cells)),
+          {part_from, part_to} <- kept_of(member, &(&1 in held), cells),
+          do: {part_from, part_to, id}
+    )
+  end
+
+  @doc """
+  The members of the first list of arcs that share a cell with a member of
+  the second, or that share none.
+
+  ### Arguments
+
+  * `a` and `b` are lists of arcs `{from, to, id}`, in whole cells.
+
+  * `cells` is how many cells the cycle has.
+
+  * `kept` is `:overlapping` or `:outside`.
+
+  ### Returns
+
+  * A list of arcs, each a whole member of `a`.
+
+  """
+  @spec members_on_cycle([span()], [span()], pos_integer(), :overlapping | :outside) :: [span()]
+  def members_on_cycle(a, b, cells, kept) do
+    held = b |> Enum.flat_map(&arc_cells(&1, cells)) |> MapSet.new()
+
+    a
+    |> Enum.filter(fn member ->
+      Enum.any?(arc_cells(member, cells), &(&1 in held)) == (kept == :overlapping)
+    end)
+    |> ordered()
+  end
+
+  # The cells of a member that are kept, as arcs: the member as it is written
+  # when every cell is, and otherwise the runs of kept cells going round,
+  # which for a member that is once round may run through where it starts.
+  defp kept_of({from, to, _id} = member, keep?, cells) do
+    own = arc_cells(member, cells)
+
+    if Enum.all?(own, keep?) do
+      [{from, to}]
+    else
+      held = MapSet.new(own)
+
+      0..(cells - 1)
+      |> Enum.map(&{{&1, &1 + 1}, &1 in held and keep?.(&1)})
+      |> runs_around(cells)
+    end
+  end
+
   # The cycle cut at every end of an arc: between two cuts next to each
   # other every arc either holds all of the cell or none of it. The last
   # cell runs through the cycle's end to the first cut.

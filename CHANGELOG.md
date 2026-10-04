@@ -269,6 +269,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A span with no year that runs through its cycle's end is one member to the set operations: `Tempo.union(~o"T22/T02", ~o"T03/T04")` has the two members it was given, where it had three, `Tempo.members_outside/3` and `Tempo.members_overlapping/3` keep or drop it whole, where a part of it was returned, and `Tempo.difference/3` and `Tempo.intersection/3` cut it only where the other operand does. The whole day less two hours is one span round midnight (`T12H/T10H`), where it was two.
+
 * `Tempo.IntervalSet.covered?/2` answers for a set with no year whose member runs through its cycle's end: `~o"T00:30"` is covered by a set holding `~o"T22/T02"`, where the question raised a `Tempo.IntervalEndpointsError`. `Tempo.IntervalSet.new/2` returns the tree backend's refusal of a member with no year as `{:error, %ArgumentError{}}`, where it raised it.
 
 * A value's qualifiers follow its components: `Tempo.trunc/2`, `Tempo.round/2` and `Tempo.split/1` drop the qualifier of a unit they drop (`2015-?02-28` truncated to its year is `2015`, where it kept an uncertain month), a value placed with `Tempo.at/2` brings its own (`T10~` on a date is an approximate hour, where the qualifier was lost), and a date written again in other units is qualified in each (`2026-W25-1?` is `2026-06-15?`). An interval's end written without its year or month is qualified as the same end written in full.
