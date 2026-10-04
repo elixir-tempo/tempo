@@ -480,7 +480,7 @@ defmodule Tempo.Validation do
 
   # A group within a group of the same unit, such as a group of years
   # after a century or decade, counts from the outer group's first value.
-  # Here we merge into a set.
+  # The two name one run of values, so they are resolved as one set.
 
   def resolve(
         [{unit, {:group, %Range{} = range1}}, {unit, {:group, %Range{} = range2}} | rest],

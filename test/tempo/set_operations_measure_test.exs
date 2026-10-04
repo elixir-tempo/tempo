@@ -391,7 +391,7 @@ defmodule Tempo.SetOperationsMeasureTest do
   describe "every pair of sets of up to two members between five points" do
     test "of days" do
       sets = small_sets()
-      assert length(sets) == 66
+      assert Enum.count(sets) == 66
 
       for a_slots <- sets, b_slots <- sets do
         assert_operations(a_slots, :days, b_slots, :days)
@@ -522,7 +522,7 @@ defmodule Tempo.SetOperationsMeasureTest do
         end
 
       sets = [[]] ++ Enum.map(arcs, &[&1]) ++ pairs
-      assert length(sets) == 153
+      assert Enum.count(sets) == 153
 
       for a_slots <- sets, b_slots <- Enum.take_every(sets, 5) do
         assert_operations_on_cycle(a_slots, b_slots, :day_hours)
@@ -560,7 +560,7 @@ defmodule Tempo.SetOperationsMeasureTest do
         end
 
       sets = [[]] ++ Enum.map(arcs, &[&1]) ++ pairs
-      assert length(sets) == 351
+      assert Enum.count(sets) == 351
 
       Enum.each(sets, &assert_cover_on_cycle(&1, :day_hours))
     end

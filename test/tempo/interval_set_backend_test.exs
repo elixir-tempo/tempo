@@ -69,7 +69,7 @@ defmodule Tempo.IntervalSetBackendTest do
       refute IntervalSet.empty?(set)
       assert IntervalSet.first(set).from.time[:month] == 6
       assert set |> IntervalSet.walk() |> Enum.count() == 2
-      assert length(IntervalSet.members(set)) == 2
+      assert IntervalSet.count(set) == 2
     end
 
     test "the use-provided defaults answer over the walk" do

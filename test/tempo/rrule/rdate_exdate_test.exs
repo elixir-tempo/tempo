@@ -2,6 +2,7 @@ defmodule Tempo.RRule.RdateExdateTest do
   use ExUnit.Case, async: true
 
   alias Tempo.ICal
+  alias Tempo.IntervalSet
 
   # Phase D — RDATE and EXDATE semantics.
   #
@@ -34,7 +35,7 @@ defmodule Tempo.RRule.RdateExdateTest do
       {:ok, set} = ICal.parse(ics)
 
       # 2 RRULE occurrences (Jun 1, Jun 8) + 1 RDATE (Jun 18 14:00).
-      assert length(set.intervals) == 3
+      assert IntervalSet.count(set) == 3
 
       pairs =
         Enum.map(set.intervals, fn iv ->
@@ -88,7 +89,7 @@ defmodule Tempo.RRule.RdateExdateTest do
 
       {:ok, set} = ICal.parse(ics)
       # 1 RRULE + 3 RDATEs.
-      assert length(set.intervals) == 4
+      assert IntervalSet.count(set) == 4
     end
 
     test "RDATE occurrences carry the event's metadata" do
@@ -140,7 +141,7 @@ defmodule Tempo.RRule.RdateExdateTest do
       {:ok, set} = ICal.parse(ics)
 
       # 3 RRULE occurrences, Jun 8 removed → 2 remain (Jun 1, Jun 15).
-      assert length(set.intervals) == 2
+      assert IntervalSet.count(set) == 2
       days = Enum.map(set.intervals, & &1.from.time[:day])
       assert days == [1, 15]
     end
@@ -164,7 +165,7 @@ defmodule Tempo.RRule.RdateExdateTest do
 
       {:ok, set} = ICal.parse(ics)
       # No match → all 3 occurrences survive.
-      assert length(set.intervals) == 3
+      assert IntervalSet.count(set) == 3
     end
 
     test "multiple EXDATEs remove multiple occurrences" do
@@ -194,7 +195,7 @@ defmodule Tempo.RRule.RdateExdateTest do
       {:ok, set} = ICal.parse(ics)
 
       # 4 RRULE occurrences minus Jun 8 and Jun 22 → Jun 1, Jun 15.
-      assert length(set.intervals) == 2
+      assert IntervalSet.count(set) == 2
       days = Enum.map(set.intervals, & &1.from.time[:day])
       assert days == [1, 15]
     end
@@ -221,7 +222,7 @@ defmodule Tempo.RRule.RdateExdateTest do
 
       # RRULE=Jun 1; RDATE=Jun 18 14:00; EXDATE removes the
       # RDATE. Result: just Jun 1.
-      assert length(set.intervals) == 1
+      assert IntervalSet.count(set) == 1
       [iv] = set.intervals
       assert iv.from.time[:day] == 1
     end

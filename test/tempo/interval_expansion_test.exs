@@ -21,7 +21,7 @@ defmodule Tempo.IntervalExpansion.Test do
       {:ok, tempo} = Tempo.from_iso8601("1985-XX-15")
       {:ok, %Tempo.IntervalSet{intervals: intervals}} = Tempo.to_interval(tempo)
 
-      assert length(intervals) == 12
+      assert Enum.count(intervals) == 12
       assert Enum.map(intervals, & &1.from.time[:month]) == 1..12 |> Enum.to_list()
 
       assert Enum.all?(intervals, fn i ->
@@ -41,7 +41,7 @@ defmodule Tempo.IntervalExpansion.Test do
     test "first-of-each-month — `1985-XX-01`" do
       {:ok, tempo} = Tempo.from_iso8601("1985-XX-01")
       {:ok, %Tempo.IntervalSet{intervals: intervals}} = Tempo.to_interval(tempo)
-      assert length(intervals) == 12
+      assert Enum.count(intervals) == 12
       assert Enum.all?(intervals, fn i -> i.from.time[:day] == 1 end)
     end
 
@@ -70,7 +70,7 @@ defmodule Tempo.IntervalExpansion.Test do
 
       # Under member-preserving default, each occurrence is a
       # distinct member. Call `coalesce/1` for the canonical span.
-      assert length(set.intervals) == 3
+      assert IntervalSet.count(set) == 3
       assert Enum.map(set.intervals, & &1.from.time[:month]) == [1, 2, 3]
 
       coalesced = IntervalSet.coalesce(set)
@@ -82,7 +82,7 @@ defmodule Tempo.IntervalExpansion.Test do
     test "`R5/1985-01-01/P1D` — 5 distinct day members" do
       {:ok, interval} = Tempo.from_iso8601("R5/1985-01-01/P1D")
       {:ok, set} = Tempo.to_interval(interval)
-      assert length(set.intervals) == 5
+      assert IntervalSet.count(set) == 5
 
       coalesced = IntervalSet.coalesce(set)
       [span] = coalesced.intervals
@@ -93,7 +93,7 @@ defmodule Tempo.IntervalExpansion.Test do
     test "`R2/1985-01/P1Y` — two distinct year members; coalesce to a 2-year span" do
       {:ok, interval} = Tempo.from_iso8601("R2/1985-01/P1Y")
       {:ok, set} = Tempo.to_interval(interval)
-      assert length(set.intervals) == 2
+      assert IntervalSet.count(set) == 2
 
       coalesced = IntervalSet.coalesce(set)
       [span] = coalesced.intervals
@@ -135,7 +135,7 @@ defmodule Tempo.IntervalExpansion.Test do
     test "Enum.to_list respects the duration bound" do
       {:ok, interval} = Tempo.from_iso8601("1985-01/P3M")
       list = Enum.to_list(interval)
-      assert length(list) == 3
+      assert [_, _, _] = list
       assert Enum.map(list, & &1.time[:month]) == [1, 2, 3]
     end
   end

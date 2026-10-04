@@ -78,7 +78,7 @@ defmodule Tempo.RRule.Rfc5545ConformanceTest do
       # :same to UNTIL and inclusively passes, so we see 114.
       rule = %Rule{freq: :day, interval: 1, until: ~o"1997-12-24"}
       {:ok, occ} = Expander.expand(rule, ~o"1997-09-02")
-      assert length(occ) == 114
+      assert Enum.count(occ) == 114
       assert hd(occ).from.time == [year: 1997, month: 9, day: 2]
       assert List.last(occ).from.time == [year: 1997, month: 12, day: 24]
     end
@@ -127,7 +127,7 @@ defmodule Tempo.RRule.Rfc5545ConformanceTest do
       rule = %Rule{freq: :week, interval: 1, until: ~o"1997-12-24"}
       {:ok, occ} = Expander.expand(rule, ~o"1997-09-02")
       # Every Tuesday from Sep 2 through Dec 23 — 17 occurrences.
-      assert length(occ) == 17
+      assert Enum.count(occ) == 17
       assert hd(occ).from.time[:day] == 2
       assert List.last(occ).from.time == [year: 1997, month: 12, day: 23]
     end
@@ -450,7 +450,7 @@ defmodule Tempo.RRule.Rfc5545ConformanceTest do
 
       # June 5, 12, 19, 26; July 3, 10, 17, 24, 31; Aug 7, 14, 21, 28 = 13
       # … need 14, so the 14th falls on June 4, 1998.
-      assert length(occ) == 14
+      assert Enum.count(occ) == 14
       assert hd(occ).from.time == [year: 1997, month: 6, day: 5]
     end
 
@@ -622,7 +622,7 @@ defmodule Tempo.RRule.Rfc5545ConformanceTest do
 
       {:ok, occ} = Expander.expand(rule, ~o"1997-08-05")
 
-      assert length(occ) == 4
+      assert [_, _, _, _] = occ
 
       # First occurrence is Aug 5 (the anchor), next is the Sun of its week (Aug 10 with SU-start).
       # Actually — the WKST=SU week of Aug 5 is Sun Aug 3..Sat Aug 9. Sunday in that week is Aug 3.

@@ -355,8 +355,8 @@ defmodule Tempo.Network.Normalize do
     end
   end
 
-  defp axis(:year, calendars, _zones) when length(calendars) <= 1,
-    do: {:ok, calendar_axis(:year, single_calendar(calendars))}
+  defp axis(:year, [], _zones), do: {:ok, calendar_axis(:year, single_calendar([]))}
+  defp axis(:year, [calendar], _zones), do: {:ok, calendar_axis(:year, calendar)}
 
   defp axis(:month, calendars, _zones) when calendars in [[], [Calendrical.Gregorian]],
     do: {:ok, calendar_axis(:month, Calendrical.Gregorian)}

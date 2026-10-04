@@ -171,7 +171,7 @@ defmodule Tempo.RangeExpansionPropertyTest do
       # multi — it materialises as one interval and enumerates its
       # sub-points, which is the documented contract for a concrete
       # value rather than an expansion to check here.
-      if length(expected) > 1 and length(expected) <= @max_members do
+      if length(expected) in 2..@max_members do
         iso = iso(year, specs)
         count = length(specs)
 

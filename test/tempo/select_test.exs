@@ -129,7 +129,7 @@ defmodule Tempo.Select.Test do
       {:ok, set} = Tempo.select(~o"2026Y{1..13}W", Tempo.weekends(:US))
 
       days = IntervalSet.members(set)
-      assert length(days) == 26
+      assert Enum.count(days) == 26
 
       # ISO week 1 of 2026 spans 2025-12-29..2026-01-05; its
       # weekend days are Sat Jan 3 and Sun Jan 4.

@@ -185,7 +185,7 @@ defmodule Tempo.RRule.SelectionTest do
       rule = %Tempo{time: [selection: [week: 1]], calendar: Calendrical.Gregorian}
 
       results = Selection.apply(candidate, rule, :year)
-      assert length(results) == 7
+      assert Enum.count(results) == 7
 
       days = Enum.map(results, & &1.from.time[:day])
       assert days == [3, 4, 5, 6, 7, 8, 9]
@@ -423,7 +423,7 @@ defmodule Tempo.RRule.SelectionTest do
       for rule <- ["R/../PT1H/FL1KN", "R/2026-01-05/PT1H/FL1KN"] do
         hours = occurrence_spans(rule, monday)
 
-        assert length(hours) == 24
+        assert Enum.count(hours) == 24
         assert Enum.take(hours, 2) == ["2026Y1M5D/T1H", "2026Y1M5DT1H/T2H"]
         assert hours == occurrence_spans(String.replace(rule, "/FL1KN", ""), monday)
       end
@@ -532,7 +532,7 @@ defmodule Tempo.RRule.SelectionTest do
       """
 
       {:ok, set} = ICal.parse(ics)
-      assert length(set.intervals) == 6
+      assert IntervalSet.count(set) == 6
 
       # No event has the fallback marker — all are real
       # materialised occurrences.
@@ -565,7 +565,7 @@ defmodule Tempo.RRule.SelectionTest do
       """
 
       {:ok, set} = ICal.parse(ics)
-      assert length(set.intervals) == 10
+      assert IntervalSet.count(set) == 10
 
       assert Enum.all?(set.intervals, fn iv ->
                iv.metadata[:recurrence_note] == nil
@@ -589,7 +589,7 @@ defmodule Tempo.RRule.SelectionTest do
       """
 
       {:ok, set} = ICal.parse(ics)
-      assert length(set.intervals) == 3
+      assert IntervalSet.count(set) == 3
 
       assert Enum.all?(set.intervals, fn iv ->
                iv.metadata[:recurrence_note] == nil
@@ -763,7 +763,7 @@ defmodule Tempo.RRule.SelectionTest do
       """
 
       {:ok, set} = ICal.parse(ics)
-      assert length(set.intervals) == 3
+      assert IntervalSet.count(set) == 3
 
       assert Enum.all?(set.intervals, fn iv ->
                iv.metadata[:recurrence_note] == nil
@@ -1092,7 +1092,7 @@ defmodule Tempo.RRule.SelectionTest do
     test "a year limits a finer recurrence to that year's occurrences" do
       dates = holiday_dates("R/2026-01-01/P1M/FL2027Y15DN", ~o"2026Y/2029Y")
 
-      assert length(dates) == 12
+      assert Enum.count(dates) == 12
       assert hd(dates) == "2027-01-15"
       assert List.last(dates) == "2027-12-15"
     end
@@ -1184,7 +1184,7 @@ defmodule Tempo.RRule.SelectionTest do
       {:ok, set} = Tempo.to_interval(Tempo.from_iso8601!("2018YL{1,2,5}KNT10H0M0S"))
       [first | _rest] = occurrences = IntervalSet.members(set)
 
-      assert length(occurrences) == 157
+      assert Enum.count(occurrences) == 157
       assert Tempo.relation(first, ~o"2018-01-01T10:00:00/2018-01-01T10:00:01") == :equals
     end
 

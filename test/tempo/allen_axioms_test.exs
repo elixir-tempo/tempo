@@ -116,7 +116,7 @@ defmodule Tempo.AllenAxiomsTest do
         # (coalesced) form realises this: four chain-meeting
         # intervals collapse to [t0, t4).
         {:ok, set} = IntervalSet.new([a, b, c, d], coalesce: true)
-        assert length(set.intervals) == 1
+        assert IntervalSet.count(set) == 1
 
         [coalesced] = set.intervals
         assert coalesced.from == t0

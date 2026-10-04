@@ -54,7 +54,7 @@ defmodule Tempo.EnumerationMaterialisationTest do
 
     test "non-contiguous mask materialises to one disjoint interval per valid value" do
       assert {:ok, %Tempo.IntervalSet{intervals: intervals}} = Tempo.to_interval(~o"1985-XX-15")
-      assert length(intervals) == 12
+      assert Enum.count(intervals) == 12
       assert Enum.count(~o"1985-XX-15") == 12
     end
   end

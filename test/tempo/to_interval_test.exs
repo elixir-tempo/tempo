@@ -179,7 +179,7 @@ defmodule Tempo.ToInterval.Test do
       # materialises each as a day-resolution interval.
       {:ok, tempo} = Tempo.from_iso8601("1985-XX-15")
       {:ok, %Tempo.IntervalSet{intervals: intervals}} = Tempo.to_interval(tempo)
-      assert length(intervals) == 12
+      assert Enum.count(intervals) == 12
 
       assert Enum.map(intervals, & &1.from.time[:month]) ==
                [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
@@ -299,7 +299,7 @@ defmodule Tempo.ToInterval.Test do
       {:ok, set} = Tempo.to_interval(~o"2026-W1X-3")
       wednesdays = IntervalSet.members(set)
 
-      assert length(wednesdays) == 10
+      assert Enum.count(wednesdays) == 10
       assert hd(wednesdays).from.time == ymd(2026, 3, 4)
     end
   end
@@ -440,7 +440,7 @@ defmodule Tempo.ToInterval.Test do
       {:ok, set} = Tempo.to_interval(~o"R3/PT0.5S/2026-06-15T10:00:00")
       [_, _, last] = IntervalSet.members(set)
 
-      assert length(IntervalSet.members(set)) == 3
+      assert IntervalSet.count(set) == 3
       assert last.to.time == [year: 2026, month: 6, day: 15, hour: 10, minute: 0, second: 0]
     end
 
@@ -451,7 +451,7 @@ defmodule Tempo.ToInterval.Test do
                Tempo.to_interval(unending)
 
       {:ok, june} = Tempo.to_interval(unending, within: ~o"2026-06")
-      assert length(IntervalSet.members(june)) == 4
+      assert IntervalSet.count(june) == 4
 
       assert {:error, %Tempo.UnboundedRecurrenceError{}} = Tempo.to_interval(~o"R/P1D/2026-06-20")
 
@@ -705,7 +705,7 @@ defmodule Tempo.ToInterval.Test do
       {:ok, set} = Tempo.to_interval(tempo)
 
       # Three distinct year members by default.
-      assert length(set.intervals) == 3
+      assert IntervalSet.count(set) == 3
 
       # Coalesced: the touching years merge into a single 3-year span.
       coalesced = IntervalSet.coalesce(set)

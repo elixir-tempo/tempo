@@ -150,7 +150,7 @@ defmodule Tempo.ParseProfileTest do
 
       message = Exception.message(error)
       assert message =~ "as a date"
-      assert length(String.split(message, "Could not parse")) == 2
+      assert [_, _] = String.split(message, "Could not parse")
     end
   end
 

@@ -50,7 +50,7 @@ defmodule Tempo.EnumerationConformance.Test do
       # chosen by `Unit.implicit_enumerator/2` for year-only on a
       # month-based calendar is month. Enumeration walks 12 months.
       assert {:ok, list} = take(~o"2022Y" |> Tempo.to_iso8601!())
-      assert length(list) == 3
+      assert [_, _, _] = list
       assert Enum.all?(list, fn %Tempo{time: [year: 2022, month: _]} -> true end)
     end
 
@@ -61,7 +61,7 @@ defmodule Tempo.EnumerationConformance.Test do
 
     test "year-month-day with inner range enumerates" do
       assert {:ok, list} = take("2022Y{1..2}M{1..2}D")
-      assert length(list) == 3
+      assert [_, _, _] = list
     end
   end
 
@@ -216,7 +216,7 @@ defmodule Tempo.EnumerationConformance.Test do
       # resolution value subdivides into ten decisecond sub-points
       # `[.0, .1, …, .9]`.
       {:ok, value} = Tempo.from_iso8601("2022-06-15T10:30:00Z")
-      assert length(Enum.to_list(value)) == 10
+      assert Enum.count(Enum.to_list(value)) == 10
     end
 
     test "microsecond-precision-6 datetime raises (finest representable ulp)" do
@@ -278,7 +278,7 @@ defmodule Tempo.EnumerationConformance.Test do
     test "Enum.take/2 on an open-upper interval iterates forward from `from`" do
       {:ok, interval} = Tempo.from_iso8601("1985-01-01/..")
       list = Enum.take(interval, 3)
-      assert length(list) == 3
+      assert [_, _, _] = list
 
       assert Enum.map(list, & &1.time) == [
                [year: 1985, month: 1, day: 1],
@@ -333,7 +333,7 @@ defmodule Tempo.EnumerationConformance.Test do
       {:ok, interval} = Tempo.from_iso8601("1985/1986-06")
       list = Enum.to_list(interval)
 
-      assert length(list) == 17
+      assert Enum.count(list) == 17
       assert hd(list).time == [year: 1985, month: 1]
       assert List.last(list).time == [year: 1986, month: 5]
     end

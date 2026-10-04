@@ -243,7 +243,7 @@ defmodule Tempo.Interval.PredicatesTest do
         |> IntervalSet.members()
         |> Enum.filter(&Tempo.at_least?(&1, ~o"PT1H"))
 
-      assert length(one_hour_slots) == 3
+      assert [_, _, _] = one_hour_slots
     end
 
     test "candidate scheduling via within?/2" do
@@ -257,7 +257,7 @@ defmodule Tempo.Interval.PredicatesTest do
         ]
         |> Enum.filter(&Tempo.within?(&1, window))
 
-      assert length(bookable_candidates) == 2
+      assert [_, _] = bookable_candidates
     end
   end
 

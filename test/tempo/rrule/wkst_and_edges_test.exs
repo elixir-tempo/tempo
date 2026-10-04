@@ -66,8 +66,8 @@ defmodule Tempo.RRule.WkstAndEdgesTest do
       {:ok, mo_occ} = Expander.expand(rule_mo, ~o"2022-06-04")
       {:ok, su_occ} = Expander.expand(rule_su, ~o"2022-06-04")
 
-      assert length(mo_occ) == 4
-      assert length(su_occ) == 4
+      assert [_, _, _, _] = mo_occ
+      assert [_, _, _, _] = su_occ
 
       # Every occurrence ≥ DTSTART (June 4).
       for iv <- mo_occ ++ su_occ do

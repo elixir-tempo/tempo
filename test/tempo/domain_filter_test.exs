@@ -40,7 +40,7 @@ defmodule Tempo.DomainFilterTest do
 
     test "no marker keeps every year" do
       {:ok, set} = Tempo.to_interval(~o"R/{2000Y..2010Y}/P1Y/FL12M25DN")
-      assert length(years(set)) == 11
+      assert Enum.count(years(set)) == 11
     end
 
     test "the filter composes with a ^ exclusion" do

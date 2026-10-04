@@ -24,7 +24,7 @@ defmodule Tempo.ExclusionDomainTest do
     test "subtracts from a range member" do
       {:ok, set} = Tempo.to_interval(~o"{2020Y..2030Y,^2026Y}")
       result = years(set)
-      assert length(result) == 10
+      assert Enum.count(result) == 10
       refute 2026 in result
       assert List.first(result) == 2020
       assert List.last(result) == 2030
@@ -58,7 +58,7 @@ defmodule Tempo.ExclusionDomainTest do
     test "a domain with ^ drops the excluded year" do
       {:ok, set} = Tempo.to_interval(~o"R/{2020Y..2030Y,^2026Y}/P1Y/FL12M25DN")
       result = years(set)
-      assert length(result) == 10
+      assert Enum.count(result) == 10
       refute 2026 in result
     end
 
@@ -71,14 +71,14 @@ defmodule Tempo.ExclusionDomainTest do
     test "an exclusions-only domain (braces) needs a window and subtracts" do
       {:ok, set} = Tempo.to_interval(~o"R/{^2026Y}/P1Y/FL12M25DN", within: ~o"2024Y/2029Y")
       result = years(set)
-      assert length(result) == 4
+      assert [_, _, _, _] = result
       refute 2026 in result
     end
 
     test "the bare ^value form (no braces) excludes a single value" do
       {:ok, set} = Tempo.to_interval(~o"R/^2026Y/P1Y/FL12M25DN", within: ~o"2024Y/2029Y")
       result = years(set)
-      assert length(result) == 4
+      assert [_, _, _, _] = result
       refute 2026 in result
     end
   end

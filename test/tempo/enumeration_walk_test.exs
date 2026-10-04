@@ -91,7 +91,7 @@ defmodule Tempo.EnumerationWalk.Test do
     test "a set, an unspecified unit and a mask together" do
       days = Enum.to_list(~o"2026Y{6,7}MX*DT{9,17}H")
 
-      assert length(days) == 122
+      assert Enum.count(days) == 122
       assert List.first(days) == ~o"2026Y6M1DT9H"
       assert List.last(days) == ~o"2026Y7M31DT17H"
     end
@@ -126,7 +126,7 @@ defmodule Tempo.EnumerationWalk.Test do
     test "a day counted from the end of one month under a masked or unspecified year" do
       days = Enum.to_list(~o"202XY2M-1D")
 
-      assert length(days) == 10
+      assert Enum.count(days) == 10
       assert Enum.take(days, 2) == [~o"2020Y2M29D", ~o"2021Y2M28D"]
 
       # An unspecified year is no year, and with no year the last day of a
@@ -164,7 +164,7 @@ defmodule Tempo.EnumerationWalk.Test do
       assert member_starts(Tempo.to_interval(~o"{2026,2028}Y2G2MU15D")) ==
                [~o"2026Y3M15D", ~o"2028Y3M15D"]
 
-      assert length(Enum.to_list(~o"{2026,2028}Y2G2MU")) == 4
+      assert Enum.count(Enum.to_list(~o"{2026,2028}Y2G2MU")) == 4
     end
 
     test "a year with significant digits is each year of its block" do
@@ -291,27 +291,27 @@ defmodule Tempo.EnumerationWalk.Test do
     test "an end that is the coarser is where the walk stops" do
       hours = Enum.to_list(~o"2026-06-15T10/2026-06-16")
 
-      assert length(hours) == 14
+      assert Enum.count(hours) == 14
       assert List.last(hours) == ~o"2026Y6M15DT23H"
     end
 
     test "an interval written with a duration is walked to the end the duration gives" do
       hours = Enum.to_list(~o"2026-06-15/PT36H")
 
-      assert length(hours) == 36
+      assert Enum.count(hours) == 36
       assert List.last(hours) == ~o"2026Y6M16DT11H"
     end
 
     test "ends on two axes, or in two zones, are ordered as the moments they are" do
       days = Enum.to_list(~o"2026-W25/2026-07-01")
 
-      assert length(days) == 16
+      assert Enum.count(days) == 16
       assert Enum.count(~o"2026-W25/2026-07-01") == 16
 
       minutes = ~o"2026-06-15T10:00+02:00/2026-06-15T12:00Z"
 
       assert Enum.count(minutes) == 240
-      assert length(Enum.to_list(minutes)) == 240
+      assert Enum.count(Enum.to_list(minutes)) == 240
     end
   end
 

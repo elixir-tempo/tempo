@@ -161,7 +161,7 @@ defmodule Tempo.OpenStartRecurrenceTest do
                )
 
       assert List.last(starts(set)) == "2027Y1M8D"
-      assert length(starts(set)) == 12
+      assert Enum.count(starts(set)) == 12
     end
 
     test "an UNTIL bounds the expanded days inclusively" do

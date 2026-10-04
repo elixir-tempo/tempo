@@ -129,7 +129,7 @@ defmodule Tempo.SteppingTest do
 
     test "is what each year that has a thirteenth month gives" do
       leap_years = Enum.filter(5770..5830, &(Hebrew.months_in_year(&1) == 13))
-      assert length(leap_years) > 20
+      assert Enum.count(leap_years) > 20
 
       for year <- leap_years do
         last_day = Date.new!(year, 13, 29, Hebrew)
@@ -325,8 +325,8 @@ defmodule Tempo.SteppingTest do
                {~o"2026-08-15", ~o"2026-09-15"}
              ]
 
-      assert length(spans(Tempo.from_iso8601!("R2/2026Y6M{1..3}D/P1W"))) == 6
-      assert length(spans(Tempo.from_iso8601!("R3/2026Y{6,7}M15D/P1Y"))) == 6
+      assert Enum.count(spans(Tempo.from_iso8601!("R2/2026Y6M{1..3}D/P1W"))) == 6
+      assert Enum.count(spans(Tempo.from_iso8601!("R3/2026Y{6,7}M15D/P1Y"))) == 6
     end
 
     test "steps each value as far as its own month lets it" do
@@ -411,7 +411,7 @@ defmodule Tempo.SteppingTest do
       assert %IntervalSet{} = set = Tempo.shift(~o"2026YX*M15D", month: 1)
 
       starts = set |> IntervalSet.members() |> Enum.map(&Interval.from/1)
-      assert length(starts) == 12
+      assert Enum.count(starts) == 12
       assert hd(starts) == ~o"2026-02-15"
       assert List.last(starts) == ~o"2027-01-15"
     end

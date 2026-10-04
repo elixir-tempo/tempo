@@ -19,7 +19,7 @@ defmodule Tempo.IntervalSet.Test do
 
       {:ok, set} = Tempo.IntervalSet.new([may, jan, mar])
 
-      assert length(set.intervals) == 3
+      assert Tempo.IntervalSet.count(set) == 3
 
       assert Enum.map(set.intervals, & &1.from.time) == [
                [year: 2022, month: 1],
@@ -33,12 +33,12 @@ defmodule Tempo.IntervalSet.Test do
       feb = interval(~o"2022Y2M")
 
       {:ok, set} = Tempo.IntervalSet.new([jan, feb])
-      assert length(set.intervals) == 2
+      assert Tempo.IntervalSet.count(set) == 2
 
       # Explicit coalescing merges touching members under the
       # half-open convention: `[Jan, Feb) ++ [Feb, Mar)` = `[Jan, Mar)`.
       coalesced = Tempo.IntervalSet.coalesce(set)
-      assert length(coalesced.intervals) == 1
+      assert Tempo.IntervalSet.count(coalesced) == 1
       [interval] = coalesced.intervals
       assert interval.from.time == [year: 2022, month: 1]
       assert interval.to.time == [year: 2022, month: 3]
@@ -49,10 +49,10 @@ defmodule Tempo.IntervalSet.Test do
       q1 = %Tempo.Interval{from: ~o"2022Y1M15D", to: ~o"2022Y3M15D"}
 
       {:ok, set} = Tempo.IntervalSet.new([jan, q1])
-      assert length(set.intervals) == 2
+      assert Tempo.IntervalSet.count(set) == 2
 
       coalesced = Tempo.IntervalSet.coalesce(set)
-      assert length(coalesced.intervals) == 1
+      assert Tempo.IntervalSet.count(coalesced) == 1
       [interval] = coalesced.intervals
       assert interval.from.time == [year: 2022, month: 1]
       assert interval.to.time == [year: 2022, month: 3, day: 15]
@@ -63,11 +63,11 @@ defmodule Tempo.IntervalSet.Test do
       {:ok, %Tempo.IntervalSet{intervals: intervals} = set} = Tempo.to_interval(tempo)
 
       # Three separate year members.
-      assert length(intervals) == 3
+      assert [_, _, _] = intervals
 
       # Coalesced: touching years merge into a single 3-year span.
       coalesced = Tempo.IntervalSet.coalesce(set)
-      assert length(coalesced.intervals) == 1
+      assert Tempo.IntervalSet.count(coalesced) == 1
     end
 
     test "empty list yields an empty set" do
@@ -110,7 +110,7 @@ defmodule Tempo.IntervalSet.Test do
       list = Enum.take(set, 35)
       # First 31 days = Jan. Day 32 must be Mar 1 (crossing the
       # non-touching boundary skips Feb entirely).
-      assert length(list) == 35
+      assert Enum.count(list) == 35
       assert Enum.at(list, 0).time == [year: 2022, month: 1, day: 1]
       assert Enum.at(list, 30).time == [year: 2022, month: 1, day: 31]
       assert Enum.at(list, 31).time == [year: 2022, month: 3, day: 1]
@@ -122,7 +122,7 @@ defmodule Tempo.IntervalSet.Test do
       {:ok, set} = Tempo.IntervalSet.new([jan, mar])
 
       # Jan (31 days) + Mar (31 days) = 62.
-      assert length(Enum.to_list(set)) == 62
+      assert Enum.count(Enum.to_list(set)) == 62
     end
 
     test "halt during iteration works" do
@@ -165,7 +165,7 @@ defmodule Tempo.IntervalSet.Test do
         |> Tempo.IntervalSet.members()
         |> Enum.filter(&Tempo.at_least?(&1, ~o"P28D"))
 
-      assert length(long_enough) == 2
+      assert [_, _] = long_enough
     end
 
     test "empty set → empty list" do
@@ -280,11 +280,11 @@ defmodule Tempo.IntervalSet.Test do
       {:ok, set} = Tempo.to_interval(tempo)
 
       # Three separate month members by default.
-      assert length(set.intervals) == 3
+      assert Tempo.IntervalSet.count(set) == 3
 
       # Explicit coalesce merges the touching months into one span.
       coalesced = Tempo.IntervalSet.coalesce(set)
-      assert length(coalesced.intervals) == 1
+      assert Tempo.IntervalSet.count(coalesced) == 1
       [q1] = coalesced.intervals
       assert q1.from.time == [year: 2022, month: 1]
       assert q1.to.time == [year: 2022, month: 4]
@@ -293,7 +293,7 @@ defmodule Tempo.IntervalSet.Test do
     test "stepped range → multiple disjoint intervals" do
       {:ok, tempo} = Tempo.from_iso8601("2022Y{1..-1//3}M")
       {:ok, %Tempo.IntervalSet{intervals: intervals}} = Tempo.to_interval(tempo)
-      assert length(intervals) == 4
+      assert [_, _, _, _] = intervals
       assert Enum.map(intervals, & &1.from.time[:month]) == [1, 4, 7, 10]
     end
 
@@ -303,12 +303,12 @@ defmodule Tempo.IntervalSet.Test do
       # semantics; `coalesce/1` merges touching pairs.
       {:ok, tempo} = Tempo.from_iso8601("2022Y{1..2}M{1..2}D")
       {:ok, set} = Tempo.to_interval(tempo)
-      assert length(set.intervals) == 4
+      assert Tempo.IntervalSet.count(set) == 4
 
       coalesced = Tempo.IntervalSet.coalesce(set)
       # Jan 1 + Jan 2 touch → merged; Feb 1 + Feb 2 touch → merged;
       # gap between Jan 3 and Feb 1 → stays two spans.
-      assert length(coalesced.intervals) == 2
+      assert Tempo.IntervalSet.count(coalesced) == 2
     end
 
     test "scalar input still returns a single Interval" do
@@ -321,13 +321,13 @@ defmodule Tempo.IntervalSet.Test do
     test "wraps a single interval in a 1-element set" do
       {:ok, tempo} = Tempo.from_iso8601("2022Y6M")
       {:ok, %Tempo.IntervalSet{intervals: intervals}} = Tempo.to_interval_set(tempo)
-      assert length(intervals) == 1
+      assert [_] = intervals
     end
 
     test "passes IntervalSet through unchanged" do
       {:ok, tempo} = Tempo.from_iso8601("2022Y{1..-1//3}M")
       {:ok, set} = Tempo.to_interval_set(tempo)
-      assert length(set.intervals) == 4
+      assert Tempo.IntervalSet.count(set) == 4
 
       assert {:ok, ^set} = Tempo.to_interval_set(set)
     end
@@ -620,7 +620,7 @@ defmodule Tempo.IntervalSet.Test do
         ])
 
       assert [%Interval{}, %Interval{}] = Tempo.IntervalSet.members(set)
-      assert length(Tempo.IntervalSet.members(set)) == 2
+      assert Tempo.IntervalSet.count(set) == 2
     end
 
     test "and that is a different answer from Enum" do
@@ -632,14 +632,14 @@ defmodule Tempo.IntervalSet.Test do
           ~o"2026-06-15T13:00:00/2026-06-15T17:00:00"
         ])
 
-      assert length(Tempo.IntervalSet.members(set)) == 2
+      assert Tempo.IntervalSet.count(set) == 2
       assert Enum.count(set) == 25_200
     end
 
     test "the two agree at day resolution, which is why the trap hides" do
       {:ok, set} = Tempo.select(~o"2026-08-10/2026-08-15", Tempo.workdays(:AU))
 
-      assert length(Tempo.IntervalSet.members(set)) == 5
+      assert Tempo.IntervalSet.count(set) == 5
       assert Enum.count(set) == 5
     end
 

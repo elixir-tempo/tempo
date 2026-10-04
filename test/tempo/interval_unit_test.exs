@@ -15,7 +15,7 @@ defmodule Tempo.IntervalUnitTest do
       {:ok, day} = Interval.new(from: ~o"2025-07-04", to: ~o"2025-07-05", unit: :hour)
 
       assert Enum.count(day) == 24
-      assert length(Enum.to_list(day)) == 24
+      assert Enum.count(Enum.to_list(day)) == 24
       assert Enum.at(day, 0) == ~o"2025-07-04T00"
       assert Enum.at(day, 23) == ~o"2025-07-04T23"
     end
@@ -42,7 +42,7 @@ defmodule Tempo.IntervalUnitTest do
       {:ok, year} = Interval.new(from: from, to: to, unit: :month)
 
       assert Enum.count(year) == 13
-      assert length(Enum.to_list(year)) == 13
+      assert Enum.count(Enum.to_list(year)) == 13
     end
 
     test "a unit equal to the endpoint resolution normalises to nil" do
@@ -78,7 +78,7 @@ defmodule Tempo.IntervalUnitTest do
         )
 
       assert Enum.count(day) == 25
-      assert length(Enum.to_list(day)) == 25
+      assert Enum.count(Enum.to_list(day)) == 25
     end
 
     test "a zoned spring-forward day walked at :hour counts 23" do
@@ -90,7 +90,7 @@ defmodule Tempo.IntervalUnitTest do
         )
 
       assert Enum.count(day) == 23
-      assert length(Enum.to_list(day)) == 23
+      assert Enum.count(Enum.to_list(day)) == 23
     end
   end
 end

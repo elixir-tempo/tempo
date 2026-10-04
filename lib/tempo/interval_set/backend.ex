@@ -1,6 +1,6 @@
 defmodule Tempo.IntervalSet.Backend do
   @moduledoc """
-  The behaviour a `Tempo.IntervalSet` storage backend implements.
+  Behaviour for the storage backend of a `Tempo.IntervalSet`.
 
   An interval set's representation is pluggable: the set struct carries a
   `:backend` module and an opaque backend `state` (in its `:intervals`

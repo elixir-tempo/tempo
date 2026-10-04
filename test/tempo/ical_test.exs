@@ -61,7 +61,7 @@ defmodule Tempo.ICal.Test do
       """
 
       assert {:ok, set} = ICal.parse(ics)
-      assert length(set.intervals) == 1
+      assert IntervalSet.count(set) == 1
 
       [iv] = set.intervals
       assert iv.metadata.uid == "evt-1"
@@ -267,7 +267,7 @@ defmodule Tempo.ICal.Test do
       """
 
       {:ok, set} = ICal.parse(ics)
-      assert length(set.intervals) == 2
+      assert IntervalSet.count(set) == 2
       summaries = set.intervals |> Enum.map(& &1.metadata.summary) |> Enum.sort()
       assert summaries == ["Event A", "Event B"]
     end
@@ -390,7 +390,7 @@ defmodule Tempo.ICal.Test do
       """
 
       {:ok, set} = ICal.parse(ics)
-      assert length(set.intervals) == 3
+      assert IntervalSet.count(set) == 3
 
       # Each occurrence keeps its summary; days are 7 apart.
       days = set.intervals |> Enum.map(& &1.from.time[:day])
@@ -419,7 +419,7 @@ defmodule Tempo.ICal.Test do
       """
 
       {:ok, set} = ICal.parse(ics)
-      assert length(set.intervals) == 5
+      assert IntervalSet.count(set) == 5
       # All in June.
       assert Enum.all?(set.intervals, fn iv -> iv.from.time[:month] == 6 end)
     end
@@ -440,7 +440,7 @@ defmodule Tempo.ICal.Test do
       """
 
       {:ok, set} = ICal.parse(ics)
-      assert length(set.intervals) == 4
+      assert IntervalSet.count(set) == 4
 
       # 14-day spacing: Jun 1, Jun 15, Jun 29, Jul 13.
       days = set.intervals |> Enum.map(&{&1.from.time[:month], &1.from.time[:day]})
@@ -487,7 +487,7 @@ defmodule Tempo.ICal.Test do
       {:ok, set} = ICal.parse(ics, within: ~o"2022-06-01/2022-06-08")
       # 7 days in the window (Jun 1..Jun 7 inclusive; Jun 8 is
       # excluded by the window's half-open end).
-      assert length(set.intervals) == 7
+      assert IntervalSet.count(set) == 7
     end
 
     test "BYDAY=1MO now materialises via Phase C (no fallback)" do
@@ -512,7 +512,7 @@ defmodule Tempo.ICal.Test do
       """
 
       {:ok, set} = ICal.parse(ics)
-      assert length(set.intervals) == 3
+      assert IntervalSet.count(set) == 3
 
       # No fallback metadata — all fully materialised.
       assert Enum.all?(set.intervals, fn iv ->
@@ -548,7 +548,7 @@ defmodule Tempo.ICal.Test do
       """
 
       {:ok, set} = ICal.parse(ics)
-      assert length(set.intervals) == 1
+      assert IntervalSet.count(set) == 1
     end
 
     test "malformed ics returns an empty result without raising" do
@@ -589,7 +589,7 @@ defmodule Tempo.ICal.Test do
                Tempo.intersection(events, ~o"2022-06-15T09/2022-06-15T17")
 
       {:ok, overlap} = Tempo.intersection(events, work_hours)
-      assert length(overlap.intervals) == 1
+      assert IntervalSet.count(overlap) == 1
 
       [iv] = overlap.intervals
       # Event metadata survives the intersection.
@@ -621,7 +621,7 @@ defmodule Tempo.ICal.Test do
       # the pre-break and post-break portions. Both carry the
       # source event's metadata.
       {:ok, remaining} = Tempo.difference(events, break_time)
-      assert length(remaining.intervals) == 2
+      assert IntervalSet.count(remaining) == 2
 
       assert Enum.all?(remaining.intervals, fn iv ->
                iv.metadata.summary == "Long session"
@@ -715,7 +715,7 @@ defmodule Tempo.ICal.Test do
       {:ok, set} = ICal.parse_file(path)
       # The fixture has FREQ=DAILY;COUNT=3 so expansion gives us
       # three day-long occurrences.
-      assert length(set.intervals) == 3
+      assert IntervalSet.count(set) == 3
     end
   end
 

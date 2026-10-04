@@ -833,10 +833,12 @@ defmodule Tempo.Matrix.Checks do
 
   # Up to three spans as they are placed, for a failure's detail.
   defp spans(%{line: line, spans: spans}) do
-    shown = spans |> Enum.take(3) |> Enum.map_join(", ", &span(line, &1))
-    more = if length(spans) > 3, do: " and #{length(spans) - 3} more", else: ""
-    "[#{shown}]#{more}"
+    {shown, rest} = Enum.split(spans, 3)
+    "[#{Enum.map_join(shown, ", ", &span(line, &1))}]#{and_more(rest)}"
   end
+
+  defp and_more([]), do: ""
+  defp and_more(rest), do: " and #{length(rest)} more"
 
   defp span(line, {from, to}) when line in [:time, :floating],
     do: "#{moment(from)}/#{moment(to)}"

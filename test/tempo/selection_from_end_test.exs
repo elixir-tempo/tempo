@@ -32,7 +32,7 @@ defmodule Tempo.SelectionFromEndTest do
     test "of days is the days to the month's last" do
       assert starts("2026Y6ML{28..-1}DN") == ~w(2026Y6M28D 2026Y6M29D 2026Y6M30D)
       assert starts("2026Y6ML{1..-1}DN") == starts("2026Y6ML{1..30}DN")
-      assert length(starts("2026Y6ML{1..-1}DN")) == 30
+      assert Enum.count(starts("2026Y6ML{1..-1}DN")) == 30
     end
 
     test "keeps its step" do
@@ -48,7 +48,7 @@ defmodule Tempo.SelectionFromEndTest do
 
     test "of weekdays is the weekdays to the week's last" do
       assert starts("2026Y6ML{6..-1}KN") == starts("2026Y6ML{6,7}KN")
-      assert length(starts("2026Y6ML{6..-1}KN")) == 8
+      assert Enum.count(starts("2026Y6ML{6..-1}KN")) == 8
     end
 
     test "of hours is the hours to the day's last" do
@@ -63,7 +63,7 @@ defmodule Tempo.SelectionFromEndTest do
     end
 
     test "far longer than its period costs no more than the period" do
-      assert length(starts("2026Y6ML{1..999999999}DN")) == 30
+      assert Enum.count(starts("2026Y6ML{1..999999999}DN")) == 30
     end
   end
 

@@ -58,7 +58,7 @@ defmodule Tempo.Iso8601.LeapSecond.Test do
 
   describe "Tempo.LeapSeconds — data remains available" do
     test "dates/0 still lists the 27 IERS insertions" do
-      assert length(LeapSeconds.dates()) == 27
+      assert Enum.count(LeapSeconds.dates()) == 27
       assert {2016, 12, 31} in LeapSeconds.dates()
       assert {1972, 6, 30} in LeapSeconds.dates()
     end

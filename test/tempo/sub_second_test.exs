@@ -192,12 +192,12 @@ defmodule Tempo.SubSecondTest do
 
     test "union keeps both members" do
       {:ok, union} = Tempo.union(work_day(), sub_second_shift())
-      assert length(IntervalSet.members(union)) == 2
+      assert IntervalSet.count(union) == 2
     end
 
     test "member-preserving filters accept mixed sub-second operands" do
       {:ok, overlapping} = Tempo.members_overlapping(work_day(), sub_second_shift())
-      assert length(IntervalSet.members(overlapping)) == 1
+      assert IntervalSet.count(overlapping) == 1
 
       {:ok, outside} = Tempo.members_outside(work_day(), sub_second_shift())
       assert IntervalSet.members(outside) == []
@@ -316,7 +316,7 @@ defmodule Tempo.SubSecondTest do
       # [.50, .51, …, .59]. Each step in resolution is +1 digit of
       # precision, matching the year→month, day→hour pattern.
       values = Enum.to_list(~o"2026Y6M15DT10H30M45.5S")
-      assert length(values) == 10
+      assert Enum.count(values) == 10
       assert Tempo.to_iso8601!(hd(values)) == "2026Y6M15DT10H30M45.50S"
       assert Tempo.to_iso8601!(List.last(values)) == "2026Y6M15DT10H30M45.59S"
     end

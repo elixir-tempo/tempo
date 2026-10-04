@@ -178,7 +178,7 @@ defmodule Tempo.OneReadingTest do
       second = Tempo.from_iso8601!("2026-10-25T02:30+01:00[Europe/Paris]")
 
       assert Enum.count(first) == 60
-      assert length(Enum.to_list(first)) == 60
+      assert Enum.count(Enum.to_list(first)) == 60
       assert first |> Enum.to_list() |> Enum.map(& &1.shift) |> Enum.uniq() == [[hour: 2]]
       assert second |> Enum.to_list() |> Enum.map(& &1.shift) |> Enum.uniq() == [[hour: 1]]
     end
@@ -187,7 +187,7 @@ defmodule Tempo.OneReadingTest do
       day = Tempo.from_iso8601!("2026-10-25[Europe/Paris]")
 
       assert Enum.count(day) == 25
-      assert length(Enum.to_list(day)) == 25
+      assert Enum.count(Enum.to_list(day)) == 25
     end
   end
 

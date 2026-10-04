@@ -462,7 +462,7 @@ defmodule Tempo.Duration do
 
   defp mixed_signs?(components) do
     signs = components |> Enum.map(&component_sign/1) |> Enum.reject(&(&1 == 0)) |> Enum.uniq()
-    length(signs) > 1
+    match?([_, _ | _], signs)
   end
 
   defp time_of_day_microseconds(components) do

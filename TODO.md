@@ -124,6 +124,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Done
 
+* [x] **The `ex_slop` Credo checks pass** — the 162 issues the checks added in `13a5967` raised are cleared with `.credo.exs` as it is: 70 tests that read `set.intervals` count the set with `Tempo.IntervalSet.count/1`, a list of one to four is matched, a longer one and a walk are counted with `Enum.count/1`, and in `lib/` six comparisons of a length, a comment and a moduledoc line are rewritten. 2026-10-05.
+
 * [x] **What is known to answer wrongly is a named error in 2.0** — `Tempo.NotBuilt` holds each area as one function, called where a value is read and where an answer would leave the library, and each refusal is a `Tempo.ConversionError` whose reason is `:not_built`, naming what was asked for and the calendar: a selection that counts days within a month or a year, a season and a step by days from several months or years where the year does not begin with its first month, and a month of a `Calendrical.Reform.England` year before 1751. [guides/operation-matrix.md](guides/operation-matrix.md) lists them. 2026-10-05.
 
 * [x] **A month selected with a day is the month the date names** — in a year that does not begin with its first month `1750YL3M25DN` is 25 March, as the value `1750Y3M25D` and `Tempo.select(year, ~o"3M25D")` are, and a month selected alone (`L3MN`) is the month the calendar counts: decided as it is read, with nothing to change. 2026-10-05.

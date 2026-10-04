@@ -48,7 +48,7 @@ defmodule Tempo.RRule.SelectionCoverageTest do
   describe "BYWEEKNO" do
     test "EXPAND (YEARLY) yields the seven days of the listed ISO week" do
       week10 = froms(~o"2022-01-01", [week: [10]], :year)
-      assert length(week10) == 7
+      assert Enum.count(week10) == 7
       assert hd(week10) == ~o"2022-03-07"
     end
 

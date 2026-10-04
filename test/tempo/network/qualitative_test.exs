@@ -50,7 +50,7 @@ defmodule Tempo.Network.QualitativeTest do
 
       qualitative = Qualitative.from_network(network)
 
-      assert length(QNet.between(qualitative, :x, :y)) == 13
+      assert Enum.count(QNet.between(qualitative, :x, :y)) == 13
     end
   end
 

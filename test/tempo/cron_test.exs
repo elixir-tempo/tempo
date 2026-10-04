@@ -34,14 +34,14 @@ defmodule Tempo.CronTest do
     test "a step that does not divide the hour starts again each hour" do
       minutes = firings("*/7 * * * *", ~o"2026-01-05", ~o"2026-01-05T09/2026-01-05T11")
 
-      assert length(minutes) == 18
+      assert Enum.count(minutes) == 18
       assert Enum.slice(minutes, 8, 2) == ["2026Y1M5DT9H56M/T57M", "2026Y1M5DT10H0M/T1M"]
     end
 
     test "an hour step fires every minute of the hours it names" do
       minutes = firings("* */2 * * *", ~o"2026-01-05", ~o"2026-01-05T00/2026-01-05T04")
 
-      assert length(minutes) == 120
+      assert Enum.count(minutes) == 120
       assert Enum.at(minutes, 60) == "2026Y1M5DT2H0M/T1M"
     end
 
@@ -50,7 +50,7 @@ defmodule Tempo.CronTest do
       assert odd_days == Enum.to_list(1..31//2)
 
       midnights = firings("0 0 */2 * *", ~o"2026-01-01", ~o"2026-01")
-      assert length(midnights) == 16
+      assert Enum.count(midnights) == 16
       assert Enum.take(midnights, 2) == ["2026Y1M1DT0H0M/T1M", "2026Y1M3DT0H0M/T1M"]
     end
 
@@ -62,14 +62,14 @@ defmodule Tempo.CronTest do
                "2026Y1M5DT10H30M/T31M"
              ]
 
-      assert length(firings("0 */2 * * *", ~o"2026-01-05", ~o"2026-01-05")) == 12
+      assert Enum.count(firings("0 */2 * * *", ~o"2026-01-05", ~o"2026-01-05")) == 12
     end
 
     test "6-field `*/10 * * * * *` fires at 0, 10, … 50 seconds past each minute" do
       assert {:ok, %Rule{freq: :minute, bysecond: [0, 10, 20, 30, 40, 50]}} =
                Cron.to_rule("*/10 * * * * *")
 
-      assert length(firings("*/10 * * * * *", ~o"2026-01-05T09:00:00", ~o"2026-01-05T09:00")) ==
+      assert Enum.count(firings("*/10 * * * * *", ~o"2026-01-05T09:00:00", ~o"2026-01-05T09:00")) ==
                6
     end
   end
@@ -78,8 +78,8 @@ defmodule Tempo.CronTest do
     # A `*` finer than the rule's frequency is every value, not the start's,
     # so a five-field expression fires on every minute it names.
     test "every hour of a Monday, and of the 5th" do
-      assert length(firings("0 * * * 1", ~o"2026-01-05", ~o"2026-01-05/2026-01-12")) == 24
-      assert length(firings("0 * 5 * *", ~o"2026-01-01", ~o"2026-01")) == 24
+      assert Enum.count(firings("0 * * * 1", ~o"2026-01-05", ~o"2026-01-05/2026-01-12")) == 24
+      assert Enum.count(firings("0 * 5 * *", ~o"2026-01-01", ~o"2026-01")) == 24
     end
 
     test "every day of June, and every minute of nine o'clock" do
@@ -470,7 +470,7 @@ defmodule Tempo.CronTest do
 
       assert Enum.sort(dates) == expected
       # Sanity: 52 Fridays + 12 thirteenths − 3 Friday-the-13ths in 2026.
-      assert length(dates) == 61
+      assert Enum.count(dates) == 61
     end
 
     test "month still AND-composes with the day union" do

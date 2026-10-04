@@ -109,7 +109,7 @@ defmodule Tempo.GroupNegativeComponentTest do
       enumerated = iso |> Tempo.from_iso8601!() |> Enum.map(&(&1 |> Tempo.to_date() |> elem(1)))
 
       assert expand_dates(iso) == enumerated
-      assert length(enumerated) == 730
+      assert Enum.count(enumerated) == 730
     end
   end
 

@@ -698,7 +698,7 @@ defmodule Tempo.Explain do
   defp numbered(word, values),
     do: "#{noun(word, values)} #{component_phrase(values, &Integer.to_string/1)}"
 
-  defp noun(word, values), do: if(length(values_of(values)) == 1, do: word, else: word <> "s")
+  defp noun(word, values), do: if(match?([_one], values_of(values)), do: word, else: word <> "s")
 
   # A unit's values by name: one alone, a run of more than two as its ends,
   # and otherwise each, joined with "and". A group is one span, from its first
@@ -2009,10 +2009,12 @@ defmodule Tempo.Explain do
     do: for(value <- values, rest <- finer_times(finer), do: [value | rest])
 
   # A handful of times are each named, and more are counted.
-  defp times_phrase(times, _noun) when length(times) <= 12, do: or_join(times)
+  defp times_phrase(times, noun), do: times_phrase(times, noun, length(times))
 
-  defp times_phrase(times, noun),
-    do: "#{length(times)} #{noun} from #{hd(times)} to #{List.last(times)}"
+  defp times_phrase(times, _noun, count) when count <= 12, do: or_join(times)
+
+  defp times_phrase(times, noun, count),
+    do: "#{count} #{noun} from #{hd(times)} to #{List.last(times)}"
 
   defp number_list(numbers), do: numbers |> Enum.map(&Integer.to_string/1) |> or_join()
 
@@ -2048,7 +2050,7 @@ defmodule Tempo.Explain do
       [lo | _] = list ->
         hi = List.last(list)
 
-        if length(list) > 2 and hi - lo + 1 == length(list),
+        if match?([_, _, _ | _], list) and hi - lo + 1 == length(list),
           do: ["the #{ordinal(lo)}–#{ordinal(hi)}"],
           else: ["the " <> and_join(Enum.map(list, &ordinal/1))]
     end

@@ -217,7 +217,7 @@ defmodule Tempo.Network.SolverTest do
         |> Network.add_period(:b, duration: {:at_least, 1})
         |> Solver.relation(:a, :b)
 
-      assert length(relations) == 13
+      assert Enum.count(relations) == 13
     end
 
     test "a sequence link entails :meets" do

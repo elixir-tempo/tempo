@@ -41,7 +41,7 @@ defmodule Tempo.EventTest do
     end
 
     test "known/0 lists Easter (Western + Orthodox), the astronomical events, and the 24 solar terms" do
-      assert length(Event.known()) == 31
+      assert Enum.count(Event.known()) == 31
       assert "orthodox-easter" in Event.known()
       assert "new-moon" in Event.known()
       assert Event.solar_term?("qingming")

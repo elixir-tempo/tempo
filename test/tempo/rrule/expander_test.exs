@@ -92,7 +92,7 @@ defmodule Tempo.RRule.ExpanderTest do
       rule = %Rule{freq: :day, count: 5}
       {:ok, occurrences} = Expander.expand(rule, ~o"2022-06-01")
 
-      assert length(occurrences) == 5
+      assert Enum.count(occurrences) == 5
       assert Enum.map(occurrences, & &1.from.time[:day]) == [1, 2, 3, 4, 5]
     end
 
@@ -101,7 +101,7 @@ defmodule Tempo.RRule.ExpanderTest do
       {:ok, occurrences} = Expander.expand(rule, ~o"2022-06-01")
 
       # Jun 1, 8, 15, 22, 29 — all before Jul 1.
-      assert length(occurrences) == 5
+      assert Enum.count(occurrences) == 5
       assert Enum.map(occurrences, & &1.from.time[:day]) == [1, 8, 15, 22, 29]
     end
 
@@ -111,7 +111,7 @@ defmodule Tempo.RRule.ExpanderTest do
       {:ok, occurrences} =
         Expander.expand(rule, ~o"2022-06-01", within: ~o"2022-06-01/2022-06-08")
 
-      assert length(occurrences) == 7
+      assert Enum.count(occurrences) == 7
     end
 
     test "unbounded rule with no :within window errors cleanly" do
@@ -145,7 +145,7 @@ defmodule Tempo.RRule.ExpanderTest do
       rule = %Rule{freq: :day, count: 5}
       {:ok, occurrences} = Expander.expand(rule, ~o"2022-06-01")
 
-      assert length(occurrences) == 5
+      assert Enum.count(occurrences) == 5
     end
   end
 

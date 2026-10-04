@@ -251,7 +251,7 @@ defmodule Tempo.Math.Test do
       result = Math.add(~o"199X-06-XX", ~o"P1Y")
 
       assert %Tempo.IntervalSet{intervals: intervals} = result
-      assert length(intervals) == 10
+      assert Enum.count(intervals) == 10
       assert inspect(hd(intervals)) =~ "1991Y6M1D"
       assert inspect(List.last(intervals)) =~ "2000Y6M1D"
     end

@@ -47,7 +47,7 @@ defmodule Tempo.OpenWindowTest do
       {:ok, weeks} = Tempo.to_interval_set(~o"R/2026-01-05/P1W", within: ~o"2026-01-01/..")
       mondays = starts(weeks, 12)
 
-      assert length(Enum.uniq(mondays)) == 12
+      assert Enum.count(Enum.uniq(mondays)) == 12
       assert mondays == Enum.sort(mondays, Tempo)
     end
 

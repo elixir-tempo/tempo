@@ -403,7 +403,7 @@ defmodule Tempo.Network.Solver do
 
         cond do
           relation not in feasible -> :impossible
-          length(feasible) == 1 -> :certain
+          feasible == [relation] -> :certain
           true -> :possible
         end
     end
