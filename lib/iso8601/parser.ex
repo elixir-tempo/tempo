@@ -710,13 +710,25 @@ defmodule Tempo.Iso8601.Parser do
   # run on into 10. A list with a negative member is left in the order it is
   # written (`sort_unless_signed/1`), so nothing here takes its members to be
   # in ascending order: one is held by another only when both its ends are.
-  def consolidate_ranges([]), do: []
-  def consolidate_ranges([member]), do: [member]
+  #
+  # One pass joins each member with the one after it, so a member written
+  # out of order may leave two that run on from one another side by side
+  # (`{0,2,1..7,-1}` is `0` and `1..7` after one pass): the passes are
+  # repeated until one joins nothing.
+  def consolidate_ranges(members) do
+    case join_neighbours(members) do
+      ^members -> members
+      joined -> consolidate_ranges(joined)
+    end
+  end
 
-  def consolidate_ranges([first, second | rest]) do
+  defp join_neighbours([]), do: []
+  defp join_neighbours([member]), do: [member]
+
+  defp join_neighbours([first, second | rest]) do
     case joined(first, second) do
-      {:ok, one} -> consolidate_ranges([one | rest])
-      :apart -> [first | consolidate_ranges([second | rest])]
+      {:ok, one} -> join_neighbours([one | rest])
+      :apart -> [first | join_neighbours([second | rest])]
     end
   end
 

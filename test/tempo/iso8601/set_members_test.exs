@@ -51,6 +51,13 @@ defmodule Tempo.Iso8601.SetMembersTest do
       end
     end
 
+    # One pass left `0` beside `1..7`, which run on from one another, where
+    # a member between them was written out of order.
+    test "joins members a member written out of order had kept apart" do
+      assert Parser.consolidate_ranges([0, 2, 1..7]) == [0..7]
+      assert Parser.consolidate_ranges([0, 2, 1..7, -1]) == [0..7, -1]
+    end
+
     test "joins neighbours that count from one end" do
       assert Parser.consolidate_ranges([1, 2, 3]) == [1..3]
       assert Parser.consolidate_ranges([-2, -1]) == [-2..-1]

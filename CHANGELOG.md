@@ -269,6 +269,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A set's members written out of order beside a count from the end are joined as far as they run on: `{0,2,1..7,-1}` is `{0..7,-1}`, where one pass of the joining left `0` beside `1..7`.
+
 * `Tempo.intersection/3` gives one part for each pair of members that overlap, as its documentation says, where an operand whose members overlapped each other lost pairs: a member intersected with two that both cover it gave one part, and `metadata: {:merge, fun}` never saw the second. The time covered is unchanged, and `Tempo.IntervalSet.coalesce/1` merges parts that overlap.
 
 * A span with no year that runs through its cycle's end is one member to the set operations: `Tempo.union(~o"T22/T02", ~o"T03/T04")` has the two members it was given, where it had three, `Tempo.members_outside/3` and `Tempo.members_overlapping/3` keep or drop it whole, where a part of it was returned, and `Tempo.difference/3` and `Tempo.intersection/3` cut it only where the other operand does. The whole day less two hours is one span round midnight (`T12H/T10H`), where it was two.
