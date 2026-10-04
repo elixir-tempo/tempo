@@ -24,8 +24,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **A Gregorian week's days are calendar dates from the walk and a shift** — `Enum.to_list(~o"2026-W25")` yields `2026Y6M15D` to `2026Y6M21D` and `Tempo.shift(~o"2026-W25", day: 1)` is `2026Y6M16D`, where both give a week and a day of it (`2026Y25W2K`), which the parser reads as the calendar date. A calendar of weeks keeps its week dates. Decided 2026-10-04, following the decision of 2026-10-03 for a value built or read.
 
-* [ ] **A value with no year is placed only on a year of its own calendar** — `Tempo.on(~o"6M15D", hebrew_year)` reads the 6 and the 15 in the Hebrew calendar (`5786Y6M15D`, not June), and `~o"6M-1D"`, counted as June's 30th, is an `InvalidDateError` there. Decided 2026-10-04: placing across calendars is an error naming both (the value is read in the year's calendar to place it), and a count from the end is resolved at once wherever its own calendar fixes it.
-
 * [ ] **`extend/2` of a group writes what the group walks** — `Tempo.extend(~o"2026Y2G3MU")` is `{:ok, ~o"2026Y{4..6}M"}`, the months the group yields, where it writes `2026Y2G3MU{1..-1}D`, a range of days counted from the group's start that nothing reads (`:counted_in_group`). Groups of days and of hours each need their writing. Decided 2026-10-04.
 
 * [ ] **An interval with no end refuses what needs its end, as a lazy set does** — `Enum.at/2`, `Enum.empty?/1`, `Enum.random/1` and `Enum.slice/2` of `~o"2026Y/.."` raise a `Tempo.UnboundedSetError`, where `Enum.at(_, -1)` and `Enum.random/1` walk for ever and the first two answer; `Enum.take/2` and streams answer. Decided 2026-10-04: an answer that needs an unbounded walk refuses and never hangs.
@@ -133,6 +131,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A value is placed only on a value of its own calendar** — `Tempo.at/2` and `on/2` return a `ConversionError` naming both calendars where two values that hold date units are of different ones (`~o"6M15D"` or `~o"25W2K"` on a Hebrew or an ISO week year), where the numbers were read in the other's calendar; a time of day is placed on any. `Tempo.select/2` still reads a selector's numbers in the span's calendar, a question for the user. 2026-10-04.
 
 * [x] **A week with no year has no week after it and no span** — the stepper asks `Tempo.UnitValues` for the week after a week as for every other unit, and with no year it has no answer, where it counted to a literal 52 in every calendar; so `25W` and the last day of a week (`25W7K`) have no span, which weeks 1 to 51 had. A step back needs no count and stays. A count of weeks with no year in Calendrical (a `weeks_in_year/0`) would let a week follow the rule of months and days. 2026-10-04.
 

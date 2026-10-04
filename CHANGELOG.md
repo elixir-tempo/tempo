@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* `Tempo.at/2` and `Tempo.on/2` place a value that holds a month, a week or a day only on a value of its own calendar: `Tempo.on(~o"6M15D", hebrew_year)` returns a `Tempo.ConversionError` naming both calendars, where it read the 6 and the 15 in the Hebrew calendar. A value read in the year's calendar is placed as before (`Tempo.from_iso8601("6M-1D", Calendrical.Hebrew)` on 5786 is its 29th), and a time of day is placed on a value of any calendar.
+
 * A week with no year has no week after it and no span: `Tempo.shift(~o"25W", week: 1)` and `Tempo.to_interval(~o"25W")` return a `Tempo.UnanchoredError`, where a week below 52 stepped to the next in every calendar, a count that holds for a Gregorian year alone. It is still read, walked by its days and stepped back, and it is checked and stepped by its year once it has one.
 
 * With no year, an unspecified unit whose count depends on the year is not listed: the walk of `~o"2MX*D"` raises a `Tempo.UnanchoredError`, as the walk of `~o"2M"`, `~o"2MXXD"` and `~o"2M{1..-1}D"` do, where it listed the 29 days a February can have. Its span is still the month, and a unit that takes the same values every year is still listed (`~o"6MX*D"`, `~o"X*M"`).

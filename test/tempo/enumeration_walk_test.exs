@@ -203,10 +203,16 @@ defmodule Tempo.EnumerationWalk.Test do
                [~o"2026-02-28", ~o"2027-02-28", ~o"2028-02-29"]
     end
 
-    test "is counted in the calendar of the year it is placed on" do
+    # A value is placed on a year of its own calendar (decided 2026-10-04):
+    # the Gregorian `2M-1D` was read in the Hebrew year's calendar.
+    test "is counted in the year it is placed on, a year of its own calendar" do
       hebrew_year = Tempo.from_iso8601!("5787Y", Hebrew)
+      last_of_the_second_month = Tempo.from_iso8601!("2M-1D", Hebrew)
 
-      assert Tempo.on(~o"2M-1D", hebrew_year) == Tempo.from_iso8601("5787Y2M30D", Hebrew)
+      assert Tempo.on(last_of_the_second_month, hebrew_year) ==
+               Tempo.from_iso8601("5787Y2M30D", Hebrew)
+
+      assert {:error, %Tempo.ConversionError{}} = Tempo.on(~o"2M-1D", hebrew_year)
     end
 
     test "has to be a day the month can have" do

@@ -673,6 +673,44 @@ defmodule Tempo.Operations.Test do
     end
   end
 
+  # A month, a week and a day are numbered by their calendar, so a value that
+  # holds one is placed only on a value of its own calendar (decided
+  # 2026-10-04): a Gregorian `6M15D` on a Hebrew year was read as that year's
+  # sixth month.
+  describe "on/2 and at/2 with values of two calendars" do
+    setup do
+      hebrew = fn text -> Tempo.from_iso8601!(text, Calendrical.Hebrew) end
+      {:ok, hebrew: hebrew}
+    end
+
+    test "refuse a date unit read in one calendar placed on another's", %{hebrew: hebrew} do
+      for {value, other} <- [
+            {~o"6M15D", hebrew.("5786Y")},
+            {~o"6M-1D", hebrew.("5786Y")},
+            {hebrew.("6M15D"), ~o"2026Y"},
+            {~o"3M", hebrew.("2D")},
+            {~o"25W", hebrew.("5786Y")},
+            {~o"3K", hebrew.("5786Y6M")},
+            {~o"4M2D/4M16D", hebrew.("5786Y")}
+          ] do
+        assert {:error, %Tempo.ConversionError{} = error} = Tempo.on(value, other)
+        assert Exception.message(error) =~ "numbered by their calendar"
+        assert {:error, %Tempo.ConversionError{}} = Tempo.at(other, value)
+      end
+    end
+
+    test "place a value read in the year's calendar", %{hebrew: hebrew} do
+      assert Tempo.on(hebrew.("6M-1D"), hebrew.("5786Y")) == {:ok, hebrew.("5786Y6M29D")}
+      assert Tempo.on(hebrew.("6M15D"), hebrew.("5786Y")) == {:ok, hebrew.("5786Y6M15D")}
+    end
+
+    test "place a time of day, which no calendar numbers, on a value of any", %{hebrew: hebrew} do
+      assert Tempo.at(hebrew.("5786Y6M15D"), ~o"T17") == {:ok, hebrew.("5786Y6M15DT17H")}
+      assert {:ok, nine_to_five} = Tempo.on(~o"T09/T17", hebrew.("5786Y6M15D"))
+      assert Interval.from(nine_to_five) == hebrew.("5786Y6M15DT9H")
+    end
+  end
+
   describe "on/2 and at/2 with an interval or a selection" do
     test "an interval is placed endpoint by endpoint" do
       assert Tempo.on(~o"4M2D/4M16D", ~o"2027") == {:ok, ~o"2027Y4M2D/16D"}

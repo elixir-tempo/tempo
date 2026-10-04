@@ -152,7 +152,13 @@ defmodule Tempo.WeekCalendarTest do
   describe "a value placed or extended in its own calendar" do
     test "a week date keeps its shape when a time or a week is placed in it" do
       assert Tempo.at(~o"2026-W25-2"W, ~o"T10") == {:ok, ~o"2026-W25-2T10"W}
-      assert Tempo.at(~o"2026"W, ~o"25W2K") == {:ok, ~o"2026-W25-2"W}
+      assert Tempo.at(~o"2026"W, ~o"25W2K"W) == {:ok, ~o"2026-W25-2"W}
+
+      # A week and a day read in the Gregorian calendar are not those of a
+      # calendar of weeks, and are placed on no year of one (decided
+      # 2026-10-04).
+      assert {:error, %ConversionError{target: Calendrical.Gregorian}} =
+               Tempo.at(~o"2026"W, ~o"25W2K")
 
       {:ok, tuesdays} = Tempo.select(~o"2026-W25"W, ~o"2K")
       assert [%{from: from}] = IntervalSet.members(tuesdays)

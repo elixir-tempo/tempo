@@ -1318,10 +1318,10 @@ defmodule Tempo.Validation do
 
   # A month of no year, no further from either end than the most months a
   # year of its calendar has. One counted from the end is kept as written
-  # even where every year has as many months: a value with no year is placed
-  # on one later, and the year it is placed on may be another calendar's
-  # (`~o"-1M"` selected in a Hebrew year is its thirteenth month in a leap
-  # year, where December read as a number would be its twelfth).
+  # even where every year has as many months: a value with no year may be
+  # selected in a year of another calendar (`~o"-1M"` selected in a Hebrew
+  # year is its thirteenth month in a leap year, where December read as a
+  # number would be its twelfth).
   defp bounded_months({:month, months} = component, calendar) do
     case max_months_in_year(calendar) do
       {:ok, max} ->

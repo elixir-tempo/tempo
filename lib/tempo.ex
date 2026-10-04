@@ -3125,8 +3125,9 @@ defmodule Tempo do
       target: calendar,
       reason:
         "#{inspect(calendar)} is a calendar of weeks, with no months, so #{inspect(from)} " <>
-          "cannot be placed on #{inspect(base)}; place a week (W) and a day of the week (K), " <>
-          "or write the whole date, which is read as the Gregorian day and converted."
+          "cannot be placed on #{inspect(base)}; place a week (W) and a day of the week (K) " <>
+          "read in that calendar, or write the whole date, which is read as the Gregorian " <>
+          "day and converted."
     )
   end
 
@@ -3152,10 +3153,14 @@ defmodule Tempo do
 
   A value with a year is checked against its calendar, so
   `~o"2026-02" |> Tempo.on(~o"29D")` is an error: 2026 is not a leap
-  year. A value of a calendar of weeks, such as `Calendrical.ISOWeek`,
-  takes a week and a day of the week; a month, a day of one or a day
-  of the year placed on it is an error, since its year is the
-  calendar's own and not the Gregorian year they belong to.
+  year. A month, a week and a day are numbered by their calendar, so
+  two values that hold them are of one calendar: a Gregorian
+  `~o"6M15D"` placed on a Hebrew year is an error and not the fifteenth
+  of that year's sixth month, which is written by reading it in that
+  calendar (`Tempo.from_iso8601("6M15D", Calendrical.Hebrew)`). A time
+  of day is placed on a value of any calendar. A value of a calendar
+  of weeks, such as `Calendrical.ISOWeek`, takes a week and a day of
+  the week of that calendar.
 
   An interval is placed endpoint by endpoint, so nine to five on 15
   June, or 2–15 April in 2027, is one call; an open end, or one its
@@ -3172,9 +3177,10 @@ defmodule Tempo do
   * `{:ok, tempo}` with the one value placed on the other, or
     `{:ok, interval}` with an interval's endpoints placed.
 
-  * `{:error, reason}` when both values have a year, when the result is
-    not a date in its calendar or an interval whose start is before its
-    end, or when either argument is not a Tempo value or interval.
+  * `{:error, reason}` when both values have a year, when the two hold
+    date units of different calendars, when the result is not a date in
+    its calendar or an interval whose start is before its end, or when
+    either argument is not a Tempo value or interval.
 
   ### Examples
 
@@ -3200,7 +3206,8 @@ defmodule Tempo do
           {:ok, t() | Interval.t()} | {:error, error_reason()}
   def at(%__MODULE__{} = value, %__MODULE__{} = other) do
     with :ok <- one_value(value),
-         :ok <- one_value(other) do
+         :ok <- one_value(other),
+         :ok <- one_calendar(value, other) do
       value = without_unspecified_year(value)
       other = without_unspecified_year(other)
       place(value, other, anchored?(value), anchored?(other))
@@ -3217,6 +3224,51 @@ defmodule Tempo do
          "#{inspect(value)} on #{inspect(other)}."
      )}
   end
+
+  # A month, a week and a day are numbered by their calendar: the sixth month
+  # of a Hebrew year is not June. So a value that holds a date unit is placed
+  # only on a value of its own calendar, and its numbers are never read in
+  # the other's. A time of day is the same in every calendar and is placed on
+  # any.
+  defp one_calendar(%__MODULE__{} = value, %__MODULE__{} = other) do
+    if dated?(value) and dated?(other) and placing_calendar(value) != placing_calendar(other),
+      do: {:error, two_calendars_error(value, other)},
+      else: :ok
+  end
+
+  defp dated?(%__MODULE__{time: time}) when is_list(time),
+    do: Enum.any?(time, &(elem(&1, 0) not in [:hour, :minute, :second, :microsecond]))
+
+  defp dated?(%__MODULE__{}), do: false
+
+  defp placing_calendar(%__MODULE__{calendar: Calendar.ISO}), do: Calendrical.Gregorian
+  defp placing_calendar(%__MODULE__{} = value), do: calendar_of(value)
+
+  # A month or a day placed on a value of a calendar of weeks keeps the error
+  # that says what such a calendar takes.
+  defp two_calendars_error(value, other) do
+    cond do
+      by_month_on_weeks?(value, other) ->
+        placed_by_month_error(other, value, placing_calendar(other))
+
+      by_month_on_weeks?(other, value) ->
+        placed_by_month_error(value, other, placing_calendar(value))
+
+      true ->
+        ConversionError.exception(
+          value: value,
+          target: placing_calendar(other),
+          reason:
+            "#{inspect(value)} is a value of #{inspect(placing_calendar(value))} and " <>
+              "#{inspect(other)} one of #{inspect(placing_calendar(other))}, and a month, a " <>
+              "week and a day are numbered by their calendar: read both in one calendar to " <>
+              "place one on the other."
+        )
+    end
+  end
+
+  defp by_month_on_weeks?(%__MODULE__{time: time}, %__MODULE__{} = base),
+    do: Validation.written_in_another_calendar?(time, placing_calendar(base))
 
   # An interval is placed endpoint by endpoint; an open end, or one its
   # duration gives, has nothing to place.
