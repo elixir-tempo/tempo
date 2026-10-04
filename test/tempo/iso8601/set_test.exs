@@ -126,4 +126,46 @@ defmodule Tempo.Parser.Set.Test do
              type: :one
            }
   end
+
+  # A set's members are separated by commas, so within one a comma is never
+  # a decimal sign. Read as one, `2023,2020` was a number, and the set one
+  # interval from part way through 2023.
+  describe "a comma between a set's members" do
+    test "is not a decimal sign before an interval" do
+      assert Tempo.from_iso8601("{2023,2020/2021}") == {:ok, ~o"{2023Y,2020Y/2021Y}"}
+      assert Tempo.from_iso8601("[2020,2021/2022]") == {:ok, ~o"[2020Y,2021Y/2022Y]"}
+      assert Tempo.from_iso8601("{2020-06,2021/2022}") == {:ok, ~o"{2020Y6M,2021Y/2022Y}"}
+
+      assert Tempo.from_iso8601("{1985,1990/1995,2000}") ==
+               {:ok, ~o"{1985Y,1990Y/1995Y,2000Y}"}
+    end
+
+    test "separates intervals written without designators" do
+      assert Tempo.from_iso8601("{2020/2021,2023/2024}") ==
+               Tempo.from_iso8601("{2020Y/2021Y,2023Y/2024Y}")
+
+      assert Tempo.from_iso8601("[2020/2021,2023/2024]") ==
+               Tempo.from_iso8601("[2020Y/2021Y,2023Y/2024Y]")
+
+      assert {:ok, %Tempo.Set{set: [_week, %Tempo.Interval{}]}} =
+               Tempo.from_iso8601("{2020W05,2021W05/2021W07}")
+
+      assert {:ok, %Tempo.Set{set: [%Tempo.Range{}, %Tempo.Interval{}]}} =
+               Tempo.from_iso8601("{2020..2022,2025/2026}")
+    end
+
+    test "separates the years of a recurrence's domain" do
+      assert Tempo.from_iso8601("R/{2020,2022/2024}/P1Y") ==
+               Tempo.from_iso8601("R/{2020Y,2022Y/2024Y}/P1Y")
+    end
+
+    test "is a decimal sign outside a set, and never inside one" do
+      assert Tempo.from_iso8601("PT1,5H") == Tempo.from_iso8601("PT1.5H")
+      assert Tempo.from_iso8601("T10:30:45,5") == Tempo.from_iso8601("T10:30:45.5")
+      assert Tempo.from_iso8601("2023,5/2024") == Tempo.from_iso8601("2023.5/2024")
+
+      assert {:ok, _durations} = Tempo.from_iso8601("{P1.5Y,P2Y}")
+      assert {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("{P1,5Y}")
+    end
+  end
 end

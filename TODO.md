@@ -8,13 +8,13 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Correctness
 
-* [ ] **A fraction of a minute or an hour is read to the second or the minute** — `T10:30.5` is the second 10:30:30 and `T10.5` the minute 10:30, where the text names a tenth of a minute and a tenth of an hour, six seconds and six minutes long. No value has such a resolution to hold it; decide between an interval and a named error. Found 2026-10-03.
+* [ ] **A fraction of a minute or an hour is read to the second or the minute** — `T10:30.5` is the second 10:30:30 and `T10.5` the minute 10:30, where the text names a tenth of a minute and a tenth of an hour, six seconds and six minutes long. No value has such a resolution to hold it; decide between an interval and a named error. Found 2026-10-03. Decision: Its an interval. `T10:30.5` is the second 10:30:30 and `T10.5` the minute 10:30 are both correct.
 
 * [ ] **A Gregorian week's days are week dates from the walk and calendar dates from the parser** — `Enum.to_list(~o"2026-W25")` and `Tempo.shift(~o"2026-W25", day: 1)` give `2026Y25W2K`, a week and a day of it, which the parser and `Tempo.new/1` read as the calendar date `2026-06-16` (user, 2026-10-03), so the text of such a value reads back as another value of the same span. Decide whether the walk and the shift give the calendar date too. Found 2026-10-03.
 
-* [ ] **A time of day under a year or a month is read on its first day** — `2026T17` is `2026Y1M1DT17H` and `Tempo.at(~o"2026-06", ~o"T17")` 17:00 on 1 June, as a clock unit left out is read as zero, where ISO 8601-2 §7.7.1 wants the date of a date and time complete. Decide whether it stays the first day, is an error, or is that time on each day. Found 2026-10-03.
+* [ ] **A time of day under a year or a month is read on its first day** — `2026T17` is `2026Y1M1DT17H` and `Tempo.at(~o"2026-06", ~o"T17")` 17:00 on 1 June, as a clock unit left out is read as zero, where ISO 8601-2 §7.7.1 wants the date of a date and time complete. Decide whether it stays the first day, is an error, or is that time on each day. Found 2026-10-03. Decision: Stays the first day, and is documented as a divergence from ISO8601.
 
-* [ ] **A count from the end with no year** — `~o"2M-1D"` is the 29th, the longest February, and `~o"-1M"` is a `ConversionError`, though every Gregorian year has twelve months. Decide what each is. Found 2026-10-03.
+* [ ] **A count from the end with no year** — `~o"2M-1D"` is the 29th, the longest February, and `~o"-1M"` is a `ConversionError`, though every Gregorian year has twelve months. Decide what each is. Found 2026-10-03. Decision: When a month has differing lengths depending on the year, and no year is available, the count can't happen until the date is anchored.
 
 * [ ] **`extend/2` of a group writes a value nothing walks** — `Tempo.extend(~o"2026Y2G3MU")` is `{:ok, ~o"2026Y2G3MU{1..-1}D"}`, a range of days counted from the group's start, which `Enum` and `to_interval/2` refuse (`:counted_in_group`: a unit after a group takes one whole number), where every other extension walks as its value does. Decide whether such a range is walked (the ninety-one days of the quarter) or `extend/2` of a group is a named error. Found 2026-10-04.
 
@@ -30,7 +30,7 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Conformance and completeness
 
-* [ ] **The third instance of a time of day, §12.11.1 example 2** — the standard's text `2018Y9MTLT8H20MN3I` writes the position after the selection's `N`, which does not parse; written inside it (`2018Y9MTLT8H20M3IN`) it parses and converts to an empty set, where the standard reads it as 08:20 on 3 September. Read the position after `N`, and give a time of day's positions the days of the span. Found 2026-10-04.
+* [ ] **The third instance of a time of day, §12.11.1 example 2** — the standard's text `2018Y9MTLT8H20MN3I` writes the position after the selection's `N`, which does not parse; written inside it (`2018Y9MTLT8H20M3IN`) it parses and converts to an empty set, where the standard reads it as 08:20 on 3 September: a time of day selected in a month is that time on each of its days there, and on the first day alone in Tempo (`2018Y9MLT8H20MN` is one value, 08:20 on 1 September), as a recurrence's rule reads it from its start's day, as RFC 5545 does. Decide whether a selection follows the first-day decision above, the example then a documented divergence, or matches each day. Found 2026-10-04.
 
 * [ ] **A position after a set of weekdays, where the standard contradicts itself** — `L{1,3}K1IN` is the first of the Mondays and Wednesdays taken together, as §12.9 defines a position (the i-th of the occurrences the rules before it select, `{1..5}K-1I` the last workday), where §12.11.3 example 2 calls `2018Y9ML{1,3}K1IN/P5D` identical to `{2018Y9ML1K1IN/P5D, 2018Y9ML3K1IN/P5D}`, each weekday's first. Decide whether Tempo keeps §12.9's rule, which RRULE's `BYSETPOS` is read as. Found 2026-10-04.
 
@@ -38,7 +38,7 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **§12.10 window shorter than a day** — `FL11MLL1K1IN/PT12HN1K1IN` (and `/P0DN…`) walks `[lo, lo - 1]`, the anchor and the day before, as `Date.range/2` infers for a reversed range (with a runtime deprecation warning before the day-number walk replaced it). Decide the semantics — no day, or the anchor day whose start the window contains — and test it.
 
-* [ ] **Sets the parser does not read** — several intervals in the extended format (`{2020/2021,2023/2024}`, where `{2020Y/2021Y,2023Y/2024Y}` parses) a qualified member (`{2026-06-15?,2026-06~}`), and the fractions of a second as a set (`T10H30M45.{0..9}S`), the form `extend/2` gives a second and `inspect/1` writes. Found 2026-10-02 and 2026-10-03.
+* [ ] **Sets the parser does not read** — a qualified member (`{2026-06-15?,2026-06~}`); the fractions of a second as a set (`T10H30M45.{0..9}S`), the form `extend/2` gives a second and `inspect/1` writes; and a fraction before a comma or the closing brace (`{T10:30:45.5,T11:00}`, `{2021-06-15.5}`), which the lookahead after a fraction's digits refuses, so a set's member has no fraction of a second. Found 2026-10-02 to 2026-10-04.
 
 * [ ] **Week-of-month selections, and calendar-aware RRULE `BYWEEKNO`** — parse `2026Y6M2W` ("2nd week of June", a positional `W` after a month) and materialise it via `Calendrical.week_of_month/3`; and replace the hard-coded ISO week walk still used by RRULE `BYWEEKNO` with Calendrical's calendar-aware functions. Month and native week-of-year selections are done. Plan in [plans/recurrence-selection-resolution.md](plans/recurrence-selection-resolution.md).
 
@@ -129,6 +129,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A comma between a set's members is never a decimal sign** — `{2023,2020/2021}` is a year and an interval, where `2023,2020` was read as a number and the set was one interval from part way through 2023, and `{2020/2021,2023/2024}` parses; a fraction in a member is written with a full stop. 2026-10-04.
 
 * [x] **A second followed by a position, and numbers given to significant digits** — in a selection `0S1I` is second 0 and position 1 (the `S` was read as the significant-digit marker and the second lost); a duration's seconds take significant digits and a set, where they raised; a position, and a fraction no exponent has scaled, take none. 2026-10-04.
 

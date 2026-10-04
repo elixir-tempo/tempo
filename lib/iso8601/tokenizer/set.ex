@@ -24,6 +24,17 @@ defmodule Tempo.Iso8601.Tokenizer.Set do
                 ]),
                 export_combinator: true
 
+  # A comma as a decimal sign, which it is only outside a set
+  # (`Tempo.Iso8601.Tokenizer.Helpers.members_of_a_set/2`). A combinator of
+  # its own, so that the refusal is this combinator failing, and what reads
+  # it goes on to its next alternative.
+  defcombinator :decimal_comma,
+                post_traverse(
+                  ignore(ascii_char([?,])),
+                  {Tempo.Iso8601.Tokenizer.Helpers, :outside_a_set, []}
+                ),
+                export_combinator: true
+
   defcombinator :integer_or_integer_set,
                 choice([
                   integer(min: 1) |> unwrap_and_tag(:nth),

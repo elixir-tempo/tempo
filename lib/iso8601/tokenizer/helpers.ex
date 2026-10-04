@@ -28,6 +28,51 @@ defmodule Tempo.Iso8601.Tokenizer.Helpers do
     ascii_char([?,, ?.])
   end
 
+  # The sign before a fraction's digits: a full stop, or a comma where a
+  # comma does not separate the members of a set.
+  def decimal_sign do
+    choice([
+      ignore(ascii_char([?.])),
+      decimal_comma()
+    ])
+  end
+
+  # A comma as a decimal sign. It is read through a combinator of its own
+  # (`Tempo.Iso8601.Tokenizer.Set`'s `:decimal_comma`), so that being refused
+  # inside a set is an alternative that fails, where an error returned from
+  # a traversal in line ends the whole parse.
+  def decimal_comma do
+    parsec({Tempo.Iso8601.Tokenizer.Set, :decimal_comma})
+  end
+
+  # A set's members are separated by commas, so within one a comma is never
+  # a decimal sign: `{2023,2020/2021}` is a year and an interval, where
+  # reading `2023,2020` as a number made it one interval from the year
+  # 2023.2020. A fraction in a member is written with a full stop. How deep
+  # in sets the text being read is, is kept in the parser's context, which
+  # goes back to what it was when an alternative fails.
+  def members_of_a_set(combinator, members) do
+    combinator
+    |> post_traverse(empty(), {__MODULE__, :enter_set, []})
+    |> concat(members)
+    |> post_traverse(empty(), {__MODULE__, :leave_set, []})
+  end
+
+  @doc false
+  def enter_set(rest, args, context, _line, _offset),
+    do: {rest, args, Map.update(context, :set_depth, 1, &(&1 + 1))}
+
+  @doc false
+  def leave_set(rest, args, context, _line, _offset),
+    do: {rest, args, Map.update(context, :set_depth, 0, &(&1 - 1))}
+
+  @doc false
+  def outside_a_set(rest, args, context, _line, _offset) do
+    if Map.get(context, :set_depth, 0) > 0,
+      do: {:error, "a comma separates the members of a set"},
+      else: {rest, args, context}
+  end
+
   def negative do
     ascii_char([?-])
   end

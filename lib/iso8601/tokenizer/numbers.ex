@@ -317,7 +317,7 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
   end
 
   def fraction do
-    ignore(decimal_separator())
+    decimal_sign()
     |> times(ascii_char([?0..?9]), min: 1)
     |> lookahead_not(number_separator())
     |> reduce(:reduce_fraction)
@@ -329,15 +329,16 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
   # a dash after it does not make it something else, as it does after a
   # number in a date.
   #
-  # A comma is also what separates the members of a set, where a date may
-  # follow it (`{T10:00,2026-06-16}`): after a comma and digits a dash is
-  # taken for a time shift only when what follows it is written as one.
+  # A comma is also what separates the members of a set, where it is never a
+  # decimal sign (`Tempo.Iso8601.Tokenizer.Helpers.decimal_comma/0`). Outside
+  # one, after a comma and digits a dash is taken for a time shift only when
+  # what follows it is written as one.
   def time_fraction do
     choice([
       ignore(ascii_char([?.]))
       |> times(ascii_char([?0..?9]), min: 1)
       |> lookahead_not(choice([decimal_separator(), ascii_char([?], ?}])])),
-      ignore(ascii_char([?,]))
+      decimal_comma()
       |> times(ascii_char([?0..?9]), min: 1)
       |> lookahead_not(
         choice([

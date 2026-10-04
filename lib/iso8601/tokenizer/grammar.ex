@@ -878,8 +878,10 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
 
   def list_of_time_or_range(combinator \\ empty()) do
     combinator
-    |> time_or_range_member()
-    |> repeat(ignore(string(",")) |> time_or_range_member())
+    |> members_of_a_set(
+      time_or_range_member()
+      |> repeat(ignore(string(",")) |> time_or_range_member())
+    )
     |> label("list of times or ranges")
   end
 
