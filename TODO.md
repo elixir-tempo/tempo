@@ -8,6 +8,12 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Correctness
 
+* [ ] **A month with days missing is walked and read as `1..n`** — `Calendrical.Reform.England`'s September 1752 has the days 1, 2 and 14 to 30: the walk of `1752Y9M` yields 1 to 19, `1752Y9M3D` is read and `1752Y9M20D` is an `InvalidDateError`, since Tempo takes a month's days to be `1..days_in_month/2`. Calendrical lists them (`Calendrical.Interval.month/3` is the range of its nineteen dates, `valid_date?/3` answers each), so the fix is Tempo's. Found 2026-10-04.
+
+* [ ] **With no year, the walk and the conversion disagree in every month calendar but the Gregorian** — `6M` converts and its walk raises an `UnanchoredError` in `Persian`, `Coptic`, `Ethiopic`, `Indian`, `Hebrew` and the Islamic calendars, `6M15D` is refused by the conversion and walked, and in `Julian` it is the other way round. Whatever Calendrical can say of a month with no year, the two must answer alike. Found 2026-10-04.
+
+* [ ] **A year that starts within the months is walked in the order of its month numbers** — a `Calendrical.Julian.March25` year runs from 25 March to the next 24 March, and the walk of `2026Y` yields months 1 to 12, the first three of which come after the other nine. Calendrical counts such a year's months from its start (`month/2`: the first is 25 to 31 March, the twelfth 1 February to 24 March) and gives its days in order (`year/1`), where a date's month is its Julian month, which the year holds in two parts. Decide what a month of such a year is in Tempo: the month of its dates, or the nth month of the year. Found 2026-10-04.
+
 * [ ] **A Gregorian week's days are week dates from the walk and calendar dates from the parser** — `Enum.to_list(~o"2026-W25")` and `Tempo.shift(~o"2026-W25", day: 1)` give `2026Y25W2K`, a week and a day of it, which the parser and `Tempo.new/1` read as the calendar date `2026-06-16` (user, 2026-10-03), so the text of such a value reads back as another value of the same span. Decide whether the walk and the shift give the calendar date too. Found 2026-10-03.
 
 * [ ] **A count from the end of a month of fixed length is counted before the value is placed** — `~o"6M-1D"` is `6M30D`, as June always has thirty days, so placed on a Hebrew year whose sixth month has twenty-nine it is an `InvalidDateError`, where the same text read in the Hebrew calendar is that month's 29th. Decide whether a count from the end is ever counted before the value has a year. Found 2026-10-04.
@@ -116,11 +122,7 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Blocked
 
-* [ ] **A month's length with no year, in calendars other than the Gregorian** — a month and a month and day with no year are answered by one of the walk and the conversion and refused by the other. Blocked on Calendrical: `days_in_month/1` is `{:error, :undefined}` for every month of `Persian`, `Coptic`, `Ethiopic`, `Indian`, `Islamic.*` and `Hebrew`, where most have one length in every year, and `{:error, :unresolved}` for the Julian February where the Gregorian is `{:ambiguous, 28..29}`; `months_in_year/0` is not defined on `Julian`, its year-start variants and the reform calendars.
-
-* [ ] **A month with days missing** — `Reform.England`'s September 1752 walks as the days 1 to 19, reads the 3rd and refuses the 20th. Blocked on Calendrical listing the days a month has: `days_in_month(1752, 9)` is 19, and nothing says which.
-
-* [ ] **A year that starts within the months** — the walk of a `Julian.March25` year yields months 1 to 12, the first three of which follow the other nine in time. Blocked on Calendrical giving a year's months in the order of time, and on what the walk of such a year should be.
+* [ ] **A month's length with no year, in calendars other than the Gregorian** — a month and a month and day with no year cannot be counted there. Blocked on Calendrical, confirmed at its `main` (`ad5ff77`) and recorded as the first two Open items of its `TODO.md` on 2026-10-04: `days_in_month/1` is `{:error, :undefined}` for every month of twelve calendars, most of whose months have one length in every year, and for the months tried of two more, and the Julian calendars answer `{:error, :unresolved}` for February and define no `months_in_year/0`. Not blocked, and Tempo's own: the walk and the conversion answer such a value differently (below, under Correctness), and `months_in_year/0` is an optional callback whose absence a caller must tolerate.
 
 * [ ] **A span of two values with no year in `to_string/2`** — `Tempo.to_string(~o"6M/9M")` and `~o"6M15D/9M1D"` return Localize's `DateTimeIntervalFormatError` (`:mixed_endpoints`), where each end alone is shown ("Jun", "Jun 15"). Blocked on `Localize.Interval.to_string/3` taking a date with no year, the second Open item of its `TODO.md`: `Localize.Interval.to_string(%{month: 6, calendar: Calendrical.Gregorian}, %{month: 8, calendar: Calendrical.Gregorian})` is that error, since its `date_value?/1` wants a `:year`. Found 2026-10-03.
 

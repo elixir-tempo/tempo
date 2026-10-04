@@ -65,8 +65,8 @@ So for a date or a time with a year, in the fifteen calendars of whole months th
 | One implementation of a unit's values and of a count from the end | Open |
 | A selection in a calendar of weeks | Open |
 | A weekday selected in a Gregorian week | Open |
-| A month whose days are not `1..n` (a reform) | Blocked |
-| A year that starts within the months | Blocked |
+| A month whose days are not `1..n` (a reform) | Open |
+| A year that starts within the months | Open |
 | A value with no year in a calendar other than the Gregorian | Blocked |
 | `inspect/1`, `to_iso8601/1` and `explain/1` on a selection | Open |
 | `Tempo.select/2` against the selection | Open |
@@ -98,9 +98,9 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 
 ## Feature gaps
 
-* **A month's length with no year** — Calendrical's `days_in_month/1` is `{:error, :undefined}` for every month of `Persian`, `Coptic`, `Ethiopic`, `Indian`, `Islamic.*` and `Hebrew`, including the months that have one length in every year, so nothing with no year can be counted there. `months_in_year/0` is not defined on `Julian`, its year-start variants and the reform calendars. Upstream.
+* **A month's length with no year** — Calendrical's `days_in_month/1` is `{:error, :undefined}` for every month of twelve calendars (`Buddhist`, `Roc`, `Japanese`, `Indian`, `Persian`, `Coptic`, the two Ethiopic, `Hebrew`, `Islamic.Civil`, `Tbla` and `UmmAlQura`), most of whose months have one length in every year, and for the months tried of `Islamic.Observational` and `Rgsa`, and the Julian calendars answer `{:error, :unresolved}` for February and define no `months_in_year/0`. Confirmed at Calendrical's `main` (`ad5ff77`, which Tempo locks) and recorded in its `TODO.md` on 2026-10-04. Upstream.
 
-* **The days of a month, and the months of a year, in order** — nothing in Calendrical lists the day numbers a month has, or the months of a year in the order of time, which the reform month and the year that starts within the months need. Upstream.
+* **What Calendrical already answers** — two things first thought missing there are not. It lists the days a month has (`Calendrical.Interval.month/3` is the range of September 1752's nineteen dates in `Reform.England`, and `valid_date?/3` answers each), and it counts the months of a year that starts within them from the year's start (`month/2` of a Julian year-start variant, and `year/1` for its days in order). Both bugs are Tempo's, and the second needs a decision: what a month of such a year is.
 
 * **A month in a calendar of weeks** — `6M` in `ISOWeek` or `NRF` is a `ConversionError` when it is read. An open decision in `TODO.md`.
 
@@ -127,6 +127,8 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 * **Fiscal and configured calendars** — `Calendrical.FiscalYear` and a calendar made with `Calendrical.Config`.
 
 ## Decisions
+
+* 2026-10-04, the user — a finding in Calendrical is confirmed against its latest `main` and then recorded in its `TODO.md`.
 
 * 2026-10-04, the user — one implementation of a count from the end, for validation, the walk, `Tempo.select/2`, the selection's resolver and `Tempo.explain/1`, so that there is one place to verify.
 
@@ -170,10 +172,10 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 
 * [ ] **The measure widened** — shapes, intervals, recurrences and rules in every calendar; a calendar-generic answer for a week, for `NRF`; the astronomical calendars with a time limit that suits them.
 
+* [ ] **A month with days missing** — the walk and the reading of a month take its days from Calendrical (`Calendrical.Interval.month/3`), not from `1..days_in_month/2`.
+
+* [ ] **A year that starts within the months** — once what a month of such a year is has been decided, the walk follows Calendrical's `month/2` and `year/1`.
+
 ### Blocked
 
-* [ ] **A month with days missing** — blocked on Calendrical listing a month's days.
-
-* [ ] **A year that starts within the months** — blocked on Calendrical giving a year's months in the order of time, and on what such a year's walk should be.
-
-* [ ] **A month's length with no year in other calendars** — blocked on Calendrical's `days_in_month/1` and `months_in_year/0`.
+* [ ] **A month's length with no year in other calendars** — blocked on Calendrical's `days_in_month/1` and the Julian calendars' answers, the first two Open items of its `TODO.md`. The walk and the conversion agreeing with each other is not blocked.
