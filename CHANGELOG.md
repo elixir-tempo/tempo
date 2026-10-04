@@ -257,6 +257,10 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A month or a week followed by a selection is held to its year: `2027Y53WL1KN` and a Hebrew `5786Y13ML1KN` are a `Tempo.InvalidDateError`, where a week or a month the year does not have was read and, in a calendar of weeks, `Tempo.to_interval/2` raised a `FunctionClauseError`. A count from the end there is counted in its year, so `2026Y-1ML1KN` is the Mondays of December.
+
+* A weekday selected in a year of a calendar of weeks is that day of each of the year's weeks: `2026YL1KN` in `Calendrical.ISOWeek` is the year's 53 Mondays, where it was the first twelve, and its last Friday is in week 53.
+
 * The thirteenth month of a Hebrew or a Chinese year, written with no year, has a span and a month after it: `Tempo.to_interval/2` of a Hebrew `13M` is `13M/1M` and `Tempo.shift/2` by a month gives `1M`, where each returned a `Tempo.UnanchoredError`. The last month a year can have is followed by the first month of the next year in every year that has it, as the last day a month can have is followed by the first of the next month.
 
 * A set that holds a count from the end keeps every member and is read as the set of its numbers: `~o"2026Y1M{28..30,-1}D"` is the 28th to the 31st, where it lost the 31st, and `~o"T{-1,0}H"` is hours 0 and 23, where it was a range from the last hour to the first, which named none. A range with a step is not run on into its neighbour (`{1..9//2,10}D` lost the 10th), and a set of years is in order whatever the signs of its years.

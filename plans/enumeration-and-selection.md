@@ -84,7 +84,7 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 
 * **The weeks of a year with no year** — no calendar counts them without a year, so the stepper holds a literal 52, `53W` has no span and `54W` is read. An item of `TODO.md`, with a decision: a count from Calendrical, or a week with no year that is neither bounded nor stepped.
 
-* **A selection in a calendar of weeks** — a week selected in a year is the whole year, and a year's weekdays stop at its twelfth week, in `ISOWeek` and `NRF` alike. Fifteen cells of the matrix, and eight of the census's in `ISOWeek`.
+* **A selection in a calendar of weeks** — a week selected in a year is the whole year, in `ISOWeek` and `NRF` alike. Six cells of the matrix. A year's weekdays, which stopped at its twelfth week, are those of each of its weeks since 2026-10-04 (nine cells).
 
 * **A weekday selected in a Gregorian week** — `2026Y25WL3KN` is the week's Monday whatever the weekday, in a value and in a recurrence's rule. 42 cells.
 
@@ -154,11 +154,11 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 
 ## Tasks
 
-* [ ] **One implementation** — `Tempo.UnitValues`, then each of the five callers moved to it in turn, the matrix green after each. Moved: a selection's resolver, `Tempo.select/2`'s count from the end and its weekdays, and the walk's reading of a range that reaches past a period's values (the walk reads everything else through the reading of a value). `Tempo.Validation.conform/2` is `resolve/2`, and a set or a range of a clock unit is held to the unit's values. What a unit takes with no year is `in_any_year/3`, for every module that asked. The reading of a value and its masks take a unit's values in a year from `in_period/3` (`validation.ex`, `mask.ex`, the calendar weeks of `group.ex`). A step from a value asks `following/4` and `preceding/4` what comes after and before a value, and `first/3` and `last/3` for the value a carry or a borrow lands on (`math.ex`, which has no count of its own left but the weeks of a year with no year and a fraction of a year in months). To move: a selection's own expansions (`selection.ex`, eight), `Tempo.explain/1`'s count from the end; then the week counts of `Tempo.Validation` come into the module. Not to move: the arithmetic of a group and of a fraction (the nth day of a group of months, half of a year), which counts a period's units, where the calendar's own count is the answer.
+* [ ] **One implementation** — `Tempo.UnitValues`, then each of the five callers moved to it in turn, the matrix green after each. Moved: a selection's resolver, `Tempo.select/2`'s count from the end and its weekdays, and the walk's reading of a range that reaches past a period's values (the walk reads everything else through the reading of a value). `Tempo.Validation.conform/2` is `resolve/2`, and a set or a range of a clock unit is held to the unit's values. What a unit takes with no year is `in_any_year/3`, for every module that asked. The reading of a value and its masks take a unit's values in a year from `in_period/3` (`validation.ex`, `mask.ex`, the calendar weeks of `group.ex`). A step from a value asks `following/4` and `preceding/4` what comes after and before a value, `first/3` and `last/3` for the value a carry or a borrow lands on, and `at_or_before/4` for the day a step of months lands on (`math.ex`, which has no count of its own left but the weeks of a year with no year and a fraction of a year in months). A selection's resolver takes a month's days, a year's months and their ends from it too (`selection.ex`). To move: `Tempo.explain/1`'s count from the end; then the week counts of `Tempo.Validation` come into the module. Still arithmetic of its own in the resolver: the nearest weekday of cron's `W`, which steps a day or two within a month. Not to move: the arithmetic of a group and of a fraction (the nth day of a group of months, half of a year), which counts a period's units, where the calendar's own count is the answer.
 
 * [ ] **The census in the matrix** — every calendar module as a generated class of `Tempo.Matrix.Corpus`, with the calendar-only answer as a check, so that the table above is a test.
 
-* [ ] **A selection in a calendar of weeks, and a weekday in a Gregorian week** — 57 cells of the baseline.
+* [ ] **A week selected in a year of a calendar of weeks, and a weekday in a Gregorian week** — 48 cells of the baseline.
 
 * [ ] **A selection under an hour, and `explain/1` on a range to the end** — 54 cells of the baseline.
 
@@ -171,6 +171,10 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 * [ ] **A year that starts within the months** — once what a month of such a year is has been decided, the walk follows Calendrical's `month/2` and `year/1`.
 
 ### Done
+
+* [x] **A selection's resolver asks the one implementation** — the weekdays of a month and of a year, the clamp of a day to its month, the nearest weekday, a day of the year and the bounds of a month and a year. The months of a year are those the resolver's own `period_values/2` gives, which for a calendar of weeks are its weeks, so a year's weekdays no longer stop at week twelve: nine cells of the baseline, which lists 102. A probe of 5,892 selections, rules, RRULE strings and cron expressions in eight calendars changed in 33 cells, all of them those; four rules timed the same. 2026-10-04.
+
+* [x] **The units before a selection are read as a value** — `Validation.resolve_units/2` reads them apart from the selection, so a month, a week or a set of days of the year its year does not have is refused, and a count from the end is counted in its year. 444 cells of the same probe, each a period its year does not have. 2026-10-04.
 
 * [x] **A step asks the one implementation** — `following/4`, `preceding/4`, `first/3` and `last/3` in `Tempo.UnitValues`, and the stepper's with-year and no-year paths made one on them. A value below the last every year has is followed by the next with no year asked for, so the year's count is asked only where the answer depends on it (28 February) or the calendar cannot say without a year (a reform's). Three probes hold it to the same answers: 133,110 cells of single steps, shifts and spans in twelve calendars, and the 24,484 and 13,951 of values with a year and with none; none changed. Timed against the commit before, best of three: a day step 16% faster, a walk of a year's days 8% and of a Hebrew year's 18%; a month step 16% slower and a walk of months 11%; a day step back 26% slower and a day of the year's step 40%, neither on the path of a walk. 2026-10-04.
 

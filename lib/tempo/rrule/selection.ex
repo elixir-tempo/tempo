@@ -1060,38 +1060,38 @@ defmodule Tempo.RRule.Selection do
   # the candidate's time-of-day and metadata; only the date
   # component changes. Every calendar op goes through the
   # candidate's own calendar.
-  defp expand_weekdays_in_month(%Interval{from: %Tempo{calendar: calendar}} = candidate, weekdays) do
+  defp expand_weekdays_in_month(%Interval{} = candidate, weekdays) do
     case enclosing_month(candidate) do
-      nil ->
-        [candidate]
-
-      {year, month} ->
-        emit_matching_days(
-          candidate,
-          year,
-          month,
-          1..calendar.days_in_month(year, month),
-          weekdays
-        )
+      nil -> [candidate]
+      {year, month} -> weekdays_of_month(candidate, year, month, weekdays)
     end
   end
 
-  defp expand_weekdays_in_year(%Interval{from: %Tempo{calendar: calendar}} = candidate, weekdays) do
-    case enclosing_year(candidate) do
-      nil ->
-        [candidate]
+  # The months of the candidate's year are those `period_values/2` gives,
+  # which for a calendar of weeks are its weeks: a date of one holds its
+  # week where a month is held, so a year's weekdays are those of each of
+  # its weeks and not of its first twelve.
+  defp expand_weekdays_in_year(%Interval{} = candidate, weekdays) do
+    with year when is_integer(year) <- enclosing_year(candidate),
+         {:ok, months} <- period_values(:month, candidate) do
+      Enum.flat_map(months, &weekdays_of_month(candidate, year, &1, weekdays))
+    else
+      nil -> [candidate]
+      {:error, _cannot_count} -> []
+    end
+  end
 
-      year ->
-        1..calendar.months_in_year(year)
-        |> Enum.flat_map(fn month ->
-          emit_matching_days(
-            candidate,
-            year,
-            month,
-            1..calendar.days_in_month(year, month),
-            weekdays
-          )
-        end)
+  # The days of one month of the candidate's year that fall on the weekdays,
+  # the month's days being those `Tempo.UnitValues` counts.
+  defp weekdays_of_month(
+         %Interval{from: %Tempo{calendar: calendar}} = candidate,
+         year,
+         month,
+         weekdays
+       ) do
+    case UnitValues.in_period(:day, [year: year, month: month], calendar) do
+      {:ok, days} -> emit_matching_days(candidate, year, month, days, weekdays)
+      {:error, _no_such_month} -> []
     end
   end
 
@@ -1317,8 +1317,12 @@ defmodule Tempo.RRule.Selection do
   # the occurrence is the month itself: `swap_date` rewrites only the
   # units the candidate already has, so a dayless candidate stays at
   # month resolution.
-  defp clamp_to_month(calendar, year, month, day) when is_integer(day),
-    do: min(day, calendar.days_in_month(year, month))
+  defp clamp_to_month(calendar, year, month, day) when is_integer(day) do
+    case UnitValues.at_or_before(:day, day, [year: year, month: month], calendar) do
+      {:ok, clamped} -> clamped
+      {:error, _cannot_count} -> day
+    end
+  end
 
   defp clamp_to_month(_calendar, _year, _month, day), do: day
 
@@ -1367,18 +1371,15 @@ defmodule Tempo.RRule.Selection do
   # The concrete day-of-month each target resolves to in the
   # candidate's month (deduplicated; out-of-range targets dropped).
   defp nearest_weekday_days(%Interval{from: %Tempo{calendar: calendar, time: time}}, targets) do
-    year = Keyword.get(time, :year)
-    month = Keyword.get(time, :month)
-
-    if is_integer(year) and is_integer(month) do
-      dim = calendar.days_in_month(year, month)
-
+    with year when is_integer(year) <- Keyword.get(time, :year),
+         month when is_integer(month) <- Keyword.get(time, :month),
+         {:ok, last_day} <- UnitValues.last(:day, [year: year, month: month], calendar) do
       targets
-      |> Enum.map(&nearest_weekday(calendar, year, month, &1, dim))
+      |> Enum.map(&nearest_weekday(calendar, year, month, &1, last_day))
       |> Enum.reject(&is_nil/1)
       |> Enum.uniq()
     else
-      []
+      _no_one_month -> []
     end
   end
 
@@ -1569,9 +1570,13 @@ defmodule Tempo.RRule.Selection do
   # The {month, day} of a day of the year, from Calendrical. Returns
   # `nil` if the year has no such day.
   defp year_day_to_month_day(calendar, year, doy) when is_integer(doy) and doy >= 1 do
-    if doy <= calendar.days_in_year(year) do
-      %{month: month, day: day} = Calendrical.date_from_day_of_year(year, doy, calendar)
-      {month, day}
+    case UnitValues.last(:day_of_year, [year: year], calendar) do
+      {:ok, last} when doy <= last ->
+        %{month: month, day: day} = Calendrical.date_from_day_of_year(year, doy, calendar)
+        {month, day}
+
+      _past_the_year ->
+        nil
     end
   end
 
@@ -1644,21 +1649,31 @@ defmodule Tempo.RRule.Selection do
   # the candidate's year.
   defp period_bounds(%Interval{from: %Tempo{time: time, calendar: calendar}}, :month) do
     with year when is_integer(year) <- Keyword.get(time, :year),
-         month when is_integer(month) <- Keyword.get(time, :month),
-         last_day when is_integer(last_day) <- calendar.days_in_month(year, month),
-         {:ok, start_date} <- Date.new(year, month, 1, calendar),
-         {:ok, end_date} <- Date.new(year, month, last_day, calendar) do
-      {start_date, end_date}
+         month when is_integer(month) <- Keyword.get(time, :month) do
+      month_bounds(year, month, month, calendar)
     else
       _ -> nil
     end
   end
 
-  defp period_bounds(%Interval{from: %Tempo{time: time, calendar: calendar}}, :year) do
+  # A year runs from the first day of its first month to the last of its
+  # last, the months being those `period_values/2` gives: for a calendar of
+  # weeks, its weeks.
+  defp period_bounds(%Interval{from: %Tempo{time: time, calendar: calendar}} = candidate, :year) do
     with year when is_integer(year) <- Keyword.get(time, :year),
-         last_month when is_integer(last_month) <- calendar.months_in_year(year),
-         last_day when is_integer(last_day) <- calendar.days_in_month(year, last_month),
-         {:ok, start_date} <- Date.new(year, 1, 1, calendar),
+         {:ok, %Range{first: first_month, last: last_month}} <- period_values(:month, candidate) do
+      month_bounds(year, first_month, last_month, calendar)
+    else
+      _ -> nil
+    end
+  end
+
+  # The first day of one month of a year and the last day of another, which
+  # `Tempo.UnitValues` gives.
+  defp month_bounds(year, first_month, last_month, calendar) do
+    with {:ok, first_day} <- UnitValues.first(:day, [year: year, month: first_month], calendar),
+         {:ok, last_day} <- UnitValues.last(:day, [year: year, month: last_month], calendar),
+         {:ok, start_date} <- Date.new(year, first_month, first_day, calendar),
          {:ok, end_date} <- Date.new(year, last_month, last_day, calendar) do
       {start_date, end_date}
     else

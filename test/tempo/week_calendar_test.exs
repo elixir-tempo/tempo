@@ -366,6 +366,26 @@ defmodule Tempo.WeekCalendarTest do
                Enum.map(["2026-W01-3", "2026-W02-3", "2026-W03-3"], &Tempo.from_iso8601!(&1, NRF))
     end
 
+    # A date of a calendar of weeks holds its week where a month is held,
+    # and a year's weekdays were taken from its first twelve "months".
+    test "picks that day of each week of a year" do
+      {2026, weeks} = :calendar.iso_week_number({2026, 12, 28})
+      assert weeks == 53
+
+      assert occurrence_starts("2026YL1KN", ISOWeek) ==
+               Enum.map(1..weeks, &Tempo.from_iso8601!("2026Y#{&1}W1K", ISOWeek))
+
+      # The year's last Friday and its twentieth Monday.
+      assert occurrence_starts("2026YL5K-1IN", ISOWeek) ==
+               [Tempo.from_iso8601!("2026Y53W5K", ISOWeek)]
+
+      assert occurrence_starts("2026YL1K20IN", ISOWeek) ==
+               [Tempo.from_iso8601!("2026Y20W1K", ISOWeek)]
+
+      {nrf_weeks, _days_in_last_week} = NRF.weeks_in_year(2026)
+      assert length(occurrence_starts("2026YL1KN", NRF)) == nrf_weeks
+    end
+
     test "picks a day of a selected week each year" do
       assert occurrence_starts("R3/2026-W25-1/P1Y/FL25W2KN", ISOWeek) ==
                Enum.map(

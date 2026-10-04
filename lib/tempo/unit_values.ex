@@ -4,7 +4,7 @@ defmodule Tempo.UnitValues do
 
   A date or a time is counted in units, and each unit takes a run of values that the units before it and the calendar decide: the months of a year, the days of a month, the hours of a day. A value is written against that run as a number, as a count from its end (`-1`, the last), as a range from one of its values to another (`{28..-1}`), or as several of these.
 
-  This module is the one place where either is worked out, so that there is one place to verify. `in_period/3` gives the run, and `in_any_year/3` the run a unit takes with no year to count it in; `first/3`, `last/3`, `following/4` and `preceding/4` are what a step asks of it; `named/2` lists the values a written value names in it, and `resolve/2` reads a written value against it in the shape it is written in; `from_end/2` is the count from the end that all rest on. How many values a unit takes is always asked of the calendar, which is Calendrical's to answer: nothing here is calendar arithmetic.
+  This module is the one place where either is worked out, so that there is one place to verify. `in_period/3` gives the run, and `in_any_year/3` the run a unit takes with no year to count it in; `first/3`, `last/3`, `following/4`, `preceding/4` and `at_or_before/4` are what a step asks of it; `named/2` lists the values a written value names in it, and `resolve/2` reads a written value against it in the shape it is written in; `from_end/2` is the count from the end that all rest on. How many values a unit takes is always asked of the calendar, which is Calendrical's to answer: nothing here is calendar arithmetic.
 
   A selection's resolver (`Tempo.RRule.Selection`), `Tempo.select/2`, the walk, the reading of a value (`Tempo.Validation`) and its masks (`Tempo.Mask`) count through it. A step from a value still asks the calendar for a year's or a month's count where it steps, and `Tempo.explain/1` still holds a count from the end of its own; both are to follow (`plans/enumeration-and-selection.md`).
 
@@ -415,6 +415,62 @@ defmodule Tempo.UnitValues do
       {:ok, last} when is_integer(value) and value < last -> {:ok, value + 1}
       {:ok, _last} -> :last
       {:error, _reason} = error -> error
+    end
+  end
+
+  @doc """
+  Returns the last value a unit takes, after the units before it, that is not after a value.
+
+  A step of months may leave a day its new month does not have: "31 February" is the last day of February. With no year in the context the answer is given where it is the same in every year: the 15th of any February is the 15th, and whether a 29th is itself or the 28th depends on the year.
+
+  The units before it are taken to name a period the calendar has, as those of a value that has been read do; `in_period/3` is the function that checks.
+
+  ### Arguments
+
+  * `unit` is the unit counted, as for `in_period/3`.
+
+  * `value` is a whole number of the unit, which may be past the last the unit takes.
+
+  * `context` is a keyword list of the units before it, as a value's `:time` holds them.
+
+  * `calendar` is the calendar module the units are counted in.
+
+  ### Returns
+
+  * `{:ok, value}` where the unit takes the value, and `{:ok, last}` where the value is past the last it takes.
+
+  * `{:error, :unanchored}` when the answer depends on a year the context does not hold.
+
+  * `{:error, :uncounted}` or `{:error, :no_period}`, as `in_period/3` returns them.
+
+  ### Examples
+
+      iex> Tempo.UnitValues.at_or_before(:day, 31, [year: 2026, month: 2], Calendrical.Gregorian)
+      {:ok, 28}
+
+      iex> Tempo.UnitValues.at_or_before(:day, 15, [month: 2], Calendrical.Gregorian)
+      {:ok, 15}
+
+      iex> Tempo.UnitValues.at_or_before(:day, 31, [month: 6], Calendrical.Gregorian)
+      {:ok, 30}
+
+      iex> Tempo.UnitValues.at_or_before(:day, 29, [month: 2], Calendrical.Gregorian)
+      {:error, :unanchored}
+
+  """
+  @spec at_or_before(atom(), integer(), keyword(), module()) ::
+          {:ok, integer()} | {:error, :unanchored | :uncounted | :no_period}
+  def at_or_before(unit, value, context, calendar) when is_integer(value) do
+    case last_in_any_year(unit, context, calendar) do
+      {:ok, fewest, _most} when value <= fewest -> {:ok, value}
+      {:ok, last, last} -> {:ok, last}
+      _by_the_year_or_cannot_say -> at_or_before_in_period(unit, value, context, calendar)
+    end
+  end
+
+  defp at_or_before_in_period(unit, value, context, calendar) do
+    with {:ok, last} <- last_in_period(unit, context, calendar) do
+      {:ok, min(value, last)}
     end
   end
 

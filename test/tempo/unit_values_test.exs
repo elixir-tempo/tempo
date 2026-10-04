@@ -322,6 +322,20 @@ defmodule Tempo.UnitValuesTest do
       end
     end
 
+    test "a day past the last of its month is the last, and any other is itself" do
+      for calendar <- @calendars, year <- years(calendar) do
+        for month <- 1..calendar.months_in_year(year) do
+          context = [year: year, month: month]
+          valid = Enum.filter(1..40, &calendar.valid_date?(year, month, &1))
+
+          for day <- 1..40 do
+            expected = valid |> Enum.filter(&(&1 <= day)) |> List.last()
+            assert UnitValues.at_or_before(:day, day, context, calendar) == {:ok, expected}
+          end
+        end
+      end
+    end
+
     test "an unspecified value counts as the last" do
       assert UnitValues.following(:day, :any, [year: 2026, month: 6], Calendrical.Gregorian) ==
                :last
@@ -386,6 +400,34 @@ defmodule Tempo.UnitValuesTest do
 
           assert UnitValues.following(:month, month, [], calendar) == expected,
                  "#{inspect(calendar)} #{month}"
+        end
+      end
+    end
+
+    test "a day every year's month has is itself, and one past a month of one length its last" do
+      for calendar <- @calendars do
+        years = many_years(calendar)
+        most_months = years |> Enum.map(&calendar.months_in_year/1) |> Enum.max()
+
+        for month <- 1..most_months do
+          lengths =
+            for year <- years, month <= calendar.months_in_year(year) do
+              calendar.days_in_month(year, month)
+            end
+
+          {fewest, most} = Enum.min_max(lengths)
+
+          for day <- 1..40 do
+            expected =
+              cond do
+                day <= fewest -> {:ok, day}
+                fewest == most -> {:ok, most}
+                true -> {:error, :unanchored}
+              end
+
+            assert UnitValues.at_or_before(:day, day, [month: month], calendar) == expected,
+                   "#{inspect(calendar)} #{month}-#{day}"
+          end
         end
       end
     end

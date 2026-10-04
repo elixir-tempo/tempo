@@ -1989,25 +1989,20 @@ defmodule Tempo.Math do
       {:untracked, _month} -> {:ok, time}
       # Day-only value (no month): there is nothing to clamp the day against.
       {_day, :untracked} -> {:ok, time}
-      {{:ok, day}, {:ok, month}} -> clamp_integer_day(time, month, day, calendar)
+      {{:ok, day}, {:ok, _month}} -> clamp_integer_day(time, day, calendar)
       {_day, month} -> keep_unclamped(time, largest_day(time), fewest_days(time, month, calendar))
     end
   end
 
-  defp clamp_integer_day(time, month, day, calendar) do
-    case year_of(time) do
-      {:ok, _year} -> {:ok, clamp_day_to_month_anchored(time, day, calendar)}
-      _none_or_several -> clamp_day_to_month_unanchored(time, month, day, calendar)
-    end
-  end
-
-  # A day past the last of its month is the month's last, which
-  # `Tempo.UnitValues` gives without asking the year where every year's
-  # month is as long.
-  defp clamp_day_to_month_anchored(time, day, calendar) do
-    case UnitValues.last(:day, time, calendar) do
-      {:ok, last} when day > last -> put_component(time, :day, last)
-      _within_the_month -> time
+  # A day past the last of its month is the month's last. With no year a day
+  # that every year's month has is kept, one past a month of one length is
+  # that month's last, and one whose place depends on the missing year (a
+  # 29th or a 30th of February) is `{:error, :unanchored}`.
+  defp clamp_integer_day(time, day, calendar) do
+    case UnitValues.at_or_before(:day, day, time, calendar) do
+      {:ok, ^day} -> {:ok, time}
+      {:ok, last} -> {:ok, put_component(time, :day, last)}
+      {:error, _reason} -> {:error, :unanchored}
     end
   end
 
@@ -2017,23 +2012,6 @@ defmodule Tempo.Math do
     case UnitValues.in_any_year(:day, [month: month], calendar) do
       {:ok, %Range{last: fewest}, _longest} -> fewest
       {:error, _cannot_say} -> 0
-    end
-  end
-
-  # Clamp without a year: a day that fits every possible length of the
-  # month is kept; one that overflows an unambiguous month is clamped;
-  # anything whose validity depends on the missing year (a 29th/30th of
-  # a variable-length month) is `{:error, :unanchored}`.
-  defp clamp_day_to_month_unanchored(time, month, day, calendar) do
-    case UnitValues.in_any_year(:day, [month: month], calendar) do
-      {:ok, %Range{last: count} = days, days} ->
-        {:ok, if(day > count, do: put_component(time, :day, count), else: time)}
-
-      {:ok, %Range{last: fewest}, _longest} ->
-        if day <= fewest, do: {:ok, time}, else: {:error, :unanchored}
-
-      {:error, _cannot_say} ->
-        {:error, :unanchored}
     end
   end
 
