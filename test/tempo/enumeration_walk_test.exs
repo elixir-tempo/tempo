@@ -314,6 +314,31 @@ defmodule Tempo.EnumerationWalk.Test do
       assert {:error, %Tempo.UnanchoredError{}} = Tempo.to_interval(~o"3m")
     end
 
+    # With no year, what depends on the year is refused (decided 2026-10-04):
+    # an unspecified day of a February listed the 29 days one can have.
+    test "an unspecified unit follows the count, as a mask and a count from the end do" do
+      for value <- [~o"2MX*D", ~o"2MXXD", ~o"2M{1..-1}D", ~o"2M", ~o"2M-XD"] do
+        assert_raise Tempo.UnanchoredError, fn -> Enum.take(value, 1) end
+      end
+
+      # The days of January are listed before February's are asked for.
+      assert_raise Tempo.UnanchoredError, fn -> Enum.to_list(~o"X*MX*D") end
+
+      assert {:ok, february} = Tempo.to_interval(~o"2MX*D")
+      assert Tempo.to_iso8601!(february) == "2M/3M"
+      assert {:error, %Tempo.UnanchoredError{}} = Tempo.to_interval(~o"2MX*DT10H")
+
+      hebrew_months = Tempo.from_iso8601!("X*M", Calendrical.Hebrew)
+      assert_raise Tempo.UnanchoredError, fn -> Enum.take(hebrew_months, 1) end
+    end
+
+    test "an unspecified unit that takes the same values every year is listed with no year" do
+      assert Enum.count(~o"6MX*D") == 30
+      assert Enum.count(~o"X*M") == 12
+      assert Enum.count(~o"XXM") == 12
+      assert Enum.count(~o"2026Y2MX*D") == 28
+    end
+
     test "the error names the value" do
       assert_raise Tempo.UnanchoredError, ~r/~o"X\*W" has none/, fn -> Enum.count(~o"X*W") end
       assert_raise Tempo.UnanchoredError, ~r/~o"2MXXD" has none/, fn -> Enum.count(~o"2MXXD") end

@@ -367,10 +367,11 @@ defmodule Tempo.Interval.Cycle do
 
   defp at_end?([], _calendar), do: false
 
-  # The last value a unit takes with no unit before it, by the reader of an
-  # unspecified unit: the twelfth month, hour 23, the seventh day of the week.
+  # The last value a unit takes with no unit before it, in the year that has
+  # the most: the twelfth month, a Hebrew thirteenth, hour 23, the seventh
+  # day of the week.
   defp last_value(unit, calendar) do
-    case Mask.unspecified(unit, [], calendar) do
+    case Mask.at_most(unit, [], calendar) do
       {:ok, %Range{last: last}} -> {:ok, last}
       {:error, _reason} -> :none
     end

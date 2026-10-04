@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* With no year, an unspecified unit whose count depends on the year is not listed: the walk of `~o"2MX*D"` raises a `Tempo.UnanchoredError`, as the walk of `~o"2M"`, `~o"2MXXD"` and `~o"2M{1..-1}D"` do, where it listed the 29 days a February can have. Its span is still the month, and a unit that takes the same values every year is still listed (`~o"6MX*D"`, `~o"X*M"`).
+
 * A range written backwards is a parse error: `{2026-06-20..2026-06-15}` and `2026Y6M{20..15}D` return a `Tempo.ParseError`, as an interval written backwards is an error, where the first converted to nothing and the second was walked from the 20th down. A range whose ends are counted to a first value after its last (`{-1..1}D` in a month) is a `Tempo.InvalidDateError`, and one that counts from the start to the end (`{1..-1}D`) is read as before.
 
 * With no year, a day counted from the end of a month whose length depends on the year is kept as written until the value is placed on one: `~o"2M-1D"` on 2027 is 28 February and `Tempo.select(~o"2026", ~o"2M-1D")` selects it, where it was read as the 29th, an error on 2027 and an empty selection in 2026. A February with no year is no longer walked (`Enum.to_list(~o"2M")` raises a `Tempo.UnanchoredError`, where it listed 29 days), and `Tempo.to_interval/2` of a count from the end with no year returns that error, where it was a `Tempo.ConversionError` about several values.

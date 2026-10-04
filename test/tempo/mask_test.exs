@@ -135,10 +135,24 @@ defmodule Tempo.MaskTest do
       assert Mask.unspecified(:day_of_year, [year: 2026], @cal) == {:ok, 1..365}
     end
 
-    test "a unit whose extent depends on a year it lacks takes every value it has in some year" do
+    test "a unit that takes the same values in every year needs no year" do
       assert Mask.unspecified(:month, [], @cal) == {:ok, 1..12}
-      assert Mask.unspecified(:day, [month: 2], @cal) == {:ok, 1..29}
       assert Mask.unspecified(:day, [month: 6], @cal) == {:ok, 1..30}
+    end
+
+    # With no year, what depends on the year is refused (decided 2026-10-04):
+    # an unspecified day of a February listed 29 days, where a mask of it, a
+    # count from its end and the walk of the month were each unanchored.
+    test "a unit whose extent depends on a year it lacks is unanchored" do
+      assert Mask.unspecified(:day, [month: 2], @cal) == {:error, :unanchored}
+      assert Mask.unspecified(:month, [], Calendrical.Hebrew) == {:error, :unanchored}
+    end
+
+    test "at_most/3 takes the values of the year that has the most, where a cycle ends" do
+      assert Mask.at_most(:day, [month: 2], @cal) == {:ok, 1..29}
+      assert Mask.at_most(:month, [], Calendrical.Hebrew) == {:ok, 1..13}
+      assert Mask.at_most(:month, [], @cal) == {:ok, 1..12}
+      assert Mask.at_most(:week, [], @cal) == {:error, :unanchored}
     end
 
     test "a unit with nothing to bound it is unanchored" do

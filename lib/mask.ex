@@ -36,12 +36,27 @@ defmodule Tempo.Mask do
   @doc false
   # Every value an unspecified unit (`X*`) takes after the concrete units
   # before it. A unit whose extent depends on a year the value does not have
-  # takes every value it has in some year (`2MX*D` is 1 to 29), where a count
-  # from the end is kept as written until the value has a year
-  # (`2M{1..-1}D`): the two differ, an open item in `TODO.md`.
+  # (`2MX*D`, the days of a February) has no one answer, and is unanchored
+  # as a mask of it (`2MXXD`), a count from its end (`2M{1..-1}D`) and the
+  # walk of its month are: with no year, what depends on the year is refused.
   @spec unspecified(atom(), keyword(), module()) ::
           {:ok, Range.t()} | {:error, :unanchored | {:unmaskable, atom()}}
   def unspecified(unit, previous, calendar) do
+    case valid_range(unit, previous, calendar) do
+      {:ok, range} -> {:ok, range}
+      {:ambiguous, _every_year, _longest} -> {:error, :unanchored}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  @doc false
+  # The most values a unit takes after the units before it: those of the
+  # year that has the most, where the count depends on a year the value does
+  # not have. It is where a cycle ends (`Tempo.Interval.Cycle`), so that
+  # every value a year can hold has a place in it.
+  @spec at_most(atom(), keyword(), module()) ::
+          {:ok, Range.t()} | {:error, :unanchored | {:unmaskable, atom()}}
+  def at_most(unit, previous, calendar) do
     case valid_range(unit, previous, calendar) do
       {:ok, range} -> {:ok, range}
       {:ambiguous, _every_year, longest} -> {:ok, longest}

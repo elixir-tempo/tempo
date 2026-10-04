@@ -294,7 +294,7 @@ A value can parse and still name nothing a walk could yield. `Enumerable.reduce/
 
 | Reason | Example | Raises |
 |---|---|---|
-| A unit that needs a year the value lacks | `X*W`, `{1..-1}W`, `2MXXD` | `Tempo.UnanchoredError` |
+| A unit that needs a year the value lacks | `X*W`, `{1..-1}W`, `2MXXD`, `2MX*D` | `Tempo.UnanchoredError` |
 | A mask no value matches | `1985-02-3X` | `Tempo.InvalidDateError` |
 | A group that starts beyond what holds it | `{2026,2027}Y5G3MU` | `Tempo.InvalidDateError` |
 | A group of a set counted from the end of no year | `{1..-1}G3MU` | `Tempo.UnanchoredError` |
