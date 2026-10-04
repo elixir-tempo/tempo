@@ -304,29 +304,24 @@ defmodule Tempo.Math do
     end
   end
 
+  # The week after a week is what the one implementation says it is. With no
+  # year it says nothing: a year's weeks are counted by no calendar without a
+  # year, so which week is a year's last is not known, and a week with no
+  # year has no next week and so no span (decided 2026-10-04). It counted to
+  # 52, ISO 8601's count for a Gregorian year, in every calendar.
   defp add_week(time, week, calendar) do
-    case year_of(time) do
-      {:ok, year} -> add_week_anchored(time, year, week, calendar)
-      _none_or_several -> advance_week_unanchored(time, week)
-    end
-  end
-
-  defp add_week_anchored(time, year, week, calendar) do
     case UnitValues.following(:week, week, time, calendar) do
       {:ok, next} -> {:ok, put_component(time, :week, next)}
-      :last -> time |> put_component(:year, year + 1) |> at_first(:week, calendar)
+      :last -> first_week_of_the_next_year(time, calendar)
       {:error, _reason} -> {:error, :unanchored}
     end
   end
 
-  # Without a year the week count is 52 or 53 depending on the year, so a
-  # week below 52 steps cleanly and the wrap needs a year. No calendar counts
-  # a year's weeks without a year, so the count is written here (an open
-  # item in `TODO.md`).
-  defp advance_week_unanchored(time, week) do
-    if before?(week, 52),
-      do: {:ok, put_component(time, :week, week + 1)},
-      else: {:error, :unanchored}
+  defp first_week_of_the_next_year(time, calendar) do
+    case year_of(time) do
+      {:ok, year} -> time |> put_component(:year, year + 1) |> at_first(:week, calendar)
+      _none_or_several -> {:error, :unanchored}
+    end
   end
 
   defp add_day_of_week(time, day, calendar) do

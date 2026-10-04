@@ -78,6 +78,43 @@ defmodule Tempo.SteppingTest do
 
   # A Hebrew year has twelve months or thirteen, and its thirteenth has 29
   # days in every year that has one.
+  # A year's weeks are counted by no calendar without a year, so a week with
+  # no year has no next week and no span (decided 2026-10-04). It stepped to
+  # the next while below a literal 52, ISO 8601's count for a Gregorian year,
+  # in every calendar.
+  describe "a week with no year" do
+    test "has no week after it, in any calendar" do
+      for text <- ["1W", "25W", "51W", "52W", "53W"],
+          calendar <- [Calendrical.Gregorian, Hebrew] do
+        week = Tempo.from_iso8601!(text, calendar)
+
+        assert {:error, %UnanchoredError{}} = Tempo.shift(week, week: 1), text
+        assert {:error, %UnanchoredError{}} = Tempo.to_interval(week), text
+      end
+    end
+
+    test "has the week before it, which needs no count, down to the first" do
+      assert Tempo.shift(~o"25W", week: -1) == ~o"24W"
+      assert Tempo.shift(~o"2W", week: -1) == ~o"1W"
+      assert {:error, %UnanchoredError{}} = Tempo.shift(~o"1W", week: -1)
+    end
+
+    test "is walked by its days, which end with the week" do
+      assert Enum.to_list(~o"25W") == Enum.map(1..7, &Tempo.from_iso8601!("25W#{&1}K"))
+      assert {:ok, _wednesday} = Tempo.to_interval(~o"25W3K")
+      assert {:error, %UnanchoredError{}} = Tempo.to_interval(~o"25W7K")
+      assert {:error, %UnanchoredError{}} = Tempo.shift(~o"25W7K", day: 1)
+    end
+
+    test "is checked and stepped by its year once it has one" do
+      assert Tempo.on(~o"53W", ~o"2026") == {:ok, ~o"2026Y53W"}
+      assert {:error, %Tempo.InvalidDateError{}} = Tempo.on(~o"53W", ~o"2027")
+      assert Tempo.shift(~o"2026Y53W", week: 1) == ~o"2027Y1W"
+      assert Tempo.shift(~o"2027Y52W", week: 1) == ~o"2028Y1W"
+      assert {:ok, _week} = Tempo.to_interval(~o"2026Y25W")
+    end
+  end
+
   describe "the last month a year can have, with no year" do
     defp hebrew(text), do: Tempo.from_iso8601!(text, Hebrew)
 

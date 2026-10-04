@@ -28,8 +28,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **`extend/2` of a group writes what the group walks** — `Tempo.extend(~o"2026Y2G3MU")` is `{:ok, ~o"2026Y{4..6}M"}`, the months the group yields, where it writes `2026Y2G3MU{1..-1}D`, a range of days counted from the group's start that nothing reads (`:counted_in_group`). Groups of days and of hours each need their writing. Decided 2026-10-04.
 
-* [ ] **A week with no year is read, and has no span and no step** — a step from a week with no year returns a `Tempo.UnanchoredError`, where it counts to a literal 52 (`advance_week_unanchored/2` in the stepper), ISO 8601's count for a Gregorian year and wrong elsewhere (an Islamic civil year has 50 or 51 ISO weeks, a Hebrew one 50 to 55). Its number is checked when the value has a year, and its span stays refused. Decided 2026-10-04; a count of weeks with no year in Calendrical (a `weeks_in_year/0`) would let a week follow the rule of months and days.
-
 * [ ] **An interval with no end refuses what needs its end, as a lazy set does** — `Enum.at/2`, `Enum.empty?/1`, `Enum.random/1` and `Enum.slice/2` of `~o"2026Y/.."` raise a `Tempo.UnboundedSetError`, where `Enum.at(_, -1)` and `Enum.random/1` walk for ever and the first two answer; `Enum.take/2` and streams answer. Decided 2026-10-04: an answer that needs an unbounded walk refuses and never hangs.
 
 * [ ] **A qualification is held per component alone** — `2026?` and `?2026` are one value (ISO 8601-2 §8.2.4), written in the preferred form, where the first holds `qualification: :uncertain` and the second `qualifications: %{year: :uncertain}`, the two are not `==`, and the walk of the first yields uncertain months (`2026Y1M?`). A unit a walk adds is not qualified, and `trunc/2` drops the qualifier of a unit it drops. The matrix's read-back check (`same_value/4` in `test/support/matrix/checks.ex`) is then `==`. Decided 2026-10-04.
@@ -135,6 +133,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A week with no year has no week after it and no span** — the stepper asks `Tempo.UnitValues` for the week after a week as for every other unit, and with no year it has no answer, where it counted to a literal 52 in every calendar; so `25W` and the last day of a week (`25W7K`) have no span, which weeks 1 to 51 had. A step back needs no count and stays. A count of weeks with no year in Calendrical (a `weeks_in_year/0`) would let a week follow the rule of months and days. 2026-10-04.
 
 * [x] **An unspecified unit follows the count with no year** — the walk of `2MX*D` is a `Tempo.UnanchoredError`, as that of `2M`, `2MXXD` and `2M{1..-1}D` is, and so is a Hebrew `X*M` and a mask counted from the end of such a month (`2M-XD`), where each listed the values of the longest year; the span stays the month, and a cycle still ends at the most a year can have (`Tempo.Mask.at_most/3`). 2026-10-04.
 
