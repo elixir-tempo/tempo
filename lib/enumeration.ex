@@ -5,6 +5,7 @@ defmodule Tempo.Enumeration do
   alias Tempo.ConversionError
   alias Tempo.InvalidDateError
   alias Tempo.Iso8601.Group
+  alias Tempo.Iso8601.Parser
   alias Tempo.Iso8601.Unit
   alias Tempo.Mask
   alias Tempo.UnanchoredError
@@ -390,6 +391,77 @@ defmodule Tempo.Enumeration do
   end
 
   @doc false
+  # Whether a value's last component is a group (`2026Y2G3MU`) or a group of
+  # a set (`2026Y{1,2}G3MU`), which names values of its own unit and none
+  # below it.
+  @spec ends_in_group?(Tempo.t()) :: boolean()
+  def ends_in_group?(%Tempo{time: time}) when is_list(time), do: group?(List.last(time))
+  def ends_in_group?(%Tempo{}), do: false
+
+  defp group?({_unit, {:group, %Range{}}}), do: true
+  defp group?({_unit, {:group, {_kind, members}}, _size}) when is_list(members), do: true
+  defp group?(_component), do: false
+
+  @doc false
+  # A value that ends in a group, written as the values the group names where
+  # it stands: `2026Y2G3MU`, the second group of three months, is
+  # `2026Y{4..6}M`, the months its walk yields. A group names its values in
+  # the units before it (the third group of ten days of February stops at
+  # the 28th, and a group counted from the end of a Hebrew year is other
+  # months in a leap year), so one after several years or months is written
+  # so only where it names the same values in each. A value whose walk is an
+  # error is that error.
+  @spec group_as_set(Tempo.t()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
+  def group_as_set(%Tempo{time: time, calendar: calendar} = tempo) do
+    calendar = Compare.effective_calendar(calendar)
+    {before, [group]} = Enum.split(time, -1)
+
+    with {:ok, [_ | _]} <- members(tempo),
+         {:ok, contexts} <- contexts(tempo, before),
+         {:ok, values} <- named_in_each(group, contexts, calendar, tempo) do
+      {:ok, %{tempo | time: before ++ [{elem(group, 0), Parser.consolidate_ranges(values)}]}}
+    end
+  end
+
+  # The concrete components a value's last component is read after, finest
+  # first: one list for each value the components before it name.
+  defp contexts(_tempo, []), do: {:ok, [[]]}
+
+  defp contexts(tempo, before) do
+    with {:ok, values} <- members(%{tempo | time: before}) do
+      {:ok, Enum.map(values, fn %Tempo{time: time} -> :lists.reverse(time) end)}
+    end
+  end
+
+  defp named_in_each(group, contexts, calendar, tempo) do
+    case contexts |> Enum.map(&group_values(group, &1, calendar)) |> Enum.uniq() do
+      [{:ok, values}] -> {:ok, values |> Enum.uniq() |> Enum.sort()}
+      [{:error, reason} | _rest] -> {:error, exception(tempo, reason)}
+      _several -> {:error, exception(tempo, :group_differs)}
+    end
+  end
+
+  # The values a group names after `ancestors`, as the walk reads them.
+  defp group_values({unit, {:group, %Range{}}} = group, ancestors, calendar) do
+    case candidates(group, ancestors, calendar) do
+      {:ok, ^unit, values} -> {:ok, values}
+      {:unmatched, _reason} -> {:ok, []}
+    end
+  end
+
+  defp group_values({unit, {:group, {_kind, members}}, size}, ancestors, calendar) do
+    with {:ok, groups} <-
+           Group.groups_of_set(unit, members, size, :lists.reverse(ancestors), calendar) do
+      {:ok, Enum.flat_map(groups, &values_of_group(unit, &1, ancestors, calendar))}
+    end
+  end
+
+  defp values_of_group(unit, %Range{} = range, ancestors, calendar) do
+    {:ok, values} = group_values({unit, {:group, range}}, ancestors, calendar)
+    values
+  end
+
+  @doc false
   # The members of a value whose components are concrete integers, ranges, or
   # lists of either (`{2000..2010}Y{1..-1}M{1..-1}D` and any other combination
   # of sets in any position), or `:not_expandable` for a value that holds
@@ -713,6 +785,15 @@ defmodule Tempo.Enumeration do
     ArgumentError.exception(
       "Cannot enumerate a significant-digits block of #{size} candidates " <>
         "(limit: #{@significant_digits_limit}). Source: #{inspect(value)}S#{digits}"
+    )
+  end
+
+  defp exception(tempo, :group_differs) do
+    ConversionError.exception(
+      value: tempo,
+      reason:
+        "Cannot write #{inspect(tempo)} by the values its group names: the group names " <>
+          "other values in each of the periods it is counted in."
     )
   end
 

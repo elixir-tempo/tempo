@@ -3477,6 +3477,8 @@ defmodule Tempo do
 
   A second is written as its ten tenths and a fraction of a second as its next decimal place, down to a microsecond, which has no finer unit. Such a value inspects with the fractions as a set after the decimal sign (`45.{0..9}S`), a notation `from_iso8601/1` does not read.
 
+  A value that ends in a group is written as the values the group names, in the group's own unit: the second group of three months of 2026 is its April to June. A group stops where its container does (the third ten days of a February are its 21st to its 28th or 29th), so one under several years or months is written only where it names the same values in each.
+
   ### Arguments
 
   * `tempo` is a `t:t/0`.
@@ -3487,7 +3489,7 @@ defmodule Tempo do
 
   * `{:ok, tempo}` with the finer enumeration added.
 
-  * `{:error, exception}` — a `Tempo.ResolutionError` for a value with no finer unit to be written in (a fraction of a second at microsecond precision), an `ArgumentError` for a value that is not a `t:t/0` or a `unit` that is not `nil`, and the validation error when the result fails validation.
+  * `{:error, exception}` — a `Tempo.ResolutionError` for a value with no finer unit to be written in (a fraction of a second at microsecond precision), a `Tempo.ConversionError` for a group that names other values in each of the years or months it is under, an `ArgumentError` for a value that is not a `t:t/0` or a `unit` that is not `nil`, and the validation error when the result fails validation.
 
   ### Examples
 
@@ -3500,6 +3502,9 @@ defmodule Tempo do
       iex> Tempo.extend(~o"2026Y{6,7}M")
       {:ok, ~o"2026Y{6..7}M{1..-1}D"}
 
+      iex> Tempo.extend(~o"2026Y2G3MU")
+      {:ok, ~o"2026Y{4..6}M"}
+
       iex> {:error, %Tempo.ResolutionError{}} = Tempo.extend(~o"2026-06-15T10:30:45.123456")
 
   """
@@ -3508,10 +3513,9 @@ defmodule Tempo do
   def extend(tempo, unit \\ nil)
 
   def extend(%Tempo{time: time} = tempo, nil) when is_list(time) do
-    case Enumeration.implicit_enumeration(tempo) do
-      {:ok, enumerated} -> Validation.validate(enumerated, calendar_of(tempo))
-      {:finest, unit} -> {:error, no_finer_unit_error(tempo, unit)}
-    end
+    if Enumeration.ends_in_group?(tempo),
+      do: extend_group(tempo),
+      else: extend_by_finer_unit(tempo)
   end
 
   def extend(%Tempo{time: time}, unit) when is_list(time) do
@@ -3528,6 +3532,22 @@ defmodule Tempo do
        "Tempo.extend/2 writes one date or time value by its next finer unit, and " <>
          "#{inspect(value)} is not one."
      )}
+  end
+
+  defp extend_by_finer_unit(tempo) do
+    case Enumeration.implicit_enumeration(tempo) do
+      {:ok, enumerated} -> Validation.validate(enumerated, calendar_of(tempo))
+      {:finest, unit} -> {:error, no_finer_unit_error(tempo, unit)}
+    end
+  end
+
+  # A group names values of its own unit, the ones its walk yields, and is
+  # written as them: a unit below a group is counted from the group's start
+  # (ISO 8601-2 §5.4.2), so an enumeration of one would be read as no value
+  # of the group is.
+  defp extend_group(tempo) do
+    with {:ok, written} <- Enumeration.group_as_set(tempo),
+         do: Validation.validate(written, calendar_of(tempo))
   end
 
   defp no_finer_unit_error(tempo, unit) do

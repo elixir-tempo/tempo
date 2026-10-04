@@ -12,8 +12,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **A month of a year that starts within the months is the nth month of the year** — in `Calendrical.Julian.March25` `2026Y1M` is 25 to 31 March and `2026Y12M` 1 February to 24 March, as Calendrical's `month/2` counts them, and the walk of a year yields them in that order, where it yields the Julian months 1 to 12 in number order, the first three of which come after the other nine. A date keeps its month's Julian number, so a month's number is not the month of its dates. Decided 2026-10-04.
 
-* [ ] **`extend/2` of a group writes what the group walks** — `Tempo.extend(~o"2026Y2G3MU")` is `{:ok, ~o"2026Y{4..6}M"}`, the months the group yields, where it writes `2026Y2G3MU{1..-1}D`, a range of days counted from the group's start that nothing reads (`:counted_in_group`). Groups of days and of hours each need their writing. Decided 2026-10-04.
-
 ### Conformance and completeness
 
 * [ ] **A day with no month selected in a year is a day of the year** — `2026YL-1DN` is 31 December and `2026YL45DN` 14 February, as the value `2026Y-1D` and `Tempo.select(~o"2026", ~o"-1D")` read it, where the selection reads the day in the year's first month (31 January). An RRULE's `BYMONTHDAY` keeps its own rule, DTSTART's month. Decided 2026-10-04; with it a constraint of `select/2` and a selection go through one resolver, and the matrix's selections take the form in.
@@ -117,6 +115,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **`extend/2` of a group writes what the group walks** — a value that ends in a group, or a group of a set, is written as the values the group names in its own unit, stopping where its container does (`2026Y2G3MU` is `2026Y{4..6}M`, `2026Y2M3G10DU` is `2026Y2M{21..28}D`), where it wrote the unit below, counted from the group's start, which nothing read and a second's group could not be inspected; a group that names other values in each of several years or months is a `ConversionError`. 2026-10-05.
 
 * [x] **A Gregorian week's days are calendar dates** — the walk of a week and of the interval it converts to, a shift by days or hours, `extend_resolution/2`, an interval's end and a recurrence's occurrences counted from a week by a duration, and a set operation's members give the date (`2026Y6M16D`) where each gave a week and a day of it; one converter, `Tempo.Validation.calendar_date_from_week_date/1`, at each place a value leaves. A week kept whole by a set operation beside a date walked its 168 hours and walks its seven days, and the matrix's 42 cells of a weekday selected in a Gregorian week are fixed with it. 2026-10-05.
 

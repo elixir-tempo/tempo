@@ -2,6 +2,8 @@ defmodule Tempo.Extend.Test do
   use ExUnit.Case, async: true
   import Tempo.Sigils
 
+  alias Calendrical.Hebrew
+
   # `Tempo.extend/2` writes a value by the unit below its own. It returns
   # tuples, and raised for a value with no finer unit (a fraction of a second
   # at microsecond precision), for a second already written as its
@@ -41,8 +43,8 @@ defmodule Tempo.Extend.Test do
       assert Tempo.extend(Tempo.from_iso8601!("{2026,2027}Y", Calendrical.ISOWeek)) ==
                Tempo.from_iso8601("{2026,2027}Y{1..-1}W", Calendrical.ISOWeek)
 
-      assert Tempo.extend(Tempo.from_iso8601!("5786Y{6,7}M", Calendrical.Hebrew)) ==
-               Tempo.from_iso8601("5786Y{6,7}M{1..-1}D", Calendrical.Hebrew)
+      assert Tempo.extend(Tempo.from_iso8601!("5786Y{6,7}M", Hebrew)) ==
+               Tempo.from_iso8601("5786Y{6,7}M{1..-1}D", Hebrew)
     end
 
     test "inspects as the text that reads back as it" do
@@ -96,6 +98,131 @@ defmodule Tempo.Extend.Test do
       scattered = %{~o"2026-06-15T10:30:45" | time: scattered_time()}
 
       assert inspect(scattered) == ~s(~o"2026Y6M15DT10H30M45.{0,5}S")
+    end
+  end
+
+  # A group names values of its own unit, the ones its walk yields, and a
+  # unit written after a group is counted from the group's start (ISO 8601-2
+  # §5.4.2), so an enumeration of the unit below was read as no value of the
+  # group is. A group is written as the values it names.
+  describe "a value that ends in a group" do
+    test "is written as the values the group names" do
+      assert Tempo.extend(~o"2026Y2G3MU") == {:ok, ~o"2026Y{4..6}M"}
+      assert Tempo.extend(~o"2026Y2Q") == {:ok, ~o"2026Y{4..6}M"}
+      assert Tempo.extend(~o"2G5YU") == {:ok, ~o"{5..9}Y"}
+      assert Tempo.extend(~o"2026Y3G4WU") == {:ok, ~o"2026Y{9..12}W"}
+      assert Tempo.extend(~o"2026Y6M2G10DU") == {:ok, ~o"2026Y6M{11..20}D"}
+      assert Tempo.extend(~o"2026Y2G60DU") == {:ok, ~o"2026Y{61..120}D"}
+      assert Tempo.extend(~o"2026Y6M15D2GT6HU") == {:ok, ~o"2026Y6M15DT{6..11}H"}
+      assert Tempo.extend(~o"2026Y6M15DT10H2G15MU") == {:ok, ~o"2026Y6M15DT10H{15..29}M"}
+
+      assert Tempo.extend(~o"2026Y6M15DT10H30M2G15SU") ==
+               {:ok, ~o"2026Y6M15DT10H30M{15..29}S"}
+
+      assert Tempo.extend(~o"2G3MU") == {:ok, ~o"{4..6}M"}
+      assert Tempo.extend(~o"T2G6HU") == {:ok, ~o"T{6..11}H"}
+    end
+
+    test "walks as the group does and reads back as itself" do
+      for text <- [
+            "2026Y2G3MU",
+            "2026Y2Q",
+            "2G5YU",
+            "2026Y3G4WU",
+            "2026Y6M2G10DU",
+            "2026Y2G60DU",
+            "2026Y6M15D2GT6HU",
+            "2026Y6M15DT10H2G15MU",
+            "2026Y6M15DT10H30M2G15SU",
+            "2G3MU",
+            "T2G6HU",
+            "2026Y{1,-1}G3MU",
+            "{2026,2027}Y{1,-1}G3MU",
+            "2026Y2M3G10DU",
+            "2026Y6M{1,3}G10DU"
+          ] do
+        group = Tempo.from_iso8601!(text)
+        {:ok, written} = Tempo.extend(group)
+        {:ok, iso8601} = Tempo.to_iso8601(written)
+
+        assert Enum.to_list(written) == Enum.to_list(group)
+        assert Tempo.from_iso8601(iso8601) == {:ok, written}
+      end
+    end
+
+    test "a group of a set is the values of each of its groups" do
+      assert Tempo.extend(~o"2026Y{1,2}G3MU") == {:ok, ~o"2026Y{1..6}M"}
+      assert Tempo.extend(~o"2026Y{1,-1}G3MU") == {:ok, ~o"2026Y{1..3,10..12}M"}
+      assert Tempo.extend(~o"2026Y6M{1,3}G10DU") == {:ok, ~o"2026Y6M{1..10,21..30}D"}
+      assert Tempo.extend(~o"2026Y2M{1..-1}G10DU") == {:ok, ~o"2026Y2M{1..28}D"}
+    end
+
+    test "stops where its container does" do
+      # The third ten days of a February, and a group of thirty-one days of June.
+      assert Tempo.extend(~o"2026Y2M3G10DU") == {:ok, ~o"2026Y2M{21..28}D"}
+      assert Tempo.extend(~o"2024Y2M3G10DU") == {:ok, ~o"2024Y2M{21..29}D"}
+      assert Tempo.extend(~o"2026Y6M1G31DU") == {:ok, ~o"2026Y6M{1..30}D"}
+    end
+
+    test "that names one value is that value" do
+      assert Tempo.extend(~o"2026Y3G1MU") == {:ok, ~o"2026Y3M"}
+
+      # 2026 has 53 weeks, so the fourteenth group of four holds the last alone.
+      assert Tempo.extend(~o"2026Y14G4WU") == {:ok, ~o"2026Y53W"}
+    end
+
+    test "under several years or months is written where it names the same values in each" do
+      assert Tempo.extend(~o"{2026,2027}Y2G3MU") == {:ok, ~o"{2026,2027}Y{4..6}M"}
+
+      assert Tempo.extend(~o"{2026,2027}Y{1,-1}G3MU") ==
+               {:ok, ~o"{2026,2027}Y{1..3,10..12}M"}
+
+      # The third ten days of February are eight days or nine, and of January ten.
+      for value <- [~o"{2024,2026}Y2M3G10DU", ~o"2026Y{1,2}M3G10DU"] do
+        assert {:error, %Tempo.ConversionError{} = error} = Tempo.extend(value)
+        assert Exception.message(error) =~ "the group names other values in each"
+        assert_raise Tempo.ConversionError, fn -> Tempo.extend!(value) end
+      end
+    end
+
+    test "in a calendar of weeks, and in one of other months" do
+      assert Tempo.extend(Tempo.from_iso8601!("2026Y2G4WU", Calendrical.ISOWeek)) ==
+               Tempo.from_iso8601("2026Y{5..8}W", Calendrical.ISOWeek)
+
+      assert Tempo.extend(Tempo.from_iso8601!("5786Y2G3MU", Hebrew)) ==
+               Tempo.from_iso8601("5786Y{4..6}M", Hebrew)
+
+      # 5784 has thirteen months, so its last group of three is the thirteenth alone.
+      assert Hebrew.months_in_year(5784) == 13
+
+      assert Tempo.extend(Tempo.from_iso8601!("5784Y{1,-1}G3MU", Hebrew)) ==
+               Tempo.from_iso8601("5784Y{1..3,13}M", Hebrew)
+
+      assert {:error, %Tempo.ConversionError{}} =
+               Tempo.extend(Tempo.from_iso8601!("{5784,5785}Y{1,-1}G3MU", Hebrew))
+    end
+
+    test "keeps its zone and its qualification" do
+      assert Tempo.extend(Tempo.from_iso8601!("2026Y2G3MU[Europe/Paris]")) ==
+               Tempo.from_iso8601("2026Y{4..6}M[Europe/Paris]")
+
+      {:ok, months} = Tempo.extend(~o"2026?Y2G3MU")
+      assert Tempo.qualification(months, :year) == :uncertain
+    end
+
+    test "is the walk's error where the group cannot be walked" do
+      assert {:error, %Tempo.ConversionError{reason: :counted_in_group}} =
+               Tempo.extend(~o"2026Y2G3MU2G10DU")
+    end
+
+    test "is extended again by the unit below the group's" do
+      {:ok, months} = Tempo.extend(~o"2026Y2G3MU")
+
+      assert Tempo.extend(months) == {:ok, ~o"2026Y{4..6}M{1..-1}D"}
+    end
+
+    test "a unit after a group makes it one value, extended as any is" do
+      assert Tempo.extend(~o"2026Y2G3MU15D") == {:ok, ~o"2026Y4M15DT{0..23}H"}
     end
   end
 

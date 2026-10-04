@@ -273,6 +273,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.extend/2` writes a value that ends in a group as the values the group names: `Tempo.extend(~o"2026Y2G3MU")` is `{:ok, ~o"2026Y{4..6}M"}`, the months its walk yields, where it wrote the unit below (`2026Y2G3MU{1..-1}D`), which is counted from the group's start and was read as no value of the group. A group stops where its container does (`2026Y2M3G10DU` is `2026Y2M{21..28}D`), and one that names other values in each of several years or months is a `Tempo.ConversionError`.
+
 * A week kept whole by a set operation beside a date is walked by its seven days, where the first member of `Tempo.union(~o"2026-W25", ~o"2026-06-20")` walked its 168 hours. A weekday selected in a Gregorian week (`2026Y25WL3KN`) is that day, in a value and in a recurrence's rule, where it was the week's Monday.
 
 * A time of day is placed on each day of a `:within` window whatever units the window is written in: `Tempo.intersection(~o"T09/T17", ~o"2026-W25", within: ~o"2026-W25")` is the hours of the week's seven days, where it was empty, and `Tempo.complement/2` there the time outside them, where it was the whole week. In a window of another calendar the time is placed on that calendar's days (a Hebrew month's twenty-nine, a week calendar's week dates), where the day's numbers were read in the Gregorian calendar and nothing was placed.
