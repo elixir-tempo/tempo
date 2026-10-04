@@ -4,7 +4,7 @@ defmodule Tempo.UnitValues do
 
   A date or a time is counted in units, and each unit takes a run of values that the units before it and the calendar decide: the months of a year, the days of a month, the hours of a day. A value is written against that run as a number, as a count from its end (`-1`, the last), as a range from one of its values to another (`{28..-1}`), or as several of these.
 
-  This module is the one place where either is worked out, so that there is one place to verify. `in_period/3` gives the run, and `in_any_year/3` the run a unit takes with no year to count it in; `named/2` lists the values a written value names in it, and `resolve/2` reads a written value against it in the shape it is written in; `from_end/2` is the count from the end that all rest on. How many values a unit takes is always asked of the calendar, which is Calendrical's to answer: nothing here is calendar arithmetic.
+  This module is the one place where either is worked out, so that there is one place to verify. `in_period/3` gives the run, and `in_any_year/3` the run a unit takes with no year to count it in; `first/3`, `last/3`, `following/4` and `preceding/4` are what a step asks of it; `named/2` lists the values a written value names in it, and `resolve/2` reads a written value against it in the shape it is written in; `from_end/2` is the count from the end that all rest on. How many values a unit takes is always asked of the calendar, which is Calendrical's to answer: nothing here is calendar arithmetic.
 
   A selection's resolver (`Tempo.RRule.Selection`), `Tempo.select/2`, the walk, the reading of a value (`Tempo.Validation`) and its masks (`Tempo.Mask`) count through it. A step from a value still asks the calendar for a year's or a month's count where it steps, and `Tempo.explain/1` still holds a count from the end of its own; both are to follow (`plans/enumeration-and-selection.md`).
 
@@ -62,32 +62,74 @@ defmodule Tempo.UnitValues do
   """
   @spec in_period(atom(), keyword(), module()) ::
           {:ok, Range.t()} | {:error, :unanchored | :uncounted | :no_period}
-  def in_period(:month, context, calendar),
-    do: counted(whole(context, :year), &calendar.months_in_year/1)
+  def in_period(unit, context, calendar) do
+    with {:ok, last} <- last_in_period(unit, context, calendar) do
+      {:ok, first_value(unit)..last//1}
+    end
+  end
 
-  def in_period(:week, context, calendar),
-    do: counted(whole(context, :year), &Validation.iso_weeks_in_year(&1, calendar))
+  # The units that take a run of values.
+  @counted [
+    :month,
+    :week,
+    :calendar_week,
+    :day_of_year,
+    :day,
+    :day_of_week,
+    :hour,
+    :minute,
+    :second
+  ]
 
-  def in_period(:calendar_week, context, calendar),
-    do: counted(whole(context, :year), &Validation.calendar_weeks_in_year(&1, calendar))
+  # The first value a unit takes: the first month, week or day, and hour,
+  # minute or second zero.
+  defp first_value(unit) when unit in [:hour, :minute, :second], do: 0
+  defp first_value(_unit), do: 1
 
-  def in_period(:day_of_year, context, calendar),
-    do: counted(whole(context, :year), &calendar.days_in_year/1)
+  # The last value a unit takes in the period the units before it name. A
+  # step asks it of the value it steps from, so no range is built here.
+  defp last_in_period(:month, context, calendar) do
+    case whole(context, :year) do
+      nil -> {:error, :unanchored}
+      year -> counted(calendar.months_in_year(year))
+    end
+  end
 
-  def in_period(:day, context, calendar) do
+  defp last_in_period(:week, context, calendar) do
+    case whole(context, :year) do
+      nil -> {:error, :unanchored}
+      year -> counted(Validation.iso_weeks_in_year(year, calendar))
+    end
+  end
+
+  defp last_in_period(:calendar_week, context, calendar) do
+    case whole(context, :year) do
+      nil -> {:error, :unanchored}
+      year -> counted(Validation.calendar_weeks_in_year(year, calendar))
+    end
+  end
+
+  defp last_in_period(:day_of_year, context, calendar) do
+    case whole(context, :year) do
+      nil -> {:error, :unanchored}
+      year -> counted(calendar.days_in_year(year))
+    end
+  end
+
+  defp last_in_period(:day, context, calendar) do
     year = whole(context, :year)
     month = whole(context, :month)
 
     cond do
       is_nil(year) or is_nil(month) -> {:error, :unanchored}
-      month_of_year?(month, year, calendar) -> counted(year, &calendar.days_in_month(&1, month))
+      month_of_year?(month, year, calendar) -> counted(calendar.days_in_month(year, month))
       true -> {:error, :no_period}
     end
   end
 
-  def in_period(unit, _context, calendar) do
+  defp last_in_period(unit, _context, calendar) do
     case Unit.value_range(unit, calendar) do
-      {:ok, %Range{first: first, last: last}} -> {:ok, first..last//1}
+      {:ok, %Range{last: last}} -> {:ok, last}
       :unknown -> {:error, :uncounted}
     end
   end
@@ -119,8 +161,8 @@ defmodule Tempo.UnitValues do
   defp month_of_year?(_month, _year, _calendar), do: false
 
   defp fewest_months(calendar) do
-    case months_in_any_year(calendar) do
-      {:ok, %Range{last: fewest}, _longest} -> fewest
+    case last_in_any_year(:month, [], calendar) do
+      {:ok, fewest, _most} -> fewest
       {:error, _cannot_say} -> 0
     end
   end
@@ -132,14 +174,10 @@ defmodule Tempo.UnitValues do
     end
   end
 
-  defp counted(year, count) when is_integer(year) do
-    case count.(year) do
-      last when is_integer(last) -> {:ok, 1..last//1}
-      _not_a_count -> {:error, :unanchored}
-    end
-  end
-
-  defp counted(_no_year, _count), do: {:error, :unanchored}
+  # What a calendar answers for a year or a month of one: a count, or that
+  # it cannot say.
+  defp counted(last) when is_integer(last), do: {:ok, last}
+  defp counted(_not_a_count), do: {:error, :unanchored}
 
   @doc """
   Returns the values a unit takes with no year to count them in: those it takes in every year, and those it takes in the year that has the most.
@@ -182,56 +220,246 @@ defmodule Tempo.UnitValues do
   """
   @spec in_any_year(atom(), keyword(), module()) ::
           {:ok, every :: Range.t(), longest :: Range.t()} | {:error, :unanchored | :uncounted}
-  def in_any_year(:month, _context, calendar) do
-    # `function_exported?/3` is false for a module that is not yet loaded.
-    if Code.ensure_loaded?(calendar),
-      do: months_in_any_year(calendar),
-      else: {:error, :unanchored}
-  end
-
-  def in_any_year(:day, context, calendar) do
-    month = whole(context, :month)
-
-    if is_integer(month) and month > 0 and Code.ensure_loaded?(calendar) and
-         function_exported?(calendar, :days_in_month, 1),
-       do: counted_in_any_year(calendar.days_in_month(month)),
-       else: {:error, :unanchored}
-  end
-
-  def in_any_year(unit, _context, _calendar)
-      when unit in [:week, :calendar_week, :day_of_year],
-      do: {:error, :unanchored}
-
   def in_any_year(unit, context, calendar) do
-    with {:ok, values} <- in_period(unit, context, calendar) do
-      {:ok, values, values}
+    with {:ok, fewest, most} <- last_in_any_year(unit, context, calendar) do
+      first = first_value(unit)
+      {:ok, first..fewest//1, first..most//1}
     end
   end
 
-  # `months_in_year/0` is an optional callback of a calendar. The module is
-  # taken to be loaded, as one a function has been called on is.
-  defp months_in_any_year(calendar) do
-    if function_exported?(calendar, :months_in_year, 0),
+  # The last value a unit takes in every year, and in the year that has the
+  # most: what a calendar answers with no year, read in this one place. A
+  # step asks it of the value it steps from, so no range is built here.
+  defp last_in_any_year(:month, _context, calendar) do
+    # `months_in_year/0` is an optional callback of a calendar.
+    if exported?(calendar, :months_in_year, 0),
       do: counted_in_any_year(calendar.months_in_year()),
       else: {:error, :unanchored}
+  end
+
+  defp last_in_any_year(:day, context, calendar) do
+    month = whole(context, :month)
+
+    if is_integer(month) and month > 0 and exported?(calendar, :days_in_month, 1),
+      do: counted_in_any_year(calendar.days_in_month(month)),
+      else: {:error, :unanchored}
+  end
+
+  defp last_in_any_year(unit, _context, _calendar)
+       when unit in [:week, :calendar_week, :day_of_year],
+       do: {:error, :unanchored}
+
+  defp last_in_any_year(unit, context, calendar) do
+    with {:ok, last} <- last_in_period(unit, context, calendar) do
+      {:ok, last, last}
+    end
+  end
+
+  # `function_exported?/3` is false for a module that is not yet loaded, so
+  # one that seems not to export the function is loaded and asked again.
+  defp exported?(calendar, function, arity) do
+    function_exported?(calendar, function, arity) or
+      (Code.ensure_loaded?(calendar) and function_exported?(calendar, function, arity))
   end
 
   # What a calendar answers with no year: a count, the counts its years run
   # over (a range or a list of them), or that it cannot say.
   defp counted_in_any_year(count) when is_integer(count) and count > 0,
-    do: {:ok, 1..count//1, 1..count//1}
+    do: {:ok, count, count}
 
   defp counted_in_any_year({:ambiguous, %Range{first: first, last: last}})
        when is_integer(first) and is_integer(last) and first > 0 and last > 0,
-       do: {:ok, 1..min(first, last)//1, 1..max(first, last)//1}
+       do: {:ok, min(first, last), max(first, last)}
 
   defp counted_in_any_year({:ambiguous, [_ | _] = counts}) do
     if Enum.all?(counts, &(is_integer(&1) and &1 > 0)),
-      do: {:ok, 1..Enum.min(counts)//1, 1..Enum.max(counts)//1},
+      do: {:ok, Enum.min(counts), Enum.max(counts)},
       else: {:error, :unanchored}
   end
 
   defp counted_in_any_year(_cannot_say), do: {:error, :unanchored}
+
+  @doc """
+  Returns the first value a unit takes after the units before it.
+
+  A step that carries puts the unit it leaves at its first value: the day after the last of a month is the first day of the next.
+
+  ### Arguments
+
+  * `unit` is the unit counted, as for `in_period/3`.
+
+  * `context` is a keyword list of the units before it, as a value's `:time` holds them.
+
+  * `calendar` is the calendar module the units are counted in.
+
+  ### Returns
+
+  * `{:ok, first}`: the first month, week or day, and hour, minute or second zero.
+
+  * `{:error, :uncounted}` for a unit that takes no run of values, such as a year.
+
+  ### Examples
+
+      iex> Tempo.UnitValues.first(:day, [year: 2026, month: 6], Calendrical.Gregorian)
+      {:ok, 1}
+
+      iex> Tempo.UnitValues.first(:hour, [], Calendrical.Gregorian)
+      {:ok, 0}
+
+  """
+  @spec first(atom(), keyword(), module()) :: {:ok, integer()} | {:error, :uncounted}
+  def first(unit, _context, _calendar) when unit in @counted, do: {:ok, first_value(unit)}
+  def first(_unit, _context, _calendar), do: {:error, :uncounted}
+
+  @doc """
+  Returns the last value a unit takes after the units before it.
+
+  A step back that borrows puts the unit it leaves at its last value: the day before the first of a month is the last day of the month before. With no year in the context the answer is given where every year has the same (`in_any_year/3`).
+
+  The units before it are taken to name a period the calendar has, as those of a value that has been read do; `in_period/3` is the function that checks.
+
+  ### Arguments
+
+  * `unit` is the unit counted, as for `in_period/3`.
+
+  * `context` is a keyword list of the units before it, as a value's `:time` holds them.
+
+  * `calendar` is the calendar module the units are counted in.
+
+  ### Returns
+
+  * `{:ok, last}`.
+
+  * `{:error, :unanchored}` when the last value depends on a year the context does not hold.
+
+  * `{:error, :uncounted}` or `{:error, :no_period}`, as `in_period/3` returns them.
+
+  ### Examples
+
+      iex> Tempo.UnitValues.last(:day, [year: 2028, month: 2], Calendrical.Gregorian)
+      {:ok, 29}
+
+      iex> Tempo.UnitValues.last(:day, [month: 6], Calendrical.Gregorian)
+      {:ok, 30}
+
+      iex> Tempo.UnitValues.last(:day, [month: 2], Calendrical.Gregorian)
+      {:error, :unanchored}
+
+  """
+  @spec last(atom(), keyword(), module()) ::
+          {:ok, integer()} | {:error, :unanchored | :uncounted | :no_period}
+  def last(unit, context, calendar) do
+    case last_in_any_year(unit, context, calendar) do
+      {:ok, last, last} -> {:ok, last}
+      _by_the_year_or_cannot_say -> last_in_period(unit, context, calendar)
+    end
+  end
+
+  @doc """
+  Returns the value that follows a value among those a unit takes after the units before it.
+
+  A step asks it of the value it steps from: the day after the 15th is the 16th, and the last day of a month is followed by none, so the step carries into the month. Where the answer is the same in every year the year is not asked for, and with no year in the context that is the only answer there is: the day after 27 February is the 28th and the 29th is the last of any February that has one, where what follows the 28th depends on the year.
+
+  The units before it are taken to name a period the calendar has, as those of a value that has been read do; `in_period/3` is the function that checks.
+
+  ### Arguments
+
+  * `unit` is the unit counted, as for `in_period/3`.
+
+  * `value` is the whole number the step counts from, or `:any` for an unspecified unit, which counts as its last value.
+
+  * `context` is a keyword list of the units before it, as a value's `:time` holds them.
+
+  * `calendar` is the calendar module the units are counted in.
+
+  ### Returns
+
+  * `{:ok, next}`, the value after `value`.
+
+  * `:last` when `value` is the last the unit takes there.
+
+  * `{:error, :unanchored}` when what follows depends on a year the context does not hold.
+
+  * `{:error, :uncounted}` or `{:error, :no_period}`, as `in_period/3` returns them.
+
+  ### Examples
+
+      iex> Tempo.UnitValues.following(:day, 15, [year: 2026, month: 6], Calendrical.Gregorian)
+      {:ok, 16}
+
+      iex> Tempo.UnitValues.following(:day, 30, [year: 2026, month: 6], Calendrical.Gregorian)
+      :last
+
+      iex> Tempo.UnitValues.following(:day, 28, [year: 2028, month: 2], Calendrical.Gregorian)
+      {:ok, 29}
+
+      iex> Tempo.UnitValues.following(:day, 28, [month: 2], Calendrical.Gregorian)
+      {:error, :unanchored}
+
+      iex> Tempo.UnitValues.following(:month, 12, [year: 5787], Calendrical.Hebrew)
+      {:ok, 13}
+
+  """
+  @spec following(atom(), integer() | :any, keyword(), module()) ::
+          {:ok, integer()} | :last | {:error, :unanchored | :uncounted | :no_period}
+  def following(unit, value, context, calendar) do
+    case last_in_any_year(unit, context, calendar) do
+      {:ok, fewest, _most} when is_integer(value) and value < fewest -> {:ok, value + 1}
+      {:ok, _fewest, most} when value == :any or value >= most -> :last
+      _by_the_year_or_cannot_say -> following_in_period(unit, value, context, calendar)
+    end
+  end
+
+  defp following_in_period(unit, value, context, calendar) do
+    case last_in_period(unit, context, calendar) do
+      {:ok, last} when is_integer(value) and value < last -> {:ok, value + 1}
+      {:ok, _last} -> :last
+      {:error, _reason} = error -> error
+    end
+  end
+
+  @doc """
+  Returns the value that comes before a value among those a unit takes after the units before it.
+
+  A step back asks it of the value it steps from: the day before the 15th is the 14th, and the first day of a month has none before it, so the step borrows from the month.
+
+  ### Arguments
+
+  * `unit` is the unit counted, as for `in_period/3`.
+
+  * `value` is the whole number the step counts back from.
+
+  * `context` is a keyword list of the units before it, as a value's `:time` holds them.
+
+  * `calendar` is the calendar module the units are counted in.
+
+  ### Returns
+
+  * `{:ok, previous}`, the value before `value`.
+
+  * `:first` when `value` is the first the unit takes there.
+
+  * `{:error, :uncounted}` for a unit that takes no run of values, such as a year.
+
+  ### Examples
+
+      iex> Tempo.UnitValues.preceding(:day, 15, [year: 2026, month: 6], Calendrical.Gregorian)
+      {:ok, 14}
+
+      iex> Tempo.UnitValues.preceding(:day, 1, [year: 2026, month: 6], Calendrical.Gregorian)
+      :first
+
+      iex> Tempo.UnitValues.preceding(:hour, 0, [], Calendrical.Gregorian)
+      :first
+
+  """
+  @spec preceding(atom(), integer(), keyword(), module()) ::
+          {:ok, integer()} | :first | {:error, :uncounted}
+  def preceding(unit, value, _context, _calendar) when is_integer(value) and unit in @counted do
+    if value > first_value(unit), do: {:ok, value - 1}, else: :first
+  end
+
+  def preceding(_unit, _value, _context, _calendar), do: {:error, :uncounted}
 
   @doc """
   Returns the values a written value names among those a unit takes, in order and once each.

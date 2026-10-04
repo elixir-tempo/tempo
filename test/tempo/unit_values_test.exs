@@ -234,6 +234,180 @@ defmodule Tempo.UnitValuesTest do
     end
   end
 
+  # A step asks what follows a value and what comes before it, and for the
+  # first and the last value of the period it carries into or borrows from.
+  # Each is held to the calendar's own word on which dates are valid.
+  describe "following/4, preceding/4, first/3 and last/3, in a year" do
+    test "a day is followed by the next the calendar calls valid, and the last by none" do
+      for calendar <- @calendars, year <- years(calendar) do
+        for month <- 1..calendar.months_in_year(year) do
+          context = [year: year, month: month]
+          valid = Enum.filter(1..40, &calendar.valid_date?(year, month, &1))
+
+          assert UnitValues.first(:day, context, calendar) == {:ok, hd(valid)}
+          assert UnitValues.last(:day, context, calendar) == {:ok, List.last(valid)}
+
+          for day <- valid do
+            expected = if (day + 1) in valid, do: {:ok, day + 1}, else: :last
+            assert UnitValues.following(:day, day, context, calendar) == expected
+
+            expected = if (day - 1) in valid, do: {:ok, day - 1}, else: :first
+            assert UnitValues.preceding(:day, day, context, calendar) == expected
+          end
+        end
+      end
+    end
+
+    test "a month is followed by the next the calendar calls valid, and the last by none" do
+      for calendar <- @calendars, year <- years(calendar) do
+        context = [year: year]
+        valid = Enum.filter(1..14, &calendar.valid_date?(year, &1, 1))
+
+        assert UnitValues.first(:month, context, calendar) == {:ok, hd(valid)}
+        assert UnitValues.last(:month, context, calendar) == {:ok, List.last(valid)}
+
+        for month <- valid do
+          expected = if (month + 1) in valid, do: {:ok, month + 1}, else: :last
+          assert UnitValues.following(:month, month, context, calendar) == expected
+
+          expected = if (month - 1) in valid, do: {:ok, month - 1}, else: :first
+          assert UnitValues.preceding(:month, month, context, calendar) == expected
+        end
+      end
+    end
+
+    test "a day of the year and a week are followed by the next their year has" do
+      for year <- 2020..2032 do
+        days = Date.diff(Date.new!(year + 1, 1, 1), Date.new!(year, 1, 1))
+        {^year, weeks} = :calendar.iso_week_number({year, 12, 28})
+        context = [year: year]
+
+        assert UnitValues.last(:day_of_year, context, Calendrical.Gregorian) == {:ok, days}
+        assert UnitValues.following(:day_of_year, days, context, Calendrical.Gregorian) == :last
+
+        assert UnitValues.following(:day_of_year, days - 1, context, Calendrical.Gregorian) ==
+                 {:ok, days}
+
+        assert UnitValues.last(:week, context, Calendrical.Gregorian) == {:ok, weeks}
+        assert UnitValues.following(:week, weeks, context, Calendrical.Gregorian) == :last
+
+        assert UnitValues.following(:week, weeks - 1, context, Calendrical.Gregorian) ==
+                 {:ok, weeks}
+
+        assert UnitValues.preceding(:week, 1, context, Calendrical.Gregorian) == :first
+      end
+    end
+
+    test "the first and the last are the ends of the values the unit takes" do
+      for {unit, context} <- [
+            month: [year: 2026],
+            week: [year: 2026],
+            calendar_week: [year: 2026],
+            day_of_year: [year: 2026],
+            day: [year: 2026, month: 2],
+            day_of_week: [],
+            hour: [],
+            minute: [],
+            second: []
+          ] do
+        assert {:ok, %Range{first: first, last: last}} =
+                 UnitValues.in_period(unit, context, Calendrical.Gregorian)
+
+        assert UnitValues.first(unit, context, Calendrical.Gregorian) == {:ok, first},
+               inspect(unit)
+
+        assert UnitValues.last(unit, context, Calendrical.Gregorian) == {:ok, last}, inspect(unit)
+        assert UnitValues.following(unit, last, context, Calendrical.Gregorian) == :last
+        assert UnitValues.preceding(unit, first, context, Calendrical.Gregorian) == :first
+      end
+    end
+
+    test "an unspecified value counts as the last" do
+      assert UnitValues.following(:day, :any, [year: 2026, month: 6], Calendrical.Gregorian) ==
+               :last
+
+      assert UnitValues.following(:month, :any, [year: 5787], Calendrical.Hebrew) == :last
+      assert UnitValues.following(:week, :any, [year: 2026], Calendrical.Gregorian) == :last
+      assert UnitValues.following(:day, :any, [month: 2], Calendrical.Gregorian) == :last
+    end
+
+    test "a unit that takes no run of values is uncounted" do
+      assert UnitValues.first(:year, [], Calendrical.Gregorian) == {:error, :uncounted}
+      assert UnitValues.last(:year, [], Calendrical.Gregorian) == {:error, :uncounted}
+      assert UnitValues.following(:year, 2026, [], Calendrical.Gregorian) == {:error, :uncounted}
+      assert UnitValues.preceding(:year, 2026, [], Calendrical.Gregorian) == {:error, :uncounted}
+    end
+  end
+
+  describe "following/4 and last/3, with no year" do
+    test "a day is followed by the next where every year has it, and is the last where no year has another" do
+      for calendar <- @calendars do
+        years = many_years(calendar)
+        most_months = years |> Enum.map(&calendar.months_in_year/1) |> Enum.max()
+
+        for month <- 1..most_months do
+          lengths =
+            for year <- years, month <= calendar.months_in_year(year) do
+              calendar.days_in_month(year, month)
+            end
+
+          {fewest, most} = Enum.min_max(lengths)
+
+          for day <- 1..most do
+            expected =
+              cond do
+                day < fewest -> {:ok, day + 1}
+                day == most -> :last
+                true -> {:error, :unanchored}
+              end
+
+            assert UnitValues.following(:day, day, [month: month], calendar) == expected,
+                   "#{inspect(calendar)} #{month}-#{day}"
+          end
+
+          expected = if fewest == most, do: {:ok, most}, else: {:error, :unanchored}
+          assert UnitValues.last(:day, [month: month], calendar) == expected
+        end
+      end
+    end
+
+    test "a month is followed by the next where every year has it, and is the last where no year has another" do
+      for calendar <- @calendars do
+        {fewest, most} =
+          calendar |> many_years() |> Enum.map(&calendar.months_in_year/1) |> Enum.min_max()
+
+        for month <- 1..most do
+          expected =
+            cond do
+              month < fewest -> {:ok, month + 1}
+              month == most -> :last
+              true -> {:error, :unanchored}
+            end
+
+          assert UnitValues.following(:month, month, [], calendar) == expected,
+                 "#{inspect(calendar)} #{month}"
+        end
+      end
+    end
+
+    test "a week and a day of the year are followed by nothing that can be said" do
+      assert UnitValues.following(:week, 25, [], Calendrical.Gregorian) == {:error, :unanchored}
+
+      assert UnitValues.following(:day_of_year, 200, [], Calendrical.Gregorian) ==
+               {:error, :unanchored}
+
+      assert UnitValues.last(:week, [], Calendrical.Gregorian) == {:error, :unanchored}
+    end
+
+    test "a calendar that cannot say without a year leaves the step to the year" do
+      assert UnitValues.following(:day, 15, [month: 6], Calendrical.Reform.England) ==
+               {:error, :unanchored}
+
+      assert UnitValues.following(:day, 15, [year: 2026, month: 6], Calendrical.Reform.England) ==
+               {:ok, 16}
+    end
+  end
+
   # A number, or a range with a step, written from either end.
   defp written do
     index = integer(-70..70)

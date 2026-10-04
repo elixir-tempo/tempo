@@ -15,7 +15,6 @@ defmodule Tempo.Math do
   alias Tempo.TimeZoneDatabase
   alias Tempo.UnanchoredError
   alias Tempo.UnitValues
-  alias Tempo.Validation
 
   @doc """
   Advance a `%Tempo{}` or a keyword-list time representation by
@@ -288,14 +287,20 @@ defmodule Tempo.Math do
     end
   end
 
+  # ── A step among a unit's values ──────────────────────────────
+  #
+  # `Tempo.UnitValues` is asked what follows a value among those its unit
+  # takes after the units before it, and answers with the next, with `:last`,
+  # where the step carries into the unit above, or that the answer depends on
+  # a year the value does not have. It is one question for a value with a
+  # year and for one with none, and the one place a unit's values are known.
+  # A step that carries puts the unit it leaves at its first value.
+
   defp next_day_of_year(time, year, day, calendar) do
-    if before?(day, calendar.days_in_year(year)) do
-      {:ok, put_component(time, :day_of_year, day + 1)}
-    else
-      {:ok,
-       time
-       |> put_component(:year, year + 1)
-       |> put_component(:day_of_year, 1)}
+    case UnitValues.following(:day_of_year, day, time, calendar) do
+      {:ok, next} -> {:ok, put_component(time, :day_of_year, next)}
+      :last -> time |> put_component(:year, year + 1) |> at_first(:day_of_year, calendar)
+      {:error, _reason} -> {:error, :unanchored}
     end
   end
 
@@ -307,18 +312,17 @@ defmodule Tempo.Math do
   end
 
   defp add_week_anchored(time, year, week, calendar) do
-    if before?(week, Validation.iso_weeks_in_year(year, calendar)) do
-      {:ok, put_component(time, :week, week + 1)}
-    else
-      {:ok,
-       time
-       |> put_component(:year, year + 1)
-       |> put_component(:week, 1)}
+    case UnitValues.following(:week, week, time, calendar) do
+      {:ok, next} -> {:ok, put_component(time, :week, next)}
+      :last -> time |> put_component(:year, year + 1) |> at_first(:week, calendar)
+      {:error, _reason} -> {:error, :unanchored}
     end
   end
 
   # Without a year the week count is 52 or 53 depending on the year, so a
-  # week below 52 steps cleanly and the wrap needs a year.
+  # week below 52 steps cleanly and the wrap needs a year. No calendar counts
+  # a year's weeks without a year, so the count is written here (an open
+  # item in `TODO.md`).
   defp advance_week_unanchored(time, week) do
     if before?(week, 52),
       do: {:ok, put_component(time, :week, week + 1)},
@@ -326,64 +330,67 @@ defmodule Tempo.Math do
   end
 
   defp add_day_of_week(time, day, calendar) do
-    if before?(day, calendar.days_in_week()) do
-      {:ok, put_component(time, :day_of_week, day + 1)}
-    else
-      time
-      |> put_component(:day_of_week, 1)
-      |> add_unit(:week, calendar)
+    case UnitValues.following(:day_of_week, day, time, calendar) do
+      {:ok, next} ->
+        {:ok, put_component(time, :day_of_week, next)}
+
+      :last ->
+        with {:ok, first_day} <- at_first(time, :day_of_week, calendar) do
+          add_unit(first_day, :week, calendar)
+        end
+
+      {:error, _reason} ->
+        {:error, :unanchored}
     end
   end
 
   defp add_month(time, month, calendar) do
-    case year_of(time) do
-      {:ok, year} ->
-        add_month_anchored(time, year, month, calendar)
-
-      _none_or_several ->
-        advance_month_present(time, month, UnitValues.in_any_year(:month, [], calendar))
+    case UnitValues.following(:month, month, time, calendar) do
+      {:ok, next} -> {:ok, put_component(time, :month, next)}
+      :last -> first_month_of_the_next_year(time, calendar)
+      {:error, _reason} -> {:error, :unanchored}
     end
   end
 
-  defp add_month_anchored(time, year, month, calendar) do
-    if before?(month, calendar.months_in_year(year)) do
-      {:ok, put_component(time, :month, month + 1)}
-    else
-      {:ok,
-       time
-       |> put_component(:year, year + 1)
-       |> put_component(:month, 1)}
+  # The month after the last of a year is the first of the next. A value
+  # with no year has no year to move to and stays on its months, and one that
+  # names several years has no one year to move to.
+  defp first_month_of_the_next_year(time, calendar) do
+    case year_of(time) do
+      {:ok, year} -> time |> put_component(:year, year + 1) |> at_first(:month, calendar)
+      :none -> at_first(time, :month, calendar)
+      :several -> {:error, :grouped_component}
     end
   end
 
   defp add_day(time, month, day, calendar) do
-    case year_of(time) do
-      {:ok, year} ->
-        add_day_anchored(time, year, month, day, calendar)
-
-      _none_or_several ->
-        days = UnitValues.in_any_year(:day, [month: month], calendar)
-        advance_day_in_month(time, month, day, days, calendar)
+    case UnitValues.following(:day, day, time, calendar) do
+      {:ok, next} -> {:ok, put_component(time, :day, next)}
+      :last -> first_day_of_the_next_month(time, month, calendar)
+      {:error, _reason} -> {:error, :unanchored}
     end
   end
 
-  defp add_day_anchored(time, year, month, day, calendar) do
-    cond do
-      before?(day, calendar.days_in_month(year, month)) ->
-        {:ok, put_component(time, :day, day + 1)}
+  defp first_day_of_the_next_month(time, month, calendar) do
+    with {:ok, advanced} <- add_month(time, month, calendar) do
+      at_first(advanced, :day, calendar)
+    end
+  end
 
-      month < calendar.months_in_year(year) ->
-        {:ok,
-         time
-         |> put_component(:month, month + 1)
-         |> put_component(:day, 1)}
+  # Puts a unit at the first, or at the last, value it takes after the units
+  # before it. The stepper names two reasons a step cannot be taken, and a
+  # unit whose values cannot be counted is short of a year.
+  defp at_first(time, unit, calendar) do
+    case UnitValues.first(unit, time, calendar) do
+      {:ok, first} -> {:ok, put_component(time, unit, first)}
+      {:error, _reason} -> {:error, :unanchored}
+    end
+  end
 
-      true ->
-        {:ok,
-         time
-         |> put_component(:year, year + 1)
-         |> put_component(:month, 1)
-         |> put_component(:day, 1)}
+  defp at_last(time, unit, calendar) do
+    case UnitValues.last(unit, time, calendar) do
+      {:ok, last} -> {:ok, put_component(time, unit, last)}
+      {:error, _reason} -> {:error, :unanchored}
     end
   end
 
@@ -441,9 +448,9 @@ defmodule Tempo.Math do
   #   return `%Tempo.UnanchoredError{}` when the result would depend on the
   #   year. Never raise.
   #
-  # The calendar answers without a year, and `Tempo.UnitValues.in_any_year/3`
-  # is where it is asked: the values a unit takes in every year, and those of
-  # the year that has the most. `place/3` reads a value against the two, for
+  # The calendar answers without a year, and `Tempo.UnitValues` is where it
+  # is asked: the values a unit takes in every year, and those of the year
+  # that has the most. Its `following/4` reads a value against the two, for
   # a day and a month alike. Applying the principle (Gregorian examples):
   #
   #   * A whole-year step is a **no-op** — the untracked year moves, the
@@ -466,29 +473,6 @@ defmodule Tempo.Math do
   # `add/2` turns the internal `{:error, :unanchored}` into an
   # `UnanchoredError` naming the value and the duration, so callers see a
   # value or a clean error, never a crash.
-
-  defp advance_day_in_month(time, month, day, {:ok, every_year, longest}, calendar) do
-    case place(day, every_year, longest) do
-      :before_the_last -> {:ok, put_component(time, :day, day + 1)}
-      :the_last -> start_of_next_month_unanchored(time, month, calendar)
-      :by_the_year -> {:error, :unanchored}
-    end
-  end
-
-  defp advance_day_in_month(_time, _month, _day, {:error, _cannot_say}, _calendar),
-    do: {:error, :unanchored}
-
-  # Where a value stands among those its unit takes with no year: before the
-  # last in every year, the last in every year that has it, or one or the
-  # other by the year (28 February, which the 29th follows in a leap year).
-  # An unspecified unit counts as its last value, so its step carries.
-  defp place(value, %Range{last: fewest}, _longest) when is_integer(value) and value < fewest,
-    do: :before_the_last
-
-  defp place(value, _every_year, %Range{last: most}) when value == :any or value >= most,
-    do: :the_last
-
-  defp place(_value, _every_year, _longest), do: :by_the_year
 
   # Day-only value (no month): the day advances while it stays valid in
   # *every* month; at the shortest month's length the roll-over depends on
@@ -547,111 +531,23 @@ defmodule Tempo.Math do
     end
   end
 
-  defp start_of_next_month_unanchored(time, month, calendar) do
-    with {:ok, advanced} <-
-           advance_month_present(time, month, UnitValues.in_any_year(:month, [], calendar)) do
-      {:ok, put_component(advanced, :day, 1)}
-    end
-  end
-
-  # The month after one of no year. The last month a year can have is
-  # followed by the first of the next year in every year that has it (a
-  # Hebrew year's thirteenth), as the last day a month can have is by the
-  # first of the next month; the month every year has and only some end on
-  # (its twelfth) is followed by one or the other by the year.
-  defp advance_month_present(time, month, {:ok, every_year, longest}) do
-    case place(month, every_year, longest) do
-      :before_the_last -> {:ok, put_component(time, :month, month + 1)}
-      :the_last -> first_month_of_the_next_year(time)
-      :by_the_year -> {:error, :unanchored}
-    end
-  end
-
-  defp advance_month_present(_time, _month, {:error, _cannot_say}),
-    do: {:error, :unanchored}
-
-  defp first_month_of_the_next_year(time) do
-    if year_of(time) == :several,
-      do: {:error, :grouped_component},
-      else: {:ok, put_component(time, :month, 1)}
-  end
-
   # Mirrors of the advance helpers for `subtract_unit/3`.
 
+  # The month before the first of a year is the last of the year before,
+  # which a value with no year has where every year has as many months.
   defp last_month_of_previous_year(time, calendar) do
     case year_of(time) do
-      {:ok, year} ->
-        {:ok,
-         time
-         |> put_component(:year, year - 1)
-         |> put_component(:month, calendar.months_in_year(year - 1))}
-
-      :none ->
-        last_month_unanchored(time, calendar)
-
-      :several ->
-        {:error, :grouped_component}
+      {:ok, year} -> time |> put_component(:year, year - 1) |> at_last(:month, calendar)
+      :none -> at_last(time, :month, calendar)
+      :several -> {:error, :grouped_component}
     end
   end
 
-  defp last_month_unanchored(time, calendar) do
-    case UnitValues.in_any_year(:month, [], calendar) do
-      {:ok, %Range{last: last} = months, months} -> {:ok, put_component(time, :month, last)}
-      _by_the_year_or_cannot_say -> {:error, :unanchored}
-    end
-  end
-
-  defp end_of_month_before(time, month, calendar) do
-    case year_of(time) do
-      {:ok, year} -> end_of_previous_month(time, year, month, calendar)
-      _none_or_several -> end_of_previous_month_unanchored(time, month, calendar)
-    end
-  end
-
-  defp end_of_previous_month(time, year, month, calendar) when month > 1 do
-    {:ok,
-     time
-     |> put_component(:month, month - 1)
-     |> put_component(:day, calendar.days_in_month(year, month - 1))}
-  end
-
-  defp end_of_previous_month(time, year, _first_month, calendar) do
-    previous_year = year - 1
-    last_month = calendar.months_in_year(previous_year)
-
-    {:ok,
-     time
-     |> put_component(:year, previous_year)
-     |> put_component(:month, last_month)
-     |> put_component(:day, calendar.days_in_month(previous_year, last_month))}
-  end
-
-  defp end_of_previous_month_unanchored(time, month, calendar) when month > 1,
-    do: last_day_of_month_unanchored(time, month - 1, calendar)
-
-  defp end_of_previous_month_unanchored(time, _first_month, calendar) do
-    case {year_of(time), UnitValues.in_any_year(:month, [], calendar)} do
-      {:several, _months} ->
-        {:error, :grouped_component}
-
-      {_none, {:ok, %Range{last: last} = months, months}} ->
-        last_day_of_month_unanchored(time, last, calendar)
-
-      _by_the_year_or_cannot_say ->
-        {:error, :unanchored}
-    end
-  end
-
-  defp last_day_of_month_unanchored(time, month, calendar) do
-    case UnitValues.in_any_year(:day, [month: month], calendar) do
-      {:ok, %Range{last: last} = days, days} ->
-        {:ok,
-         time
-         |> put_component(:month, month)
-         |> put_component(:day, last)}
-
-      _by_the_year_or_cannot_say ->
-        {:error, :unanchored}
+  # The day before the first of a month is the last of the month before,
+  # which a value with no year has where that month is as long in every year.
+  defp last_day_of_the_month_before(time, calendar) do
+    with {:ok, stepped} <- subtract_unit(time, :month, calendar) do
+      at_last(stepped, :day, calendar)
     end
   end
 
@@ -711,8 +607,7 @@ defmodule Tempo.Math do
 
   def subtract_unit(time, :month, calendar) when is_list(time) do
     case backward(time, :month) do
-      {:ok, month} when month > 1 -> {:ok, put_component(time, :month, month - 1)}
-      {:ok, _first_month} -> last_month_of_previous_year(time, calendar)
+      {:ok, month} -> previous_month(time, month, calendar)
       # The value does not track months, so the borrow comes from an axis
       # it never had — nothing to change.
       :untracked -> {:ok, time}
@@ -725,9 +620,10 @@ defmodule Tempo.Math do
       # The value does not track days, so the borrow comes from an axis it
       # never had — nothing to change.
       {:untracked, _month} -> {:ok, time}
-      # The day before a day past the first is the same in whatever month.
-      {{:ok, day}, _month} when day > 1 -> {:ok, put_component(time, :day, day - 1)}
-      {{:ok, _first_day}, {:ok, month}} -> end_of_month_before(time, month, calendar)
+      {{:ok, day}, {:ok, _month}} -> previous_day(time, day, calendar)
+      # In several months, or in none, the day before a day past the first
+      # is the same in whatever month.
+      {{:ok, day}, _no_one_month} when day > 1 -> {:ok, put_component(time, :day, day - 1)}
       # Day-only value: the 1st's predecessor is the last day of an unknown
       # month, so it needs a year.
       {{:ok, _first_day}, :untracked} -> {:error, :unanchored}
@@ -749,8 +645,7 @@ defmodule Tempo.Math do
   # weeks keeps its own axis.
   def subtract_unit(time, :week, calendar) when is_list(time) do
     case backward(time, :week) do
-      {:ok, week} when week > 1 -> {:ok, put_component(time, :week, week - 1)}
-      {:ok, _first_week} -> last_week_of_previous_year(time, calendar)
+      {:ok, week} -> previous_week(time, week, calendar)
       :untracked -> {:ok, time}
       :several -> {:error, :grouped_component}
     end
@@ -769,19 +664,9 @@ defmodule Tempo.Math do
 
   def subtract_unit(time, :day_of_week, calendar) when is_list(time) do
     case backward(time, :day_of_week) do
-      {:ok, day} when day > 1 ->
-        {:ok, put_component(time, :day_of_week, day - 1)}
-
-      {:ok, _first_day} ->
-        time
-        |> put_component(:day_of_week, calendar.days_in_week())
-        |> subtract_unit(:week, calendar)
-
-      :untracked ->
-        {:ok, time}
-
-      :several ->
-        {:error, :grouped_component}
+      {:ok, day} -> previous_day_of_week(time, day, calendar)
+      :untracked -> {:ok, time}
+      :several -> {:error, :grouped_component}
     end
   end
 
@@ -813,32 +698,67 @@ defmodule Tempo.Math do
     end
   end
 
+  # ── A step back among a unit's values ────────────────────────
+  #
+  # `Tempo.UnitValues` is asked what comes before a value, and answers with
+  # the one before or with `:first`, where the step borrows from the unit
+  # above and puts the unit it leaves at its last value.
+
+  defp previous_month(time, month, calendar) do
+    case UnitValues.preceding(:month, month, time, calendar) do
+      {:ok, previous} -> {:ok, put_component(time, :month, previous)}
+      :first -> last_month_of_previous_year(time, calendar)
+      {:error, _reason} -> {:error, :unanchored}
+    end
+  end
+
+  defp previous_day(time, day, calendar) do
+    case UnitValues.preceding(:day, day, time, calendar) do
+      {:ok, previous} -> {:ok, put_component(time, :day, previous)}
+      :first -> last_day_of_the_month_before(time, calendar)
+      {:error, _reason} -> {:error, :unanchored}
+    end
+  end
+
+  defp previous_week(time, week, calendar) do
+    case UnitValues.preceding(:week, week, time, calendar) do
+      {:ok, previous} -> {:ok, put_component(time, :week, previous)}
+      :first -> last_week_of_previous_year(time, calendar)
+      {:error, _reason} -> {:error, :unanchored}
+    end
+  end
+
   # Without a year, the week before week 1 is the 52nd or the 53rd of the
   # year before, so it needs a year; any later week steps back cleanly.
   defp last_week_of_previous_year(time, calendar) do
     case year_of(time) do
-      {:ok, year} ->
-        {:ok,
-         time
-         |> put_component(:year, year - 1)
-         |> put_component(:week, Validation.iso_weeks_in_year(year - 1, calendar))}
-
-      :none ->
-        {:error, :unanchored}
-
-      :several ->
-        {:error, :grouped_component}
+      {:ok, year} -> time |> put_component(:year, year - 1) |> at_last(:week, calendar)
+      :none -> {:error, :unanchored}
+      :several -> {:error, :grouped_component}
     end
   end
 
-  defp previous_day_of_year(time, _year, day, _calendar) when day > 1,
-    do: {:ok, put_component(time, :day_of_year, day - 1)}
+  defp previous_day_of_year(time, year, day, calendar) do
+    case UnitValues.preceding(:day_of_year, day, time, calendar) do
+      {:ok, previous} -> {:ok, put_component(time, :day_of_year, previous)}
+      :first -> time |> put_component(:year, year - 1) |> at_last(:day_of_year, calendar)
+      {:error, _reason} -> {:error, :unanchored}
+    end
+  end
 
-  defp previous_day_of_year(time, year, _first_day, calendar) do
-    {:ok,
-     time
-     |> put_component(:year, year - 1)
-     |> put_component(:day_of_year, calendar.days_in_year(year - 1))}
+  defp previous_day_of_week(time, day, calendar) do
+    case UnitValues.preceding(:day_of_week, day, time, calendar) do
+      {:ok, previous} ->
+        {:ok, put_component(time, :day_of_week, previous)}
+
+      :first ->
+        with {:ok, last_day} <- at_last(time, :day_of_week, calendar) do
+          subtract_unit(last_day, :week, calendar)
+        end
+
+      {:error, _reason} ->
+        {:error, :unanchored}
+    end
   end
 
   @doc """
@@ -2076,20 +1996,18 @@ defmodule Tempo.Math do
 
   defp clamp_integer_day(time, month, day, calendar) do
     case year_of(time) do
-      {:ok, year} -> {:ok, clamp_day_to_month_anchored(time, year, month, day, calendar)}
+      {:ok, _year} -> {:ok, clamp_day_to_month_anchored(time, day, calendar)}
       _none_or_several -> clamp_day_to_month_unanchored(time, month, day, calendar)
     end
   end
 
-  # A day no later than the fewest days the month has in any year needs no
-  # year to confirm it, so the calendar is asked for the year's month length
-  # only for a day past that.
-  defp clamp_day_to_month_anchored(time, year, month, day, calendar) do
-    if day <= fewest_days_in_month(calendar, month) do
-      time
-    else
-      days = calendar.days_in_month(year, month)
-      if day > days, do: put_component(time, :day, days), else: time
+  # A day past the last of its month is the month's last, which
+  # `Tempo.UnitValues` gives without asking the year where every year's
+  # month is as long.
+  defp clamp_day_to_month_anchored(time, day, calendar) do
+    case UnitValues.last(:day, time, calendar) do
+      {:ok, last} when day > last -> put_component(time, :day, last)
+      _within_the_month -> time
     end
   end
 
@@ -2160,8 +2078,8 @@ defmodule Tempo.Math do
   # in its year, or in any year when it names no one year; and for a month
   # that holds several, the days of the shortest month its calendar has.
   defp fewest_days(time, {:ok, month}, calendar) do
-    case year_of(time) do
-      {:ok, year} -> calendar.days_in_month(year, month)
+    case {year_of(time), UnitValues.last(:day, time, calendar)} do
+      {{:ok, _year}, {:ok, last}} -> last
       _none_or_several -> fewest_days_in_month(calendar, month)
     end
   end
