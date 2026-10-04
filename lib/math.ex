@@ -105,7 +105,7 @@ defmodule Tempo.Math do
       # The value does not track months, so the carry lands on an axis it
       # never had — nothing to change.
       :untracked -> {:ok, time}
-      :several -> {:error, :grouped_component}
+      :several -> no_one_value(time, :month)
     end
   end
 
@@ -118,7 +118,7 @@ defmodule Tempo.Math do
       {{:ok, day}, :untracked} -> advance_day_no_month(time, day, calendar)
       {{:ok, day}, _several_months} -> advance_day_in_any_month(time, day, calendar)
       # The day after depends on which of its days.
-      {:several, _month} -> {:error, :grouped_component}
+      {:several, _month} -> no_one_value(time, :day)
     end
   end
 
@@ -154,7 +154,7 @@ defmodule Tempo.Math do
       # carries into an axis it never had: the day after its Sunday is a
       # Monday, of a week it does not name, and nothing else changes.
       :untracked -> {:ok, time}
-      :several -> {:error, :grouped_component}
+      :several -> no_one_value(time, :week)
     end
   end
 
@@ -218,6 +218,17 @@ defmodule Tempo.Math do
       false -> :untracked
       {_unit, :any} -> :unspecified
       _several -> :several
+    end
+  end
+
+  # The refusal for a unit that holds no one number to count from. A count
+  # from the end in a value with no year (`2M-1D`, the last day of a
+  # February) cannot be counted until the value is placed on one, so the
+  # step is unanchored; anything else holds several values.
+  defp no_one_value(time, unit) do
+    case {:lists.keyfind(unit, 1, time), year_of(time)} do
+      {{_unit, count}, :none} when is_integer(count) and count < 0 -> {:error, :unanchored}
+      _several -> {:error, :grouped_component}
     end
   end
 

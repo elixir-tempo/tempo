@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* With no year, a day counted from the end of a month whose length depends on the year is kept as written until the value is placed on one: `~o"2M-1D"` on 2027 is 28 February and `Tempo.select(~o"2026", ~o"2M-1D")` selects it, where it was read as the 29th, an error on 2027 and an empty selection in 2026. A February with no year is no longer walked (`Enum.to_list(~o"2M")` raises a `Tempo.UnanchoredError`, where it listed 29 days), and `Tempo.to_interval/2` of a count from the end with no year returns that error, where it was a `Tempo.ConversionError` about several values.
+
 * A value's calendar is recorded once, as its `:calendar` module: its `extended` map has no `:calendar` key and is `nil` for a value with no zone, offset or tag, so `Tempo.from_iso8601!("5786-09-30[u-ca=hebrew]")` equals the same date made with `Calendrical.Hebrew`, `Tempo.new/1`, `Tempo.from_elixir/1` or `Tempo.to_calendar/2`, and every value equals its own text read back. A Gregorian value read with `[u-ca=gregory]` is written without the suffix, and `Tempo.explain/1` no longer prints an "IXDTF calendar hint".
 
 * A day of the year that does not resolve to a date (`350O`, `2020Y{100,200}O`) is its own unit, `:day_of_year`, written back as `O`, where it was a `:day` written `D`, and a day of the year never follows a month. A `D` with no month is still read as a day of the year where a year resolves it: `2026Y32D` is 1 February.

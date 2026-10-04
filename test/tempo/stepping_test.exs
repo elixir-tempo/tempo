@@ -129,8 +129,9 @@ defmodule Tempo.SteppingTest do
 
   describe "a value no step can count from" do
     test "has no span, and to_interval/2 returns why" do
-      assert {:error, %ConversionError{reason: :grouped_component}} =
-               Tempo.to_interval(Tempo.from_iso8601!("-1D"))
+      # A count from the end with no year cannot be counted until the value
+      # is placed on one.
+      assert {:error, %Tempo.UnanchoredError{}} = Tempo.to_interval(Tempo.from_iso8601!("-1D"))
     end
 
     test "is shifted where the step passes the unit by" do

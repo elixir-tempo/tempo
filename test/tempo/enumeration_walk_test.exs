@@ -124,10 +124,11 @@ defmodule Tempo.EnumerationWalk.Test do
       assert length(days) == 10
       assert Enum.take(days, 2) == [~o"2020Y2M29D", ~o"2021Y2M28D"]
 
-      # An unspecified year is no year, so the last day of its February is the
-      # last February has in any year, as it is with no year written.
-      assert ~o"X*Y2M-1D" == ~o"X*Y2M29D"
-      assert ~o"2M-1D" == ~o"2M29D"
+      # An unspecified year is no year, and with no year the last day of a
+      # February cannot be counted: it is kept as written, as it is with no
+      # year written.
+      assert ~o"X*Y2M-1D".time == [year: :any, month: 2, day: -1]
+      assert ~o"2M-1D".time == [month: 2, day: -1]
     end
 
     test "a day counted from the end of a month whose length varies by year in another calendar" do
@@ -169,6 +170,53 @@ defmodule Tempo.EnumerationWalk.Test do
     test "a margin of error is not a sequence" do
       assert Enum.take(~o"2018±2Y", 2) == [~o"2018Y1M", ~o"2018Y2M"]
       assert Enum.to_list(~o"2018±2Y{1,2}M") == [~o"2018Y1M", ~o"2018Y2M"]
+    end
+  end
+
+  # With no year, a day counted from the end of a month whose length depends
+  # on the year cannot be counted until the value is placed on one (user,
+  # 2026-10-04). It was counted in the month's longest length, so the last
+  # day of February was the 29th whatever year the value was then placed on.
+  describe "a day counted from the end of a month with no year" do
+    test "is kept as written where the month's length depends on the year" do
+      assert ~o"2M-1D".time == [month: 2, day: -1]
+      assert ~o"2M{1..-1}D".time == [month: 2, day: [1..-1//1]]
+      assert Tempo.to_iso8601(~o"2M-1D") == {:ok, "2M-1D"}
+    end
+
+    test "is counted where every year's month is as long" do
+      assert ~o"6M-1D" == ~o"6M30D"
+      assert ~o"6M{1..-1}D" == ~o"6M{1..30}D"
+    end
+
+    test "is counted in the year the value is placed on" do
+      assert Tempo.on(~o"2M-1D", ~o"2027") == {:ok, ~o"2027-02-28"}
+      assert Tempo.on(~o"2M-1D", ~o"2028") == {:ok, ~o"2028-02-29"}
+      assert Tempo.on(~o"2M-2D", ~o"2027") == {:ok, ~o"2027-02-27"}
+      assert Tempo.on(~o"2M{1..-1}D", ~o"2027") == {:ok, ~o"2027Y2M{1..28}D"}
+    end
+
+    test "is selected in each year of a span" do
+      {:ok, last_days} = Tempo.select(~o"2026/2029", ~o"2M-1D")
+
+      assert Enum.map(IntervalSet.members(last_days), &Interval.from/1) ==
+               [~o"2026-02-28", ~o"2027-02-28", ~o"2028-02-29"]
+    end
+
+    test "is counted in the calendar of the year it is placed on" do
+      hebrew_year = Tempo.from_iso8601!("5787Y", Hebrew)
+
+      assert Tempo.on(~o"2M-1D", hebrew_year) == Tempo.from_iso8601("5787Y2M30D", Hebrew)
+    end
+
+    test "has to be a day the month can have" do
+      assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("2M-30D")
+    end
+
+    test "cannot be walked or converted until the value has a year" do
+      assert_raise Tempo.UnanchoredError, fn -> Enum.to_list(~o"2M{1..-1}D") end
+      assert {:error, %Tempo.UnanchoredError{}} = Tempo.to_interval(~o"2M-1D")
+      assert {:error, %Tempo.UnanchoredError{}} = Tempo.to_interval(~o"-1M")
     end
   end
 
@@ -331,8 +379,11 @@ defmodule Tempo.EnumerationWalk.Test do
     test "the units after it are walked as they are with no year written" do
       assert Enum.take(~o"X*Y12M28D", 2) == [~o"X*Y12M28DT0H", ~o"X*Y12M28DT1H"]
       assert Enum.count(~o"X*Y6M") == Enum.count(~o"6M")
-      assert Enum.count(~o"X*Y2M") == 29
       assert Enum.take(~o"X*YX*MX*D", 2) == [~o"X*Y1M1D", ~o"X*Y1M2D"]
+
+      # A February's days depend on its year, so with none they are not listed.
+      assert_raise Tempo.UnanchoredError, fn -> Enum.count(~o"X*Y2M") end
+      assert_raise Tempo.UnanchoredError, fn -> Enum.count(~o"2M") end
     end
 
     test "in a calendar whose months change with the year it is not listed, as with no year" do

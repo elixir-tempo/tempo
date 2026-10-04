@@ -37,8 +37,9 @@ defmodule Tempo.Mask do
   @doc false
   # Every value an unspecified unit (`X*`) takes after the concrete units
   # before it. A unit whose extent depends on a year the value does not have
-  # takes every value it has in some year, as a count from the end does there
-  # (`2M{1..-1}D` and `2MX*D` are both 1 to 29).
+  # takes every value it has in some year (`2MX*D` is 1 to 29), where a count
+  # from the end is kept as written until the value has a year
+  # (`2M{1..-1}D`): the two differ, an open item in `TODO.md`.
   @spec unspecified(atom(), keyword(), module()) ::
           {:ok, Range.t()} | {:error, :unanchored | {:unmaskable, atom()}}
   def unspecified(unit, previous, calendar) do

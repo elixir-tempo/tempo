@@ -30,8 +30,12 @@ defmodule TempoTest do
     # bounded by the days it can have in *some* year — the same rule
     # `2M29D` (accepted) and `2M30D` (rejected) already follow. Which
     # days a particular February actually has is settled when the
-    # value is anchored or expanded against a concrete year.
-    assert Tempo.from_iso8601("2M{1..-1}D") == {:ok, ~o"2M{1..29}D"}
+    # value is anchored or expanded against a concrete year, so a set
+    # counted from the month's end is kept as written until then.
+    assert {:ok, february} = Tempo.from_iso8601("2M{1..-1}D")
+    assert february.time == [month: 2, day: [1..-1//1]]
+    assert Tempo.on(february, ~o"2027") == {:ok, ~o"2027Y2M{1..28}D"}
+    assert Tempo.on(february, ~o"2028") == {:ok, ~o"2028Y2M{1..29}D"}
 
     assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("2M{28..30}D")
   end

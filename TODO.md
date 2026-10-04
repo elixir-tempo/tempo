@@ -14,11 +14,11 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **A time of day under a year or a month is read on its first day** — `2026T17` is `2026Y1M1DT17H` and `Tempo.at(~o"2026-06", ~o"T17")` 17:00 on 1 June, as a clock unit left out is read as zero, where ISO 8601-2 §7.7.1 wants the date of a date and time complete. Decide whether it stays the first day, is an error, or is that time on each day. Found 2026-10-03. Decision: Stays the first day, and is documented as a divergence from ISO8601.
 
-* [ ] **A count from the end with no year** — `~o"2M-1D"` is the 29th, the longest February, and `~o"-1M"` is a `ConversionError`, though every Gregorian year has twelve months. Decide what each is. Found 2026-10-03. Decision: When a month has differing lengths depending on the year, and no year is available, the count can't happen until the date is anchored.
+* [ ] **A count from the end of a month of fixed length is counted before the value is placed** — `~o"6M-1D"` is `6M30D`, as June always has thirty days, so placed on a Hebrew year whose sixth month has twenty-nine it is an `InvalidDateError`, where the same text read in the Hebrew calendar is that month's 29th. Decide whether a count from the end is ever counted before the value has a year. Found 2026-10-04.
 
 * [ ] **`extend/2` of a group writes a value nothing walks** — `Tempo.extend(~o"2026Y2G3MU")` is `{:ok, ~o"2026Y2G3MU{1..-1}D"}`, a range of days counted from the group's start, which `Enum` and `to_interval/2` refuse (`:counted_in_group`: a unit after a group takes one whole number), where every other extension walks as its value does. Decide whether such a range is walked (the ninety-one days of the quarter) or `extend/2` of a group is a named error. Found 2026-10-04.
 
-* [ ] **The days of a February with no year have two answers** — 29 written `2MX*D` or `2M{1..-1}D` or left to the walk of `2M`, as validation accepts a 29th that some year has, and an `UnanchoredError` written `2MXXD`, as a mask wants every candidate to fit the shortest month, so `XXMXXD` yields January and raises at February (`to_interval/2` of `2MXXD` is the month, `2M/3M`). The months of a year with none split the other way: `X*M` and `XXM` are the twelve the Gregorian calendar always has, `{1..-1}M` and `-1M` an error. Decide one rule. Found 2026-10-03.
+* [ ] **An unspecified day of a February with no year is still listed** — `2MX*D` yields 29 days, as an unspecified unit takes the longest its month can be, where a day counted from the month's end (`2M{1..-1}D`), the walk of `2M` and `2MXXD` are an `UnanchoredError` (`XXMXXD` yields January and raises at February; `to_interval/2` of `2MXXD` is the month, `2M/3M`). The months of a year with none still split: `X*M` and `XXM` are the twelve the Gregorian calendar always has, where `{1..-1}M` and `-1M` are kept as written until the value has a year, which may be another calendar's. Decide whether `X*D` and `X*M` follow the count. Found 2026-10-03, restated 2026-10-04.
 
 * [ ] **A set none of whose members exists is empty** — `Enum.to_list(~o"{2,6}M31D")` is `[]` and `to_interval/2` an empty set, where a mask no value matches (`1985-02-3X`) is an `InvalidDateError`. Decide whether it is an error. Found 2026-10-03.
 
@@ -31,6 +31,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 ### Conformance and completeness
 
 * [ ] **The third instance of a time of day, §12.11.1 example 2** — the standard's text `2018Y9MTLT8H20MN3I` writes the position after the selection's `N`, which does not parse; written inside it (`2018Y9MTLT8H20M3IN`) it parses and converts to an empty set, where the standard reads it as 08:20 on 3 September: a time of day selected in a month is that time on each of its days there, and on the first day alone in Tempo (`2018Y9MLT8H20MN` is one value, 08:20 on 1 September), as a recurrence's rule reads it from its start's day, as RFC 5545 does. Decide whether a selection follows the first-day decision above, the example then a documented divergence, or matches each day. Found 2026-10-04.
+
+* [ ] **A month counted from the end in a recurrence's rule selects nothing** — `R4/2026-01-01/P1Y/FL-1M-1DN` and `FL-1M31DN` give no occurrences, where `FL12M-1DN` gives 31 December of each year and `Tempo.select(~o"2026", ~o"-1M-1D")` selects it. Found 2026-10-04.
 
 * [ ] **A position after a set of weekdays, where the standard contradicts itself** — `L{1,3}K1IN` is the first of the Mondays and Wednesdays taken together, as §12.9 defines a position (the i-th of the occurrences the rules before it select, `{1..5}K-1I` the last workday), where §12.11.3 example 2 calls `2018Y9ML{1,3}K1IN/P5D` identical to `{2018Y9ML1K1IN/P5D, 2018Y9ML3K1IN/P5D}`, each weekday's first. Decide whether Tempo keeps §12.9's rule, which RRULE's `BYSETPOS` is read as. Found 2026-10-04.
 
@@ -129,6 +131,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A count from the end with no year waits for one** — a day counted from the end of a month whose length depends on the year is kept as written until the value is placed on a year (user's decision): `~o"2M-1D"` on 2027 is 28 February, where it was the 29th and an error there; a month from the end is kept as written too, and what needs the count returns an `UnanchoredError`. 2026-10-04.
 
 * [x] **A comma between a set's members is never a decimal sign** — `{2023,2020/2021}` is a year and an interval, where `2023,2020` was read as a number and the set was one interval from part way through 2023, and `{2020/2021,2023/2024}` parses; a fraction in a member is written with a full stop. 2026-10-04.
 

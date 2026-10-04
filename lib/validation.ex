@@ -1205,20 +1205,40 @@ defmodule Tempo.Validation do
   # A yearless month's day, bounded by the month's longest length across years
   # (see `max_day_in_month/2`). A month whose length cannot be bounded without
   # a year is left as it is, since Tempo cannot prove the day impossible.
+  #
+  # A day counted from the end of a month whose length depends on the year
+  # cannot be counted until the value has one: the last day of February is
+  # the 28th or the 29th. It is kept as written, as it is in a calendar
+  # whose months have no fixed length, and placing the value on a year
+  # counts it there (`~o"2M-1D"` on 2027 is 28 February). It is still
+  # checked against the longest the month can be: February has no thirtieth
+  # day from its end.
   defp yearless_month_and_day(month, day, rest, calendar) do
-    case max_day_in_month(calendar, month) do
-      {:ok, max_day} ->
+    case {max_day_in_month(calendar, month), counted_in_any_year?(day, month, calendar)} do
+      {{:ok, max_day}, true} ->
         with {:ok, day} <- conform(day, 1..max_day),
              rest when is_list(rest) <- resolve(rest, calendar) do
           [{:month, month}, {:day, day} | rest]
         end
 
-      :unknown ->
+      {{:ok, max_day}, false} ->
+        with {:ok, _possible} <- conform(day, 1..max_day),
+             rest when is_list(rest) <- resolve(rest, calendar) do
+          [{:month, month}, {:day, day} | rest]
+        end
+
+      {:unknown, _counted?} ->
         with rest when is_list(rest) <- resolve(rest, calendar) do
           [{:month, month}, {:day, day} | rest]
         end
     end
   end
+
+  # Whether a yearless month's day is the same day in every year: one counted
+  # from the month's start always is, and one counted from its end is where
+  # the month is as long in every year.
+  defp counted_in_any_year?(day, month, calendar),
+    do: not counts_from_end?(day) or is_integer(calendar.days_in_month(month))
 
   defp names_zero?(0), do: true
   defp names_zero?(%Range{first: first, last: last}), do: first == 0 or last == 0
@@ -1237,6 +1257,12 @@ defmodule Tempo.Validation do
   defp zeroth_noun(:calendar_week), do: "week"
   defp zeroth_noun(unit), do: Atom.to_string(unit)
 
+  # A month of no year, no further from either end than the most months a
+  # year of its calendar has. One counted from the end is kept as written
+  # even where every year has as many months: a value with no year is placed
+  # on one later, and the year it is placed on may be another calendar's
+  # (`~o"-1M"` selected in a Hebrew year is its thirteenth month in a leap
+  # year, where December read as a number would be its twelfth).
   defp bounded_months({:month, months} = component, calendar) do
     case max_months_in_year(calendar) do
       {:ok, max} ->
