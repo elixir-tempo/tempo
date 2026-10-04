@@ -255,6 +255,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* In a selection a second followed by a position is read as both: `L1KT10H0M30S1IN` is second 30 and position 1, where the `S` was taken for the significant-digit marker and the value was position 30 with no second. A duration's seconds take significant digits and a set (`PT1230S2S`, `PT{1,2}S`), where each raised a `FunctionClauseError`; a position, and a fraction no exponent has scaled (`2026.5S1Y`), take no significant digits and are a `Tempo.ParseError`.
+
 * `Tempo.extend/2` writes the months of several years and the days of several months as text is read: `Tempo.extend(~o"2026Y{6,7}M")` is `~o"2026Y{6,7}M{1..-1}D"`, where it held a range counted backwards (`{1..-1//-1}D`) that walked alike and was not equal.
 
 * `Tempo.to_string/2` shows an interval from its first value to its last in the finer of its ends' units, and a week beside a date as the days between them: `~o"2026/2026-03"` is "Jan – Feb 2026" and `~o"2026-W25/2026-07-01"` is "Jun 15 – 30, 2026", where each was "2026 – 2025". A year written to significant digits is shown as the block it names (`1950S2` is "1900 – 1999"), as a mask is, where it returned Localize's error.

@@ -351,14 +351,20 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     choice([
       maybe_negative_number(min: 1) |> ignore(string("H")) |> unwrap_and_tag(:hour),
       maybe_negative_number(min: 1) |> ignore(string("M")) |> unwrap_and_tag(:minute),
-      # The sign, integer, and optional fraction of a duration second
-      # reduce together, so `PT-0.2S` keeps its sign (a `-0` integer
-      # second cannot carry it alone). The fraction is preserved with
-      # its digit count — folding to a float would lose significant
-      # trailing zeros (`PT1.250S` vs `PT1.25S`).
+      # The sign, integer, and fraction of a duration second reduce
+      # together, so `PT-0.2S` keeps its sign (a `-0` integer second
+      # cannot carry it alone). The fraction is preserved with its digit
+      # count — folding to a float would lose significant trailing zeros
+      # (`PT1.250S` vs `PT1.25S`). A fraction follows a whole number only:
+      # one given to significant digits, a mask and a set take none.
+      optional(negative())
+      |> integer(min: 1)
+      |> concat(fraction())
+      |> reduce({Tempo.Iso8601.Tokenizer.Numbers, :form_duration_second, []})
+      |> unwrap_and_tag(:second)
+      |> ignore(string("S")),
       optional(negative())
       |> positive_integer(min: 1)
-      |> optional(fraction())
       |> reduce({Tempo.Iso8601.Tokenizer.Numbers, :form_duration_second, []})
       |> unwrap_and_tag(:second)
       |> ignore(string("S"))
@@ -423,15 +429,18 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     choice([
       maybe_negative_integer_or_integer_set("H", :hour, min: 1),
       maybe_negative_integer_or_integer_set("M", :minute, min: 1),
-      maybe_negative_integer_or_integer_set("S", :second, min: 1),
+      # A clock second takes no significant digits, so the `S` after it is its
+      # designator whatever follows: in `0S1I` a position does.
+      maybe_negative_exact_integer_or_integer_set("S", :second, min: 1),
       ignore(string("L"))
       |> parsec({Tempo.Iso8601.Tokenizer.Set, :interval_parser})
       |> ignore(string("N"))
     ])
   end
 
+  # A position is an integer (ISO 8601-2 §12.9), with no significant digits.
   def selection_instance do
-    maybe_negative_integer_or_integer_set("I", :instance, min: 1)
+    maybe_negative_exact_integer_or_integer_set("I", :instance, min: 1)
   end
 
   # Week start (RFC 5545 WKST), written `<n>q`. A Tempo extension: lowercase `q`

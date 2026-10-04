@@ -26,11 +26,13 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **What needs the last value of an interval with no end never returns** — `Enum.at(~o"2026Y/..", -1)` and `Enum.random/1` walk for ever: `Enumerable.slice/1` cannot tell them from `Enum.at/2` with a positive index and `Enum.empty?/1`, which the interval answers and a lazy interval set refuses (`UnboundedSetError`). Decide one rule for the two. Found 2026-10-03.
 
-* [ ] **A qualification on every component is recorded two ways** — `2026?Y`, `6~M` and `2026?Y6?M` hold it on each component (`qualifications: %{year: :uncertain}`) and are written in the complete form (`2026Y?`), which reads back as the value's own (`qualification: :uncertain`): one value, not `==` to its own text. Read a qualification that every component shares as the value's, as the writer already treats it; the matrix's read-back check (`same_value/4` in `test/support/matrix/checks.ex`) can then be `==`. Found 2026-10-04.
+* [ ] **One qualification is recorded two ways, and the two behave differently** — `2026?` holds `qualification: :uncertain` and `?2026` or `2026?Y` holds `qualifications: %{year: :uncertain}`, which ISO 8601-2 §8.2.4 calls one meaning: the two are not `==`, both write `2026Y?`, and the walk of the first yields uncertain months (`2026Y1M?`) where the second yields months of an uncertain year (`2026?Y1M`). `trunc/2` also keeps the qualifiers of units it drops (`2015-?02-28` truncated to its year holds `%{month: :uncertain}`). Decide whether a qualification is held per component alone and written in the preferred form, so a unit a walk adds is not itself qualified; the matrix's read-back check (`same_value/4` in `test/support/matrix/checks.ex`) can then be `==`. Found 2026-10-04.
 
 ### Conformance and completeness
 
-* [ ] **Three §12 selection parses** — `2018Y9MTLT8H20MN3I` does not parse, `FL1KT10H0M0S1IN` misreads `0S1`, and `{1,3}K1I` merges where ISO 8601-2 §12.11.3 example 2 distributes.
+* [ ] **The third instance of a time of day, §12.11.1 example 2** — the standard's text `2018Y9MTLT8H20MN3I` writes the position after the selection's `N`, which does not parse; written inside it (`2018Y9MTLT8H20M3IN`) it parses and converts to an empty set, where the standard reads it as 08:20 on 3 September. Read the position after `N`, and give a time of day's positions the days of the span. Found 2026-10-04.
+
+* [ ] **A position after a set of weekdays, where the standard contradicts itself** — `L{1,3}K1IN` is the first of the Mondays and Wednesdays taken together, as §12.9 defines a position (the i-th of the occurrences the rules before it select, `{1..5}K-1I` the last workday), where §12.11.3 example 2 calls `2018Y9ML{1,3}K1IN/P5D` identical to `{2018Y9ML1K1IN/P5D, 2018Y9ML3K1IN/P5D}`, each weekday's first. Decide whether Tempo keeps §12.9's rule, which RRULE's `BYSETPOS` is read as. Found 2026-10-04.
 
 * [ ] **An interval's end of several components in the basic format** — `20260615/0720` and `20260615T1030/1130` read the end as a year (720, 1130), where the extended forms (`/07-20`, `/11:30`) and a bare number (`/20`) take the units the end leaves out from the start. For the grammar of [plans/parser-formal-grammar.md](plans/parser-formal-grammar.md). Found 2026-10-03.
 
@@ -127,6 +129,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A second followed by a position, and numbers given to significant digits** — in a selection `0S1I` is second 0 and position 1 (the `S` was read as the significant-digit marker and the second lost); a duration's seconds take significant digits and a set, where they raised; a position, and a fraction no exponent has scaled, take none. 2026-10-04.
 
 * [x] **A value's calendar is recorded once** — the name a `[u-ca=…]` suffix gives is the value's calendar module and is not kept in `extended`, which holds a zone and tags or is `nil`, so a value equals the same value however it was made, and its own text read back. 2026-10-04.
 

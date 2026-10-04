@@ -1,6 +1,9 @@
 defmodule Tempo.Parser.Selection.Test do
   use ExUnit.Case, async: true
 
+  alias Tempo.Interval
+  alias Tempo.IntervalSet
+
   test "selections" do
     # First Monday in March, 2018
     assert Tempo.from_iso8601("2018Y3ML1K1IN") ==
@@ -156,6 +159,52 @@ defmodule Tempo.Parser.Selection.Test do
   test "when subsequent time units are greater than the prior selection" do
     assert {:error, %Tempo.ParseError{} = e} = Tempo.from_iso8601("L1DN1M")
     assert Exception.message(e) =~ ":month is greater than the selection max of :day"
+  end
+
+  # A clock second takes no significant digits, and neither does a position
+  # (ISO 8601-2 §4.4.3, §12.9), so the `S` after a second is its designator
+  # whatever follows it: `0S1I` was read as position 0 to one significant
+  # digit, and the second was lost.
+  describe "a second followed by a position" do
+    test "is the second and the position" do
+      assert {:ok, %Tempo{time: time}} = Tempo.from_iso8601("2018Y9ML1KT10H0M0S1IN")
+
+      assert time == [
+               year: 2018,
+               month: 9,
+               selection: [day_of_week: 1, hour: 10, minute: 0, second: 0, instance: 1]
+             ]
+
+      assert {:ok, %Tempo{time: [year: 2018, month: 9, selection: selection]}} =
+               Tempo.from_iso8601("2018Y9ML1KT10H0M30S2IN")
+
+      assert selection == [day_of_week: 1, hour: 10, minute: 0, second: 30, instance: 2]
+    end
+
+    test "in a recurrence's rule" do
+      assert {:ok, recurrence} = Tempo.from_iso8601("R/2018-01-01/P1W/FL1KT10H0M0S1IN")
+
+      assert recurrence.repeat_rule.time ==
+               [selection: [day_of_week: 1, hour: 10, minute: 0, second: 0, instance: 1]]
+    end
+
+    test "is that second of the day the position selects" do
+      {:ok, value} = Tempo.from_iso8601("2018Y9ML1KT10H0M30S1IN")
+      {:ok, set} = Tempo.to_interval(value)
+
+      assert [first_monday] = IntervalSet.members(set)
+      assert Interval.from(first_monday) == Tempo.from_iso8601!("2018-09-03T10:00:30")
+    end
+
+    test "reads back from its own text" do
+      {:ok, value} = Tempo.from_iso8601("2018Y9ML1KT10H0M30S1IN")
+
+      assert Tempo.from_iso8601(Tempo.to_iso8601!(value)) == {:ok, value}
+    end
+
+    test "a position given to significant digits is a parse error" do
+      assert {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("2018Y9ML1K1950S2IN")
+    end
   end
 
   # FIXME Raises on inspection

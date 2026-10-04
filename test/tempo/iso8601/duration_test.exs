@@ -68,4 +68,29 @@ defmodule Tempo.Parser.Duration.Test do
       end
     end
   end
+
+  # A duration's seconds are numbered as its other units are (ISO 8601-2
+  # §4.4.3 gives a duration's units significant digits), where each of these
+  # raised a `FunctionClauseError`.
+  describe "a duration's seconds" do
+    test "take significant digits and a set, as its other units do" do
+      assert {:ok, %Tempo.Duration{time: [second: {1230, [significant_digits: 2]}]}} =
+               Tempo.from_iso8601("PT1230S2S")
+
+      assert Tempo.from_iso8601("PT-1230S2S") |> elem(1) |> Map.fetch!(:time) ==
+               [second: {-1230, [significant_digits: 2]}]
+
+      assert {:ok, %Tempo.Duration{}} = Tempo.from_iso8601("PT{1,2}S")
+      assert {:ok, %Tempo.Interval{}} = Tempo.from_iso8601("2026-06-15/PT1230S2S")
+    end
+
+    test "written to significant digits read back as written" do
+      assert Tempo.to_iso8601(~o"PT1230S2S") == {:ok, "PT1230S2S"}
+    end
+
+    test "a fraction after significant digits or a mask is a parse error" do
+      assert {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("PT1230S2.5S")
+      assert {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("PT3X.5S")
+    end
+  end
 end

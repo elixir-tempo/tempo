@@ -55,9 +55,7 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
     combinator
     |> choice([
       integer(n)
-      |> optional(fraction())
-      |> optional(exponent())
-      |> optional(significant())
+      |> fraction_or_significant()
       |> optional(error_range())
       |> lookahead_not(unspecified_or_set())
       |> reduce(:form_number),
@@ -76,9 +74,7 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
     combinator
     |> choice([
       integer(opts)
-      |> optional(fraction())
-      |> optional(exponent())
-      |> optional(significant())
+      |> fraction_or_significant()
       |> optional(error_range())
       |> lookahead_not(unspecified_or_set())
       |> reduce(:form_number),
@@ -92,6 +88,18 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
     ])
     |> reduce(:form_number)
     |> label("positive number")
+  end
+
+  # What follows a number's whole part. Significant digits are given to an
+  # integer value (ISO 8601-2 §4.4.3), which a fraction is only once an
+  # exponent has scaled it: `1230S2` and `13.787E9S4` are values, and
+  # `1230.5S2` is not.
+  defp fraction_or_significant(combinator) do
+    combinator
+    |> choice([
+      fraction() |> optional(exponent() |> optional(significant())),
+      optional(exponent()) |> optional(significant())
+    ])
   end
 
   def positive_integer(combinator \\ empty(), opts)
@@ -257,6 +265,42 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
     |> unwrap_and_tag(tag)
   end
 
+  # As `maybe_negative_integer_or_integer_set/3`, for a number that takes no
+  # significant digits: ISO 8601-2 §4.4.3 gives them to a unit of unbounded
+  # values (a year) and to a duration's units, not to a clock second or to a
+  # selection's position (§12.9, an integer). It matters where `S` follows
+  # the number as the seconds designator: `0S1I` is second 0 and position 1,
+  # not zero to one significant digit.
+  def maybe_negative_exact_integer_or_integer_set(indicator, tag, opts) do
+    choice([
+      parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all}),
+      parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_one}),
+      optional(negative()) |> exact_integer(opts) |> reduce(:form_number)
+    ])
+    |> ignore(string(indicator))
+    |> unwrap_and_tag(tag)
+  end
+
+  defp exact_integer(combinator, opts) do
+    combinator
+    |> choice([
+      integer(opts)
+      |> lookahead_not(unspecified())
+      |> optional(exponent())
+      |> optional(error_range())
+      |> lookahead_not(unspecified_or_set())
+      |> reduce(:form_number),
+      all_unspecified()
+      |> reduce(:normalize_mask)
+      |> unwrap_and_tag(:mask),
+      digit_or_unspecified()
+      |> times(opts)
+      |> reduce(:normalize_mask)
+      |> unwrap_and_tag(:mask)
+    ])
+    |> label("integer")
+  end
+
   def exponent do
     ignore(string("E"))
     |> integer(min: 1)
@@ -371,8 +415,9 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
       when is_integer(integer),
       do: {:signed_fraction, 1, integer, {digits, count}}
 
-  def form_duration_second([?-, integer]) when is_integer(integer), do: -integer
-  def form_duration_second([integer]) when is_integer(integer), do: integer
+  # Any other number is formed as another duration unit's is: a whole second,
+  # one given to significant digits (`PT1230S2S`), a mask or a set.
+  def form_duration_second(number), do: form_number(number)
 
   def form_number([number]) when is_number(number) do
     number

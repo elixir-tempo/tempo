@@ -60,4 +60,13 @@ defmodule Tempo.Iso8601.TokenizerNumbersTest do
   test "a malformed number is a ParseError" do
     assert {:error, %ParseError{}} = Tokenizer.tokenize("+12022Y6M")
   end
+
+  # Significant digits are given to an integer value (ISO 8601-2 §4.4.3). A
+  # fraction with them parsed to a value `to_iso8601/1` raised on.
+  test "a fraction takes significant digits only once an exponent has scaled it" do
+    assert tokens("-13.787E9S4Y") == [date: [year: {-13_787_000_000, significant_digits: 4}]]
+
+    assert {:error, %ParseError{}} = Tokenizer.tokenize("2026.5S1Y")
+    assert {:error, %ParseError{}} = Tokenizer.tokenize("P1.5S1Y")
+  end
 end
