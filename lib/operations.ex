@@ -58,9 +58,10 @@ defmodule Tempo.Operations do
 
   * `:within` — a Tempo value (any of the above types), the window
     the operation works within: a time-of-day operand is placed on
-    every day of it, and a `t:Tempo.RecurrenceSet.t/0` operand gives
-    the occurrences that overlap it (the other operand, by default).
-    Required when `a` and `b` belong to different anchor classes.
+    every day of it, inside the window, and a
+    `t:Tempo.RecurrenceSet.t/0` operand gives the occurrences that
+    overlap it (the other operand, by default). Required when `a` and
+    `b` belong to different anchor classes.
 
   ### Returns
 
@@ -302,32 +303,50 @@ defmodule Tempo.Operations do
   defp overlaps_a_part?(parts, b_parts),
     do: sweep_members(parts, b_parts, :overlapping) != []
 
-  ## Cross-axis materialisation — when one operand is
-  ## unanchored and a `:within` window is supplied, anchor the
-  ## unanchored operand to every day of the window.
+  ## Placing on a window — a `:within` window places each operand with no
+  ## year on every day of it, so the operation is of dated spans.
   ##
-  ## v1 scope: the unanchored operand's intervals must not
-  ## cross midnight (i.e. `from` and `to` share a wall-clock day).
-  ## A Tempo like `T10:30` materialises cleanly to an hour- or
-  ## minute-slot that fits within a single day.
-
-  defp maybe_anchor_to_window(a, b, class_a, class_b, _opts)
-       when class_a == class_b,
-       do: {:ok, a, b}
-
-  defp maybe_anchor_to_window(a, b, :empty, _class_b, _opts), do: {:ok, a, b}
-  defp maybe_anchor_to_window(a, b, _class_a, :empty, _opts), do: {:ok, a, b}
+  ## An operand with no year is placed whatever the other is: a dated one,
+  ## another with no year, or an empty set, whose own kind cannot be told
+  ## (the working hours of a week with no meetings in it are still that
+  ## week's). A window that has no year itself places nothing: it is an
+  ## operand on the same cycle, as `complement/2`'s is, and is an error only
+  ## where a dated operand needs a dated window.
 
   defp maybe_anchor_to_window(a, b, class_a, class_b, opts) do
-    within = Keyword.fetch!(opts, :within)
+    classes = {anchor_class(a), anchor_class(b)}
 
-    with {:ok, window_set} <- Tempo.to_interval_set(within),
-         :ok <- ensure_anchored_window(window_set, within),
-         {:ok, a2} <- anchor_if_unanchored(class_a, a, window_set),
-         {:ok, b2} <- anchor_if_unanchored(class_b, b, window_set) do
-      {:ok, a2, b2}
+    case Keyword.get(opts, :within) do
+      nil -> {:ok, a, b}
+      within -> place_on_window(a, b, classes, {class_a, class_b}, within)
     end
   end
+
+  # Neither operand has a time of day to place.
+  defp place_on_window(a, b, {class_a, class_b}, _compatible, _within)
+       when class_a != :unanchored and class_b != :unanchored,
+       do: {:ok, a, b}
+
+  defp place_on_window(a, b, classes, compatible, within) do
+    with {:ok, window_set} <- Tempo.to_interval_set(within) do
+      placed_on_window(a, b, classes, {anchor_class(window_set), compatible}, window_set, within)
+    end
+  end
+
+  defp placed_on_window(a, b, {class_a, class_b}, {:anchored, _compatible}, window_set, _within) do
+    with {:ok, a} <- anchor_if_unanchored(class_a, a, window_set),
+         {:ok, b} <- anchor_if_unanchored(class_b, b, window_set) do
+      {:ok, a, b}
+    end
+  end
+
+  # A window with no year, on the operands' own cycle.
+  defp placed_on_window(a, b, _classes, {_no_year, {same, same}}, _window_set, _within),
+    do: {:ok, a, b}
+
+  # A window with no year, where an operand is dated.
+  defp placed_on_window(_a, _b, _classes, _dated_operand, window_set, within),
+    do: ensure_anchored_window(window_set, within)
 
   defp ensure_anchored_window(window_set, within) do
     if anchor_class(window_set) == :anchored do
@@ -380,10 +399,30 @@ defmodule Tempo.Operations do
     end
   end
 
+  # A time of day is placed on each day the window touches, and what is
+  # placed is the part of it the window holds: on a window from noon to noon,
+  # nine to five is noon to five on its first day and nine to noon on its
+  # last. Nothing placed lies outside the window.
   defp placed_on(times_of_day, %Interval{} = window) do
     with {:ok, days} <- days_in(window) do
-      {:ok, for(day <- days, time <- times_of_day, do: anchor_interval_to_day(time, day))}
+      placed =
+        for day <- days,
+            time <- times_of_day,
+            held <- held_by(anchor_interval_to_day(time, day), window),
+            do: held
+
+      {:ok, placed}
     end
+  end
+
+  defp held_by(%Interval{} = placed, %Interval{from: from, to: to}) do
+    held = %{
+      placed
+      | from: later_endpoint(placed.from, from),
+        to: earlier_endpoint(placed.to, to)
+    }
+
+    if Compare.compare_endpoints(held.from, held.to) == :earlier, do: [held], else: []
   end
 
   # The days a window touches, its last included when the window ends part
@@ -437,7 +476,7 @@ defmodule Tempo.Operations do
   defp day_step(time), do: if(Keyword.has_key?(time, :day_of_week), do: :day_of_week, else: :day)
 
   defp anchor_interval_to_day(
-         %Interval{from: na_from, to: na_to},
+         %Interval{from: na_from, to: na_to, metadata: metadata},
          %Tempo{time: day_time, calendar: calendar} = day
        ) do
     if crosses_midnight?(na_from, na_to) do
@@ -447,9 +486,13 @@ defmodule Tempo.Operations do
       {:ok, next_day_time} = Math.add_unit(day_time, day_step(day_time), calendar)
       new_from = on_day(na_from, day_time, day)
       new_to = on_day(na_to, next_day_time, day)
-      %Interval{from: new_from, to: new_to}
+      %Interval{from: new_from, to: new_to, metadata: metadata}
     else
-      %Interval{from: on_day(na_from, day_time, day), to: on_day(na_to, day_time, day)}
+      %Interval{
+        from: on_day(na_from, day_time, day),
+        to: on_day(na_to, day_time, day),
+        metadata: metadata
+      }
     end
   end
 
@@ -466,10 +509,10 @@ defmodule Tempo.Operations do
 
   # An unanchored interval "crosses midnight" when its `from`
   # time-of-day is at or after its `to` time-of-day — e.g.
-  # `T23:30/T01:00`. Zero-width cases (`from == to`) are treated
-  # as not crossing.
+  # `T23:30/T01:00`, and `T10:00/T10:00`, which ends where it starts
+  # and is once round the clock.
   defp crosses_midnight?(%Tempo{time: from_time}, %Tempo{time: to_time}) do
-    Compare.compare_time(from_time, to_time) == :gt
+    Compare.compare_time(from_time, to_time) != :lt
   end
 
   ## Operand validation — reject durations and one-of sets up-front.

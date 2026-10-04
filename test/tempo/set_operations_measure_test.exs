@@ -27,6 +27,9 @@ defmodule Tempo.SetOperationsMeasureTest do
   whether a point is covered, are held to arcs of the cycle worked out the
   same way; and so is each operation of two such sets, a member that runs
   through its cycle's end being one member, in the answer as in the set.
+
+  Times of day placed on a `:within` window are held to their placing worked
+  out in hours: each on each day the window touches, and inside the window.
   """
   use ExUnit.Case, async: true
   use ExUnitProperties
@@ -575,6 +578,85 @@ defmodule Tempo.SetOperationsMeasureTest do
           assert_cover_on_cycle(slots, unquote(line))
         end
       end
+    end
+  end
+
+  ## A time of day on a window
+
+  # The spans a set of times of day is placed as on a window, in hours from
+  # the line's first: each starts on each day the window touches, runs into
+  # the next day where its end is not after its start, and is cut to the
+  # window. Each keeps the mark of the time of day it is.
+  defp placed(daily, {window_from, window_to}) do
+    for day <- Integer.floor_div(window_from, 24)..Integer.floor_div(window_to - 1, 24)//1,
+        {{from, to}, index} <- Enum.with_index(daily),
+        last = if(to > from, do: to, else: to + 24),
+        start = max(24 * day + from, window_from),
+        stop = min(24 * day + last, window_to),
+        start < stop do
+      {position(point(:hours, start)), position(point(:hours, stop)), {:a, index}}
+    end
+    |> Sets.ordered()
+  end
+
+  # Every operation of times of day and a set of hours, the times placed on
+  # a window that may open and close within a day. What is placed is inside
+  # the window (decided 2026-10-04): a time of day was placed on the whole of
+  # every day the window touches.
+  defp assert_operations_within(daily, b_slots, {window_from, window_to} = hours) do
+    times = set(daily, :day_hours, :a, [])
+    b = set(b_slots, :hours, :b, [])
+    window = Interval.new!(from: point(:hours, window_from), to: point(:hours, window_to))
+    in_p = placed(daily, hours)
+    in_b = read(b)
+    in_w = [{position(point(:hours, window_from)), position(point(:hours, window_to)), nil}]
+    named = "#{inspect(daily)} within #{inspect(hours)} and #{inspect(b_slots)}"
+
+    assert read(Tempo.union(times, b, within: window)) == Sets.union(in_p, in_b),
+           "union of #{named}"
+
+    assert read(Tempo.intersection(times, b, within: window)) == Sets.pairwise(in_p, in_b),
+           "intersection of #{named}"
+
+    assert read(Tempo.difference(times, b, within: window)) == Sets.difference(in_p, in_b),
+           "difference of #{named}"
+
+    assert read(Tempo.difference(b, times, within: window)) == Sets.difference(in_b, in_p),
+           "difference from #{named}"
+
+    assert read(Tempo.members_overlapping(times, b, within: window)) ==
+             Sets.members_overlapping(in_p, in_b),
+           "members_overlapping of #{named}"
+
+    assert read(Tempo.members_outside(times, b, within: window)) ==
+             Sets.members_outside(in_p, in_b),
+           "members_outside of #{named}"
+
+    assert stretches(read(Tempo.complement(times, within: window))) ==
+             stretches(Sets.difference(in_w, in_p)),
+           "complement of #{named}"
+  end
+
+  describe "times of day placed on a window" do
+    property "are placed inside it, for every operation" do
+      window =
+        gen all(from <- integer(0..71), to <- integer((from + 1)..96)) do
+          {from, to}
+        end
+
+      check all(
+              daily <- arcs_between(24),
+              b_slots <- spans_on(:hours, 4),
+              hours <- window,
+              max_runs: 120
+            ) do
+        assert_operations_within(daily, b_slots, hours)
+      end
+    end
+
+    test "a window from noon to noon holds no time before it opens or after it closes" do
+      assert_operations_within([{9, 17}], [{10, 11}], {12, 60})
+      assert_operations_within([{23, 1}, {0, 0}], [{0, 96}], {12, 36})
     end
   end
 

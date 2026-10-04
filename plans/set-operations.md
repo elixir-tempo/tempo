@@ -68,7 +68,7 @@ None is a second algebra. But "do these two spans overlap" has four answers in t
 
 The matrix measures the time covered, with one plain partner at a time. The measure reaches two sets of several members, the members an answer holds, a tree beside a list, two calendars neither of which is the Gregorian, and two sets with no year. Neither reaches:
 
-* **A `:within` window that places a time of day** — the matrix measures it for `complement/2` alone, in a window with no zone; the measure gives `complement/2` a set as its window and places nothing on it.
+* **A `:within` window with a zone, or of several members** — the measure places times of day on one window with no zone, for every operation; a window in a zone, and one that is a set of several spans, are measured by the matrix for `complement/2` alone.
 
 * **The forms that take a list of operands, the `:metadata` option, and a recurrence set as an operand** — held to no answer worked out apart from the library.
 
@@ -92,13 +92,13 @@ Both by the user, 2026-10-04.
 
 ## Tasks
 
-* [ ] **The measure widened** — a `:within` window that places a time of day, for each operation; the forms that take a list of operands and the `:metadata` option; a lazy set within a window.
+* [ ] **The measure widened** — a `:within` window in a zone and of several members; the forms that take a list of operands and the `:metadata` option; a lazy set within a window.
 
 * [ ] **One answer to whether two spans overlap** — a property that the sweeps, the backends, Allen's relation and a window's bound agree on every generated pair; then whether any is to be read through another.
 
-* [ ] **A time of day placed inside its window** — placed on the part of each day the window holds; the measure widened to a window that opens and closes within a day.
-
 ### Done
+
+* [x] **A time of day placed inside its window** — placed on the part of each day the window holds, whatever the other operand is, with its metadata; the measure holds every operation with a window that opens and closes within a day. 2026-10-04.
 
 * [x] **A time of day on a week window** — the window's days are those of its span, whatever units it is written in, and the time of day is placed in the day's calendar. 2026-10-04.
 

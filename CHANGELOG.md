@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A `:within` window bounds where a time of day is placed: on a window from noon to noon `~o"T09/T17"` is noon to five on the first day and nine to noon on the last, for every set operation, where it was placed on the whole of every day the window touches and a union or an intersection reached outside the window. A dated window places every operand with no year, with an empty or a time-of-day partner too, and each placed span keeps its time of day's metadata.
+
 * A qualification is held per component alone: the `:qualification` field of `t:Tempo.t/0` is removed, a qualifier written after a whole value (`2026-06?`) is recorded for each of its components in `:qualifications`, and `Tempo.qualification/1` reads the qualifier every component shares, `Tempo.qualification/2` one component's. `2026?` and `?2026`, which ISO 8601-2 §8.2.4 calls one meaning, are one value, where they were not equal, and the walk of either yields months of an uncertain year (`2026?Y1M`), where the first yielded uncertain months.
 
 * An interval with no end refuses what needs its end, as a lazy interval set does: `Enum.at/2`, `Enum.fetch/2`, `Enum.empty?/1`, `Enum.random/1` and `Enum.slice/2` of `~o"2026Y/.."` raise a `Tempo.IntervalEndpointsError`, where `Enum.at(_, -1)` and `Enum.random/1` walked for ever and `Enum.at/2` with a positive index and `Enum.empty?/1` answered. `Enum.take/2`, `Enum.take_while/2`, `Enum.find/2` and the `Stream` functions read what they need, and `Tempo.Interval.empty?/1` says whether it is empty.

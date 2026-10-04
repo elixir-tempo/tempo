@@ -162,6 +162,8 @@ Tempo.intersection(~o"2026-01-04", ~o"T10:30", within: ~o"2026-01-04")
 #=> {:ok, #Tempo.IntervalSet<[~o"2026Y1M4DT10H30M/T31M"]>}
 ```
 
+A window places a time of day on each day it touches, and what is placed is inside the window: on a window from noon on Monday to noon on Wednesday, nine to five is noon to five on Monday, nine to five on Tuesday and nine to noon on Wednesday, for every operation alike. The other operand is not cut by the window. A dated window places every operand that has no year, whatever the other operand is, so the working hours of a week with no meetings in it are still that week's hours, and each placed span keeps the metadata of the time of day it is.
+
 The `:within` option is also required on `complement/2` — for the same reason. An unbounded complement is infinite; Tempo refuses to pick a universe.
 
 ### Composing across axes — `at/2` and `on/2`
