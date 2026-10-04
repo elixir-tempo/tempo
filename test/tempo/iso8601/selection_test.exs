@@ -1,6 +1,7 @@
 defmodule Tempo.Parser.Selection.Test do
   use ExUnit.Case, async: true
 
+  alias Calendrical.Hebrew
   alias Tempo.Interval
   alias Tempo.IntervalSet
 
@@ -187,6 +188,58 @@ defmodule Tempo.Parser.Selection.Test do
 
     test "is not read with its position after the selection's N" do
       assert {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("2018Y9MTLT8H20MN3I")
+    end
+  end
+
+  # The units before a selection name the period it selects in, and are read
+  # as they are with no selection after them. A month or a week followed by
+  # a selection was held only to the most any year has, so a week its year
+  # does not have was read, and converted to a week that does not exist, or
+  # in a calendar of weeks raised.
+  describe "the period a selection is in" do
+    test "is a week its year has" do
+      # ISO 8601's 2026 has 53 weeks and its 2027 has 52.
+      assert :calendar.iso_week_number({2026, 12, 28}) == {2026, 53}
+      assert :calendar.iso_week_number({2027, 12, 28}) == {2027, 52}
+
+      assert [%Tempo{time: [year: 2026, week: 53, day_of_week: 1]}] = starts("2026Y53WL1KN")
+
+      for calendar <- [Calendrical.Gregorian, Calendrical.ISOWeek] do
+        assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("2027Y53WL1KN", calendar)
+        assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("2027Y54WL1KN", calendar)
+
+        assert {:error, %Tempo.InvalidDateError{}} =
+                 Tempo.from_iso8601("2027Y{1,53}WL1KN", calendar)
+      end
+    end
+
+    test "is a month its year has" do
+      # A Hebrew year has twelve months or thirteen: 5786 twelve, 5787 thirteen.
+      assert Hebrew.months_in_year(5786) == 12
+      assert Hebrew.months_in_year(5787) == 13
+
+      assert {:ok, _thirteenth} = Tempo.from_iso8601("5787Y13ML1KN", Hebrew)
+
+      assert {:error, %Tempo.InvalidDateError{}} =
+               Tempo.from_iso8601("5786Y13ML1KN", Hebrew)
+
+      assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("2026Y13ML1KN")
+      assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("2026Y{1,13}ML15DN")
+    end
+
+    test "is counted from the end of its year as it is with no selection" do
+      assert Tempo.from_iso8601!("2026Y-1ML1KN") == Tempo.from_iso8601!("2026Y12ML1KN")
+      assert Tempo.from_iso8601!("2026Y-1WL1KN") == Tempo.from_iso8601!("2026Y53WL1KN")
+      assert starts("2026Y-1ML-1DN") == [Tempo.from_iso8601!("2026-12-31")]
+    end
+
+    test "is read the same with a selection after it as with none" do
+      for period <- ~w(2026Y 2026Y6M 2026Y25W 2026Y6M15D 2026Y200O 2026Y6M15DT10H) do
+        {:ok, %Tempo{time: alone}} = Tempo.from_iso8601(period)
+        {:ok, %Tempo{time: selected}} = Tempo.from_iso8601(period <> "LT30MN")
+
+        assert Enum.take_while(selected, &(not match?({:selection, _}, &1))) == alone, period
+      end
     end
   end
 

@@ -138,13 +138,43 @@ defmodule Tempo.Validation do
   defp resolve_as_written(units, written, calendar),
     do: units |> resolve_units(written) |> convert_date(written, calendar)
 
+  # The units before a selection name the period it selects in, and are read
+  # as they are with no selection after them: a month or a week its year
+  # does not have is refused there too (`2027Y53WL1KN`), and a count from the
+  # end is counted in its year. The selection and what follows it are read as
+  # they are written.
   defp resolve_units(units, calendar) do
+    if selection_after_units?(units),
+      do: resolve_around_selection(units, calendar),
+      else: resolve_a_value(units, calendar)
+  end
+
+  defp resolve_a_value(units, calendar) do
     units
     |> first_of_skipped_date_units(calendar)
     |> resolve_fixed_extent_negatives(calendar)
     |> resolve(calendar)
     |> settle_groups(calendar)
   end
+
+  defp resolve_around_selection(units, calendar) do
+    {before, selection_and_after} = Enum.split_while(units, &(not selection?(&1)))
+
+    with period when is_list(period) <- resolve_a_value(before, calendar),
+         rest when is_list(rest) <- resolve_a_value(selection_and_after, calendar) do
+      period ++ rest
+    end
+  end
+
+  # Whether a selection follows at least one unit. Most values hold none, and
+  # are left as the list they are.
+  defp selection_after_units?([_unit | rest]) when is_list(rest),
+    do: Enum.any?(rest, &selection?/1)
+
+  defp selection_after_units?(_units), do: false
+
+  defp selection?({:selection, _parts}), do: true
+  defp selection?(_unit), do: false
 
   @clock_units [:hour, :minute, :second]
   @units_of_days [:year, :month, :week]
