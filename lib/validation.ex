@@ -12,6 +12,7 @@ defmodule Tempo.Validation do
   alias Tempo.Iso8601.Group
   alias Tempo.Iso8601.Parser
   alias Tempo.Microsecond
+  alias Tempo.NotBuilt
   alias Tempo.ParseError
   alias Tempo.Qualification
   alias Tempo.TimeZoneDatabase
@@ -48,7 +49,8 @@ defmodule Tempo.Validation do
 
   def validate(%Tempo{time: units} = tempo, calendar) do
     with :ok <- validate_leap_second(units, tempo),
-         :ok <- validate_time_shift(tempo.shift) do
+         :ok <- validate_time_shift(tempo.shift),
+         :ok <- NotBuilt.month(tempo, calendar) do
       written = written_calendar(units, calendar)
 
       case resolve_as_written(units, written, calendar) do
@@ -59,6 +61,7 @@ defmodule Tempo.Validation do
           tempo
           |> qualify_converted(resolved, written, calendar)
           |> validated_groups(collapse_single_member_sets(resolved), calendar)
+          |> NotBuilt.result()
       end
     end
   end

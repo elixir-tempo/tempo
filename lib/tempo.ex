@@ -128,6 +128,7 @@ defmodule Tempo do
   alias Tempo.Iso8601EncodeError
   alias Tempo.Mask
   alias Tempo.Math
+  alias Tempo.NotBuilt
   alias Tempo.ParseError
   alias Tempo.Qualification
   alias Tempo.RecurrenceSet.Conditional
@@ -2778,7 +2779,10 @@ defmodule Tempo do
   def trunc(%__MODULE__{} = tempo, truncate_to) do
     with {:ok, truncate_to} <- validate_unit(truncate_to),
          :ok <- one_value(tempo) do
-      tempo |> truncate(day_unit(truncate_to, tempo)) |> qualified_as_it_stands()
+      tempo
+      |> truncate(day_unit(truncate_to, tempo))
+      |> qualified_as_it_stands()
+      |> NotBuilt.result()
     end
   end
 
@@ -2993,7 +2997,7 @@ defmodule Tempo do
   def round(%__MODULE__{} = tempo, round_to) do
     with {:ok, round_to} <- validate_unit(round_to),
          :ok <- one_to_round(tempo, round_to) do
-      tempo |> Rounding.round(round_to) |> qualified_as_it_stands()
+      tempo |> Rounding.round(round_to) |> qualified_as_it_stands() |> NotBuilt.result()
     end
   end
 
@@ -3533,9 +3537,12 @@ defmodule Tempo do
   def extend(tempo, unit \\ nil)
 
   def extend(%Tempo{time: time} = tempo, nil) when is_list(time) do
-    if Enumeration.ends_in_group?(tempo),
-      do: extend_group(tempo),
-      else: extend_by_finer_unit(tempo)
+    extended =
+      if Enumeration.ends_in_group?(tempo),
+        do: extend_group(tempo),
+        else: extend_by_finer_unit(tempo)
+
+    NotBuilt.result(extended)
   end
 
   def extend(%Tempo{time: time}, unit) when is_list(time) do
@@ -3854,7 +3861,7 @@ defmodule Tempo do
           t | {:error, error_reason()}
   def extend_resolution(%Tempo{} = tempo, target_unit) do
     with %Tempo{} = extended <- extend_resolution_as_written(tempo, target_unit),
-         do: Validation.calendar_date_from_week_date(extended)
+         do: extended |> Validation.calendar_date_from_week_date() |> NotBuilt.result()
   end
 
   def extend_resolution(value, _target_unit),
@@ -6681,7 +6688,7 @@ defmodule Tempo do
              "#{inspect(interval)} cannot select by a month, a day of one or a day of the year."
        )}
     else
-      :ok
+      NotBuilt.selection(time, interval, Compare.effective_calendar(calendar_of(rule)))
     end
   end
 

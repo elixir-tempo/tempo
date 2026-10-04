@@ -174,6 +174,7 @@ defmodule Tempo.Select do
   alias Tempo.InvalidDateError
   alias Tempo.Iso8601.Unit
   alias Tempo.Math
+  alias Tempo.NotBuilt
   alias Tempo.UnboundedSetError
   alias Tempo.UnitValues
   alias Tempo.Validation
@@ -965,12 +966,23 @@ defmodule Tempo.Select do
          )}
 
       {next_unit, _range} ->
-        intervals =
-          indices
-          |> Enum.map(fn idx -> project_index(source, base_time, next_unit, idx) end)
-          |> Enum.reject(&is_nil/1)
+        select_built_indices(source, base_time, next_unit, indices)
+    end
+  end
 
-        IntervalSet.new(intervals, coalesce: false)
+  # An index is a value of the unit below the base's: a day of a month, a
+  # month of a year. One Tempo does not yet answer for in the base's
+  # calendar is refused, and named.
+  defp select_built_indices(source, base_time, next_unit, indices) do
+    case NotBuilt.selector([{next_unit, indices}], %{source | time: base_time}) do
+      :ok ->
+        indices
+        |> Enum.map(fn idx -> project_index(source, base_time, next_unit, idx) end)
+        |> Enum.reject(&is_nil/1)
+        |> IntervalSet.new(coalesce: false)
+
+      {:error, _not_built} = error ->
+        error
     end
   end
 
@@ -1140,7 +1152,16 @@ defmodule Tempo.Select do
   defp merged_constraint_tempo(%Interval{from: %Tempo{calendar: calendar}} = base, c_time) do
     if Validation.written_in_another_calendar?(c_time, calendar),
       do: {:error, selects_by_month_error(calendar, c_time)},
-      else: merge_constraint(base, c_time)
+      else: merge_built_constraint(base, c_time)
+  end
+
+  # A selector Tempo answers for in the base's calendar is merged onto the
+  # base; one it does not yet is refused, and named.
+  defp merge_built_constraint(base, c_time) do
+    case NotBuilt.selector(c_time, base.from) do
+      :ok -> merge_constraint(base, c_time)
+      {:error, _not_built} = error -> error
+    end
   end
 
   defp selects_by_month_error(calendar, c_time) do

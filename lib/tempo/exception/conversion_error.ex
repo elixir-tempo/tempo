@@ -37,14 +37,27 @@ defmodule Tempo.ConversionError do
   * `:recurrence_set_member` and `:conditional_member` — a
     `Tempo.RecurrenceSet` member of a shape it cannot hold.
 
+  * `:not_built` — the answer is one Tempo does not yet work out in the
+    calendar named in `:calendar`, where it is known that it would be
+    wrong, so it is refused: `:target` says what was asked for.
+    `:selection` is a selection that counts days within a month or a
+    year, `:season` a season and `:shift` a step by days from a value
+    that holds several months or years, each in a calendar whose year
+    does not begin with its first month (Calendrical's Julian `March25`,
+    `March1`, `Sept1` and `Dec25`); `:month` is a month of a year whose
+    months the calendar does not count from the day the year begins (a
+    year of `Calendrical.Reform.England` before 1751). The
+    [operation matrix](operation-matrix.html) lists each.
+
   """
 
-  defexception [:value, :target, :reason]
+  defexception [:value, :target, :reason, :calendar]
 
   @type t :: %__MODULE__{
           value: any() | nil,
           target: atom() | module() | String.t() | nil,
-          reason: atom() | String.t() | nil
+          reason: atom() | String.t() | nil,
+          calendar: module() | nil
         }
 
   @impl true
@@ -144,6 +157,11 @@ defmodule Tempo.ConversionError do
       "from the group's start."
   end
 
+  def message(%__MODULE__{reason: :not_built, target: target, calendar: calendar} = error) do
+    "#{not_built_subject(error)} — #{not_built(target)} is not built for #{inspect(calendar)}, " <>
+      "#{not_built_calendar(target)}, and is refused where it would be answered wrongly."
+  end
+
   def message(%__MODULE__{value: value, target: target})
       when not is_nil(value) and not is_nil(target) do
     "Cannot convert #{inspect(value)} to #{describe_target(target)}"
@@ -154,6 +172,26 @@ defmodule Tempo.ConversionError do
   end
 
   def message(%__MODULE__{}), do: "Conversion failed"
+
+  # What a refusal of something not built says of the value, of what was
+  # asked for and of the calendar it was asked in.
+  defp not_built_subject(%__MODULE__{value: nil}), do: "Cannot answer"
+
+  defp not_built_subject(%__MODULE__{value: value}) when is_binary(value),
+    do: "Cannot answer #{value}"
+
+  defp not_built_subject(%__MODULE__{value: value}), do: "Cannot answer #{inspect(value)}"
+
+  defp not_built(:selection), do: "a selection that counts days within a month or a year"
+  defp not_built(:season), do: "a season"
+  defp not_built(:shift), do: "a step by days from a value that holds several months or years"
+  defp not_built(:month), do: "a month of a year that begins within one"
+  defp not_built(other), do: "#{other}"
+
+  defp not_built_calendar(:month),
+    do: "which does not count that year's months from the day it begins"
+
+  defp not_built_calendar(_target), do: "whose year does not begin with its first month"
 
   # A module target reads as the module (`Date`), a plain atom as its
   # name (`rrule`).

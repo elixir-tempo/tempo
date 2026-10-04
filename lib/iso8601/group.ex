@@ -7,6 +7,7 @@ defmodule Tempo.Iso8601.Group do
   alias Tempo.Iso8601.Group
   alias Tempo.Iso8601.Parser
   alias Tempo.Math
+  alias Tempo.NotBuilt
   alias Tempo.ParseError
   alias Tempo.UnitValues
   alias Tempo.Validation
@@ -672,7 +673,8 @@ defmodule Tempo.Iso8601.Group do
   # the Gregorian, found among the Gregorian seasons of the years it
   # overlaps: its span, or its nth day, in that calendar.
   defp calendar_season(year, code, rest, calendar) do
-    with {:ok, first, last} <- gregorian_year_bounds(year, calendar),
+    with :ok <- NotBuilt.season(year, code, calendar),
+         {:ok, first, last} <- gregorian_year_bounds(year, calendar),
          {:ok, start_date, end_date} <- season_starting_within(code, first, last, year, calendar) do
       calendar_season_span(start_date, end_date, rest, calendar)
     end
