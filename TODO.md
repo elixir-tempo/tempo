@@ -26,7 +26,7 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Conformance and completeness
 
-* [ ] **A count from the end in a selection selects nothing** — a month from the end in a recurrence's rule (`R4/2026-01-01/P1Y/FL-1M-1DN`, `FL-1M31DN`) gives no occurrences, where `FL12M-1DN` gives 31 December of each year and `Tempo.select(~o"2026", ~o"-1M-1D")` selects it; and a range of days to the end (`2026Y6ML{1..-1}DN`) selects none, where `L{1..30}DN` selects thirty and `L-1DN` the last. Found 2026-10-04.
+* [ ] **Selections the matrix does not measure** — the corpus holds a selection in a Gregorian month and year alone, and probing beside the count from the end found four defects of one kind. On the week axis: a weekday selected in a Gregorian week is its Monday whatever the weekday (`2026Y25WL3KN`); in a calendar of weeks a week selected in a year is the whole year (`2026YL10WN` in `Calendrical.ISOWeek`) and a year's weekdays stop at its twelfth week (`2026YL7KN`); and `Tempo.select(~o"2026", ~o"53W7K")` selects nothing. With no year: a day selected in a recurrence raises a `FunctionClauseError` (`R3/6M/P1M/FL15DN`). `Tempo.explain/1` raises a `CaseClauseError` on a range that reaches the end (`2026Y6ML{1..-1}DN`). And `Tempo.select/2` reads a day with no month as a day of the year where a selection reads it in the year's first month (`Tempo.select(~o"2026", ~o"-1D")` is 31 December and `2026YL-1DN` 31 January), and selects a day named from both ends twice (`{30,-1}D`): decide the day's reading, and whether `select/2` resolves through the selection's resolver. Add a class for each to the corpus first, so that the matrix lists what fails. Found 2026-10-04.
 
 * [ ] **A position after a set of weekdays, where the standard contradicts itself** — `L{1,3}K1IN` is the first of the Mondays and Wednesdays taken together, as §12.9 defines a position (the i-th of the occurrences the rules before it select, `{1..5}K-1I` the last workday), where §12.11.3 example 2 calls `2018Y9ML{1,3}K1IN/P5D` identical to `{2018Y9ML1K1IN/P5D, 2018Y9ML3K1IN/P5D}`, each weekday's first. Decide whether Tempo keeps §12.9's rule, which RRULE's `BYSETPOS` is read as. Found 2026-10-04.
 
@@ -64,7 +64,7 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Performance
 
-* [ ] **A never-matching selector walks the whole horizon** — `Tempo.select/2` over an open-ended span walks a thousand years of periods before a selector that never matches ends: 30 ms of years, 0.2 s of months, about 10 s of days, minutes of hours. An index selector on a fixed-range unit could end after its first empty period, a daylight-saving gap day aside.
+* [ ] **A never-matching selector walks the whole horizon** — `Tempo.select/2` over an open-ended span walks a thousand years of periods before a selector that never matches ends: 30 ms of years, 0.2 s of months, about 10 s of days, minutes of hours. An index selector on a fixed-range unit could end after its first empty period, a daylight-saving gap day aside. A recurrence's rule that selects nothing is as slow where the search has no bound of its own: twelve seconds where its start has no year (`R3/T22H/PT1H/FLT25HN`) and over forty-five in a calendar of weeks (`R2/2026-W25/P1W/FL8KN` in `Calendrical.ISOWeek`), where a Gregorian one answers in under a second.
 
 * [ ] **Conditional first pass walks whole periods** — it widens the bound by the conditions' reach, and the walk covers every period the widened bound touches, so a ±1-day bridge crossing both year ends materialises three years: Japan's holiday set takes 55 ms a year with its bridge, 25 ms without. Widen only where a condition reaches past the bound (the bridge's days, a move's search back from the bound's start).
 
@@ -125,6 +125,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A count from the end in a selection is counted in its period** — a month, a weekday, an hour, a range that reaches the end (`{28..-1}D`), a position (`{2..-1}I`) and a unit after the selection (`2026YL6MN-1D`) select what their positive twins do, in a value and in a recurrence's rule; the values a part names are taken in the order of time and once each, which puts an RRULE's unordered lists right (`BYMONTHDAY=15,1;COUNT=3`), and a value its period lacks (hour 25) is passed over. 2026-10-04.
 
 * [x] **A time of day selected in a month is on its first day, a divergence** — a selection follows the first-day rule (user's decision): `2018Y9MLT8H20MN` is 08:20 on 1 September and has no third instance, where ISO 8601-2 §12.11.1 example 2 reads the third as 3 September; recorded in the conformance guide with the form that names the days (`2018Y9ML{1..30}DT8H20M3IN`). 2026-10-04.
 

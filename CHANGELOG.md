@@ -257,6 +257,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A count from the end in a selection is counted in the period the selection resolves in, where it selected nothing or raised: a month, a weekday, an hour, a range that reaches the end (`{28..-1}D`), a position (`{2..-1}I`) and a unit after the selection (`2026YL6MN-1D`), so `R/2026-01-01/P1Y/FL-1M-1DN` is each 31 December. The values a selection or an RRULE lists are taken in the order of time and once each (`BYMONTHDAY=15,1;COUNT=3` is 1 January, 15 January and 1 February), and a value its period lacks (hour 25, the 31st of June) is passed over.
+
 * A fraction of an hour or a minute that does not land on a whole minute or second is read to the minute, or the second, the time falls in: `T10.51` is 10:30 and `T10:30.51` is 10:30:30. The value held the fractional minute or second, which `Tempo.to_interval/2` and `Tempo.compare/2` refused, `Enum` raised on, and its own text read back as another value.
 
 * Within a set a comma separates the members and is never a decimal sign: `{2023,2020/2021}` is a year and an interval, where `2023,2020` was read as a number and the set, or a recurrence's domain (`R/{2020,2022/2024}/P1Y`), was one interval from part way through 2023, and `{2020/2021,2023/2024}` parses. A fraction in a set's member is written with a full stop, so `{P1,5Y}` is a `Tempo.ParseError`.

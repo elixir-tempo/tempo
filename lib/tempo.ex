@@ -9389,12 +9389,18 @@ defmodule Tempo do
     set
     |> IntervalSet.members()
     |> Enum.reduce_while({:ok, []}, fn %Tempo.Interval{from: %Tempo{} = from}, {:ok, acc} ->
-      case to_interval(%{from | time: Keyword.merge(from.time, trailing)}) do
+      case selected_with_units(from, trailing) do
         {:ok, %Tempo.Interval{} = interval} ->
           {:cont, {:ok, [interval | acc]}}
 
         {:ok, %IntervalSet{} = expanded} ->
           {:cont, {:ok, Enum.reverse(IntervalSet.members(expanded)) ++ acc}}
+
+        # A date the units do not make (`2026YL{1,2}MN30D` has no 30
+        # February) is passed over, as a selection passes over a value its
+        # period lacks.
+        {:error, %InvalidDateError{}} ->
+          {:cont, {:ok, acc}}
 
         {:error, _reason} = error ->
           {:halt, error}
@@ -9410,6 +9416,18 @@ defmodule Tempo do
   end
 
   defp with_trailing_units({:error, _reason} = error, _trailing), do: error
+
+  # A date the selection picked with the units after it, read as the same
+  # text is: a unit counted from the end (`2026YL6MN-1D`) is counted in the
+  # date picked, which the text before the selection could not give it.
+  defp selected_with_units(%Tempo{time: time, calendar: calendar} = selected, trailing) do
+    with_units = %{selected | time: Keyword.merge(time, trailing)}
+
+    with {:ok, %Tempo{} = read} <-
+           Validation.validate(with_units, Compare.effective_calendar(calendar)) do
+      to_interval(read)
+    end
+  end
 
   # A span a selection picks is walked as the span it is, as the dates it
   # picks are: the unit a value's own span is walked by, which

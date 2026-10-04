@@ -85,7 +85,12 @@ defmodule Tempo.Matrix.Corpus do
       "R3/P1W/2026-06-22"
     ],
     recurrence_unending: ["R/2026-01-01/P1Y", "R/2026-06-01/P1D"],
-    recurrence_selection: ["R3/2026-01-01/P1Y/FL7M4DN", "R/../P1Y/FL12M25DN", "R/../P1M/FL5K-1IN"],
+    recurrence_selection: [
+      "R3/2026-01-01/P1Y/FL7M4DN",
+      "R/../P1Y/FL12M25DN",
+      "R/../P1M/FL5K-1IN",
+      "R3/2026-01-01/P1Y/FL-1M-1DN"
+    ],
     component_set: ["2026Y{6,7}M", "2026Y6M{1,15}D", "{2026,2027}Y", "2026Y6M{1,15}DT10H30M0S"],
     component_range: ["2026Y{1..3}M", "2026Y6M{1..-1}D", "{2020..2022}Y6M"],
     value_set_all: ["{2026-06-15,2026-07-01}", "{2026Y,2027Y}", "{2026,2027}"],
@@ -112,7 +117,8 @@ defmodule Tempo.Matrix.Corpus do
     significant_digits: ["1950S2", "1950S2Y6M", "1950S4"],
     group: ["2026Y1G3MU", "20C", "201J", "2026Y2G3MU", "2018Y1G6MU"],
     count_from_end: ["2026Y6M-1D", "2026Y-1M", "2026Y{1..12}M-1D"],
-    value_selection: ["2026Y4ML1K1IN", "2026Y6ML2KN"],
+    # The last two count from the end of the period they are selected in.
+    value_selection: ["2026Y4ML1K1IN", "2026Y6ML2KN", "2026YL-1M-1DN", "2026Y6M15DLT-1HN"],
     season: ["2026-21", "2026Y24M"],
     zone_transition: ["2026-10-25T02:30[Europe/Paris]", "2026-03-29[Europe/Paris]"],
     mask_from_end: ["2026Y-XM", "2026Y6M-1XD", "2026Y-XM15D"],
