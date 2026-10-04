@@ -213,6 +213,7 @@ defmodule Tempo.MixProject do
       {:benchee, "~> 1.3", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:ex_slop, "~> 0.1", only: [:dev, :test], runtime: false},
       {:stream_data, "~> 1.0", only: [:dev, :test], runtime: false},
       {:tz, "~> 0.28", only: [:dev, :test]}
     ] ++ maybe_json_polyfill()

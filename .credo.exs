@@ -36,7 +36,7 @@
       #
       # Load and configure plugins here:
       #
-      plugins: [],
+      plugins: [{ExSlop, []}],
       #
       # If you create your own checks, you must specify the source files for
       # them here, so they can be loaded by Credo before running the analysis.
@@ -65,123 +65,124 @@
       #     {Credo.Check.Design.DuplicatedCode, false}
       #
       checks: %{
-        enabled: [
-          #
-          ## Consistency Checks
-          #
-          {Credo.Check.Consistency.ExceptionNames, []},
-          {Credo.Check.Consistency.LineEndings, []},
-          {Credo.Check.Consistency.ParameterPatternMatching, []},
-          {Credo.Check.Consistency.SpaceAroundOperators, []},
-          {Credo.Check.Consistency.SpaceInParentheses, []},
-          {Credo.Check.Consistency.TabsOrSpaces, []},
+        enabled:
+          [
+            #
+            ## Consistency Checks
+            #
+            {Credo.Check.Consistency.ExceptionNames, []},
+            {Credo.Check.Consistency.LineEndings, []},
+            {Credo.Check.Consistency.ParameterPatternMatching, []},
+            {Credo.Check.Consistency.SpaceAroundOperators, []},
+            {Credo.Check.Consistency.SpaceInParentheses, []},
+            {Credo.Check.Consistency.TabsOrSpaces, []},
 
-          #
-          ## Design Checks
-          #
-          # You can customize the priority of any check
-          # Priority values are: `low, normal, high, higher`
-          #
-          # Enabled: aliasing nested modules to collapse the namespace
-          # by the primary level (`Tempo.Foo.Bar` → `Bar`) is the house
-          # style — it keeps call sites reading as domain verbs rather
-          # than fully-qualified paths. `excluded_lastnames` keeps names
-          # that would shadow an Elixir/Erlang built-in fully qualified
-          # (e.g. `Localize.Calendar`, `Tempo.Inspect`) — aliasing those
-          # to the bare name silently captures the stdlib module.
-          {Credo.Check.Design.AliasUsage,
-           [
-             excluded_lastnames: ~w(
+            #
+            ## Design Checks
+            #
+            # You can customize the priority of any check
+            # Priority values are: `low, normal, high, higher`
+            #
+            # Enabled: aliasing nested modules to collapse the namespace
+            # by the primary level (`Tempo.Foo.Bar` → `Bar`) is the house
+            # style — it keeps call sites reading as domain verbs rather
+            # than fully-qualified paths. `excluded_lastnames` keeps names
+            # that would shadow an Elixir/Erlang built-in fully qualified
+            # (e.g. `Localize.Calendar`, `Tempo.Inspect`) — aliasing those
+            # to the bare name silently captures the stdlib module.
+            {Credo.Check.Design.AliasUsage,
+             [
+               excluded_lastnames: ~w(
                Calendar Inspect Date Time DateTime NaiveDateTime Range Stream
                Map List Set Keyword Tuple Atom Integer Float String Process
                Task Agent Node Port System IO File Path URI Version Regex
                Module Macro Code Enum Access Base Exception Kernel
              )
-           ]},
-          # Disabled: TODO/FIXME work is tracked in TODO.md, the system
-          # of record — inline tags are intentional pointers, not debt
-          # for Credo to flag.
-          {Credo.Check.Design.TagFIXME, false},
-          {Credo.Check.Design.TagTODO, false},
+             ]},
+            # Disabled: TODO/FIXME work is tracked in TODO.md, the system
+            # of record — inline tags are intentional pointers, not debt
+            # for Credo to flag.
+            {Credo.Check.Design.TagFIXME, false},
+            {Credo.Check.Design.TagTODO, false},
 
-          #
-          ## Readability Checks
-          #
-          {Credo.Check.Readability.AliasOrder, []},
-          {Credo.Check.Readability.FunctionNames, []},
-          {Credo.Check.Readability.LargeNumbers, []},
-          {Credo.Check.Readability.MaxLineLength, [priority: :low, max_length: 120]},
-          {Credo.Check.Readability.ModuleAttributeNames, []},
-          {Credo.Check.Readability.ModuleDoc, []},
-          {Credo.Check.Readability.ModuleNames, []},
-          {Credo.Check.Readability.ParenthesesInCondition, []},
-          {Credo.Check.Readability.ParenthesesOnZeroArityDefs, []},
-          {Credo.Check.Readability.PipeIntoAnonymousFunctions, []},
-          {Credo.Check.Readability.PredicateFunctionNames, []},
-          {Credo.Check.Readability.PreferImplicitTry, []},
-          {Credo.Check.Readability.RedundantBlankLines, []},
-          {Credo.Check.Readability.Semicolons, []},
-          {Credo.Check.Readability.SpaceAfterCommas, []},
-          {Credo.Check.Readability.StringSigils, []},
-          {Credo.Check.Readability.TrailingBlankLine, []},
-          {Credo.Check.Readability.TrailingWhiteSpace, []},
-          {Credo.Check.Readability.UnnecessaryAliasExpansion, []},
-          {Credo.Check.Readability.VariableNames, []},
-          {Credo.Check.Readability.WithSingleClause, []},
+            #
+            ## Readability Checks
+            #
+            {Credo.Check.Readability.AliasOrder, []},
+            {Credo.Check.Readability.FunctionNames, []},
+            {Credo.Check.Readability.LargeNumbers, []},
+            {Credo.Check.Readability.MaxLineLength, [priority: :low, max_length: 120]},
+            {Credo.Check.Readability.ModuleAttributeNames, []},
+            {Credo.Check.Readability.ModuleDoc, []},
+            {Credo.Check.Readability.ModuleNames, []},
+            {Credo.Check.Readability.ParenthesesInCondition, []},
+            {Credo.Check.Readability.ParenthesesOnZeroArityDefs, []},
+            {Credo.Check.Readability.PipeIntoAnonymousFunctions, []},
+            {Credo.Check.Readability.PredicateFunctionNames, []},
+            {Credo.Check.Readability.PreferImplicitTry, []},
+            {Credo.Check.Readability.RedundantBlankLines, []},
+            {Credo.Check.Readability.Semicolons, []},
+            {Credo.Check.Readability.SpaceAfterCommas, []},
+            {Credo.Check.Readability.StringSigils, []},
+            {Credo.Check.Readability.TrailingBlankLine, []},
+            {Credo.Check.Readability.TrailingWhiteSpace, []},
+            {Credo.Check.Readability.UnnecessaryAliasExpansion, []},
+            {Credo.Check.Readability.VariableNames, []},
+            {Credo.Check.Readability.WithSingleClause, []},
 
-          #
-          ## Refactoring Opportunities
-          #
-          {Credo.Check.Refactor.Apply, []},
-          {Credo.Check.Refactor.CondStatements, []},
-          # Default (9). Vocabulary dispatch (Allen relations, cron
-          # cascade, iteration shapes) is expressed as multi-head
-          # function clauses rather than one branchy function.
-          {Credo.Check.Refactor.CyclomaticComplexity, []},
-          {Credo.Check.Refactor.FilterCount, []},
-          {Credo.Check.Refactor.FilterFilter, []},
-          {Credo.Check.Refactor.FunctionArity, []},
-          {Credo.Check.Refactor.LongQuoteBlocks, []},
-          {Credo.Check.Refactor.MapJoin, []},
-          {Credo.Check.Refactor.MatchInCondition, []},
-          {Credo.Check.Refactor.NegatedConditionsInUnless, []},
-          {Credo.Check.Refactor.NegatedConditionsWithElse, []},
-          # Default depth (2). A `case`/`with` nested inside another
-          # `with`/`if` is extracted to a multi-head helper rather than
-          # tolerated — depth 3+ flags.
-          {Credo.Check.Refactor.Nesting, []},
-          {Credo.Check.Refactor.RedundantWithClauseResult, []},
-          {Credo.Check.Refactor.RejectReject, []},
-          {Credo.Check.Refactor.UnlessWithElse, []},
-          {Credo.Check.Refactor.WithClauses, []},
+            #
+            ## Refactoring Opportunities
+            #
+            {Credo.Check.Refactor.Apply, []},
+            {Credo.Check.Refactor.CondStatements, []},
+            # Default (9). Vocabulary dispatch (Allen relations, cron
+            # cascade, iteration shapes) is expressed as multi-head
+            # function clauses rather than one branchy function.
+            {Credo.Check.Refactor.CyclomaticComplexity, []},
+            {Credo.Check.Refactor.FilterCount, []},
+            {Credo.Check.Refactor.FilterFilter, []},
+            {Credo.Check.Refactor.FunctionArity, []},
+            {Credo.Check.Refactor.LongQuoteBlocks, []},
+            {Credo.Check.Refactor.MapJoin, []},
+            {Credo.Check.Refactor.MatchInCondition, []},
+            {Credo.Check.Refactor.NegatedConditionsInUnless, []},
+            {Credo.Check.Refactor.NegatedConditionsWithElse, []},
+            # Default depth (2). A `case`/`with` nested inside another
+            # `with`/`if` is extracted to a multi-head helper rather than
+            # tolerated — depth 3+ flags.
+            {Credo.Check.Refactor.Nesting, []},
+            {Credo.Check.Refactor.RedundantWithClauseResult, []},
+            {Credo.Check.Refactor.RejectReject, []},
+            {Credo.Check.Refactor.UnlessWithElse, []},
+            {Credo.Check.Refactor.WithClauses, []},
 
-          #
-          ## Warnings
-          #
-          {Credo.Check.Warning.ApplicationConfigInModuleAttribute, []},
-          {Credo.Check.Warning.BoolOperationOnSameValues, []},
-          {Credo.Check.Warning.Dbg, []},
-          {Credo.Check.Warning.ExpensiveEmptyEnumCheck, []},
-          {Credo.Check.Warning.IExPry, []},
-          {Credo.Check.Warning.IoInspect, []},
-          {Credo.Check.Warning.MissedMetadataKeyInLoggerConfig, []},
-          {Credo.Check.Warning.OperationOnSameValues, []},
-          {Credo.Check.Warning.OperationWithConstantResult, []},
-          {Credo.Check.Warning.RaiseInsideRescue, []},
-          {Credo.Check.Warning.SpecWithStruct, []},
-          {Credo.Check.Warning.StructFieldAmount, []},
-          {Credo.Check.Warning.UnsafeExec, []},
-          {Credo.Check.Warning.UnusedEnumOperation, []},
-          {Credo.Check.Warning.UnusedFileOperation, []},
-          {Credo.Check.Warning.UnusedKeywordOperation, []},
-          {Credo.Check.Warning.UnusedListOperation, []},
-          {Credo.Check.Warning.UnusedMapOperation, []},
-          {Credo.Check.Warning.UnusedPathOperation, []},
-          {Credo.Check.Warning.UnusedRegexOperation, []},
-          {Credo.Check.Warning.UnusedStringOperation, []},
-          {Credo.Check.Warning.UnusedTupleOperation, []},
-          {Credo.Check.Warning.WrongTestFilename, []}
-        ],
+            #
+            ## Warnings
+            #
+            {Credo.Check.Warning.ApplicationConfigInModuleAttribute, []},
+            {Credo.Check.Warning.BoolOperationOnSameValues, []},
+            {Credo.Check.Warning.Dbg, []},
+            {Credo.Check.Warning.ExpensiveEmptyEnumCheck, []},
+            {Credo.Check.Warning.IExPry, []},
+            {Credo.Check.Warning.IoInspect, []},
+            {Credo.Check.Warning.MissedMetadataKeyInLoggerConfig, []},
+            {Credo.Check.Warning.OperationOnSameValues, []},
+            {Credo.Check.Warning.OperationWithConstantResult, []},
+            {Credo.Check.Warning.RaiseInsideRescue, []},
+            {Credo.Check.Warning.SpecWithStruct, []},
+            {Credo.Check.Warning.StructFieldAmount, []},
+            {Credo.Check.Warning.UnsafeExec, []},
+            {Credo.Check.Warning.UnusedEnumOperation, []},
+            {Credo.Check.Warning.UnusedFileOperation, []},
+            {Credo.Check.Warning.UnusedKeywordOperation, []},
+            {Credo.Check.Warning.UnusedListOperation, []},
+            {Credo.Check.Warning.UnusedMapOperation, []},
+            {Credo.Check.Warning.UnusedPathOperation, []},
+            {Credo.Check.Warning.UnusedRegexOperation, []},
+            {Credo.Check.Warning.UnusedStringOperation, []},
+            {Credo.Check.Warning.UnusedTupleOperation, []},
+            {Credo.Check.Warning.WrongTestFilename, []}
+          ] ++ Enum.map(ExSlop.recommended_checks(), &{&1, []}),
         disabled: [
           #
           # Checks scheduled for next check update (opt-in for now)
