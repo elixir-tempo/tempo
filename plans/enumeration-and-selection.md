@@ -80,7 +80,7 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 
 * **A month with days missing** — `Reform.England`'s September 1752 has the days 1, 2 and 14 to 30. The walk of `1752Y9M` yielded 1 to 19, `1752Y9M3D` was read though no such day existed, and `1752Y9M20D` was an `InvalidDateError` though it did: Tempo took a month's days to be `1..days_in_month/2`, here 19. Six cells. Done 2026-10-05: in a composite calendar `Tempo.UnitValues` lists a month's days and a year's months from the calendar, its values may be several ranges, and a date is stepped by the calendar (`test/tempo/composite_calendar_test.exs`). England's years before 1751, whose months the composite numbers as their dates do, are an item of `TODO.md`.
 
-* **A year that starts within the months** — in `Julian.March25` the year 2026 runs from 25 March to the next 24 March. The walk of `2026Y` yielded months 1 to 12 as the Julian months of those numbers, the first three of which are in the year after the fourth, and March was one month though the year turns within it. Decided 2026-10-04 (a month is the nth month of the year as Calendrical's `month/2` counts, and a date keeps its month's own number) and done 2026-10-05 for values in the four Julian calendars: the year, its months, their dates, steps, durations, quarters, groups, masks, set operations and text are held to Calendrical's `year/1` and `month/2` in `test/tempo/year_start_test.exs`. The twelve selection cells of that calendar, which the census's own answer also got wrong, are still wrong, and need one more decision (`TODO.md`, "Selections in a year that does not begin with its first month").
+* **A year that starts within the months** — in `Julian.March25` the year 2026 runs from 25 March to the next 24 March. The walk of `2026Y` yielded months 1 to 12 as the Julian months of those numbers, the first three of which are in the year after the fourth, and March was one month though the year turns within it. Decided 2026-10-04 (a month is the nth month of the year as Calendrical's `month/2` counts, and a date keeps its month's own number) and done 2026-10-05 for values in the four Julian calendars: the year, its months, their dates, steps, durations, quarters, groups, masks, set operations and text are held to Calendrical's `year/1` and `month/2` in `test/tempo/year_start_test.exs`. The twelve selection cells of that calendar, which the census's own answer also got wrong, are still wrong. A month selected with a day is the month the date names, as it is read (decided 2026-10-05); a selection inside a month or a year the calendar counts is to build, and a named error in 2.0 until it is (`TODO.md`).
 
 * **The weeks of a year with no year** — no calendar counts them without a year, so the stepper holds a literal 52, `53W` has no span and `54W` is read. An item of `TODO.md`, with a decision: a count from Calendrical, or a week with no year that is neither bounded nor stepped.
 
@@ -94,11 +94,11 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 
 * **What Calendrical already answers** — two things first thought missing there are not. It lists the days a month has (`Calendrical.Interval.month/3` is the range of September 1752's nineteen dates in `Reform.England`, and `valid_date?/3` answers each), and it counts the months of a year that starts within them from the year's start (`month/2` of a Julian year-start variant, and `year/1` for its days in order). Both bugs are Tempo's, and the second needs a decision: what a month of such a year is.
 
-* **A month in a calendar of weeks** — `6M` in `ISOWeek` or `NRF` is a `ConversionError` when it is read. An open decision in `TODO.md`.
+* **A month in a calendar of weeks** — `6M` in `ISOWeek` or `NRF` is a `ConversionError` when it is read, and stays one (decided 2026-10-04).
 
-* **A day with no month, selected in a year** — undecided, in `TODO.md`.
+* **A day with no month, selected in a year** — a day of the year (decided 2026-10-04); to build, in `TODO.md`.
 
-* **A weekday in a calendar whose week does not start on Monday** — whether `3K` in `NRF` is the third day of its week or Wednesday is not written down, and the selection and the value may differ. To decide.
+* **A weekday in a calendar whose week does not start on Monday** — `K` counts the days of the week the value is in: the calendar's own in a calendar of weeks, ISO 8601's in a calendar of months (decided 2026-10-05). The value `2026Y25W3K` in `NRF` is its third day, Tuesday, and a selection and `Tempo.select/2` there read Wednesday: to build, in `TODO.md`.
 
 * **Traditional months in a selection** — a set, a mask or a count from the end. In `TODO.md`.
 
@@ -119,6 +119,8 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 * **Fiscal and configured calendars** — `Calendrical.FiscalYear` and a calendar made with `Calendrical.Config`.
 
 ## Decisions
+
+* 2026-10-05, the user, six questions put after the run through the Correctness items, each answered as recommended and each an item of `TODO.md`: a month selected with a day, in a year that does not begin with its first month, is the month the date names; `K` counts the days of the week the value is in (the third day of an `NRF` week is Tuesday); `Tempo.select/2` refuses a selector that holds a month or a day of another calendar than the span's; a week of a calendar of months converts to an interval with `unit: day`; a day of the year from the walk is the calendar date; and for 2.0 an area known to answer wrongly and not yet built returns a named error.
 
 * 2026-10-04, the user — a finding in Calendrical is confirmed against its latest `main` and then recorded in its `TODO.md`.
 
