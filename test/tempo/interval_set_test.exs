@@ -383,6 +383,40 @@ defmodule Tempo.IntervalSet.Test do
       assert Tempo.IntervalSet.empty?(none)
     end
 
+    test "members that meet are one region, at any threshold" do
+      back_to_back = Tempo.IntervalSet.new!([at("09", "10"), at("10", "11")])
+
+      assert spans(Tempo.IntervalSet.covered(back_to_back)) == ["2026Y6M15DT9H0M0S/T11H0M0S"]
+
+      under_one = Tempo.IntervalSet.new!([at("09", "11"), at("09", "10"), at("10", "11")])
+
+      assert spans(Tempo.IntervalSet.covered(under_one, at_least: 2)) ==
+               ["2026Y6M15DT9H0M0S/T11H0M0S"]
+    end
+
+    test "a set with no year is covered on its cycle" do
+      nights = Tempo.IntervalSet.new!([~o"T22/T02", ~o"T23/T03"])
+
+      assert spans(Tempo.IntervalSet.covered(nights)) == ["T22H/T3H"]
+      assert spans(Tempo.IntervalSet.covered(nights, at_least: 2)) == ["T23H/T2H"]
+
+      last_hour = Tempo.IntervalSet.new!([~o"T23/T00"])
+      assert spans(Tempo.IntervalSet.covered(last_hour)) == ["T23H/T0H"]
+
+      weekend_and_monday = Tempo.IntervalSet.new!([~o"6K/2K", ~o"1K/3K"])
+      assert spans(Tempo.IntervalSet.covered(weekend_and_monday)) == ["6K/3K"]
+      assert spans(Tempo.IntervalSet.covered(weekend_and_monday, at_least: 2)) == ["1K/2K"]
+
+      new_year = Tempo.IntervalSet.new!([~o"12M20D/1M10D"])
+      assert spans(Tempo.IntervalSet.covered(new_year)) == ["12M20D/1M10D"]
+    end
+
+    test "a member that runs past the end of a cycle of no one length is an error, not a raise" do
+      set = Tempo.IntervalSet.new!([~o"25D/5D"])
+
+      assert {:error, %Tempo.UnanchoredError{}} = Tempo.IntervalSet.covered(set)
+    end
+
     test "depth is tracked across three members" do
       set = Tempo.IntervalSet.new!([at("09", "14"), at("10", "13"), at("11", "12")])
 

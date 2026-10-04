@@ -6,7 +6,8 @@ defmodule Tempo.Matrix.Sets do
   A span is `{from, to, id}`: a half-open stretch of positions on one line,
   and a mark of the member it is, or of the member it was cut from. The
   members of a list may overlap, nest, repeat and meet. A stretch is a span
-  with no mark, `{from, to}`. Nothing here reads a Tempo value: positions
+  with no mark, `{from, to}`, and on a cycle it is an arc, which may run
+  through the cycle's end. Nothing here reads a Tempo value: positions
   are read by `Tempo.Matrix.Extent`, and what is done with them is
   arithmetic on whole numbers.
 
@@ -274,5 +275,80 @@ defmodule Tempo.Matrix.Sets do
     end)
     |> Enum.map(fn [from, to] -> {from, to, nil} end)
     |> cover()
+  end
+
+  @doc """
+  The time at least so many arcs of a cycle cover.
+
+  ### Arguments
+
+  * `arcs` is a list of `{from, to}`, positions counted from the cycle's
+    start and before its end. An arc whose end is not after its start runs
+    through the cycle's end, and one that ends where it starts is once
+    round.
+
+  * `at_least` is a positive whole number.
+
+  * `length` is the length of the cycle.
+
+  ### Returns
+
+  * A list of arcs in the order of their starts, each as long as it can
+    be. The whole cycle, which starts nowhere, is `{0, 0}`.
+
+  """
+  @spec covered_on_cycle([stretch()], pos_integer(), pos_integer()) :: [stretch()]
+  def covered_on_cycle(arcs, at_least, length) do
+    arcs
+    |> Enum.flat_map(fn {from, to} -> [from, to] end)
+    |> Enum.uniq()
+    |> Enum.sort()
+    |> cells_around(length)
+    |> Enum.map(fn {from, _to} = cell -> {cell, holders_at(arcs, from, length) >= at_least} end)
+    |> runs_around(length)
+    |> Enum.sort()
+  end
+
+  # The cycle cut at every end of an arc: between two cuts next to each
+  # other every arc either holds all of the cell or none of it. The last
+  # cell runs through the cycle's end to the first cut.
+  defp cells_around([], _length), do: []
+
+  defp cells_around([first | later] = cuts, length),
+    do: Enum.zip(cuts, later ++ [first + length])
+
+  # How many arcs hold a position: those it is no further round from the
+  # start of than the arc is long.
+  defp holders_at(arcs, position, length) do
+    Enum.count(arcs, fn {from, to} ->
+      Integer.mod(position - from, length) < reach(from, to, length)
+    end)
+  end
+
+  defp reach(from, from, length), do: length
+  defp reach(from, to, length), do: Integer.mod(to - from, length)
+
+  # The runs of covered cells, going round from a cell that is not covered
+  # so that no run is cut where the list starts.
+  defp runs_around(cells, length) do
+    {leading, rest} = Enum.split_while(cells, fn {_cell, covered?} -> covered? end)
+    runs_from(rest, leading, length)
+  end
+
+  defp runs_from([], [], _length), do: []
+  defp runs_from([], _all_covered, _length), do: [{0, 0}]
+
+  defp runs_from(rest, leading, length) do
+    next_turn =
+      for {{from, to}, covered?} <- leading, do: {{from + length, to + length}, covered?}
+
+    (rest ++ next_turn)
+    |> Enum.chunk_by(fn {_cell, covered?} -> covered? end)
+    |> Enum.filter(fn [{_cell, covered?} | _run] -> covered? end)
+    |> Enum.map(fn run ->
+      {{from, _to}, true} = hd(run)
+      {{_from, to}, true} = List.last(run)
+      {Integer.mod(from, length), Integer.mod(to, length)}
+    end)
   end
 end

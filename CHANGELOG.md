@@ -257,6 +257,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.IntervalSet.covered/2` gives each region as long as it can be: members that meet are one region at any threshold, where a member ending as another began cut it in two. A set with no year is read on its cycle, as `coalesce/1` reads it, so a member that runs to or through the cycle's end (`T23H/T0H`, `T22H/T2H`) is covered where it was lost, and one no cycle can be cut for (`25D/5D`) is a `Tempo.UnanchoredError` where it gave nothing.
+
 * `Tempo.explain/1` words a selection whose range reaches the end of its period ("on the 28th to the last"), where it raised a `CaseClauseError` or a `MatchError`, and words a count from the end in a value with no year by its place ("The last day of February, in any year").
 
 * `Tempo.explain/1` says what a selection names in full: `{6..7}K` is "on a Saturday or Sunday", `-1M` "in December" and `T10H30M` "at 10:30", where the minutes were left out, and a selection in June 2026 is "In June 2026" where it was "In 2026".

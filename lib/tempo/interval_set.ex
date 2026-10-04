@@ -1036,7 +1036,13 @@ defmodule Tempo.IntervalSet do
 
   The half-open convention decides the boundaries: a member ending at
   the instant another begins does not overlap it, so two members that
-  merely meet are never covered twice.
+  merely meet are never covered twice. A region runs for as long as the
+  threshold holds, whichever members hold it: where one member ends as
+  another begins the region goes on through that instant.
+
+  A set with no year is on a cycle, the day for times of day, and is
+  read as `coalesce/1` reads it: a member that runs through the cycle's
+  end (`T22H/T2H`) covers both sides of it, and so may a region.
 
   ### Arguments
 
@@ -1054,8 +1060,10 @@ defmodule Tempo.IntervalSet do
   * `{:ok, covered}`, a `t:t/0` of the qualifying regions in time
     order, empty when nothing reaches the threshold.
 
-  * `{:error, reason}` for an option `covered/2` does not take, or for a
-    lazy set, which has no end to sweep to.
+  * `{:error, reason}` for an option `covered/2` does not take, for a
+    lazy set, which has no end to sweep to, or for a member with no year
+    that runs past the end of a cycle of no one length (a day of a month
+    it does not name).
 
   ### Examples
 
@@ -1079,6 +1087,16 @@ defmodule Tempo.IntervalSet do
       iex> {:ok, double_booked} = Tempo.IntervalSet.covered(back_to_back, at_least: 2)
       iex> Tempo.IntervalSet.empty?(double_booked)
       true
+      iex> {:ok, busy} = Tempo.IntervalSet.covered(back_to_back)
+      iex> Tempo.IntervalSet.members(busy)
+      [~o"2026Y6M15DT9H0M0S/T11H0M0S"]
+
+  Two night shifts with no date are both on duty through midnight:
+
+      iex> shifts = Tempo.IntervalSet.new!([~o"T22/T02", ~o"T23/T03"])
+      iex> {:ok, both_on_duty} = Tempo.IntervalSet.covered(shifts, at_least: 2)
+      iex> Tempo.IntervalSet.members(both_on_duty)
+      [~o"T23H/T2H"]
 
   """
   @spec covered(t(), keyword()) :: {:ok, t()} | {:error, Exception.t()}
@@ -1086,14 +1104,9 @@ defmodule Tempo.IntervalSet do
 
   def covered(%__MODULE__{} = set, options) do
     with {:ok, threshold} <- at_least_option(options),
-         :ok <- sweepable(set) do
-      set
-      |> members()
-      |> Enum.flat_map(fn %Interval{from: from, to: to} -> [{from, 1}, {to, -1}] end)
-      |> sort_edges()
-      |> sweep_depth(threshold, 0, nil, [])
-      |> Enum.reverse()
-      |> then(&{:ok, with_intervals(set, &1)})
+         :ok <- sweepable(set),
+         {:ok, regions} <- regions_covered(members(set), threshold) do
+      {:ok, with_intervals(set, regions)}
     end
   end
 
@@ -1128,6 +1141,30 @@ defmodule Tempo.IntervalSet do
     end
   end
 
+  # Spans with no year are swept inside one turn of their cycle and what is
+  # found written back as the spans it is, as `coalesce/1` merges them
+  # (`coalesce_on_cycle/1`). A span no cycle can be cut for has no place in
+  # the sweep, and is the error `Tempo.Interval.Cycle.parts/1` gives.
+  defp regions_covered([%Interval{} = first | _rest] = intervals, threshold) do
+    if Cycle.cyclic?(first) do
+      with {:ok, parts} <- cycle_parts(intervals) do
+        {:ok, parts |> sweep_regions(threshold) |> Cycle.joined()}
+      end
+    else
+      {:ok, sweep_regions(intervals, threshold)}
+    end
+  end
+
+  defp regions_covered([], _threshold), do: {:ok, []}
+
+  defp sweep_regions(intervals, threshold) do
+    intervals
+    |> Enum.flat_map(fn %Interval{from: from, to: to} -> [{from, 1}, {to, -1}] end)
+    |> sort_edges()
+    |> sweep_depth(threshold, 0, nil, [])
+    |> Enum.reverse()
+  end
+
   # Closing edges sort before opening ones at the same instant, which
   # is what keeps `[a, b)` and `[b, c)` from reading as an overlap at
   # `b`.
@@ -1160,10 +1197,23 @@ defmodule Tempo.IntervalSet do
 
   defp emit_region(from, to, acc) do
     case Compare.compare_endpoints(from, to) do
-      :earlier -> [%Interval{from: from, to: to} | acc]
+      :earlier -> add_region(from, to, acc)
       _not_a_span -> acc
     end
   end
+
+  # Closing edges being taken first, the count falls below the threshold and
+  # rises again at an instant where one member ends as another begins. The
+  # time on both sides of it is covered, so a region that starts where the
+  # one before it ends is that region going on.
+  defp add_region(from, to, [%Interval{to: previous_to} = previous | rest] = acc) do
+    case Compare.compare_endpoints(previous_to, from) do
+      :same -> [%{previous | to: to} | rest]
+      _apart -> [%Interval{from: from, to: to} | acc]
+    end
+  end
+
+  defp add_region(from, to, []), do: [%Interval{from: from, to: to}]
 
   # Single forward pass. At each step, decide whether the next
   # interval should merge with the current "accumulator" interval

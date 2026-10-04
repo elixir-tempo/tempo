@@ -22,8 +22,11 @@ defmodule Tempo.SetOperationsMeasureTest do
   a line is in a difference when a member of the first holds it and none of
   the second does, and so on, cell by cell.
 
-  A span of a value with no year that crosses its cycle's end is not here:
-  it comes back in two, an open item of `TODO.md`.
+  A set with no year is on a cycle: the day, the week, the year. The time
+  such a set covers, and the time at least so many of its members cover, are
+  held to arcs of the cycle worked out the same way. Two operands with no
+  year are not here: a span that crosses its cycle's end comes back from an
+  operation in two, an open item of `TODO.md`.
   """
   use ExUnit.Case, async: true
   use ExUnitProperties
@@ -32,6 +35,8 @@ defmodule Tempo.SetOperationsMeasureTest do
   alias Tempo.IntervalSet
   alias Tempo.Matrix.Extent
   alias Tempo.Matrix.Sets
+
+  @day 86_400_000_000
 
   setup_all do
     Calendar.put_time_zone_database(Tz.TimeZoneDatabase)
@@ -74,12 +79,27 @@ defmodule Tempo.SetOperationsMeasureTest do
   defp read_point(:hebrew_days, slot), do: day_in(Calendrical.Hebrew, slot)
   defp read_point(:persian_days, slot), do: day_in(Calendrical.Persian, slot)
 
+  # Lines with no year, each a cycle whose points are counted from its start.
+  defp read_point(:day_hours, slot), do: Tempo.from_iso8601!("T#{slot}H")
+  defp read_point(:weekdays, slot), do: Tempo.from_iso8601!("#{slot + 1}K")
+  defp read_point(:months, slot), do: Tempo.from_iso8601!("#{slot + 1}M")
+
+  defp read_point(:year_days, slot),
+    do: Tempo.from_iso8601!("#{div(slot, 3) + 1}M#{Enum.at([1, 10, 20], rem(slot, 3))}D")
+
   defp hour(slot), do: NaiveDateTime.add(~N[2026-06-01 00:00:00], slot, :hour)
 
   defp day_in(calendar, slot) do
     date = ~D[2026-06-01] |> Date.add(slot) |> Date.convert!(calendar)
     Tempo.from_iso8601!("#{date.year}Y#{date.month}M#{date.day}D", calendar)
   end
+
+  # The points a cycle has, and its length in microseconds: the day, the
+  # week, and the longest year, in which every date has a place.
+  defp cycle(:day_hours), do: {24, @day}
+  defp cycle(:weekdays), do: {7, 7 * @day}
+  defp cycle(:months), do: {12, 366 * @day}
+  defp cycle(:year_days), do: {36, 366 * @day}
 
   # How many of a line's points are one day, so that a line of days and one
   # of hours can be generated over the same days.
@@ -123,8 +143,7 @@ defmodule Tempo.SetOperationsMeasureTest do
     position
   end
 
-  defp stretches(spans),
-    do: spans |> Enum.map(fn {from, to, _id} -> {from, to} end) |> Enum.uniq()
+  defp stretches(spans), do: Enum.map(spans, fn {from, to, _id} -> {from, to} end)
 
   ## The answers
 
@@ -208,16 +227,34 @@ defmodule Tempo.SetOperationsMeasureTest do
     assert Tempo.equal?(a, b) == (Sets.cover(in_a) == Sets.cover(in_b)), "equal? of #{named}"
   end
 
-  # One set's own cover: merged, and counted by how many members cover it.
-  # `covered/2` cuts a stretch where one member ends as another begins (an
-  # open item of `TODO.md`), so the time it covers is compared.
+  # One set's own cover: merged, and counted by how many members cover it,
+  # each stretch as long as it can be.
   defp assert_cover(a, in_a, named) do
     assert stretches(read(IntervalSet.coalesce(a))) == Sets.cover(in_a), "coalesce of #{named}"
 
     for at_least <- 1..3 do
       {:ok, regions} = IntervalSet.covered(a, at_least: at_least)
 
-      assert Sets.cover(read(regions)) == Sets.covered(in_a, at_least),
+      assert stretches(read(regions)) == Sets.covered(in_a, at_least),
+             "covered at least #{at_least} times, of #{named}"
+    end
+  end
+
+  # The same of a set with no year, as arcs of its cycle: a member, and a
+  # stretch, may run through the cycle's end.
+  defp assert_cover_on_cycle(slots, line) do
+    {_points, length} = cycle(line)
+    set = set(slots, line, :a, [])
+    arcs = stretches(read(set))
+    named = "#{inspect(slots)} on #{line}"
+
+    assert stretches(read(IntervalSet.coalesce(set))) == Sets.covered_on_cycle(arcs, 1, length),
+           "coalesce of #{named}"
+
+    for at_least <- 1..3 do
+      {:ok, regions} = IntervalSet.covered(set, at_least: at_least)
+
+      assert stretches(read(regions)) == Sets.covered_on_cycle(arcs, at_least, length),
              "covered at least #{at_least} times, of #{named}"
     end
   end
@@ -270,7 +307,53 @@ defmodule Tempo.SetOperationsMeasureTest do
     assert member in Sets.members_outside(a, b) == not Enum.any?(own, &holds?(b, &1))
   end
 
+  # The cells of a cycle an arc holds, by going round from its start to its
+  # end: all of them where it ends where it starts.
+  defp cells_round({from, from}, length), do: Enum.to_list(0..(length - 1))
+
+  defp cells_round({from, to}, length) do
+    from
+    |> Stream.iterate(&Integer.mod(&1 + 1, length))
+    |> Enum.take_while(&(&1 != to))
+  end
+
+  # Whether the cells either side of an arc are not covered, so that it
+  # could be no longer.
+  defp as_long_as_can_be?({from, from}, _covered, _length), do: true
+
+  defp as_long_as_can_be?({from, to}, covered, length),
+    do: Integer.mod(from - 1, length) not in covered and to not in covered
+
+  # Up to five arcs between the points of a cycle: any point to any point.
+  defp arcs_between(points) do
+    arc =
+      gen all(from <- integer(0..(points - 1)), to <- integer(0..(points - 1))) do
+        {from, to}
+      end
+
+    list_of(arc, max_length: 5)
+  end
+
+  defp assert_cycle_by_cells(arcs, at_least, length) do
+    regions = Sets.covered_on_cycle(arcs, at_least, length)
+
+    covered =
+      Enum.filter(0..(length - 1), fn cell ->
+        Enum.count(arcs, &(cell in cells_round(&1, length))) >= at_least
+      end)
+
+    assert regions |> Enum.flat_map(&cells_round(&1, length)) |> Enum.sort() == covered
+    assert regions == Enum.sort(regions)
+    assert Enum.all?(regions, &as_long_as_can_be?(&1, covered, length))
+  end
+
   describe "the answers the operations are held to" do
+    property "are the time covered on a cycle, cell by cell" do
+      check all(arcs <- arcs_between(12), at_least <- integer(1..3), max_runs: 500) do
+        assert_cycle_by_cells(arcs, at_least, 12)
+      end
+    end
+
     property "are each operation's definition, cell by cell" do
       check all(a <- marked_spans(:a), b <- marked_spans(:b), max_runs: 300) do
         line = 0..10
@@ -361,6 +444,40 @@ defmodule Tempo.SetOperationsMeasureTest do
               max_runs: 60
             ) do
         assert_operations(a_slots, unquote(a_line), b_slots, unquote(b_line))
+      end
+    end
+  end
+
+  ## A set with no year
+
+  describe "a set with no year, on its cycle" do
+    test "every set of up to two spans between five hours of the day" do
+      hours = [0, 1, 12, 22, 23]
+      arcs = for from <- hours, to <- hours, do: {from, to}
+
+      pairs =
+        for {first, index} <- Enum.with_index(arcs), second <- Enum.drop(arcs, index) do
+          [first, second]
+        end
+
+      sets = [[]] ++ Enum.map(arcs, &[&1]) ++ pairs
+      assert length(sets) == 351
+
+      Enum.each(sets, &assert_cover_on_cycle(&1, :day_hours))
+    end
+
+    for {line, what} <- [
+          day_hours: "hours of the day",
+          weekdays: "days of the week",
+          months: "months of the year",
+          year_days: "days of the year"
+        ] do
+      property "generated sets of #{what}" do
+        {points, _length} = cycle(unquote(line))
+
+        check all(slots <- arcs_between(points), max_runs: 100) do
+          assert_cover_on_cycle(slots, unquote(line))
+        end
       end
     end
   end
