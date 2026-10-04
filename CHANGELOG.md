@@ -257,6 +257,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.select/2` reads a set or a range of weekdays (`~o"{6..-1}K"`, `~o"{1,-1}K"`), where it selected one of the days or none, and selects a time of day written after a weekday on each of the days (`~o"1KT10H"`), where the time was dropped.
+
 * A recurrence that starts with no year and whose rule is counted in a date (a day of a month, a weekday, a week, a month from the end: `R3/6M/P1M/FL15DN`) returns a `Tempo.UnanchoredError`, where a day rule raised a `FunctionClauseError` and the others searched for an occurrence that could not come. Placed on a year with `:within` it is counted there.
 
 * A count from the end in a selection is counted in the period the selection resolves in, where it selected nothing or raised: a month, a weekday, an hour, a range that reaches the end (`{28..-1}D`), a position (`{2..-1}I`) and a unit after the selection (`2026YL6MN-1D`), so `R/2026-01-01/P1Y/FL-1M-1DN` is each 31 December. The values a selection or an RRULE lists are taken in the order of time and once each (`BYMONTHDAY=15,1;COUNT=3` is 1 January, 15 January and 1 February), and a value its period lacks (hour 25, the 31st of June) is passed over.

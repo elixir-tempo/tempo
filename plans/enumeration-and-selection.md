@@ -67,9 +67,9 @@ So for a date or a time with a year, in the fifteen calendars of whole months th
 | A weekday selected in a Gregorian week | Open |
 | A month whose days are not `1..n` (a reform) | Open |
 | A year that starts within the months | Open |
-| A value with no year in a calendar other than the Gregorian | Blocked |
+| A value with no year in a calendar other than the Gregorian | Open |
 | `inspect/1`, `to_iso8601/1` and `explain/1` on a selection | Open |
-| `Tempo.select/2` against the selection | Open |
+| `Tempo.select/2` against the selection | Done |
 | A recurrence with no year and a rule | Done |
 | The astronomical calendars | In progress |
 | Shapes, intervals, recurrences and zones in other calendars | Open |
@@ -92,11 +92,9 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 
 * **`Tempo.explain/1` on a range that reaches the end** — a `CaseClauseError` or a `MatchError`. 19 cells.
 
-* **`Tempo.select/2` on a set or a range of weekdays, and on a weekday with a time** — one or none of the days where the selection gives all. 24 cells.
-
 ## Feature gaps
 
-* **A month's length with no year** — Calendrical's `days_in_month/1` is `{:error, :undefined}` for every month of twelve calendars (`Buddhist`, `Roc`, `Japanese`, `Indian`, `Persian`, `Coptic`, the two Ethiopic, `Hebrew`, `Islamic.Civil`, `Tbla` and `UmmAlQura`), most of whose months have one length in every year, and for the months tried of `Islamic.Observational` and `Rgsa`, and the Julian calendars answer `{:error, :unresolved}` for February and define no `months_in_year/0`. Confirmed at Calendrical's `main` (`ad5ff77`, which Tempo locks) and recorded in its `TODO.md` on 2026-10-04. Upstream.
+* **A month's length with no year** — Calendrical answered `{:error, :undefined}` for every month of twelve calendars and the Julian calendars answered unlike the Gregorian. Both were recorded in its `TODO.md` and are fixed there at `6bbb560` (2026-10-04); Tempo locks `ad5ff77`, so its own work with no year starts with moving the lock.
 
 * **What Calendrical already answers** — two things first thought missing there are not. It lists the days a month has (`Calendrical.Interval.month/3` is the range of September 1752's nineteen dates in `Reform.England`, and `valid_date?/3` answers each), and it counts the months of a year that starts within them from the year's start (`month/2` of a Julian year-start variant, and `year/1` for its days in order). Both bugs are Tempo's, and the second needs a decision: what a month of such a year is.
 
@@ -134,13 +132,13 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 
 ## The one implementation
 
-Counting from the end was written five times, each copy covering a different part of the space. `Tempo.UnitValues` is the one implementation (2026-10-04): `in_period/3` for the values a unit takes and `named/2` for the values a written value names, verified in `test/tempo/unit_values_test.exs` against the calendar asked another way in fourteen calendars. A selection reads through it; the other four copies are still where they were:
+Counting from the end was written five times, each copy covering a different part of the space. `Tempo.UnitValues` is the one implementation (2026-10-04): `in_period/3` for the values a unit takes and `named/2` for the values a written value names, verified in `test/tempo/unit_values_test.exs` against the calendar asked another way in fourteen calendars. A selection and `Tempo.select/2` read through it; the other three copies are still where they were:
 
 | Where | Function | Used by |
 |---|---|---|
 | `lib/validation.ex:360` and `:1513` | `from_end/2`, `conform/2` | Reading a value |
 | `lib/enumeration.ex:587` | `clip_range/2`, `resolve_bound/2` | The walk |
-| `lib/tempo/select.ex:1349` | `resolve_negatives/2`, `resolve_negative_unit/4` | `Tempo.select/2` |
+| `lib/tempo/select.ex` | moved to `Tempo.UnitValues` | `Tempo.select/2` |
 | `lib/tempo/rrule/selection.ex` | moved to `Tempo.UnitValues` | A selection |
 | `lib/explain.ex:1758` | `ordinals_phrase/1`, `expand_int/1` | `Tempo.explain/1` |
 
@@ -152,11 +150,11 @@ They become one module with two questions, each asked of Calendrical and of noth
 
 * **The values a written value names among them** — a number, a count from the end, a range resolved end by end, a set: in order and once each, with what the period lacks either an error (reading a value) or passed over (a selection), as the caller asks.
 
-Validation, the walk, `select/2`, the selection and `explain/1` call it and hold no arithmetic of their own, and `select/2` resolves through the selection's resolver. It is verified in one place: its own property test against `Tempo.Matrix.Selections`' counting, in every calendar of the census.
+Validation, the walk, `select/2`, the selection and `explain/1` call it and hold no arithmetic of their own. `select/2` keeps one count of its own, the weeks of a month (`weeks_in_month/3`), which is the week-of-month item of `TODO.md`; and it still merges a constraint onto its base and reads the result as a value, so a constraint that is no selection is resolved by the reading of a value and not by the selection's resolver. Whether the two become one is open, and waits on the reading of a day with no month. It is verified in one place: its own property test against `Tempo.Matrix.Selections`' counting, in every calendar of the census.
 
 ## Tasks
 
-* [ ] **One implementation** — `Tempo.UnitValues`, then each of the five callers moved to it in turn, the matrix green after each. Moved: a selection's resolver. To move: `Tempo.select/2` (through the selection's resolver), the walk's `clip_range/2`, the reading of a value (`conform/2`, with the values of a unit with no year), `Tempo.explain/1`; then `Tempo.Iso8601.Unit.value_range/2` and the week counts of `Tempo.Validation` come into it.
+* [ ] **One implementation** — `Tempo.UnitValues`, then each of the five callers moved to it in turn, the matrix green after each. Moved: a selection's resolver, and `Tempo.select/2`'s count from the end and its weekdays. To move: the walk's `clip_range/2`, the reading of a value (`conform/2`, with the values of a unit with no year), `Tempo.explain/1`; then `Tempo.Iso8601.Unit.value_range/2` and the week counts of `Tempo.Validation` come into it.
 
 * [ ] **The census in the matrix** — every calendar module as a generated class of `Tempo.Matrix.Corpus`, with the calendar-only answer as a check, so that the table above is a test.
 
@@ -164,9 +162,7 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 
 * [ ] **A selection under an hour, and `explain/1` on a range to the end** — 54 cells of the baseline.
 
-* [ ] **`Tempo.select/2` through the selection's resolver** — 24 cells of the baseline.
-
-* [ ] **A value with no year, measured** — an answer worked out apart from the library, and the walk and the conversion made to agree in every calendar.
+* [ ] **A value with no year, measured** — Tempo's lock moved to Calendrical's `6bbb560`, which answers a month's length with no year in every calendar; then an answer worked out apart from the library, and the walk and the conversion made to agree in every calendar.
 
 * [ ] **The measure widened** — shapes, intervals, recurrences and rules in every calendar; a calendar-generic answer for a week, for `NRF`; the astronomical calendars with a time limit that suits them.
 
@@ -174,10 +170,8 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 
 * [ ] **A year that starts within the months** — once what a month of such a year is has been decided, the walk follows Calendrical's `month/2` and `year/1`.
 
-### Blocked
-
-* [ ] **A month's length with no year in other calendars** — blocked on Calendrical's `days_in_month/1` and the Julian calendars' answers, the first two Open items of its `TODO.md`. The walk and the conversion agreeing with each other is not blocked.
-
 ### Done
+
+* [x] **`Tempo.select/2` reads its counts through the one implementation** — its count from the end and the weekdays a constraint names; 24 cells of the baseline, which lists 111. 2026-10-04.
 
 * [x] **A recurrence with no year and a rule** — a rule counted in a date is an `UnanchoredError` on a start with no year, where it raised or searched without end. Its class in the matrix comes with the census. 2026-10-04.

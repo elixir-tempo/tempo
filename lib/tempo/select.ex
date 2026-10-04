@@ -175,6 +175,7 @@ defmodule Tempo.Select do
   alias Tempo.Iso8601.Unit
   alias Tempo.Math
   alias Tempo.UnboundedSetError
+  alias Tempo.UnitValues
   alias Tempo.Validation
 
   @type selector ::
@@ -493,9 +494,9 @@ defmodule Tempo.Select do
   # so their walk needs no horizon. A selector that matches no day of
   # the week, or a span that starts on no day, selects nothing.
   defp lazy_weekdays(%Interval{from: %Tempo{calendar: calendar} = from} = span, weekdays) do
-    with [_ | _] = matching <- Enum.filter(weekdays, &(&1 in 1..7)),
+    with [_ | _] <- weekdays,
          {:ok, _first_day} <- tempo_to_date(from, calendar) do
-      {:ok, span |> weekdays_in(matching) |> IntervalSet.from_stream()}
+      {:ok, span |> weekdays_in(weekdays) |> IntervalSet.from_stream()}
     else
       _nothing_to_select -> IntervalSet.new([], coalesce: false)
     end
@@ -503,16 +504,21 @@ defmodule Tempo.Select do
 
   # A selector that names only days of the week (`Tempo.workdays/1`,
   # `Tempo.weekends/1`, `~o"5K"`, or a list of them), and the ISO days
-  # it names.
-  defp weekday_selector(%Tempo{time: time}), do: day_of_week_only(time)
+  # it names. One that names a time of day too (`~o"1KT10H"`) selects that
+  # time on each of the days, period by period.
+  defp weekday_selector(%Tempo{time: [day_of_week: _days] = time, calendar: calendar}),
+    do: day_of_week_only(time, calendar)
 
   defp weekday_selector([_ | _] = selectors),
     do: Enum.reduce_while(selectors, {:ok, []}, &add_weekdays/2)
 
   defp weekday_selector(_selector), do: :no
 
-  defp add_weekdays(%Tempo{time: time}, {:ok, weekdays}) do
-    case day_of_week_only(time) do
+  defp add_weekdays(
+         %Tempo{time: [day_of_week: _days] = time, calendar: calendar},
+         {:ok, weekdays}
+       ) do
+    case day_of_week_only(time, calendar) do
       {:ok, more} -> {:cont, {:ok, weekdays ++ more}}
       :no -> {:halt, :no}
     end
@@ -1027,9 +1033,15 @@ defmodule Tempo.Select do
   # a recurring pattern rather than a specific date, so it routes
   # to the weekday filter instead of the merge-and-materialise
   # path.
-  defp project_onto_base(%Interval{} = base, %Tempo{time: c_time}) do
-    case day_of_week_only(c_time) do
-      {:ok, weekdays} -> base |> weekdays_in(weekdays) |> Enum.to_list()
+  #
+  # Units after the weekday (`~o"1KT10H"`, each Monday at 10:00) are merged
+  # onto each of the days it selects.
+  defp project_onto_base(
+         %Interval{from: %Tempo{calendar: calendar}} = base,
+         %Tempo{time: c_time}
+       ) do
+    case day_of_week_only(c_time, calendar) do
+      {:ok, weekdays} -> base |> weekdays_in(weekdays) |> on_each_day(after_day_of_week(c_time))
       :no -> project_merge(base, c_time)
     end
   end
@@ -1052,6 +1064,21 @@ defmodule Tempo.Select do
   end
 
   defp project_onto_base(_base, constraint), do: {:error, unrecognised_selector(constraint)}
+
+  # The units a constraint names after its weekday, merged onto each day the
+  # weekday selects.
+  defp after_day_of_week(c_time), do: Keyword.delete(c_time, :day_of_week)
+
+  defp on_each_day(days, []), do: Enum.to_list(days)
+
+  defp on_each_day(days, units) do
+    Enum.reduce_while(days, [], fn day, selected ->
+      case project_merge(day, units) do
+        {:error, _reason} = error -> {:halt, error}
+        on_the_day -> {:cont, selected ++ (on_the_day |> List.wrap() |> Enum.reject(&is_nil/1))}
+      end
+    end)
+  end
 
   defp span_endpoint(%Interval{recurrence: recurrence}) when recurrence != 1, do: :point
   defp span_endpoint(%Interval{to: %Tempo{} = to}), do: {:to, to}
@@ -1330,88 +1357,55 @@ defmodule Tempo.Select do
     |> Enum.sort_by(fn {unit, _} -> unit_index(unit) || 9_999 end)
   end
 
-  # Resolve any negative component values to their positive equivalent,
-  # counting from the end as specified by ISO 8601-2 §4.4.1:
-  #
-  #   * `month: -1` → `months_in_year(year)` (12 for Gregorian).
-  #
-  #   * `day: -N` → when `:month` is present, count from end of that
-  #     month; otherwise count from end of year.
-  #
-  #   * `week: -N` → count from end of year's weeks.
-  #
-  #   * `day_of_year: -N` → count from end of year's days.
-  #
-  #   * `day_of_week: -N` → count from end of week's days.
-  #
-  # Negative years are NOT resolved — they remain as BC/negative year
-  # designators per ISO 8601-2.
+  # A unit counted from the end (ISO 8601-2 §4.4.1) is the value
+  # `Tempo.UnitValues` counts back to among those the unit takes in the units
+  # before it: the months of the year, the days of the month, the weeks and
+  # the days of the year, the days of the week, the hours of the day. A day
+  # with no month before it is a day of the year, as a value's is. A year is
+  # never counted from the end: a negative year is a year before year 1.
   defp resolve_negatives(time, calendar) do
     time
-    |> Enum.reduce({[], []}, fn {unit, value}, {acc, ctx} ->
-      resolved = resolve_negative_unit(unit, value, ctx, calendar)
-      entry = {unit, resolved}
-      {[entry | acc], ctx ++ [entry]}
+    |> Enum.reduce({[], []}, fn {unit, value}, {resolved, context} ->
+      entry = {unit, from_end(unit, value, context, calendar)}
+      {[entry | resolved], context ++ [entry]}
     end)
     |> elem(0)
     |> Enum.reverse()
   end
 
-  defp resolve_negative_unit(_unit, value, _ctx, _cal) when not is_integer(value),
-    do: value
-
-  defp resolve_negative_unit(_unit, value, _ctx, _cal) when value >= 0,
-    do: value
-
-  # Years keep their negative sign (BC designator).
-  defp resolve_negative_unit(:year, value, _ctx, _cal), do: value
-
-  defp resolve_negative_unit(:month, value, ctx, cal) do
-    year = Keyword.fetch!(ctx, :year)
-    cal.months_in_year(year) + 1 + value
-  end
-
-  defp resolve_negative_unit(:day, value, ctx, cal) do
-    year = Keyword.fetch!(ctx, :year)
-
-    case Keyword.get(ctx, :month) do
-      nil -> cal.days_in_year(year) + 1 + value
-      month when is_integer(month) -> cal.days_in_month(year, month) + 1 + value
-      _ -> value
+  defp from_end(unit, value, context, calendar)
+       when is_integer(value) and value < 0 and unit != :year do
+    case unit_values(unit, context, calendar) do
+      {:ok, values} -> UnitValues.from_end(value, values)
+      {:error, _reason} -> value
     end
   end
 
-  defp resolve_negative_unit(:week, value, ctx, cal) do
-    year = Keyword.fetch!(ctx, :year)
+  defp from_end(_unit, value, _context, _calendar), do: value
 
-    weeks =
-      case Keyword.get(ctx, :month) do
-        month when is_integer(month) ->
-          # Week-of-month is non-standard — approximate as the number
-          # of whole or partial weeks that fit in the month. Keeps
-          # `~o"-1W"` on a month base giving a sensible "last week of
-          # month" (4 or 5 for Gregorian) rather than resolving to the
-          # year's week 52/53, which would fall outside the base.
-          days = cal.days_in_month(year, month)
-          div(days + 6, 7)
-
-        _ ->
-          Validation.iso_weeks_in_year(year, cal)
-      end
-
-    weeks + 1 + value
+  defp unit_values(:day, context, calendar) do
+    if Keyword.has_key?(context, :month),
+      do: UnitValues.in_period(:day, context, calendar),
+      else: UnitValues.in_period(:day_of_year, context, calendar)
   end
 
-  defp resolve_negative_unit(:day_of_year, value, ctx, cal) do
-    year = Keyword.fetch!(ctx, :year)
-    cal.days_in_year(year) + 1 + value
+  defp unit_values(:week, context, calendar) do
+    case {Keyword.get(context, :year), Keyword.get(context, :month)} do
+      {year, month} when is_integer(year) and is_integer(month) ->
+        {:ok, 1..weeks_in_month(year, month, calendar)//1}
+
+      _no_month ->
+        UnitValues.in_period(:week, context, calendar)
+    end
   end
 
-  defp resolve_negative_unit(:day_of_week, value, _ctx, cal) do
-    cal.days_in_week() + 1 + value
-  end
+  defp unit_values(unit, context, calendar), do: UnitValues.in_period(unit, context, calendar)
 
-  defp resolve_negative_unit(_unit, value, _ctx, _cal), do: value
+  # Week-of-month is non-standard: the number of whole or partial weeks that
+  # fit in the month, so that `~o"-1W"` on a month is its last week (the
+  # fourth or the fifth) and not the year's, which lies outside the month.
+  # See "Week-of-month selections" in `TODO.md`.
+  defp weeks_in_month(year, month, calendar), do: div(calendar.days_in_month(year, month) + 6, 7)
 
   # After materialisation, `Tempo.to_interval/1` may pad the
   # endpoints with `hour: 0` (the natural start-of-day representation
@@ -1462,9 +1456,11 @@ defmodule Tempo.Select do
   end
 
   # A constraint is "day-of-week-only" when its :time keyword list
-  # has a `:day_of_week` entry (scalar integer or list) and no
-  # date-axis key (`:year`, `:month`, `:day`, `:week`).
-  defp day_of_week_only(c_time) do
+  # has a `:day_of_week` entry and no date-axis key (`:year`, `:month`,
+  # `:day`, `:week`). The days it names are those `Tempo.UnitValues` reads
+  # among the days of the week: a number, a count from the end (`-1`, the
+  # last), a range (`{6..-1}`) or several of them.
+  defp day_of_week_only(c_time, calendar) do
     case Keyword.get(c_time, :day_of_week) do
       nil ->
         :no
@@ -1473,8 +1469,15 @@ defmodule Tempo.Select do
         if Enum.any?([:year, :month, :day, :week], &Keyword.has_key?(c_time, &1)) do
           :no
         else
-          {:ok, List.wrap(dow)}
+          {:ok, weekdays_named(dow, calendar)}
         end
+    end
+  end
+
+  defp weekdays_named(written, calendar) do
+    case UnitValues.in_period(:day_of_week, [], Compare.effective_calendar(calendar)) do
+      {:ok, days} -> UnitValues.named(written, days)
+      {:error, _reason} -> []
     end
   end
 

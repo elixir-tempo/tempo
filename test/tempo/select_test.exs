@@ -928,6 +928,54 @@ defmodule Tempo.Select.Test do
     end
   end
 
+  # The weekdays a constraint names are read by `Tempo.UnitValues`, as every
+  # count from the end is: a set held a count from the end as it was written
+  # and a range as a range, neither of which is a weekday, and a time of day
+  # after a weekday was dropped.
+  describe "a set or a range of weekdays, and a weekday with a time of day" do
+    defp starts(set),
+      do: set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!(Interval.from(&1)))
+
+    test "a range of weekdays that reaches the end of the week" do
+      {:ok, weekend} = Tempo.select(~o"2026-06", ~o"{6..-1}K")
+
+      assert starts(weekend) ==
+               ~w(2026Y6M6D 2026Y6M7D 2026Y6M13D 2026Y6M14D 2026Y6M20D 2026Y6M21D 2026Y6M27D 2026Y6M28D)
+    end
+
+    test "a range of weekdays" do
+      {:ok, days} = Tempo.select(~o"2026-06-01/2026-06-08", ~o"{1..3}K")
+      assert starts(days) == ~w(2026Y6M1D 2026Y6M2D 2026Y6M3D)
+    end
+
+    test "the first and the last day of the week" do
+      {:ok, days} = Tempo.select(~o"2026-06-01/2026-06-15", ~o"{1,-1}K")
+      assert starts(days) == ~w(2026Y6M1D 2026Y6M7D 2026Y6M8D 2026Y6M14D)
+    end
+
+    test "in a span with no end" do
+      {:ok, weekends} = Tempo.select(~o"2026-06-15/..", ~o"{6..-1}K")
+
+      assert weekends
+             |> IntervalSet.walk()
+             |> Enum.take(2)
+             |> Enum.map(&Tempo.day(Interval.from(&1))) ==
+               [20, 21]
+    end
+
+    test "a weekday with a time of day is that time on each of the days" do
+      {:ok, mondays_at_ten} = Tempo.select(~o"2026-06", ~o"1KT10H")
+
+      assert starts(mondays_at_ten) ==
+               ~w(2026Y6M1DT10H 2026Y6M8DT10H 2026Y6M15DT10H 2026Y6M22DT10H 2026Y6M29DT10H)
+    end
+
+    test "a weekday with the last hour of the day" do
+      {:ok, last_hours} = Tempo.select(~o"2026-06-01/2026-06-09", ~o"1KT-1H")
+      assert starts(last_hours) == ~w(2026Y6M1DT23H 2026Y6M8DT23H)
+    end
+  end
+
   describe "the metadata of what is selected" do
     defp metadata_of(set), do: set |> IntervalSet.members() |> Enum.map(&Tempo.metadata/1)
 

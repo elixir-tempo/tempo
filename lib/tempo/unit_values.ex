@@ -58,23 +58,21 @@ defmodule Tempo.UnitValues do
   @spec in_period(atom(), keyword(), module()) ::
           {:ok, Range.t()} | {:error, :unanchored | :uncounted}
   def in_period(:month, context, calendar),
-    do: counted(year(context), &calendar.months_in_year/1)
+    do: counted(whole(context, :year), &calendar.months_in_year/1)
 
   def in_period(:week, context, calendar),
-    do: counted(year(context), &Validation.iso_weeks_in_year(&1, calendar))
+    do: counted(whole(context, :year), &Validation.iso_weeks_in_year(&1, calendar))
 
   def in_period(:calendar_week, context, calendar),
-    do: counted(year(context), &Validation.calendar_weeks_in_year(&1, calendar))
+    do: counted(whole(context, :year), &Validation.calendar_weeks_in_year(&1, calendar))
 
   def in_period(:day_of_year, context, calendar),
-    do: counted(year(context), &calendar.days_in_year/1)
+    do: counted(whole(context, :year), &calendar.days_in_year/1)
 
   def in_period(:day, context, calendar) do
-    with year when is_integer(year) <- year(context),
-         month when is_integer(month) <- Keyword.get(context, :month) do
-      counted(year, &calendar.days_in_month(&1, month))
-    else
-      _no_year_or_month -> {:error, :unanchored}
+    case whole(context, :month) do
+      nil -> {:error, :unanchored}
+      month -> counted(whole(context, :year), &calendar.days_in_month(&1, month))
     end
   end
 
@@ -85,7 +83,15 @@ defmodule Tempo.UnitValues do
     end
   end
 
-  defp year(context), do: Keyword.get(context, :year)
+  # A unit of the context that is one whole number. A time list is not
+  # always a keyword list (a group of a set is a triple), and a unit that is
+  # a set, a range or a mask fixes no one period to count in.
+  defp whole(context, unit) do
+    case List.keyfind(context, unit, 0) do
+      {^unit, value} when is_integer(value) -> value
+      _absent_or_several -> nil
+    end
+  end
 
   defp counted(year, count) when is_integer(year) do
     case count.(year) do
