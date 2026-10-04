@@ -6090,6 +6090,7 @@ defmodule Tempo do
          value = counted_from_points(value),
          {:ok, value} <- placed_on_window(value, Keyword.get(opts, :within)),
          :one_start <- recurrence_from_each_value(value, opts),
+         :ok <- rule_has_a_date(value),
          :ok <- walkable(value) do
       case open_window_start(Keyword.get(opts, :within)) do
         {:ok, window_from} -> occurrences_from(value, window_from, opts)
@@ -6098,6 +6099,23 @@ defmodule Tempo do
       end
     end
   end
+
+  # A recurrence's rule that selects a day of a month, a weekday, a week or a
+  # month from the end counts it in the date of each occurrence, and a
+  # recurrence that starts with no year (`R3/6M/P1M/FL15DN`) has no date to
+  # count it in: which days a month has, and which is a Monday, depend on the
+  # year. Months as they are written and the units of a time of day need none.
+  defp rule_has_a_date(%Interval{
+         from: %__MODULE__{time: time} = from,
+         repeat_rule: %__MODULE__{time: [{:selection, selection} | _units]}
+       })
+       when is_list(time) do
+    if Keyword.has_key?(time, :year) or not Selection.needs_a_date?(selection),
+      do: :ok,
+      else: {:error, UnanchoredError.exception(value: from)}
+  end
+
+  defp rule_has_a_date(_value), do: :ok
 
   # A group of a set at an end of an interval (`R3/2026Y{1,2}G3MU15D/P1D`) names
   # a span in each of its groups, which nothing expands, so the interval has

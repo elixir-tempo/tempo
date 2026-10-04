@@ -140,7 +140,7 @@ defmodule Tempo.MixProject do
       Exceptions: ~r/^Tempo\.\w+Error$/,
       # The engine: documented for contributors, but not the API a caller uses.
       Internals:
-        ~r/^Tempo\.(Compare|Microsecond|Interval\.(Steps|Cycle)|Network\.Normalize|RRule\.(Expander|Rule|Selection)|Iso8601\.Tokenizer(\.\w+)?)$/
+        ~r/^Tempo\.(Compare|Microsecond|UnitValues|Interval\.(Steps|Cycle)|Network\.Normalize|RRule\.(Expander|Rule|Selection)|Iso8601\.Tokenizer(\.\w+)?)$/
     ]
   end
 

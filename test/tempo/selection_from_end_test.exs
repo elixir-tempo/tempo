@@ -129,6 +129,35 @@ defmodule Tempo.SelectionFromEndTest do
     end
   end
 
+  # A day of a month, a weekday, a week and a month from the end are counted
+  # in the date of each occurrence, which a recurrence that starts with no
+  # year does not have: the two day rules raised a `FunctionClauseError`, and
+  # the others searched for an occurrence that could not come.
+  describe "a rule that is counted in a date, on a start with no year" do
+    test "is an UnanchoredError" do
+      for text <- ~w(R3/6M/P1M/FL15DN R3/6M/P1M/FL-1DN R3/6M1D/P1D/FL1KN R3/6M/P1M/FL-1MN) do
+        {:ok, recurrence} = Tempo.from_iso8601(text)
+
+        assert {:error, %Tempo.UnanchoredError{}} = Tempo.to_interval(recurrence), text
+      end
+    end
+
+    test "is counted once the start is placed on a year" do
+      {:ok, recurrence} = Tempo.from_iso8601("R3/6M/P1M/FL15DN")
+      {:ok, placed} = Tempo.to_interval(recurrence, within: ~o"2026")
+
+      assert placed
+             |> IntervalSet.members()
+             |> Enum.map(&(&1 |> Interval.from() |> Tempo.to_iso8601!())) ==
+               ~w(2026Y6M15D 2026Y7M15D 2026Y8M15D)
+    end
+
+    test "leaves a rule of months as written, or of a time of day, as it was" do
+      assert starts("R2/6M/P1M/FL{6,8}MN") == ~w(6M 8M)
+      assert starts("R2/T22H/PT1H/FLT-1HN") == ~w(T23H T23H)
+    end
+  end
+
   describe "the values a selection names" do
     test "are taken in the order of time" do
       assert starts("2026Y6ML{-1,1}D1IN") == ~w(2026Y6M1D)

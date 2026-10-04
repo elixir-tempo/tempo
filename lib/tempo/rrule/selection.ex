@@ -54,9 +54,9 @@ defmodule Tempo.RRule.Selection do
   alias Tempo.Compare
   alias Tempo.Event
   alias Tempo.Interval
-  alias Tempo.Iso8601.Unit
   alias Tempo.Mask
   alias Tempo.Math
+  alias Tempo.UnitValues
   alias Tempo.Validation
 
   # ISO 8601's weeks, and RFC 5545's by default, start on a Monday, weekday 1.
@@ -188,6 +188,43 @@ defmodule Tempo.RRule.Selection do
   end
 
   def expands?(_repeat_rule, _freq), do: false
+
+  @doc false
+  # Whether a selection has a part that is counted in a date: a day of a
+  # month or of a year, a week, a weekday, an event, a window, or a month
+  # counted from the end. A candidate with no year has no date to count them
+  # in, so a recurrence that starts with none cannot resolve such a rule.
+  # Months as they are written, the hours, minutes and seconds of a day and
+  # a position need none.
+  @spec needs_a_date?(keyword()) :: boolean()
+  def needs_a_date?(selection) when is_list(selection),
+    do: Enum.any?(selection, &part_needs_a_date?/1)
+
+  @parts_counted_in_a_date [
+    :traditional_month,
+    :week,
+    :calendar_week,
+    :day_of_year,
+    :event,
+    :day,
+    :nearest_weekday,
+    :or_day,
+    :day_of_week,
+    :byday,
+    :interval
+  ]
+
+  defp part_needs_a_date?({part, _value}) when part in @parts_counted_in_a_date, do: true
+  defp part_needs_a_date?({:month, months}), do: counts_from_end?(months)
+  defp part_needs_a_date?(_part), do: false
+
+  defp counts_from_end?(index) when is_integer(index), do: index < 0
+  defp counts_from_end?(%Range{first: first, last: last}), do: first < 0 or last < 0
+
+  defp counts_from_end?(indices) when is_list(indices),
+    do: Enum.any?(indices, &counts_from_end?/1)
+
+  defp counts_from_end?(_other), do: false
 
   # The units after a selection apply to every date it picks (ISO 8601-2
   # §12.11.2): the selection, its position applied last of all, picks the
@@ -475,73 +512,49 @@ defmodule Tempo.RRule.Selection do
   # (`day: [2..8]`), where the RRULE adapter emits each number
   # (`day: [2, 3, …, 8]`). Either names the same values.
   #
-  # `values_in/2` gives the values a part names among `valid`, the values its
-  # unit takes in the candidate's period — the days of its month (`1..30`),
-  # the hours of a day (`0..23`) — in order and once each, so that the points
-  # an expansion makes come in the order of time, as a position (`I`) and a
-  # recurrence's count take them. A count from the end is counted in that
-  # period, `-1` its last value, and a range is resolved end by end:
-  # `{1..-1}` is every value and `{28..-1}` the 28th to the last. A value the
-  # period lacks is passed over, as RFC 5545 §3.3.10 ignores an invalid date:
-  # the 31st of a month of thirty days, a thirteenth month, hour 25.
-  defp values_in(indices, %Range{} = valid) do
-    indices
-    |> List.wrap()
-    |> Enum.flat_map(&index_values(&1, valid))
-    |> Enum.uniq()
-    |> Enum.sort()
+  # What it names is read by `Tempo.UnitValues`, the one place where a count
+  # from the end and a range are resolved: among the values the part's unit
+  # takes in the candidate's period — the days of its month, the hours of a
+  # day — in order and once each, so that the points an expansion makes come
+  # in the order of time, as a position (`I`) and a recurrence's count take
+  # them. A value the period lacks is passed over, as RFC 5545 §3.3.10
+  # ignores an invalid date: the 31st of a month of thirty days, a
+  # thirteenth month, hour 25.
+
+  # The values a part names in the candidate's period, and none where the
+  # candidate does not fix the period: an expansion makes no point it cannot
+  # count, and a limit keeps none.
+  defp counted_values(indices, unit, candidate) do
+    case period_values(unit, candidate) do
+      {:ok, valid} -> UnitValues.named(indices, valid)
+      {:error, _reason} -> []
+    end
   end
 
-  # A range's members are looked for among the period's own values, so a
-  # range far longer than the period (`{1..999999999}D`) costs no more than
-  # the period does.
-  defp index_values(%Range{first: first, last: last, step: step}, valid) do
-    named = Range.new(from_end(first, valid), from_end(last, valid), step)
-    Enum.filter(valid, &(&1 in named))
-  end
-
-  defp index_values(index, valid) when is_integer(index) do
-    value = from_end(index, valid)
-    if value in valid, do: [value], else: []
-  end
-
-  defp index_values(_index, _valid), do: []
-
-  defp from_end(index, %Range{last: last}) when index < 0, do: last + 1 + index
-  defp from_end(index, _valid), do: index
-
-  # The values a part names in the candidate's period, for a unit whose
-  # values the candidate fixes. Where it does not — a month with no year to
-  # be in — they are the values as they are written, among which a count
-  # from the end names none.
+  # The values a part names in the candidate's period, or as they are
+  # written where the candidate does not fix the period — a month with no
+  # year to be in — among which a count from the end names none.
   defp values_named(indices, unit, candidate) do
     case period_values(unit, candidate) do
-      %Range{} = valid -> values_in(indices, valid)
-      nil -> indices |> List.wrap() |> Enum.flat_map(&expand_range_element/1)
+      {:ok, valid} -> UnitValues.named(indices, valid)
+      {:error, _reason} -> indices |> List.wrap() |> Enum.flat_map(&expand_range_element/1)
     end
   end
 
   defp expand_range_element(%Range{} = range), do: Enum.to_list(range)
   defp expand_range_element(element), do: [element]
 
-  # The values `unit` takes in the candidate's period: the months of its
-  # year, the days of its month, and those of a clock unit or a weekday,
-  # which are the same in every period.
-  defp period_values(:month, candidate), do: months_of_enclosing_year(candidate)
-
-  defp period_values(:day, candidate) do
-    case days_in_enclosing_month(candidate) do
-      nil -> nil
-      days -> 1..days//1
-    end
+  # The values `unit` takes in the candidate's period, the units of its start
+  # being the context. A calendar of weeks holds its week as the candidate's
+  # month (see `in_calendar_terms/4`), so its months are counted as its weeks.
+  defp period_values(:month, %Interval{from: %Tempo{time: time, calendar: calendar}}) do
+    if week_calendar?(calendar),
+      do: UnitValues.in_period(:week, time, calendar),
+      else: UnitValues.in_period(:month, time, calendar)
   end
 
-  defp period_values(unit, %Interval{from: %Tempo{calendar: calendar}}) do
-    case Unit.value_range(unit, calendar) do
-      {:ok, %Range{} = values} -> values
-      :unknown -> nil
-    end
-  end
+  defp period_values(unit, %Interval{from: %Tempo{time: time, calendar: calendar}}),
+    do: UnitValues.in_period(unit, time, calendar)
 
   @application_order [
     :wkst,
@@ -923,15 +936,6 @@ defmodule Tempo.RRule.Selection do
 
   defp month_of(%Interval{from: %Tempo{time: time}}), do: Keyword.get(time, :month)
 
-  # The months of the candidate's year, which a month from the end is
-  # counted in. A candidate with no year has none to count in.
-  defp months_of_enclosing_year(%Interval{from: %Tempo{time: time, calendar: calendar}}) do
-    case Keyword.get(time, :year) do
-      year when is_integer(year) -> 1..month_fields_in_year(calendar, year)//1
-      _no_year -> nil
-    end
-  end
-
   defp year_of(%Interval{from: %Tempo{time: time}}), do: Keyword.get(time, :year)
 
   @doc false
@@ -951,36 +955,17 @@ defmodule Tempo.RRule.Selection do
   ## BYMONTHDAY
   ## ------------------------------------------------------------
 
-  defp in_month_day_list?(%Interval{} = candidate, days) do
-    case {day_of(candidate), days_in_enclosing_month(candidate)} do
-      {nil, _} -> false
-      {_, nil} -> false
-      {day, dim} -> day in values_in(days, 1..dim//1)
-    end
-  end
+  defp in_month_day_list?(%Interval{} = candidate, days),
+    do: day_of(candidate) in counted_values(days, :day, candidate)
 
   defp day_of(%Interval{from: %Tempo{time: time}}), do: Keyword.get(time, :day)
-
-  defp days_in_enclosing_month(%Interval{from: %Tempo{time: time, calendar: calendar}}) do
-    year = Keyword.get(time, :year)
-    month = Keyword.get(time, :month)
-
-    if is_integer(year) and is_integer(month) do
-      calendar.days_in_month(year, month)
-    end
-  end
 
   ## ------------------------------------------------------------
   ## BYYEARDAY
   ## ------------------------------------------------------------
 
-  defp in_year_day_list?(%Interval{} = candidate, target_days) do
-    case {day_of_year_of(candidate), days_in_enclosing_year(candidate)} do
-      {nil, _} -> false
-      {_, nil} -> false
-      {doy, diy} -> doy in values_in(target_days, 1..diy//1)
-    end
-  end
+  defp in_year_day_list?(%Interval{} = candidate, target_days),
+    do: day_of_year_of(candidate) in counted_values(target_days, :day_of_year, candidate)
 
   defp day_of_year_of(%Interval{from: %Tempo{time: time, calendar: calendar}}) do
     with year when is_integer(year) <- Keyword.get(time, :year),
@@ -992,13 +977,6 @@ defmodule Tempo.RRule.Selection do
     end
   end
 
-  defp days_in_enclosing_year(%Interval{from: %Tempo{time: time, calendar: calendar}}) do
-    case Keyword.get(time, :year) do
-      year when is_integer(year) -> calendar.days_in_year(year)
-      _ -> nil
-    end
-  end
-
   ## ------------------------------------------------------------
   ## BYWEEKNO
   ## ------------------------------------------------------------
@@ -1006,7 +984,7 @@ defmodule Tempo.RRule.Selection do
   defp in_week_no_list?(%Interval{from: %Tempo{time: time, calendar: calendar}}, weeks, wkst) do
     with {:ok, date} <- date_of(time, calendar),
          {:ok, week, weeks_in_week_year} <- week_number_from_wkst(date, calendar, wkst) do
-      week in values_in(weeks, 1..weeks_in_week_year//1)
+      week in UnitValues.named(weeks, 1..weeks_in_week_year//1)
     else
       _ -> false
     end
@@ -1039,7 +1017,7 @@ defmodule Tempo.RRule.Selection do
          true <- Code.ensure_loaded?(calendar) and function_exported?(calendar, :week_of_year, 3),
          {week_year, week} when is_integer(week_year) and is_integer(week) <-
            calendar.week_of_year(year, month, day) do
-      week in values_in(weeks, calendar_weeks_of_year(week_year, calendar))
+      week in calendar_weeks_named(weeks, week_year, calendar)
     else
       _ -> false
     end
@@ -1318,7 +1296,6 @@ defmodule Tempo.RRule.Selection do
          origin_day
        ) do
     year = candidate.from.time[:year]
-    months_in_year = month_fields_in_year(calendar, year)
 
     day =
       cond do
@@ -1328,20 +1305,11 @@ defmodule Tempo.RRule.Selection do
       end
 
     dates =
-      for month <- values_in(months, 1..months_in_year//1) do
+      for month <- values_named(months, :month, candidate) do
         {year, month, clamp_to_month(calendar, year, month, day)}
       end
 
     swap_dates(candidate, dates)
-  end
-
-  # The values a date's month field takes in a year: a calendar of weeks keeps
-  # its week there (see `in_calendar_terms/4`), so its year has as many as it
-  # has weeks, where `months_in_year/1` counts its months.
-  defp month_fields_in_year(calendar, year) do
-    if week_calendar?(calendar),
-      do: calendar.weeks_in_year(year) |> elem(0),
-      else: calendar.months_in_year(year)
   end
 
   # A day clamps to the month's last day. A pure month selection (`L6M`)
@@ -1375,12 +1343,8 @@ defmodule Tempo.RRule.Selection do
   # BYMONTHDAY with FREQ=MONTHLY or YEARLY: for each candidate,
   # produce one occurrence per listed day (signed: -1 = last day
   # of enclosing month). Invalid combinations skip.
-  defp expand_candidate_days(%Interval{from: %Tempo{calendar: calendar}} = candidate, days) do
-    year = candidate.from.time[:year]
-    month = candidate.from.time[:month]
-    dim = calendar.days_in_month(year, month)
-
-    dates = for day <- values_in(days, 1..dim//1), do: {year, month, day}
+  defp expand_candidate_days(%Interval{from: %Tempo{time: time}} = candidate, days) do
+    dates = for day <- counted_values(days, :day, candidate), do: {time[:year], time[:month], day}
 
     swap_dates(candidate, dates)
   end
@@ -1465,10 +1429,9 @@ defmodule Tempo.RRule.Selection do
          year_days
        ) do
     year = candidate.from.time[:year]
-    diy = calendar.days_in_year(year)
 
     dates =
-      for day_of_year <- values_in(year_days, 1..diy//1),
+      for day_of_year <- counted_values(year_days, :day_of_year, candidate),
           {m, day} <- [year_day_to_month_day(calendar, year, day_of_year)],
           do: {year, m, day}
 
@@ -1522,14 +1485,14 @@ defmodule Tempo.RRule.Selection do
       month = if within_month?, do: month_of(candidate)
 
       weeks
-      |> values_in(1..length(week_starts)//1)
+      |> UnitValues.named(1..length(week_starts)//1)
       |> Enum.flat_map(&week_candidate_dates(&1, candidate, week_starts, month))
     else
       # A native week selection (`FL10WN`) names the week itself. The
       # occurrence is the `[year, week]` value; its span is resolved by
       # the calendar, so there is no week walk here.
       weeks
-      |> values_in(1..Validation.iso_weeks_in_year(year, calendar)//1)
+      |> counted_values(:week, candidate)
       |> Enum.map(&week_candidate_span(&1, candidate, year))
     end
   end
@@ -1555,20 +1518,23 @@ defmodule Tempo.RRule.Selection do
         month = if within_month?, do: month_of(candidate)
 
         weeks
-        |> values_in(calendar_weeks_of_year(year, calendar))
+        |> calendar_weeks_named(year, calendar)
         |> Enum.flat_map(&calendar_week_dates(&1, candidate, year, calendar, month))
 
       true ->
         weeks
-        |> values_in(calendar_weeks_of_year(year, calendar))
+        |> calendar_weeks_named(year, calendar)
         |> Enum.flat_map(&calendar_week_span(&1, candidate, year, calendar))
     end
   end
 
-  # The weeks the calendar numbers in a year, which a week from the end is
-  # counted in.
-  defp calendar_weeks_of_year(year, calendar),
-    do: 1..Validation.calendar_weeks_in_year(year, calendar)//1
+  # The weeks a part names among those the calendar numbers in a year.
+  defp calendar_weeks_named(weeks, year, calendar) do
+    case UnitValues.in_period(:calendar_week, [year: year], calendar) do
+      {:ok, valid} -> UnitValues.named(weeks, valid)
+      {:error, _reason} -> []
+    end
+  end
 
   # `month` is the candidate's month after a BYMONTH expansion, and `nil`
   # when every day of the week is kept.
@@ -1758,7 +1724,7 @@ defmodule Tempo.RRule.Selection do
   # occurrences picked keep the order of time, and a position the period
   # lacks picks none.
   defp pick_set_positions(candidates, positions) do
-    picked = values_in(positions, 1..length(candidates)//1)
+    picked = UnitValues.named(positions, 1..length(candidates)//1)
 
     for {candidate, position} <- Enum.with_index(candidates, 1), position in picked do
       candidate

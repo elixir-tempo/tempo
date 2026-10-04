@@ -62,7 +62,7 @@ So for a date or a time with a year, in the fifteen calendars of whole months th
 | Selections in a year and a month, in a calendar of whole months | Done |
 | Full dates and times in a calendar of weeks | Done |
 | Every shape of a Gregorian value (the matrix) | Done |
-| One implementation of a unit's values and of a count from the end | Open |
+| One implementation of a unit's values and of a count from the end | In progress |
 | A selection in a calendar of weeks | Open |
 | A weekday selected in a Gregorian week | Open |
 | A month whose days are not `1..n` (a reform) | Open |
@@ -70,7 +70,7 @@ So for a date or a time with a year, in the fifteen calendars of whole months th
 | A value with no year in a calendar other than the Gregorian | Blocked |
 | `inspect/1`, `to_iso8601/1` and `explain/1` on a selection | Open |
 | `Tempo.select/2` against the selection | Open |
-| A recurrence with no year and a rule | Open |
+| A recurrence with no year and a rule | Done |
 | The astronomical calendars | In progress |
 | Shapes, intervals, recurrences and zones in other calendars | Open |
 
@@ -93,8 +93,6 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 * **`Tempo.explain/1` on a range that reaches the end** — a `CaseClauseError` or a `MatchError`. 19 cells.
 
 * **`Tempo.select/2` on a set or a range of weekdays, and on a weekday with a time** — one or none of the days where the selection gives all. 24 cells.
-
-* **A day selected in a recurrence with no year** — `R3/6M/P1M/FL15DN` raises a `FunctionClauseError`.
 
 ## Feature gaps
 
@@ -130,18 +128,20 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 
 * 2026-10-04, the user — a finding in Calendrical is confirmed against its latest `main` and then recorded in its `TODO.md`.
 
+* 2026-10-04, the user — once validation, the walk, `Tempo.select/2`, the selection's resolver and `Tempo.explain/1` rest on one implementation, the next step is strong confidence in a single implementation of the set operations. It is an item of `TODO.md` and will have a plan of its own.
+
 * 2026-10-04, the user — one implementation of a count from the end, for validation, the walk, `Tempo.select/2`, the selection's resolver and `Tempo.explain/1`, so that there is one place to verify.
 
 ## The one implementation
 
-Counting from the end is written five times today, and each copy covers a different part of the space:
+Counting from the end was written five times, each copy covering a different part of the space. `Tempo.UnitValues` is the one implementation (2026-10-04): `in_period/3` for the values a unit takes and `named/2` for the values a written value names, verified in `test/tempo/unit_values_test.exs` against the calendar asked another way in fourteen calendars. A selection reads through it; the other four copies are still where they were:
 
 | Where | Function | Used by |
 |---|---|---|
 | `lib/validation.ex:360` and `:1513` | `from_end/2`, `conform/2` | Reading a value |
 | `lib/enumeration.ex:587` | `clip_range/2`, `resolve_bound/2` | The walk |
 | `lib/tempo/select.ex:1349` | `resolve_negatives/2`, `resolve_negative_unit/4` | `Tempo.select/2` |
-| `lib/tempo/rrule/selection.ex:487` | `values_in/2`, `values_named/3`, `period_values/2` | A selection |
+| `lib/tempo/rrule/selection.ex` | moved to `Tempo.UnitValues` | A selection |
 | `lib/explain.ex:1758` | `ordinals_phrase/1`, `expand_int/1` | `Tempo.explain/1` |
 
 `Tempo.Iso8601.Unit.value_range/2` is a sixth piece: the values a clock unit and a weekday take, with `:unknown` for every unit that depends on the date.
@@ -156,7 +156,7 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 
 ## Tasks
 
-* [ ] **One implementation** — the module above, then each of the five callers moved to it in turn, the matrix green after each.
+* [ ] **One implementation** — `Tempo.UnitValues`, then each of the five callers moved to it in turn, the matrix green after each. Moved: a selection's resolver. To move: `Tempo.select/2` (through the selection's resolver), the walk's `clip_range/2`, the reading of a value (`conform/2`, with the values of a unit with no year), `Tempo.explain/1`; then `Tempo.Iso8601.Unit.value_range/2` and the week counts of `Tempo.Validation` come into it.
 
 * [ ] **The census in the matrix** — every calendar module as a generated class of `Tempo.Matrix.Corpus`, with the calendar-only answer as a check, so that the table above is a test.
 
@@ -165,8 +165,6 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 * [ ] **A selection under an hour, and `explain/1` on a range to the end** — 54 cells of the baseline.
 
 * [ ] **`Tempo.select/2` through the selection's resolver** — 24 cells of the baseline.
-
-* [ ] **A recurrence with no year and a rule** — a named error where the rule needs a date, and a class in the matrix.
 
 * [ ] **A value with no year, measured** — an answer worked out apart from the library, and the walk and the conversion made to agree in every calendar.
 
@@ -179,3 +177,7 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 ### Blocked
 
 * [ ] **A month's length with no year in other calendars** — blocked on Calendrical's `days_in_month/1` and the Julian calendars' answers, the first two Open items of its `TODO.md`. The walk and the conversion agreeing with each other is not blocked.
+
+### Done
+
+* [x] **A recurrence with no year and a rule** — a rule counted in a date is an `UnanchoredError` on a start with no year, where it raised or searched without end. Its class in the matrix comes with the census. 2026-10-04.
