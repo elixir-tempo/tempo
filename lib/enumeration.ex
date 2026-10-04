@@ -8,6 +8,7 @@ defmodule Tempo.Enumeration do
   alias Tempo.Iso8601.Unit
   alias Tempo.Mask
   alias Tempo.UnanchoredError
+  alias Tempo.UnitValues
   alias Tempo.Validation
 
   # The walk of a value.
@@ -550,12 +551,12 @@ defmodule Tempo.Enumeration do
           :restated -> restated_candidate(unit, raw, ancestors, calendar)
         end
 
-      # The validator names the range this unit can hold in this
+      # The validator names the values this unit can hold in this
       # context (12 months in a common Hebrew year, 28 days in a
-      # non-leap February). Clip an overflowing range to it rather
-      # than discarding the whole range.
+      # non-leap February). A range that reaches past them names those
+      # of its own values the context has, rather than none.
       {:error, %InvalidDateError{valid_range: %Range{} = valid}} when is_struct(raw, Range) ->
-        clip_range(raw, valid)
+        {:ok, values_as_written(raw, valid)}
 
       {:error, _reason} ->
         {:ok, []}
@@ -580,24 +581,14 @@ defmodule Tempo.Enumeration do
 
   defp restated_candidate(_unit, raw, _ancestors, _calendar), do: integers(raw)
 
-  # Clip to the range the unit can hold in this context, honouring the
-  # range's own direction: a descending range (`{5..1}`) clips at the
-  # opposite ends from an ascending one, and either may be emptied by
-  # the clip.
-  defp clip_range(%Range{first: first, last: last, step: step}, %Range{} = valid) do
-    first = resolve_bound(first, valid)
-    last = resolve_bound(last, valid)
+  # The values a range names among those the unit can hold, read by
+  # `Tempo.UnitValues` as every range and count from the end is, in the
+  # order the range is written: a descending range (`{31..29}`) yields them
+  # descending.
+  defp values_as_written(%Range{step: step} = range, %Range{} = valid) when step < 0,
+    do: range |> UnitValues.named(valid) |> Enum.reverse()
 
-    if step > 0 do
-      max(first, valid.first)..min(last, valid.last)//step
-    else
-      min(first, valid.last)..max(last, valid.first)//step
-    end
-    |> integers()
-  end
-
-  defp resolve_bound(bound, %Range{last: valid_last}) when bound < 0, do: valid_last + 1 + bound
-  defp resolve_bound(bound, _valid), do: bound
+  defp values_as_written(%Range{} = range, %Range{} = valid), do: UnitValues.named(range, valid)
 
   # A count from the end is resolved by the calendar for date units and by
   # the unit's fixed extent for clock units, both in `Tempo.Validation`. A

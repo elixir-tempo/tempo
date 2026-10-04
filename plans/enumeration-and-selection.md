@@ -84,6 +84,8 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 
 * **A value with no year, in a calendar other than the Gregorian** — the conversion and the walk disagree in both directions. In `Persian`, `Coptic`, `Ethiopic`, `Indian`, `Islamic.*` and `Hebrew` a month (`6M`) converts and its walk raises an `UnanchoredError`, and a month and day (`6M15D`) is refused by the conversion and walked. In `Julian` it is the other way round: `6M` is refused and walked. It is so in each of the ten month calendars probed, and none of the 122 cells with no year is verified.
 
+* **A range of a clock unit past its last value** — `2026Y6M15DT{22..25}H` is read, its walk yields hours 24 and 25, and `to_interval/2` refuses it; minutes and seconds alike, where a range of days or months past the end is an `InvalidDateError` when it is read. The reading of a value holds a set or a range of a date unit to the unit's values and not one of a clock unit. Found with the walk's step, 2026-10-04; not measured by the matrix, whose shapes hold no range past a unit's end.
+
 * **A selection in a calendar of weeks** — a week selected in a year is the whole year, and a year's weekdays stop at its twelfth week, in `ISOWeek` and `NRF` alike. Fifteen cells of the matrix, and eight of the census's in `ISOWeek`.
 
 * **A weekday selected in a Gregorian week** — `2026Y25WL3KN` is the week's Monday whatever the weekday, in a value and in a recurrence's rule. 42 cells.
@@ -132,12 +134,12 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 
 ## The one implementation
 
-Counting from the end was written five times, each copy covering a different part of the space. `Tempo.UnitValues` is the one implementation (2026-10-04): `in_period/3` for the values a unit takes and `named/2` for the values a written value names, verified in `test/tempo/unit_values_test.exs` against the calendar asked another way in fourteen calendars. A selection and `Tempo.select/2` read through it; the other three copies are still where they were:
+Counting from the end was written five times, each copy covering a different part of the space. `Tempo.UnitValues` is the one implementation (2026-10-04): `in_period/3` for the values a unit takes and `named/2` for the values a written value names, verified in `test/tempo/unit_values_test.exs` against the calendar asked another way in fourteen calendars. A selection, `Tempo.select/2` and the walk read through it; the other two copies are still where they were:
 
 | Where | Function | Used by |
 |---|---|---|
 | `lib/validation.ex:360` and `:1513` | `from_end/2`, `conform/2` | Reading a value |
-| `lib/enumeration.ex:587` | `clip_range/2`, `resolve_bound/2` | The walk |
+| `lib/enumeration.ex` | moved to `Tempo.UnitValues` | The walk |
 | `lib/tempo/select.ex` | moved to `Tempo.UnitValues` | `Tempo.select/2` |
 | `lib/tempo/rrule/selection.ex` | moved to `Tempo.UnitValues` | A selection |
 | `lib/explain.ex:1758` | `ordinals_phrase/1`, `expand_int/1` | `Tempo.explain/1` |
@@ -154,7 +156,7 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 
 ## Tasks
 
-* [ ] **One implementation** — `Tempo.UnitValues`, then each of the five callers moved to it in turn, the matrix green after each. Moved: a selection's resolver, and `Tempo.select/2`'s count from the end and its weekdays. To move: the walk's `clip_range/2`, the reading of a value (`conform/2`, with the values of a unit with no year), `Tempo.explain/1`; then `Tempo.Iso8601.Unit.value_range/2` and the week counts of `Tempo.Validation` come into it.
+* [ ] **One implementation** — `Tempo.UnitValues`, then each of the five callers moved to it in turn, the matrix green after each. Moved: a selection's resolver, `Tempo.select/2`'s count from the end and its weekdays, and the walk's reading of a range that reaches past a period's values (the walk reads everything else through the reading of a value). To move: the reading of a value (`conform/2`, with the values of a unit with no year), `Tempo.explain/1`; then `Tempo.Iso8601.Unit.value_range/2` and the week counts of `Tempo.Validation` come into it.
 
 * [ ] **The census in the matrix** — every calendar module as a generated class of `Tempo.Matrix.Corpus`, with the calendar-only answer as a check, so that the table above is a test.
 
@@ -171,6 +173,8 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 * [ ] **A year that starts within the months** — once what a month of such a year is has been decided, the walk follows Calendrical's `month/2` and `year/1`.
 
 ### Done
+
+* [x] **The walk reads a range through the one implementation** — a range that reaches past a period's values names its own values there, in the order written and on its own steps. 2026-10-04.
 
 * [x] **`Tempo.select/2` reads its counts through the one implementation** — its count from the end and the weekdays a constraint names; 24 cells of the baseline, which lists 111. 2026-10-04.
 

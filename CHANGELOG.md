@@ -257,6 +257,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A range with a step that reaches past the days one of its months has keeps its own steps there: the walk of `~o"{1,2}M{31..1//-7}D"` yields the 24th, 17th, 10th and 3rd of February, the days of the range February has, where it yielded the 29th, 22nd, 15th, 8th and 1st.
+
 * `Tempo.select/2` reads a set or a range of weekdays (`~o"{6..-1}K"`, `~o"{1,-1}K"`), where it selected one of the days or none, and selects a time of day written after a weekday on each of the days (`~o"1KT10H"`), where the time was dropped.
 
 * A recurrence that starts with no year and whose rule is counted in a date (a day of a month, a weekday, a week, a month from the end: `R3/6M/P1M/FL15DN`) returns a `Tempo.UnanchoredError`, where a day rule raised a `FunctionClauseError` and the others searched for an occurrence that could not come. Placed on a year with `:within` it is counted there.

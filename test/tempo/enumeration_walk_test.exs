@@ -518,6 +518,30 @@ defmodule Tempo.EnumerationWalk.Test do
 
   # `Enum.count/1`, and `Enum.member?/2` of a value the walk does not reach,
   # fall back to a walk, which never ended.
+  # A range that reaches past the values its unit has in one of the periods
+  # it is read in names those of its own values the period has. They are read
+  # by `Tempo.UnitValues`, as every range is; the walk clipped the range's
+  # ends itself, which moved a stepped range onto days it does not name.
+  describe "a range that reaches past the values a period has" do
+    test "names the values the period has" do
+      assert Enum.to_list(~o"2026Y{1,2}M{28..31}D") ==
+               [~o"2026Y1M28D", ~o"2026Y1M29D", ~o"2026Y1M30D", ~o"2026Y1M31D", ~o"2026Y2M28D"]
+
+      assert Enum.to_list(~o"{2026,2028}Y2M{27..-1}D") ==
+               [~o"2026Y2M27D", ~o"2026Y2M28D", ~o"2028Y2M27D", ~o"2028Y2M28D", ~o"2028Y2M29D"]
+    end
+
+    test "keeps the order it is written in" do
+      assert Enum.to_list(~o"{4,6}M{31..29}D") == [~o"4M30D", ~o"4M29D", ~o"6M30D", ~o"6M29D"]
+    end
+
+    test "keeps its own steps" do
+      # The 31st and every seventh day back: 31, 24, 17, 10 and 3, of which
+      # February has the last four.
+      assert units(~o"{1,2}M{31..1//-7}D", :day) == [31, 24, 17, 10, 3, 24, 17, 10, 3]
+    end
+  end
+
   describe "an interval with no end" do
     test "has no count" do
       assert_raise Tempo.IntervalEndpointsError,
