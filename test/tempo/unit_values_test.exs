@@ -171,6 +171,50 @@ defmodule Tempo.UnitValuesTest do
     end
   end
 
+  describe "resolve/2" do
+    property "keeps what it is given where every value is one the unit has, and names the first that is not" do
+      check all(written <- written(), values <- values()) do
+        case UnitValues.resolve(written, values) do
+          {:ok, resolved} ->
+            assert length(resolved) == length(written)
+            assert UnitValues.named(resolved, values) == UnitValues.named(written, values)
+
+          {:error, {:not_taken, value}} ->
+            assert value in ends(written)
+            refute value in values
+
+          {:error, {:not_taken, value, counted}} ->
+            assert value in ends(written)
+            assert counted == UnitValues.from_end(value, values)
+            refute counted in values
+        end
+      end
+    end
+
+    test "a count from the end is the value it names, in a number, a range and a list" do
+      assert UnitValues.resolve(-1, 1..30//1) == {:ok, 30}
+      assert UnitValues.resolve(28..-1//1, 1..30//1) == {:ok, 28..30//1}
+      assert UnitValues.resolve([1, -1, 10..-2//3], 0..23//1) == {:ok, [1, 23, 10..22//3]}
+    end
+
+    test "a range within the unit's values is kept as it is written" do
+      assert UnitValues.resolve(23..20//-1, 0..23//1) == {:ok, 23..20//-1}
+    end
+
+    test "a fraction within the unit's values is kept" do
+      assert UnitValues.resolve(10.5, 0..23//1) == {:ok, 10.5}
+      assert UnitValues.resolve(24.5, 0..23//1) == {:error, {:not_taken, 24.5}}
+    end
+  end
+
+  # Each written number, and each end of each written range.
+  defp ends(written) do
+    Enum.flat_map(written, fn
+      %Range{first: first, last: last} -> [first, last]
+      value -> [value]
+    end)
+  end
+
   describe "from_end/2" do
     property "counts back from the last value, and leaves a count from the start as it is" do
       check all(index <- integer(-70..70), values <- values()) do

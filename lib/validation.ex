@@ -11,10 +11,10 @@ defmodule Tempo.Validation do
   alias Tempo.InvalidTimeError
   alias Tempo.Iso8601.AST
   alias Tempo.Iso8601.Group
-  alias Tempo.Iso8601.Unit
   alias Tempo.Microsecond
   alias Tempo.ParseError
   alias Tempo.TimeZoneDatabase
+  alias Tempo.UnitValues
   alias Tempo.ZoneGapError
 
   # This function performs two roles (and maybe should be split):
@@ -342,11 +342,15 @@ defmodule Tempo.Validation do
 
   defp resolve_fixed_extent(%Range{first: first, last: last} = range, unit, calendar)
        when first < 0 or last < 0 do
-    case Unit.value_range(unit, calendar) do
+    case UnitValues.in_period(unit, [], calendar) do
       {:ok, valid} ->
-        %{range | first: from_end(first, valid), last: from_end(last, valid)}
+        %{
+          range
+          | first: UnitValues.from_end(first, valid),
+            last: UnitValues.from_end(last, valid)
+        }
 
-      :unknown ->
+      {:error, _counted_in_a_date} ->
         range
     end
   end
@@ -356,9 +360,6 @@ defmodule Tempo.Validation do
   end
 
   defp resolve_fixed_extent(value, _unit, _calendar), do: value
-
-  defp from_end(bound, %Range{last: last}) when bound < 0, do: last + 1 + bound
-  defp from_end(bound, _valid), do: bound
 
   # An endpoint validates against its own calendar when it carries one —
   # a per-endpoint IXDTF `u-ca` suffix can make one endpoint of an
@@ -934,12 +935,17 @@ defmodule Tempo.Validation do
     end
   end
 
-  def resolve([{:hour, %Range{first: first, last: last, step: step}} | rest], calendar)
-      when first > 0 and last < 0 do
-    with {:ok, last} <- conform(last, 0..(@hours_per_day - 1)) do
+  # A set or a range of hours, minutes, seconds or days of the week is held
+  # to the values the unit takes, as one of days or months is: `T{22..25}H`
+  # names two hours no day has.
+  def resolve([{unit, written} | rest], calendar)
+      when unit in [:hour, :minute, :second, :day_of_week] and
+             (is_list(written) or is_struct(written, Range)) do
+    with {:ok, valid} <- UnitValues.in_period(unit, [], calendar),
+         {:ok, written} <- conform(written, valid) do
       case resolve(rest, calendar) do
         {:error, reason} -> {:error, reason}
-        resolved -> [{:hour, first..last//abs(step)} | resolved]
+        resolved -> [{unit, written} | resolved]
       end
     end
   end
@@ -1510,70 +1516,27 @@ defmodule Tempo.Validation do
     end
   end
 
-  def conform(integer, %Range{first: first, last: last})
-      when is_integer(integer) and integer in first..last//1 do
-    {:ok, integer}
-  end
-
-  def conform(float, %Range{first: first, last: last})
-      when is_float(float) and float >= first and float <= last do
-    {:ok, float}
-  end
-
-  def conform(integer, %Range{last: last} = range) when is_integer(integer) and integer < 0 do
-    value = last + integer + 1
-
-    case value >= 0 && conform(value, range) do
-      {:ok, value} ->
-        {:ok, value}
-
-      {:error, _} ->
-        normalized_error(integer, value, range)
-
-      false ->
-        normalized_error(integer, value, range)
+  @doc false
+  # A written value read against the values its unit takes: a count from the
+  # end counted, a range and a list kept as they are written, and a value the
+  # unit does not take an `InvalidDateError`. The reading is
+  # `Tempo.UnitValues.resolve/2`; this names its refusal.
+  def conform(written, %Range{} = valid) do
+    case UnitValues.resolve(written, valid) do
+      {:ok, resolved} -> {:ok, resolved}
+      {:error, {:not_taken, value, counted}} -> normalized_error(value, counted, valid)
+      {:error, {:not_taken, value}} -> not_valid_error(value, valid, valid)
     end
   end
 
-  def conform(%Range{first: f1, last: t1} = from, %Range{first: f2, last: t2})
-      when f1 in f2..t2//1 and t1 in f2..t2//1 do
-    {:ok, from}
-  end
+  def conform(written, not_a_range), do: not_valid_error(written, not_a_range, nil)
 
-  def conform(%Range{first: f1, last: t1, step: step}, %Range{} = to) do
-    with {:ok, from} <- conform(f1, to),
-         {:ok, to} <- conform(t1, to) do
-      {:ok, from..to//abs(step)}
-    end
-  end
-
-  def conform(from, to) when is_list(from) do
-    conformed =
-      Enum.reduce_while(from, {:ok, []}, fn unit, {:ok, acc} ->
-        case conform(unit, to) do
-          {:ok, conformed} -> {:cont, {:ok, [conformed | acc]}}
-          {:error, reason} -> {:halt, {:error, reason}}
-        end
-      end)
-
-    case conformed do
-      {:error, reason} -> {:error, reason}
-      {:ok, other} -> {:ok, Enum.reverse(other)}
-    end
-  end
-
-  def conform(from, to) do
-    range =
-      case to do
-        %Range{} = r -> r
-        _other -> nil
-      end
-
+  defp not_valid_error(value, valid, valid_range) do
     {:error,
      InvalidDateError.exception(
-       value: from,
-       valid_range: range,
-       reason: "#{inspect(from)} is not valid. The valid values are #{inspect(to)}"
+       value: value,
+       valid_range: valid_range,
+       reason: "#{inspect(value)} is not valid. The valid values are #{inspect(valid)}"
      )}
   end
 

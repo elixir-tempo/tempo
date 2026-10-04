@@ -349,6 +349,32 @@ defmodule Tempo.OneReadingTest do
     end
   end
 
+  # A set or a range of a clock unit was not held to the unit's values when
+  # the value was read, where one of days or months was: the walk yielded
+  # hours 24 and 25, `to_interval/2` refused the value, and a set's walk
+  # passed over the member the unit lacks.
+  describe "a set or a range of hours, minutes, seconds or weekdays past the unit's values" do
+    test "is an InvalidDateError when it is read, as one of days is" do
+      for text <-
+            ~w(2026Y6M15DT{22..25}H 2026Y6M15DT{22,25}H T{22..25}H 2026Y6M15DT10H{58..61}M
+                     2026Y6M15DT10H{0,61}M 2026Y6M15DT10H30M{58..61}S 2026Y25W{1,8}K 2026Y6M{28..31}D) do
+        assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601(text), text
+      end
+    end
+
+    test "names the value the unit lacks and the values it has" do
+      {:error, error} = Tempo.from_iso8601("2026Y6M15DT{22..25}H")
+      assert Exception.message(error) =~ "25 is not valid. The valid values are 0..23"
+    end
+
+    test "is read where every value is one the unit has" do
+      assert Enum.map(~o"2026Y6M15DT{22..-1}H", &Tempo.hour/1) == [22, 23]
+      assert Enum.map(~o"2026Y6M15DT{23..20}H", &Tempo.hour/1) == [23, 22, 21, 20]
+      assert Enum.map(~o"2026Y6M15DT10H{0..-1//15}M", &Tempo.minute/1) == [0, 15, 30, 45]
+      assert Enum.count(~o"2026Y6M15DT10H30M{0..59}S") == 60
+    end
+  end
+
   describe "duration!/2" do
     test "raises what duration/2 returns for what is no value" do
       # Read at run time, so that the compiler does not see a call that can

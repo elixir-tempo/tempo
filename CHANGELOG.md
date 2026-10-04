@@ -257,6 +257,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A set or a range of hours, minutes, seconds or days of the week that names a value the unit does not have is a `Tempo.InvalidDateError` when it is read, as one of days or months is: `~o"2026Y6M15DT{22..25}H"` was read, its walk yielded hours 24 and 25 and `Tempo.to_interval/2` refused it. A set with such a member (`T{22,25}H`) was read with the member passed over, and is that error too.
+
 * A range with a step that reaches past the days one of its months has keeps its own steps there: the walk of `~o"{1,2}M{31..1//-7}D"` yields the 24th, 17th, 10th and 3rd of February, the days of the range February has, where it yielded the 29th, 22nd, 15th, 8th and 1st.
 
 * `Tempo.select/2` reads a set or a range of weekdays (`~o"{6..-1}K"`, `~o"{1,-1}K"`), where it selected one of the days or none, and selects a time of day written after a weekday on each of the days (`~o"1KT10H"`), where the time was dropped.

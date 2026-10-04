@@ -4,9 +4,9 @@ defmodule Tempo.UnitValues do
 
   A date or a time is counted in units, and each unit takes a run of values that the units before it and the calendar decide: the months of a year, the days of a month, the hours of a day. A value is written against that run as a number, as a count from its end (`-1`, the last), as a range from one of its values to another (`{28..-1}`), or as several of these.
 
-  This module is the one place where either is worked out, so that there is one place to verify. `in_period/3` gives the run and `named/2` the values a written value names in it; `from_end/2` is the count from the end that both rest on. How many values a unit takes is always asked of the calendar, which is Calendrical's to answer: nothing here is calendar arithmetic.
+  This module is the one place where either is worked out, so that there is one place to verify. `in_period/3` gives the run; `named/2` lists the values a written value names in it, and `resolve/2` reads a written value against it in the shape it is written in; `from_end/2` is the count from the end that all rest on. How many values a unit takes is always asked of the calendar, which is Calendrical's to answer: nothing here is calendar arithmetic.
 
-  A selection's resolver (`Tempo.RRule.Selection`) reads its parts through it. The reading of a value, the walk, `Tempo.select/2` and `Tempo.explain/1` each still hold a count from the end of their own and are to follow (`plans/enumeration-and-selection.md`).
+  A selection's resolver (`Tempo.RRule.Selection`), `Tempo.select/2`, the walk and the reading of a value (`Tempo.Validation`) count through it. `Tempo.explain/1` still holds a count from the end of its own and is to follow (`plans/enumeration-and-selection.md`).
 
   """
 
@@ -151,6 +151,87 @@ defmodule Tempo.UnitValues do
   end
 
   defp values_named(_not_a_number, _values), do: []
+
+  @doc """
+  Returns a written value with each count from the end counted among the values a unit takes, in the shape it is written in.
+
+  Where `named/2` lists the values a written value names, passing over those the unit does not take, this keeps a range a range and a list a list, as a value holds them and writes them back, and refuses a value the unit does not take: it is how a value is read.
+
+  ### Arguments
+
+  * `written` is a `t:written/0`, or a float for a fraction of a unit.
+
+  * `values` is the range of values the unit takes, as `in_period/3` gives it.
+
+  ### Returns
+
+  * `{:ok, resolved}`, where a whole number counted from the end is the value it names, a range has each end so counted and counts up by its own step, and a list has each of its members so resolved.
+
+  * `{:error, {:not_taken, value}}` for the first written value, or end of a range, that is not one of `values`.
+
+  * `{:error, {:not_taken, value, counted}}` for the first count from the end that reaches past their start, with the value it counts to.
+
+  ### Examples
+
+      iex> Tempo.UnitValues.resolve(-1, 1..30//1)
+      {:ok, 30}
+
+      iex> Tempo.UnitValues.resolve([1, 28..-1//1], 1..30//1)
+      {:ok, [1, 28..30]}
+
+      iex> Tempo.UnitValues.resolve(22..25//1, 0..23//1)
+      {:error, {:not_taken, 25}}
+
+      iex> Tempo.UnitValues.resolve(-31, 1..30//1)
+      {:error, {:not_taken, -31, 0}}
+
+  """
+  @spec resolve(written() | float(), Range.t()) ::
+          {:ok, written() | float()}
+          | {:error, {:not_taken, term()} | {:not_taken, integer(), integer()}}
+  def resolve(value, %Range{first: first, last: last})
+      when is_integer(value) and value in first..last//1,
+      do: {:ok, value}
+
+  def resolve(value, %Range{first: first, last: last})
+      when is_float(value) and value >= first and value <= last,
+      do: {:ok, value}
+
+  def resolve(value, %Range{first: first, last: last} = values)
+      when is_integer(value) and value < 0 do
+    counted = from_end(value, values)
+
+    if counted >= 0 and counted in first..last//1,
+      do: {:ok, counted},
+      else: {:error, {:not_taken, value, counted}}
+  end
+
+  def resolve(%Range{first: from, last: to} = range, %Range{first: first, last: last})
+      when from in first..last//1 and to in first..last//1,
+      do: {:ok, range}
+
+  def resolve(%Range{first: from, last: to, step: step}, %Range{} = values) do
+    with {:ok, from} <- resolve(from, values),
+         {:ok, to} <- resolve(to, values) do
+      {:ok, from..to//abs(step)}
+    end
+  end
+
+  def resolve(written, %Range{} = values) when is_list(written) do
+    written
+    |> Enum.reduce_while({:ok, []}, fn member, {:ok, resolved} ->
+      case resolve(member, values) do
+        {:ok, value} -> {:cont, {:ok, [value | resolved]}}
+        {:error, _not_taken} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, resolved} -> {:ok, Enum.reverse(resolved)}
+      {:error, _not_taken} = error -> error
+    end
+  end
+
+  def resolve(value, %Range{}), do: {:error, {:not_taken, value}}
 
   @doc """
   Returns the value a count from the end names among those a unit takes.
