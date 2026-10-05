@@ -333,4 +333,49 @@ defmodule Tempo.CalendarWeekdayTest do
                [{~o"2026Y40W", ~o"2026Y41W"}]
     end
   end
+
+  # A week's interval said it was walked by the days of the week, the unit
+  # its walk steps on, where the walk of a week of a calendar of months
+  # yields dates: the interval names the unit of what it yields.
+  describe "a week of a calendar of months converts to an interval walked by days" do
+    test "the interval, its granularity and the explanation say days" do
+      {:ok, week} = Tempo.to_interval(~o"2026-W25")
+
+      assert Interval.granularity(week) == :day
+      assert inspect(week) == ~s|#Tempo.Interval<~o"2026Y25W/26W" unit: day>|
+      assert to_string(Tempo.explain(~o"2026-W25")) =~ "Iterates at :day granularity."
+    end
+
+    test "its walk, its count and what it holds are the week's seven dates" do
+      {:ok, week} = Tempo.to_interval(~o"2026-W25")
+
+      # Erlang's ISO 8601 weeks: 15 June 2026 is the Monday of week 25.
+      assert :calendar.iso_week_number({2026, 6, 15}) == {2026, 25}
+      assert :calendar.day_of_the_week({2026, 6, 15}) == 1
+
+      assert Enum.to_list(week) ==
+               for(day <- 15..21, do: Tempo.new!(year: 2026, month: 6, day: day))
+
+      assert Enum.count(week) == 7
+      assert ~o"2026-06-21" in week
+      refute ~o"2026-06-22" in week
+    end
+
+    test "each week of a set of them, and a week of another calendar of months" do
+      {:ok, weeks} = Tempo.to_interval(~o"2026Y{25,26}W")
+      {:ok, hebrew} = Tempo.to_interval(Tempo.from_iso8601!("5786Y25W", Calendrical.Hebrew))
+
+      assert Enum.map(IntervalSet.members(weeks), &Interval.granularity/1) == [:day, :day]
+      assert Interval.granularity(hebrew) == :day
+    end
+
+    test "a calendar of weeks keeps its day of the week, which its walk yields" do
+      week = Tempo.from_iso8601!("2026Y25W", Calendrical.ISOWeek)
+      {:ok, interval} = Tempo.to_interval(week)
+
+      assert Interval.granularity(interval) == :day_of_week
+      assert Enum.take(interval, 1) == [Tempo.from_iso8601!("2026Y25W1K", Calendrical.ISOWeek)]
+      assert to_string(Tempo.explain(week)) =~ "Iterates at :day_of_week granularity."
+    end
+  end
 end

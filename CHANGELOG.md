@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A week of a calendar of months converts to an interval walked by days: `Tempo.to_interval(~o"2026-W25")` is `#Tempo.Interval<~o"2026Y25W/26W" unit: day>`, `Tempo.Interval.granularity/1` is `:day` and `Tempo.explain/1` says "Iterates at :day granularity", where each said `day_of_week` while the walk yields dates. A calendar of weeks keeps `day_of_week`, which its walk yields.
+
 * `Tempo.select/2` returns a `Tempo.ConversionError` naming both calendars for a selector that holds a year, a month, a day of one, a day of the year or a week of another calendar than the span's, as `Tempo.at/2` and `Tempo.on/2` do, where it read the selector's numbers in the span's calendar: `Tempo.select(hebrew_year, ~o"6M15D")` selected the fifteenth of the Hebrew year's sixth month, and `~o"6M-1D"`, already June's 30th, nothing. A time of day and a day of the week select from a span in any calendar, a week of the Gregorian or the ISO week calendar from a span in the other, and a rule of another calendar that selects by them answers in the span's calendar, where it answered in its own.
 
 * A day of the week (`K`) is a day of the week of the value that holds it, the calendar's own week in a calendar of weeks and ISO 8601's in a calendar of months, in a selection and a recurrence's rule as in a value: in `Calendrical.NRF`, whose weeks start on Sunday, `2026Y25WL3KN` and `R/2026Y25W/P1W/FL3KN` select Tuesday, the value `2026Y25W3K`, where they selected Wednesday. A selector given to `Tempo.select/2` is read in the calendar it is written in (`~o"3K[u-ca=nrf]"` selects Tuesdays from any span, and `~o"3K"` and `Tempo.workdays/1` the weekdays they name), and `Tempo.explain/1` and `Tempo.RRule.to_string/1` name the weekday the calendar gives the day.

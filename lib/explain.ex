@@ -897,16 +897,18 @@ defmodule Tempo.Explain do
   # answers exactly that question: its map's keys *are* `@units`.
   defp enumerator_text(unit, calendar) do
     case Unit.fetch_sort_key(unit) do
-      {:ok, _key} -> describe_enumerator(Unit.implicit_enumerator(unit, calendar))
+      {:ok, _key} -> describe_enumerator(Unit.implicit_enumerator(unit, calendar), calendar)
       :error -> nil
     end
   end
 
-  defp describe_enumerator(nil),
+  defp describe_enumerator(nil, _calendar),
     do: "At finest supported resolution — cannot be enumerated further."
 
-  defp describe_enumerator({next_unit, _range}),
-    do: "Iterates at #{inspect(next_unit)} granularity."
+  # The unit is the one the value's interval says it is walked by: a week
+  # of a calendar of months by days, the dates its walk yields.
+  defp describe_enumerator({next_unit, _range}, calendar),
+    do: "Iterates at #{inspect(Unit.walked_by(next_unit, calendar))} granularity."
 
   ## ------------------------------------------------------------
   ## Tempo.Interval

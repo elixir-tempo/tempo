@@ -8,8 +8,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Correctness
 
-* [ ] **A week of a calendar of months converts to an interval walked by days** — `Tempo.to_interval(~o"2026-W25")` is `#Tempo.Interval<~o"2026Y25W/26W" unit: day>`, `Tempo.Interval.granularity/1` is `:day` and `Tempo.explain/1` says "Iterates at :day granularity", where each says `day_of_week` while the walk yields dates. A calendar of weeks keeps `day_of_week`, which its walk yields. Decided 2026-10-05.
-
 * [ ] **An RRULE is written from a recurrence of another calendar as if it were Gregorian** — `Tempo.RRule.to_string/1` takes no account of the recurrence's calendar: a Hebrew `R2/5786Y6M/P1M/FL3KN` is `COUNT=2;FREQ=MONTHLY;BYDAY=WE`, a rule of Gregorian months, and an NRF rule's weeks are written as `BYWEEKNO`, which counts ISO 8601's. Known to answer wrongly, so by the rule for 2.0 it is a named error (or RFC 7529's `RSCALE` for the calendars CLDR names) until it is built; a rule that steps by weeks or days and selects by weekday alone is right in any calendar, since `BYDAY` now names the weekday the calendar gives the day. Found 2026-10-05.
 
 * [ ] **A computed event in another calendar than the Gregorian is the event of the Gregorian year of that number** — `R2/5786Y/P1Y/FL(easter)eN` in the Hebrew calendar is `9546Y7M19D` and `9547Y6M16D`, the Easters of the Gregorian years 5786 and 5787 written as Hebrew dates, where the Easter that falls in the Hebrew year 5786 is 5 April 2026; `Tempo.select(hebrew_year, rule)` selects nothing for the same reason. Known to answer wrongly: the event is to be asked for the Gregorian years the period overlaps, or refused by the rule for 2.0 until it is. Found 2026-10-05.
@@ -121,6 +119,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A week of a calendar of months converts to an interval walked by days** — `Tempo.Iso8601.Unit.walked_by/2` names the unit a span is said to be walked by, `:day` for the days of a week where the calendar has months, and the interval, `Tempo.Interval.granularity/1` and `Tempo.explain/1` read it; the stepper fills a week to either unit as its first day, so the walk is what it was. A calendar of weeks keeps `day_of_week`. 2026-10-05.
 
 * [x] **`Tempo.select/2` refuses a selector of another calendar** — `one_calendar/2` in `Tempo.Select`, asked of every selector that is not a weekday alone: a year, a month, a day of one, a day of the year or a week of another calendar than the span's is a `Tempo.ConversionError` naming both (a span in a calendar of weeks keeps its own message), in a value, an interval, a list, a rule and what a function gives. A time of day and a weekday select in any calendar, the Gregorian and the ISO week calendars share ISO 8601's weeks, and a rule of another calendar is resolved in the span's, so what it selects are the span's values. 2026-10-05.
 
