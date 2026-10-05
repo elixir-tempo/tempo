@@ -8,8 +8,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Correctness
 
-* [ ] **An RRULE is written from a recurrence of another calendar as if it were Gregorian** — `Tempo.RRule.to_string/1` takes no account of the recurrence's calendar: a Hebrew `R2/5786Y6M/P1M/FL3KN` is `COUNT=2;FREQ=MONTHLY;BYDAY=WE`, a rule of Gregorian months, and an NRF rule's weeks are written as `BYWEEKNO`, which counts ISO 8601's. Known to answer wrongly, so by the rule for 2.0 it is a named error (or RFC 7529's `RSCALE` for the calendars CLDR names) until it is built; a rule that steps by weeks or days and selects by weekday alone is right in any calendar, since `BYDAY` now names the weekday the calendar gives the day. Found 2026-10-05.
-
 * [ ] **A computed event in another calendar than the Gregorian is the event of the Gregorian year of that number** — `R2/5786Y/P1Y/FL(easter)eN` in the Hebrew calendar is `9546Y7M19D` and `9547Y6M16D`, the Easters of the Gregorian years 5786 and 5787 written as Hebrew dates, where the Easter that falls in the Hebrew year 5786 is 5 April 2026; `Tempo.select(hebrew_year, rule)` selects nothing for the same reason. Known to answer wrongly: the event is to be asked for the Gregorian years the period overlaps, or refused by the rule for 2.0 until it is. Found 2026-10-05.
 
 ### Conformance and completeness
@@ -36,6 +34,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **Traditional months that are sets or masks** — `2026Y{1,2}m` parses as a mask (`traditional_month: {:mask, [[1..2]]}`) and a masked one (`1Xm`) is a `ConversionError` from `Enum` and `to_interval/2`: nothing lists the traditional months a year has, which is Calendrical's to answer. Found 2026-10-03.
 
+* [ ] **The RRULE writer writes parts RFC 5545 forbids for the frequency** — `Tempo.RRule.to_string/1` writes each selection token as its BY-part whatever the cadence: a numeric `BYDAY` in a weekly or a daily rule (`R/2026-06-01/P1W/FL3K2IN` is `FREQ=WEEKLY;BYDAY=2WE`, where `BYDAY=WE;BYSETPOS=2` says the same and is allowed), `BYWEEKNO` outside a yearly rule, `BYYEARDAY` in a daily, weekly or monthly one and `BYMONTHDAY` in a weekly one. Tempo reads each back as it was and a strict reader rejects the rule; to decide whether the writer refuses them or writes the allowed equivalent where there is one. Found 2026-10-05.
+
 * [ ] **A shift reaches each value of a set** — `~o"2026Y6M{1,15}D"` plus a day is `~o"2026Y6M{2,16}D"`: each value the set names is shifted and the results gathered into the value where one unit can hold them, and into an interval set where it cannot (`{15,30}D` plus a day is 16 June and 1 July), where a shift from a unit that holds several values is a `ConversionError`. Decided 2026-10-04. An unspecified day of a week is one case: `Tempo.shift(~o"2026Y25WX*K", day: 1)` is the next week's Monday alone (`~o"2026-06-22"`), where `~o"2026Y6MX*D"` plus a day is the days from 2 June to 1 July. Done for a value that holds days of the year (2026-10-05), which is stepped date by date and gathered as decided here: `gathered/2` in `lib/math.ex` is what the month and week axes are to be brought to.
 
 ### Errors and API
@@ -55,6 +55,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 ### Performance
 
 * [ ] **A never-matching selector walks the whole horizon** — `Tempo.select/2` over an open-ended span walks a thousand years of periods before a selector that never matches ends: 30 ms of years, 0.2 s of months, about 10 s of days, minutes of hours. An index selector on a fixed-range unit could end after its first empty period, a daylight-saving gap day aside. A recurrence's rule that selects nothing is as slow where the search has no bound of its own: twelve seconds where its start has no year (`R3/T22H/PT1H/FLT25HN`) and over forty-five in a calendar of weeks (`R2/2026-W25/P1W/FL8KN` in `Calendrical.ISOWeek`), where a Gregorian one answers in under a second.
+
+* [ ] **A shift by hours in a calendar of weeks costs time in proportion to the count** — `Tempo.shift/2` of `2026Y25W1K` in `Calendrical.ISOWeek` by 60,000 hours takes 16 ms where a calendar of months takes none, so a recurrence there whose rule never selects (`R6/2026Y25W1K/PT6H/FLT{9,17}HN`, ten thousand candidates before the search ends) takes over a minute to give its empty answer, where the Gregorian calendar takes 200 ms. Measured 2026-10-05.
 
 * [ ] **Conditional first pass walks whole periods** — it widens the bound by the conditions' reach, and the walk covers every period the widened bound touches, so a ±1-day bridge crossing both year ends materialises three years: Japan's holiday set takes 55 ms a year with its bridge, 25 ms without. Widen only where a condition reaches past the bound (the bridge's days, a move's search back from the bound's start).
 
@@ -119,6 +121,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **An RRULE is written from a recurrence of another calendar only where it reads the same** — `Tempo.NotBuilt.rrule/1` refuses, as `:rrule`, a recurrence of another calendar than the Gregorian that steps by months or years or selects by a month, a day of one, a day of the year or a week of the year, which RFC 5545 counts in the Gregorian calendar. One that steps by weeks, days or less and selects by weekday and time of day is written, its end as the Gregorian date it is and, in a calendar of weeks, its `WKST` as the day the calendar's weeks begin; `Tempo.RRule.OtherCalendarTest` reads each written rule again in the Gregorian calendar and compares its occurrences with the recurrence's. 2026-10-05.
 
 * [x] **A week of a calendar of months converts to an interval walked by days** — `Tempo.Iso8601.Unit.walked_by/2` names the unit a span is said to be walked by, `:day` for the days of a week where the calendar has months, and the interval, `Tempo.Interval.granularity/1` and `Tempo.explain/1` read it; the stepper fills a week to either unit as its first day, so the walk is what it was. A calendar of weeks keeps `day_of_week`. 2026-10-05.
 

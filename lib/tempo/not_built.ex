@@ -18,7 +18,10 @@ defmodule Tempo.NotBuilt do
   # which is counted through the values and not asked of the calendar. The
   # fourth is a month of a year whose months the calendar numbers as its
   # dates do, and not from the day the year begins (a year of
-  # `Calendrical.Reform.England` before 1751): no one span of the year.
+  # `Calendrical.Reform.England` before 1751): no one span of the year. The
+  # fifth is in every calendar but the Gregorian: an RRULE that steps or
+  # selects by a month, a year, a week of the year or a day of one, which
+  # RFC 5545 counts in the Gregorian calendar.
 
   alias Tempo.{Compare, ConversionError, Duration, Interval, UnitValues}
 
@@ -33,6 +36,15 @@ defmodule Tempo.NotBuilt do
   # first month: a value in one is answered before anything is asked of it,
   # since these functions are called for every value read and every step.
   @first_month_first [Calendrical.Gregorian, Calendar.ISO]
+
+  # The calendar RFC 5545 writes a rule in, as a value holds it.
+  @gregorian [Calendrical.Gregorian, Calendar.ISO, nil]
+
+  # The units of a cadence that an RRULE counts in its calendar,
+  # `FREQ=YEARLY` and `FREQ=MONTHLY`, and the tokens of a selection that it
+  # does: `BYMONTH`, `BYMONTHDAY`, `BYYEARDAY` and `BYWEEKNO`.
+  @stepped_by_rrule_calendar [:year, :month]
+  @selected_by_rrule_calendar [:month, :day, :day_of_year, :week]
 
   @doc false
   # The refusal of `target` for `value`, naming `calendar`.
@@ -94,6 +106,58 @@ defmodule Tempo.NotBuilt do
       do: :ok,
       else: {:error, error("season #{code} of the year #{year}", :season, calendar)}
   end
+
+  @doc false
+  # An RRULE (RFC 5545) is a rule of the Gregorian calendar: its months, its
+  # years, its weeks of the year and its days of a month or of a year are
+  # that calendar's, and RFC 7529's `RSCALE`, which names another, is not
+  # written. So a recurrence of another calendar that steps or selects by
+  # one of them has no RRULE yet: a Hebrew rule of months was written as one
+  # of Gregorian months. One that steps by weeks, by days or by the units of
+  # a time of day, and selects by weekday and time of day, is the same rule
+  # in every calendar, and is written.
+  @spec rrule(Interval.t()) :: :ok | {:error, ConversionError.t()}
+  def rrule(%Interval{} = recurrence) do
+    case rule_calendar(recurrence) do
+      nil -> :ok
+      calendar -> rrule_in(recurrence, calendar)
+    end
+  end
+
+  defp rrule_in(%Interval{duration: duration, repeat_rule: rule} = recurrence, calendar) do
+    if stepped_by_rrule_calendar?(duration) or selected_by_rrule_calendar?(rule),
+      do: {:error, error(recurrence, :rrule, calendar)},
+      else: :ok
+  end
+
+  # The calendar a recurrence is in where that is not the Gregorian: its
+  # rule's, or its start's.
+  defp rule_calendar(%Interval{from: from, repeat_rule: rule}) do
+    [rule, from]
+    |> Enum.flat_map(fn
+      %Tempo{calendar: calendar} when calendar not in @gregorian -> [calendar]
+      _gregorian_or_absent -> []
+    end)
+    |> List.first()
+  end
+
+  defp stepped_by_rrule_calendar?(%Duration{time: time}) when is_list(time),
+    do: Enum.any?(time, &(is_tuple(&1) and elem(&1, 0) in @stepped_by_rrule_calendar))
+
+  defp stepped_by_rrule_calendar?(_no_cadence), do: false
+
+  defp selected_by_rrule_calendar?(%Tempo{time: time}) when is_list(time),
+    do: selected_by_rrule_calendar?(time)
+
+  defp selected_by_rrule_calendar?(units) when is_list(units) do
+    Enum.any?(units, fn
+      {:selection, selection} -> selected_by_rrule_calendar?(selection)
+      entry when is_tuple(entry) -> elem(entry, 0) in @selected_by_rrule_calendar
+      _other -> false
+    end)
+  end
+
+  defp selected_by_rrule_calendar?(_no_rule), do: false
 
   @doc false
   # A selection (ISO 8601-2 §12.11), in a value or as the rule of a

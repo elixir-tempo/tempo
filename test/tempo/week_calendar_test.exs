@@ -539,10 +539,10 @@ defmodule Tempo.WeekCalendarTest do
       assert to_string(Tempo.explain(read("2026Y25WL3KN", ISOWeek))) =~ "selects on a Wednesday"
 
       assert RRule.to_string(read("R2/2026Y25W/P1W/FL3KN", NRF)) ==
-               {:ok, "COUNT=2;FREQ=WEEKLY;BYDAY=TU"}
+               {:ok, "COUNT=2;FREQ=WEEKLY;BYDAY=TU;WKST=SU"}
 
       assert RRule.to_string(read("R2/2026Y25W/P1W/FL{1,-1}KN", NRF)) ==
-               {:ok, "COUNT=2;FREQ=WEEKLY;BYDAY=SU,SA"}
+               {:ok, "COUNT=2;FREQ=WEEKLY;BYDAY=SU,SA;WKST=SU"}
 
       assert RRule.to_string(read("R2/2026Y25W/P1W/FL3KN", ISOWeek)) ==
                {:ok, "COUNT=2;FREQ=WEEKLY;BYDAY=WE"}

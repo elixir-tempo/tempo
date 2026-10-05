@@ -146,32 +146,23 @@ defmodule Tempo.RRule do
   end
 
   @doc """
-  Write a `t:Tempo.Interval.t/0` as an RRULE string — the inverse of
-  `parse/2`.
+  Write a `t:Tempo.Interval.t/0` as an RRULE string — the inverse of `parse/2`.
 
-  The output has no leading `RRULE:` prefix and no `DTSTART`: an
-  RRULE is a recurrence pattern, not a full iCalendar record, so a
-  caller writing the full record adds `DTSTART` from the interval's
-  start.
+  The output has no leading `RRULE:` prefix and no `DTSTART`: an RRULE is a recurrence pattern, not a full iCalendar record, so a caller writing the full record adds `DTSTART` from the interval's start.
+
+  An RRULE is read in the Gregorian calendar (RFC 5545), and RFC 7529's `RSCALE`, which names another, is not written. A recurrence of another calendar is written where an RFC 5545 reader finds the days it selects: one that steps by weeks, days or less and selects by weekday and time of day. Its end is written as the Gregorian date it is, in a calendar of weeks `WKST` is the day the calendar's weeks begin, and the `DTSTART` a caller adds is the Gregorian date of its start (`Tempo.to_calendar/2`).
 
   ### Arguments
 
-  * `interval` is a recurring `t:Tempo.Interval.t/0`. Its cadence is
-    one unit — `:second`, `:minute`, `:hour`, `:day`, `:week`,
-    `:month` or `:year` — and its recurrence is `:infinity` (no
-    `COUNT`), a positive integer (`COUNT`), or `1` with an end
-    (`UNTIL`). Its repeat rule is `nil` or a selection whose entries
-    for `:month`, `:day` (`BYMONTHDAY`), `:day_of_year`, `:week`,
-    `:hour`, `:minute`, `:second` and the paired `:day_of_week` and
-    `:instance` (`BYDAY`, with ordinals) have RRULE parts.
+  * `interval` is a recurring `t:Tempo.Interval.t/0`. Its cadence is one unit — `:second`, `:minute`, `:hour`, `:day`, `:week`, `:month` or `:year` — and its recurrence is `:infinity` (no `COUNT`), a positive integer (`COUNT`), or `1` with an end (`UNTIL`). Its repeat rule is `nil` or a selection whose entries for `:month`, `:day` (`BYMONTHDAY`), `:day_of_year`, `:week`, `:hour`, `:minute`, `:second` and the paired `:day_of_week` and `:instance` (`BYDAY`, with ordinals) have RRULE parts.
 
   ### Returns
 
   * `{:ok, rrule}` with the rule as a string.
 
-  * `{:error, %Tempo.ConversionError{}}` when the value has no RRULE
-    form — it is not an interval, its cadence has more than one unit,
-    or its selection has an entry RRULE cannot express.
+  * `{:error, %Tempo.ConversionError{}}` when the value has no RRULE form — it is not an interval, its cadence has more than one unit, or its selection has an entry RRULE cannot express.
+
+  * `{:error, %Tempo.ConversionError{}}` whose `:reason` is `:not_built` for a recurrence of another calendar than the Gregorian that steps or selects by a month, a year, a week of the year or a day of one, which an RFC 5545 reader would count in the Gregorian calendar.
 
   ### Examples
 
@@ -182,6 +173,10 @@ defmodule Tempo.RRule do
       iex> {:ok, interval} = Tempo.RRule.parse("FREQ=YEARLY;BYMONTH=11;BYDAY=4TH")
       iex> Tempo.RRule.to_string(interval)
       {:ok, "FREQ=YEARLY;BYMONTH=11;BYDAY=4TH"}
+
+      iex> {:ok, weekly} = Tempo.from_iso8601("R/2026Y25W/P1W/FL3KN", Calendrical.NRF)
+      iex> Tempo.RRule.to_string(weekly)
+      {:ok, "FREQ=WEEKLY;BYDAY=TU;WKST=SU"}
 
       iex> {:error, %Tempo.ConversionError{}} = Tempo.RRule.to_string(~o"2022-06-15")
 

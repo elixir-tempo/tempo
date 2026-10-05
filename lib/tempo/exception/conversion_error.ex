@@ -46,8 +46,10 @@ defmodule Tempo.ConversionError do
     does not begin with its first month (Calendrical's Julian `March25`,
     `March1`, `Sept1` and `Dec25`); `:month` is a month of a year whose
     months the calendar does not count from the day the year begins (a
-    year of `Calendrical.Reform.England` before 1751). The
-    [operation matrix](operation-matrix.html) lists each.
+    year of `Calendrical.Reform.England` before 1751); and `:rrule` is an
+    RRULE that steps or selects by a month, a year, a week of the year or
+    a day of one, for a recurrence of another calendar than the Gregorian.
+    The [operation matrix](operation-matrix.html) lists each.
 
   """
 
@@ -186,10 +188,18 @@ defmodule Tempo.ConversionError do
   defp not_built(:season), do: "a season"
   defp not_built(:shift), do: "a step by days from a value that holds several months or years"
   defp not_built(:month), do: "a month of a year that begins within one"
+
+  defp not_built(:rrule),
+    do: "an RRULE that steps or selects by a month, a year, a week of the year or a day of one"
+
   defp not_built(other), do: "#{other}"
 
   defp not_built_calendar(:month),
     do: "which does not count that year's months from the day it begins"
+
+  defp not_built_calendar(:rrule),
+    do:
+      "since RFC 5545 counts them in the Gregorian calendar and RFC 7529's RSCALE is not written"
 
   defp not_built_calendar(_target), do: "whose year does not begin with its first month"
 

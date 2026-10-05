@@ -166,7 +166,7 @@ Each error in the table is an exception module, returned in an `{:error, excepti
 
 Some answers Tempo does not yet work out. Where it is known that the answer it would give is wrong, it gives none: the function returns, and a walk raises, a `Tempo.ConversionError` whose `:reason` is `:not_built`, whose `:target` says what was asked for and whose `:calendar` names the calendar. What has not been measured, and is not known to be wrong, still answers.
 
-Each is in a calendar whose year does not begin with its first month: Calendrical's Julian `March25`, `March1`, `Sept1` and `Dec25`, whose years turn on those days, and `Calendrical.Reform.England`, whose years began on 25 March until 1751.
+All but the last are in a calendar whose year does not begin with its first month: Calendrical's Julian `March25`, `March1`, `Sept1` and `Dec25`, whose years turn on those days, and `Calendrical.Reform.England`, whose years began on 25 March until 1751.
 
 * **A selection that counts days within a month or a year** — `:selection`. A day of a month selected without its month, a weekday and an ordinal, in a value (`1750Y12ML-1DN`) and in the rule of a recurrence that steps by months or years, and a day of a month given to `Tempo.select/2` to select from a month or a year. A month alone, a month with a day, a day of the year, a week and a time of day are answered, and so are a weekday given to `Tempo.select/2` and any selection in a recurrence that steps by weeks or by less.
 
@@ -175,3 +175,5 @@ Each is in a calendar whose year does not begin with its first month: Calendrica
 * **A step by days from a value that holds several months or years** — `:shift`. The day after `1750Y{3,4}M15D`, and the day after an unspecified day of the month the year begins within (`1750Y3MX*D` where the year turns on 25 March). One date is stepped by its calendar and is answered, and so is each date a mask stands for.
 
 * **A month of a year of `Calendrical.Reform.England` before 1751** — `:month`. The calendar numbers the months of those years as their dates do, and not from the day the year begins, so no month is the days from 25 to 31 March that begin the year. A month of such a year is not read, and the year is not walked by its months, extended, truncated or rounded to one, or stepped by one. The year, its dates and their steps are answered, and so are the months of 1751 and of every year after it.
+
+* **An RRULE that counts in another calendar than the Gregorian** — `:rrule`. RFC 5545 counts a rule's months, years and weeks of the year in the Gregorian calendar, and RFC 7529's `RSCALE`, which names another, is not written: `Tempo.RRule.to_string/1` of a recurrence of another calendar that steps by months or years, or selects by a month, a day of the month, a day of the year or a week of the year. A rule that steps by weeks, days or less and selects by weekday and time of day is written, and reads in the Gregorian calendar as the days it selects.

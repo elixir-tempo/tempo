@@ -3,6 +3,7 @@ defmodule Tempo.RRule.Encoder do
 
   alias Tempo.Compare
   alias Tempo.ConversionError
+  alias Tempo.NotBuilt
   alias Tempo.UnitValues
 
   # Converts a `%Tempo.Interval{}` back into an RFC 5545 RRULE
@@ -108,9 +109,13 @@ defmodule Tempo.RRule.Encoder do
     # valid — and keeps the mental model of an RRULE interval
     # aligned with an ISO 8601 recurring interval.
 
+    # What RRULE has no form for in any calendar is refused first, each by
+    # its own name. What is left would be written, and is refused where it
+    # would be read in the Gregorian calendar as another rule.
     with {:ok, freq_and_interval_parts} <- freq_and_interval(time, interval),
          {:ok, bound_part} <- bound_part(interval),
-         {:ok, by_parts} <- by_parts(interval.repeat_rule, interval) do
+         {:ok, by_parts} <- by_parts(interval.repeat_rule, interval),
+         :ok <- NotBuilt.rrule(interval) do
       parts =
         [bound_part, freq_and_interval_parts, by_parts]
         |> List.flatten()
@@ -205,7 +210,15 @@ defmodule Tempo.RRule.Encoder do
      )}
   end
 
-  # RRULE UNTIL uses basic-format ISO 8601 — no separators.
+  # RRULE UNTIL uses basic-format ISO 8601 — no separators — and is a date
+  # of the Gregorian calendar, so an end in another calendar is written as
+  # the Gregorian date it is.
+  defp encode_until(%Tempo{calendar: calendar} = value)
+       when calendar not in [Calendrical.Gregorian, Calendar.ISO, nil] do
+    with {:ok, %Tempo{} = gregorian} <- Tempo.to_calendar(value, Calendrical.Gregorian),
+         do: encode_until(gregorian)
+  end
+
   defp encode_until(%Tempo{time: time} = value) do
     case time do
       [year: y, month: m, day: d] ->
@@ -243,7 +256,10 @@ defmodule Tempo.RRule.Encoder do
          |> Enum.uniq() do
       [] ->
         with {:ok, selection} <- weekdays_named(selection, calendar, interval) do
-          {:ok, encode_selection(selection) ++ Enum.flat_map(units, &encode_by_entry/1)}
+          {week_start, selection} = week_start(selection, interval)
+
+          {:ok,
+           encode_selection(selection) ++ Enum.flat_map(units ++ week_start, &encode_by_entry/1)}
         end
 
       tokens ->
@@ -279,6 +295,40 @@ defmodule Tempo.RRule.Encoder do
        target: :rrule
      )}
   end
+
+  # WKST says the day a rule's weeks begin, which is Monday where none is
+  # written, and is always the last part written. A recurrence in a calendar
+  # of weeks counts its weeks as the calendar does, whatever week start its
+  # rule holds, so the one written for it is the calendar's: the day its weeks
+  # begin where the rule steps by weeks and that day is not Monday, and
+  # otherwise none.
+  defp week_start(selection, interval) do
+    {held, selection} = Enum.split_with(selection, &match?({:wkst, _day}, &1))
+    {week_start_in(counted_in(interval), held, interval), selection}
+  end
+
+  defp week_start_in(calendar, held, %Tempo.Interval{duration: %Tempo.Duration{time: time}}) do
+    cond do
+      not Tempo.week_based_calendar?(calendar) -> held
+      Keyword.has_key?(time, :week) -> calendar_week_start(calendar)
+      true -> []
+    end
+  end
+
+  defp calendar_week_start(calendar) do
+    case UnitValues.iso_weekday_from_day_of_week(1, calendar) do
+      1 -> []
+      weekday -> [wkst: weekday]
+    end
+  end
+
+  # The calendar a recurrence's occurrences are counted in: that of its
+  # start, and with no start that of its rule.
+  defp counted_in(%Tempo.Interval{from: %Tempo{calendar: calendar}}),
+    do: Compare.effective_calendar(calendar)
+
+  defp counted_in(%Tempo.Interval{repeat_rule: %Tempo{calendar: calendar}}),
+    do: Compare.effective_calendar(calendar)
 
   # BYDAY names weekdays, and a selection holds days of the week of its
   # rule's calendar, the last of them written `-1K`. Each is written as the

@@ -98,6 +98,8 @@ RRULE's UNTIL uses the RFC 3339 basic format — four-digit years only. Years ou
 
 Tempo's IXDTF support attaches `[Europe/Paris]`, `[u-ca=hebrew]`, or arbitrary elective tags to a datetime: a zone and tags are stored on the `:extended` field, and a calendar is the value's `:calendar`. `Tempo.RRule.to_string/1` does **not** emit these — iCalendar handles zones and calendars via `TZID` and `CALSCALE` at the calendar-object level, not inside `RRULE`.
 
+An RRULE is read in the Gregorian calendar, so a recurrence of another calendar is written only where it reads there as the occurrences it has: one that steps by weeks, days or less and selects by weekday and time of day. The rest is refused, as the list of the writer's errors below has it.
+
 ## RRULE features and how they map to ISO 8601
 
 Most RRULE `BY*` filters map straight onto the ISO 8601-2 selection grammar — `BYWEEKNO` onto the ISO 8601 week `W`, which a rule without `BYDAY` gives DTSTART's weekday, as ISO 8601-2 Annex C.4 has a conversion state it. Tempo's calendar week `w` has no RRULE form, since `BYWEEKNO` counts ISO 8601 weeks. Two need comment: `BYSETPOS` **is** ISO 8601-2 (the §12.9 position designator `I`), while `WKST` has no ISO representation and so gets Tempo's project-specific designator `q`. Both are documented in `guides/iso8601-conformance.md` §5. A rule carrying either round-trips through the ISO form; the canonical *external* form remains the RRULE string via `Tempo.RRule.to_string/1`.
@@ -109,6 +111,8 @@ RRULE `BYSETPOS=-1` ("take the last element of the resolved per-period set") is 
 ### `WKST` — the `q` designator
 
 RRULE lets a rule override the week start (`WKST=SU`), which shifts `BYWEEKNO`/`BYDAY`-weekly boundaries. Tempo holds it as a `:wkst` token: `Tempo.RRule.to_string/1` emits `WKST=SU`, and `Tempo.to_iso8601/1` renders it as `7q` (7 = Sunday), so it round-trips both ways. (A non-default `WKST` alone is enough to produce a `:repeat_rule`, since it changes weekly boundaries.)
+
+A recurrence in a calendar of weeks counts its weeks as the calendar does, whatever week start its rule holds, so the `WKST` written for one that steps by weeks is the day the calendar's weeks begin: `WKST=SU` in `Calendrical.NRF`, and none in `Calendrical.ISOWeek`, whose weeks begin on Monday as an RRULE's do.
 
 ## What is lossy in the encoders
 
@@ -143,6 +147,8 @@ Because ISO 8601 can describe more than RRULE, and RRULE needs specific features
 * A `:repeat_rule` whose shape isn't a flat `:selection` keyword list.
 
 * A selection with no RRULE `BY*` part: a calendar week (`w`), a traditional month (`m`), a computed event (`e`), a year, a selection window (ISO 8601-2 §12.10), or a cron nearest weekday or day-of-month-or-weekday. The error names each one rather than dropping it.
+
+* A recurrence of another calendar than the Gregorian that steps or selects by a month, a year, a week of the year or a day of one. RFC 5545 counts them in the Gregorian calendar and RFC 7529's `RSCALE`, which names another, is not written, so the error's `:reason` is `:not_built`.
 
 Every error carries a human-readable `:message` field and the source `:value`. Errors can be re-raised as exceptions — `Tempo.RRule.to_string!/1` does this.
 

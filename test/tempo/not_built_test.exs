@@ -6,15 +6,21 @@ defmodule Tempo.NotBuiltTest do
   # Each refusal is held here, and beside it what is still answered, against
   # an answer taken from the calendar's own functions.
 
+  import Tempo.Sigils
+
+  alias Calendrical.Hebrew
+  alias Calendrical.ISOWeek
   alias Calendrical.Julian
   alias Calendrical.Julian.Dec25
   alias Calendrical.Julian.March1
   alias Calendrical.Julian.March25
   alias Calendrical.Julian.Sept1
+  alias Calendrical.NRF
   alias Calendrical.Reform.England
   alias Tempo.ConversionError
   alias Tempo.Interval
   alias Tempo.IntervalSet
+  alias Tempo.RRule
 
   # The calendars of one rule whose year does not begin with its first month.
   @turning [March25, March1, Sept1, Dec25]
@@ -379,6 +385,67 @@ defmodule Tempo.NotBuiltTest do
         assert Enum.to_list(read("1750Y", calendar)) ==
                  for(month <- 1..12, do: read("1750Y#{month}M", calendar))
       end
+    end
+  end
+
+  # An RRULE is a rule of the Gregorian calendar (RFC 5545), and one written
+  # from a recurrence of another carried that calendar's months, weeks and
+  # days as if they were Gregorian ones.
+  describe "an RRULE of a recurrence of another calendar than the Gregorian" do
+    test "is refused where it steps or selects by a month, a year, a week of the year or a day of one" do
+      for {text, calendar} <- [
+            {"R2/5786Y6M/P1M/FL3KN", Hebrew},
+            {"R2/5786Y/P1Y/FL7M15DN", Hebrew},
+            {"R2/5786Y6M1D/P1Y", Hebrew},
+            {"R2/5786Y6M1D/P1M", Hebrew},
+            {"R2/5786Y6M1D/P1D/FL15DN", Hebrew},
+            {"R2/5786Y6M1D/P1D/FL100ON", Hebrew},
+            {"R2/2026Y/P1Y/FL10W3KN", NRF},
+            {"R2/2026Y/P1Y/FL25W2KN", ISOWeek}
+          ] do
+        assert refused?(RRule.to_string(read(text, calendar)), :rrule, calendar), text
+      end
+    end
+
+    test "names the recurrence, what was asked and the calendar" do
+      {:error, error} = RRule.to_string(read("R2/5786Y6M/P1M/FL3KN", Hebrew))
+
+      assert Exception.message(error) =~ "R2/5786Y6M/P1M/FL3KN"
+      assert Exception.message(error) =~ "an RRULE that steps or selects by a month"
+      assert Exception.message(error) =~ "is not built for Calendrical.Hebrew"
+    end
+
+    test "is written where it steps by weeks, days or less and selects by weekday and time" do
+      assert RRule.to_string(read("R2/5786Y6M1D/P1W/FL3KN", Hebrew)) ==
+               {:ok, "COUNT=2;FREQ=WEEKLY;BYDAY=WE"}
+
+      assert RRule.to_string(read("R2/5786Y6M1D/P1D/FLT{9,17}HN", Hebrew)) ==
+               {:ok, "COUNT=2;FREQ=DAILY;BYHOUR=9,17"}
+
+      # The third day of an NRF week, which starts on a Sunday, is a Tuesday.
+      assert RRule.to_string(read("R2/2026Y25W/P1W/FL3KN", NRF)) ==
+               {:ok, "COUNT=2;FREQ=WEEKLY;BYDAY=TU;WKST=SU"}
+    end
+
+    test "writes its end as the Gregorian date it is" do
+      until = Date.new!(5786, 6, 10, Hebrew) |> Date.convert!(Calendar.ISO)
+
+      daily = %Interval{
+        recurrence: :infinity,
+        from: read("5786Y6M1D", Hebrew),
+        duration: ~o"P1D",
+        to: read("5786Y6M10D", Hebrew)
+      }
+
+      assert RRule.to_string(daily) == {:ok, "UNTIL=#{Date.to_iso8601(until, :basic)};FREQ=DAILY"}
+    end
+
+    test "is written as it was in the Gregorian calendar" do
+      assert RRule.to_string(~o"R/2026-01-01/P1Y/FL7M15DN") ==
+               {:ok, "FREQ=YEARLY;BYMONTH=7;BYMONTHDAY=15"}
+
+      assert RRule.to_string(~o"R2/2026-06-01/P1M/FL3KN") ==
+               {:ok, "COUNT=2;FREQ=MONTHLY;BYDAY=WE"}
     end
   end
 end

@@ -69,6 +69,8 @@ RFC 5545 is implicitly Gregorian. RFC 7529 defines a separate `RSCALE` property 
 
 Occurrence selection dispatches to the calendar module (`days_in_month/2`, `day_of_year/3`, `day_of_week/4`) and steps through Calendrical, so BYMONTH/BYMONTHDAY/BYYEARDAY respect calendar-specific month and year lengths, and BYWEEKNO numbers the weeks of the calendar's own year from `WKST`.
 
+Writing is narrower than reading. `Tempo.RRule.to_string/1` writes a rule for an RFC 5545 reader, who counts months, years and weeks of the year in the Gregorian calendar, so a recurrence of another calendar is written only where that reader finds the same days: one that steps by weeks, days or less and selects by weekday and time of day. Its `UNTIL` is the Gregorian date its end is, and in a calendar of weeks its `WKST` is the day the calendar's weeks begin (`WKST=SU` in `Calendrical.NRF`). One that steps or selects by a month, a year, a week of the year or a day of one returns a `Tempo.ConversionError` whose `:reason` is `:not_built`, since only `RSCALE` could say which calendar counts them.
+
 ## Unbounded rules require a window
 
 A rule with `FREQ` but no `COUNT`, no `UNTIL`, and no `:within` window is infinite — Tempo cannot list its occurrences. Attempting to do so returns:
@@ -89,7 +91,7 @@ A small list of features outside Tempo's current RRULE scope:
 
 * **Sub-second `FREQ` or `BY*`** — Tempo's resolution ladder currently stops at `:second`. Sub-second recurrence isn't meaningful within Tempo's AST.
 
-* **RFC 7529 `RSCALE`** — the named property is not parsed. Calendar-awareness via DTSTART gives equivalent behaviour, described above.
+* **RFC 7529 `RSCALE`** — the named property is not parsed and not written. Reading is calendar-aware through DTSTART, and writing refuses what only `RSCALE` could say, both described above.
 
 ## Test coverage
 
