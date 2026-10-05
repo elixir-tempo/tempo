@@ -248,6 +248,7 @@ defmodule Tempo.Select do
   alias Tempo.ConversionError
   alias Tempo.Duration
   alias Tempo.Enumeration
+  alias Tempo.Enumeration.Zone
   alias Tempo.Interval
   alias Tempo.Interval.Steps
   alias Tempo.IntervalEndpointsError
@@ -257,6 +258,7 @@ defmodule Tempo.Select do
   alias Tempo.Math
   alias Tempo.NotBuilt
   alias Tempo.RRule.Selection
+  alias Tempo.TimeZoneDatabase
   alias Tempo.UnboundedSetError
   alias Tempo.UnitValues
   alias Tempo.Validation
@@ -402,6 +404,7 @@ defmodule Tempo.Select do
   def select(%Interval{metadata: metadata} = interval, selector) do
     interval
     |> select_span(selector)
+    |> on_days_the_zone_has(interval)
     |> with_base_metadata(metadata)
   end
 
@@ -435,6 +438,63 @@ defmodule Tempo.Select do
       {:open_end, span} -> select_open_end(span, selector)
       {:set, set} -> select(set, selector)
       {:error, _reason} = error -> error
+    end
+  end
+
+  # A day its zone leaves out is no day to select: Samoa had no 30 December
+  # 2011, which the 30th of a month and the Fridays of that December would
+  # pick. What starts on such a day, the day or a time of day on it, is not
+  # selected, and a day that ends where one begins ends on the next day the
+  # zone has, as the day's own span does. The days a zone leaves out are kept
+  # (`Tempo.TimeZoneDatabase.days_left_out/1`) and nearly every zone has
+  # none, so this asks nothing of the zone database.
+  defp on_days_the_zone_has(
+         {:ok, %IntervalSet{} = selected},
+         %Interval{from: %Tempo{extended: %{zone_id: zone}}}
+       )
+       when is_binary(zone) do
+    if TimeZoneDatabase.days_left_out(zone) == [],
+      do: {:ok, selected},
+      else: through_members(selected, &on_a_day_the_zone_has/1)
+  end
+
+  defp on_days_the_zone_has(selected, _base), do: selected
+
+  defp on_a_day_the_zone_has(%Interval{from: %Tempo{} = from, to: to} = selected) do
+    if Zone.on_a_day_left_out?(from),
+      do: [],
+      else: [%{selected | to: on_the_next_day_the_zone_has(to)}]
+  end
+
+  defp on_a_day_the_zone_has(selected), do: [selected]
+
+  # An end is the start of its day, so a date its zone leaves out is where
+  # the day after begins. A time of day on one is left as it is selected.
+  defp on_the_next_day_the_zone_has(%Tempo{time: [year: _, month: _, day: _]} = date) do
+    if Zone.on_a_day_left_out?(date),
+      do: Math.add(date, %Duration{time: [day: 1]}),
+      else: date
+  end
+
+  defp on_the_next_day_the_zone_has(other), do: other
+
+  # A set's members, each as the members `fun` gives for it, in a set that
+  # is walked as the set is: at once where it is bounded, and member by
+  # member where it is not.
+  defp through_members(set, fun) do
+    metadata = IntervalSet.metadata(set)
+
+    if IntervalSet.bounded?(set) do
+      set
+      |> IntervalSet.members()
+      |> Enum.flat_map(fun)
+      |> IntervalSet.new(coalesce: false, metadata: metadata)
+    else
+      {:ok,
+       set
+       |> IntervalSet.walk()
+       |> Stream.flat_map(fun)
+       |> IntervalSet.from_stream(metadata: metadata)}
     end
   end
 

@@ -3312,8 +3312,10 @@ defmodule Tempo do
 
   A value with a year is checked against its calendar, so
   `~o"2026-02" |> Tempo.on(~o"29D")` is an error: 2026 is not a leap
-  year. A month, a week and a day are numbered by their calendar, so
-  two values that hold them are of one calendar: a Gregorian
+  year. One in a zone is checked against the zone's clock as a value
+  that is read is, so 02:30 placed on the night clocks go forward is
+  an error too. A month, a week and a day are numbered by their
+  calendar, so two values that hold them are of one calendar: a Gregorian
   `~o"6M15D"` placed on a Hebrew year is an error and not the fifteenth
   of that year's sixth month, which is written by reading it in that
   calendar (`Tempo.from_iso8601("6M15D", Calendrical.Hebrew)`). A time
@@ -3338,8 +3340,9 @@ defmodule Tempo do
 
   * `{:error, reason}` when both values have a year, when the two hold
     date units of different calendars, when the result is not a date in
-    its calendar or an interval whose start is before its end, or when
-    either argument is not a Tempo value or interval.
+    its calendar, is a time the clock skips in its zone or is an
+    interval whose start is not before its end, or when either argument
+    is not a Tempo value or interval.
 
   ### Examples
 
@@ -3470,7 +3473,13 @@ defmodule Tempo do
       else: placed(graft(other, value))
   end
 
-  defp placed(%__MODULE__{} = tempo), do: {:ok, tempo}
+  # A value placed in a zone is held to the zone's clock as one that is read
+  # is: 02:30 on the night clocks go forward names no time there, and nor
+  # does a day the zone leaves out.
+  defp placed(%__MODULE__{} = tempo) do
+    with :ok <- Validation.validate_zone_existence(tempo), do: {:ok, tempo}
+  end
+
   defp placed(error), do: error
 
   # An unspecified year (`X*Y6M`) is no year, so it is where the year of the
@@ -8215,11 +8224,31 @@ defmodule Tempo do
        when is_function(occurrence_end_fn, 2) do
     occurrence_metadata = strip_span_directives(metadata)
 
-    Stream.unfold(
-      0,
+    0
+    |> Stream.unfold(
       &stepped_candidate(&1, from, cadence, occurrence_end_fn, occurrence_metadata)
     )
+    |> each_start_once(from)
   end
+
+  # In a zone that leaves a day out (Samoa had no 30 December 2011) the step
+  # onto that day is moved to the day after, where the step after it lands
+  # too. The two are one occurrence, and the later is the one that is kept:
+  # it is the step that lands there, and its end is counted from where it is.
+  defp each_start_once(candidates, %Tempo{extended: %{zone_id: zone}}) when is_binary(zone) do
+    if TimeZoneDatabase.days_left_out(zone) == [],
+      do: candidates,
+      else: candidates |> Stream.concat([:walked]) |> Stream.transform(nil, &held_for_the_next/2)
+  end
+
+  defp each_start_once(candidates, _from), do: candidates
+
+  # Each candidate is held until the one after it is known, and dropped
+  # where that one has its start.
+  defp held_for_the_next(:walked, held), do: {List.wrap(held), nil}
+  defp held_for_the_next(candidate, nil), do: {[], candidate}
+  defp held_for_the_next({start, _span} = candidate, {start, _held}), do: {[], candidate}
+  defp held_for_the_next(candidate, held), do: {[held], candidate}
 
   # The candidate that starts at `start` and the start of the one after it,
   # which is where it ends. A step the cadence cannot take is the walk's last
@@ -8239,13 +8268,25 @@ defmodule Tempo do
   defp candidate_from_the_start(:stopped, _from, _cadence, _metadata), do: nil
 
   defp candidate_from_the_start({step, start}, from, cadence, metadata) do
-    case add_n_durations(from, cadence, step + 1) do
-      %Tempo{} = next_start ->
+    case start_after(step, start, from, cadence) do
+      {next_step, %Tempo{} = next_start} ->
         occurrence = %Tempo.Interval{from: start, to: next_start, metadata: metadata}
-        {{start, occurrence}, {step + 1, next_start}}
+        {{start, occurrence}, {next_step, next_start}}
 
-      failed ->
+      {_next_step, failed} ->
         {step_failure(failed), :stopped}
+    end
+  end
+
+  # The start after `start`, and the step that reaches it. A step onto a day
+  # the zone leaves out is moved to the day after, where the step after it
+  # lands too: the two are one occurrence, so the start after is the next
+  # step's. One step on is as far as that reaches, so a cadence that goes
+  # nowhere is not followed.
+  defp start_after(step, start, from, cadence) do
+    case add_n_durations(from, cadence, step + 1) do
+      ^start -> {step + 2, add_n_durations(from, cadence, step + 2)}
+      next_start -> {step + 1, next_start}
     end
   end
 
@@ -8465,15 +8506,16 @@ defmodule Tempo do
   defp contiguous_occurrences?(_cadence, _interval), do: false
 
   # A step of days or weeks from a time of day in a zone keeps the reading
-  # of the clock, and is moved where the clock skips it. A step of hours or
-  # less counts time that has passed and lands on no such reading, and a
-  # date has no reading to be moved.
+  # of the clock, and is moved where the clock skips it; from a date it is
+  # moved off a day the zone leaves out (Samoa had no 30 December 2011). A
+  # step of hours or less counts time that has passed and lands on no such
+  # reading, and a date in any other zone has no reading to be moved.
   defp settled_by_the_clock?(
          %Tempo{extended: %{zone_id: zone}, time: time},
          %Tempo.Duration{time: [{unit, _amount} | _]}
        )
        when is_binary(zone) and unit in [:week, :day],
-       do: List.keymember?(time, :hour, 0)
+       do: List.keymember?(time, :hour, 0) or TimeZoneDatabase.days_left_out(zone) != []
 
   defp settled_by_the_clock?(_from, _cadence), do: false
 

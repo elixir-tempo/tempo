@@ -5,6 +5,7 @@ defimpl Enumerable, for: Tempo.Interval do
   alias Tempo.Interval.Steps
   alias Tempo.Math
   alias Tempo.NotBuilt
+  alias Tempo.TimeZoneDatabase
   alias Tempo.Validation
 
   # An interval represents a span on the time line. Enumerating it
@@ -78,9 +79,10 @@ defimpl Enumerable, for: Tempo.Interval do
     # An end or an element with no year, or one that holds a set or a mask,
     # has no place on the time line to compare by, so the walk answers. So it
     # does for ends that are not in the order of their units.
-    if dated?(from) and dated?(to) and dated?(element) and Tempo.Compare.structural?(from, to),
-      do: stepped_member?(element, from, to, unit, calendar),
-      else: {:error, __MODULE__}
+    if dated?(from) and dated?(to) and dated?(element) and Tempo.Compare.structural?(from, to) and
+         not day_left_out?(from, unit),
+       do: stepped_member?(element, from, to, unit, calendar),
+       else: {:error, __MODULE__}
   end
 
   # The walk `Enum.member?/2` falls back to ends only when it finds the
@@ -203,7 +205,7 @@ defimpl Enumerable, for: Tempo.Interval do
   defp stepped_count(interval, %Tempo{calendar: calendar} = from, %Tempo{} = to) do
     unit = iteration_unit(interval, from)
 
-    if Tempo.Compare.structural?(from, to) do
+    if Tempo.Compare.structural?(from, to) and not day_left_out?(from, unit) do
       # Fill both bounds: the closed-form step counters read unit
       # components from each side, and start-of-unit filling names the
       # same boundary instant under the half-open convention.
@@ -221,6 +223,15 @@ defimpl Enumerable, for: Tempo.Interval do
 
   # The unit the interval is walked by from `from`, which is its start or
   # the start a duration was counted to (`Tempo.Interval.granularity/1`).
+  # The days of a zone that leaves a day out (Samoa had no 30 December 2011)
+  # are not counted by step arithmetic: the walk, which passes over the day,
+  # answers. The days a zone leaves out are kept, so this asks nothing of
+  # the zone database.
+  defp day_left_out?(%Tempo{extended: %{zone_id: zone}}, :day) when is_binary(zone),
+    do: TimeZoneDatabase.days_left_out(zone) != []
+
+  defp day_left_out?(_from, _unit), do: false
+
   defp iteration_unit(%Tempo.Interval{} = interval, %Tempo{} = from),
     do: Tempo.Interval.granularity(%{interval | from: from})
 

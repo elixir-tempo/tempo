@@ -4,7 +4,9 @@ defmodule Tempo.RecurrenceAcrossGapTest do
   of day. An occurrence that lands on a reading the clock skips is moved to
   the reading that long after (RFC 5545 §3.3.5: 02:30 on the night of a
   spring-forward is 03:30), and it alone: the occurrence after it is at the
-  time of day the recurrence started with.
+  time of day the recurrence started with. Where the clock skips a whole day
+  (Samoa had no 30 December 2011) the occurrence moved is at the time of the
+  next, and the two are one.
 
   Each occurrence was stepped from the one before it as it was moved, so a
   daily 02:30 in New York was 03:30 from the night of the change on.
@@ -39,12 +41,16 @@ defmodule Tempo.RecurrenceAcrossGapTest do
     end
   end
 
-  defp expected(%NaiveDateTime{} = start, zone, days_apart, count),
-    do:
-      for(
-        step <- 0..(count - 1),
-        do: instant(NaiveDateTime.add(start, step * days_apart, :day), zone)
-      )
+  # Two steps that land on one instant are one occurrence: a step onto a day
+  # the zone leaves out is the same time on the day after, where the step
+  # after it lands when the cadence is a day.
+  defp expected(%NaiveDateTime{} = start, zone, days_apart, count) do
+    0
+    |> Stream.iterate(&(&1 + 1))
+    |> Stream.map(&instant(NaiveDateTime.add(start, &1 * days_apart, :day), zone))
+    |> Stream.dedup()
+    |> Enum.take(count)
+  end
 
   defp starts({:ok, %IntervalSet{} = occurrences}) do
     for occurrence <- IntervalSet.members(occurrences) do
@@ -67,6 +73,10 @@ defmodule Tempo.RecurrenceAcrossGapTest do
     {"R5/2026-03-27T02:15:00[Europe/Paris]/P1D", ~N[2026-03-27 02:15:00], "Europe/Paris", 1, 5},
     {"R5/2026-10-02T02:10:00[Australia/Lord_Howe]/P1D", ~N[2026-10-02 02:10:00],
      "Australia/Lord_Howe", 1, 5},
+    # A day the zone leaves out: Samoa had no 30 December 2011.
+    {"R5/2011-12-28T10:00:00[Pacific/Apia]/P1D", ~N[2011-12-28 10:00:00], "Pacific/Apia", 1, 5},
+    {"R4/2011-12-28T10:00:00[Pacific/Apia]/P2D", ~N[2011-12-28 10:00:00], "Pacific/Apia", 2, 4},
+    {"R4/2011-12-23T10:00:00[Pacific/Apia]/P1W", ~N[2011-12-23 10:00:00], "Pacific/Apia", 7, 4},
     # A fall-back, where the clock shows the reading twice.
     {"R5/2024-11-01T01:30:00[America/New_York]/P1D", ~N[2024-11-01 01:30:00], "America/New_York",
      1, 5},
@@ -96,12 +106,18 @@ defmodule Tempo.RecurrenceAcrossGapTest do
                ]
     end
 
-    test "has each occurrence end where the next starts" do
-      {:ok, occurrences} = Tempo.to_interval(~o"R4/2024-03-09T02:30:00[America/New_York]/P1D")
-      members = IntervalSet.members(occurrences)
+    test "has each occurrence end where the next starts, and after it starts" do
+      for text <- [
+            "R4/2024-03-09T02:30:00[America/New_York]/P1D",
+            "R5/2011-12-28T10:00:00[Pacific/Apia]/P1D"
+          ] do
+        {:ok, occurrences} = Tempo.to_interval(Tempo.from_iso8601!(text))
+        members = IntervalSet.members(occurrences)
 
-      for {occurrence, next} <- Enum.zip(members, tl(members)) do
-        assert Interval.to(occurrence) == Interval.from(next)
+        for {occurrence, next} <- Enum.zip(members, tl(members)) do
+          assert {text, Interval.to(occurrence)} == {text, Interval.from(next)}
+          assert {text, Tempo.relation(occurrence, next)} == {text, :meets}
+        end
       end
     end
 

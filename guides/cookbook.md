@@ -1169,6 +1169,16 @@ iex> {:error, %Tempo.ZoneGapError{}} = Tempo.from_iso8601("2011-12-30T12:00:00[P
 
 > At the end of 29 December 2011, Samoa moved from east of the international date line to west of it: the day after Thursday the 29th was Saturday the 31st, and **30 December never happened** there. Tempo consults the time zone database for the gap, and a value the clock skips the whole of (that day, any hour of it, any timestamp in it) is an error.
 
+```elixir
+december = ~o"2011-12[Pacific/Apia]"
+thursday = ~o"2011-12-29[Pacific/Apia]"
+
+saturday = Tempo.shift(thursday, day: 1)
+{:ok, fridays} = Tempo.select(december, ~o"5K")
+```
+
+> *"The day **after** Thursday the 29th is Saturday the 31st. The **Fridays** of that December are the 2nd, 9th, 16th and 23rd: four, where the calendar shows five."*
+
 ### Julian vs Gregorian — the same nominal date, different calendars
 
 ```elixir

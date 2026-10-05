@@ -1,6 +1,8 @@
 defmodule Tempo.Enumeration.Zone do
   @moduledoc false
 
+  alias Tempo.TimeZoneDatabase
+
   # Shared DST classification for enumeration. Both `Enumerable.Tempo`
   # (implicit-span walk) and `Enumerable.Tempo.Interval` (explicit
   # forward-stepping walk) classify each emitted moment against its
@@ -22,6 +24,15 @@ defmodule Tempo.Enumeration.Zone do
       walk emits the moment twice, once with each.
   """
   @spec zone_status(Tempo.t()) :: :ok | :gap | {:ambiguous, keyword(), keyword()}
+
+  # A date is a gap where its zone leaves the day out (Samoa had no
+  # 30 December 2011): the walk skips it as it skips an hour the clock
+  # skips.
+  def zone_status(%Tempo{extended: %{zone_id: zone}, time: [year: _, month: _, day: _]} = date)
+      when is_binary(zone) do
+    if on_a_day_left_out?(date), do: :gap, else: :ok
+  end
+
   def zone_status(%Tempo{extended: %{zone_id: zone}} = tempo) when is_binary(zone) do
     with %NaiveDateTime{} = naive <- naive_from_tempo(tempo),
          db when is_atom(db) <- Calendar.get_time_zone_database() do
@@ -41,6 +52,32 @@ defmodule Tempo.Enumeration.Zone do
   end
 
   def zone_status(_tempo), do: :ok
+
+  @doc """
+  Whether a value is on a day its zone leaves out: a date, or a time of day
+  on one, that the zone's wall clock never showed (Samoa had no 30 December
+  2011).
+
+  The days a zone leaves out are kept
+  (`Tempo.TimeZoneDatabase.days_left_out/1`), so this asks nothing of the
+  zone database. The units of a value are read as Gregorian ones, so a
+  value of another calendar is on no such day.
+  """
+  @spec on_a_day_left_out?(Tempo.t()) :: boolean()
+  def on_a_day_left_out?(%Tempo{
+        extended: %{zone_id: zone},
+        time: [{:year, year}, {:month, month}, {:day, day} | _clock],
+        calendar: calendar
+      })
+      when is_binary(zone) and is_integer(year) and is_integer(month) and is_integer(day) and
+             calendar in [Calendrical.Gregorian, Calendar.ISO] do
+    case TimeZoneDatabase.days_left_out(zone) do
+      [] -> false
+      days -> {year, month, day} in days
+    end
+  end
+
+  def on_a_day_left_out?(_value), do: false
 
   @doc """
   Convert a total UTC offset in seconds to a `%Tempo{}` `:shift`

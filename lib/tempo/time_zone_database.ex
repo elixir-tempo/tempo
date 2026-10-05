@@ -163,6 +163,116 @@ defmodule Tempo.TimeZoneDatabase do
   end
 
   @doc """
+  The calendar days a zone leaves out: the days its wall clock never
+  showed, where the zone moved across the date line.
+
+  Samoa had no 30 December 2011, and Manila no 31 December 1844. A
+  value that names such a day names no time, and nothing steps onto
+  it or walks through it.
+
+  The days are found once for each zone and kept, since a zone has
+  none or one and asking the database of every day walked would cost
+  more than the walk. A zone's offset at the start of each decade
+  from 1800 to 2100 shows the years it moved a day ahead, and the
+  days of those years are asked of the database. They are kept for
+  as long as the system runs, so a database that learns of a new
+  move across the date line is asked again only when it restarts.
+
+  ### Arguments
+
+  * `zone` is an IANA zone name.
+
+  ### Returns
+
+  * A list of `{year, month, day}` Gregorian dates, empty for nearly
+    every zone, and for an unknown zone or with no database
+    configured.
+
+  ### Examples
+
+      iex> Tempo.TimeZoneDatabase.days_left_out("Etc/UTC")
+      []
+
+  """
+  @spec days_left_out(String.t()) :: [:calendar.date()]
+  def days_left_out(zone) when is_binary(zone) do
+    key = {__MODULE__, :days_left_out, zone}
+
+    case :persistent_term.get(key, nil) do
+      nil -> found_days_left_out(key, zone, database())
+      days -> days
+    end
+  end
+
+  # With no database configured nothing is known of a zone, and nothing is
+  # kept, so that one configured later is asked. Nor is anything kept for a
+  # name the database does not know.
+  defp found_days_left_out(_key, _zone, Calendar.UTCOnlyTimeZoneDatabase), do: []
+
+  defp found_days_left_out(key, zone, _database) do
+    if zone_exists?(zone), do: kept_days_left_out(key, zone), else: []
+  end
+
+  defp kept_days_left_out(key, zone) do
+    days = find_days_left_out(zone)
+    :persistent_term.put(key, days)
+    days
+  end
+
+  # The decades a zone's offset is scanned over, and the least a move across
+  # the date line changes it by: such a move is a whole day, and no change
+  # for daylight saving or of a zone's standard time comes near half of one.
+  # A move ahead stays in the zone's offset, so the decades are asked first
+  # and then the years of a decade that holds one.
+  @decades_scanned 1800..2090//10
+  @half_a_day div(@seconds_per_day, 2)
+
+  defp find_days_left_out(zone) do
+    for decade <- @decades_scanned,
+        moved_a_day_ahead?(zone, decade, decade + 10),
+        year <- decade..(decade + 9),
+        moved_a_day_ahead?(zone, year, year + 1),
+        day <- days_of(year),
+        left_out?(zone, day),
+        do: day
+  end
+
+  defp moved_a_day_ahead?(zone, from_year, to_year),
+    do: offset_at_start(zone, to_year) - offset_at_start(zone, from_year) >= @half_a_day
+
+  defp offset_at_start(zone, year) do
+    case period_at_utc(zone, :calendar.datetime_to_gregorian_seconds({{year, 1, 1}, {0, 0, 0}})) do
+      {:ok, period} -> total_offset(period)
+      {:error, _reason} -> 0
+    end
+  end
+
+  defp days_of(year) do
+    first = :calendar.datetime_to_gregorian_seconds({{year, 1, 1}, {0, 0, 0}})
+
+    for day <- 0..365,
+        {date, _midnight} =
+          :calendar.gregorian_seconds_to_datetime(first + day * @seconds_per_day),
+        elem(date, 0) == year,
+        do: date
+  end
+
+  # A day is left out where one gap holds its first reading and its last.
+  defp left_out?(zone, date) do
+    case gap_at(zone, {date, {0, 0, 0}}) do
+      nil -> false
+      gap -> gap == gap_at(zone, {date, {23, 59, 59}})
+    end
+  end
+
+  defp gap_at(zone, reading) do
+    case period_at_wall(zone, :calendar.datetime_to_gregorian_seconds(reading)) do
+      {:gap, {_before, starts}, {_after, ends}} -> {starts, ends}
+      _shown_or_not_known -> nil
+    end
+  end
+
+  @doc """
   The total UTC offset of a period in seconds — the standard offset
   plus any daylight-saving adjustment.
 

@@ -199,7 +199,27 @@ iex> Exception.message(error)
 iex> {:error, %Tempo.ZoneGapError{}} = Tempo.from_iso8601("2011-12-30T12:00:00[Pacific/Apia]")
 ```
 
-The day, and any hour or timestamp on it, is rejected in that zone. The same mechanism that catches DST gaps (falsehood #2) catches this one — the wall time is invalid in the IANA data and Tempo surfaces the error. The days on either side, `2011-12-29[Pacific/Apia]` and `2011-12-31[Pacific/Apia]`, are read.
+The day, and any hour or timestamp on it, is rejected in that zone. The same mechanism that catches DST gaps (falsehood #2) catches this one — the wall time is invalid in the IANA data and Tempo surfaces the error.
+
+**Tempo — the days on either side are neighbours:**
+
+```elixir
+iex> thursday = ~o"2011-12-29[Pacific/Apia]"
+iex> saturday = ~o"2011-12-31[Pacific/Apia]"
+
+iex> Tempo.shift(thursday, day: 1) == saturday
+true
+
+iex> Tempo.relation(thursday, saturday)
+:meets
+
+iex> Enum.count(~o"2011-12[Pacific/Apia]")
+30
+```
+
+> *"The day **after** Thursday the 29th is Saturday the 31st, and the one **meets** the other. December 2011 had **thirty days** in Samoa."*
+
+Nothing gives the day that is not there: a step that lands on it is the day after (the day before, where the step runs back), and a walk, a recurrence and a selection pass over it.
 
 ---
 

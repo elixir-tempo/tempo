@@ -66,6 +66,7 @@ defmodule Tempo.Interval do
   alias Tempo.Mask
   alias Tempo.Math
   alias Tempo.Qualification
+  alias Tempo.TimeZoneDatabase
   alias Tempo.UnanchoredError
   alias Tempo.UnitValues
 
@@ -1036,9 +1037,26 @@ defmodule Tempo.Interval do
   # a named zone is a unit of elapsed time, ending on the reading the wall
   # clock shows then (`Tempo.Math.add/2`): the hour a fall-back repeats
   # ends where its second occurrence begins, and the hour before a
-  # spring-forward gap ends on the gap's far side.
+  # spring-forward gap ends on the gap's far side. A day in a named zone
+  # ends on the next day the zone has: 29 December 2011 in Samoa ends where
+  # the 31st begins, the zone having left the 30th out.
   defp span_bounds(%Tempo{extended: %{zone_id: zone}} = tempo, time, unit, _calendar)
-       when is_binary(zone) and unit in [:hour, :minute, :second, :microsecond] do
+       when is_binary(zone) and unit in [:hour, :minute, :second, :microsecond],
+       do: bounds_by_the_clock(tempo, time, unit)
+
+  # Nearly every zone leaves no day out, and a day in one ends on the day
+  # after it as a day in no zone does.
+  defp span_bounds(%Tempo{extended: %{zone_id: zone}} = tempo, time, :day, calendar)
+       when is_binary(zone) do
+    if TimeZoneDatabase.days_left_out(zone) == [],
+      do: bounds_by_the_calendar(tempo, time, :day, calendar),
+      else: bounds_by_the_clock(tempo, time, :day)
+  end
+
+  defp span_bounds(tempo, time, unit, calendar),
+    do: bounds_by_the_calendar(tempo, time, unit, calendar)
+
+  defp bounds_by_the_clock(tempo, time, unit) do
     lower = %{tempo | time: time}
 
     case Math.add(lower, one_unit(unit, time)) do
@@ -1047,7 +1065,7 @@ defmodule Tempo.Interval do
     end
   end
 
-  defp span_bounds(tempo, time, unit, calendar) do
+  defp bounds_by_the_calendar(tempo, time, unit, calendar) do
     with {:ok, upper_time} <- Math.add_unit(time, unit, calendar) do
       {:ok, build_bounds(tempo, time, upper_time)}
     end

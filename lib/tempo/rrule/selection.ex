@@ -60,6 +60,7 @@ defmodule Tempo.RRule.Selection do
 
   alias Calendrical.Kday
   alias Tempo.Compare
+  alias Tempo.Enumeration.Zone
   alias Tempo.Event
   alias Tempo.EventError
   alias Tempo.Interval
@@ -150,6 +151,7 @@ defmodule Tempo.RRule.Selection do
       candidate
       |> apply_selection(selection ++ context, freq)
       |> with_units(units, Keyword.get(context, :keep_span, false))
+      |> on_days_the_zone_has()
     end)
   end
 
@@ -161,6 +163,21 @@ defmodule Tempo.RRule.Selection do
   # crash. Future phases replace this catch-all with a specific
   # error once every shape is accounted for.
   def apply(%Interval{} = candidate, _, _freq, _options), do: [candidate]
+
+  # A day its zone leaves out is no day to select: Samoa had no 30 December
+  # 2011, which the 30th of each month and the Fridays of that December
+  # would pick. A time of day on such a day is on no day either: a rule for
+  # Fridays at ten selects nothing in that week, where the reading moved a
+  # day on would be a Saturday's.
+  defp on_days_the_zone_has(occurrences) when is_list(occurrences),
+    do: Enum.reject(occurrences, &starts_on_a_day_left_out?/1)
+
+  defp on_days_the_zone_has({:error, _reason} = error), do: error
+
+  defp starts_on_a_day_left_out?(%Interval{from: %Tempo{} = from}),
+    do: Zone.on_a_day_left_out?(from)
+
+  defp starts_on_a_day_left_out?(_occurrence), do: false
 
   @doc """
   Returns whether a `repeat_rule` expands each candidate into points rather than only limiting the candidates it keeps.

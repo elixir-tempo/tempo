@@ -2136,7 +2136,7 @@ defmodule Tempo.Validation do
         :ok
 
       {:ok, first, last, written} ->
-        skipped_whole(gap_at(zone, first), gap_at(zone, last), written, zone)
+        skipped_whole(gap_at(zone, first), last, written, zone)
 
       :no_one_span ->
         :ok
@@ -2156,17 +2156,25 @@ defmodule Tempo.Validation do
     end
   end
 
-  defp skipped_whole({_starts, _ends} = gap, gap, written, zone) do
-    {:error,
-     ZoneGapError.exception(
-       wall_time: written,
-       zone_id: zone,
-       reason: :dst_gap,
-       detail: "it falls inside a daylight-saving or zone-transition gap"
-     )}
+  # A value is skipped whole where the gap that holds its first reading
+  # holds its last too, so the last is asked only where the first is in one:
+  # nearly every value is asked once.
+  defp skipped_whole(nil, _last, _written, _zone), do: :ok
+
+  defp skipped_whole(gap, last, written, zone) do
+    if gap_at(zone, last) == gap,
+      do: {:error, skipped_error(written, zone)},
+      else: :ok
   end
 
-  defp skipped_whole(_first_gap, _last_gap, _written, _zone), do: :ok
+  defp skipped_error(written, zone) do
+    ZoneGapError.exception(
+      wall_time: written,
+      zone_id: zone,
+      reason: :dst_gap,
+      detail: "it falls inside a daylight-saving or zone-transition gap"
+    )
+  end
 
   # The first and the last reading of the wall clock that a value spans,
   # and the value as it is written: one reading for a value written to the

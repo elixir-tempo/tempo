@@ -1028,19 +1028,36 @@ defmodule Tempo.Math do
 
   defp step_wall(tempo, calendar, zone, shift) do
     case add_wall(tempo, %Tempo.Duration{time: calendar}) do
-      %Tempo{} = stepped -> settle(stepped, zone, shift)
+      %Tempo{} = stepped -> settle(stepped, zone, shift, calendar)
       other -> other
     end
   end
 
   # A day, a month or a year names no reading of the clock; only a value
   # with a time of day can land in a gap or a fold.
-  defp settle(%Tempo{time: time} = stepped, zone, shift) do
-    if Keyword.has_key?(time, :hour) do
-      reading = TimeZoneDatabase.period_at_wall(zone, wall_reading(stepped))
-      settle_reading(stepped, shift, reading)
-    else
-      stepped
+  #
+  # A date lands in one gap: the day its zone leaves out (Samoa had no
+  # 30 December 2011). It is then the day after, or the day before where the
+  # step runs back, as the calendar there went from the 29th to the 31st. It
+  # was left on the day, which no value is read as.
+  defp settle(%Tempo{time: time} = stepped, zone, shift, step) do
+    cond do
+      Keyword.has_key?(time, :hour) ->
+        reading = TimeZoneDatabase.period_at_wall(zone, wall_reading(stepped))
+        settle_reading(stepped, shift, reading)
+
+      Zone.zone_status(stepped) == :gap ->
+        add_wall(stepped, %Tempo.Duration{time: [day: direction(step)]})
+
+      true ->
+        stepped
+    end
+  end
+
+  defp direction(step) do
+    case Enum.find(step, fn {_unit, amount} -> amount != 0 end) do
+      {_unit, amount} when amount < 0 -> -1
+      _forward -> 1
     end
   end
 

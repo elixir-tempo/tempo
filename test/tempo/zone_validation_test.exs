@@ -406,6 +406,23 @@ defmodule Tempo.ZoneValidationTest do
       assert {:ok, _day} = Tempo.in_zone(~o"2024-03-10", "America/New_York")
     end
 
+    test "is refused by at/2 and on/2, as it is when read" do
+      day = ~o"2024-03-10[America/New_York]"
+
+      assert {:error, %Tempo.ZoneGapError{}} = Tempo.at(day, ~o"T02")
+      assert {:error, %Tempo.ZoneGapError{}} = Tempo.at(day, ~o"T02:30")
+      assert {:error, %Tempo.ZoneGapError{}} = Tempo.on(~o"T02:30", day)
+      assert {:error, %Tempo.ZoneGapError{}} = Tempo.on(~o"30D", ~o"2011-12[Pacific/Apia]")
+
+      # An interval is placed end by end.
+      assert {:error, %Tempo.ZoneGapError{}} = Tempo.on(~o"T02/T05", day)
+
+      assert {:ok, _hour} = Tempo.at(day, ~o"T03")
+      assert {:ok, _minute} = Tempo.at(day, ~o"T01:30")
+      assert {:ok, _span} = Tempo.on(~o"T03/T05", day)
+      assert {:ok, _day} = Tempo.on(~o"29D", ~o"2011-12[Pacific/Apia]")
+    end
+
     test "is refused at an end of an interval and as a member of a set" do
       for text <- [
             "2024-03-10T02[America/New_York]/2024-03-10T05[America/New_York]",

@@ -4,7 +4,7 @@
 
 ### Breaking changes
 
-* A value whose every reading the clock skips in its zone is a `Tempo.ZoneGapError`, at an hour and a date as at a minute: the hour a spring-forward skips (`2026-03-29T02[Europe/Paris]`) and a day a zone left out (`2011-12-30[Pacific/Apia]`) were read, and ordered by their fields. `Tempo.new/1` and `Tempo.in_zone/2` return the error too, for a minute as well, where they held a value `from_iso8601/2` refuses.
+* A value whose every reading the clock skips in its zone is a `Tempo.ZoneGapError`, at an hour and a date as at a minute: the hour a spring-forward skips (`2026-03-29T02[Europe/Paris]`) and a day a zone left out (`2011-12-30[Pacific/Apia]`) were read, and ordered by their fields. `Tempo.new/1`, `Tempo.in_zone/2`, `Tempo.at/2` and `Tempo.on/2` return the error too, for a minute as well, where they held a value `from_iso8601/2` refuses.
 
 * A set of whole numbers written with no designator is a set of years only where each has four digits, as a year alone has: `{19,20}` is the centuries 19 and 20 and `{196,197}` two decades, as `[19,20]` and each member alone are, where they were the years 19 and 20, and `{1,2}` is an error. Years of fewer digits are written with the designator (`{19,20}Y`) or with four digits (`{0019,0020}`).
 
@@ -217,6 +217,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Added
 
+* `Tempo.TimeZoneDatabase.days_left_out/1` — the calendar days a zone's clock never showed, where the zone moved across the date line: 30 December 2011 in Samoa, 31 December 1844 in Manila. They are found once for each zone and kept.
+
 * `Tempo.RRule.parse/2` reads RFC 7529's `RSCALE` and `SKIP` for the Gregorian calendar: `SKIP=BACKWARD` keeps the last day of a month or a year without its start's day, each occurrence as long as the start is precise (`RSCALE=GREGORIAN;FREQ=MONTHLY;SKIP=BACKWARD` from 31 January lists 28 February), and `SKIP=OMIT` is RFC 5545's rule, where each was `{:error, {:unknown_rule_part, _}}`. `SKIP=FORWARD`, an `RSCALE` other than `GREGORIAN` and a `SKIP` with no `RSCALE` are reported, as `Tempo.JSCalendar.parse/2` reports them.
 
 * A group of a set (`2026Y{1,2}G3MU`, the first and the second groups of three months) converts to a span for each group and walks the values of each, a unit after it counted from each group's start, where `Tempo.to_interval/2` and `Enum` returned a `Tempo.ConversionError`. A group counted from the end (`{1..-1}G3MU`) is counted in what holds it, and one of several groups (`[1,2]G3MU`) is no one span, as a one-of set is none.
@@ -320,6 +322,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* Nothing gives a day its zone leaves out. In Samoa, which had no 30 December 2011, the 29th ends where the 31st begins and meets it, a step of days, months or years that lands on the 30th is the 31st (the 29th where it runs back), a recurrence has that occurrence on the 31st, once, and a walk, `Tempo.round/2` and `Tempo.select/2` pass over the day, where each gave a date that is then not read.
 
 * A recurrence of days or weeks from a time of day in a zone keeps that time of day after an occurrence the clock moves: `R4/2024-03-09T02:30[America/New_York]/P1D` is 02:30, 03:30 on the night clocks go forward, then 02:30 again, where every occurrence after that night was 03:30. A rule read from an RRULE (`FREQ=DAILY`) is so too.
 
