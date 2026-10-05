@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A week given to `Tempo.select/2` to select from a month, or from a day or a time within one, returns a `Tempo.ConversionError` whose `:reason` is `:not_built` and whose `:target` is `:week_of_month`, where `Tempo.select(~o"2026-06", ~o"-1W")` was `2026Y6M5W/6W`, a week of the month that no value is read as. Its walk yielded `2026Y6M5W1K`, a set operation on it was a `Tempo.ResolutionError` and its text named other dates; a week is still selected from a year and from a week, and a day of the week from any base.
+
 * A computed event with no date where a recurrence or a selection asks for it is an error, the new `Tempo.EventError`, which names the event and the year: `Tempo.to_interval(~o"R/../P1Y/FL(march-equinox)eN", within: ~o"0500Y")`, an equinox being computed from 1000 CE, and `(brigadoon)e`, a name no resolver knows, where each was no occurrence and `R2/0500Y/P1Y/FL(march-equinox)eN` was the equinoxes of 1000 and 1001. A registered `Tempo.Event.Resolver`'s `{:error, reason}` is the error's `:reason`, a zone on an event with no instant is one too, and a walk raises it.
 
 * A computed event is each of its days that falls in the period it is selected in, a year, a month or a week: `Tempo.select(~o"2026Y4M", ~o"L(easter)eN")` and the selection from ISO week 14 are 5 April 2026, where a month and a week selected nothing unless they started on the event. `R2/2026-01-05/P1M/FL(easter)eN` is the Easter of each month that has one, 5 April 2026 and 28 March 2027, where it was the 5th of a month when that was Easter (2026 and 2037); a daily or finer recurrence keeps the occurrences on the event's day, as before.
@@ -296,6 +298,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* A selector of `Tempo.select/2` written on another axis than its base selects the spans it names that start in the base: `Tempo.select(~o"2026-W25", ~o"15D")` and `Tempo.select(~o"2026-06", ~o"166O")` are 15 June 2026, where a day of a month from a week and a day of the year from a day were values of two axes (`2026Y25W15D`, `2026Y6M15D100O`), and a day of the year from a month, or a month and a day from a week, selected nothing. A week that runs across two months or two years selects in each, so `~o"1D"` from the week of 29 June is 1 July.
 
 * A constraint of `Tempo.select/2` names values among those its period has, as an integer index and a selection do: a count from the end that reaches past the period's start selects nothing (`Tempo.select(~o"2026-06", ~o"-45D")` was 17 June, the count taken from the end a second time), and a set or a range passes over a value the period lacks and keeps the rest (`~o"{1,30}D"` selects the 1st from February, where it selected nothing). A week a month does not have (`~o"25W"` from June) selects nothing, where it was a week no value names, and a value written twice (`~o"{1,-31}D"` from January) is selected once.
 

@@ -475,7 +475,7 @@ iex> Tempo.Interval.from(Tempo.IntervalSet.first(last_day_of_feb))
 
 > **`-1M`** on a year base is the **last month**. **`-1D`** on a month base is the **last day of that month** — **leap-aware** (Feb 29 in 2024, Feb 28 in 2026). **`-1W`** on a year base is the **last ISO week** (52 or 53 depending on year).
 
-The resolution is axis-aware: `-1W` on a month base gives the last week-of-month (4 or 5), while on a year base it gives the last ISO week-of-year (52 or 53). `-1O` (ordinal) on a year base is the year's last day; `-1K` is the week's last day-of-week.
+`-1W` on a year base is the last ISO week of the year (the 52nd or the 53rd), `-1O` (ordinal) the year's last day and `-1K` the week's last day of the week. A week selected from a month is the week of the month, which is not yet built: it returns a `Tempo.ConversionError` whose `:reason` is `:not_built`.
 
 Time-of-day units work the same way. `~o"-1H"` is hour 23, `~o"T-1M"` is minute 59, `~o"T-1S"` is second 59:
 

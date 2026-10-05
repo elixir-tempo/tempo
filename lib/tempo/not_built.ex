@@ -21,7 +21,8 @@ defmodule Tempo.NotBuilt do
   # `Calendrical.Reform.England` before 1751): no one span of the year. The
   # fifth is in every calendar but the Gregorian: an RRULE that steps or
   # selects by a month, a year, a week of the year or a day of one, which
-  # RFC 5545 counts in the Gregorian calendar.
+  # RFC 5545 counts in the Gregorian calendar. The sixth is in every calendar
+  # of months: a week selected from within a month, the week of the month.
 
   alias Tempo.{Compare, ConversionError, Duration, Interval, UnitValues}
 
@@ -221,6 +222,18 @@ defmodule Tempo.NotBuilt do
   end
 
   def selector(_selector, _base), do: :ok
+
+  @doc false
+  # A week selected from a period that is within a month: a month, a day of
+  # one or a time on it. A week after a month is the week of the month, which
+  # no value is read as and no operation takes: it was merged into a value of
+  # a year, a month and a week whose walk, whose set operations and whose
+  # text were each wrong. `selector` is what was to be merged onto `from`.
+  @spec week_of_month(list(), Tempo.t()) :: {:error, ConversionError.t()}
+  def week_of_month(selector, %Tempo{calendar: calendar} = from) when is_list(selector) do
+    asked = "the selection of #{inspect(selector)} from #{inspect(from)}"
+    {:error, error(asked, :week_of_month, Compare.effective_calendar(calendar))}
+  end
 
   @doc false
   # A step that reaches the day, from a value that holds several years or

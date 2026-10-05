@@ -154,7 +154,7 @@ They become one module with two questions, each asked of Calendrical and of noth
 
 * **The values a written value names among them** — a number, a count from the end, a range resolved end by end, a set: in order and once each, with what the period lacks either an error (reading a value) or passed over (a selection), as the caller asks.
 
-Validation, the walk, `select/2`, the selection and `explain/1` call it and hold no arithmetic of their own. `select/2` keeps one count of its own, the weeks of a month (`weeks_in_month/3`), which is the week-of-month item of `TODO.md`; and it still merges a constraint onto its base and reads the result as a value, so a constraint that is no selection is resolved by the reading of a value and not by the selection's resolver. Whether the two become one is open, and waits on the reading of a day with no month. It is verified in one place: its own property test against `Tempo.Matrix.Selections`' counting, in every calendar of the census.
+Validation, the walk, `select/2`, the selection and `explain/1` call it and hold no arithmetic of their own. `select/2` held one count of its own, the weeks of a month (`weeks_in_month/3`), until 2026-10-05, when a week selected from within a month became a named refusal (the week-of-month item of `TODO.md`); and it still merges a constraint onto its base and reads the result as a value, so a constraint that is no selection is resolved by the reading of a value and not by the selection's resolver. Whether the two become one is open, and waits on the reading of a day with no month. It is verified in one place: its own property test against `Tempo.Matrix.Selections`' counting, in every calendar of the census.
 
 ## Tasks
 

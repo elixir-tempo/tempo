@@ -321,8 +321,7 @@ defmodule Tempo.Select.Test do
     # Negative integers count from the end of their containing time
     # scale unit. `~o"-1M"` means "last month of year"; `~o"-1D"`
     # means "last day of year" on a year base and "last day of month"
-    # on a month base; `~o"-1W"` means "last week of year" or "last
-    # week of month" depending on base resolution.
+    # on a month base; `~o"-1W"` means "last week of year".
 
     test "`~o\"-1M\"` inspects without raising" do
       # Previously the parser interpreted `-1M` as a time-zone shift
@@ -394,32 +393,16 @@ defmodule Tempo.Select.Test do
       assert iv_2028.from.time[:week] == 52
     end
 
-    test "`1W` on a month base resolves as week-of-month" do
-      # Week-of-month is non-standard in ISO 8601 but Tempo accepts
-      # a `[year, month, week]` composite and materialises it as an
-      # N-week span within the month.
-      {:ok, set} = Tempo.select(~o"2026-06", ~o"1W")
-      [iv] = IntervalSet.members(set)
+    test "a week on a month base is the week of the month, which is not built" do
+      # A week after a month is a week of that month. No value is read as
+      # one, and what the merge gave (`2026Y6M1W/2W`) was walked, converted
+      # and compared wrongly, so it is refused by name until it is built.
+      for selector <- [~o"1W", ~o"-1W", ~o"25W"] do
+        assert {:error, %ConversionError{reason: :not_built, target: :week_of_month} = error} =
+                 Tempo.select(~o"2026-06", selector)
 
-      assert iv.from.time[:month] == 6
-      assert iv.from.time[:week] == 1
-    end
-
-    test "`-1W` on a month base resolves as last week-of-month" do
-      # Gregorian June has 30 days → 5 week-of-month slots.
-      {:ok, set} = Tempo.select(~o"2026-06", ~o"-1W")
-      [iv] = IntervalSet.members(set)
-
-      assert iv.from.time[:month] == 6
-      assert iv.from.time[:week] == 5
-    end
-
-    test "`-1W` on a February base resolves to week 4 (28-day month)" do
-      {:ok, set} = Tempo.select(~o"2026-02", ~o"-1W")
-      [iv] = IntervalSet.members(set)
-
-      assert iv.from.time[:month] == 2
-      assert iv.from.time[:week] == 4
+        assert Exception.message(error) =~ "a week of a month is not built"
+      end
     end
 
     test "`-1O` (ordinal-day) on a year base selects the last day of the year" do
@@ -1057,6 +1040,169 @@ defmodule Tempo.Select.Test do
         assert {text, spans(base, Tempo.from_iso8601!(text))} ==
                  {text, spans(base, Tempo.from_iso8601!("L#{text}N"))}
       end
+    end
+  end
+
+  describe "a selector on another axis than its base" do
+    # A date is written by its month and day, by its week or by its day of
+    # the year, and a selector written on another of those than its base
+    # selects the spans it names that start in the base. The merge kept the
+    # base's own units beside the selector's, so a day of the year selected
+    # from a day was `2026Y6M15D100O`, which no reader writes.
+    #
+    # The measure is `Date` alone: every day of the base is asked whether the
+    # selector names it, its day counted in its own month or year.
+
+    defp weeks_of(year) do
+      {^year, last} = :calendar.iso_week_number({year, 12, 28})
+      1..last
+    end
+
+    defp days_of_week(year, week),
+      do: for(day <- 0..6, do: Date.add(monday_of_week(year, week), day))
+
+    defp days_in_year(%Date{} = date), do: if(Date.leap_year?(date), do: 366, else: 365)
+
+    @days_of_month [
+      {"15D", [15]},
+      {"1D", [1]},
+      {"-1D", [-1]},
+      {"{1,31}D", [1, 31]},
+      {"{28..-1}D", [28..-1//1]}
+    ]
+
+    test "a day of a month, from a week" do
+      for year <- 2025..2027, week <- weeks_of(year), {text, written} <- @days_of_month do
+        expected =
+          for date <- days_of_week(year, week),
+              date.day in named_among(written, Date.days_in_month(date)),
+              do: {date, 1}
+
+        base = Tempo.from_iso8601!("#{year}Y#{week}W")
+        selected = spans(base, Tempo.from_iso8601!(text))
+
+        assert {year, week, text, selected} == {year, week, text, expected}
+      end
+    end
+
+    @months_and_days [
+      {"6M15D", [6], [15]},
+      {"1M1D", [1], [1]},
+      {"12M31D", [12], [31]},
+      {"2M29D", [2], [29]},
+      {"12M-1D", [12], [-1]},
+      {"{6,7}M{1,15}D", [6, 7], [1, 15]}
+    ]
+
+    test "a month and a day of it, from a week" do
+      for year <- 2025..2028, week <- weeks_of(year), {text, months, days} <- @months_and_days do
+        expected =
+          for date <- days_of_week(year, week),
+              date.month in months,
+              date.day in named_among(days, Date.days_in_month(date)),
+              do: {date, 1}
+
+        base = Tempo.from_iso8601!("#{year}Y#{week}W")
+        selected = spans(base, Tempo.from_iso8601!(text))
+
+        assert {year, week, text, selected} == {year, week, text, expected}
+      end
+    end
+
+    test "a month, from the week it starts in" do
+      for year <- 2025..2027, week <- weeks_of(year), month <- [1, 3, 7] do
+        expected =
+          for date <- days_of_week(year, week),
+              date.month == month and date.day == 1,
+              do: {date, Date.days_in_month(date)}
+
+        base = Tempo.from_iso8601!("#{year}Y#{week}W")
+        selected = spans(base, Tempo.from_iso8601!("#{month}M"))
+
+        assert {year, week, month, selected} == {year, week, month, expected}
+      end
+    end
+
+    @days_of_year [
+      {"166O", [166]},
+      {"1O", [1]},
+      {"-1O", [-1]},
+      {"{1,60,366}O", [1, 60, 366]},
+      {"{360..-1}O", [360..-1//1]}
+    ]
+
+    test "a day of the year, from a week" do
+      for year <- 2024..2027, week <- weeks_of(year), {text, written} <- @days_of_year do
+        expected =
+          for date <- days_of_week(year, week),
+              Date.day_of_year(date) in named_among(written, days_in_year(date)),
+              do: {date, 1}
+
+        base = Tempo.from_iso8601!("#{year}Y#{week}W")
+        selected = spans(base, Tempo.from_iso8601!(text))
+
+        assert {year, week, text, selected} == {year, week, text, expected}
+      end
+    end
+
+    test "a day of the year, from a month and from a day" do
+      for year <- 2024..2026, month <- 1..12, {text, written} <- @days_of_year do
+        days = Date.range(Date.new!(year, month, 1), Date.end_of_month(Date.new!(year, month, 1)))
+        named? = &(Date.day_of_year(&1) in named_among(written, days_in_year(&1)))
+
+        selector = Tempo.from_iso8601!(text)
+        from_month = spans(Tempo.from_iso8601!("#{year}Y#{month}M"), selector)
+
+        assert {year, month, text, from_month} ==
+                 {year, month, text, for(date <- days, named?.(date), do: {date, 1})}
+
+        # The first, the fifteenth and the last day of the month.
+        for date <- [Enum.at(days, 0), Enum.at(days, 14), Enum.at(days, -1)] do
+          from_day = spans(Tempo.from_date(date), selector)
+          expected = if named?.(date), do: [{date, 1}], else: []
+
+          assert {date, text, from_day} == {date, text, expected}
+        end
+      end
+    end
+
+    test "with a time of day, in a list and as the ends of a span" do
+      {:ok, set} = Tempo.select(~o"2026-W25", ~o"15DT10H")
+      assert Enum.map(IntervalSet.members(set), &Interval.from/1) == [~o"2026Y6M15DT10H"]
+
+      {:ok, set} = Tempo.select(~o"2026-06-15", ~o"166OT10H")
+      assert Enum.map(IntervalSet.members(set), &Interval.from/1) == [~o"2026Y6M15DT10H"]
+
+      # The 166th day of the year starts before ten o'clock on it.
+      assert spans(~o"2026-06-15T10", ~o"166O") == []
+
+      assert spans(~o"2026-W27", [~o"1D", ~o"-1D", ~o"183O"]) ==
+               [{~D[2026-06-30], 1}, {~D[2026-07-01], 1}, {~D[2026-07-02], 1}]
+
+      {:ok, by_day_of_year} = Interval.new(from: ~o"166O", to: ~o"168O")
+      assert spans(~o"2026-06", by_day_of_year) == [{~D[2026-06-15], 2}]
+
+      {:ok, by_day} = Interval.new(from: ~o"15D", to: ~o"17D")
+      assert spans(~o"2026-W25", by_day) == [{~D[2026-06-15], 2}]
+    end
+
+    test "a week from a month, or from a day or a time within one, is not built" do
+      for base <- [~o"2026-06", ~o"2026-06-15", ~o"2026-06-15T10", ~o"2026-06/2026-09"],
+          selector <- [~o"25W", ~o"25W1K", [~o"15D", ~o"1W"]] do
+        assert {:error, %ConversionError{reason: :not_built, target: :week_of_month}} =
+                 Tempo.select(base, selector)
+      end
+
+      assert {:error, %ConversionError{reason: :not_built}} =
+               Tempo.select(~o"2026-06/..", ~o"1W")
+    end
+
+    test "a week is selected from a year and from a week, and a weekday from any base" do
+      assert spans(~o"2026", ~o"25W") == [{~D[2026-06-15], 7}]
+      assert spans(~o"2026-W25", ~o"25W") == [{~D[2026-06-15], 7}]
+      assert spans(~o"2026-W25", ~o"26W") == []
+      assert spans(~o"2026", ~o"25W3K") == [{~D[2026-06-17], 1}]
+      assert spans(~o"2026-06-15/2026-06-18", ~o"3K") == [{~D[2026-06-17], 1}]
     end
   end
 

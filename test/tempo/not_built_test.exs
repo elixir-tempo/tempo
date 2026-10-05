@@ -448,4 +448,44 @@ defmodule Tempo.NotBuiltTest do
                {:ok, "COUNT=2;FREQ=MONTHLY;BYDAY=WE"}
     end
   end
+
+  # A week after a month is a week of that month, which no value is read as.
+  # `Tempo.select/2` merged one onto a month into a value of a year, a month
+  # and a week: its walk yielded `2026Y6M1W1K`, a set operation on it was a
+  # `ResolutionError` and its text said "Jun 29, 2025 – Jun 4, 2026".
+  describe "a week selected from within a month" do
+    test "is refused from a month, a day and a time of day, in any calendar of months" do
+      for {base, calendar} <- [
+            {"2026Y6M", Calendrical.Gregorian},
+            {"2026Y6M15D", Calendrical.Gregorian},
+            {"2026Y6M15DT10H", Calendrical.Gregorian},
+            {"5787Y6M", Hebrew},
+            {"1750Y6M", March25}
+          ],
+          week <- ["1W", "-1W", "25W", "25W3K"] do
+        answer = Tempo.select(read(base, calendar), read(week, calendar))
+        assert refused?(answer, :week_of_month, calendar), "#{week} from #{base}"
+      end
+    end
+
+    test "names what was asked for and the calendar" do
+      {:error, error} = Tempo.select(~o"2026-06", ~o"-1W")
+
+      assert Exception.message(error) =~ "the selection of [week: -1] from ~o\"2026Y6M\""
+
+      assert Exception.message(error) =~
+               "a week of a month is not built for Calendrical.Gregorian"
+    end
+
+    test "a week is selected from a year and from a week, and a weekday from a month" do
+      {:ok, weeks} = Tempo.select(~o"2026", ~o"-1W")
+      assert Enum.map(IntervalSet.members(weeks), &Interval.from/1) == [~o"2026Y53W"]
+
+      {:ok, same} = Tempo.select(~o"2026-W25", ~o"25W")
+      assert Enum.map(IntervalSet.members(same), &Interval.from/1) == [~o"2026Y25W"]
+
+      {:ok, mondays} = Tempo.select(~o"2026-06", ~o"1K")
+      assert IntervalSet.count(mondays) == 5
+    end
+  end
 end

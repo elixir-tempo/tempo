@@ -127,12 +127,10 @@ defmodule Tempo.Select do
   ```
 
   The resolution is calendar-aware — `Tempo.select(~o"2024-02",
-  ~o"-1D")` returns Feb 29 because 2024 is a leap year. It is
-  also axis-aware: `-1W` on a year base uses ISO
-  weeks-in-year (52 or 53); `-1W` on a month base uses weeks of
-  that month (4 or 5). `-1M` always refers to the calendar
-  month; `-1K` to the week's last day-of-week; `-1O` to the
-  year's last ordinal day.
+  ~o"-1D")` returns Feb 29 because 2024 is a leap year. `-1W` is
+  the last ISO week of a year (the 52nd or the 53rd), `-1M` its
+  last month, `-1K` the week's last day and `-1O` the year's last
+  day.
 
   Time-of-day components (`:hour`, `:minute`, `:second`,
   `:day_of_week`) have fixed ranges and resolve at **parse time**
@@ -159,6 +157,25 @@ defmodule Tempo.Select do
   selects the 1st from February and `~o"{25..35}D"` the 25th to the 30th
   from June; and a count from the end that reaches past the period's
   start, such as `~o"-45D"` from a month, selects nothing.
+
+  ## A selector on another axis than its base
+
+  A date is written by its month and day, by its week, or by its day of
+  the year, and a selector may be written on another of those than the
+  base is. What it selects are the spans it names that start in the base:
+
+  ```elixir
+  Tempo.select(~o"2026-W25", ~o"15D")    # 15 June, which is in ISO week 25
+  Tempo.select(~o"2026-W27", ~o"1D")     # 1 July: the week starts on 29 June
+  Tempo.select(~o"2026-06", ~o"166O")    # 15 June, the 166th day of 2026
+  Tempo.select(~o"2026-06-15", ~o"100O") # nothing: the 100th day is 10 April
+  ```
+
+  A week selected from a month, or from a day or a time within one, is
+  the week of the month, which Tempo does not yet build: it returns a
+  `Tempo.ConversionError` whose `:reason` is `:not_built` and whose
+  `:target` is `:week_of_month`. Select a week from a year or from a
+  week, and a day of the week (`~o"1K"`) from any base.
 
   ## A calendar of weeks
 
@@ -1127,9 +1144,14 @@ defmodule Tempo.Select do
   # back to point projection of the from-endpoint.
   defp project_onto_base(%Interval{} = base, %Interval{from: %Tempo{} = c_from} = constraint) do
     case span_endpoint(constraint) do
-      {:to, %Tempo{} = c_to} -> project_span(base, c_from, c_to)
-      {:duration, %Duration{} = duration} -> project_span_duration(base, c_from, duration)
-      :point -> project_onto_base(base, c_from)
+      {:to, %Tempo{} = c_to} ->
+        on_each_period(base, c_from.time, &project_span(&1, c_from, c_to))
+
+      {:duration, %Duration{} = duration} ->
+        on_each_period(base, c_from.time, &project_span_duration(&1, c_from, duration))
+
+      :point ->
+        project_onto_base(base, c_from)
     end
   end
 
@@ -1140,12 +1162,93 @@ defmodule Tempo.Select do
   defp after_day_of_week(c_time), do: Keyword.delete(c_time, :day_of_week)
 
   defp on_each_day(days, []), do: Enum.to_list(days)
+  defp on_each_day(days, units), do: gathered(days, &project_merge(&1, units))
 
-  defp on_each_day(days, units) do
-    Enum.reduce_while(days, [], fn day, selected ->
-      case project_merge(day, units) do
+  # What `project` gives each period in turn, as one list, or the first error.
+  defp gathered(periods, project) do
+    Enum.reduce_while(periods, [], fn period, selected ->
+      case project.(period) do
         {:error, _reason} = error -> {:halt, error}
-        on_the_day -> {:cont, selected ++ (on_the_day |> List.wrap() |> Enum.reject(&is_nil/1))}
+        projected -> {:cont, selected ++ (projected |> List.wrap() |> Enum.reject(&is_nil/1))}
+      end
+    end)
+  end
+
+  # A constraint is merged onto the start of its period, which is right where
+  # it is written in the units the period's own start is: a day of a month
+  # onto a month, a day of the year onto a year. One written on another axis
+  # names no value there (`2026Y6M15D100O`), so it is merged onto the periods
+  # of its own axis that the period touches, and what does not start in the
+  # period is dropped as any selection is (`select_in_period/2`):
+  #
+  # * a day of the year onto the calendar years a month, a week or a day
+  #   touches, so `166O` is 15 June from June and from its week;
+  #
+  # * a month or a day of one onto the months a week touches, so `1D` is
+  #   1 July from the week that starts on 29 June.
+  #
+  # A week under a month is the week of the month, which is not built
+  # (`Tempo.NotBuilt.week_of_month/2`). A calendar of weeks has no other
+  # axis, and refuses a month or a day of one where it is merged.
+  defp on_each_period(%Interval{} = base, c_time, project) do
+    case periods_on_axis(base, c_time) do
+      {:ok, [^base]} -> project.(base)
+      {:ok, periods} -> periods |> gathered(project) |> each_once()
+      {:error, _not_built} = error -> error
+    end
+  end
+
+  defp each_once(projected) when is_list(projected), do: Enum.uniq(projected)
+  defp each_once({:error, _reason} = error), do: error
+
+  defp periods_on_axis(%Interval{from: %Tempo{time: time, calendar: calendar}} = base, c_time) do
+    if Tempo.week_based_calendar?(Compare.effective_calendar(calendar)),
+      do: {:ok, [base]},
+      else: periods_on_axis(written_on(c_time), written_on(time), base, c_time)
+  end
+
+  defp periods_on_axis(:ordinal, period_axis, base, _c_time) when period_axis in [:month, :week],
+    do: periods_touched(base, &[year: &1.year])
+
+  defp periods_on_axis(:month, :week, base, _c_time),
+    do: periods_touched(base, &[year: &1.year, month: &1.month])
+
+  defp periods_on_axis(:week, :month, %Interval{from: from}, c_time),
+    do: NotBuilt.week_of_month(c_time, from)
+
+  defp periods_on_axis(_axis, _period_axis, base, _c_time), do: {:ok, [base]}
+
+  # The axis a time list is written on below its year: the day of the year,
+  # the week, or the month and its day. A year alone, a day of the week and a
+  # time of day are on none, and go with any.
+  defp written_on(time) do
+    cond do
+      List.keymember?(time, :day_of_year, 0) -> :ordinal
+      List.keymember?(time, :week, 0) -> :week
+      List.keymember?(time, :month, 0) or List.keymember?(time, :day, 0) -> :month
+      true -> :none
+    end
+  end
+
+  # The periods a span touches, of the units `named` gives a date: those of
+  # the day it starts on and of the day it ends on. A span that ends where
+  # such a period begins touches it at no day, and what is merged onto that
+  # one starts at or after the span's end.
+  defp periods_touched(%Interval{from: %Tempo{calendar: calendar} = from, to: to}, named) do
+    with {:ok, %Date{} = first} <- tempo_to_date(from, calendar),
+         {:ok, %Date{} = last} <- end_date(to, calendar) do
+      [first, last] |> Enum.map(named) |> Enum.uniq() |> periods_named(from)
+    else
+      _no_one_day -> {:ok, []}
+    end
+  end
+
+  # Each time list as the period of the value it is, or the first error.
+  defp periods_named(times, %Tempo{} = from) do
+    Enum.reduce_while(times, {:ok, []}, fn time, {:ok, periods} ->
+      case period_of(%{from | time: time}) do
+        {:ok, period} -> {:cont, {:ok, periods ++ [period]}}
+        {:error, _reason} = error -> {:halt, error}
       end
     end)
   end
@@ -1360,7 +1463,10 @@ defmodule Tempo.Select do
 
   defp validated_merge(:none, _base_from), do: nil
 
-  defp project_merge(%Interval{} = base, c_time) do
+  defp project_merge(%Interval{} = base, c_time),
+    do: on_each_period(base, c_time, &project_merged(&1, c_time))
+
+  defp project_merged(%Interval{} = base, c_time) do
     with %Tempo{} = merged <- merged_constraint_tempo(base, c_time) do
       materialise_projection(merged, c_time)
     end
@@ -1430,10 +1536,10 @@ defmodule Tempo.Select do
   # `[year, month, week]` — which Tempo's materialiser cannot
   # resolve coherently.
   #
-  # User-specified units (at or coarser than base's resolution) are
-  # always kept, even off-axis — on a month base, a week selector
-  # should honour the base's month context, yielding Tempo's
-  # non-standard "week-of-month" materialisation.
+  # The units the base's own start is written in are kept: a
+  # constraint on another axis than those is merged onto periods of
+  # its own axis first (`on_each_period/3`), so none is off its axis
+  # here.
   defp prune_off_axis_defaults(base_time, c_time, base_resolution) do
     base_res_idx = unit_index(base_resolution) || -1
     axis = axis_for_constraint(c_time)
@@ -1605,23 +1711,7 @@ defmodule Tempo.Select do
       else: UnitValues.in_period(:day_of_year, context, calendar)
   end
 
-  defp unit_values(:week, context, calendar) do
-    case {Keyword.get(context, :year), Keyword.get(context, :month)} do
-      {year, month} when is_integer(year) and is_integer(month) ->
-        {:ok, 1..weeks_in_month(year, month, calendar)//1}
-
-      _no_month ->
-        UnitValues.in_period(:week, context, calendar)
-    end
-  end
-
   defp unit_values(unit, context, calendar), do: UnitValues.in_period(unit, context, calendar)
-
-  # Week-of-month is non-standard: the number of whole or partial weeks that
-  # fit in the month, so that `~o"-1W"` on a month is its last week (the
-  # fourth or the fifth) and not the year's, which lies outside the month.
-  # See "Week-of-month selections" in `TODO.md`.
-  defp weeks_in_month(year, month, calendar), do: div(calendar.days_in_month(year, month) + 6, 7)
 
   # After materialisation, `Tempo.to_interval/1` may pad the
   # endpoints with `hour: 0` (the natural start-of-day representation
