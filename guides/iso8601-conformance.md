@@ -454,6 +454,8 @@ Tempo.to_interval(~o"R/../P1Y/FL11MLL1K1IN/P9DN2K1IN", within: ~o"2026")       #
 
 The spec's worked examples resolve as written: `~o"R/../P1Y/FLLL2K2IN/P10DN4K2IN"` is "the 2nd Thursday within the ten days from the 2nd Tuesday" (§12.11 Example 3), and `~o"R/../P1Y/FLL4M4D/-P20DN7K-2IN"` is "the 2nd Sunday before April 4" (Example 7). A terminal window with no inner selectors — `~o"R/../P1Y/FLL3K4IN/P5DN"`, "the 4th Wednesday for 5 days" — yields one interval per period spanning its whole duration.
 
+A window holds what is selected within it whole. One of no length (`/P0D`) is no interval, and one shorter than a unit selected within it holds none: `LLL1K1IN/PT12HN1K1IN` asks for a Monday in twelve hours. Both are a `Tempo.ParseError` when the value is read, the window measured in the units a duration measures exactly (a week is seven days, a day twenty-four hours); a window written in months or years is as long as the calendar makes it where it starts. A window of hours that selects a time of day is read, and the times it selects are those that start within it: of the twelve hours from a Monday, `T{9,13}H` is that Monday's 09:00.
+
 A window can carry an occurrence out of the period that produced it, and the `:within` window keeps each occurrence in the year it lands in. A holiday observed on the previous Friday when it falls on a Saturday — `FLLL1M1D6KN/-P7DN5K1IN` — lands on 31 December 2021 for New Year's Day 2022:
 
 ```elixir

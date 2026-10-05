@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A selection's window (ISO 8601-2 §12.10) that has no length, or is shorter than a unit selected within it, is a `Tempo.ParseError` when the value is read: `LLL1K1IN/PT12HN1K1IN`, a Monday in twelve hours, and `LL45DN/P0DN`, where the first selected the day the window starts on and the second gave an interval of no length. A window is measured in the units a duration measures exactly, so one written in months or years is not judged, and a window of hours that selects a time of day is read.
+
 * A day with no month, selected in a year, is a day of the year, as the value `2026Y45D` is read: `2026YL45DN`, `Tempo.select(~o"2026", ~o"45D")` and `R/2026/P1Y/FL45DN` are 14 February and `2026YL-1DN` is 31 December, where the day was read in the year's first month, so the 45th selected nothing and the last day was 31 January. A recurrence's start that names a month still gives the day that month (`R/2026-03-10/P1Y/FL15DN` is each 15 March), `Tempo.RRule.to_string/1` writes the day of the year as `BYYEARDAY`, and `Tempo.explain/1` says "the 45th day of the year".
 
 * A week given to `Tempo.select/2` to select from a month, or from a day or a time within one, returns a `Tempo.ConversionError` whose `:reason` is `:not_built` and whose `:target` is `:week_of_month`, where `Tempo.select(~o"2026-06", ~o"-1W")` was `2026Y6M5W/6W`, a week of the month that no value is read as. Its walk yielded `2026Y6M5W1K`, a set operation on it was a `Tempo.ResolutionError` and its text named other dates; a week is still selected from a year and from a week, and a day of the week from any base.
@@ -300,6 +302,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* A time of day selected within a window is selected where it starts within the window: of the twelve hours from a Monday, `LLL1K1IN/PT12HNT{9,13}HN` is that Monday's 09:00, where it was 09:00 and 13:00 on the Monday and on the day before. A window that crosses midnight selects on both days (01:00 the next morning in the four hours from 22:00), and a position counts what is left.
 
 * A range of years that holds a year before year 1 is walked and converted as each of its years: `Enum.to_list(~o"{-5..-3}Y")` is the three years and `~o"{-1..1}Y"` the years either side of year 0, where each was a `Tempo.ConversionError` that took the range's negative end for a count from the end. A set of such years (`{-5,-3}Y`) was listed already.
 

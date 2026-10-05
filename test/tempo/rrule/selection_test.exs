@@ -927,6 +927,109 @@ defmodule Tempo.RRule.SelectionTest do
       assert gregorian_dates(rule, ~o"2007Y") == ["2007-01-01"]
     end
 
+    test "a window shorter than a unit selected within it is refused when it is read" do
+      # Twelve hours hold no day: they were walked as the day the window
+      # starts on and the day before it, and its Monday was the first.
+      for {text, shorter_than} <- [
+            {"R/../P1Y/FL11MLL1K1IN/PT12HN1K1IN", "12 hours is shorter than a day"},
+            {"R/../P1Y/FL11MLL1K1IN/PT23H59MN1KN", "23 hours 59 minutes is shorter than a day"},
+            {"R/../P1Y/FL11MLL1K1IN/P6DN46WN", "6 days is shorter than a week"},
+            {"R/../P1Y/FL11MLL1K1IN/PT59MNT1HN", "59 minutes is shorter than an hour"},
+            {"R/../P1Y/FL11MLL1K1IN/-PT12HN1KN", "12 hours is shorter than a day"},
+            {"2026YL11MLL1K1IN/PT12HN1K1IN", "12 hours is shorter than a day"}
+          ] do
+        assert {:error, %Tempo.ParseError{} = error} = Tempo.from_iso8601(text)
+        assert {text, Exception.message(error) =~ shorter_than} == {text, true}
+      end
+    end
+
+    test "a window of no length is refused when it is read" do
+      for text <- ["R/../P1Y/FL11MLL1K1IN/P0DN1K1IN", "2026YLL45DN/P0DN", "2026YLL45DN/PT0SN"] do
+        assert {:error, %Tempo.ParseError{} = error} = Tempo.from_iso8601(text)
+        assert {text, Exception.message(error) =~ "has no length"} == {text, true}
+      end
+    end
+
+    test "a window as long as what is selected within it is read" do
+      # A day in a day, a week in seven days, an hour in sixty minutes.
+      assert holiday_dates("R/../P1Y/FL11MLL1K1IN/P1DN1K1IN") == ["2026-11-02"]
+      assert holiday_dates("R/../P1Y/FL11MLL1K1IN/PT24HN1K1IN") == ["2026-11-02"]
+      assert holiday_dates("R/../P1Y/FL11MLL1K1IN/P7DN45W1KN") == ["2026-11-02"]
+
+      assert occurrence_spans("R/../P1Y/FL11MLL1K1IN/PT60MNT0HN", ~o"2026Y") == [
+               "2026Y11M2DT0H/T1H"
+             ]
+
+      # However its direction is written.
+      assert {:ok, _rule} = Tempo.from_iso8601("R/../P1Y/FLLL(easter)eN/P-7DN5K-1IN")
+
+      # A window written in months or years is as long as the calendar makes
+      # it where it starts, and is not judged when it is read.
+      assert {:ok, _rule} = Tempo.from_iso8601("R/../P1Y/FLLL1K1IN/P1MN45WN")
+    end
+
+    # The first Monday of November, as a `Date`.
+    defp first_monday_of_november(year) do
+      first = Date.new!(year, 11, 1)
+      Date.add(first, Integer.mod(1 - Date.day_of_week(first), 7))
+    end
+
+    test "a time of day is selected where it starts within the window" do
+      # The measure is `NaiveDateTime` alone: each hour named, on each day the
+      # window could touch, is kept where it is at or after the window's
+      # start and before its end. The hours of the day before the window were
+      # selected with it, and so were hours after its end.
+      for year <- 2024..2027,
+          window_hours <- [1, 12, 23, 24, 25, 36, 48],
+          hours <- [[0], [9, 13], [0, 11, 12, 23]] do
+        monday = first_monday_of_november(year)
+        start = NaiveDateTime.new!(monday, ~T[00:00:00])
+
+        expected =
+          for day <- -1..2,
+              hour <- hours,
+              at = NaiveDateTime.add(start, day * 24 + hour, :hour),
+              NaiveDateTime.diff(at, start, :hour) in 0..(window_hours - 1)//1,
+              do: {NaiveDateTime.to_date(at), at.hour}
+
+        text = "R/../P1Y/FL11MLL1K1IN/PT#{window_hours}HNT{#{Enum.join(hours, ",")}}HN"
+        {:ok, set} = Tempo.to_interval(Tempo.from_iso8601!(text), within: ~o"2024/2028")
+
+        selected =
+          for member <- IntervalSet.members(set),
+              from = Interval.from(member),
+              Tempo.year(from) == year do
+            {:ok, date} = from |> Tempo.trunc(:day) |> Tempo.to_date()
+            {date, Tempo.hour(from)}
+          end
+
+        assert {year, window_hours, hours, selected} == {year, window_hours, hours, expected}
+      end
+    end
+
+    test "a time of day is selected within a window that runs backward, or across midnight" do
+      # The twelve hours before the first Monday of November 2026.
+      assert occurrence_spans("R/../P1Y/FL11MLL1K1IN/-PT12HNT{9,13}HN", ~o"2026Y") ==
+               ["2026Y11M1DT13H/T14H"]
+
+      # The four hours from 22:00 each night: 23:00 that night and 01:00 the
+      # next morning, and neither 21:00 nor 02:00.
+      assert occurrence_spans(
+               "R/2026-01-01/P1D/FLLLT22HN/PT4HNT{21,23,1,2}HN",
+               ~o"2026-01-01/2026-01-03"
+             ) == ["2026Y1M1DT23H/2DT0H", "2026Y1M2DT1H/T2H", "2026Y1M2DT23H/3DT0H"]
+    end
+
+    test "a position counts the times of day that are within the window" do
+      # Thirty-six hours from the Monday: 09:00 and 13:00 that day and 09:00
+      # the next, of which the last is the Tuesday's.
+      assert occurrence_spans("R/../P1Y/FL11MLL1K1IN/PT36HNT{9,13}H-1IN", ~o"2026Y") ==
+               ["2026Y11M3DT9H/T10H"]
+
+      assert occurrence_spans("R/../P1Y/FL11MLL1K1IN/PT12HNT{9,10}H1IN", ~o"2026Y") ==
+               ["2026Y11M2DT9H/T10H"]
+    end
+
     test "a windowed selection round-trips through to_iso8601/1" do
       for iso <- [
             "R/../P1Y/FLLL2K2IN/P10DN4K2IN",

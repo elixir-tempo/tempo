@@ -8,9 +8,18 @@ defmodule Tempo.Iso8601.Parser do
   alias Tempo.Qualification
 
   def parse(tokens, calendar) do
-    case backwards_range(tokens) do
+    case refused(tokens) do
       nil -> parse_tokens(tokens, calendar)
-      range -> {:error, ParseError.exception(reason: backwards_reason(range))}
+      reason -> {:error, ParseError.exception(reason: reason)}
+    end
+  end
+
+  # What the tokens say that is no value, wherever it is written: the reason
+  # it is refused, or `nil`.
+  defp refused(tokens) do
+    case backwards_range(tokens) do
+      nil -> short_window(tokens)
+      range -> backwards_reason(range)
     end
   end
 
@@ -60,6 +69,111 @@ defmodule Tempo.Iso8601.Parser do
   defp backwards_reason({:range, [{_from_tag, from}, {_to_tag, to}]}) do
     "The range #{inspect(from)}..#{inspect(to)} is written backwards: a range runs from " <>
       "its first value up to its last"
+  end
+
+  # A selection with a time interval (ISO 8601-2 §12.10) makes each date it
+  # selects the start of an interval of the window's duration, and selectors
+  # written after the window pick within it. A window of no length is no
+  # interval, and one shorter than a unit selected within it holds none of
+  # them whole: twelve hours hold no day, so `LLL1K1IN/PT12HN1K1IN` selects a
+  # Monday in a window that has none. Both are refused here, where the value
+  # is read, in a value and in a rule. A window of twelve hours that selects
+  # hours is read.
+  #
+  # A window is held to the units a duration measures exactly: a week is
+  # seven days, a day twenty-four hours. One written in months or years is as
+  # long as the calendar makes it where it starts, and is not judged here.
+  defp short_window({:selection, parts}) when is_list(parts),
+    do: window_reason(parts) || short_window(parts)
+
+  defp short_window(tokens) when is_list(tokens), do: Enum.find_value(tokens, &short_window/1)
+
+  defp short_window(token) when is_tuple(token),
+    do: token |> Tuple.to_list() |> short_window()
+
+  defp short_window(_token), do: nil
+
+  defp window_reason(parts) do
+    case Enum.split_while(parts, &(not match?({:interval, _window}, &1))) do
+      {_before, [{:interval, window} | within]} when is_list(window) ->
+        window |> List.keyfind(:duration, 0) |> window_shortfall(within)
+
+      _no_window ->
+        nil
+    end
+  end
+
+  defp window_shortfall({:duration, time}, within) when is_list(time) do
+    amounts = for {unit, amount} <- time, unit != :direction, do: {unit, amount}
+
+    if Enum.all?(amounts, fn {_unit, amount} -> amount == 0 end),
+      do: no_length_reason(amounts),
+      else: shorter_reason(amounts, measured_seconds(amounts), within)
+  end
+
+  defp window_shortfall(_no_duration, _within), do: nil
+
+  @measured_seconds %{week: 604_800, day: 86_400, hour: 3_600, minute: 60, second: 1}
+
+  # The units a selector within a window picks by, as the unit one of them
+  # is as long as.
+  @selected_by %{
+    week: :week,
+    calendar_week: :week,
+    day: :day,
+    day_of_week: :day,
+    day_of_year: :day,
+    hour: :hour,
+    minute: :minute,
+    second: :second
+  }
+
+  # A duration's length in seconds where every unit it is written in is
+  # measured exactly, and `nil` where one is not.
+  defp measured_seconds(amounts) do
+    Enum.reduce_while(amounts, 0, fn {unit, amount}, seconds ->
+      case Map.fetch(@measured_seconds, unit) do
+        {:ok, each} when is_number(amount) -> {:cont, seconds + amount * each}
+        _not_measured -> {:halt, nil}
+      end
+    end)
+  end
+
+  defp shorter_reason(_amounts, nil, _within), do: nil
+
+  defp shorter_reason(amounts, seconds, within) do
+    Enum.find_value(within, fn
+      {unit, _value} -> shorter_than(amounts, seconds, Map.get(@selected_by, unit))
+      _no_unit -> nil
+    end)
+  end
+
+  defp shorter_than(_amounts, _seconds, nil), do: nil
+
+  # A window that runs backward is as long as one that runs forward, however
+  # its direction is written (`-P7D`, `P-7D`).
+  defp shorter_than(amounts, seconds, unit) do
+    if abs(seconds) < Map.fetch!(@measured_seconds, unit) do
+      "A selection's window of #{duration_words(amounts)} is shorter than #{one(unit)}, and " <>
+        "#{one(unit)} is selected within it: a window holds what is selected in it whole " <>
+        "(ISO 8601-2 §12.10)"
+    end
+  end
+
+  defp one(:hour), do: "an hour"
+  defp one(unit), do: "a #{unit}"
+
+  defp no_length_reason(amounts) do
+    "A selection's window of #{duration_words(amounts)} has no length: each date selected " <>
+      "starts an interval of the window's duration (ISO 8601-2 §12.10), and an interval of " <>
+      "no length is none"
+  end
+
+  defp duration_words(amounts) do
+    Enum.map_join(amounts, " ", fn
+      {unit, 1} -> "1 #{unit}"
+      {unit, amount} -> "#{amount} #{unit}s"
+    end)
   end
 
   defp parse_tokens(tokens, calendar) do

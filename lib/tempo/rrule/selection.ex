@@ -606,11 +606,56 @@ defmodule Tempo.RRule.Selection do
 
   defp selected_in_windows(starts, duration, selectors, wkst) do
     each_candidate(starts, fn start ->
-      case start |> window_days(duration) |> apply_window_selectors(selectors, wkst) do
+      case select_in_window(start, duration, selectors, wkst) do
         {:error, _reason} = error -> error
         occurrences -> {:ok, occurrences}
       end
     end)
+  end
+
+  # Selectors that pick days pick among the days of the window. Those that
+  # pick a time of day pick it on every day the window touches, and a time is
+  # the window's where it starts within it: of the twelve hours from a
+  # Monday, 09:00 is that Monday's and 13:00 is none, and of the four hours
+  # from 22:00, 01:00 is the next day's. A position (`I`) counts what is left.
+  defp select_in_window(start, duration, selectors, wkst) do
+    if Enum.any?(selectors, &picks_time_of_day?/1),
+      do: select_times_in_window(start, duration, selectors, wkst),
+      else: start |> window_days(duration, :whole) |> apply_window_selectors(selectors, wkst)
+  end
+
+  defp picks_time_of_day?({unit, _values}), do: unit in [:hour, :minute, :second]
+
+  defp select_times_in_window(start, duration, selectors, wkst) do
+    {positions, parts} = Enum.split_with(selectors, &match?({:instance, _positions}, &1))
+
+    case start
+         |> window_days(duration, :touched)
+         |> apply_window_selectors(parts, selectors, wkst) do
+      {:error, _reason} = error ->
+        error
+
+      times ->
+        times
+        |> starting_in_window(start, duration)
+        |> apply_window_selectors(positions, selectors, wkst)
+    end
+  end
+
+  defp starting_in_window(occurrences, %Interval{from: %Tempo{} = from}, duration) do
+    case Tempo.shift(from, duration) do
+      %Tempo{} = shifted ->
+        {lo, hi} = window_ends(from, shifted)
+        Enum.filter(occurrences, &starts_within?(&1, lo, hi))
+
+      _no_end ->
+        occurrences
+    end
+  end
+
+  defp starts_within?(%Interval{from: %Tempo{} = from}, lo, hi) do
+    match?({:ok, order} when order != :earlier, Compare.order(from, lo)) and
+      match?({:ok, :earlier}, Compare.order(from, hi))
   end
 
   # Each candidate's occurrences in turn, or the first error one of them is.
@@ -629,8 +674,13 @@ defmodule Tempo.RRule.Selection do
   # Resolve the outer selectors within a window's enumerated days. Day scope
   # makes a weekday a LIMIT (keep matching days) and leaves the position (`I`)
   # to pick the Nth survivor.
-  defp apply_window_selectors(day_candidates, outer, wkst) do
-    outer
+  defp apply_window_selectors(day_candidates, outer, wkst),
+    do: apply_window_selectors(day_candidates, outer, outer, wkst)
+
+  # `selectors` are those of `outer` to apply, each reading the rest of
+  # `outer` as the parts beside it.
+  defp apply_window_selectors(day_candidates, selectors, outer, wkst) do
+    selectors
     |> Enum.sort_by(&application_order_key/1)
     |> Enum.reduce_while(day_candidates, fn entry, candidates ->
       case apply_entry(entry, candidates, :day, outer, wkst) do
@@ -644,11 +694,13 @@ defmodule Tempo.RRule.Selection do
   # extends backward), as a day-resolution candidate in the start's calendar.
   # Half-open — `lo` the earlier of start and shifted endpoint, `hi` the
   # later — so a forward duration keeps the start and a backward one
-  # excludes it. A window within one day (`lo == hi`) is `lo` and the day
-  # before, as `Date.range/2` infers for a reversed range: see TODO.md.
+  # excludes it. The `:whole` days are those from `lo` up to `hi`, and the one
+  # day of a window within a day; the days `:touched` reach the day the
+  # window ends within, for a time of day to be picked on.
   defp window_days(
          %Interval{from: %Tempo{calendar: calendar, time: time} = from} = start,
-         %Tempo.Duration{} = duration
+         %Tempo.Duration{} = duration,
+         which
        ) do
     with {:ok, start_date} <- date_of(time, calendar),
          %Tempo{time: shifted_time} <- Tempo.shift(from, duration),
@@ -656,7 +708,7 @@ defmodule Tempo.RRule.Selection do
       {lo, hi} = window_bounds(start_date, shifted_date)
 
       days =
-        for date <- window_dates(lo, hi) do
+        for date <- window_dates(lo, hi, which) do
           {date.year, date.month, date.day, date}
         end
 
@@ -666,17 +718,23 @@ defmodule Tempo.RRule.Selection do
     end
   end
 
-  # The dates from `lo` up to, not including, `hi`, each the day
-  # Calendrical gives after the one before.
-  defp window_dates(lo, hi) do
-    if Compare.compare_days(lo, hi) == :eq do
-      [lo, Calendrical.previous(lo, :day)]
-    else
-      lo
-      |> Stream.iterate(&Calendrical.next(&1, :day))
-      |> Enum.take_while(&(Compare.compare_days(&1, hi) == :lt))
+  # The dates from `lo` up to `hi`, each the day Calendrical gives after the
+  # one before: not including `hi` for the whole days, and including it for
+  # the days touched. A window within one day has that day.
+  defp window_dates(lo, hi, which) do
+    case {Compare.compare_days(lo, hi), which} do
+      {:eq, _which} ->
+        [lo]
+
+      {_before, :whole} ->
+        lo |> each_day_from() |> Enum.take_while(&(Compare.compare_days(&1, hi) == :lt))
+
+      {_before, :touched} ->
+        lo |> each_day_from() |> Enum.take_while(&(Compare.compare_days(&1, hi) != :gt))
     end
   end
+
+  defp each_day_from(date), do: Stream.iterate(date, &Calendrical.next(&1, :day))
 
   # Half-open `[lo, hi)`: `lo` is the earlier of start / shifted endpoint, `hi`
   # the later. A forward duration keeps the start; a backward one excludes it.
