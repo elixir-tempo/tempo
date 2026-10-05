@@ -1159,12 +1159,10 @@ defmodule Tempo.Select.Test do
       end
     end
 
-    test "a month, from the week it starts in" do
+    test "a month, which is coarser than a week, keeps the week that starts in it" do
       for year <- 2025..2027, week <- weeks_of(year), month <- [1, 3, 7] do
-        expected =
-          for date <- days_of_week(year, week),
-              date.month == month and date.day == 1,
-              do: {date, Date.days_in_month(date)}
+        start = monday_of_week(year, week)
+        expected = if start.month == month, do: [{start, 7}], else: []
 
         base = Tempo.from_iso8601!("#{year}Y#{week}W")
         selected = spans(base, Tempo.from_iso8601!("#{month}M"))
@@ -1223,8 +1221,11 @@ defmodule Tempo.Select.Test do
       {:ok, set} = Tempo.select(~o"2026-06-15", ~o"166OT10H")
       assert Enum.map(IntervalSet.members(set), &Interval.from/1) == [~o"2026Y6M15DT10H"]
 
-      # The 166th day of the year starts before ten o'clock on it.
-      assert spans(~o"2026-06-15T10", ~o"166O") == []
+      # A day of the year is coarser than an hour, and keeps the hour of it.
+      {:ok, set} = Tempo.select(~o"2026-06-15T10", ~o"166O")
+      assert Enum.map(IntervalSet.members(set), &Interval.from/1) == [~o"2026Y6M15DT10H"]
+      assert {:ok, set} = Tempo.select(~o"2026-06-15T10", ~o"100O")
+      assert IntervalSet.count(set) == 0
 
       assert spans(~o"2026-W27", [~o"1D", ~o"-1D", ~o"183O"]) ==
                [{~D[2026-06-30], 1}, {~D[2026-07-01], 1}, {~D[2026-07-02], 1}]
@@ -1236,9 +1237,9 @@ defmodule Tempo.Select.Test do
       assert spans(~o"2026-W25", by_day) == [{~D[2026-06-15], 2}]
     end
 
-    test "a week from a month, or from a day or a time within one, is not built" do
-      for base <- [~o"2026-06", ~o"2026-06-15", ~o"2026-06-15T10", ~o"2026-06/2026-09"],
-          selector <- [~o"25W", ~o"25W1K", [~o"15D", ~o"1W"]] do
+    test "a week from a month is the week of the month, which is not built" do
+      for base <- [~o"2026-06", ~o"2026-06/2026-09"],
+          selector <- [~o"25W", ~o"25W1K", ~o"L25WN", [~o"15D", ~o"1W"]] do
         assert {:error, %ConversionError{reason: :not_built, target: :week_of_month}} =
                  Tempo.select(base, selector)
       end
@@ -1253,6 +1254,91 @@ defmodule Tempo.Select.Test do
       assert spans(~o"2026-W25", ~o"26W") == []
       assert spans(~o"2026", ~o"25W3K") == [{~D[2026-06-17], 1}]
       assert spans(~o"2026-06-15/2026-06-18", ~o"3K") == [{~D[2026-06-17], 1}]
+    end
+  end
+
+  describe "a selector as coarse as its period, or coarser" do
+    # A filter (decided 2026-10-05): the period is kept where it starts in
+    # what the selector names, as a weekday selector keeps a day. A
+    # constraint was merged onto the period, so `~o"6M"` selected nothing from
+    # a day, and from the first of June the month of June.
+    #
+    # The measure is `Date` and `:calendar` alone: each day of the span is
+    # asked whether the selector names its month, its week or its year.
+
+    @days Date.range(~D[2026-05-25], ~D[2026-07-09])
+
+    defp kept(named?), do: for(date <- @days, named?.(date), do: {date, 1})
+
+    defp week_of(date), do: date |> Date.to_erl() |> :calendar.iso_week_number() |> elem(1)
+
+    test "keeps each day that is in the month, the week or the year it names" do
+      days = ~o"2026-05-25/2026-07-10"
+
+      for form <- ["", "L"] do
+        selector = fn text ->
+          Tempo.from_iso8601!(if form == "L", do: "L#{text}N", else: text)
+        end
+
+        assert spans(days, selector.("6M")) == kept(&(&1.month == 6))
+        assert spans(days, selector.("{5,7}M")) == kept(&(&1.month in [5, 7]))
+        assert spans(days, selector.("25W")) == kept(&(week_of(&1) == 25))
+        assert spans(days, selector.("{22..24}W")) == kept(&(week_of(&1) in 22..24))
+        assert spans(days, selector.("15D")) == kept(&(&1.day == 15))
+        assert spans(days, selector.("6M15D")) == [{~D[2026-06-15], 1}]
+        assert spans(days, selector.("7M15D")) == []
+      end
+
+      assert spans(days, ~o"2026Y") == kept(fn _date -> true end)
+      assert spans(days, ~o"2027Y") == []
+    end
+
+    test "keeps each hour of the day it names" do
+      hours = ~o"2026-06-14T22/2026-06-15T03"
+
+      for selector <- [~o"15D", ~o"6M15D", ~o"L15DN", ~o"25W"] do
+        {:ok, set} = Tempo.select(hours, selector)
+
+        assert Enum.map(IntervalSet.members(set), &Interval.from/1) ==
+                 [~o"2026Y6M15DT0H", ~o"2026Y6M15DT1H", ~o"2026Y6M15DT2H"]
+      end
+
+      assert {:ok, set} = Tempo.select(hours, ~o"T0H")
+      assert Enum.map(IntervalSet.members(set), &Interval.from/1) == [~o"2026Y6M15DT0H"]
+    end
+
+    test "keeps a week by the month it starts in, and a week of its own number" do
+      # ISO week 27 of 2026 starts on 29 June.
+      assert spans(~o"2026-W25", ~o"6M") == [{~D[2026-06-15], 7}]
+      assert spans(~o"2026-W27", ~o"6M") == [{~D[2026-06-29], 7}]
+      assert spans(~o"2026-W27", ~o"7M") == []
+      assert spans(~o"2026-W25", ~o"25W") == [{~D[2026-06-15], 7}]
+    end
+
+    test "the period kept is the period, as it is written" do
+      {:ok, first_of_june} = Tempo.to_interval(~o"2026-06-01")
+
+      for selector <- [~o"6M", ~o"L6MN", ~o"23W", ~o"2026Y"] do
+        {:ok, set} = Tempo.select(~o"2026-06-01", selector)
+        assert {selector, IntervalSet.members(set)} == {selector, [first_of_june]}
+      end
+
+      {:ok, week} = Tempo.to_interval(~o"2026-W25")
+      {:ok, set} = Tempo.select(~o"2026-W25", ~o"L6MN")
+      assert IntervalSet.members(set) == [week]
+    end
+
+    test "units finer than the period are placed in the period the coarser ones keep" do
+      days = ~o"2026-05-31/2026-06-02"
+
+      {:ok, set} = Tempo.select(days, ~o"6MT10H")
+      assert Enum.map(IntervalSet.members(set), &Interval.from/1) == [~o"2026Y6M1DT10H"]
+
+      {:ok, set} = Tempo.select(days, ~o"23WT10H")
+      assert Enum.map(IntervalSet.members(set), &Interval.from/1) == [~o"2026Y6M1DT10H"]
+
+      # A month and a day of it, from a week that runs across two months.
+      assert spans(~o"2026-W27", ~o"7M1D") == [{~D[2026-07-01], 1}]
     end
   end
 

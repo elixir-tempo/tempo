@@ -465,17 +465,25 @@ defmodule Tempo.NotBuiltTest do
   # and a week: its walk yielded `2026Y6M1W1K`, a set operation on it was a
   # `ResolutionError` and its text said "Jun 29, 2025 – Jun 4, 2026".
   describe "a week selected from within a month" do
-    test "is refused from a month, a day and a time of day, in any calendar of months" do
+    test "is refused from a month, in any calendar of months" do
       for {base, calendar} <- [
             {"2026Y6M", Calendrical.Gregorian},
-            {"2026Y6M15D", Calendrical.Gregorian},
-            {"2026Y6M15DT10H", Calendrical.Gregorian},
             {"5787Y6M", Hebrew},
             {"1750Y6M", March25}
           ],
           week <- ["1W", "-1W", "25W", "25W3K"] do
         answer = Tempo.select(read(base, calendar), read(week, calendar))
         assert refused?(answer, :week_of_month, calendar), "#{week} from #{base}"
+      end
+    end
+
+    test "from a day or a time of day is a filter by the week of the year" do
+      # 15 June 2026 is in ISO week 25.
+      for base <- ["2026Y6M15D", "2026Y6M15DT10H"] do
+        {:ok, kept} = Tempo.select(read(base, Calendrical.Gregorian), ~o"25W")
+        {:ok, dropped} = Tempo.select(read(base, Calendrical.Gregorian), ~o"26W")
+
+        assert {base, IntervalSet.count(kept), IntervalSet.count(dropped)} == {base, 1, 0}
       end
     end
 

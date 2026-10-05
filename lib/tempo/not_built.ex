@@ -227,11 +227,12 @@ defmodule Tempo.NotBuilt do
   def selector(_selector, _base), do: :ok
 
   @doc false
-  # A week selected from a period that is within a month: a month, a day of
-  # one or a time on it. A week after a month is the week of the month, which
-  # no value is read as and no operation takes: it was merged into a value of
-  # a year, a month and a week whose walk, whose set operations and whose
-  # text were each wrong. `selector` is what was to be merged onto `from`.
+  # A week selected from a month. A week after a month is the week of the
+  # month, which no value is read as and no operation takes: it was merged
+  # into a value of a year, a month and a week whose walk, whose set
+  # operations and whose text were each wrong. `selector` is what was to be
+  # merged onto `from`. A week selected from a day or a time of day is as
+  # coarse as its period or coarser, and is a filter by the week of the year.
   @spec week_of_month(list(), Tempo.t()) :: {:error, ConversionError.t()}
   def week_of_month(selector, %Tempo{calendar: calendar} = from) when is_list(selector) do
     asked = "the selection of #{inspect(selector)} from #{inspect(from)}"

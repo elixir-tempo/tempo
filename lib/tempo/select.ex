@@ -182,11 +182,28 @@ defmodule Tempo.Select do
   Tempo.select(~o"2026-06-15", ~o"100O") # nothing: the 100th day is 10 April
   ```
 
-  A week selected from a month, or from a day or a time within one, is
-  the week of the month, which Tempo does not yet build: it returns a
-  `Tempo.ConversionError` whose `:reason` is `:not_built` and whose
-  `:target` is `:week_of_month`. Select a week from a year or from a
-  week, and a day of the week (`~o"1K"`) from any base.
+  A week selected from a month is the week of the month, which Tempo
+  does not yet build: it returns a `Tempo.ConversionError` whose
+  `:reason` is `:not_built` and whose `:target` is `:week_of_month`.
+  Select a week from a year or from a week, and a day of the week
+  (`~o"1K"`) from any base.
+
+  ## A selector as coarse as its base, or coarser
+
+  A selector's units that are as coarse as the period they are selected
+  from, or coarser, are a filter: the period is kept where it starts in
+  what they name, as a weekday selector keeps a day.
+
+  ```elixir
+  {:ok, days} = Tempo.select(~o"2026-05-25/2026-07-10", Tempo.workdays(:US))
+  {:ok, june} = Tempo.select(days, ~o"6M")      # the workdays that are in June
+  {:ok, week} = Tempo.select(days, ~o"25W")     # those in ISO week 25
+  ```
+
+  > *"The workdays of the span that are in June. Those in week 25."*
+
+  Units finer than the period are placed within the periods the coarser
+  ones keep: `~o"6MT10H"` is ten o'clock on each day that is in June.
 
   ## A calendar of weeks
 
@@ -842,7 +859,7 @@ defmodule Tempo.Select do
   defp select_period(period, %Tempo{time: time} = constraint) do
     with :ok <- one_calendar(period, constraint) do
       case selection_parts(time) do
-        :none -> select_projections(period, [constraint])
+        :none -> select_constraint(period, constraint)
         {[], selection} -> select_by_rule(period, %{constraint | time: [selection: selection]})
         {units, selection} -> select_narrowed(period, constraint, units, selection)
         :unreadable -> {:error, unrecognised_selector(constraint)}
@@ -871,20 +888,125 @@ defmodule Tempo.Select do
   defp select_period(_period, {:error, _reason} = error), do: error
   defp select_period(_period, selector), do: {:error, unrecognised_selector(selector)}
 
+  # A constraint's units that are as coarse as the period or coarser are a
+  # filter (decided 2026-10-05): they keep the period where it starts in what
+  # they name, as a selection of the same units does and a weekday selector
+  # does a day, and are resolved as one. `~o"6M"` keeps each day that is in
+  # June, where it was merged onto the day into the month of June. Units
+  # finer than the period are merged onto it and name spans within it.
+  #
+  # A constraint that holds both is filtered by the first and merged with the
+  # second. A week is the one period that runs across a month or a year, so a
+  # month and a day of it selected from a week are merged whole, onto each
+  # month the week touches (`on_each_period/3`).
+  defp select_constraint(
+         %Interval{from: %Tempo{} = from} = period,
+         %Tempo{time: time} = constraint
+       ) do
+    {unit, _precision} = Tempo.resolution(from)
+
+    case filter_and_finer(time, unit) do
+      {[], _all_finer} -> select_projections(period, [constraint])
+      {coarse, []} -> select_by_rule(period, %{constraint | time: [selection: coarse]})
+      {_coarse, _finer} when unit == :week -> select_projections(period, [constraint])
+      {coarse, finer} -> select_filtered(period, constraint, coarse, finer)
+    end
+  end
+
+  defp select_filtered(period, constraint, coarse, finer) do
+    with {:ok, %IntervalSet{} = kept} <-
+           select_by_rule(period, %{constraint | time: [selection: coarse]}) do
+      if IntervalSet.count(kept) == 0,
+        do: {:ok, kept},
+        else: select_projections(period, [%{constraint | time: finer}])
+    end
+  end
+
+  # A unit's place from the coarsest, for telling a constraint's units from
+  # its period's.
+  @coarseness %{
+    year: 0,
+    month: 1,
+    week: 2,
+    day: 3,
+    day_of_year: 3,
+    day_of_week: 3,
+    hour: 4,
+    minute: 5,
+    second: 6
+  }
+
+  # A constraint's units as those no finer than `unit` and those finer. One
+  # that holds what a filter cannot count (a mask, a fraction, a group) is
+  # all merged.
+  defp filter_and_finer(time, unit) do
+    with {:ok, period_place} <- Map.fetch(@coarseness, unit),
+         true <- Enum.all?(time, &counted_unit?/1) do
+      Enum.split_with(time, fn {constraint_unit, _value} ->
+        Map.fetch!(@coarseness, constraint_unit) <= period_place
+      end)
+    else
+      _all_merged -> {[], time}
+    end
+  end
+
+  defp counted_unit?({unit, value}), do: is_map_key(@coarseness, unit) and counted?(value)
+  defp counted_unit?(_other), do: false
+
   # An ISO 8601-2 selection — a computed event, a §12.10 window, any
   # `L…N` — is a recurrence's rule, and what it selects in a period is that
   # recurrence's occurrences there at the period's own cadence: Easter in
   # a year, the first Monday in a month.
   defp select_by_rule(%Interval{from: %Tempo{} = from} = period, rule) do
     {unit, _precision} = Tempo.resolution(from)
+    freq = cadence_unit(unit)
 
     with :ok <- no_week_of_month(rule, unit, from) do
-      cadence = %Duration{time: [{cadence_unit(unit), 1}]}
       rule = in_calendar_of(rule, from)
-      recurrence = %Interval{recurrence: :infinity, duration: cadence, repeat_rule: rule}
 
-      Tempo.to_interval_set(recurrence, within: span_selected_in(period, rule))
+      if Selection.expands?(rule, freq),
+        do: occurrences_in(period, rule, freq),
+        else: kept_or_dropped(period, rule, freq)
     end
+  end
+
+  # What a rule that makes points within its period selects there: the
+  # occurrences, in the period, of the recurrence it is the rule of.
+  defp occurrences_in(period, rule, freq) do
+    cadence = %Duration{time: [{freq, 1}]}
+    recurrence = %Interval{recurrence: :infinity, duration: cadence, repeat_rule: rule}
+
+    Tempo.to_interval_set(recurrence, within: span_selected_in(period, rule))
+  end
+
+  # A rule that only keeps or drops its period is asked of the period itself,
+  # the candidate the resolver answers for: no recurrence is walked, so a
+  # span of many periods costs each of them one question, and the period kept
+  # is the period as it is written.
+  defp kept_or_dropped(
+         %Interval{from: %Tempo{calendar: calendar} = from} = period,
+         %Tempo{time: [selection: selection]} = rule,
+         freq
+       ) do
+    with :ok <- filters_in(selection, from, calendar) do
+      case Selection.apply(period, rule, freq) do
+        {:error, _reason} = error -> error
+        [] -> IntervalSet.new([], coalesce: false)
+        [_kept | _] -> IntervalSet.new([period], coalesce: false)
+      end
+    end
+  end
+
+  defp kept_or_dropped(period, rule, freq), do: occurrences_in(period, rule, freq)
+
+  # What a merged constraint is asked before it is merged
+  # (`merged_constraint_tempo/2`): a calendar of weeks has no month to
+  # filter by, and a selector Tempo does not yet answer for in the period's
+  # calendar is refused, and named.
+  defp filters_in(selection, from, calendar) do
+    if Validation.written_in_another_calendar?(selection, calendar),
+      do: {:error, selects_by_month_error(calendar, selection)},
+      else: NotBuilt.selector(selection, from)
   end
 
   # A week selected from a month is the week of the month, which is refused
@@ -933,7 +1055,7 @@ defmodule Tempo.Select do
     rule = %{constraint | time: [selection: selection]}
 
     with {:ok, %IntervalSet{} = narrowed} <-
-           select_projections(period, [%{constraint | time: units}]) do
+           select_constraint(period, %{constraint | time: units}) do
       narrowed
       |> IntervalSet.members()
       |> collect(&rule_members(&1, rule))
@@ -1271,8 +1393,11 @@ defmodule Tempo.Select do
   #   1 July from the week that starts on 29 June.
   #
   # A week under a month is the week of the month, which is not built
-  # (`Tempo.NotBuilt.week_of_month/2`). A calendar of weeks has no other
-  # axis, and refuses a month or a day of one where it is merged.
+  # (`Tempo.NotBuilt.week_of_month/2`): a week merged onto a month, or with
+  # finer units onto a period within one. A week alone selected from a day or
+  # a time is a filter and is not merged (`select_constraint/2`). A calendar
+  # of weeks has no other axis, and refuses a month or a day of one where it
+  # is merged.
   defp on_each_period(%Interval{} = base, c_time, project) do
     case periods_on_axis(base, c_time) do
       {:ok, [^base]} -> project.(base)
