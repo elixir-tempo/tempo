@@ -2060,11 +2060,15 @@ defmodule Tempo.Validation do
   * The value is a bare `%Tempo{}` (Interval/Set values are
     composed of Tempos and checked via recursion).
 
-  * The value has year, month, day, hour, minute (fully anchored
-    at least to the minute). A coarser value is not checked: an hour
-    the clock skips, or a day or a month whose first reading it skips,
-    is read with the offset before the gap, as the time that long
-    after the clock changed (`Tempo.Compare.to_utc_seconds/1`).
+  * The value is a date, or a date with a time of day to the hour,
+    the minute or the second, each unit one whole number. It is
+    refused where the clock skips every reading it spans (decided
+    2026-10-06): a minute inside the gap, the hour a spring-forward
+    skips, a day a zone leaves out. A value the clock skips part of
+    (a day or a month whose first hour is skipped, the hour of a
+    half-hour change) is not refused: it is read with the offset
+    before the gap, as the time that long after the clock changed
+    (`Tempo.Compare.to_utc_seconds/1`).
 
   * The value carries an IANA zone id on `extended.zone_id`.
 
@@ -2107,8 +2111,18 @@ defmodule Tempo.Validation do
 
   defp zone_id(_), do: nil
 
+  # A value names no time in its zone where the clock skips every reading
+  # it spans: a minute or a second inside a gap, the hour a spring-forward
+  # skips, and the day a zone leaves out when it moves across the date line
+  # (Samoa had no 30 December 2011). Its first and its last reading are
+  # asked, and it is refused where one gap holds both.
+  #
+  # A value the clock skips only part of is some time: the hour of a
+  # half-hour change (Lord Howe Island), and the day or the month whose
+  # first hour is skipped where clocks go forward at midnight. It is read
+  # with the offset before the gap (`Tempo.Compare.to_utc_seconds/1`).
   defp check_wall_time_in_zone(%Tempo{time: time}, zone) do
-    case fully_anchored_datetime(time) do
+    case wall_readings(time) do
       # Pre-common-era wall times cannot fall into a zone-transition
       # gap — standardised time (and every IANA rule) begins many
       # centuries later, so local mean time applies throughout. The
@@ -2118,64 +2132,80 @@ defmodule Tempo.Validation do
       # like `~o"2022-06-15T10:00[Europe/Paris][u-ca=hebrew]"` — the
       # units read as Hebrew year 2022, ≈ 1739 BCE Gregorian — must
       # validate cleanly, not crash.
-      {:ok, {{year, _month, _day}, _time}} when year < 1 ->
+      {:ok, {{year, _month, _day}, _time}, _last, _written} when year < 1 ->
         :ok
 
-      {:ok, {{year, month, day}, {hour, minute, second}} = datetime} ->
-        wall = :calendar.datetime_to_gregorian_seconds(datetime)
+      {:ok, first, last, written} ->
+        skipped_whole(gap_at(zone, first), gap_at(zone, last), written, zone)
 
-        case TimeZoneDatabase.period_at_wall(zone, wall) do
-          {:gap, _before, _after} ->
-            {:error,
-             ZoneGapError.exception(
-               wall_time:
-                 "#{year}-#{pad2(month)}-#{pad2(day)}T#{pad2(hour)}:#{pad2(minute)}:#{pad2(second)}",
-               zone_id: zone,
-               reason: :dst_gap,
-               detail: "it falls inside a daylight-saving or zone-transition gap"
-             )}
-
-          _ok_ambiguous_or_no_database ->
-            # `{:ok, _}` = unambiguous. `{:ambiguous, _, _}` = fall-back
-            # ambiguity, accepted silently (the caller can disambiguate
-            # with an explicit offset). `{:error, _}` = no configured
-            # database or unknown zone — nothing to check against.
-            :ok
-        end
-
-      :not_fully_anchored ->
+      :no_one_span ->
         :ok
     end
   end
 
-  # The zone-existence check only fires when the value is fully
-  # anchored down to the minute. A coarser one ("2024-03-10",
-  # "2024-03-10T02") can start in a gap, or lie wholly in one, and is
-  # read with the offset before the gap.
-  defp fully_anchored_datetime(time) do
-    with year when is_integer(year) <- unit_value(time, :year),
-         month when is_integer(month) <- unit_value(time, :month),
-         day when is_integer(day) <- unit_value(time, :day),
-         hour when is_integer(hour) <- unit_value(time, :hour),
-         minute when is_integer(minute) <- unit_value(time, :minute) do
-      second = integer_second(unit_value(time, :second) || 0)
-      {:ok, {{year, month, day}, {hour, minute, second}}}
-    else
-      _ -> :not_fully_anchored
+  # The gap a reading of the wall clock falls in, or `nil`: a reading the
+  # clock shows, once or twice (a fall-back's repeated hour is accepted, and
+  # an explicit offset tells its two readings apart), and one there is no
+  # database or no such zone to ask of.
+  defp gap_at(zone, {date, {_hour, _minute, _second} = time}) do
+    wall = :calendar.datetime_to_gregorian_seconds({date, time})
+
+    case TimeZoneDatabase.period_at_wall(zone, wall) do
+      {:gap, {_before, starts}, {_after, ends}} -> {starts, ends}
+      _shown_or_not_known -> nil
     end
   end
 
-  # A unit's value, or `nil` where it is absent. A group of a set is held as
-  # three elements (`{:month, {:group, …}, 3}`), which `Keyword.get/2` raises
-  # on, and is no one value to read.
-  defp unit_value(time, unit) do
-    case List.keyfind(time, unit, 0) do
-      {^unit, value} -> value
-      _absent_or_a_group_of_a_set -> nil
-    end
+  defp skipped_whole({_starts, _ends} = gap, gap, written, zone) do
+    {:error,
+     ZoneGapError.exception(
+       wall_time: written,
+       zone_id: zone,
+       reason: :dst_gap,
+       detail: "it falls inside a daylight-saving or zone-transition gap"
+     )}
   end
 
-  defp integer_second(s) when is_integer(s), do: s
-  defp integer_second(s) when is_float(s), do: trunc(s)
-  defp integer_second(_), do: 0
+  defp skipped_whole(_first_gap, _last_gap, _written, _zone), do: :ok
+
+  # The first and the last reading of the wall clock that a value spans,
+  # and the value as it is written: one reading for a value written to the
+  # minute or the second, the hour's for one written to the hour, the day's
+  # for a date. A coarser value, and one that holds a set, a mask or a group
+  # in a unit, is no one span that a gap could hold.
+  defp wall_readings(time) do
+    if Enum.all?(time, &one_reading?/1),
+      do: dated_readings(time),
+      else: :no_one_span
+  end
+
+  @wall_units [:year, :month, :day, :hour, :minute, :second]
+
+  defp one_reading?({unit, value}) when unit in @wall_units and is_integer(value), do: true
+  defp one_reading?({:microsecond, {_value, _precision}}), do: true
+  defp one_reading?(_a_set_a_mask_or_a_group), do: false
+
+  defp dated_readings([{:year, year}, {:month, month}, {:day, day} | clock]),
+    do: clock_readings({year, month, day}, List.keydelete(clock, :microsecond, 0))
+
+  defp dated_readings(_no_date), do: :no_one_span
+
+  defp clock_readings({year, month, day} = date, []) do
+    {:ok, {date, {0, 0, 0}}, {date, {23, 59, 59}}, "#{year}-#{pad2(month)}-#{pad2(day)}"}
+  end
+
+  defp clock_readings(date, hour: hour) do
+    {:ok, {date, {hour, 0, 0}}, {date, {hour, 59, 59}}, "#{written_date(date)}T#{pad2(hour)}"}
+  end
+
+  defp clock_readings(date, [{:hour, hour}, {:minute, minute} | finer]) do
+    second = Keyword.get(finer, :second, 0)
+    reading = {date, {hour, minute, second}}
+
+    {:ok, reading, reading, "#{written_date(date)}T#{pad2(hour)}:#{pad2(minute)}:#{pad2(second)}"}
+  end
+
+  defp clock_readings(_date, _other_units), do: :no_one_span
+
+  defp written_date({year, month, day}), do: "#{year}-#{pad2(month)}-#{pad2(day)}"
 end

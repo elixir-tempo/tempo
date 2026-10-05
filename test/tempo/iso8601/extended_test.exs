@@ -280,9 +280,12 @@ defmodule Tempo.Iso8601.Extended.Test do
       assert {:ok, _tempo} = Tempo.from_iso8601("2022-01-01T00:00:00[!America/New_York]")
     end
 
-    test "elective zone with a disagreeing offset is accepted (offset authoritative)" do
-      assert {:ok, _tempo} =
+    test "elective zone with a disagreeing offset is accepted, and read in the zone" do
+      assert {:ok, tempo} =
                Tempo.from_iso8601("2022-01-01T00:00:00+05:00[America/New_York]")
+
+      assert Tempo.relation(tempo, Tempo.from_iso8601!("2022-01-01T00:00:00[America/New_York]")) ==
+               :equals
     end
 
     test "strict: true is a superset — it rejects an elective disagreement too" do

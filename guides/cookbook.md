@@ -1160,12 +1160,14 @@ iex> Tempo.from_iso8601("2024-03-10T02:30:00[America/New_York]")
 ### Samoa skipping the international date line, 2011
 
 ```elixir
-iex> Tempo.from_iso8601("2011-09-24T12:00:00[Pacific/Apia]")
-{:error,
- "Wall time 2011-09-24T12:00:00 does not exist in \"Pacific/Apia\" — it falls inside a daylight-saving or zone-transition gap."}
+iex> {:error, error} = Tempo.from_iso8601("2011-12-30[Pacific/Apia]")
+iex> Exception.message(error)
+"Wall time 2011-12-30 does not exist in \"Pacific/Apia\" (it falls inside a daylight-saving or zone-transition gap)."
+
+iex> {:error, %Tempo.ZoneGapError{}} = Tempo.from_iso8601("2011-12-30T12:00:00[Pacific/Apia]")
 ```
 
-> In 2011, Samoa shifted from east of the international date line to west of it — their timeline **skipped forward 25 hours**. Tempo consults the time zone database for the exact gap boundaries. (Current IANA data has the gap spanning Sep 24 03:00 → Sep 25 04:00 local, 25 hours; the news coverage at the time described the shift as end-of-December 2011. Wherever IANA places the transition, Tempo uses it as authoritative.)
+> At the end of 29 December 2011, Samoa moved from east of the international date line to west of it: the day after Thursday the 29th was Saturday the 31st, and **30 December never happened** there. Tempo consults the time zone database for the gap, and a value the clock skips the whole of (that day, any hour of it, any timestamp in it) is an error.
 
 ### Julian vs Gregorian — the same nominal date, different calendars
 

@@ -187,16 +187,19 @@ The calendar module supplies the correct `days_in_month/2` for each calendar sys
 
 ## 9. "Every location follows a 24-hour offset from UTC"
 
-Samoa skipped 29 December 2011 entirely when it moved from UTC−11 to UTC+13 to align its calendar with Australia and New Zealand. The entire calendar day never existed for that territory.
+Samoa skipped 30 December 2011 entirely when it moved across the International Date Line, from UTC−11 to UTC+13, to align its calendar with Australia and New Zealand. The day after Thursday 29 December was Saturday 31 December: the calendar day between them never existed for that territory.
 
 **Tempo — the missing day is an error, not a silent correction:**
 
 ```elixir
-iex> Tempo.from_iso8601("2011-12-29T12:00:00[Pacific/Apia]")
-{:error, "Wall time 2011-12-29T12:00:00 does not exist in \"Pacific/Apia\" (DST gap: the calendar date was skipped when Samoa moved from UTC-11 to UTC+13 on 29 December 2011)."}
+iex> {:error, error} = Tempo.from_iso8601("2011-12-30[Pacific/Apia]")
+iex> Exception.message(error)
+"Wall time 2011-12-30 does not exist in \"Pacific/Apia\" (it falls inside a daylight-saving or zone-transition gap)."
+
+iex> {:error, %Tempo.ZoneGapError{}} = Tempo.from_iso8601("2011-12-30T12:00:00[Pacific/Apia]")
 ```
 
-Any timestamp in that zone on that date is rejected. The same mechanism that catches DST gaps (falsehood #2) catches this one — the wall time is invalid in the IANA data and Tempo surfaces the error.
+The day, and any hour or timestamp on it, is rejected in that zone. The same mechanism that catches DST gaps (falsehood #2) catches this one — the wall time is invalid in the IANA data and Tempo surfaces the error. The days on either side, `2011-12-29[Pacific/Apia]` and `2011-12-31[Pacific/Apia]`, are read.
 
 ---
 

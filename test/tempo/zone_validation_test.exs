@@ -229,16 +229,10 @@ defmodule Tempo.ZoneValidationTest do
       assert {:ok, _} = Tempo.from_iso8601("2024-03-10T02:30:00")
     end
 
-    test "coarser than minute-resolution → no check even if zone present" do
-      # `2024-03-10T02[America/New_York]` is the hour the clock skips
-      # that night. A value coarser than a minute is not checked: it is
-      # read with the offset before the gap, as the hour that starts when
-      # the clock changes (below).
-      assert {:ok, _} = Tempo.from_iso8601("2024-03-10T02[America/New_York]")
-    end
-
-    test "date-only with zone → no check (no time component)" do
+    test "a day that holds a skipped hour is still a day" do
+      # `2024-03-10` in New York is the twenty-three hours the clock shows.
       assert {:ok, _} = Tempo.from_iso8601("2024-03-10[America/New_York]")
+      assert {:ok, _} = Tempo.from_iso8601("2024-03[America/New_York]")
     end
 
     test "numeric-offset zones (not IANA) → no check" do
@@ -305,15 +299,152 @@ defmodule Tempo.ZoneValidationTest do
     end
   end
 
-  # A value anchored to the minute is refused where the clock skips its
-  # reading. A coarser one is read: the hour a spring-forward skips, and the
-  # day or the month whose first reading is skipped, where clocks go forward
-  # at midnight. Its reading had no offset to be read with and was taken as
-  # UTC, so the skipped hour in Paris spanned three hours, an hour on from
-  # it in New York was 22:00 the day before, and a day in Cairo started two
-  # hours late. It is read with the offset before the gap (RFC 5545 §3.3.5),
-  # which is the time the clock shows that long after it changed.
-  describe "a reading the clock skips, in a value coarser than a minute" do
+  # A value names a time in its zone. One whose every reading the clock
+  # skips names none and is refused (decided 2026-10-06): a minute or a
+  # second in the gap, the hour a spring-forward skips, and a day a zone
+  # leaves out. The hour and the day were read, and ordered by their fields:
+  # the skipped hour in Paris was "finished by" the hour after it.
+  #
+  # The measure is Elixir's own lookup of the first and the last reading
+  # the value spans: it is skipped whole where one gap holds both.
+  describe "a value the clock skips the whole of" do
+    import Tempo.Sigils
+
+    defp gap(%NaiveDateTime{} = reading, zone) do
+      case DateTime.from_naive(reading, zone) do
+        {:gap, just_before, just_after} -> {just_before, just_after}
+        _shown -> nil
+      end
+    end
+
+    defp skipped_whole?(first, last, zone),
+      do: gap(first, zone) != nil and gap(first, zone) == gap(last, zone)
+
+    @spans [
+      # The hour a spring-forward skips.
+      {"2026-03-29T02[Europe/Paris]", ~N[2026-03-29 02:00:00], ~N[2026-03-29 02:59:59],
+       "Europe/Paris"},
+      {"2024-03-10T02[America/New_York]", ~N[2024-03-10 02:00:00], ~N[2024-03-10 02:59:59],
+       "America/New_York"},
+      # Clocks went forward at midnight in Cairo: the first hour of the day.
+      {"2023-04-28T00[Africa/Cairo]", ~N[2023-04-28 00:00:00], ~N[2023-04-28 00:59:59],
+       "Africa/Cairo"},
+      # Samoa left out 30 December 2011, and Manila 31 December 1844.
+      {"2011-12-30[Pacific/Apia]", ~N[2011-12-30 00:00:00], ~N[2011-12-30 23:59:59],
+       "Pacific/Apia"},
+      {"2011-12-30T12[Pacific/Apia]", ~N[2011-12-30 12:00:00], ~N[2011-12-30 12:59:59],
+       "Pacific/Apia"},
+      {"1844-12-31[Asia/Manila]", ~N[1844-12-31 00:00:00], ~N[1844-12-31 23:59:59],
+       "Asia/Manila"},
+      # Skipped in part, or not at all.
+      {"2026-10-04T02[Australia/Lord_Howe]", ~N[2026-10-04 02:00:00], ~N[2026-10-04 02:59:59],
+       "Australia/Lord_Howe"},
+      {"2023-04-28[Africa/Cairo]", ~N[2023-04-28 00:00:00], ~N[2023-04-28 23:59:59],
+       "Africa/Cairo"},
+      {"2024-03-10[America/New_York]", ~N[2024-03-10 00:00:00], ~N[2024-03-10 23:59:59],
+       "America/New_York"},
+      {"2024-03-10T01[America/New_York]", ~N[2024-03-10 01:00:00], ~N[2024-03-10 01:59:59],
+       "America/New_York"},
+      {"2024-03-10T03[America/New_York]", ~N[2024-03-10 03:00:00], ~N[2024-03-10 03:59:59],
+       "America/New_York"},
+      {"2011-12-29[Pacific/Apia]", ~N[2011-12-29 00:00:00], ~N[2011-12-29 23:59:59],
+       "Pacific/Apia"},
+      {"2011-12-31[Pacific/Apia]", ~N[2011-12-31 00:00:00], ~N[2011-12-31 23:59:59],
+       "Pacific/Apia"}
+    ]
+
+    test "is refused when it is read, and one the clock shows any of is read" do
+      for {text, first, last, zone} <- @spans do
+        refused = match?({:error, %Tempo.ZoneGapError{}}, Tempo.from_iso8601(text))
+
+        assert {text, refused} == {text, skipped_whole?(first, last, zone)}
+      end
+    end
+
+    test "is six of the spans above" do
+      skipped =
+        for {text, first, last, zone} <- @spans, skipped_whole?(first, last, zone), do: text
+
+      assert skipped == [
+               "2026-03-29T02[Europe/Paris]",
+               "2024-03-10T02[America/New_York]",
+               "2023-04-28T00[Africa/Cairo]",
+               "2011-12-30[Pacific/Apia]",
+               "2011-12-30T12[Pacific/Apia]",
+               "1844-12-31[Asia/Manila]"
+             ]
+    end
+
+    test "is refused by new/1 and in_zone/2, as it is when read" do
+      assert {:error, %Tempo.ZoneGapError{}} =
+               Tempo.new(year: 2024, month: 3, day: 10, hour: 2, zone: "America/New_York")
+
+      assert {:error, %Tempo.ZoneGapError{}} =
+               Tempo.new(
+                 year: 2024,
+                 month: 3,
+                 day: 10,
+                 hour: 2,
+                 minute: 30,
+                 zone: "America/New_York"
+               )
+
+      assert {:error, %Tempo.ZoneGapError{}} =
+               Tempo.new(year: 2011, month: 12, day: 30, zone: "Pacific/Apia")
+
+      assert {:error, %Tempo.ZoneGapError{}} =
+               Tempo.in_zone(~o"2024-03-10T02", "America/New_York")
+
+      assert {:error, %Tempo.ZoneGapError{}} =
+               Tempo.in_zone(~o"2024-03-10T02:30", "America/New_York")
+
+      assert {:error, %Tempo.ZoneGapError{}} = Tempo.in_zone(~o"2011-12-30", "Pacific/Apia")
+
+      assert {:ok, _hour} =
+               Tempo.new(year: 2024, month: 3, day: 10, hour: 3, zone: "America/New_York")
+
+      assert {:ok, _day} = Tempo.in_zone(~o"2024-03-10", "America/New_York")
+    end
+
+    test "is refused at an end of an interval and as a member of a set" do
+      for text <- [
+            "2024-03-10T02[America/New_York]/2024-03-10T05[America/New_York]",
+            "2011-12-30/2011-12-31[Pacific/Apia]",
+            "{2011-12-29,2011-12-30}[Pacific/Apia]"
+          ] do
+        assert {^text, {:error, %Tempo.ZoneGapError{}}} = {text, Tempo.from_iso8601(text)}
+      end
+
+      assert {:ok, _days} = Tempo.from_iso8601("2011-12-29/2011-12-31[Pacific/Apia]")
+    end
+
+    test "is named as it is written, with its zone" do
+      for {text, written} <- [
+            {"2024-03-10T02[America/New_York]", "2024-03-10T02"},
+            {"2024-03-10T02:30[America/New_York]", "2024-03-10T02:30:00"},
+            {"2011-12-30[Pacific/Apia]", "2011-12-30"}
+          ] do
+        assert {:error, %Tempo.ZoneGapError{wall_time: ^written} = error} =
+                 Tempo.from_iso8601(text)
+
+        assert Exception.message(error) =~ "Wall time #{written} does not exist"
+      end
+    end
+
+    test "is left out of the walk of a set of hours that names it" do
+      {:ok, hours} = Tempo.from_iso8601("2024-03-10T{01,02,03}[America/New_York]")
+
+      assert Enum.map(hours, &Tempo.hour/1) == [1, 3]
+    end
+  end
+
+  # A value the clock skips part of is some time: the hour of a half-hour
+  # change, and the day or the month whose first hour is skipped, where
+  # clocks go forward at midnight. Its first reading had no offset to be
+  # read with and was taken as UTC, so a day in Cairo started two hours late.
+  # It is read with the offset before the gap (RFC 5545 §3.3.5), which is
+  # the time the clock shows that long after it changed.
+  describe "a value the clock skips the start of" do
     import Tempo.Sigils
 
     # The instant of a skipped reading, read with the offset before the gap,
@@ -327,35 +458,16 @@ defmodule Tempo.ZoneValidationTest do
 
     test "is read with the offset before the gap" do
       for {text, reading, zone} <- [
-            {"2026-03-29T02[Europe/Paris]", ~N[2026-03-29 02:00:00], "Europe/Paris"},
-            {"2026-03-08T02[America/New_York]", ~N[2026-03-08 02:00:00], "America/New_York"},
+            # Lord Howe Island goes forward half an hour, from 02:00 to 02:30.
             {"2026-10-04T02[Australia/Lord_Howe]", ~N[2026-10-04 02:00:00],
              "Australia/Lord_Howe"},
             # Clocks went forward at midnight: a day and a month start in the gap.
             {"2023-04-28[Africa/Cairo]", ~N[2023-04-28 00:00:00], "Africa/Cairo"},
-            {"2023-10[America/Asuncion]", ~N[2023-10-01 00:00:00], "America/Asuncion"},
-            # Samoa left out 30 December 2011.
-            {"2011-12-30[Pacific/Apia]", ~N[2011-12-30 00:00:00], "Pacific/Apia"},
-            {"2011-12-30T12[Pacific/Apia]", ~N[2011-12-30 12:00:00], "Pacific/Apia"}
+            {"2023-10[America/Asuncion]", ~N[2023-10-01 00:00:00], "America/Asuncion"}
           ] do
         assert {text, Compare.to_utc_seconds(Tempo.from_iso8601!(text))} ==
                  {text, before_the_gap(reading, zone)}
       end
-    end
-
-    test "is the reading the clock shows that long after it changed" do
-      # The skipped hour is the hour from 03:00, and an hour on from it 04:00.
-      assert Compare.to_utc_seconds(~o"2026-03-29T02[Europe/Paris]") ==
-               Compare.to_utc_seconds(~o"2026-03-29T03[Europe/Paris]")
-
-      assert Tempo.shift(~o"2026-03-29T02[Europe/Paris]", hour: 1) ==
-               ~o"2026-03-29T04[Europe/Paris]"
-
-      assert Tempo.shift(~o"2026-03-08T02[America/New_York]", hour: 1) ==
-               ~o"2026-03-08T04[America/New_York]"
-
-      assert Tempo.shift(~o"2026-03-08T02[America/New_York]", hour: -1) ==
-               ~o"2026-03-08T01[America/New_York]"
     end
 
     test "starts a day whose first hour is skipped when the clock changes" do

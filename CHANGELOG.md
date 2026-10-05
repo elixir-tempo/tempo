@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A value whose every reading the clock skips in its zone is a `Tempo.ZoneGapError`, at an hour and a date as at a minute: the hour a spring-forward skips (`2026-03-29T02[Europe/Paris]`) and a day a zone left out (`2011-12-30[Pacific/Apia]`) were read, and ordered by their fields. `Tempo.new/1` and `Tempo.in_zone/2` return the error too, for a minute as well, where they held a value `from_iso8601/2` refuses.
+
 * A set of whole numbers written with no designator is a set of years only where each has four digits, as a year alone has: `{19,20}` is the centuries 19 and 20 and `{196,197}` two decades, as `[19,20]` and each member alone are, where they were the years 19 and 20, and `{1,2}` is an error. Years of fewer digits are written with the designator (`{19,20}Y`) or with four digits (`{0019,0020}`).
 
 * `Tempo.new/1` returns a `Tempo.InvalidCalendarError` for a `:calendar` that is not a calendar module and a `Tempo.UnknownZoneError` for a `:zone` the time zone database does not have, where it held whatever it was given. `calendar: :hebrew` raised once the value had a month, and a zone that is none was read as UTC.
@@ -341,7 +343,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * A member of a set is read with a qualifier (`{2026-06-15?,2026-06~}`, `{2020?..2030}`), qualified as it would be alone, and with a fraction before the comma or the brace that follows it (`{T10:30:45.5,T11:00}`). Both were a parse error.
 
-* A reading the clock skips, in a value coarser than a minute, is read with the offset before the gap (RFC 5545 §3.3.5), where it was read as UTC: the hour a spring-forward skips (`~o"2026-03-29T02[Europe/Paris]"`) is the hour from 03:00, where its span ran to 05:00 and an hour on from the same hour in New York was 22:00 the day before. A day or a month whose first reading is skipped, where clocks go forward at midnight (`~o"2023-04-28[Africa/Cairo]"`), starts when the clock changes, where it started two hours late.
+* A day or a month whose first reading the clock skips, where clocks go forward at midnight (`~o"2023-04-28[Africa/Cairo]"`), starts when the clock changes: its first reading is read with the offset before the gap (RFC 5545 §3.3.5), where it was read as UTC and the day started two hours late. The hour of a half-hour change (`~o"2026-10-04T02[Australia/Lord_Howe]"`) is read so too.
 
 * `Tempo.shift/3` of a value that holds unspecified digits lands each value they stand for and names no other: a day on from some day of week 25 (`~o"2026Y25WX*K"`) is one of the seven days from the Tuesday, where it was the next Monday alone, and an unspecified week steps so too. An hour on from some day of June is `~o"2026Y6MXXDT1H"`, where it was any hour from 01:00 on the 1st to 01:00 on the 30th, a mask whose values are not one run (`~o"2026Y6MX5D"`) gives the set of their spans, and each is stepped in its zone and by its calendar.
 

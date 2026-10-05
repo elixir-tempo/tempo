@@ -1105,10 +1105,11 @@ defmodule Tempo.Compare do
       # out) is read with the offset before the gap, as RFC 5545 §3.3.5
       # reads it, so it is the time that much after the clock changed:
       # 02:30 on the night Paris moves from 02:00 to 03:00 is 03:30. A value
-      # anchored to the minute is refused when it is read
+      # the clock skips the whole of is refused when it is read
       # (`Tempo.Validation.validate_zone_existence/1`), and this is what a
-      # coarser one reaches: the hour that is skipped, and the day or the
-      # month whose first reading is, which starts when the clock changes.
+      # value it skips part of reaches: the day or the month whose first
+      # reading is skipped, which starts when the clock changes, and the
+      # hour of a half-hour change.
       {:gap, {before, _gap_starts}, _after} ->
         TimeZoneDatabase.total_offset(before)
 

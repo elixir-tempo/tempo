@@ -330,7 +330,7 @@ defmodule Tempo.Enumeration.Test do
       day = ~o"2022-03-13[America/New_York]"
       assert Enum.count(day) == 23
       assert Enum.count(day) == length(Enum.to_list(day))
-      refute Enum.member?(day, ~o"2022-03-13T02[America/New_York]")
+      refute Enum.any?(day, &(Tempo.hour(&1) == 2))
     end
 
     test "fall-back day counts 25 hours and count matches the walk" do

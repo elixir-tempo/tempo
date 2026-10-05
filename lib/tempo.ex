@@ -800,8 +800,12 @@ defmodule Tempo do
   # value built and a value read are one value: a week and a day of it are
   # the calendar date they name (`2026-W25-3` is 17 June), and a month and a
   # day given for a calendar of weeks are the Gregorian day, converted.
-  defp validate_against_calendar(%__MODULE__{calendar: calendar} = tempo),
-    do: Validation.validate(tempo, calendar)
+  defp validate_against_calendar(%__MODULE__{calendar: calendar} = tempo) do
+    with {:ok, validated} <- Validation.validate(tempo, calendar),
+         :ok <- Validation.validate_zone_existence(validated) do
+      {:ok, validated}
+    end
+  end
 
   @doc """
   Creates a `t:Tempo.t/0` struct from an ISO 8601 or IXDTF
@@ -821,8 +825,15 @@ defmodule Tempo do
   flag on a time zone additionally enforces RFC 9557 §4.2 offset
   consistency: a numeric offset that disagrees with the critical
   zone is rejected with a `Tempo.ZoneOffsetMismatchError`. An
-  elective zone leaves the offset authoritative; pass `strict: true`
-  to reject an elective disagreement too.
+  elective zone that disagrees with the offset is accepted, and the
+  value is read in the zone, the offset telling apart the two
+  readings of a repeated hour; pass `strict: true` to reject an
+  elective disagreement too.
+
+  A value names a time in its zone. One whose every reading the
+  clock there skips is a `Tempo.ZoneGapError`: 02:30 on the night
+  clocks go forward, the hour from 02:00 that night, or a day the
+  zone left out, as Samoa left out 30 December 2011.
 
   `parse/2` reads everything this function reads, and a locale's own
   words besides.
@@ -1723,8 +1734,9 @@ defmodule Tempo do
   # offset/zone consistency mandatory — a disagreeing offset is rejected
   # unconditionally, independent of the `strict:` option (which is the
   # stricter, opt-in superset that also rejects *elective* disagreement).
-  # An elective (non-critical) zone leaves the offset authoritative and
-  # the zone advisory, so nothing is enforced.
+  # An elective (non-critical) zone that disagrees with the offset is
+  # accepted, and the value is read in the zone
+  # (`Tempo.Compare.validate_zone_offset/1`), so nothing is enforced.
   defp enforce_critical_zone_offset(%__MODULE__{} = tempo) do
     if zone_critical?(tempo), do: Compare.validate_zone_offset(tempo), else: :ok
   end
@@ -5063,8 +5075,11 @@ defmodule Tempo do
   * `{:ok, tempo}` in `zone`, with the same wall-clock fields.
 
   * `{:error, reason}` when `tempo` is already zoned (use
-    `shift_zone/2` instead) or `zone` is unknown to the configured
-    time zone database.
+    `shift_zone/2` instead), when `zone` is unknown to the configured
+    time zone database, or when the clock in `zone` skips the whole of
+    `tempo` (a `Tempo.ZoneGapError`): 02:30 on the night clocks go
+    forward, the hour from 02:00 that night, or a day the zone left
+    out.
 
   ### Examples
 
@@ -5085,12 +5100,18 @@ defmodule Tempo do
         {:error, UnknownZoneError.exception(zone_id: zone)}
 
       true ->
-        {:ok, %{tempo | extended: put_zone_id(tempo.extended, zone)}}
+        in_existing_zone(%{tempo | extended: put_zone_id(tempo.extended, zone)})
     end
   end
 
   def in_zone(%Tempo{}, zone), do: {:error, UnknownZoneError.exception(zone_id: zone)}
   def in_zone(value, _zone), do: {:error, not_one_value("in_zone/2", value)}
+
+  # A value placed in a zone is refused where the clock there skips every
+  # reading it spans, as one read with the zone is.
+  defp in_existing_zone(%Tempo{} = zoned) do
+    with :ok <- Validation.validate_zone_existence(zoned), do: {:ok, zoned}
+  end
 
   defp put_zone_id(nil, zone),
     do: %{zone_id: zone, zone_offset: nil, zone_critical: false, tags: %{}}
