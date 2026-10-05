@@ -8,7 +8,7 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Correctness
 
-* [ ] **A time shift whose units are not whole numbers** — a set, a range or unspecified digits in an explicit shift (`T10HZ{1,2}H`, `Z1H0M{1,2}S`, `ZXH`) raise from `from_iso8601/1`; a fraction of a second, a group or a selection (`Z1H0M5.5S`, `Z1H1G2MU`) is read and raises from `inspect/1`; a fraction of an hour or a minute (`Z1.5H`, `+01:30.5`) is read and raises from `Tempo.relation/2`; a sign inside (`Z1H-30M`) reads back as another value; and `Z0S` (ISO 8601-2 §7.4 example 8) is not read, which an assertion that cannot fail in `parser_test.exs` hid. Found 2026-10-06.
+* [ ] **`Tempo.new/1` does not check its `:calendar` and `:zone`** — `calendar: :hebrew` and `calendar: String` raise an `UndefinedFunctionError` and `calendar: "gregorian"` a `FunctionClauseError`, where a calendar that is no calendar module is an error; `zone: 123` and `zone: :utc` are held and not written, and `zone: "Not/AZone"` is held as a zone, which is then read as UTC. Found 2026-10-06.
 
 * [ ] **A time in the basic format before a set holds a unit as a mask** — `T1030{45,50}` reads its minute as `{:mask, [3, 0]}` and `20260615T10{30,45}` its hour as `{:mask, [1, 0]}`, so neither equals the same time in the extended format (`T10:30:{45,50}`) or reads back from its own text. Found 2026-10-06.
 
@@ -125,6 +125,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A time shift is whole hours, minutes and seconds** — the shift's units were read by the combinators of a time of day, so a set, a range or a mask raised in `from_iso8601/1`, a fraction of a second, a group or a selection in `inspect/1`, and a fraction of an hour (`Z1.5H`, `+01.5`) in `Tempo.relation/2`; a sign inside (`Z1H-30M`) read back as another value, the minus sign `−` was kept as a unit, and `Z0S` of §7.4 was not read, behind an assertion that could not fail. The grammar reads whole numbers (`shift_units/0`, `shift_hour/0` in `lib/iso8601/tokenizer/grammar.ex`), `validate_time_shift/1` holds any shift to that shape and to minutes and seconds under 60 (so `Tempo.new/1` checks its `:shift`), the IXDTF offset's minutes are under 60, and `Zone.offset_to_shift/1` keeps an offset's seconds. Measure: `test/tempo/iso8601/time_shift_test.exs`, against `DateTime`. 2026-10-06.
 
 * [x] **A duration in a set is refused, and an interval at an end of a range** — a member was built from its units as a date is whatever it was, so `{P1Y,P2Y}` equalled `{1Y,2Y}`, `{P1M2S,P1M3S}` was `{1M1DT2S,1M1DT3S}`, and `{PT1.5S,PT2S}`, `{-P1D,P2D}` and `{2020/2021..2023/2024}` were read and raised when written. `no_member/1` in `lib/iso8601/parser.ex` refuses each wherever a set is written (a member, an end of a range, a member left out, a recurrence's domain), and the tokenizer keeps the tag of a duration or an interval at the one end of an open range. Two assertions in `set_test.exs` that could not fail named the forms. 2026-10-06.
 

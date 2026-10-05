@@ -798,14 +798,22 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   end
 
   # Time Shift
+  #
+  # A time shift is a whole number of hours and of minutes (ISO 8601-1
+  # §4.3.13), and of seconds too in the explicit form (ISO 8601-2 §7.4). Its
+  # units were read by the combinators that read a time of day's, which take
+  # a set, a range, unspecified digits, a group, a selection and a fraction.
+  # None of them is a shift, and each raised: where the value was read (a set
+  # or a mask), where it was written (a fraction of a second, a group) or
+  # where it was compared (a fraction of an hour or a minute).
 
   def implicit_time_shift do
     shift_indicator()
     |> choice([
-      parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_hour_p})
+      shift_hour()
       |> ignore(optional(colon()))
-      |> concat(parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_minute_p})),
-      parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_hour_p}),
+      |> concat(shift_minute()),
+      shift_hour(),
       lookahead_not(digit())
     ])
     |> reduce(:resolve_shift)
@@ -815,16 +823,19 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   def extended_time_shift do
     shift_indicator()
     |> choice([
-      parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_hour_p})
+      shift_hour()
       |> ignore(optional(colon()))
-      |> concat(parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_minute_p})),
-      parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_hour_p})
+      |> concat(shift_minute()),
+      shift_hour()
       |> lookahead_not(digit()),
       lookahead_not(digit())
     ])
     |> reduce(:resolve_shift)
     |> unwrap_and_tag(:time_shift)
   end
+
+  defp shift_hour, do: integer(2) |> unwrap_and_tag(:hour)
+  defp shift_minute, do: integer(2) |> unwrap_and_tag(:minute)
 
   # An explicit time shift must begin with the zulu indicator `Z`.
   # Permitting a bare signed + explicit-designator shift like `-1H`
@@ -842,18 +853,31 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   #   * `Z0H`, `Z0H0M`      — UTC with explicit-designator components
   #   * `Z1H`, `Z-05H30M`, and `Z+1H` — UTC with explicit components, signed
   #     behind UTC (ISO 8601-2 §7.4) and, leniently, ahead of it
+  #   * `Z0S`, `Z30M`       — with the units that are zero left out (§7.10,
+  #     and §7.4 example 8)
   def explicit_time_shift do
     zulu()
-    |> optional(
-      optional(sign())
-      |> concat(explicit_hour())
-      |> optional(explicit_minute())
-      |> optional(explicit_second())
-    )
+    |> optional(optional(sign()) |> concat(shift_units()))
     |> lookahead_not(digit())
     |> reduce(:resolve_shift)
     |> unwrap_and_tag(:time_shift)
   end
+
+  # The units of an explicit shift, from the hour down, each a whole number
+  # and any of them left out.
+  defp shift_units do
+    choice([
+      shift_unit(:hour, "H")
+      |> optional(shift_unit(:minute, "M"))
+      |> optional(shift_unit(:second, "S")),
+      shift_unit(:minute, "M")
+      |> optional(shift_unit(:second, "S")),
+      shift_unit(:second, "S")
+    ])
+  end
+
+  defp shift_unit(unit, designator),
+    do: integer(min: 1) |> ignore(string(designator)) |> unwrap_and_tag(unit)
 
   # A sign is required if no Z indicator
   # A sign is optional if there is a Z indicator
@@ -1033,8 +1057,10 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   end
 
   # A negative shift carries its sign on its first non-zero component,
-  # so `-00:30` stays negative as `[hour: 0, minute: -30]`.
-  def resolve_shift([{:sign, ?-} | components]) do
+  # so `-00:30` stays negative as `[hour: 0, minute: -30]`. It is written
+  # with a hyphen or with the minus sign itself (`−`, U+2212), which was
+  # read and kept as a unit of the shift.
+  def resolve_shift([{:sign, minus} | components]) when minus in [?-, ?−] do
     negate_leading(components)
   end
 

@@ -54,7 +54,7 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 | Month-day | `06-15` (the truncated `--06-15` / `--0615` forms are deprecated — see below) |
 | Time of day | `T10`, `T10:30`, `T10:30:00`, `T103000` |
 | Fractional seconds | `T10:30:00.5`, `T10:30:00,5` |
-| Time zone `Z`, `+HH`, `+HH:MM`, `+HHMM` | `10:30:00Z`, `10:30:00+05:30` |
+| Time zone `Z`, `+HH`, `+HH:MM`, `+HHMM` | `10:30:00Z`, `10:30:00+05:30`, `10:30:00−05:30` (the minus sign, or a hyphen). Two digits of hours and two of minutes from 00 to 59, with no fraction. |
 | Combined datetime | `2022-06-15T10:30:00Z` |
 | Durations `PnYnMnDTnHnMnS` | `P1Y`, `PT30M`, `P3Y6M4DT12H30M5S` |
 | Negative duration | `-P100D` |
@@ -112,6 +112,7 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 | **Significant-digit annotations** (short form) | `1950S2`, `-1859S5`, `Y3388E2S3` |
 | **Year-zero** (`0000`, `-0000`) | Parses as year 0. Interpretation per astronomical convention (year 0 = 1 BCE) is the caller's responsibility. |
 | **Day of the year** (§4.3.4) | `350O`, `1985Y102O` (12 April 1985) |
+| **Time shift in the explicit form** (§7.4) | `Z`, `Z8H`, `Z-5H30M`, `Z7H33M14S`, `Z0S` — whole hours, minutes and seconds, any that are zero left out (§7.10). A shift is at most 24 hours, so the standard's `Z28H` is refused. |
 
 ### Partial or divergent
 

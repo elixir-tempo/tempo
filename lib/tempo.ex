@@ -169,7 +169,7 @@ defmodule Tempo do
           | {:microsecond, Tempo.Microsecond.t()}
         ]
 
-  @type time_shift :: [{:hour, integer()} | {:minute, integer()}] | nil
+  @type time_shift :: [{:hour, integer()} | {:minute, integer()} | {:second, integer()}] | nil
 
   @typedoc """
   A value's zone and tags, as an IXDTF suffix writes them. `nil` for a value with no zone, offset or tag.
@@ -351,7 +351,10 @@ defmodule Tempo do
     zone and no time of day is that day in the zone.
 
   * `:shift` is a manual UTC offset expressed as `[hour: n]` or
-    `[hour: n, minute: m]`.
+    `[hour: n, minute: m]`, with a `:second` too if the offset has
+    one. Each is a whole number, and an offset behind UTC carries its
+    sign on its first unit that is not zero: `[hour: -5, minute: 30]`
+    is five and a half hours behind.
 
   * `:qualification` marks the whole value with an EDTF qualifier,
     which qualifies each of its components. One of `:uncertain`,

@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A time shift's minutes and seconds are from 0 to 59: `+01:60`, `Z1H60S` and the IXDTF offset `[+01:60]` are errors, where they were read as two hours and the like. `Tempo.new/1` returns an `ArgumentError` for a `:shift` that is not whole hours, minutes and seconds from the hour down with its sign on the first unit that is not zero, where it held whatever it was given.
+
 * A selector of `Tempo.select/2` that is as coarse as the period it is selected from, or coarser, is a filter that keeps the period where it starts in what the selector names, as a weekday selector keeps a day: `Tempo.select(days, ~o"6M")` is the days that are in June, where it was the month of June, once, from 1 June, and `Tempo.select(~o"2026-06-15", ~o"6M")` is 15 June, where it was nothing. The period kept is the period as it is written, for a selection too (`~o"L6MN"` from 1 June was `2026Y6M/2D`), and units finer than the period are placed within the periods the coarser ones keep (`~o"6MT10H"`).
 
 * A week selected from a year by `Tempo.select/2` is a week of that year's ISO 8601 week-year, wherever it starts: `Tempo.select(~o"2026", ~o"1W")` is `2026Y1W/2W`, the week from 29 December 2025, and `~o"1W1K"` that Monday, as the value `2026YL1W1KN` is, where each selected nothing because the week does not start in the calendar year, and `Tempo.select(~o"2020/2030", ~o"1W")` is ten weeks where it was seven. A selection gives each week to its own year too, so `Tempo.select(~o"2025", ~o"L1WN")` is `2025Y1W/2W`, where it was 2026's.
@@ -312,6 +314,10 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* A time shift is a whole number of hours, minutes and seconds: one written with a set, a range, unspecified digits, a group, a selection or a fraction (`Z{1,2}H`, `Z1H0M5.5S`, `+01.5`) is a parse error, where it raised when the value was read, written or compared. `Z0S` and `Z30M` (ISO 8601-2 §7.4 and §7.10) are read, and so is a shift written with the minus sign (`−05:30`).
+
+* An offset that is not a whole number of minutes keeps its seconds in the shift it is written as: a time in New York's local mean time is `Z-4H56M2S[America/New_York]` from `Tempo.shift_zone/2` and `Tempo.from_elixir/1`, where the two seconds were dropped.
 
 * A duration written in a set (`{P1Y,P2Y}`, `{PT1M2S..PT1M5S}`) is refused, where its units were read as a date's and `{P1Y,P2Y}` was the years 1 and 2: a set of durations (ISO 8601-2 §6.5) is not built. An interval at an end of a range (`{2020/2021..2023/2024}`), on which `inspect/1` raised, is refused too.
 

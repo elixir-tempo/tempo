@@ -96,14 +96,16 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
   # A numeric offset such as `+08:45` or `-03:00` appearing
   # inside the time-zone brackets. The leading sign is
   # mandatory so we don't accidentally consume a zone name
-  # whose initial character is alphabetic.
+  # whose initial character is alphabetic. Its minutes are those of an
+  # hour (RFC 3339 §5.6, `time-minute`): `+01:60` was read as `+02:00`.
   defp numeric_offset do
     sign_char = ascii_char([?+, ?-])
+    minutes = ascii_char([?0..?5]) |> concat(digit())
 
     sign_char
     |> choice([
-      digit() |> times(2) |> ignore(colon()) |> concat(digit() |> times(2)),
-      digit() |> times(4),
+      digit() |> times(2) |> ignore(colon()) |> concat(minutes),
+      digit() |> times(2) |> concat(minutes),
       digit() |> times(2)
     ])
     |> reduce({__MODULE__, :to_offset, []})

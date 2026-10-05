@@ -1936,25 +1936,88 @@ defmodule Tempo.Validation do
 
   defp validate_time_shift(nil), do: :ok
 
-  defp validate_time_shift(shift) when is_list(shift) do
+  # A time shift is hours, minutes and seconds from the hour down, each a
+  # whole number and any left out, with its sign on the first unit that is
+  # not zero (`-05:30` is `[hour: -5, minute: 30]`). The parser writes it so,
+  # and `Tempo.new/1` takes its caller's: whatever else was given was held,
+  # and raised where the value was written or compared.
+  defp validate_time_shift(shift) do
+    cond do
+      not shift_units?(shift) ->
+        {:error, ArgumentError.exception(shift_units_reason(shift))}
+
+      not signed_on_first_unit?(shift) ->
+        {:error, ArgumentError.exception(shift_sign_reason(shift))}
+
+      true ->
+        validate_shift_range(shift)
+    end
+  end
+
+  @shift_units [:hour, :minute, :second]
+
+  defp shift_units?([_unit | _rest] = shift) do
+    Enum.all?(shift, &shift_unit?/1) and in_shift_order?(Enum.map(shift, &elem(&1, 0)))
+  end
+
+  defp shift_units?(_no_units), do: false
+
+  defp shift_unit?({unit, amount}) when unit in @shift_units and is_integer(amount), do: true
+  defp shift_unit?(_other), do: false
+
+  # From the hour down, each unit once.
+  defp in_shift_order?(units), do: units == Enum.filter(@shift_units, &(&1 in units))
+
+  # The units after the first that is not zero take its sign, so none of
+  # them is written with one.
+  defp signed_on_first_unit?(shift) do
+    shift
+    |> Enum.map(&elem(&1, 1))
+    |> Enum.drop_while(&(&1 == 0))
+    |> Enum.drop(1)
+    |> Enum.all?(&(&1 >= 0))
+  end
+
+  defp shift_units_reason(shift) do
+    "A time shift is hours, minutes and seconds from the hour down, each a whole number " <>
+      "and any of them left out, such as [hour: 5, minute: 30]; got #{inspect(shift)}."
+  end
+
+  defp shift_sign_reason(shift) do
+    "A time shift behind UTC carries its sign on its first unit that is not zero, " <>
+      "such as [hour: -5, minute: 30] or [hour: 0, minute: -30]; got #{inspect(shift)}."
+  end
+
+  # A shift's minutes are those of an hour and its seconds those of a
+  # minute (ISO 8601-1 §4.3.13 writes it with `[hour]` and `[min]`), and no
+  # shift is longer than a day.
+  defp validate_shift_range(shift) do
     hour = fetch_unit(shift, :hour) || 0
     minute = fetch_unit(shift, :minute) || 0
     second = fetch_unit(shift, :second) || 0
     magnitude = abs(hour) * 3600 + abs(minute) * 60 + abs(second)
 
-    if magnitude > @max_offset_minutes * 60 do
-      {:error,
-       ParseError.exception(
-         reason:
-           "Time-zone offset out of range. Offsets must be within ±24h; " <>
-             "got #{inspect(shift)}."
-       )}
-    else
-      :ok
+    cond do
+      abs(minute) >= @minutes_per_hour or abs(second) >= @minutes_per_hour ->
+        {:error,
+         ParseError.exception(
+           reason:
+             "Time-zone offset out of range. An offset's minutes and seconds are " <>
+               "from 0 to 59; got #{inspect(shift)}."
+         )}
+
+      magnitude > @max_offset_minutes * 60 ->
+        {:error,
+         ParseError.exception(
+           reason:
+             "Time-zone offset out of range. Offsets must be within ±24h; " <>
+               "got #{inspect(shift)}."
+         )}
+
+      true ->
+        :ok
     end
   end
-
-  defp validate_time_shift(_), do: :ok
 
   @doc """
   Validate an IXDTF numeric offset (minutes) for the `[+HH:MM]`

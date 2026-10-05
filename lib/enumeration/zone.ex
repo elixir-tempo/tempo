@@ -50,6 +50,11 @@ defmodule Tempo.Enumeration.Zone do
   The sign is carried on the first non-zero component, as the ISO 8601
   parser writes it: −03:30 is `[hour: -3, minute: 30]` and −00:30 is
   `[hour: 0, minute: -30]`.
+
+  An offset that is not a whole number of minutes keeps its seconds, as
+  a zone's local mean time has them: New York's until 1883 is
+  `[hour: -4, minute: 56, second: 2]`. They were dropped, so the shift
+  written beside such a zone was not its offset.
   """
   @spec offset_to_shift(integer()) :: keyword()
   def offset_to_shift(total_seconds) do
@@ -58,12 +63,20 @@ defmodule Tempo.Enumeration.Zone do
     hours = div(abs_total, 3600)
     minutes = div(rem(abs_total, 3600), 60)
 
-    case {hours, minutes} do
-      {hours, 0} -> [hour: sign * hours]
-      {0, minutes} -> [hour: 0, minute: sign * minutes]
-      {hours, minutes} -> [hour: sign * hours, minute: minutes]
-    end
+    signed_units(sign, hours, minutes, rem(abs_total, 60))
   end
+
+  defp signed_units(sign, hours, 0, 0), do: [hour: sign * hours]
+  defp signed_units(sign, 0, minutes, 0), do: [hour: 0, minute: sign * minutes]
+  defp signed_units(sign, hours, minutes, 0), do: [hour: sign * hours, minute: minutes]
+
+  defp signed_units(sign, 0, 0, seconds), do: [hour: 0, minute: 0, second: sign * seconds]
+
+  defp signed_units(sign, 0, minutes, seconds),
+    do: [hour: 0, minute: sign * minutes, second: seconds]
+
+  defp signed_units(sign, hours, minutes, seconds),
+    do: [hour: sign * hours, minute: minutes, second: seconds]
 
   # Extract `year, month, day, hour, minute, second` from a Tempo's
   # time keyword list and build a NaiveDateTime, filling missing

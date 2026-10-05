@@ -442,8 +442,8 @@ defmodule Tempo.Iso8601.Parser.Test do
              {:ok, %Tempo{calendar: Calendrical.Gregorian, time: [], shift: [hour: 0, minute: 0]}}
 
     # Section 7.4 Example 8
-    assert Tempo.from_iso8601("Z0S")
-    {:ok, %Tempo{calendar: Calendrical.Gregorian, time: [], shift: [second: 0]}}
+    assert Tempo.from_iso8601("Z0S") ==
+             {:ok, %Tempo{calendar: Calendrical.Gregorian, time: [], shift: [second: 0]}}
   end
 
   test "Section 7.5 Date Shift" do
