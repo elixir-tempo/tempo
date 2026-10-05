@@ -1908,8 +1908,10 @@ defmodule Tempo.Validation do
     composed of Tempos and checked via recursion).
 
   * The value has year, month, day, hour, minute (fully anchored
-    at least to the minute — coarser values like "2024-03" can
-    never land in a gap because the gap is minute-scale).
+    at least to the minute). A coarser value is not checked: an hour
+    the clock skips, or a day or a month whose first reading it skips,
+    is read with the offset before the gap, as the time that long
+    after the clock changed (`Tempo.Compare.to_utc_seconds/1`).
 
   * The value carries an IANA zone id on `extended.zone_id`.
 
@@ -1994,9 +1996,9 @@ defmodule Tempo.Validation do
   end
 
   # The zone-existence check only fires when the value is fully
-  # anchored down to the minute — coarser resolutions ("2024-03",
-  # "2024-03-10", "2024-03-10T02") can't land in a gap because the
-  # gap is smaller than the value's resolution.
+  # anchored down to the minute. A coarser one ("2024-03-10",
+  # "2024-03-10T02") can start in a gap, or lie wholly in one, and is
+  # read with the offset before the gap.
   defp fully_anchored_datetime(time) do
     with year when is_integer(year) <- unit_value(time, :year),
          month when is_integer(month) <- unit_value(time, :month),

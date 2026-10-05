@@ -230,10 +230,10 @@ defmodule Tempo.ZoneValidationTest do
     end
 
     test "coarser than minute-resolution → no check even if zone present" do
-      # `2024-03-10T02[America/New_York]` spans the entire 02:00
-      # hour, which includes both valid and gap minutes. Since the
-      # value represents the hour as a whole (resolution :hour),
-      # there's no single wall time to validate.
+      # `2024-03-10T02[America/New_York]` is the hour the clock skips
+      # that night. A value coarser than a minute is not checked: it is
+      # read with the offset before the gap, as the hour that starts when
+      # the clock changes (below).
       assert {:ok, _} = Tempo.from_iso8601("2024-03-10T02[America/New_York]")
     end
 
@@ -302,6 +302,79 @@ defmodule Tempo.ZoneValidationTest do
 
     test "03:00:00 (first valid instant after the gap) is accepted" do
       assert {:ok, _} = Tempo.from_iso8601("2024-03-10T03:00:00[America/New_York]")
+    end
+  end
+
+  # A value anchored to the minute is refused where the clock skips its
+  # reading. A coarser one is read: the hour a spring-forward skips, and the
+  # day or the month whose first reading is skipped, where clocks go forward
+  # at midnight. Its reading had no offset to be read with and was taken as
+  # UTC, so the skipped hour in Paris spanned three hours, an hour on from
+  # it in New York was 22:00 the day before, and a day in Cairo started two
+  # hours late. It is read with the offset before the gap (RFC 5545 §3.3.5),
+  # which is the time the clock shows that long after it changed.
+  describe "a reading the clock skips, in a value coarser than a minute" do
+    import Tempo.Sigils
+
+    # The instant of a skipped reading, read with the offset before the gap,
+    # from Elixir's own lookup and none of Tempo's.
+    defp before_the_gap(%NaiveDateTime{} = reading, zone) do
+      {:gap, just_before, _just_after} = DateTime.from_naive(reading, zone)
+      {seconds, _microseconds} = NaiveDateTime.to_gregorian_seconds(reading)
+
+      seconds - just_before.utc_offset - just_before.std_offset
+    end
+
+    test "is read with the offset before the gap" do
+      for {text, reading, zone} <- [
+            {"2026-03-29T02[Europe/Paris]", ~N[2026-03-29 02:00:00], "Europe/Paris"},
+            {"2026-03-08T02[America/New_York]", ~N[2026-03-08 02:00:00], "America/New_York"},
+            {"2026-10-04T02[Australia/Lord_Howe]", ~N[2026-10-04 02:00:00],
+             "Australia/Lord_Howe"},
+            # Clocks went forward at midnight: a day and a month start in the gap.
+            {"2023-04-28[Africa/Cairo]", ~N[2023-04-28 00:00:00], "Africa/Cairo"},
+            {"2023-10[America/Asuncion]", ~N[2023-10-01 00:00:00], "America/Asuncion"},
+            # Samoa left out 30 December 2011.
+            {"2011-12-30[Pacific/Apia]", ~N[2011-12-30 00:00:00], "Pacific/Apia"},
+            {"2011-12-30T12[Pacific/Apia]", ~N[2011-12-30 12:00:00], "Pacific/Apia"}
+          ] do
+        assert {text, Compare.to_utc_seconds(Tempo.from_iso8601!(text))} ==
+                 {text, before_the_gap(reading, zone)}
+      end
+    end
+
+    test "is the reading the clock shows that long after it changed" do
+      # The skipped hour is the hour from 03:00, and an hour on from it 04:00.
+      assert Compare.to_utc_seconds(~o"2026-03-29T02[Europe/Paris]") ==
+               Compare.to_utc_seconds(~o"2026-03-29T03[Europe/Paris]")
+
+      assert Tempo.shift(~o"2026-03-29T02[Europe/Paris]", hour: 1) ==
+               ~o"2026-03-29T04[Europe/Paris]"
+
+      assert Tempo.shift(~o"2026-03-08T02[America/New_York]", hour: 1) ==
+               ~o"2026-03-08T04[America/New_York]"
+
+      assert Tempo.shift(~o"2026-03-08T02[America/New_York]", hour: -1) ==
+               ~o"2026-03-08T01[America/New_York]"
+    end
+
+    test "starts a day whose first hour is skipped when the clock changes" do
+      {:gap, _just_before, first_reading} =
+        DateTime.from_naive(~N[2023-04-28 00:00:00], "Africa/Cairo")
+
+      an_hour_on = DateTime.add(first_reading, 1, :hour)
+
+      assert Tempo.shift(~o"2023-04-28[Africa/Cairo]", hour: 1) ==
+               Tempo.from_iso8601!("2023Y4M28DT#{an_hour_on.hour}H[Africa/Cairo]")
+
+      # The day is its twenty-three hours, and follows the day before it.
+      {:ok, day} = Tempo.to_interval(~o"2023-04-28[Africa/Cairo]")
+
+      assert Compare.to_utc_seconds(Interval.to(day)) - Compare.to_utc_seconds(Interval.from(day)) ==
+               23 * 3600
+
+      assert Enum.count(~o"2023-04-28[Africa/Cairo]") == 23
+      assert Tempo.relation(~o"2023-04-27[Africa/Cairo]", ~o"2023-04-28[Africa/Cairo]") == :meets
     end
   end
 

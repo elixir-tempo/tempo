@@ -313,6 +313,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A reading the clock skips, in a value coarser than a minute, is read with the offset before the gap (RFC 5545 §3.3.5), where it was read as UTC: the hour a spring-forward skips (`~o"2026-03-29T02[Europe/Paris]"`) is the hour from 03:00, where its span ran to 05:00 and an hour on from the same hour in New York was 22:00 the day before. A day or a month whose first reading is skipped, where clocks go forward at midnight (`~o"2023-04-28[Africa/Cairo]"`), starts when the clock changes, where it started two hours late.
+
 * `Tempo.shift/3` of a value that holds unspecified digits lands each value they stand for and names no other: a day on from some day of week 25 (`~o"2026Y25WX*K"`) is one of the seven days from the Tuesday, where it was the next Monday alone, and an unspecified week steps so too. An hour on from some day of June is `~o"2026Y6MXXDT1H"`, where it was any hour from 01:00 on the 1st to 01:00 on the 30th, a mask whose values are not one run (`~o"2026Y6MX5D"`) gives the set of their spans, and each is stepped in its zone and by its calendar.
 
 * A week stepped by years is the last week of a year that has no week of its number, as a day past the end of its month is the month's last: `Tempo.shift(~o"2026Y53W", year: 1)` is `~o"2027Y52W"`, where it was `~o"2027Y53W"`, a week 2027 does not have. A calendar of weeks steps its week dates so too, and a recurrence of years from week 53 (`R3/2026Y53W/P1Y`) no longer ends an occurrence on such a week.
