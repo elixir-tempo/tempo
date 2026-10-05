@@ -37,6 +37,8 @@ defmodule Tempo.RRule.Selection do
 
   A computed event is each of its days that falls in the period it is selected in: it expands a `YEARLY`, a `MONTHLY` and a `WEEKLY` rule, so the Easter of April 2026 and of its fourteenth week are both 5 April, and it limits a `DAILY` rule and a finer one to the candidates on its day. A weekday or a day of the month beside it limits that day.
 
+  A day with no month (`D`) in a rule that is resolved in a year, and that nothing gives a month, is a day of the year, as the value `2026Y45D` is: `2026YL45DN` and `R/2026/P1Y/FL45DN` are 14 February, and `L-1DN` there is 31 December. A recurrence's start that names a month gives the day that month (ISO 8601-2 §13.6.3), a rule read from an RRULE with a start states it (`L3M15DN`), and a month, a week, a day of the year or a computed event beside the day places it already. `read_in_its_period/1` is that reading, which the conversion, the RRULE writer and `Tempo.explain/1` all ask.
+
   A year (`Y`), which RFC 5545 has no part for and ISO 8601-2 §12.2 no
   selection rule, limits the periods a selection resolves in, as a
   recurrence domain's years (`R/{2027Y}/…`) do: a period that starts in
@@ -226,6 +228,101 @@ defmodule Tempo.RRule.Selection do
     :byday,
     :interval
   ]
+
+  @doc false
+  # A recurrence, or a value that holds a selection, with the selection as it
+  # is resolved where that is in a year: a day with no month is a day of the
+  # year (`days_of_year_where_no_month/1`). Every reader of a rule asks here,
+  # so the occurrences, the RRULE written and the words of `Tempo.explain/1`
+  # are of one reading.
+  #
+  # A recurrence that steps by years resolves its rule in a year, and where
+  # its start names a month (a date, a month of a year) the day is that
+  # month's: the rule takes from its start what it does not say (ISO 8601-2
+  # §13.6.3). A start that is a year, and no start, give it no month. A value
+  # resolves its selection in a year where the units before it are a year, or
+  # there are none. A calendar of weeks has no months, and a selection in one
+  # is as it was.
+  @spec read_in_its_period(value) :: value when value: term()
+  def read_in_its_period(
+        %Interval{
+          duration: %Tempo.Duration{time: [{:year, _count} | _finer]},
+          from: from,
+          repeat_rule: %Tempo{time: [{:selection, selection} | units]} = rule
+        } = recurrence
+      ) do
+    if gives_no_month?(from, rule),
+      do: %{recurrence | repeat_rule: %{rule | time: [{:selection, in_year(selection)} | units]}},
+      else: recurrence
+  end
+
+  def read_in_its_period(%Tempo{time: time, calendar: calendar} = value) when is_list(time) do
+    case Enum.split_while(time, &(not match?({:selection, _selection}, &1))) do
+      {context, [{:selection, selection} | trailing]} ->
+        if a_year_or_none?(context) and not week_calendar?(calendar),
+          do: %{value | time: context ++ [{:selection, in_year(selection)} | trailing]},
+          else: value
+
+      {_time, []} ->
+        value
+    end
+  end
+
+  def read_in_its_period(value), do: value
+
+  defp in_year(selection), do: days_of_year_where_no_month(selection)
+
+  defp a_year_or_none?([]), do: true
+  defp a_year_or_none?([{:year, _years}]), do: true
+  defp a_year_or_none?(_finer_context), do: false
+
+  defp gives_no_month?(%Tempo{time: time, calendar: calendar}, _rule) when is_list(time),
+    do: not week_calendar?(calendar) and Enum.all?(time, &year_unit?/1)
+
+  defp gives_no_month?(%Tempo.Set{set: [_ | _] = years}, rule),
+    do: Enum.all?(years, &gives_no_month?(&1, rule))
+
+  defp gives_no_month?(%Tempo.Range{first: first, last: last}, rule),
+    do: gives_no_month?(first, rule) and gives_no_month?(last, rule)
+
+  defp gives_no_month?(no_start, %Tempo{calendar: calendar}) when no_start in [nil, :undefined],
+    do: not week_calendar?(calendar)
+
+  defp gives_no_month?(_another_start, _rule), do: false
+
+  # A start written to its year, or to a span of years, and no finer.
+  defp year_unit?({unit, _value}), do: unit in [:year, :decade, :century]
+  defp year_unit?(_other), do: false
+
+  @doc false
+  # A day with no month, selected in a year, is a day of the year, as the
+  # value `2026Y45D` is read: `L45DN` in a year is 14 February, and `L-1DN`
+  # its last day. A selection that names the day's month, a week, a day of
+  # the year or a computed event places the day already, and is as it was.
+  # The start of a §12.10 window in the selection is read the same way.
+  @spec days_of_year_where_no_month(keyword()) :: keyword()
+  def days_of_year_where_no_month(selection) when is_list(selection) do
+    if Enum.any?(selection, &places_a_day?/1),
+      do: selection,
+      else: Enum.map(selection, &day_of_the_year/1)
+  end
+
+  @places_a_day [:month, :traditional_month, :week, :calendar_week, :day_of_year, :event]
+
+  defp places_a_day?({part, _value}), do: part in @places_a_day
+  defp places_a_day?(_other), do: false
+
+  defp day_of_the_year({:day, days}), do: {:day_of_year, days}
+
+  defp day_of_the_year({:interval, %Interval{from: %Tempo{time: time} = start} = window}),
+    do: {:interval, %{window | from: %{start | time: window_start_in_year(time)}}}
+
+  defp day_of_the_year(part), do: part
+
+  defp window_start_in_year([{:selection, selection} | units]),
+    do: [{:selection, days_of_year_where_no_month(selection)} | units]
+
+  defp window_start_in_year(time), do: time
 
   defp part_needs_a_date?({part, _value}) when part in @parts_counted_in_a_date, do: true
   defp part_needs_a_date?({:month, months}), do: counts_from_end?(months)

@@ -170,7 +170,7 @@ Some answers Tempo does not yet work out. Where it is known that the answer it w
 
 All but the last two are in a calendar whose year does not begin with its first month: Calendrical's Julian `March25`, `March1`, `Sept1` and `Dec25`, whose years turn on those days, and `Calendrical.Reform.England`, whose years began on 25 March until 1751.
 
-* **A selection that counts days within a month or a year** — `:selection`. A day of a month selected without its month, a weekday and an ordinal, in a value (`1750Y12ML-1DN`) and in the rule of a recurrence that steps by months or years, and a day of a month given to `Tempo.select/2` to select from a month or a year. A month alone, a month with a day, a day of the year, a week and a time of day are answered, and so are a weekday given to `Tempo.select/2` and any selection in a recurrence that steps by weeks or by less.
+* **A selection that counts days within a month or a year** — `:selection`. A day of a month selected without its month, a weekday and an ordinal, in a value (`1750Y12ML-1DN`) and in the rule of a recurrence that steps by months or years, and a day of a month given to `Tempo.select/2` to select from a month. A month alone, a month with a day, a day of the year, a day with no month selected in a year (which is a day of the year, `1750YL45DN`), a week and a time of day are answered, and so are a weekday given to `Tempo.select/2` and any selection in a recurrence that steps by weeks or by less.
 
 * **A season** — `:season`. `1750Y21M`, the spring of a year. A quarter, a half and the other divisions of a year by its months are answered.
 

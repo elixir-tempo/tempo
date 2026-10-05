@@ -74,6 +74,7 @@ defmodule Tempo.Explain do
   alias Tempo.Qualification
   alias Tempo.RecurrenceSet
   alias Tempo.RecurrenceSet.Conditional
+  alias Tempo.RRule.Selection
   alias Tempo.UnitValues
   alias Tempo.Validation
 
@@ -84,8 +85,15 @@ defmodule Tempo.Explain do
   """
   @spec explain(term()) :: Explanation.t()
   def explain(value) do
+    value = as_resolved(value)
     %Explanation{kind: classify(value), parts: explain_parts(value)}
   end
+
+  # A selection is worded as it is resolved: a day with no month, selected in
+  # a year, is a day of the year. A selection alone has no period until it is
+  # paired with one, and is worded as it is written.
+  defp as_resolved(%Tempo{time: [{:selection, _selection} | _units]} = selection), do: selection
+  defp as_resolved(value), do: Selection.read_in_its_period(value)
 
   @doc """
   Render an explanation as plain multi-line text.

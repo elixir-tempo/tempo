@@ -20,8 +20,9 @@ defmodule Tempo.Matrix.Selections do
   and a day is selected when every part names it; a count from the end is
   counted in the period its unit is in; a week is an ISO 8601 week, and a
   year's weeks keep the days they hold of the year before and after; a time
-  of day is on each day the parts name. A day of the month in a year, with
-  no month named, is not generated: its reading is undecided (`TODO.md`).
+  of day is on each day the parts name. A day selected in a year, with no
+  month, week or day of the year beside it, is a day of the year, as the
+  value `2026Y45D` is (decided 2026-10-04).
 
   """
 
@@ -153,6 +154,10 @@ defmodule Tempo.Matrix.Selections do
     {Gregorian, [year: 2026], [], :day_of_year},
     {Gregorian, [year: 2026], [], :day_of_week},
     {Gregorian, [year: 2026], [day_of_week: [1]], :instance},
+    {Gregorian, [year: 2026], [], :day},
+    {Gregorian, [year: 2024], [], :day},
+    {Gregorian, [year: 2026], [day: [45]], :day_of_week},
+    {Gregorian, [year: 2026], [day: [45]], :hour},
     {Gregorian, [year: 2024], [month: [2]], :day},
     {Gregorian, [year: 2026, month: 6], [], :day},
     {Gregorian, [year: 2026, month: 6], [], :day_of_week},
@@ -168,6 +173,7 @@ defmodule Tempo.Matrix.Selections do
     {Hebrew, [year: 5787], [], :month},
     {Hebrew, [year: 5788], [], :month},
     {Hebrew, [year: 5787], [month: [13]], :day},
+    {Hebrew, [year: 5787], [], :day},
     {Hebrew, [year: 5787, month: 6], [], :day},
     {ISOWeek, [year: 2026], [], :week},
     {ISOWeek, [year: 2026], [week: [25]], :day_of_week},
@@ -319,6 +325,8 @@ defmodule Tempo.Matrix.Selections do
   """
   @spec members(datum()) :: [Reference.point()]
   def members(%{calendar: calendar, period: period, parts: parts}) do
+    parts = read_in(parts, period)
+
     period
     |> days(parts, calendar)
     |> Enum.filter(&named?(&1, parts, calendar))
@@ -326,6 +334,19 @@ defmodule Tempo.Matrix.Selections do
     |> Enum.flat_map(&at_times(&1, parts, period))
     |> positions(parts[:instance])
   end
+
+  # A day selected in a year is a day of the year where no part beside it is
+  # a month, a week or a day of the year for it to be a day of.
+  defp read_in(parts, year: _year) do
+    if Enum.any?([:month, :week, :day_of_year], &Keyword.has_key?(parts, &1)),
+      do: parts,
+      else: Enum.map(parts, &day_of_the_year/1)
+  end
+
+  defp read_in(parts, _finer_period), do: parts
+
+  defp day_of_the_year({:day, written}), do: {:day_of_year, written}
+  defp day_of_the_year(part), do: part
 
   # The days of the period, as proleptic Gregorian dates. A year whose weeks
   # are selected, and a year of a calendar of weeks, is its ISO 8601 weeks'

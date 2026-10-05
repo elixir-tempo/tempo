@@ -96,7 +96,7 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 
 * **A month in a calendar of weeks** — `6M` in `ISOWeek` or `NRF` is a `ConversionError` when it is read, and stays one (decided 2026-10-04).
 
-* **A day with no month, selected in a year** — a day of the year (decided 2026-10-04); to build, in `TODO.md`.
+* **A day with no month, selected in a year** — a day of the year (decided 2026-10-04); built 2026-10-05 as one reading, `Tempo.RRule.Selection.read_in_its_period/1`, which the conversion, the RRULE writer and `explain/1` ask, with `Tempo.select/2` reading a constraint the same way where it is merged onto a year. Held in `test/tempo/day_with_no_month_test.exs` against `Date` and in the matrix's selections.
 
 * **A weekday in a calendar whose week does not start on Monday** — `K` counts the days of the week the value is in: the calendar's own in a calendar of weeks, ISO 8601's in a calendar of months (decided 2026-10-05). The value `2026Y25W3K` in `NRF` is its third day, Tuesday, and so are a selection and a rule there since 2026-10-05, where they read Wednesday. A selector given to `Tempo.select/2` is read in the calendar it is written in (decided the same day, when it was seen that `Tempo.workdays/1` is a Gregorian `K` value): `~o"3K"` selects Wednesdays from an `NRF` week and `~o"3K[u-ca=nrf]"` Tuesdays from any span. Held in `test/tempo/week_calendar_test.exs` against the weekday Elixir gives each date.
 
@@ -154,7 +154,7 @@ They become one module with two questions, each asked of Calendrical and of noth
 
 * **The values a written value names among them** — a number, a count from the end, a range resolved end by end, a set: in order and once each, with what the period lacks either an error (reading a value) or passed over (a selection), as the caller asks.
 
-Validation, the walk, `select/2`, the selection and `explain/1` call it and hold no arithmetic of their own. `select/2` held one count of its own, the weeks of a month (`weeks_in_month/3`), until 2026-10-05, when a week selected from within a month became a named refusal (the week-of-month item of `TODO.md`); and it still merges a constraint onto its base and reads the result as a value, so a constraint that is no selection is resolved by the reading of a value and not by the selection's resolver. Whether the two become one is open, and waits on the reading of a day with no month. It is verified in one place: its own property test against `Tempo.Matrix.Selections`' counting, in every calendar of the census.
+Validation, the walk, `select/2`, the selection and `explain/1` call it and hold no arithmetic of their own. `select/2` held one count of its own, the weeks of a month (`weeks_in_month/3`), until 2026-10-05, when a week selected from within a month became a named refusal (the week-of-month item of `TODO.md`); and it still merges a constraint onto its base and reads the result as a value, so a constraint that is no selection is resolved by the reading of a value and not by the selection's resolver. Whether the two become one is open: with the day with no month read as a day of the year in both (2026-10-05), the two give the same spans in 444 of 516 cells measured, and the 72 left are listed in `TODO.md` with the reading each needs. It is verified in one place: its own property test against `Tempo.Matrix.Selections`' counting, in every calendar of the census.
 
 ## Tasks
 

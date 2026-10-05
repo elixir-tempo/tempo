@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A day with no month, selected in a year, is a day of the year, as the value `2026Y45D` is read: `2026YL45DN`, `Tempo.select(~o"2026", ~o"45D")` and `R/2026/P1Y/FL45DN` are 14 February and `2026YL-1DN` is 31 December, where the day was read in the year's first month, so the 45th selected nothing and the last day was 31 January. A recurrence's start that names a month still gives the day that month (`R/2026-03-10/P1Y/FL15DN` is each 15 March), `Tempo.RRule.to_string/1` writes the day of the year as `BYYEARDAY`, and `Tempo.explain/1` says "the 45th day of the year".
+
 * A week given to `Tempo.select/2` to select from a month, or from a day or a time within one, returns a `Tempo.ConversionError` whose `:reason` is `:not_built` and whose `:target` is `:week_of_month`, where `Tempo.select(~o"2026-06", ~o"-1W")` was `2026Y6M5W/6W`, a week of the month that no value is read as. Its walk yielded `2026Y6M5W1K`, a set operation on it was a `Tempo.ResolutionError` and its text named other dates; a week is still selected from a year and from a week, and a day of the week from any base.
 
 * A computed event with no date where a recurrence or a selection asks for it is an error, the new `Tempo.EventError`, which names the event and the year: `Tempo.to_interval(~o"R/../P1Y/FL(march-equinox)eN", within: ~o"0500Y")`, an equinox being computed from 1000 CE, and `(brigadoon)e`, a name no resolver knows, where each was no occurrence and `R2/0500Y/P1Y/FL(march-equinox)eN` was the equinoxes of 1000 and 1001. A registered `Tempo.Event.Resolver`'s `{:error, reason}` is the error's `:reason`, a zone on an event with no instant is one too, and a walk raises it.

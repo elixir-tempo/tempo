@@ -171,7 +171,9 @@ defmodule Tempo.NotBuilt do
   # a month or a year the count is of the month a date names. A month alone
   # is the month the calendar counts, a month with a day is the date they
   # name, and a day of the year, a week and the units of a time of day are
-  # counted from the year's or the day's own start: each is answered.
+  # counted from the year's or the day's own start: each is answered. A day
+  # with no month, selected in a year, is a day of the year by the time it is
+  # asked here (`Tempo.RRule.Selection.read_in_its_period/1`).
   @spec selection(list(), Tempo.t() | Interval.t(), module()) ::
           :ok | {:error, ConversionError.t()}
   def selection(selection, value, calendar) when is_list(selection) do
@@ -196,9 +198,10 @@ defmodule Tempo.NotBuilt do
   # A selector of `Tempo.select/2`, or the unit and the numbers of one given
   # as numbers, that is merged onto `from`, the start of the span it selects
   # from, in a year that does not begin with its first month: a day of a
-  # month without its month, selected from a month or a year, and a month
-  # alone in a year whose months are not counted from its start. A weekday
-  # is selected among the span's own days, and is answered.
+  # month without its month, selected from a month, and a month alone in a
+  # year whose months are not counted from its start. A weekday is selected
+  # among the span's own days, and is answered; so is a day with no month
+  # selected from a year, which is merged as the day of the year it is.
   @spec selector(list(), Tempo.t()) :: :ok | {:error, ConversionError.t()}
   def selector(selector, %Tempo{time: time, calendar: calendar} = from)
       when is_list(selector) and is_list(time) do

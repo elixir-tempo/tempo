@@ -128,6 +128,8 @@ All other EDTF Level 2 features — including wide-range exponent years (`Y17E8`
 
 `O` is the day of the year and `D` the day of the month, and Tempo keeps them apart: a day of the year writes back as `O`, and it never follows a month, so `Tempo.at(~o"3M", ~o"2O")` is an error. A `D` with no month before it reads as a day of the year wherever a year resolves it — `1985Y102D` is 12 April, as `1985Y102O` is, and `Tempo.select(~o"2026", ~o"-1D")` is 31 December — and as a day of a month elsewhere: `Tempo.at(~o"3M", ~o"2D")` is 2 March.
 
+A selection reads it the same way. Selected in a year with nothing to give it a month, a day is a day of the year: `2026YL45DN` is 14 February, `2026YL-1DN` is 31 December, and so are `Tempo.select(~o"2026", ~o"45D")` and the rule of a recurrence that steps by years from a year or from no start (`R/2026/P1Y/FL-1DN` is each 31 December). A rule takes from its start what it does not say (§13.6.3), so a start that names a month gives the day that month: `R/2026-03-10/P1Y/FL15DN` is each 15 March. A month, a week, a day of the year or a computed event beside the day places it already, and `L3M15DN` is 15 March wherever it is selected.
+
 Without a year, a day, a day of the year or a week is checked only against what every year shares: none is 0. A month is no further from either end than the most months a year of its calendar has, so `13M` is refused in the Gregorian calendar and allowed in the Hebrew. A day is bounded once it has a year: `366O` is 31 December in a leap year and an error in a common one.
 
 ### Component qualification (ISO 8601-2 §8)

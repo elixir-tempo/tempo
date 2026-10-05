@@ -4,6 +4,7 @@ defmodule Tempo.RRule.Encoder do
   alias Tempo.Compare
   alias Tempo.ConversionError
   alias Tempo.NotBuilt
+  alias Tempo.RRule.Selection
   alias Tempo.UnitValues
 
   # Converts a `%Tempo.Interval{}` back into an RFC 5545 RRULE
@@ -112,6 +113,11 @@ defmodule Tempo.RRule.Encoder do
     # What RRULE has no form for in any calendar is refused first, each by
     # its own name. What is left would be written, and is refused where it
     # would be read in the Gregorian calendar as another rule.
+    #
+    # The rule is written as it is resolved: a day with no month, in a yearly
+    # rule whose start gives it none, is a day of the year (`BYYEARDAY`).
+    interval = Selection.read_in_its_period(interval)
+
     with {:ok, interval} <- keeping_last_day(interval),
          {:ok, freq_and_interval_parts} <- freq_and_interval(time, interval),
          {:ok, bound_part} <- bound_part(interval),

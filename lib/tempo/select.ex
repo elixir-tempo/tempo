@@ -152,6 +152,10 @@ defmodule Tempo.Select do
   `Tempo.select(~o"2026", [-1])` is December. An index the period
   does not have, such as `[30]` on February, selects nothing there.
 
+  A day with no month, selected from a year, is a day of the year, as
+  the value `~o"2026Y45D"` is: `Tempo.select(~o"2026", ~o"45D")` is
+  14 February and `~o"-45D"` the 45th day from the year's end.
+
   A value a period does not have is passed over wherever it is written.
   A set or a range keeps the values the period has, so `~o"{1,30}D"`
   selects the 1st from February and `~o"{25..35}D"` the 25th to the 30th
@@ -239,8 +243,7 @@ defmodule Tempo.Select do
   @type base :: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
 
   # Time units from coarsest to finest. Used for constraint-vs-base
-  # resolution comparison, merged-keyword-list canonical ordering,
-  # and the `propagate_last_for_negatives/3` intermediate detection.
+  # resolution comparison and merged-keyword-list canonical ordering.
   @unit_order_coarse_to_fine [
     :year,
     :month,
@@ -1127,6 +1130,8 @@ defmodule Tempo.Select do
   # Units after the weekday (`~o"1KT10H"`, each Monday at 10:00) are merged
   # onto each of the days it selects.
   defp project_onto_base(%Interval{} = base, %Tempo{time: c_time, calendar: selector_calendar}) do
+    c_time = read_in(c_time, base)
+
     case day_of_week_only(c_time, selector_calendar) do
       {:ok, weekdays} -> base |> weekdays_in(weekdays) |> on_each_day(after_day_of_week(c_time))
       :no -> project_merge(base, c_time)
@@ -1143,8 +1148,11 @@ defmodule Tempo.Select do
   # duration to the projected start. Recurring or open selectors fall
   # back to point projection of the from-endpoint.
   defp project_onto_base(%Interval{} = base, %Interval{from: %Tempo{} = c_from} = constraint) do
+    c_from = %{c_from | time: read_in(c_from.time, base)}
+
     case span_endpoint(constraint) do
       {:to, %Tempo{} = c_to} ->
+        c_to = %{c_to | time: read_in(c_to.time, base)}
         on_each_period(base, c_from.time, &project_span(&1, c_from, c_to))
 
       {:duration, %Duration{} = duration} ->
@@ -1156,6 +1164,18 @@ defmodule Tempo.Select do
   end
 
   defp project_onto_base(_base, constraint), do: {:error, unrecognised_selector(constraint)}
+
+  # A day with no month, selected from a year, is a day of the year, as a
+  # value's is (`2026Y45D`) and a selection's (`Tempo.RRule.Selection`): the
+  # 45th is 14 February and the last 31 December. A calendar of weeks has no
+  # months, and refuses a day of one where it is merged.
+  defp read_in(c_time, %Interval{from: %Tempo{time: [{:year, _year}], calendar: calendar}}) do
+    if Tempo.week_based_calendar?(Compare.effective_calendar(calendar)),
+      do: c_time,
+      else: Selection.days_of_year_where_no_month(c_time)
+  end
+
+  defp read_in(c_time, _period), do: c_time
 
   # The units a constraint names after its weekday, merged onto each day the
   # weekday selects.
@@ -1451,7 +1471,6 @@ defmodule Tempo.Select do
     base_time
     |> prune_off_axis_defaults(c_time, base_res)
     |> merge_with_constraint(c_time)
-    |> propagate_last_for_negatives(c_time, base_res)
     |> trim_finer_than_constraint(c_time)
     |> reorder_coarse_to_fine()
     |> named_in_period(calendar)
@@ -1566,73 +1585,6 @@ defmodule Tempo.Select do
     base_time
     |> Enum.map(fn {unit, value} -> {unit, Keyword.get(c_time, unit, value)} end)
     |> Kernel.++(Enum.reject(c_time, fn {unit, _} -> Keyword.has_key?(base_time, unit) end))
-  end
-
-  # The natural ancestors of a time-scale unit on its ISO 8601 axis.
-  # Used by `propagate_last_for_negatives/2` to identify which
-  # intermediate units need "last" propagation.
-  #
-  #   * Gregorian axis: year → month → day → hour → minute → second
-  #   * Week axis:      year → week → day_of_week
-  #   * Ordinal axis:   year → day_of_year
-  defp axis_ancestors(:month), do: [:year]
-  defp axis_ancestors(:day), do: [:year, :month]
-  defp axis_ancestors(:week), do: [:year]
-  defp axis_ancestors(:day_of_week), do: [:year, :week]
-  defp axis_ancestors(:day_of_year), do: [:year]
-  defp axis_ancestors(:hour), do: [:year, :month, :day]
-  defp axis_ancestors(:minute), do: [:year, :month, :day, :hour]
-  defp axis_ancestors(:second), do: [:year, :month, :day, :hour, :minute]
-  defp axis_ancestors(_), do: []
-
-  # ISO 8601-2 §4.4.1 negative values count from the end. When the
-  # constraint specifies a negative value at its finest unit (e.g.
-  # `~o"-1D"` on a year base), any intermediate coarser units on
-  # the constraint's axis that came from the base's start-of-span
-  # materialisation should also mean "last" — otherwise `-1D` on
-  # `~o"2026"` would resolve to "last day of January" (base's first
-  # month) rather than "last day of year". The propagation rewrites
-  # those intermediates as `-1` sentinels so the subsequent
-  # resolve-negatives pass picks up their correct end-of-span value.
-  #
-  # `:year` is never propagated — a negative `:year` means BC, not
-  # "last year", per ISO 8601-2's expanded-year form.
-  #
-  # Units that are user-specified by the base (at or coarser than
-  # `base_resolution`) are also never propagated — on a month base,
-  # a `~o"-1D"` selector should resolve to "last day of the user's
-  # month", not "last day of December".
-  defp propagate_last_for_negatives(merged, c_time, base_resolution) do
-    if has_negative?(c_time) do
-      finest = finest_unit(c_time)
-      base_res_idx = unit_index(base_resolution) || -1
-
-      intermediates =
-        finest
-        |> axis_ancestors()
-        |> Enum.reject(&(&1 == :year))
-        |> Enum.filter(fn unit ->
-          idx = unit_index(unit)
-          not_user_specified? = is_nil(idx) or idx > base_res_idx
-
-          not_user_specified? and
-            Keyword.has_key?(merged, unit) and
-            not Keyword.has_key?(c_time, unit)
-        end)
-
-      Enum.reduce(intermediates, merged, fn unit, acc ->
-        Keyword.replace!(acc, unit, -1)
-      end)
-    else
-      merged
-    end
-  end
-
-  defp has_negative?(time) do
-    Enum.any?(time, fn
-      {_unit, value} when is_integer(value) -> value < 0
-      _ -> false
-    end)
   end
 
   defp unit_index(unit) do

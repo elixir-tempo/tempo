@@ -57,7 +57,7 @@ defmodule Tempo.NotBuiltTest do
         calendar = unquote(calendar)
 
         for text <- ~w(1750Y12ML-1DN 1750Y1ML1DN 1750Y3ML5DN 1750Y1ML1KN 1750Y12ML1K-1IN
-                       1750YL1K1IN 1750YL1K-1IN 1750YL1KN 1750YL15DN 1750YL3M1KN) do
+                       1750YL1K1IN 1750YL1K-1IN 1750YL1KN 1750YL3M1KN) do
           value = read(text, calendar)
 
           assert refused?(Tempo.to_interval(value), :selection, calendar), text
@@ -71,7 +71,7 @@ defmodule Tempo.NotBuiltTest do
         calendar = unquote(calendar)
 
         for text <- ~w(R4/1750Y11M/P1M/FL1DN R4/1750Y11M/P1M/FL-1DN R3/1750Y1M/P1M/FL1KN
-                       R2/1750Y5M10D/P1Y/FL1K1IN R2/1750Y/P1Y/FL15DN) do
+                       R2/1750Y5M10D/P1Y/FL1K1IN R2/1750Y5M10D/P1Y/FL15DN) do
           recurrence = read(text, calendar)
 
           assert refused?(Tempo.to_interval(recurrence), :selection, calendar), text
@@ -79,15 +79,10 @@ defmodule Tempo.NotBuiltTest do
         end
       end
 
-      test "is refused for a day of a month selected from a month or a year of #{inspect(calendar)}" do
+      test "is refused for a day of a month selected from a month of #{inspect(calendar)}" do
         calendar = unquote(calendar)
 
-        for {span, selector} <- [
-              {"1750Y1M", "-1D"},
-              {"1750Y12M", "1D"},
-              {"1750Y", "25D"},
-              {"1750Y", "-1D"}
-            ] do
+        for {span, selector} <- [{"1750Y1M", "-1D"}, {"1750Y12M", "1D"}, {"1750Y12M", "{1,15}D"}] do
           selected = Tempo.select(read(span, calendar), read(selector, calendar))
 
           assert refused?(selected, :selection, calendar), "#{selector} from #{span}"
@@ -157,6 +152,22 @@ defmodule Tempo.NotBuiltTest do
                  calendar
                ) ==
                  [date]
+      end
+    end
+
+    test "a day with no month, selected in a year, is a day of the year" do
+      # It was refused while it was read as a day of the year's first month.
+      for calendar <- @turning, {day, index} <- [{1, 0}, {15, 14}, {100, 99}, {-1, -1}] do
+        date = calendar.year(1750) |> days() |> Enum.at(index)
+        next = calendar.year(1751) |> days() |> Enum.at(index)
+        year = read("1750Y", calendar)
+
+        assert first_days(Tempo.to_interval(read("1750YL#{day}DN", calendar)), calendar) == [date]
+        assert first_days(Tempo.select(year, read("#{day}D", calendar)), calendar) == [date]
+        assert first_days(Tempo.select(year, read("L#{day}DN", calendar)), calendar) == [date]
+
+        assert first_days(Tempo.to_interval(read("R2/1750Y/P1Y/FL#{day}DN", calendar)), calendar) ==
+                 [date, next]
       end
     end
 

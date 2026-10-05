@@ -6412,6 +6412,7 @@ defmodule Tempo do
          opts = window_in_value_frame(value, opts),
          :ok <- ends_expand(value),
          value = counted_from_points(value),
+         value = Selection.read_in_its_period(value),
          {:ok, value} <- placed_on_window(value, Keyword.get(opts, :within)),
          :one_start <- recurrence_from_each_value(value, opts),
          :ok <- rule_has_a_date(value),

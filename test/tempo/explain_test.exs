@@ -282,8 +282,21 @@ defmodule Tempo.Explain.Test do
       assert selects("R/../P1Y/FL13MN") == "Selects: in month 13."
     end
 
+    test "a day with no month is a day of the year where it is selected in one" do
+      assert selects("2026YL15DN") == "In 2026, selects on the 15th day of the year."
+      assert selects("2026YL-1DN") == "In 2026, selects on the last day of the year."
+      assert selects("R/2026/P1Y/FL45DN") == "Selects: on the 45th day of the year."
+      assert selects("R/../P1Y/FL45DN") == "Selects: on the 45th day of the year."
+
+      # A start that names a month gives the day its month, and a selection
+      # alone has no period yet.
+      assert selects("R/2026-03-10/P1Y/FL15DN") == "Selects: on the 15th."
+      assert selects("R/2026/P1M/FL15DN") == "Selects: on the 15th."
+      assert selects("L15DN") == "Selects on the 15th."
+    end
+
     test "the period a value's selection is in is named" do
-      assert selects("2026YL15DN") == "In 2026, selects on the 15th."
+      assert selects("2026YL3M15DN") == "In 2026, selects in March, on the 15th."
       assert selects("2026Y6ML15DN") == "In June 2026, selects on the 15th."
       assert selects("2026Y6M15DLT9HN") == "On June 15, 2026, selects at 09:00."
       assert selects("2026Y25WL1KN") == "In week 25 of 2026, selects on a Monday."

@@ -108,6 +108,8 @@ Most RRULE `BY*` filters map straight onto the ISO 8601-2 selection grammar — 
 
 RFC 5545 lets a rule leave to DTSTART what it does not say, and ISO 8601-2 has no implicit selection: Annex C.4 has a converted rule state each part. `Tempo.RRule.parse/2` does so when it is given a start that is a calendar date: a weekly rule's weekday (`FREQ=WEEKLY` from a Tuesday is `…/P1W/FL2KN`), a monthly rule's day of the month (`…/P1M/FL31DN`), a yearly rule's month and day (`…/P1Y/FL3M10DN`), and the weekday of a yearly rule with `BYWEEKNO`. The stated form is the rule's ISO 8601 text and what `Tempo.RRule.to_string/1` writes back (`FREQ=MONTHLY;BYMONTHDAY=31`), which RFC 5545 reads as the rule it was.
 
+The month matters because the two forms read a day with no month differently in a year. In an ISO 8601 rule that steps by years, from a year or from no start, it is a day of the year: `R/2026/P1Y/FL45DN` is each 14 February, and is written `FREQ=YEARLY;BYYEARDAY=45`. RFC 5545's `BYMONTHDAY` is always a day of a month, DTSTART's where the rule names none, which is why a rule read with a start states the month (`…/P1Y/FL3M15DN`).
+
 Stating the day is also where the two forms part, as they should. A day selected is passed over in a month that lacks it, so the rule read from `FREQ=MONTHLY` on 31 January lists the months of 31 days, as RFC 5545 has it. The ISO 8601 recurrence `R/2026-01-31/P1M` selects nothing: it is its start and n months on, the last day of a shorter month among them, and each of its occurrences is a month long where the rule's is a day.
 
 ### `BYSETPOS` — the ISO 8601-2 §12.9 position `I`
