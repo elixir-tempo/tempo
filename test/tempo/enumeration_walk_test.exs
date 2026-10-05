@@ -34,9 +34,10 @@ defmodule Tempo.EnumerationWalk.Test do
     end
 
     test "a masked and an unspecified day of the year" do
-      assert units(~o"2026Y1XXO", :day_of_year) == Enum.to_list(100..199)
-      assert units(~o"2026YX*O", :day_of_year) == Enum.to_list(1..365)
-      assert units(~o"2024YX*O", :day_of_year) == Enum.to_list(1..366)
+      # The days of a year are walked as the dates they name, as a week's are.
+      assert Enum.map(~o"2026Y1XXO", &Tempo.day_of_year/1) == Enum.to_list(100..199)
+      assert Enum.map(~o"2026YX*O", &Tempo.day_of_year/1) == Enum.to_list(1..365)
+      assert Enum.map(~o"2024YX*O", &Tempo.day_of_year/1) == Enum.to_list(1..366)
     end
 
     test "a masked hour, minute and second" do

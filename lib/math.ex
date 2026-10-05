@@ -9,9 +9,11 @@ defmodule Tempo.Math do
   alias Tempo.IntervalEndpointsError
   alias Tempo.IntervalSet
   alias Tempo.InvalidUnitError
+  alias Tempo.Iso8601.Parser
   alias Tempo.Iso8601.Unit
   alias Tempo.Mask
   alias Tempo.NotBuilt
+  alias Tempo.Qualification
   alias Tempo.ResolutionError
   alias Tempo.TimeZoneDatabase
   alias Tempo.UnanchoredError
@@ -909,6 +911,7 @@ defmodule Tempo.Math do
         tempo
         |> add_to_value(duration)
         |> Validation.calendar_date_from_week_date()
+        |> Validation.calendar_date_from_ordinal_date()
         |> NotBuilt.result()
 
       {:error, _not_built} = error ->
@@ -1218,10 +1221,15 @@ defmodule Tempo.Math do
     tempo = unspecified_as_masks(tempo, duration_time)
     masks = find_masks(tempo.time)
 
-    if Enum.any?(masks, fn {unit, _mask} -> duration_reaches?(duration_time, unit) end) do
-      shift_masked(tempo, masks, duration)
-    else
-      add_crisp(tempo, duration)
+    cond do
+      Enum.any?(masks, fn {unit, _mask} -> duration_reaches?(duration_time, unit) end) ->
+        shift_masked(tempo, masks, duration)
+
+      several_ordinal_dates?(tempo.time) ->
+        shift_ordinal_dates(tempo, duration)
+
+      true ->
+        add_crisp(tempo, duration)
     end
   end
 
@@ -1229,6 +1237,13 @@ defmodule Tempo.Math do
   # non-zero component at the masked unit or finer (which is where the
   # arithmetic reads or writes the masked value).
   @unit_depth [year: 0, month: 1, week: 2, day: 2, hour: 3, minute: 4, second: 5, microsecond: 6]
+
+  # A day of the year is counted from the year's start, so a step by any
+  # unit moves it: a month on from the hundredth day is another day of the
+  # year, and a year on from the hundredth day of a leap year is the
+  # ninety-ninth of the next.
+  defp duration_reaches?(duration_time, :day_of_year),
+    do: Enum.any?(duration_time, fn {_unit, amount} -> amount != 0 end)
 
   defp duration_reaches?(duration_time, mask_unit) do
     mask_depth = Keyword.fetch!(@unit_depth, mask_unit)
@@ -1245,8 +1260,18 @@ defmodule Tempo.Math do
   # afterwards — `Tempo.shift(~o"2018±2Y", ~o"P1Y") == ~o"2019±2Y"` rather
   # than crashing the integer arithmetic on the tuple.
   # A week date names a week and a day of it, and no month, so it has no
-  # month to step; its weeks and days step on the week axis.
-  defp add_crisp(%Tempo{time: time} = tempo, %Tempo.Duration{time: duration_time} = duration) do
+  # month to step; its weeks and days step on the week axis. A day of the
+  # year is the date it names, and is stepped as that date.
+  defp add_crisp(%Tempo{} = tempo, %Tempo.Duration{} = duration) do
+    tempo
+    |> Validation.calendar_date_from_ordinal_date()
+    |> add_crisp_on_its_axis(duration)
+  end
+
+  defp add_crisp_on_its_axis(
+         %Tempo{time: time} = tempo,
+         %Tempo.Duration{time: duration_time} = duration
+       ) do
     if Keyword.has_key?(time, :week) and not Keyword.has_key?(time, :month) and
          Keyword.get(duration_time, :month, 0) != 0 do
       {:error,
@@ -1408,7 +1433,7 @@ defmodule Tempo.Math do
 
   # Masks are only resolved on units the arithmetic understands; a mask on
   # any other unit falls through to the crisp path unchanged.
-  @maskable_units [:year, :month, :day, :hour, :minute, :second]
+  @maskable_units [:year, :month, :day, :day_of_year, :hour, :minute, :second]
 
   # An unspecified unit other than the year (`X*D`, any day) is every value
   # the unit takes, as a mask of all its digits is (`XXD`), and a shift that
@@ -1422,11 +1447,16 @@ defmodule Tempo.Math do
   defp unspecified_as_mask({unit, :any} = component, duration_time)
        when unit in @maskable_units and unit != :year do
     if duration_reaches?(duration_time, unit),
-      do: {unit, {:mask, [:X, :X]}},
+      do: {unit, {:mask, every_digit(unit)}},
       else: component
   end
 
   defp unspecified_as_mask(component, _duration_time), do: component
+
+  # A day of the year is written in three digits, and every other unit a
+  # mask is read on in two.
+  defp every_digit(:day_of_year), do: [:X, :X, :X]
+  defp every_digit(_unit), do: [:X, :X]
 
   defp find_masks(time) do
     Enum.flat_map(time, fn
@@ -1505,6 +1535,98 @@ defmodule Tempo.Math do
   defp one_span({:ok, %Interval{} = span}), do: {:ok, span}
   defp one_span({:ok, _several_spans}), do: {:error, :grouped_component}
   defp one_span({:error, _reason} = error), do: error
+
+  # ------------------------------------------------------------------
+  # Several days of the year
+  #
+  # A day of the year is the date it names: `2026Y100O` is read as 10 April.
+  # A value that holds a set of them, or a set of years with one, names a
+  # date for each, and a step reaches every one of those dates (decided
+  # 2026-10-04): each is stepped as the date it is. The dates they land on
+  # are written again as days of the year where the years and the days
+  # they hold name those dates and no others, and are the set of their
+  # spans where they do not, as two days that land in two years.
+
+  defp several_ordinal_dates?([{:year, years}, {:day_of_year, days} | _rest]),
+    do: several?(years) or several?(days)
+
+  defp several_ordinal_dates?(_time), do: false
+
+  defp several?(values), do: is_list(values) or is_struct(values, Range)
+
+  # `Tempo.to_interval/1` resolves the dates the walk yields, and returns
+  # as an error what the walk would raise, so it is asked first.
+  defp shift_ordinal_dates(%Tempo{} = tempo, duration) do
+    with {:ok, _spans} <- Tempo.to_interval(tempo),
+         {:ok, landed} <- stepped_dates(tempo, duration) do
+      gathered(landed, Compare.effective_calendar(tempo.calendar))
+    end
+  end
+
+  # Each date the value names, stepped. The first that cannot be stepped is
+  # the answer for them all.
+  defp stepped_dates(%Tempo{} = tempo, duration) do
+    tempo
+    |> Enum.reduce_while({:ok, []}, fn date, {:ok, landed} ->
+      case add_to_value(date, duration) do
+        %Tempo{} = stepped -> {:cont, {:ok, [stepped | landed]}}
+        {:error, _reason} = error -> {:halt, error}
+        _several_values -> {:halt, {:error, :grouped_component}}
+      end
+    end)
+    |> case do
+      {:ok, landed} -> {:ok, Enum.reverse(landed)}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  # The dates a step landed on, as one value where the product of the years
+  # and the days of the year they hold is those dates, each with the same
+  # time of day, and as the set of their spans otherwise.
+  defp gathered(landed, calendar) do
+    ordinals = Enum.map(landed, &ordinal(&1, calendar))
+    years = ordinals |> Enum.map(&elem(&1, 0)) |> Enum.uniq() |> Enum.sort()
+    days = ordinals |> Enum.map(&elem(&1, 1)) |> Enum.uniq() |> Enum.sort()
+
+    with [%Tempo{time: after_the_day}] <- ordinals |> Enum.map(&elem(&1, 2)) |> Enum.uniq(),
+         true <- length(Enum.uniq(ordinals)) == length(years) * length(days) do
+      time = [{:year, one_or_set(years)}, {:day_of_year, one_or_set(days)} | after_the_day]
+      {:ok, %{Qualification.rewritten(hd(landed), time) | time: time}}
+    else
+      _in_no_one_value -> spans_of(landed)
+    end
+  end
+
+  # A date as its year, its day of that year, and the value it is but for
+  # its date: the time of day, the zone and the offset the dates must share
+  # to be written as one value.
+  defp ordinal(
+         %Tempo{time: [{:year, year}, {:month, month}, {:day, day} | rest]} = date,
+         calendar
+       )
+       when is_integer(year) and is_integer(month) and is_integer(day),
+       do:
+         {year, calendar.day_of_year(year, month, day), %{date | time: rest, qualifications: nil}}
+
+  # A value that is no calendar date is no day of a year to gather.
+  defp ordinal(%Tempo{} = other, _calendar), do: {other, other, :not_a_date}
+
+  defp one_or_set([one]), do: one
+  defp one_or_set(several), do: Parser.consolidate_ranges(several)
+
+  defp spans_of(landed) do
+    landed
+    |> Enum.reduce_while({:ok, []}, fn date, {:ok, spans} ->
+      case one_span(Tempo.to_interval(date)) do
+        {:ok, span} -> {:cont, {:ok, [span | spans]}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, spans} -> IntervalSet.new(Enum.reverse(spans))
+      {:error, _reason} = error -> error
+    end
+  end
 
   # Replace every masked component with its minimum (or maximum) candidate,
   # coarse to fine so a sub-year mask sees the concrete coarser values it

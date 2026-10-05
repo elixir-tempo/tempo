@@ -188,9 +188,12 @@ defmodule Tempo.NotBuilt do
       reaches_the_day?(duration_time) and counted_through_the_values?(time, years, calendar)
   end
 
+  # A value that holds days of the year is stepped date by date, each by its
+  # calendar, whatever it holds.
   defp counted_through_the_values?(time, years, calendar) do
-    several?(years) or several?(value_of(time, :month)) or
-      unspecified_day_of_turning_month?(time, years, calendar)
+    not List.keymember?(time, :day_of_year, 0) and
+      (several?(years) or several?(value_of(time, :month)) or
+         unspecified_day_of_turning_month?(time, years, calendar))
   end
 
   defp unspecified_day_of_turning_month?(time, year, calendar) when is_integer(year) do

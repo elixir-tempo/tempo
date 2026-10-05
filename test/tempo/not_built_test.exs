@@ -281,6 +281,15 @@ defmodule Tempo.NotBuiltTest do
       end
     end
 
+    test "several days of the year are stepped date by date, by the calendar" do
+      for calendar <- @turning do
+        shifted = Tempo.shift(read("{1750,1751}Y100O", calendar), day: 1)
+        expected = for year <- [1750, 1751], do: year |> calendar.year() |> days() |> Enum.at(100)
+
+        assert Enum.map(shifted, &day(&1, calendar)) == expected
+      end
+    end
+
     test "a step by years is answered" do
       assert Tempo.shift(read("1750Y{3,4}M15D", March25), year: 1) ==
                read("1751Y{3,4}M15D", March25)

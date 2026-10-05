@@ -8,8 +8,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Correctness
 
-* [ ] **A day of the year from the walk is the calendar date** — `Enum.to_list(~o"2026Y{100,200}O")` is `[~o"2026Y4M10D", ~o"2026Y7M19D"]`, the walk of a masked or an unspecified day of the year yields dates, and `~o"2026-04-10" in ~o"2026Y{100,200}O"` is true, where the walk yields `2026Y100O`, which the parser reads as the date, and the span of a yielded value is `2026Y100O/101O`. A shift of such a set by a day is answered, where it is a `ResolutionError` that names a second. One rule with a week's day: read, built, walked or shifted, the value is the date. Decided 2026-10-05.
-
 * [ ] **A weekday is a day of the week the value is in** — `K` counts the days of the week: the calendar's own in a calendar of weeks, ISO 8601's, which starts on Monday, in a calendar of months. In `Calendrical.NRF`, whose week starts on Sunday, `Tempo.select(week, ~o"3K")`, `2026Y25WL3KN` and a rule's `L3KN` are its third day, Tuesday, as the value `2026Y25W3K` is, where they are Wednesday (`2026Y25W4K`). Nothing changes in the Gregorian, Hebrew or ISOWeek calendars, and an RRULE's `BYDAY` keeps naming the weekday it names. Decided 2026-10-05.
 
 * [ ] **`Tempo.select/2` refuses a selector of another calendar** — a selector that holds a month, a day of one or a day of the year in another calendar than the span's is a `Tempo.ConversionError` naming both, as `Tempo.on/2` and `Tempo.at/2` are: `Tempo.select(hebrew_year, ~o"6M15D")` reads the numbers in the Hebrew calendar today, and `~o"6M-1D"`, already read as June's 30th, selects nothing in a month of 29 days. A time of day and a weekday select in any calendar, and the selector is written in the span's (`Tempo.from_iso8601!("6M-1D", Calendrical.Hebrew)`). Decided 2026-10-05.
@@ -40,7 +38,7 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **Traditional months that are sets or masks** — `2026Y{1,2}m` parses as a mask (`traditional_month: {:mask, [[1..2]]}`) and a masked one (`1Xm`) is a `ConversionError` from `Enum` and `to_interval/2`: nothing lists the traditional months a year has, which is Calendrical's to answer. Found 2026-10-03.
 
-* [ ] **A shift reaches each value of a set** — `~o"2026Y6M{1,15}D"` plus a day is `~o"2026Y6M{2,16}D"`: each value the set names is shifted and the results gathered into the value where one unit can hold them, and into an interval set where it cannot (`{15,30}D` plus a day is 16 June and 1 July), where a shift from a unit that holds several values is a `ConversionError`. Decided 2026-10-04. An unspecified day of a week is one case: `Tempo.shift(~o"2026Y25WX*K", day: 1)` is the next week's Monday alone (`~o"2026-06-22"`), where `~o"2026Y6MX*D"` plus a day is the days from 2 June to 1 July.
+* [ ] **A shift reaches each value of a set** — `~o"2026Y6M{1,15}D"` plus a day is `~o"2026Y6M{2,16}D"`: each value the set names is shifted and the results gathered into the value where one unit can hold them, and into an interval set where it cannot (`{15,30}D` plus a day is 16 June and 1 July), where a shift from a unit that holds several values is a `ConversionError`. Decided 2026-10-04. An unspecified day of a week is one case: `Tempo.shift(~o"2026Y25WX*K", day: 1)` is the next week's Monday alone (`~o"2026-06-22"`), where `~o"2026Y6MX*D"` plus a day is the days from 2 June to 1 July. Done for a value that holds days of the year (2026-10-05), which is stepped date by date and gathered as decided here: `gathered/2` in `lib/math.ex` is what the month and week axes are to be brought to.
 
 ### Errors and API
 
@@ -123,6 +121,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A day of the year from the walk is the calendar date** — `Validation.calendar_date_from_ordinal_date/1` beside the week date's, where a value leaves the two walks, a shift and `extend_resolution/2`: a set, a mask and an unspecified day of the year are walked by their dates, and hold them. A shift reaches each date such a value names (`2026Y{100,200}O` plus a day is `2026Y{101,201}O`, a mask is the block a step on, two days in two years an interval set), and the accessors read no one date from several. 2026-10-05.
 
 * [x] **The `ex_slop` Credo checks pass** — the 162 issues the checks added in `13a5967` raised are cleared with `.credo.exs` as it is: 70 tests that read `set.intervals` count the set with `Tempo.IntervalSet.count/1`, a list of one to four is matched, a longer one and a walk are counted with `Enum.count/1`, and in `lib/` six comparisons of a length, a comment and a moduledoc line are rewritten. 2026-10-05.
 

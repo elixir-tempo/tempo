@@ -226,20 +226,20 @@ defmodule Tempo.Enumeration do
 
   # The components before the one read, and the value they are read into, as
   # every value read after them holds them. Where they name a week and a day
-  # of it, a calendar of months has the date of that day, which is found
-  # once for the hours, minutes or seconds read under it.
+  # of it, or a day of the year, a calendar of months has the date of that
+  # day, which is found once for the hours, minutes or seconds read under it.
   defp dated_before(tempo, ancestors) do
-    if List.keymember?(ancestors, :day_of_week, 0),
-      do: dated_day_of_week(tempo, ancestors),
+    if List.keymember?(ancestors, :day_of_week, 0) or List.keymember?(ancestors, :day_of_year, 0),
+      do: dated_ancestors(tempo, ancestors),
       else: {tempo, ancestors}
   end
 
-  defp dated_day_of_week(tempo, ancestors) do
+  defp dated_ancestors(tempo, ancestors) do
     case yielded(tempo, :lists.reverse(ancestors)) do
       %Tempo{time: [{:year, _year}, {:month, _month} | _rest] = dated} = dated_tempo ->
         {dated_tempo, :lists.reverse(dated)}
 
-      _a_week_and_its_day_still ->
+      _on_its_own_axis_still ->
         {tempo, ancestors}
     end
   end
@@ -250,6 +250,11 @@ defmodule Tempo.Enumeration do
   # as the dates they are and a calendar of weeks keeps its own.
   defp yielded(tempo, [{:year, _year}, {:week, _week}, {:day_of_week, _day} | _rest] = time),
     do: Validation.calendar_date_from_week_date(%{tempo | time: time})
+
+  # A day of the year is the date it names too, as `2026Y100O` is read: the
+  # walk of a set of them yields each as that date.
+  defp yielded(tempo, [{:year, _year}, {:day_of_year, _day} | _rest] = time),
+    do: Validation.calendar_date_from_ordinal_date(%{tempo | time: time})
 
   # A month the walk of a year yields is one its calendar counts from the
   # day the year begins, or the walk is refused: it has no error to return.

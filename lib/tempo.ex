@@ -3861,7 +3861,7 @@ defmodule Tempo do
           t | {:error, error_reason()}
   def extend_resolution(%Tempo{} = tempo, target_unit) do
     with %Tempo{} = extended <- extend_resolution_as_written(tempo, target_unit),
-         do: extended |> Validation.calendar_date_from_week_date() |> NotBuilt.result()
+         do: extended |> as_calendar_date() |> NotBuilt.result()
   end
 
   def extend_resolution(value, _target_unit),
@@ -4013,16 +4013,28 @@ defmodule Tempo do
 
   def at_resolution(value, _target_unit), do: {:error, not_one_value("at_resolution/2", value)}
 
+  # A value an operation wrote by its week or by its day of the year, as the
+  # calendar date it names in a calendar of months: what reading it gives.
+  defp as_calendar_date(%__MODULE__{} = value) do
+    value
+    |> Validation.calendar_date_from_week_date()
+    |> Validation.calendar_date_from_ordinal_date()
+  end
+
   # A week numbers each day within it, so the day of a value on the week
   # axis is its day of the week (`K`), in a calendar of weeks and for a
   # Gregorian week alike: a week date at day resolution is
-  # `[year, week, day_of_week]`. Truncating, extending and rounding to
-  # `:day` all read the unit here. A Gregorian week extended to it is then
-  # written as the date it names (`extend_resolution/2`).
+  # `[year, week, day_of_week]`. A value that holds several days of the
+  # year has its day there (`O`); one alone is read as its date.
+  # Truncating, extending and rounding to `:day` all read the unit here. A
+  # Gregorian week extended to it is then written as the date it names
+  # (`extend_resolution/2`).
   defp day_unit(:day, %__MODULE__{time: time, calendar: calendar}) do
-    if List.keymember?(time, :week, 0) or week_based_calendar?(calendar),
-      do: :day_of_week,
-      else: :day
+    cond do
+      List.keymember?(time, :week, 0) or week_based_calendar?(calendar) -> :day_of_week
+      List.keymember?(time, :day_of_year, 0) -> :day_of_year
+      true -> :day
+    end
   end
 
   defp day_unit(unit, _tempo), do: unit
@@ -5688,22 +5700,39 @@ defmodule Tempo do
 
   # Extract {year, month, day} from a Tempo or raise a uniform
   # error. Missing month or day default to 1 (start-of-unit) so
-  # quarter-of-year on a year-resolution value still works.
+  # quarter-of-year on a year-resolution value still works. A value on the
+  # week axis is read by its week and its day, and one that holds a day of
+  # the year by that day: several of them are no one date to read.
   defp require_ymd!(%Tempo{time: time} = tempo, function, opts \\ []) do
-    default_day = Keyword.get(opts, :default_day, 1)
     year = whole!(tempo, :year, function)
 
-    if List.keymember?(time, :week, 0) do
-      week = whole!(tempo, :week, function)
-      week_date_ymd!(tempo, function, {year, week, whole!(tempo, :day_of_week, function, 1)})
-    else
-      month = whole!(tempo, :month, function, 1)
-      day = whole!(tempo, :day, function, default_day)
+    cond do
+      List.keymember?(time, :week, 0) ->
+        week = whole!(tempo, :week, function)
+        week_date_ymd!(tempo, function, {year, week, whole!(tempo, :day_of_week, function, 1)})
 
-      if List.keymember?(time, :day, 0),
-        do: {year, month, day},
-        else: first_ymd(time, {year, month, day}, calendar_of(tempo))
+      List.keymember?(time, :day_of_year, 0) ->
+        ordinal_date_ymd(year, whole!(tempo, :day_of_year, function), calendar_of(tempo))
+
+      true ->
+        month_date_ymd!(tempo, function, year, Keyword.get(opts, :default_day, 1))
     end
+  end
+
+  defp month_date_ymd!(%Tempo{time: time} = tempo, function, year, default_day) do
+    month = whole!(tempo, :month, function, 1)
+    day = whole!(tempo, :day, function, default_day)
+
+    if List.keymember?(time, :day, 0),
+      do: {year, month, day},
+      else: first_ymd(time, {year, month, day}, calendar_of(tempo))
+  end
+
+  defp ordinal_date_ymd(year, day_of_year, calendar) do
+    %{year: year, month: month, day: day} =
+      Calendrical.date_from_day_of_year(year, day_of_year, calendar)
+
+    {year, month, day}
   end
 
   # The first day of a year or a month written with no day is the first of

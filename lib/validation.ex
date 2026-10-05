@@ -1431,6 +1431,26 @@ defmodule Tempo.Validation do
 
   def calendar_date_from_week_date(value), do: value
 
+  @doc false
+  # A value that names a year and a day of it, as the date it names: what
+  # reading it gives (`resolve/2`), for a value an operation built with the
+  # day of the year, as the walk of a set of them does. A value with no
+  # year, one whose year or day is not one whole number, and one that names
+  # a day its year does not have are kept as they are.
+  @spec calendar_date_from_ordinal_date(value) :: value when value: term()
+  def calendar_date_from_ordinal_date(
+        %Tempo{time: [{:year, year}, {:day_of_year, day} | _rest] = time, calendar: calendar} =
+          tempo
+      )
+      when is_integer(year) and is_integer(day) do
+    case resolve(time, Compare.effective_calendar(calendar)) do
+      [{:year, _year} | _units] = dated -> %{Qualification.rewritten(tempo, dated) | time: dated}
+      _no_such_day -> tempo
+    end
+  end
+
+  def calendar_date_from_ordinal_date(value), do: value
+
   defp prepend_year(_year, {:error, reason}), do: {:error, reason}
   defp prepend_year(year, resolved), do: [{:year, year} | resolved]
 

@@ -42,6 +42,8 @@ Every resolved Tempo at coarser-than-finest resolution is enumerable via implici
 
 A week's days are the dates they name: `Enum.to_list(~o"2026-W25")` is `~o"2026-06-15"` to `~o"2026-06-21"`, the values a week date is read as (`2026-W25-2` is `~o"2026-06-16"`), so `~o"2026-06-16" in ~o"2026-W25"` is true. A step of days or hours from a week lands on a date too (`Tempo.shift(~o"2026-W25", day: 1)` is `~o"2026-06-16"`), and a step of whole weeks on a week. A calendar of weeks, which has no months, keeps its week and its day of the week (`2026Y25W2K`), and so does a week with no year.
 
+A day of the year is the date it names in the same way. One alone is read as its date (`2026Y100O` is `~o"2026-04-10"`), and a value that holds several is walked by their dates: `Enum.to_list(~o"2026Y{100,200}O")` is `~o"2026-04-10"` and `~o"2026-07-19"`, so `~o"2026-04-10" in ~o"2026Y{100,200}O"` is true. A step reaches each of those dates, and they are written again as days of the year where one value holds them: a day on is `~o"2026Y{101,201}O"`, a month on `~o"2026Y{130,231}O"`, and two days that land in two years are an interval set. With no year a day of the year is walked as it is written.
+
 A calendar whose year turns on another day than the first of its first month (Calendrical's Julian `March25`, `March1`, `Sept1` and `Dec25`) starts its year on that day and counts the year's months from it: the first month of a `March25` year is 25 to 31 March and its twelfth 1 February to 24 March, so `1750Y1M` is walked by seven dates and `1750Y12M` by fifty-two. A date there keeps the number its calendar gives its month (`1750Y3M25D`, the first day of 1750), so a month's number is not the month of its dates. What Tempo does not yet work out in such a calendar it refuses by name: a selection that counts days within a month or a year, a season, and a step by days from a value that holds several months or years are each a `Tempo.ConversionError` whose `:reason` is `:not_built`, listed in [What each operation gives each value](operation-matrix.md#what-is-not-built).
 
 A month of a composite calendar has the days its calendar has: September 1752 in `Calendrical.Reform.England`, the month England adopted the Gregorian calendar, is walked by the 1st, the 2nd and the 14th to the 30th, the day after the 2nd is the 14th, and `1752Y9M3D` is no date. Its years before 1751 began on 25 March, and the calendar numbers their months as their dates do, so no month is the days that begin the year: a month of such a year is refused, where the year, its dates and their steps are answered.
@@ -80,7 +82,7 @@ A digit marked `X` means "any value in this position", and `X*` an unspecified u
 | A day some months lack | `1985-XX-31` | the 31st of the seven months with one |
 | Week masked | `2026-W2X` | weeks 20 to 29 of 2026 |
 | Day of the week masked | `2026-W25-X` | the seven days of week 25, 15 to 21 June |
-| Day of the year masked | `2026Y1XXO` | days 100 to 199 of 2026 |
+| Day of the year masked | `2026Y1XXO` | days 100 to 199 of 2026, 10 April to 18 July |
 | Hour masked | `T1XH` | hours 10 to 19 |
 | Unspecified month | `2026YX*M` | the 12 months of 2026 |
 | Unspecified hour | `TX*H` | hours 0 to 23 |

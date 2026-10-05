@@ -108,7 +108,7 @@ These keep their names and change their meaning:
 
 * **`1950S0`** — a parse error, since a value has at least one significant digit.
 
-* **Ordinal days** — a day of the year that does not resolve to a date (`350O`, `2020Y{100,200}O`) holds a `:day_of_year`, written back as `O`, where 1.x held a `:day` written `D`, so a match on `[day: _]` for one now matches `[day_of_year: _]`.
+* **Ordinal days** — a day of the year that does not resolve to a date (`350O`, `2020Y{100,200}O`) holds a `:day_of_year`, written back as `O`, where 1.x held a `:day` written `D`, so a match on `[day: _]` for one now matches `[day_of_year: _]`. The walk of one with a year yields the dates the days name (`Enum.to_list(~o"2020Y{100,200}O")` is `~o"2020-04-09"` and `~o"2020-07-18"`), and a shift reaches each of them.
 
 * **A value's `extended` map** — a zone, an offset and tags only, and `nil` with none of them: the calendar a `[u-ca=…]` suffix names is the value's `:calendar` module alone, where 1.x also kept its name as `extended.calendar`. A value read with a suffix now equals the same value made with a calendar module, and a Gregorian value read with `[u-ca=gregory]` is written without the suffix.
 

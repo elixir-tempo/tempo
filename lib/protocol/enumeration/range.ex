@@ -524,6 +524,9 @@ defimpl Enumerable, for: Tempo.Interval do
     end
   end
 
+  defp yielded(%Tempo{time: [{:year, _year}, {:day_of_year, _day} | _rest]} = value),
+    do: Validation.calendar_date_from_ordinal_date(value)
+
   defp yielded(%Tempo{} = value), do: Validation.calendar_date_from_week_date(value)
 
   # A whole turn ends where it starts, so its first value is given before
