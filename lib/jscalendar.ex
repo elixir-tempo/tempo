@@ -431,7 +431,8 @@ if Code.ensure_loaded?(JSCalendar) do
 
     defp to_rule(%RecurrenceRule{} = rule) do
       with {:ok, freq} <- frequency(rule.frequency),
-           {:ok, months} <- months(rule.by_month) do
+           {:ok, months} <- months(rule.by_month),
+           {:ok, skip} <- skip(rule.skip) do
         {:ok,
          %Rule{
            freq: freq,
@@ -439,6 +440,7 @@ if Code.ensure_loaded?(JSCalendar) do
            count: rule.count,
            until: rule.until && Tempo.from_elixir(rule.until),
            wkst: weekday(rule.first_day_of_week) || 1,
+           skip: skip,
            bymonth: months,
            bymonthday: rule.by_month_day,
            byyearday: rule.by_year_day,
@@ -460,6 +462,16 @@ if Code.ensure_loaded?(JSCalendar) do
     defp frequency("minutely"), do: {:ok, :minute}
     defp frequency("secondly"), do: {:ok, :second}
     defp frequency(other), do: {:error, {:unsupported_frequency, other}}
+
+    # RFC 8984 §4.3.3: `skip` says what a rule does with a date that does not
+    # exist, the 31st of a month of thirty days. "omit", the default, passes
+    # over it and "backward" takes the month's last day. "forward", the first
+    # day of the month after, is not built, and is reported rather than read
+    # as another.
+    defp skip(nil), do: {:ok, :omit}
+    defp skip("omit"), do: {:ok, :omit}
+    defp skip("backward"), do: {:ok, :backward}
+    defp skip(other), do: {:error, {:unsupported_skip, other}}
 
     defp weekday("mo"), do: 1
     defp weekday("tu"), do: 2

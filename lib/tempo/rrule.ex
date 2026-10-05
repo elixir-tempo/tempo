@@ -86,7 +86,7 @@ defmodule Tempo.RRule do
 
   * `:from` — the recurrence's start, a `%Tempo{}` (DTSTART). Sets `Interval.from`
     so occurrence enumeration has a starting point. Optional;
-    callers that intend to enumerate must supply this.
+    callers that intend to enumerate must supply this. A rule read with a start that is a calendar date states what RFC 5545 takes from it (ISO 8601-2 Annex C.3): a weekly rule its weekday, a monthly rule its day of the month, a yearly rule its month and day. `FREQ=MONTHLY` from 31 January is `~o"R/2026-01-31/P1M/FL31DN"`, which lists the months of 31 days, and each occurrence is as long as the start is precise, a day for a date.
 
   * `:duration` — a `%Tempo.Duration{}` span for each occurrence,
     the RRULE echo of iCalendar's `DURATION`. Each occurrence spans
@@ -119,6 +119,9 @@ defmodule Tempo.RRule do
       ...>   )
       iex> Tempo.Interval.metadata(i).occurrence_duration.time
       [hour: 2]
+
+      iex> Tempo.RRule.parse("FREQ=MONTHLY;COUNT=3", from: ~o"2026-01-31")
+      {:ok, ~o"R3/2026-01-31/P1M/FL31DN"}
 
       iex> {:error, _} = Tempo.RRule.parse("FREQ=NOPE")
 

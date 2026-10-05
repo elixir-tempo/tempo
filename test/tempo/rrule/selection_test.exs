@@ -447,11 +447,15 @@ defmodule Tempo.RRule.SelectionTest do
 
     test "the January weeks of a weekly recurrence are weeks" do
       weeks = ["2026Y1M5D/12D", "2026Y1M12D/19D", "2026Y1M19D/26D", "2026Y1M26D/2M2D"]
+      assert occurrence_spans("R/2026-01-05/P1W/FL1MN", ~o"2026") == weeks
+
+      # Read from an RRULE the rule takes its weekday from its start, and
+      # states it (ISO 8601-2 Annex C.3): a weekday a rule names is a day.
       {:ok, weekly} = RRule.parse("FREQ=WEEKLY;BYMONTH=1", from: ~o"2026-01-05")
       {:ok, set} = Tempo.to_interval(weekly, within: ~o"2026")
 
-      assert occurrence_spans("R/2026-01-05/P1W/FL1MN", ~o"2026") == weeks
-      assert Enum.map(IntervalSet.members(set), &Tempo.to_iso8601!/1) == weeks
+      assert Enum.map(IntervalSet.members(set), &Tempo.to_iso8601!/1) ==
+               ["2026Y1M5D/6D", "2026Y1M12D/13D", "2026Y1M19D/20D", "2026Y1M26D/27D"]
 
       assert occurrence_spans("R/2026-01-01/P1M/FL{1,2}MN", ~o"2026") ==
                ["2026Y1M1D/2M1D", "2026Y2M1D/3M1D"]

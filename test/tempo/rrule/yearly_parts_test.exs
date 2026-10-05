@@ -7,10 +7,10 @@ defmodule Tempo.RRule.YearlyPartsTest do
   # and the measure here is taken apart from it: every day of every year is
   # asked, with `Date` alone, whether each part of the rule holds for it.
   #
-  # Two readings are Tempo's own and the measure takes them as they are. A
-  # rule that names no day takes DTSTART's, and a day past the end of a month
-  # the rule names is that month's last day. A day of the month with no month
-  # and no day of the year is a day of DTSTART's month.
+  # What a rule does not say is DTSTART's, as ISO 8601-2 Annex C.3 lists it: a
+  # rule that names no day takes DTSTART's day of the month, and one that
+  # names a day of the month and no month takes DTSTART's month. A month
+  # that lacks the day has no occurrence.
 
   import Tempo.Sigils
 
@@ -22,7 +22,7 @@ defmodule Tempo.RRule.YearlyPartsTest do
 
   @years 2026..2029
 
-  # A first occurrence at the start of a year and one on a 31st, a day four
+  # A first occurrence at the start of a year and one on a 31st, a day five
   # months do not have.
   @starts [~D[2026-01-01], ~D[2026-01-31]]
 
@@ -88,7 +88,7 @@ defmodule Tempo.RRule.YearlyPartsTest do
   defp holds?({:month, months}, date), do: date.month in months
   defp holds?({:weekday, weekdays}, date), do: Date.day_of_week(date) in weekdays
   defp holds?({:event, name}, date), do: Event.date(name, date.year) == {:ok, date}
-  defp holds?({:start_day, day}, date), do: date.day == min(day, Date.days_in_month(date))
+  defp holds?({:start_day, day}, date), do: date.day == day
 
   defp holds?({:day_of_month, days}, date),
     do: counted?(date.day, days, Date.days_in_month(date))

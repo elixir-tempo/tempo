@@ -59,7 +59,15 @@ RFC 5545 defines each BY-rule as either **EXPAND** (generates additional candida
 
 * `BYSETPOS` is always applied last as a LIMIT across the candidate set.
 
-In a `YEARLY` rule the parts that name a day hold at once, so the days selected are those that satisfy every one of them: `BYMONTH=3;BYYEARDAY=100` selects nothing, day 100 being 10 April, `BYMONTH=3,4;BYYEARDAY=80,100` is 21 March and 10 April, each once, and `BYMONTHDAY=15;BYYEARDAY=74` is 15 March in the years whose 74th day it is. Two readings are Tempo's where a rule leaves the day or the month to DTSTART: a day of the month with no month (`FREQ=YEARLY;BYMONTHDAY=15`) is a day of DTSTART's month, and DTSTART's day in a month that does not have it (the 31st in a monthly rule or in `BYMONTH=4`, 29 February in a yearly one) is that month's last day, where RFC 5545 passes over a date that does not exist.
+In a `YEARLY` rule the parts that name a day hold at once, so the days selected are those that satisfy every one of them: `BYMONTH=3;BYYEARDAY=100` selects nothing, day 100 being 10 April, `BYMONTH=3,4;BYYEARDAY=80,100` is 21 March and 10 April, each once, and `BYMONTHDAY=15;BYYEARDAY=74` is 15 March in the years whose 74th day it is.
+
+### What a rule takes from DTSTART
+
+A rule takes from DTSTART what it does not say, as ISO 8601-2 Annex C.3 lists it: a `WEEKLY` rule with no `BYDAY` its weekday, a `MONTHLY` rule with no `BYMONTHDAY` and no `BYDAY` its day of the month, and a `YEARLY` rule its month and its day, so `FREQ=YEARLY;BYMONTHDAY=15` is the 15th of DTSTART's month. A rule read with a start states each part, as Annex C.4 has a conversion do: `FREQ=MONTHLY` from 31 January is `~o"R/2026-01-31/P1M/FL31DN"`, and `Tempo.RRule.to_string/1` writes it `FREQ=MONTHLY;BYMONTHDAY=31`, which RFC 5545 reads as the rule it was.
+
+A day so stated is passed over where a month or a year lacks it, as RFC 5545 §3.3.10 says of an instance with an invalid date: that rule lists the months of 31 days, and `FREQ=YEARLY` from 29 February the leap years. An occurrence is as long as its start is precise, a day for a date, which is the length RFC 5545 gives an event with no `DTEND`; an event's `DTEND` or `DURATION` sets it otherwise.
+
+An ISO 8601 recurrence is not a rule of RFC 5545. `~o"R/2026-01-31/P1M"` selects nothing: it is its start and n months on, 28 February and 30 April among them, each occurrence a month long.
 
 ### RDATE and EXDATE
 
@@ -99,7 +107,7 @@ A small list of features outside Tempo's current RRULE scope:
 
 * **Sub-second `FREQ` or `BY*`** — Tempo's resolution ladder currently stops at `:second`. Sub-second recurrence isn't meaningful within Tempo's AST.
 
-* **RFC 7529 `RSCALE`** — the named property is not parsed and not written. Reading is calendar-aware through DTSTART, and writing refuses what only `RSCALE` could say, both described above.
+* **RFC 7529 `RSCALE` and `SKIP`** — neither is parsed in an RRULE string, and neither is written. Reading is calendar-aware through DTSTART, and writing refuses what only `RSCALE` could say, both described above. A rule read from an RRULE passes over a date that does not exist, which is RFC 5545's rule and `SKIP`'s default, `OMIT`; JSCalendar's `skip` is read, `omit` and `backward`.
 
 ## Test coverage
 

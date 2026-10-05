@@ -160,6 +160,41 @@ defmodule Tempo.JSCalendarTest do
       assert IntervalSet.count(set) == 4
     end
 
+    test "a rule passes over a month that lacks the start's day, unless it says to keep the last" do
+      monthly = fn rule ->
+        Tempo.JSCalendar.parse(event(~s(
+          "start":"2026-01-31T09:00:00","duration":"PT1H",
+          "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"monthly","count":4#{rule}}]
+        )))
+      end
+
+      # RFC 8984 §4.3.3: `skip` is "omit" where a rule does not say.
+      omitted = [
+        "2026Y1M31DT9H0M0S/T10H0M0S",
+        "2026Y3M31DT9H0M0S/T10H0M0S",
+        "2026Y5M31DT9H0M0S/T10H0M0S",
+        "2026Y7M31DT9H0M0S/T10H0M0S"
+      ]
+
+      assert {:ok, set} = monthly.("")
+      assert spans(set) == omitted
+
+      assert {:ok, set} = monthly.(~s(,"skip":"omit"))
+      assert spans(set) == omitted
+
+      assert {:ok, set} = monthly.(~s(,"skip":"backward"))
+
+      assert spans(set) == [
+               "2026Y1M31DT9H0M0S/T10H0M0S",
+               "2026Y2M28DT9H0M0S/T10H0M0S",
+               "2026Y3M31DT9H0M0S/T10H0M0S",
+               "2026Y4M30DT9H0M0S/T10H0M0S"
+             ]
+
+      # The first day of the month after is not built, and is said so.
+      assert monthly.(~s(,"skip":"forward")) == {:error, {:unsupported_skip, "forward"}}
+    end
+
     test "byDay carries its ordinal" do
       assert {:ok, set} =
                Tempo.JSCalendar.parse(event(~s(

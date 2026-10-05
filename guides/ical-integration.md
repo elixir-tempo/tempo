@@ -246,6 +246,10 @@ EXDATE:20220608T090000Z
 
 Per RFC 5545, `DTSTART` is the first instance in the recurrence. When `BY*` rules EXPAND, they can legitimately produce candidates earlier than `DTSTART` in the same period — the resolver drops these automatically so the emitted list starts at (or after) `DTSTART`.
 
+### A day a month lacks
+
+A rule that leaves its day to `DTSTART` lists no occurrence in a month or a year without that day, as RFC 5545 §3.3.10 says: an event on the 31st with `FREQ=MONTHLY` is listed in the months of 31 days, and one on 29 February with `FREQ=YEARLY` in the leap years. A rule that means the last day of each month says so, `BYMONTHDAY=-1`.
+
 ### Calendar-aware throughout
 
 Every arithmetic operation goes through the candidate's own calendar (`calendar.day_of_week/4`, `calendar.days_in_month/2`, `calendar.iso_week_of_year/3`, Calendrical's date arithmetic, `Calendrical.Kday.nth_kday/3`). A Hebrew-calendar VEVENT with `FREQ=YEARLY;BYMONTHDAY=-1` expands correctly against Hebrew month lengths.

@@ -94,6 +94,8 @@ These keep their names and change their meaning:
 
 * **A recurrence across the end of a month** — its occurrences are consecutive, each ending where the next starts.
 
+* **A rule read from an RRULE with a start** — states what RFC 5545 takes from the start (a weekly rule's weekday, a monthly rule's day of the month, a yearly rule's month and day), so a month that lacks the day is passed over and each occurrence is as long as the start is precise, where 1.x listed the month's last day and occurrences a cadence long.
+
 * **A value with no zone beside one with a zone** — refused by the set operations and the sorter, where the floating one was read as UTC.
 
 * **An interval's walk** — by the finer of its two ends' units.
@@ -878,3 +880,32 @@ iex> Tempo.shift(~o"2026YT17H", day: 1)
 > *"Five o'clock in June 2026 is five o'clock on the first of June. Five o'clock in 2026 is on the first of January, and a day later is the second."*
 
 ISO 8601 wants the date of a date and time complete, so reading such text at all is Tempo's own: the divergence is recorded in the [ISO 8601 conformance guide](iso8601-conformance.md). That time on each day of a month is written with the days named, `~o"2026Y6M{1..-1}DT17H"`.
+
+## A rule read from an RRULE states what it takes from its start
+
+`Tempo.RRule.parse/2` given a `:from` that is a calendar date writes into the rule what RFC 5545 takes from DTSTART, as ISO 8601-2 Annex C says a converted rule must: a weekly rule's weekday, a monthly rule's day of the month, a yearly rule's month and day. A day that a month lacks is then passed over, as RFC 5545 has it, where 1.x listed the month's last day, and each occurrence is as long as the start is precise, where it was a cadence long. `Tempo.ICal.parse/2` and `Tempo.JSCalendar.parse/2` list the same occurrences. An ISO 8601 recurrence is as it was: `~o"R3/2026-01-31/P1M"` is 31 January, 28 February and 31 March.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.x — the last day of February, and each occurrence a month long
+{:ok, monthly} = Tempo.RRule.parse("FREQ=MONTHLY;COUNT=3", from: ~o"2026-01-31")
+monthly
+#=> ~o"R3/2026Y1M31D/P1M"
+{:ok, occurrences} = Tempo.to_interval(monthly)
+occurrences |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
+#=> ["2026Y1M31D/2M28D", "2026Y2M28D/3M31D", "2026Y3M31D/4M30D"]
+```
+
+```elixir
+iex> {:ok, monthly} = Tempo.RRule.parse("FREQ=MONTHLY;COUNT=3", from: ~o"2026-01-31")
+iex> monthly
+~o"R3/2026Y1M31D/P1M/FL31DN"
+iex> {:ok, occurrences} = Tempo.to_interval(monthly)
+iex> occurrences |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
+["2026Y1M31D/2M1D", "2026Y3M31D/4M1D", "2026Y5M31D/6M1D"]
+iex> Tempo.RRule.to_string(monthly)
+{:ok, "COUNT=3;FREQ=MONTHLY;BYMONTHDAY=31"}
+```
+
+> *"Every month on the thirty-first, three times: January, March and May, a day each. The rule says the thirty-first, since its start was one."*

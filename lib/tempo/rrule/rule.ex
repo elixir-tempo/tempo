@@ -27,6 +27,8 @@ defmodule Tempo.RRule.Rule do
   * `:wkst` — week-start day as an integer 1–7 (Monday–Sunday, ISO
     convention). Default `1`. Affects `:byweekno` calculations.
 
+  * `:skip` — what the rule does where a month or a year lacks its start's day, as RFC 7529's `SKIP` and JSCalendar's `skip` name it. `:omit`, the default and RFC 5545's rule, lists no occurrence there: the rule states its start's day (ISO 8601-2 Annex C.3), and a day a month lacks is passed over. `:backward` lists the period's last day, as an ISO 8601 recurrence does.
+
   * `:bymonth` — list of integers 1–12. Limit.
 
   * `:bymonthday` — list of integers -31..31 (negatives count from
@@ -83,6 +85,7 @@ defmodule Tempo.RRule.Rule do
           count: pos_integer() | nil,
           until: Tempo.t() | nil,
           wkst: weekday(),
+          skip: :omit | :backward,
           bymonth: [integer()] | nil,
           bymonthday: [integer()] | nil,
           byyearday: [integer()] | nil,
@@ -102,6 +105,7 @@ defmodule Tempo.RRule.Rule do
             count: nil,
             until: nil,
             wkst: 1,
+            skip: :omit,
             bymonth: nil,
             bymonthday: nil,
             byyearday: nil,
@@ -167,10 +171,7 @@ defmodule Tempo.RRule.Rule do
 
   An ordinal weekday on one weekday (`BYDAY=2FR`) becomes a weekday and a position (`5K2I`), and a position applies last within a selection, so the hours, minutes and seconds the rule names follow the selection instead of joining it: `BYDAY=2FR;BYHOUR=9` is `L5K2INT9H`, as ISO 8601-2 §12.9 writes 09:00 on the second Tuesday. Beside a `BYSETPOS`, which takes the selection's one position, the ordinal stays an RRULE-only `:byday`.
 
-  A YEARLY rule with `BYWEEKNO` and no `BYYEARDAY`, `BYMONTHDAY` or `BYDAY`
-  selects the weekday of its start: RFC 5545 evaluates it that way, and
-  ISO 8601-2 (Annex C.3 and C.4) has a conversion state the weekday
-  explicitly. Without a start the rule keeps every day of its weeks.
+  A rule takes from its start what it does not say, and ISO 8601-2 (Annex C.3 and C.4) has a conversion state each part explicitly. With a start that is a calendar date, a WEEKLY rule with no `BYDAY` selects its start's weekday, a MONTHLY rule with no `BYMONTHDAY` and no `BYDAY` its start's day of the month, and a YEARLY rule with no `BYYEARDAY` its start's month and day of the month, or with `BYWEEKNO` its start's weekday. A day so stated is passed over in a month that lacks it, as RFC 5545 §3.3.10 passes over an instance with an invalid date: a MONTHLY rule from 31 January lists the months of 31 days. The month is stated for a start in the Gregorian calendar alone, since the step from year to year keeps a month that a leap month renumbers. A rule whose `:skip` is `:backward` states no day of the month and no month, and keeps the last day of a period that lacks its start's. Without a start a rule states nothing: a `BYWEEKNO` rule keeps every day of its weeks.
 
   ### Arguments
 
@@ -181,7 +182,7 @@ defmodule Tempo.RRule.Rule do
 
   ### Returns
 
-  * A `%Tempo{}` carrying `[selection: …]`, followed by an ordinal weekday's times when it has them, or `nil` when the rule has no `BY*` filter and a default `WKST` (the simple recurrence needs no repeat rule).
+  * A `%Tempo{}` carrying `[selection: …]`, followed by an ordinal weekday's times when it has them, or `nil` when the rule has no `BY*` filter, takes none from its start and has a default `WKST` (the simple recurrence needs no repeat rule).
 
   ### Examples
 
@@ -195,12 +196,18 @@ defmodule Tempo.RRule.Rule do
       iex> Tempo.RRule.Rule.to_selection(rule, ~o"1997-05-12")
       ~o"L20W1KN"
 
+      iex> Tempo.RRule.Rule.to_selection(%Tempo.RRule.Rule{freq: :month}, ~o"2026-01-31")
+      ~o"L31DN"
+
+      iex> Tempo.RRule.Rule.to_selection(%Tempo.RRule.Rule{freq: :year}, ~o"2026-03-10")
+      ~o"L3M10DN"
+
   """
   # No `@spec`: the result is a `%Tempo{}` carrying a `{:selection, …}` token,
   # which the `Tempo.t()` type's `token_list()` does not yet enumerate, so a
   # `Tempo.t()` spec would read as an incomplete return type to Dialyzer.
   def to_selection(%__MODULE__{} = rule, dtstart \\ nil) do
-    rule = with_weekday_of_start(rule, dtstart)
+    rule = with_parts_of_start(rule, dtstart)
 
     if has_by_rules?(rule) or non_default_wkst?(rule) do
       selection =
@@ -250,37 +257,100 @@ defmodule Tempo.RRule.Rule do
   defp non_default_wkst?(%__MODULE__{wkst: wkst}) when is_integer(wkst) and wkst != 1, do: true
   defp non_default_wkst?(_rule), do: false
 
-  # ISO 8601-2 Annex C.3: "if there is a 'BYWEEKNO' parameter set but no
-  # 'BYMONTHDAY' or 'BYDAY', the 'BYDAY' selection is inherited from the
-  # calendar day of week of the initial start date" (for a YEARLY rule with
-  # no BYYEARDAY). The weekday is Monday 1 to Sunday 7, as BYDAY numbers it.
-  defp with_weekday_of_start(
-         %__MODULE__{freq: :year, byweekno: [_ | _]} = rule,
-         %Tempo{time: time} = dtstart
-       ) do
-    date_parts = Enum.map([:year, :month, :day], &Keyword.get(time, &1))
+  # ISO 8601-2 Annex C.3 lists what RFC 5545 takes from the start of a rule
+  # that does not say it, and Annex C.4 has a conversion state each one: the
+  # weekday of a WEEKLY rule with no BYDAY, the day of the month of a MONTHLY
+  # rule with no BYMONTHDAY and no BYDAY, and for a YEARLY rule with no
+  # BYYEARDAY its month, its day of the month and, with BYWEEKNO, its weekday.
+  # A part so stated selects as one the rule wrote does, so a day of the
+  # month that a month lacks is passed over, as RFC 5545 §3.3.10 passes over
+  # an instance with an invalid date: FREQ=MONTHLY from 31 January lists the
+  # months of 31 days. A start that is no one calendar date states nothing.
+  defp with_parts_of_start(%__MODULE__{} = rule, %Tempo{time: time} = dtstart) do
+    case Enum.map([:year, :month, :day], &Keyword.get(time, &1)) do
+      [year, month, day] when is_integer(year) and is_integer(month) and is_integer(day) ->
+        with_parts_of(rule, month, day, dtstart)
 
-    if Enum.all?(date_parts, &is_integer/1) and not day_selected?(rule) do
-      %{rule | byday: [{nil, Tempo.day_of_week(dtstart, :monday)}]}
-    else
-      rule
+      _no_one_date ->
+        rule
     end
   end
 
-  defp with_weekday_of_start(rule, _dtstart), do: rule
+  defp with_parts_of_start(rule, _no_start), do: rule
 
-  defp day_selected?(%__MODULE__{} = rule) do
-    Enum.any?(
-      [
-        rule.byyearday,
-        rule.bymonthday,
-        rule.byday,
-        rule.bymonthday_nearest,
-        rule.bymonthday_or_byday
-      ],
-      &(&1 not in [nil, []])
-    )
+  defp with_parts_of(%__MODULE__{freq: :week} = rule, _month, _day, dtstart) do
+    if names_weekday?(rule), do: rule, else: with_weekday_of(rule, dtstart)
   end
+
+  defp with_parts_of(%__MODULE__{freq: :month} = rule, _month, day, _dtstart) do
+    if names_day_of_month?(rule) or names_weekday?(rule) or keeps_last_day?(rule),
+      do: rule,
+      else: %{rule | bymonthday: [day]}
+  end
+
+  defp with_parts_of(%__MODULE__{freq: :year, byyearday: days} = rule, month, day, dtstart)
+       when days in [nil, []] do
+    rule
+    |> with_month_of_start(rule, month, dtstart)
+    |> with_day_of_start(rule, day, dtstart)
+  end
+
+  defp with_parts_of(rule, _month, _day, _dtstart), do: rule
+
+  # "If no BYMONTH or BYWEEKNO parameter is set: if the BYMONTHDAY parameter
+  # is provided, then the BYMONTH selection is inherited from the calendar
+  # month of year value from the initial start date; if the BYDAY parameter
+  # is not set, then the BYMONTH selection is inherited" (Annex C.3). What
+  # the rule wrote is asked of `written`, the rule before any part was added.
+  #
+  # The month is RFC 5545's, a month of the Gregorian calendar, and is
+  # written for a start in that calendar alone. In another the step from year
+  # to year keeps the start's month as the calendar does, and a BYMONTH,
+  # which numbers a month by its place in the year, would not: Nisan is the
+  # seventh month of a Hebrew year and the eighth of one with a leap month.
+  defp with_month_of_start(rule, written, month, %Tempo{calendar: calendar})
+       when calendar in [Calendrical.Gregorian, Calendar.ISO, nil] do
+    if empty?(written.bymonth) and empty?(written.byweekno) and not keeps_last_day?(written) and
+         (names_day_of_month?(written) or not names_weekday?(written)),
+       do: %{rule | bymonth: [month]},
+       else: rule
+  end
+
+  defp with_month_of_start(rule, _written, _month, _dtstart), do: rule
+
+  # "If no BYMONTHDAY, BYWEEKNO or BYDAY parameter is set, the BYMONTHDAY
+  # selection is inherited from the calendar day of month of the initial start
+  # date. If there is a BYWEEKNO parameter set but no BYMONTHDAY or BYDAY, the
+  # BYDAY selection is inherited from the calendar day of week" (Annex C.3).
+  defp with_day_of_start(rule, written, day, dtstart) do
+    cond do
+      names_day_of_month?(written) or names_weekday?(written) -> rule
+      not empty?(written.byweekno) -> with_weekday_of(rule, dtstart)
+      keeps_last_day?(written) -> rule
+      true -> %{rule | bymonthday: [day]}
+    end
+  end
+
+  # A rule that keeps the last day of a period without its start's day
+  # (`skip: :backward`) leaves the day, and the month it is in, to the step
+  # from its start, which the calendar's own arithmetic takes to that day.
+  defp keeps_last_day?(%__MODULE__{skip: skip}), do: skip == :backward
+
+  # The weekday is Monday 1 to Sunday 7, as BYDAY numbers it.
+  defp with_weekday_of(rule, dtstart),
+    do: %{rule | byday: [{nil, Tempo.day_of_week(dtstart, :monday)}]}
+
+  # A cron day of the month that is the nearest weekday, or a day of the
+  # month or of the week, names its day as BYMONTHDAY and BYDAY do.
+  defp names_day_of_month?(%__MODULE__{} = rule) do
+    not (empty?(rule.bymonthday) and empty?(rule.bymonthday_nearest) and
+           empty?(rule.bymonthday_or_byday))
+  end
+
+  defp names_weekday?(%__MODULE__{} = rule),
+    do: not (empty?(rule.byday) and empty?(rule.bymonthday_or_byday))
+
+  defp empty?(part), do: part in [nil, []]
 
   defp push_by(acc, nil, _unit), do: acc
   defp push_by(acc, [], _unit), do: acc

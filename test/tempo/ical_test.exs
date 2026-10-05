@@ -373,6 +373,48 @@ defmodule Tempo.ICal.Test do
   end
 
   describe "parse/2 — recurrence" do
+    test "a rule passes over a month or a year that lacks DTSTART's day" do
+      # RFC 5545 §3.3.10: an instance with an invalid date is ignored and not
+      # counted. A rule on the 31st lists the months of 31 days, and one on
+      # 29 February the leap years.
+      event = fn dtstart, rrule ->
+        """
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        PRODID:-//Test//EN
+        BEGIN:VEVENT
+        UID:missing-day
+        DTSTAMP:20260101T000000Z
+        #{dtstart}
+        SUMMARY:On a day some months lack
+        RRULE:#{rrule}
+        END:VEVENT
+        END:VCALENDAR
+        """
+      end
+
+      occurrences = fn ics ->
+        {:ok, set} = ICal.parse(ics)
+        Enum.map(IntervalSet.members(set), &Tempo.to_iso8601!/1)
+      end
+
+      assert occurrences.(event.("DTSTART;VALUE=DATE:20260131", "FREQ=MONTHLY;COUNT=4")) ==
+               ["2026Y1M31D/2M1D", "2026Y3M31D/4M1D", "2026Y5M31D/6M1D", "2026Y7M31D/8M1D"]
+
+      assert occurrences.(event.("DTSTART;VALUE=DATE:20240229", "FREQ=YEARLY;COUNT=3")) ==
+               ["2024Y2M29D/3M1D", "2028Y2M29D/3M1D", "2032Y2M29D/3M1D"]
+
+      # An event with an end keeps its length on each day it is listed.
+      timed = "DTSTART:20260131T090000\nDTEND:20260131T100000"
+
+      assert occurrences.(event.(timed, "FREQ=MONTHLY;COUNT=3")) ==
+               [
+                 "2026Y1M31DT9H0M0S/T10H0M0S",
+                 "2026Y3M31DT9H0M0S/T10H0M0S",
+                 "2026Y5M31DT9H0M0S/T10H0M0S"
+               ]
+    end
+
     test "FREQ=WEEKLY;COUNT=3 — three weekly occurrences" do
       ics = """
       BEGIN:VCALENDAR
