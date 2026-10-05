@@ -122,6 +122,7 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 | Feature | Example | Reason |
 |---|---|---|
 | Cross-endpoint semantic validation of intervals | `2012-24/2012-21` (winter before spring) | Parses at the syntax level; a semantic ordering check across the two endpoints is not currently enforced, so a small number of syntactically-valid but semantically-inverted intervals are accepted. |
+| A set of durations (§6.5) | `{P1M2S..P1M5S}`, `[P1M2S,P1M3S]` | A duration is refused as a member of a set and as an end of a range: a set holds dates, times, ranges of them and intervals. Units written with no designator (`{1M2S..1M5S}`, §6.4 example 3) are read as times of day. |
 
 All other EDTF Level 2 features — including wide-range exponent years (`Y17E8`, `Y-170000002`) and long-year significant-digit annotations (`Y171010000S3`) — are supported.
 

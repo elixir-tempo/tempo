@@ -313,6 +313,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A duration written in a set (`{P1Y,P2Y}`, `{PT1M2S..PT1M5S}`) is refused, where its units were read as a date's and `{P1Y,P2Y}` was the years 1 and 2: a set of durations (ISO 8601-2 §6.5) is not built. An interval at an end of a range (`{2020/2021..2023/2024}`), on which `inspect/1` raised, is refused too.
+
 * The fractions of a second written as a set are read: `T10H30M45.{0..9}S`, the form `Tempo.extend/2` gives a second and `inspect/1` writes, and a fraction after a set of seconds (`T10H30M{45,50}.5S`), on which `inspect/1` raised. The fractions are written one by one or from a first to a last with as many digits each, and a range names at most a thousand.
 
 * A member of a set is read with a qualifier (`{2026-06-15?,2026-06~}`, `{2020?..2030}`), qualified as it would be alone, and with a fraction before the comma or the brace that follows it (`{T10:30:45.5,T11:00}`). Both were a parse error.

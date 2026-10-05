@@ -11,8 +11,8 @@ defmodule Tempo.Parser.Set.Test do
     assert Tokenizer.tokenize("{1960,1961-12}") ==
              {:ok, {[all_of: [date: [year: 1960], date: [year: 1961, month: 12]]], nil}}
 
-    assert Tokenizer.tokenize("{1M2S}")
-    {:ok, [all_of: [datetime: [month: 1, second: 2]]]}
+    assert Tokenizer.tokenize("{1M2S}") ==
+             {:ok, {[all_of: [time_of_day: [minute: 1, second: 2]]], nil}}
 
     assert Tokenizer.tokenize("{T1M2S,T1M3S}") ==
              {:ok,
@@ -23,14 +23,13 @@ defmodule Tempo.Parser.Set.Test do
                  ]
                ], nil}}
 
-    assert Tokenizer.tokenize("{PT1M2S..PT1M5S}")
-
-    {:ok,
-     [
-       all_of: [
-         [duration: [minute: 1, second: 2], duration: [minute: 1, second: 5]]
-       ]
-     ]}
+    assert Tokenizer.tokenize("{PT1M2S..PT1M5S}") ==
+             {:ok,
+              {[
+                 all_of: [
+                   range: [duration: [minute: 1, second: 2], duration: [minute: 1, second: 5]]
+                 ]
+               ], nil}}
   end
 
   test "Set expressions: one of" do
@@ -164,8 +163,123 @@ defmodule Tempo.Parser.Set.Test do
       assert Tempo.from_iso8601("T10:30:45,5") == Tempo.from_iso8601("T10:30:45.5")
       assert Tempo.from_iso8601("2023,5/2024") == Tempo.from_iso8601("2023.5/2024")
 
-      assert {:ok, _durations} = Tempo.from_iso8601("{P1.5Y,P2Y}")
-      assert {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("{P1,5Y}")
+      assert Tempo.from_iso8601("{T10H30.5M,T11H}") == {:ok, ~o"{T10H30M30S,T11H}"}
+      assert {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("{T10H30,5M,T11H}")
+    end
+  end
+
+  # A member was built from its units as a date is, whatever it was: a
+  # duration's `[year: 1]` was the year 1, so `{P1Y,P2Y}` equalled `{1Y,2Y}`
+  # and `{P1M2S,P1M3S}` was `{1M1DT2S,1M1DT3S}`. ISO 8601-2 §6.5 has sets of
+  # durations, which are not built, so one is refused until it is.
+  describe "a duration written in a set" do
+    @reason "A duration is not read as a member of a set"
+
+    test "is refused as a member, whatever is beside it" do
+      for text <- [
+            "{P1Y,P2Y}",
+            "[P1M2S,P1M3S]",
+            "{P1D}",
+            "{P1D}?",
+            "{P1D,2026-06-15}",
+            "{2026-06-15,P1D}",
+            "{PT1.5S,PT2S}",
+            "{-P1D,P2D}",
+            "{P0001-02-03,P2D}",
+            "{P1D,P2D}[u-ca=hebrew]"
+          ] do
+        assert {^text, {:error, %Tempo.ParseError{} = error}} = {text, Tempo.from_iso8601(text)}
+        assert Exception.message(error) =~ @reason
+      end
+    end
+
+    test "is refused as an end of a range" do
+      for text <- ["{PT1M2S..PT1M5S}", "{P1D..P5D}", "{2026..P1D}", "[P1D..]", "[..P1D]"] do
+        assert {^text, {:error, %Tempo.ParseError{} = error}} = {text, Tempo.from_iso8601(text)}
+        assert Exception.message(error) =~ @reason
+      end
+    end
+
+    test "is refused as a member the set leaves out, and in a recurrence's domain" do
+      for text <- [
+            "{^P1D,2026}",
+            "{2026,^P1D}",
+            "R/{P1D,2026}/P1Y",
+            "R/{2020Y..2030Y,^P1D}/P1Y"
+          ] do
+        assert {^text, {:error, %Tempo.ParseError{} = error}} = {text, Tempo.from_iso8601(text)}
+        assert Exception.message(error) =~ @reason
+      end
+    end
+
+    test "is the duration of an interval the set holds" do
+      for {text, member} <- [
+            {"{P1D/2026-06-15,2026-07}", "P1D/2026-06-15"},
+            {"{2026-06-15/P1D,2026-07}", "2026-06-15/P1D"},
+            {"{R/2026/P1D,2027}", "R/2026/P1D"}
+          ] do
+        assert %Tempo.Set{set: [first | _rest]} = Tempo.from_iso8601!(text)
+        assert {text, first} == {text, Tempo.from_iso8601!(member)}
+      end
+    end
+
+    test "is read where it is no member of a set" do
+      assert Tempo.from_iso8601("P1Y") == {:ok, ~o"P1Y"}
+      assert {:ok, %Tempo.Interval{duration: ~o"P1Y"}} = Tempo.from_iso8601("2026/P1Y")
+      assert {:ok, _recurrence} = Tempo.from_iso8601("R/{2020Y..2030Y,^2026Y}/P1Y")
+    end
+
+    test "leaves units written without the designator the times they are" do
+      assert %Tempo.Set{set: [%Tempo.Range{first: first, last: last}]} =
+               Tempo.from_iso8601!("{1M2S..1M5S}")
+
+      assert {first, last} == {~o"T1M2S", ~o"T1M5S"}
+
+      assert %Tempo.Set{set: [~o"T1M2S", ~o"T1M3S"], type: :one} =
+               Tempo.from_iso8601!("[1M2S,1M3S]")
+    end
+  end
+
+  # A range runs from one date or time to another. Its end was built from
+  # both ends of an interval as one value, which `inspect/1` raised on.
+  describe "an interval written at an end of a range" do
+    test "is refused" do
+      for text <- [
+            "{2020/2021..2023/2024}",
+            "{2020/2021..2023}",
+            "{2020..2021/2023}",
+            "[2020/2021..]",
+            "[..2020/2021]",
+            "{^2020/2021..2023,2026}",
+            "{R/2026/P1D..2027}",
+            "R/{2020/2021..2023/2024}/P1Y"
+          ] do
+        assert {^text, {:error, %Tempo.ParseError{} = error}} = {text, Tempo.from_iso8601(text)}
+        assert Exception.message(error) =~ "An interval is not an end of a range in a set"
+      end
+    end
+
+    test "is a member of the set where it is written as one" do
+      assert %Tempo.Set{set: [%Tempo.Interval{}, %Tempo.Interval{}]} =
+               Tempo.from_iso8601!("{2020/2021,2023/2024}")
+    end
+
+    test "leaves a range of dates or of times as it was" do
+      for {text, first, last} <- [
+            {"{2020-06..2023-06}", "2020-06", "2023-06"},
+            {"{T10:30..T11:30}", "T10:30", "T11:30"},
+            {"{2026-06-15T10:30..2026-06-16T10:30}", "2026-06-15T10:30", "2026-06-16T10:30"}
+          ] do
+        assert %Tempo.Set{set: [%Tempo.Range{} = range]} = Tempo.from_iso8601!(text)
+
+        assert {text, range.first, range.last} ==
+                 {text, Tempo.from_iso8601!(first), Tempo.from_iso8601!(last)}
+      end
+
+      assert %Tempo.Set{set: [%Tempo.Range{first: first, last: :undefined}]} =
+               Tempo.from_iso8601!("[2020..]")
+
+      assert first == ~o"2020"
     end
   end
 end

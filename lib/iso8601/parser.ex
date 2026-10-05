@@ -18,9 +18,55 @@ defmodule Tempo.Iso8601.Parser do
   # it is refused, or `nil`.
   defp refused(tokens) do
     case backwards_range(tokens) do
-      nil -> short_window(tokens)
+      nil -> short_window(tokens) || no_member(tokens)
       range -> backwards_reason(range)
     end
+  end
+
+  # What is written in a set that is no member of one, wherever the set is
+  # written: as a member, as an end of a range and as a member the set leaves
+  # out. Each was built from its units as a date is.
+  #
+  # A duration: ISO 8601-2 §6.5 has sets of durations (`{P1M2S..P1M5S}`),
+  # which are not built, so `{P1Y,P2Y}` was the years 1 and 2. A duration
+  # that counts an interval a set holds (`{2026-06-15/P1D}`) is the
+  # interval's.
+  #
+  # An interval at an end of a range (`{2020/2021..2023/2024}`): a range
+  # runs from one date or time to another, and its end was built from both
+  # of the interval's ends as one value, which `inspect/1` raised on.
+  defp no_member({tag, members})
+       when tag in [:all_of, :one_of, :domain_set] and is_list(members) do
+    Enum.find_value(members, &no_member_reason/1) || no_member(members)
+  end
+
+  defp no_member(tokens) when is_list(tokens), do: Enum.find_value(tokens, &no_member/1)
+
+  defp no_member(token) when is_tuple(token),
+    do: token |> Tuple.to_list() |> no_member()
+
+  defp no_member(_token), do: nil
+
+  defp no_member_reason({:duration, _units}), do: duration_in_set_reason()
+  defp no_member_reason({:except, [member]}), do: no_member_reason(member)
+
+  defp no_member_reason({:range, ends}) when is_list(ends),
+    do: Enum.find_value(ends, &no_end_reason/1)
+
+  defp no_member_reason(_member), do: nil
+
+  defp no_end_reason({:duration, _units}), do: duration_in_set_reason()
+  defp no_end_reason({:interval, _ends}), do: interval_in_range_reason()
+  defp no_end_reason(_end), do: nil
+
+  defp duration_in_set_reason do
+    "A duration is not read as a member of a set: a member is a date, a time, a range of " <>
+      "either or an interval. A set of durations (ISO 8601-2 §6.5) is not built"
+  end
+
+  defp interval_in_range_reason do
+    "An interval is not an end of a range in a set: a range runs from one date or time " <>
+      "to another"
   end
 
   # A range runs from its first value up to its last, as an interval does.

@@ -982,6 +982,18 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     first..-last//step
   end
 
+  # A duration or an interval keeps its tag at the end of a range with one
+  # end, as it does in a range with two, so that the parser knows it for
+  # what it is: neither is an end of a range
+  # (`Tempo.Iso8601.Parser.parse/2`).
+  def range([:undefined, {type, _tokens} = no_end]) when type in [:duration, :interval] do
+    {:range, [:undefined, no_end]}
+  end
+
+  def range([{type, _tokens} = no_end, :undefined]) when type in [:duration, :interval] do
+    {:range, [no_end, :undefined]}
+  end
+
   def range([:undefined, {_type, other}]) do
     {:range, [:undefined, other]}
   end
