@@ -823,12 +823,29 @@ defmodule Tempo.Select do
   # a year, the first Monday in a month.
   defp select_by_rule(%Interval{from: %Tempo{} = from} = period, rule) do
     {unit, _precision} = Tempo.resolution(from)
-    cadence = %Duration{time: [{cadence_unit(unit), 1}]}
-    rule = in_calendar_of(rule, from)
-    recurrence = %Interval{recurrence: :infinity, duration: cadence, repeat_rule: rule}
 
-    Tempo.to_interval_set(recurrence, within: period)
+    with :ok <- no_week_of_month(rule, unit, from) do
+      cadence = %Duration{time: [{cadence_unit(unit), 1}]}
+      rule = in_calendar_of(rule, from)
+      recurrence = %Interval{recurrence: :infinity, duration: cadence, repeat_rule: rule}
+
+      Tempo.to_interval_set(recurrence, within: period)
+    end
   end
+
+  # A week selected from a month is the week of the month, which is refused
+  # in a selection as it is in a constraint (`periods_on_axis/4`), and named
+  # by what was selected from what.
+  defp no_week_of_month(%Tempo{time: [selection: selection]}, :month, from) do
+    if Enum.any?(selection, &week_part?/1),
+      do: NotBuilt.week_of_month(selection, from),
+      else: :ok
+  end
+
+  defp no_week_of_month(_rule, _unit, _from), do: :ok
+
+  defp week_part?({unit, _weeks}), do: unit in [:week, :calendar_week]
+  defp week_part?(_other), do: false
 
   # A rule written in another calendar than the period's holds only what
   # selects in any calendar (`one_calendar/2`), and is resolved in the

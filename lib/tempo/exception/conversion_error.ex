@@ -49,8 +49,9 @@ defmodule Tempo.ConversionError do
     year of `Calendrical.Reform.England` before 1751); `:rrule` is an
     RRULE that steps or selects by a month, a year, a week of the year or
     a day of one, for a recurrence of another calendar than the Gregorian;
-    and `:week_of_month` is a week selected by `Tempo.select/2` from a
-    month, or from a day or a time within one, in any calendar of months.
+    and `:week_of_month` is a week selected from a month, by
+    `Tempo.select/2` or by a selection resolved in one, in any calendar
+    of months.
     The [operation matrix](operation-matrix.html) lists each.
 
   """

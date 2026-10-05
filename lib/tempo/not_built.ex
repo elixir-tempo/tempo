@@ -239,6 +239,43 @@ defmodule Tempo.NotBuilt do
   end
 
   @doc false
+  # A selection that names a week and is resolved in a month: in a value
+  # whose selection follows a month (`2026Y6ML2WN`), and as the rule of a
+  # recurrence that steps by months from a month, a year or no start. A week
+  # under a month is the week of the month, as `week_of_month/2` has it for
+  # a selector, and what the resolver gave was the whole month where its
+  # first day was in the ISO week of that number. A rule whose start is a
+  # date has a day for its candidate, which a week of the year keeps or
+  # drops, and is answered.
+  @spec week_in_month(list(), Tempo.t() | Interval.t(), module()) ::
+          :ok | {:error, ConversionError.t()}
+  def week_in_month(selection, value, calendar) when is_list(selection) do
+    units = selected_units(selection)
+
+    if (:week in units or :calendar_week in units) and resolved_in_a_month?(value),
+      do: {:error, error(value, :week_of_month, calendar)},
+      else: :ok
+  end
+
+  defp resolved_in_a_month?(%Tempo{time: time}) when is_list(time) do
+    context = Enum.take_while(time, &(not match?({:selection, _selection}, &1)))
+    match?({:month, _month}, List.last(context))
+  end
+
+  defp resolved_in_a_month?(%Interval{
+         duration: %Duration{time: [{:month, _amount} | _finer]},
+         from: from
+       }),
+       do: no_finer_than_a_month?(from)
+
+  defp resolved_in_a_month?(_another), do: false
+
+  defp no_finer_than_a_month?(%Tempo{time: time}) when is_list(time),
+    do: not finer_than_a_month?(time)
+
+  defp no_finer_than_a_month?(no_start), do: no_start in [nil, :undefined]
+
+  @doc false
   # A step that reaches the day, from a value that holds several years or
   # months, or an unspecified day of the month its year begins within, in a
   # year that does not begin with its first month. Such a step is counted

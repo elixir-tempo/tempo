@@ -6721,7 +6721,10 @@ defmodule Tempo do
              "#{inspect(interval)} cannot select by a month, a day of one or a day of the year."
        )}
     else
-      NotBuilt.selection(time, interval, Compare.effective_calendar(calendar_of(rule)))
+      calendar = Compare.effective_calendar(calendar_of(rule))
+
+      with :ok <- NotBuilt.selection(time, interval, calendar),
+           do: NotBuilt.week_in_month(time, interval, calendar)
     end
   end
 
@@ -9689,10 +9692,13 @@ defmodule Tempo do
       fill_selection_start(member, %Tempo.Interval{from: member, repeat_rule: rule})
 
     candidate = %Tempo.Interval{from: start, to: Math.add(start, cadence)}
+    freq = freq_of(cadence)
 
-    case Selection.apply(candidate, rule, freq_of(cadence), origin_day: origin_day_of(recurrence)) do
+    # A selection that only keeps or drops its period keeps it whole, as a
+    # recurrence's does: week 25, selected in week 25, is the week.
+    case Selection.apply(candidate, rule, freq, origin_day: origin_day_of(recurrence)) do
       {:error, _reason} = error -> error
-      occurrences -> resize_selected_occurrences(occurrences, true)
+      occurrences -> resize_selected_occurrences(occurrences, Selection.expands?(rule, freq))
     end
   end
 

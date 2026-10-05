@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A selection that names a week and is resolved in a month returns a `Tempo.ConversionError` whose `:reason` is `:not_built` and whose `:target` is `:week_of_month`, as a week given to `Tempo.select/2` for a month does: `Tempo.select(~o"2026-06", ~o"L23WN")`, `2026Y6ML23WN` and `R/2026Y6M/P1M/FL23WN` were the whole month where its first day was in the ISO week of that number, and nothing otherwise. A rule whose start is a date, as one read from an RRULE has it, keeps or drops that day by its week of the year as before.
+
 * A selection's window (ISO 8601-2 §12.10) that has no length, or is shorter than a unit selected within it, is a `Tempo.ParseError` when the value is read: `LLL1K1IN/PT12HN1K1IN`, a Monday in twelve hours, and `LL45DN/P0DN`, where the first selected the day the window starts on and the second gave an interval of no length. A window is measured in the units a duration measures exactly, so one written in months or years is not judged, and a window of hours that selects a time of day is read.
 
 * A day with no month, selected in a year, is a day of the year, as the value `2026Y45D` is read: `2026YL45DN`, `Tempo.select(~o"2026", ~o"45D")` and `R/2026/P1Y/FL45DN` are 14 February and `2026YL-1DN` is 31 December, where the day was read in the year's first month, so the 45th selected nothing and the last day was 31 January. A recurrence's start that names a month still gives the day that month (`R/2026-03-10/P1Y/FL15DN` is each 15 March), `Tempo.RRule.to_string/1` writes the day of the year as `BYYEARDAY`, and `Tempo.explain/1` says "the 45th day of the year".
@@ -302,6 +304,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* A selection in a whole week or month selects by the days of that period: `Tempo.select(~o"2026-W25", ~o"L15DN")` and the value `2026Y25WL16DN` are 15 and 16 June 2026, and `Tempo.select(~o"2026-06", ~o"L166ON")` is 15 June, where a day of the month or of the year limited the period by the day it starts on (the whole week, or nothing). A recurrence that starts at a week is matched by a week or a month (`R2/2026-W25/P1W/FL25WN` is week 25 of 2026 and 2027, where it matched none and walked to its horizon), a weekly rule's `BYMONTHDAY` beside a `BYDAY` is the days that are both, and `2026Y25WL25WN` is the week.
 
 * A time of day selected within a window is selected where it starts within the window: of the twelve hours from a Monday, `LLL1K1IN/PT12HNT{9,13}HN` is that Monday's 09:00, where it was 09:00 and 13:00 on the Monday and on the day before. A window that crosses midnight selects on both days (01:00 the next morning in the four hours from 22:00), and a position counts what is left.
 
