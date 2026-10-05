@@ -339,6 +339,72 @@ defmodule Tempo.Iso8601.Qualification.Test do
     end
   end
 
+  # A qualifier after a whole value qualifies each of its components (ISO
+  # 8601-2 §8.2.1). A group is the unit it is counted in, but where a value
+  # is built it is still as it is tokenized, and was taken to hold no unit:
+  # the qualifier after `20G100YU?` was lost, and the one after `2026Y1G3MU?`
+  # qualified the year alone and was written `2026?Y1G3MU`.
+  describe "a qualifier after a value that holds a group" do
+    @grouped [
+      {"20G100YU?", [:year], :uncertain},
+      {"197G10YU~", [:year], :approximate},
+      {"1G3MU?", [:month], :uncertain},
+      {"5G10DU?", [:day], :uncertain},
+      {"2026Y1G3MU?", [:year, :month], :uncertain},
+      {"2018Y4G60DU%", [:year, :day], :uncertain_and_approximate},
+      {"2026Y2G13WU~", [:year, :week], :approximate},
+      {"T16H1GT15MU?", [:hour, :minute], :uncertain},
+      {"2026Y{1,2}G3MU?", [:year, :month], :uncertain}
+    ]
+
+    test "qualifies the unit the group is counted in, with every other" do
+      for {text, units, qualifier} <- @grouped do
+        value = Tempo.from_iso8601!(text)
+
+        assert {text, Tempo.qualification(value)} == {text, qualifier}
+
+        for unit <- units do
+          assert {text, unit, Tempo.qualification(value, unit)} == {text, unit, qualifier}
+        end
+      end
+    end
+
+    test "reads back from its own text, which is the text it was written with" do
+      for {text, _units, _qualifier} <- @grouped do
+        value = Tempo.from_iso8601!(text)
+
+        assert {text, Tempo.from_iso8601(Tempo.to_iso8601!(value))} == {text, {:ok, value}}
+      end
+
+      assert Tempo.to_iso8601!(Tempo.from_iso8601!("2026Y1G3MU?")) == "2026Y1G3MU?"
+      assert Tempo.to_iso8601!(Tempo.from_iso8601!("T16H1GT15MU?")) == "T16H1GT15MU?"
+    end
+
+    test "is the qualifier of the century or the decade the group is" do
+      assert Tempo.from_iso8601!("19?") == Tempo.from_iso8601!("20G100YU?")
+      assert Tempo.from_iso8601!("196~") == Tempo.from_iso8601!("197G10YU~")
+      assert Tempo.from_iso8601!("2022-33?") == Tempo.from_iso8601!("2022Y1G3MU?")
+    end
+
+    test "is kept by a member of a set, and by a set qualified as a whole" do
+      for text <- ["{19?,20}", "[19?,20~]", "{19C..20C}?", "{20G100YU,21G100YU}?"] do
+        value = Tempo.from_iso8601!(text)
+        assert {text, Tempo.from_iso8601(Tempo.to_iso8601!(value))} == {text, {:ok, value}}
+      end
+
+      assert %Tempo.Set{set: [first, second]} = Tempo.from_iso8601!("{19?,20}")
+      assert {Tempo.qualification(first), Tempo.qualification(second)} == {:uncertain, nil}
+    end
+
+    test "leaves a qualifier of one component the component's" do
+      individual = Tempo.from_iso8601!("2026?Y1G3MU")
+
+      assert Tempo.qualification(individual, :year) == :uncertain
+      assert Tempo.qualification(individual, :month) == nil
+      assert Tempo.qualification(individual) == nil
+    end
+  end
+
   describe "bounded interval semantics are unchanged" do
     # Qualification is metadata; it does not shift the interval bounds.
     test "uncertain year still spans the whole year" do

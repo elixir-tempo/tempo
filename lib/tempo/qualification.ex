@@ -120,14 +120,23 @@ defmodule Tempo.Qualification do
 
   # The qualifiable units a time list holds. A group of a set is a 3-tuple
   # and a selection holds no unit of its own.
+  #
+  # A group is the unit it is counted in. Where a value is built it is still
+  # as it is tokenized (`{:group, [nth: 20, year: 100]}`), and was taken to
+  # hold no unit: `20G100YU?` lost its qualifier, and `2026Y1G3MU?` was
+  # qualified in its year alone, where a qualifier after the whole value
+  # qualifies each component (ISO 8601-2 §8.2.1).
   defp present(time) do
-    for entry <- time,
-        is_tuple(entry),
-        unit = elem(entry, 0),
-        unit in @units,
-        uniq: true,
-        do: unit
+    for entry <- time, unit <- units_of(entry), uniq: true, do: unit
   end
+
+  defp units_of({:group, [_ | _] = group}),
+    do: for({unit, _size} <- group, unit in @units, do: unit)
+
+  defp units_of(entry) when is_tuple(entry),
+    do: if(elem(entry, 0) in @units, do: [elem(entry, 0)], else: [])
+
+  defp units_of(_entry), do: []
 
   defp compact(qualifications) when map_size(qualifications) == 0, do: nil
   defp compact(qualifications), do: qualifications

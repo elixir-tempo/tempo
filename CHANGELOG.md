@@ -317,6 +317,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A qualifier after a value that holds a group qualifies the unit the group is counted in with every other component (ISO 8601-2 §8.2.1): `2026Y1G3MU?` is an uncertain first quarter of an uncertain 2026 and `20G100YU?` an uncertain century. The first qualified its year alone and was written `2026?Y1G3MU`, and the second lost its qualifier, so a qualified century (`19?`) did not read back from its own text.
+
 * A century or a decade before year one is the years ISO 8601-2 §4.4.1.7 and §4.4.1.8 give it: `-19` is the years −1999 to −1900 and the negative zero century `-00` the years −99 to 0, where `-19` was −1900 to −1801 and `-00` was the century `00`. It is written with its sign (`-19C`, `-196J`), where it was written as a group with a negative count, which is not read.
 
 * `Tempo.from_iso8601/2` and `Tempo.parse/2` return a `Tempo.InvalidCalendarError` for a calendar that is a string or a number, as they do for the name of one, where they raised a `FunctionClauseError`.
