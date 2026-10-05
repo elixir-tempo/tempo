@@ -105,7 +105,7 @@ defmodule Tempo.RRule do
 
   * `{:ok, %Tempo.Interval{}}` on success.
 
-  * `{:error, reason}` on a malformed rule or unknown keyword.
+  * `{:error, reason}` on a malformed rule or unknown keyword, and for what RFC 7529's `RSCALE` and `SKIP` say that Tempo does not build: `{:unsupported_rscale, name}` for a calendar other than the Gregorian, `{:unsupported_skip, "FORWARD"}`, `{:unsupported_skip, {:backward, part}}` for `BACKWARD` beside a day the rule writes that a month or a year can lack, and `{:skip_without_rscale, skip}`.
 
   ### Examples
 
@@ -123,6 +123,9 @@ defmodule Tempo.RRule do
       iex> Tempo.RRule.parse("FREQ=MONTHLY;COUNT=3", from: ~o"2026-01-31")
       {:ok, ~o"R3/2026-01-31/P1M/FL31DN"}
 
+      iex> Tempo.RRule.parse("RSCALE=GREGORIAN;FREQ=MONTHLY;SKIP=FORWARD")
+      {:error, {:unsupported_skip, "FORWARD"}}
+
       iex> {:error, _} = Tempo.RRule.parse("FREQ=NOPE")
 
   """
@@ -132,9 +135,18 @@ defmodule Tempo.RRule do
   def parse("RRULE:" <> rest, options), do: parse(rest, options)
 
   def parse(rrule, options) when is_binary(rrule) do
-    with {:ok, parts} <- parse_parts(rrule) do
+    with {:ok, parts} <- parse_parts(rrule),
+         :ok <- skip_with_rscale(parts) do
       build_interval(parts, options)
     end
+  end
+
+  # RFC 7529 §4.1: "The SKIP rule part MUST NOT be present unless the RSCALE
+  # rule part is present."
+  defp skip_with_rscale(parts) do
+    if Keyword.has_key?(parts, :skip) and not Keyword.has_key?(parts, :rscale),
+      do: {:error, {:skip_without_rscale, Keyword.fetch!(parts, :skip)}},
+      else: :ok
   end
 
   @doc """
@@ -295,6 +307,27 @@ defmodule Tempo.RRule do
     end
   end
 
+  # RFC 7529: `RSCALE` names the calendar a rule counts its months and its
+  # days in, and `SKIP` what it does with a date that does not exist, the
+  # 31st of a month of thirty days: `OMIT`, the default and RFC 5545's rule,
+  # passes over it, and `BACKWARD` takes the month's last day. A rule of
+  # another calendar than the Gregorian, and `FORWARD`, the first day of the
+  # month after, are not built, and are reported rather than read as
+  # another, as `Tempo.JSCalendar` reports them.
+  defp parse_kv("RSCALE", value) do
+    if String.upcase(value) in ["GREGORIAN", "GREGORY"],
+      do: {:ok, {:rscale, :gregorian}},
+      else: {:error, {:unsupported_rscale, value}}
+  end
+
+  defp parse_kv("SKIP", value) do
+    case String.upcase(value) do
+      "OMIT" -> {:ok, {:skip, :omit}}
+      "BACKWARD" -> {:ok, {:skip, :backward}}
+      _forward_or_unknown -> {:error, {:unsupported_skip, value}}
+    end
+  end
+
   defp parse_kv(key, _value), do: {:error, {:unknown_rule_part, key}}
 
   defp parse_byday_entry(entry) do
@@ -361,7 +394,8 @@ defmodule Tempo.RRule do
   defp build_interval(parts, options) do
     case Keyword.fetch(parts, :freq) do
       {:ok, freq_unit} ->
-        {:ok, do_build(freq_unit, parts, options)}
+        with :ok <- Rule.skip_built(struct(Rule, parts)),
+             do: {:ok, do_build(freq_unit, parts, options)}
 
       :error ->
         {:error, :missing_freq}
@@ -386,9 +420,28 @@ defmodule Tempo.RRule do
       duration: cadence,
       recurrence: recurrence,
       repeat_rule: repeat_rule,
-      metadata: occurrence_metadata(options)
+      metadata: options |> occurrence_metadata() |> as_long_as_its_start(parts, from)
     }
   end
+
+  # An occurrence of a rule is as long as its start is precise, a day for a
+  # date. A rule that states its day is given that length where it is
+  # resolved. One whose `SKIP` is `BACKWARD` states no day, so that the step
+  # from its start keeps the last day of a short month, and is given the
+  # length here: without it each occurrence would run a whole cadence, as an
+  # ISO 8601 recurrence's does.
+  defp as_long_as_its_start(metadata, parts, %Tempo{} = from)
+       when not is_map_key(metadata, :occurrence_duration) and
+              not is_map_key(metadata, :occurrence_base_to) do
+    with :backward <- Keyword.get(parts, :skip),
+         {unit, _span} when is_atom(unit) <- Tempo.resolution(from) do
+      Map.put(metadata, :occurrence_duration, %Tempo.Duration{time: [{unit, 1}]})
+    else
+      _as_it_is -> metadata
+    end
+  end
+
+  defp as_long_as_its_start(metadata, _parts, _from), do: metadata
 
   # Build the recurring interval's metadata from the parse options,
   # mirroring `Tempo.RRule.Expander.to_ast/3` so the string-parsing

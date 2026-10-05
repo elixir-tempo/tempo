@@ -193,6 +193,10 @@ defmodule Tempo.JSCalendarTest do
 
       # The first day of the month after is not built, and is said so.
       assert monthly.(~s(,"skip":"forward")) == {:error, {:unsupported_skip, "forward"}}
+
+      # Nor is the last day of the month for a day the rule writes itself.
+      assert monthly.(~s(,"skip":"backward","byMonthDay":[31])) ==
+               {:error, {:unsupported_skip, {:backward, [bymonthday: [31]]}}}
     end
 
     test "a rule counted in another calendar than the Gregorian is reported" do

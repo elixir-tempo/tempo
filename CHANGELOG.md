@@ -209,6 +209,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Added
 
+* `Tempo.RRule.parse/2` reads RFC 7529's `RSCALE` and `SKIP` for the Gregorian calendar: `SKIP=BACKWARD` keeps the last day of a month or a year without its start's day, each occurrence as long as the start is precise (`RSCALE=GREGORIAN;FREQ=MONTHLY;SKIP=BACKWARD` from 31 January lists 28 February), and `SKIP=OMIT` is RFC 5545's rule, where each was `{:error, {:unknown_rule_part, _}}`. `SKIP=FORWARD`, an `RSCALE` other than `GREGORIAN` and a `SKIP` with no `RSCALE` are reported, as `Tempo.JSCalendar.parse/2` reports them.
+
 * A group of a set (`2026Y{1,2}G3MU`, the first and the second groups of three months) converts to a span for each group and walks the values of each, a unit after it counted from each group's start, where `Tempo.to_interval/2` and `Enum` returned a `Tempo.ConversionError`. A group counted from the end (`{1..-1}G3MU`) is counted in what holds it, and one of several groups (`[1,2]G3MU`) is no one span, as a one-of set is none.
 
 * [What each operation gives each value](guides/operation-matrix.md) is a table of every class of value against every kind of operation, generated from the code and checked by the test suite, so the named errors in it are the list of what is not yet built.
@@ -310,6 +312,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* A rule whose `skip` is `backward` and that writes a day a month or a year can lack (a `BYMONTHDAY` past the 28th, a `BYYEARDAY` past the 365th) returns `{:error, {:unsupported_skip, {:backward, part}}}` from `Tempo.JSCalendar.parse/2` and `Tempo.RRule.parse/2`, where JSCalendar's was read as `omit` and passed over the months without the day. `Tempo.RRule.Rule.skip_built/1` is the check.
 
 * A recurrence that starts at a year and selects a week lists that year's own week first, wherever the week starts: `R2/2026/P1Y/FL1WN` is weeks 1 of 2026 and 2027, the first from 29 December 2025, as the value `2026YL1WN` is, where it dropped that week as one before its start and listed 2027 and 2028. A start that is a date still holds its occurrences to that date, as RFC 5545's DTSTART does.
 

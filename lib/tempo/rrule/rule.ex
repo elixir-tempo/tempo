@@ -120,6 +120,46 @@ defmodule Tempo.RRule.Rule do
             bymonthday_or_byday: nil
 
   @doc """
+  Returns whether a rule's `:skip` is one Tempo builds for the parts the rule holds.
+
+  `:backward` is built for the day a rule takes from its start: the rule states no day, and the step from its start keeps the last day of a period without it. A day the rule writes itself that a month or a year can lack, a `BYMONTHDAY` past the 28th from either end or a `BYYEARDAY` past the 365th, is passed over where it is missing, which is `:omit`. A reader reports such a rule rather than reading it as another.
+
+  ### Arguments
+
+  * `rule` is a `t:t/0`.
+
+  ### Returns
+
+  * `:ok` for a rule whose `:skip` is `:omit`, and for one whose `:skip` is `:backward` and that writes no day a month or a year can lack.
+
+  * `{:error, {:unsupported_skip, {:backward, part}}}` otherwise, where `part` is the part that holds such a day, as `[bymonthday: [31]]`.
+
+  ### Examples
+
+      iex> Tempo.RRule.Rule.skip_built(%Tempo.RRule.Rule{freq: :month, skip: :backward})
+      :ok
+
+      iex> Tempo.RRule.Rule.skip_built(%Tempo.RRule.Rule{freq: :month, skip: :backward, bymonthday: [15, 31]})
+      {:error, {:unsupported_skip, {:backward, [bymonthday: [31]]}}}
+
+  """
+  @spec skip_built(t()) :: :ok | {:error, {:unsupported_skip, {:backward, keyword()}}}
+  def skip_built(%__MODULE__{skip: :backward} = rule) do
+    missing =
+      Enum.reject(
+        [
+          bymonthday: Enum.filter(List.wrap(rule.bymonthday), &(abs(&1) > 28)),
+          byyearday: Enum.filter(List.wrap(rule.byyearday), &(abs(&1) > 365))
+        ],
+        fn {_part, days} -> days == [] end
+      )
+
+    if missing == [], do: :ok, else: {:error, {:unsupported_skip, {:backward, missing}}}
+  end
+
+  def skip_built(%__MODULE__{}), do: :ok
+
+  @doc """
   Does the rule include any `BY*` modifier?
 
   `true` when any `BY*` field is non-nil. Used by the expander to

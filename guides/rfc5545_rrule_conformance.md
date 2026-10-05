@@ -4,7 +4,7 @@ Tempo treats RFC 5545 RRULE as a first-class recurrence vocabulary. Every rule t
 
 Tempo's RRULE parsing is its own implementation; it does not delegate to a third-party library for the string-to-AST step. For full iCalendar (`.ics`) files with events, RDATEs, and EXDATEs, Tempo delegates to the excellent [`ical`](https://hex.pm/packages/ical) library and converts its `%ICal.Recurrence{}` into the same Tempo AST — giving you a single conversion path regardless of whether the rule came from a hand-written string or a parsed iCalendar feed.
 
-The reference is [RFC 5545 §3.3.10](https://datatracker.ietf.org/doc/html/rfc5545#section-3.3.10). A companion extension, RFC 7529 (RSCALE for alternative calendars), is **not** implemented as a named property — Tempo achieves the same outcome through its calendar-aware expansion pipeline (see below).
+The reference is [RFC 5545 §3.3.10](https://datatracker.ietf.org/doc/html/rfc5545#section-3.3.10). A companion extension, RFC 7529, adds `RSCALE`, the calendar a rule counts in, and `SKIP`, what it does with a date that does not exist. Tempo reads both for the Gregorian calendar and reports what it does not build; a rule in another calendar is counted through the calendar of its start (see below).
 
 ## What Tempo guarantees
 
@@ -87,7 +87,7 @@ The end-to-end formula: **`occurrences = (expand(rrule) ∪ rdates) − exdates`
 
 ## Calendar awareness
 
-RFC 5545 is implicitly Gregorian. RFC 7529 defines a separate `RSCALE` property for alternative calendars; Tempo does not implement `RSCALE` as a parsed property. Instead, **Tempo's RRULE expansion is calendar-aware through the rule's DTSTART**. Parse a DTSTART in the Hebrew calendar (`5786-09-30[u-ca=hebrew]`) and expand an RRULE against it, and the expansion iterates in Hebrew months. The same rule string yields different occurrences depending on which calendar the DTSTART is in — which is closer to what most applications want than the RSCALE annotation dance.
+RFC 5545 is implicitly Gregorian. RFC 7529 defines a separate `RSCALE` part for alternative calendars; Tempo reads `RSCALE=GREGORIAN` and reports any other (`{:error, {:unsupported_rscale, name}}`). Instead, **Tempo's RRULE expansion is calendar-aware through the rule's DTSTART**. Parse a DTSTART in the Hebrew calendar (`5786-09-30[u-ca=hebrew]`) and expand an RRULE against it, and the expansion iterates in Hebrew months. The same rule string yields different occurrences depending on which calendar the DTSTART is in — which is closer to what most applications want than the RSCALE annotation dance.
 
 Occurrence selection dispatches to the calendar module (`days_in_month/2`, `day_of_year/3`, `day_of_week/4`) and steps through Calendrical, so BYMONTH/BYMONTHDAY/BYYEARDAY respect calendar-specific month and year lengths, and BYWEEKNO numbers the weeks of the calendar's own year from `WKST`.
 
@@ -113,7 +113,7 @@ A small list of features outside Tempo's current RRULE scope:
 
 * **Sub-second `FREQ` or `BY*`** — Tempo's resolution ladder currently stops at `:second`. Sub-second recurrence isn't meaningful within Tempo's AST.
 
-* **RFC 7529 `RSCALE` and `SKIP`** — neither is parsed in an RRULE string, and neither is written. Reading is calendar-aware through DTSTART, and writing refuses what only `RSCALE` could say, both described above. A rule read from an RRULE passes over a date that does not exist, which is RFC 5545's rule and `SKIP`'s default, `OMIT`; JSCalendar's `skip` is read, `omit` and `backward`.
+* **RFC 7529 `RSCALE` and `SKIP`** — read in an RRULE string for the Gregorian calendar, and neither is written. `SKIP=OMIT`, the default and RFC 5545's rule, passes over a date that does not exist, and `SKIP=BACKWARD` keeps the last day of a month or a year without its start's day (`RSCALE=GREGORIAN;FREQ=MONTHLY;SKIP=BACKWARD` from 31 January lists 28 February), each occurrence as long as the start is precise; JSCalendar's `skip` is read the same way. Reported as `{:error, reason}` rather than read as another: `SKIP=FORWARD` (`:unsupported_skip`), an `RSCALE` other than `GREGORIAN` (`:unsupported_rscale`), a `SKIP` with no `RSCALE`, which RFC 7529 §4.1 forbids (`:skip_without_rscale`), and `BACKWARD` beside a day the rule writes that a month or a year can lack, a `BYMONTHDAY` past the 28th or a `BYYEARDAY` past the 365th. Reading in another calendar is through DTSTART, and writing refuses what only `RSCALE` could say, both described above.
 
 ## Test coverage
 

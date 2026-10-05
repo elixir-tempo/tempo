@@ -438,25 +438,30 @@ if Code.ensure_loaded?(JSCalendar) do
            {:ok, months} <- months(rule.by_month),
            {:ok, skip} <- skip(rule.skip),
            :ok <- gregorian(rule.rscale) do
-        {:ok,
-         %Rule{
-           freq: freq,
-           interval: rule.interval || 1,
-           count: rule.count,
-           until: rule.until && Tempo.from_elixir(rule.until),
-           wkst: weekday(rule.first_day_of_week) || 1,
-           skip: skip,
-           bymonth: months,
-           bymonthday: rule.by_month_day,
-           byyearday: rule.by_year_day,
-           byweekno: rule.by_week_no,
-           byday: byday(rule.by_day),
-           byhour: rule.by_hour,
-           byminute: rule.by_minute,
-           bysecond: rule.by_second,
-           bysetpos: rule.by_set_position
-         }}
+        skip_built(%Rule{
+          freq: freq,
+          interval: rule.interval || 1,
+          count: rule.count,
+          until: rule.until && Tempo.from_elixir(rule.until),
+          wkst: weekday(rule.first_day_of_week) || 1,
+          skip: skip,
+          bymonth: months,
+          bymonthday: rule.by_month_day,
+          byyearday: rule.by_year_day,
+          byweekno: rule.by_week_no,
+          byday: byday(rule.by_day),
+          byhour: rule.by_hour,
+          byminute: rule.by_minute,
+          bysecond: rule.by_second,
+          bysetpos: rule.by_set_position
+        })
       end
+    end
+
+    # A `skip` of `backward` beside a day the rule writes that a month or a
+    # year can lack is not built, and is reported (`Tempo.RRule.Rule.skip_built/1`).
+    defp skip_built(%Rule{} = rule) do
+      with :ok <- Rule.skip_built(rule), do: {:ok, rule}
     end
 
     defp frequency("yearly"), do: {:ok, :year}
