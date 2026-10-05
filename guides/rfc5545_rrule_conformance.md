@@ -46,12 +46,20 @@ Every property defined by RFC 5545 §3.3.10, with Tempo's handling:
 RFC 5545 defines each BY-rule as either **EXPAND** (generates additional candidates inside a period) or **LIMIT** (filters the candidate set) depending on the outer `FREQ`. Tempo implements the full table from the RFC:
 
 * `BYMONTH` expands when `FREQ=YEARLY`; limits under finer FREQs.
+
 * `BYMONTHDAY` expands when `FREQ=MONTHLY`/`YEARLY`; limits under finer FREQs.
+
 * `BYYEARDAY` expands when `FREQ=YEARLY`; limits otherwise.
+
 * `BYWEEKNO` expands when `FREQ=YEARLY`; limits otherwise. Its weeks start on `WKST`, and week 1 holds the year's fourth day, so with the default Monday they are ISO 8601's weeks, the `W` of the ISO form. A YEARLY rule with `BYWEEKNO` and no `BYYEARDAY`, `BYMONTHDAY` or `BYDAY` takes DTSTART's weekday, as ISO 8601-2 Annex C.3 reads RFC 5545: `FREQ=YEARLY;BYWEEKNO=20` from Monday 1997-05-12 is the Monday of week 20 each year.
+
 * `BYDAY`'s role depends on `FREQ` and whether `BYWEEKNO` or `BYMONTH` is also present — Tempo follows the RFC's §3.3.10 decision table.
+
 * `BYHOUR`/`BYMINUTE`/`BYSECOND` expand when `FREQ` is coarser than the unit; limit when finer.
+
 * `BYSETPOS` is always applied last as a LIMIT across the candidate set.
+
+In a `YEARLY` rule the parts that name a day hold at once, so the days selected are those that satisfy every one of them: `BYMONTH=3;BYYEARDAY=100` selects nothing, day 100 being 10 April, `BYMONTH=3,4;BYYEARDAY=80,100` is 21 March and 10 April, each once, and `BYMONTHDAY=15;BYYEARDAY=74` is 15 March in the years whose 74th day it is. Two readings are Tempo's where a rule leaves the day or the month to DTSTART: a day of the month with no month (`FREQ=YEARLY;BYMONTHDAY=15`) is a day of DTSTART's month, and DTSTART's day in a month that does not have it (the 31st, in `BYMONTH=4`) is that month's last day.
 
 ### RDATE and EXDATE
 

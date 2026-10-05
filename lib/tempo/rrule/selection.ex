@@ -33,6 +33,8 @@ defmodule Tempo.RRule.Selection do
   selection (`w`, Tempo's extension) expands and limits as `BYWEEKNO`
   does, in the weeks the calendar numbers itself.
 
+  In a `YEARLY` rule the parts that name a day all hold at once, so the days selected are those that satisfy every one. `BYYEARDAY`, a computed event (`e`, Tempo's extension, which expands a `YEARLY` rule and limits a finer one) and `BYMONTHDAY` apply in that order: the first of them the rule holds names the days, and each after it keeps those it names too. `BYMONTH` keeps a day of the year and an event to the months it lists, each day listed once: `BYMONTH=3;BYYEARDAY=100` selects nothing, day 100 being 10 April, and `3M(easter)e` is Easter in the years it falls in March.
+
   A year (`Y`), which RFC 5545 has no part for and ISO 8601-2 §12.2 no
   selection rule, limits the periods a selection resolves in, as a
   recurrence domain's years (`R/{2027Y}/…`) do: a period that starts in
@@ -666,8 +668,20 @@ defmodule Tempo.RRule.Selection do
   # BYDAY's weekdays within the week, month or year, and `:limit` keeps or
   # drops whole candidates.
   defp role({token, _value}, :year, _selection)
-       when token in [:month, :traditional_month, :day_of_year, :event, :week, :calendar_week],
+       when token in [:month, :traditional_month, :day_of_year, :week, :calendar_week],
        do: :expand
+
+  # In a yearly rule the parts that name a day all hold at once (RFC 5545
+  # §3.3.10): the first of them to apply names the days, and each one after it
+  # keeps those it names too. A day of the year applies before an event, and
+  # a day of the month after both.
+  defp role({:event, _name}, :year, selection) do
+    if Keyword.has_key?(selection, :day_of_year), do: :limit, else: :expand
+  end
+
+  defp role({:day, _days}, :year, selection) do
+    if day_named_before_day_of_month?(selection), do: :limit, else: :expand
+  end
 
   defp role({token, _value}, scope, _selection)
        when token in [:day, :nearest_weekday] and scope in [:month, :year],
@@ -683,6 +697,9 @@ defmodule Tempo.RRule.Selection do
   end
 
   defp role(_entry, _scope, _selection), do: :limit
+
+  defp day_named_before_day_of_month?(selection),
+    do: Keyword.has_key?(selection, :day_of_year) or Keyword.has_key?(selection, :event)
 
   # BYMONTH — EXPAND for FREQ=YEARLY, LIMIT otherwise. Per RFC
   # 5545 §3.3.10, a YEARLY rule with BYMONTH=6,7 produces an
@@ -775,9 +792,9 @@ defmodule Tempo.RRule.Selection do
 
   # BYYEARDAY — EXPAND for YEARLY, LIMIT otherwise. Signed
   # indexing: `-1` is the last day of the year.
-  defp apply_role(:expand, {:day_of_year, days}, candidates, _scope, _selection, _wkst) do
+  defp apply_role(:expand, {:day_of_year, days}, candidates, _scope, selection, _wkst) do
     Enum.flat_map(candidates, fn candidate ->
-      expand_candidate_year_days(candidate, List.wrap(days))
+      candidate |> year_day_dates(List.wrap(days)) |> swap_in_selected_month(candidate, selection)
     end)
   end
 
@@ -795,8 +812,10 @@ defmodule Tempo.RRule.Selection do
   # Astro's range) drops silently, like any other invalid combination. For
   # finer FREQs it is a LIMIT: keep candidates already sitting on the event's
   # date.
-  defp apply_role(:expand, {:event, name}, candidates, _scope, _selection, _wkst) do
-    Enum.flat_map(candidates, fn candidate -> expand_event(candidate, name) end)
+  defp apply_role(:expand, {:event, name}, candidates, _scope, selection, _wkst) do
+    Enum.flat_map(candidates, fn candidate ->
+      candidate |> event_dates(name) |> swap_in_selected_month(candidate, selection)
+    end)
   end
 
   defp apply_role(:limit, {:event, name}, candidates, _scope, _selection, _wkst) do
@@ -934,6 +953,7 @@ defmodule Tempo.RRule.Selection do
           :byday,
           :day_of_week,
           :day_of_year,
+          :event,
           :nearest_weekday,
           :or_day
         ]
@@ -946,6 +966,16 @@ defmodule Tempo.RRule.Selection do
   # After a BYMONTH expansion a week keeps only its days in the month.
   defp month_selected?(selection) do
     Keyword.has_key?(selection, :month) or Keyword.has_key?(selection, :traditional_month)
+  end
+
+  # The dates a part names in a candidate's year, as occurrences. After a
+  # BYMONTH expansion the candidate is one of the months selected, and of the
+  # dates named those in that month alone are its own: a rule's parts all
+  # hold at once, and a date is listed by the month it is in and no other.
+  defp swap_in_selected_month(dates, candidate, selection) do
+    if month_selected?(selection),
+      do: swap_dates(candidate, Enum.filter(dates, &(elem(&1, 1) == month_of(candidate)))),
+      else: swap_dates(candidate, dates)
   end
 
   # A computed event (`(easter)e`) names one day, as BYMONTHDAY does, so a
@@ -1509,32 +1539,24 @@ defmodule Tempo.RRule.Selection do
     |> normalise_day_of_week()
   end
 
-  # BYYEARDAY with FREQ=YEARLY: one occurrence per listed
-  # day-of-year (signed). Convert ordinal → {month, day} via
-  # the calendar's day-of-year axis.
-  defp expand_candidate_year_days(
-         %Interval{from: %Tempo{calendar: calendar}} = candidate,
-         year_days
-       ) do
+  # BYYEARDAY with FREQ=YEARLY: one date per listed day-of-year
+  # (signed). Convert ordinal → {month, day} via the calendar's
+  # day-of-year axis.
+  defp year_day_dates(%Interval{from: %Tempo{calendar: calendar}} = candidate, year_days) do
     year = candidate.from.time[:year]
 
-    dates =
-      for day_of_year <- counted_values(year_days, :day_of_year, candidate),
-          {m, day} <- [year_day_to_month_day(calendar, year, day_of_year)],
-          do: {year, m, day}
-
-    swap_dates(candidate, dates)
+    for day_of_year <- counted_values(year_days, :day_of_year, candidate),
+        {m, day} <- [year_day_to_month_day(calendar, year, day_of_year)],
+        do: {year, m, day}
   end
 
-  # Resolve a computed event in the candidate's year and emit each date it
-  # falls on there as a day-resolution occurrence, in the candidate's own
-  # calendar. A year the resolver cannot reach, or an unknown event, yields
-  # no occurrence.
-  defp expand_event(%Interval{from: %Tempo{time: time, calendar: calendar}} = candidate, name) do
+  # Resolve a computed event in the candidate's year: each date it falls on
+  # there, in the candidate's own calendar. A year the resolver cannot reach,
+  # or an unknown event, has none.
+  defp event_dates(%Interval{from: %Tempo{time: time, calendar: calendar}}, name) do
     case Keyword.get(time, :year) do
       year when is_integer(year) ->
-        dates = for date <- event_dates_in_year(name, year, calendar), do: date_units(date)
-        swap_dates(candidate, dates)
+        for date <- event_dates_in_year(name, year, calendar), do: date_units(date)
 
       _no_year ->
         []

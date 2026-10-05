@@ -205,6 +205,24 @@ defmodule Tempo.EventCalendarTest do
                easters
     end
 
+    test "is limited by a month of the calendar selected beside it" do
+      # Easter falls in the seventh month of a Hebrew year of twelve months
+      # and the eighth of a year of thirteen, which numbers Nisan after its
+      # second Adar.
+      for month <- 7..8 do
+        in_the_month = read("R/../P1Y/FL#{month}M(easter)eN", Hebrew)
+        selected = dates(Tempo.to_interval(in_the_month, within: read("5780Y/5800Y", Hebrew)))
+
+        expected =
+          for year <- 5780..5799,
+              date <- "easter" |> event_dates(year, Hebrew) |> in_year(year),
+              date.month == month,
+              do: date
+
+        assert {month, selected} == {month, expected}
+      end
+    end
+
     test "anchors a window, whose days are selected in the years they fall in" do
       # Each feast is a count of days from Easter, taken here with `Date.add/2`.
       # Ash Wednesday of 2027 falls in the Persian year 1405 and its Easter in

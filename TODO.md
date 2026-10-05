@@ -6,10 +6,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Open
 
-### Correctness
-
-* [ ] **In a yearly rule the parts that name a day do not all hold at once** — RFC 5545 gives a yearly rule the days that satisfy every part it holds, and Tempo applies them one after another: a month does not limit a day of the year or a computed event beside it (`FREQ=YEARLY;BYMONTH=3;BYYEARDAY=100` is 10 April, `R/../P1Y/FL3M(easter)eN` is every Easter where `Tempo.explain/1` says "in March, on Easter"), several months list the day once each (`BYMONTH=3,4;BYYEARDAY=80,100` lists 21 March and 10 April twice), and a day of the month replaces a day of the year (`BYMONTHDAY=15;BYYEARDAY=74` is 15 March in a leap year, when day 74 is the 14th). To measure against the days of the year that satisfy every part. Found 2026-10-05.
-
 ### Conformance and completeness
 
 * [ ] **A day with no month selected in a year is a day of the year** — `2026YL-1DN` is 31 December and `2026YL45DN` 14 February, as the value `2026Y-1D` and `Tempo.select(~o"2026", ~o"-1D")` read it, where the selection reads the day in the year's first month (31 January). An RRULE's `BYMONTHDAY` keeps its own rule, DTSTART's month. Decided 2026-10-04; with it a constraint of `select/2` and a selection go through one resolver, and the matrix's selections take the form in.
@@ -33,6 +29,10 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **Set operations across a week calendar's resolutions** — `Tempo.difference(~o"2026"W, ~o"2026-W25"W)` is a `ResolutionError` ("Cannot express … as a month-axis calendar date"), in `Calendrical.ISOWeek` and `Calendrical.NRF` alike. Found 2026-10-02.
 
 * [ ] **Traditional months that are sets or masks** — `2026Y{1,2}m` parses as a mask (`traditional_month: {:mask, [[1..2]]}`) and a masked one (`1Xm`) is a `ConversionError` from `Enum` and `to_interval/2`: nothing lists the traditional months a year has, which is Calendrical's to answer. Found 2026-10-03.
+
+* [ ] **The resolver measured for the monthly and weekly frequencies** — `Tempo.RRule.YearlyPartsTest` asks every day of four years, with `Date` alone, whether each part of a yearly rule holds for it, and found three defects that no example of RFC 5545 reaches. The same measure for monthly and weekly rules, and for a position and an ordinal weekday, would give those frequencies the confidence the yearly one now has. Found 2026-10-05.
+
+* [ ] **A yearly rule's day of the month with no month, and its start's day in a shorter month** — two readings RFC 5545 leaves open, now written in the conformance guide: `FREQ=YEARLY;BYMONTHDAY=15` is the 15th of DTSTART's month (libical's reading, where dateutil lists the 15th of every month), and DTSTART's 31st in `BYMONTH=4` is 30 April, where the RFC passes over a date that does not exist. To confirm or change each. Found 2026-10-05.
 
 * [ ] **A computed event in a period shorter than a year** — an event expands a yearly candidate and limits every other: `Tempo.select(~o"2026Y4M", ~o"L(easter)eN")` and a week's selection select nothing though Easter 2026 is 5 April, in ISO week 14, and `R/../P1M/FL(easter)eN` keeps a month only when its start's day is Easter. To decide whether an event expands in a month and a week too (the Easter in April), as a day of the month does in a month, where a monthly rule now reads "the start's day, when it is Easter". Found 2026-10-05.
 
@@ -125,6 +125,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **In a yearly rule the parts that name a day hold at once** — in the resolver a day of the year, an event and a day of the month apply in that order at yearly scope, the first naming the days and each after it limiting them, and after a `BYMONTH` expansion a day of the year and an event keep to the candidate's month (`swap_in_selected_month/3`), so each day is listed once. `Tempo.RRule.YearlyPartsTest` asks every day of four years, with `Date` alone, whether each part of some 300 rules holds for it. 2026-10-05.
 
 * [x] **A computed event in a year of another calendar** — the resolver asks `Tempo.Event.date/3` for each Gregorian year a candidate's year runs through (`Calendrical.first_gregorian_day_of_year/2` and `last_gregorian_day_of_year/2`) and keeps the dates that fall in that year, one, none or two; a candidate limited by an event is asked for the Gregorian year its own date falls in. `Tempo.EventCalendarTest` holds nine calendars, seven events and five years each against `Tempo.Event.date/2` converted by `Date.convert!/2`, with a count, a window, `Tempo.select/2`, a daily and a weekly rule, a weekday beside the event and a §12.10 window on it. 2026-10-05.
 
