@@ -65,6 +65,16 @@ defmodule Tempo.Iso8601.Tokenizer.Set do
                 |> tag(:all_of),
                 export_combinator: true
 
+  # The years of a set written with no designator. A combinator of its own,
+  # so that a range whose ends are not years is this combinator failing, and
+  # the set is then read member by member.
+  defcombinator :year_set_all,
+                ignore(string("{"))
+                |> list_of_year_or_range()
+                |> ignore(string("}"))
+                |> tag(:all_of),
+                export_combinator: true
+
   defcombinator :integer_set_one,
                 ignore(string("["))
                 |> list_of_integer_or_range()

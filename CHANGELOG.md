@@ -315,6 +315,10 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A set of whole numbers written with no designator is a set of years only where each has four digits or fewer, or a minus sign: `{20260615,20260616}` is the two dates, as `[20260615,20260616]` is, where it was the years 20260615 and 20260616. Two digits before a comma or a range in a set are the century they are alone, where `[19,20]` held the hour 19 beside the century 20.
+
+* A range of centuries or decades in a set (`{19C..20C}`, `[196..197]`) is written, where `inspect/1` raised, and a set of a unit's values that holds unspecified digits, significant digits or a margin of error after a whole number (`{2020,19XX}Y`, `{1960,1950S2}Y`) is read, where the parser raised. A range between unspecified digits in such a set (`2026Y{1X..2X}M`) is a parse error, where the tokenizer raised.
+
 * A unit of the basic format that unspecified digits or a set follow is the number it is written as: `202606XX` is June 2026 with its day unspecified, as `2026-06-XX` is, and `T1030{45,50}` equals `T10:30:{45,50}`. The unit was held as a mask of its own digits, so the value did not read back from its own text, had no `Tempo.year/1` or `Tempo.month/1`, and was stepped as an unspecified unit is.
 
 * A time shift is a whole number of hours, minutes and seconds: one written with a set, a range, unspecified digits, a group, a selection or a fraction (`Z{1,2}H`, `Z1H0M5.5S`, `+01.5`) is a parse error, where it raised when the value was read, written or compared. `Z0S` and `Z30M` (ISO 8601-2 §7.4 and §7.10) are read, and so is a shift written with the minus sign (`−05:30`).

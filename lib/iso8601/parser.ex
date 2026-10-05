@@ -437,8 +437,11 @@ defmodule Tempo.Iso8601.Parser do
     {:range, [:undefined, parse_date(to)]}
   end
 
+  # A range of one unit (`[1900..2000]`, `{19C..20C}`), each end read as the
+  # unit is read alone: a century is the hundred years it names. The ends
+  # were held as they are tokenized, and `inspect/1` raised on a century.
   defp parse_set_member({unit, %Range{first: first, last: last}}) do
-    {:range, [[{unit, first}], [{unit, last}]]}
+    {:range, [parse_date([{unit, first}]), parse_date([{unit, last}])]}
   end
 
   # An interval member keeps its tag so `Tempo.Set.new/3` builds it with
@@ -852,15 +855,14 @@ defmodule Tempo.Iso8601.Parser do
   defp first_value(%Range{first: first}), do: first
   defp first_value(number), do: number
 
+  # A list is put in order where each member is a whole number or a range
+  # of them. One that holds unspecified digits, significant digits or a
+  # margin of error (`{2020,19XX}Y`, `{1950S2,1960}Y`) has no one order, and
+  # is left as it is written: ordering it raised.
   defp sort_unless_signed(list) do
-    if Enum.any?(list, &signed_member?/1) do
-      list
-    else
-      Enum.sort_by(list, fn
-        a when is_integer(a) -> a
-        %Range{} = a -> a.first
-      end)
-    end
+    if Enum.all?(list, &number_or_range?/1) and not Enum.any?(list, &signed_member?/1),
+      do: Enum.sort_by(list, &first_value/1),
+      else: list
   end
 
   defp signed_member?(member) when is_integer(member), do: member < 0

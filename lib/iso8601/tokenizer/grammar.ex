@@ -259,21 +259,42 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
 
   # Time
 
+  # A time of day is written after a `T`, or with none where it is the
+  # whole of what is written. With none, a set of whole numbers alone is no
+  # time of day: one that is no set of years (`{20260615,20260616}`) would be
+  # taken for a set of hours, and is left to be read member by member. A set
+  # of hours is written after a `T` (`T{19,20}`).
   def implicit_time_of_day do
-    ignore(optional(string("T")))
-    |> choice([
-      parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_hour_p})
-      |> concat(parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_minute_p}))
-      |> concat(parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_second_p})),
-      parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_hour_p})
-      |> concat(parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_minute_p})),
-      parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_hour_p})
+    choice([
+      ignore(string("T")) |> implicit_clock(empty()),
+      implicit_clock(lookahead_not(string("{")))
     ])
     |> optional(time_fraction())
   end
 
+  defp implicit_clock(combinator \\ empty(), before_an_hour_alone) do
+    combinator
+    |> choice([
+      parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_hour_p})
+      |> concat(parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_minute_p}))
+      |> concat(parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_second_p})),
+      parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_hour_p})
+      |> concat(parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_minute_p})),
+      before_an_hour_alone
+      |> parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_hour_p})
+    ])
+  end
+
   def extended_time_of_day do
-    ignore(optional(string("T")))
+    choice([
+      ignore(string("T")) |> extended_clock(empty()),
+      extended_clock(lookahead_not(string("{")))
+    ])
+    |> optional(time_fraction())
+  end
+
+  defp extended_clock(combinator \\ empty(), before_an_hour_alone) do
+    combinator
     |> choice([
       parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_hour_p})
       |> ignore(colon())
@@ -283,10 +304,10 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
       parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_hour_p})
       |> ignore(colon())
       |> concat(parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_minute_p})),
-      parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_hour_p})
+      before_an_hour_alone
+      |> parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_hour_p})
       |> lookahead_not(digit())
     ])
-    |> optional(time_fraction())
   end
 
   def explicit_time_of_day do
@@ -491,7 +512,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   def implicit_year do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :group}),
-      parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all}) |> unwrap_and_tag(:year),
+      parsec({Tempo.Iso8601.Tokenizer.Set, :year_set_all}) |> unwrap_and_tag(:year),
 
       # EDTF Level 2 long-year with exponent or significant-digit
       # annotation: `Y17E8` (17 × 10^8) or `Y171010000S3`. Requires
@@ -533,6 +554,56 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     ])
     |> label("implicit year")
   end
+
+  # The years of a set written with no designator (`{1960,1961}`, ISO 8601-2
+  # §6.1). A year of more than four digits is written with a sign (ISO 8601-1
+  # §4.4), so a whole number of five digits or more with none is no year: any
+  # whole numbers were taken for years, and `{20260615,20260616}` was the
+  # years 20260615 and 20260616, where each is a date alone and in a set of
+  # one of. A set whose members are not years is read member by member
+  # (`Tempo.Iso8601.Tokenizer.Set`'s `:set_all`).
+  def list_of_year_or_range(combinator \\ empty()) do
+    combinator
+    |> year_or_range()
+    |> repeat(ignore(string(",")) |> year_or_range())
+    |> label("list of years or ranges of years")
+  end
+
+  defp year_or_range(combinator) do
+    combinator
+    |> choice([
+      set_year()
+      |> ignore(string(".."))
+      |> concat(set_year())
+      |> optional(ignore(string("//")) |> integer(min: 1))
+      |> post_traverse({__MODULE__, :year_range, []}),
+      set_year()
+    ])
+  end
+
+  defp set_year do
+    choice([
+      negative() |> positive_integer(min: 5) |> reduce(:form_number),
+      maybe_negative_integer(min: 1, max: 4)
+    ])
+    |> lookahead_not(digit())
+  end
+
+  # A range of years, from its first up to its last. One written backwards
+  # is given the step `-1`, which is how the parser knows it and refuses it,
+  # as `range/1` does for any range of whole numbers. A range whose ends are
+  # not whole years (`{19XX..20XX}`) is no range of years.
+  @doc false
+  def year_range(rest, [last, first], context, _line, _offset)
+      when is_integer(first) and is_integer(last),
+      do: {rest, [iterable_range(first, last)], context}
+
+  def year_range(rest, [step, last, first], context, _line, _offset)
+      when is_integer(first) and is_integer(last),
+      do: {rest, [first..last//step], context}
+
+  def year_range(_rest, _ends, _context, _line, _offset),
+    do: {:error, "a range of years runs from one whole year to another"}
 
   def explicit_year do
     choice([
@@ -734,10 +805,15 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # A decimal fraction belongs to an hour, a minute or a second alone (ISO
   # 8601-1 §5.3.1.4), so two digits with one (`09,5`, `23.5Z`) are an hour
   # and its fraction, not a century.
+  #
+  # A fraction is a decimal sign and a digit, and a comma is a decimal sign
+  # only outside a set, where it separates the members: the first of
+  # `[19,20]` and of `[19..20]` was read as the hour 19, beside the century
+  # the second member is.
   def implicit_century do
     maybe_negative_integer(2)
     |> lookahead_not(colon())
-    |> lookahead_not(ascii_char([?., ?,]))
+    |> lookahead_not(decimal_sign() |> concat(digit()))
     |> unwrap_and_tag(:century)
   end
 
@@ -1030,6 +1106,10 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     {:range, [left, right]}
   end
 
+  # What is written as a range and is none of the above: one between
+  # unspecified digits, which `range_of_whole_numbers/5` refuses.
+  def range(other), do: {:no_range, other}
+
   # Used by the `range/1` clauses above for forms where the user
   # supplies no step: ascending first..last counts up by `1`, and one
   # written backwards is marked with `-1` for the parser to refuse.
@@ -1050,11 +1130,23 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
       |> string("..")
       |> maybe_negative_integer(min: 1)
       |> optional(ignore(string("//")) |> maybe_negative_integer(min: 1))
-      |> reduce(:range),
+      |> reduce(:range)
+      |> post_traverse({__MODULE__, :range_of_whole_numbers, []}),
       maybe_negative_integer(min: 1)
     ])
     |> label("integer or range")
   end
+
+  # A range in a set of whole numbers runs from one whole number to another.
+  # One between unspecified digits (`{1X..2X}D`, `{19XX..20XX}`) is no range
+  # of them, and `range/1` raised for it. It is refused here, in a combinator
+  # read through `parsec`, so that it is that combinator failing.
+  @doc false
+  def range_of_whole_numbers(rest, [%Range{}] = range, context, _line, _offset),
+    do: {rest, range, context}
+
+  def range_of_whole_numbers(_rest, _no_range, _context, _line, _offset),
+    do: {:error, "a range of whole numbers runs from one whole number to another"}
 
   # A negative shift carries its sign on its first non-zero component,
   # so `-00:30` stays negative as `[hour: 0, minute: -30]`. It is written

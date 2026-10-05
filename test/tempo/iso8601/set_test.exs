@@ -282,4 +282,185 @@ defmodule Tempo.Parser.Set.Test do
       assert first == ~o"2020"
     end
   end
+
+  # A set of whole numbers written with no designator was a set of years
+  # whatever its numbers: `{20260615,20260616}` was the years 20260615 and
+  # 20260616. A year of more than four digits is written with a sign (ISO
+  # 8601-1 §4.4), so a whole number of five digits or more with none is no
+  # year, and the set is read member by member, as a set of one of is.
+  describe "a set of whole numbers written with no designator" do
+    defp read(text), do: Tempo.from_iso8601!(text)
+
+    test "is its members, each as it is read alone, where they are no years" do
+      for members <- [
+            ["20260615", "20260616"],
+            ["202606", "202607"],
+            ["2026166", "2026167"],
+            ["20260615", "2026"],
+            ["2026", "20260615"]
+          ] do
+        text = "{" <> Enum.join(members, ",") <> "}"
+
+        assert {text, read(text)} ==
+                 {text, %Tempo.Set{type: :all, set: Enum.map(members, &read/1)}}
+      end
+    end
+
+    test "has the members a set of one of has" do
+      for members <- ["20260615,20260616", "202606,202607", "2026166,2026167"] do
+        assert %Tempo.Set{type: :all, set: all} = read("{" <> members <> "}")
+        assert %Tempo.Set{type: :one, set: one} = read("[" <> members <> "]")
+        assert {members, all} == {members, one}
+      end
+    end
+
+    test "is a range of dates where its ends are dates" do
+      assert %Tempo.Set{set: [%Tempo.Range{first: first, last: last}]} =
+               read("{20260615..20260620}")
+
+      assert {first, last} == {read("20260615"), read("20260620")}
+    end
+
+    test "is a set of years where each has four digits or fewer, or a minus sign" do
+      assert read("{1960,1961}") == ~o"{1960,1961}Y"
+      assert read("{0019,0020}") == ~o"{19,20}Y"
+      assert read("{-1640,1200}") == ~o"{-1640,1200}Y"
+      assert read("{1960..1970//2}") == ~o"{1960..1970//2}Y"
+      assert read("{-20260615,-20260616}") == ~o"{-20260616,-20260615}Y"
+      assert read("{1960,1961}-06") == ~o"{1960,1961}Y6M"
+    end
+
+    test "is refused where a member of five digits is neither a year nor a date" do
+      for text <- ["{12022,12023}", "{19999,2000}", "{12345}"] do
+        assert {^text, {:error, %Tempo.ParseError{}}} = {text, Tempo.from_iso8601(text)}
+      end
+    end
+
+    test "is a set of years of any digits where the designator says so" do
+      assert read("{20260615,20260616}Y").time == [year: [20_260_615..20_260_616]]
+      assert read("{12022,12023}Y").time == [year: [12_022..12_023]]
+    end
+
+    test "is no time of day, which is written after a T" do
+      assert read("T{19,20}").time == [hour: [19..20]]
+      assert read("T{19,20}:30").time == [hour: [19..20], minute: 30]
+      assert read("2026-06-15T{10,11}").time == [year: 2026, month: 6, day: 15, hour: [10..11]]
+    end
+  end
+
+  # Two digits are a century, and an hour where a fraction follows them
+  # (`09,5`). In a set a comma separates the members and two full stops are
+  # a range, so the first of `[19,20]` and of `[19..20]` was the hour 19
+  # beside the century its second member is.
+  describe "two digits before a comma or a range in a set" do
+    test "are the century they are alone" do
+      assert %Tempo.Set{type: :one, set: [nineteenth, twentieth]} = Tempo.from_iso8601!("[19,20]")
+      assert {nineteenth, twentieth} == {Tempo.from_iso8601!("19"), Tempo.from_iso8601!("20")}
+
+      assert %Tempo.Set{set: [%Tempo.Range{first: first, last: last}]} =
+               Tempo.from_iso8601!("[19..20]")
+
+      assert {first, last} == {Tempo.from_iso8601!("19"), Tempo.from_iso8601!("20")}
+    end
+
+    test "are an hour where a fraction follows them" do
+      assert Tempo.from_iso8601!("09,5") == ~o"T9H30M"
+      assert Tempo.from_iso8601!("19.5") == ~o"T19H30M"
+
+      assert %Tempo.Set{set: [half_past, century]} = Tempo.from_iso8601!("[19.5,20]")
+      assert {half_past, century} == {~o"T19H30M", Tempo.from_iso8601!("20")}
+    end
+  end
+
+  # The ends of a range of one unit were held as they are tokenized, so a
+  # century stayed `[century: 19]`, which nothing after the parser reads:
+  # `inspect/1` raised on `{19C..20C}`.
+  describe "a range of centuries or of decades in a set" do
+    test "runs from the years of one to the years of the other" do
+      for {text, first, last} <- [
+            {"{19C..20C}", "19C", "20C"},
+            {"[19C..20C]", "19C", "20C"},
+            {"{196J..197J}", "196J", "197J"},
+            {"[196..197]", "196", "197"}
+          ] do
+        assert %Tempo.Set{set: [%Tempo.Range{} = range]} = Tempo.from_iso8601!(text)
+
+        assert {text, range.first, range.last} ==
+                 {text, Tempo.from_iso8601!(first), Tempo.from_iso8601!(last)}
+      end
+    end
+
+    test "is written, and reads back from its own text" do
+      for text <- ["{19C..20C}", "{196J..197J}", "[196..197]"] do
+        value = Tempo.from_iso8601!(text)
+        assert {text, Tempo.from_iso8601(Tempo.to_iso8601!(value))} == {text, {:ok, value}}
+      end
+
+      assert inspect(Tempo.from_iso8601!("{19C..20C}")) == ~s(~o"{20G100YU..21G100YU}")
+    end
+  end
+
+  # A range in a set of a unit's values runs from one whole number to
+  # another. Between unspecified digits the tokenizer raised a
+  # `FunctionClauseError`.
+  describe "a range between unspecified digits in a set of a unit's values" do
+    test "is refused" do
+      for text <- ["2026Y{1X..2X}M", "{1X..2X}D", "T{1X..2X}H", "{1..2X}M", "2026-{1X..2X}"] do
+        assert {^text, {:error, %Tempo.ParseError{}}} = {text, Tempo.from_iso8601(text)}
+      end
+    end
+
+    test "is a range of masked years where each end is a year" do
+      assert %Tempo.Set{set: [%Tempo.Range{first: first, last: last}]} =
+               Tempo.from_iso8601!("{19XX..20XX}")
+
+      assert {first, last} == {Tempo.from_iso8601!("19XX"), Tempo.from_iso8601!("20XX")}
+    end
+
+    test "leaves a range of whole numbers as it was" do
+      assert Tempo.from_iso8601!("2026Y{1..5}M").time == [year: 2026, month: [1..5]]
+      assert Tempo.from_iso8601!("2026Y{1..9//2}M").time == [year: 2026, month: [1..9//2]]
+      assert Tempo.from_iso8601!("2026Y{1..-1}M").time == [year: 2026, month: [1..12]]
+    end
+  end
+
+  # A set of a unit's values is put in order as it is read. One holding a
+  # member with unspecified digits, significant digits or a margin of error
+  # has no one order, and ordering it raised a `FunctionClauseError` unless
+  # that member came first.
+  describe "a set of a unit's values with a member that is no whole number" do
+    test "is read as it is written" do
+      assert Tempo.from_iso8601!("{2020,19XX}Y").time ==
+               [year: [2020, {:mask, [1, 9, :X, :X]}]]
+
+      assert Tempo.from_iso8601!("{1950S2,1960}Y").time ==
+               [year: [{1950, [significant_digits: 2]}, 1960]]
+
+      assert Tempo.from_iso8601!("{1960,1950±2}Y").time ==
+               [year: [1960, {1950, [margin_of_error: 2]}]]
+    end
+
+    test "is each of its members when it is walked" do
+      assert Enum.to_list(Tempo.from_iso8601!("{1950S2,1960}Y")) == [~o"1950S2Y", ~o"1960Y"]
+      assert Enum.to_list(Tempo.from_iso8601!("{2020,19XX}Y")) == [~o"2020Y", ~o"19XXY"]
+    end
+
+    test "reads back from its own text" do
+      for text <- ["{2020,19XX}Y", "{19XX,2020}Y", "{1950S2,1960}Y", "{1960,2020,19XX}Y"] do
+        value = Tempo.from_iso8601!(text)
+        assert {text, Tempo.from_iso8601(Tempo.to_iso8601!(value))} == {text, {:ok, value}}
+      end
+    end
+
+    test "is refused where the unit takes no such member" do
+      for text <- ["2026Y{1S1,2}M", "2026Y{2,1X}M", "T{10,1X}H"] do
+        assert {^text, {:error, _not_a_value}} = {text, Tempo.from_iso8601(text)}
+      end
+    end
+
+    test "leaves a set of whole numbers in order" do
+      assert Tempo.from_iso8601!("{2,1,3}M") == ~o"{1..3}M"
+      assert Tempo.from_iso8601!("{3,1..2}M") == ~o"{1..3}M"
+    end
+  end
 end
