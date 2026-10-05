@@ -235,9 +235,17 @@ defmodule Tempo.Math.Test do
       # Both year and month masked — the shifted set's endpoints are fully
       # resolved, not left carrying a mask.
       assert inspect(Math.add(~o"19XX-XX", ~o"P1Y")) == ~S|~o"[1901Y1M..2000Y12M]"|
+    end
 
-      assert inspect(Math.add(~o"2020-XX-XX", ~o"P1M")) ==
-               ~S|~o"[2020Y2M1D..2021Y1M31D]"|
+    test "a block of days stepped by months is each day brought into its month" do
+      # Every day of 2020, a month on. The 30th and 31st of January land on
+      # 29 February with the 29th, so no day lands on 30 or 31 March: the
+      # days are no run from 1 February to 31 January.
+      assert %Tempo.IntervalSet{intervals: [first | _rest] = runs} =
+               Math.add(~o"2020-XX-XX", ~o"P1M")
+
+      assert inspect(first) =~ ~S|~o"2020Y2M1D/3M30D"|
+      assert Enum.count(runs) > 1
     end
 
     test "a shift coarser than every mask keeps all of them" do

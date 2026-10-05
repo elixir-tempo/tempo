@@ -404,8 +404,13 @@ defmodule Tempo.EnumerationWalk.Test do
     end
 
     test "a shift that walks the candidates of a masked hour" do
-      assert %IntervalSet{} = set = Tempo.shift(~o"2026Y6M15DT1XH30M", minute: 1)
+      # 31 minutes on from half past, each hour the mask stands for is the
+      # next one.
+      assert %IntervalSet{} = set = Tempo.shift(~o"2026Y6M15DT1XH30M", minute: 31)
       assert IntervalSet.count(set) == 10
+
+      # A minute on, each is the hour it was, and the mask stands.
+      assert Tempo.shift(~o"2026Y6M15DT1XH30M", minute: 1) == ~o"2026Y6M15DT1XH31M"
     end
   end
 

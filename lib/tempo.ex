@@ -5933,11 +5933,18 @@ defmodule Tempo do
     can — a day on from the 15th and the 30th of June is 16 June and
     1 July.
 
+  * For a value that holds unspecified digits (`~o"2026-06-XX"`, some
+    day of June), each value they stand for shifted: the value with its
+    unspecified digits where the shift passes them by (an hour on is
+    `~o"2026Y6MXXDT1H"`), a `t:Tempo.Set.t/0` that is one of a run of
+    values where they are a run the shift keeps one (a day on is
+    `~o"[2026Y6M2D..2026Y7M1D]"`), and a `t:Tempo.IntervalSet.t/0` of
+    their spans otherwise.
+
   * `{:error, %Tempo.ConversionError{reason: :grouped_component}}` when
-    the shift would count from a unit that holds a group, or unspecified
-    digits beside a set: neither names values to shift one by one. A
-    step that passes such a unit by is computed, so a year on from
-    `~o"2026Y{6,7}MXXD"` is `~o"2027Y{6,7}MXXD"`.
+    the shift would count from a unit that holds a group, which names a
+    span of values and none to shift one by one. A step that passes the
+    group by is computed.
 
   * `{:error, reason}` when the value holds a selection and the shift
     steps a unit it does not carry: a month on `~o"2027Y4ML1K1IN"`, the
@@ -5997,6 +6004,15 @@ defmodule Tempo do
       iex> days = Tempo.shift(~o"2026Y6M{15,30}D", day: 1)
       iex> days |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.Interval.from/1)
       [~o"2026Y6M16D", ~o"2026Y7M1D"]
+
+  Some day of June, a day on, is one of the days from 2 June to 1 July,
+  and an hour on is 01:00 of some day of June:
+
+      iex> Tempo.shift(~o"2026-06-XX", day: 1)
+      ~o"[2026Y6M2D..2026Y7M1D]"
+
+      iex> Tempo.shift(~o"2026-06-XX", hour: 1)
+      ~o"2026Y6MXXDT1H"
 
   On the night New York's clocks spring forward, five hours after 23:00
   is 05:00, and a day after noon is noon:

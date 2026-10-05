@@ -1214,17 +1214,141 @@ defmodule Tempo.Math do
     end
   end
 
-  # Route to the mask path only when the shift actually reaches a mask.
-  # A shift coarser than every mask (or a value with no masks) never
-  # touches a masked component, so the crisp path shifts around them and
-  # keeps the masks intact (`2020-XX` + `P1Y` → `2021-XX`).
+  # A value's masks and unspecified units stand for several values. A step
+  # coarser than every one of them never touches a masked unit, so the crisp
+  # path shifts around them and keeps them (`2020-XX` + `P1Y` → `2021-XX`):
+  # the mask path is for a step that reaches one.
+  #
+  # That holds where the values a mask stands for take the step alike. They
+  # do not in a named zone, where a step of hours, minutes or seconds is
+  # time on the time line and differs across a change of the clock; in a
+  # calendar whose dates are stepped by the calendar and not by counting on
+  # through their numbers; or where a week and a day of it, which are the
+  # date they name in a calendar of months, are stepped by months or years,
+  # which that date takes and its week does not. There every mask is on the
+  # mask path, and each value it stands for is stepped as the one value it
+  # is.
   defp route_general(%Tempo{} = tempo, %Tempo.Duration{time: duration_time} = duration) do
-    tempo = unspecified_as_masks(tempo, duration_time)
-    masks = find_masks(tempo.time)
+    if elapsed_in_a_zone?(tempo, duration_time) or stepped_by_its_calendar?(tempo) or
+         week_date_stepped_as_a_date?(tempo, duration_time),
+       do: route_value_by_value(tempo, duration),
+       else: route_on_wall_clock(tempo, duration)
+  end
+
+  defp route_on_wall_clock(tempo, %Tempo.Duration{time: duration_time} = duration) do
+    masked = unspecified_as_masks(tempo, duration_time)
+    masks = find_masks(masked.time)
 
     if Enum.any?(masks, fn {unit, _mask} -> duration_reaches?(duration_time, unit) end),
-      do: shift_masked(tempo, masks, duration),
-      else: shift_each_or_crisp(tempo, duration)
+      do: shift_past_masks(tempo, masked, duration),
+      else: tempo |> shift_each_or_crisp(duration) |> stepped_or_each_candidate(tempo, duration)
+  end
+
+  # A step coarser than a mask can still depend on what the mask stands for:
+  # a year on from the 31st of some month is the 31st of a month that has
+  # one, which the stepper has no one value to say. Each candidate is then
+  # stepped. A value with no mask keeps the refusal.
+  defp stepped_or_each_candidate({:error, :grouped_component} = refused, tempo, duration) do
+    masked = unspecified_as_masks(tempo, :every)
+
+    case find_masks(masked.time) do
+      [] -> refused
+      _masks -> shift_masked(tempo, masked, duration)
+    end
+  end
+
+  defp stepped_or_each_candidate(answer, _tempo, _duration), do: answer
+
+  defp route_value_by_value(tempo, duration) do
+    masked = unspecified_as_masks(tempo, :every)
+
+    case find_masks(masked.time) do
+      [] -> shift_each_or_crisp(tempo, duration)
+      _masks -> shift_masked(tempo, masked, duration)
+    end
+  end
+
+  defp week_date_stepped_as_a_date?(%Tempo{time: time, calendar: calendar}, duration_time) do
+    List.keymember?(time, :week, 0) and List.keymember?(time, :day_of_week, 0) and
+      Enum.any?(duration_time, &month_or_year_step?/1) and
+      not Tempo.week_based_calendar?(Compare.effective_calendar(calendar))
+  end
+
+  # Whether a date of the value's calendar is stepped by the calendar: a
+  # composite calendar, and one whose year does not begin with its first
+  # month (`Tempo.UnitValues.stepped_by_calendar?/2`).
+  defp stepped_by_its_calendar?(%Tempo{calendar: calendar})
+       when calendar in [nil, Calendrical.Gregorian, Calendar.ISO],
+       do: false
+
+  defp stepped_by_its_calendar?(%Tempo{time: time, calendar: calendar}) do
+    years =
+      case List.keyfind(time, :year, 0) do
+        {:year, held} -> held
+        _no_year -> nil
+      end
+
+    UnitValues.stepped_by_calendar?(years, calendar)
+  end
+
+  # Whether a step counts elapsed time for a value in a zone whose offset
+  # changes (`wall_zone/1` is the zone of one whole date and time).
+  defp elapsed_in_a_zone?(%Tempo{extended: %{zone_id: zone}}, duration_time)
+       when is_binary(zone) and zone != "" and zone not in @fixed_zones do
+    not String.starts_with?(zone, "Etc/GMT") and Enum.any?(duration_time, &clock_step?/1)
+  end
+
+  defp elapsed_in_a_zone?(%Tempo{}, _duration_time), do: false
+
+  defp clock_step?({unit, amount}), do: unit in @clock_units and amount != 0
+
+  # A step that reaches a mask need not count from it: an hour on from some
+  # day of June is 01:00 of some day of June, and the day after the 15th of
+  # some month is its 16th. The stepper refuses to count from a masked unit
+  # and passes one by where every value it stands for takes the step alike,
+  # so where it steps the masked value the masks are kept, and the value is
+  # stepped as it is written. A day of the year is not a unit the stepper
+  # counts in: a value that holds one is the dates it names, each stepped as
+  # the date it is.
+  #
+  # The masks are kept only where they still stand for what the candidates
+  # land on. The day before the 31st of some month is the 30th of a month
+  # that has a 31st, and `XXM30D` is the 30th of four more.
+  defp shift_past_masks(tempo, %Tempo{time: time} = masked, duration) do
+    if List.keymember?(time, :day_of_year, 0) do
+      shift_masked(tempo, masked, duration)
+    else
+      case add_crisp(masked, duration) do
+        {:ok, passed_by} -> masks_kept_or_stepped(tempo, masked, passed_by, duration)
+        {:error, reason} when is_atom(reason) -> shift_masked(tempo, masked, duration)
+        {:error, _exception} = error -> error
+      end
+    end
+  end
+
+  defp masks_kept_or_stepped(tempo, masked, passed_by, duration) do
+    if as_many_candidates?(masked, passed_by),
+      do: add_crisp(tempo, duration),
+      else: shift_masked(tempo, masked, duration)
+  end
+
+  # Every candidate takes the step alike, so each lands on a candidate of
+  # the value the stepper gives, and the two stand for the same values where
+  # they stand for as many. A step that changes the time of day alone leaves
+  # the dates as they were, and needs no count.
+  defp as_many_candidates?(%Tempo{time: time} = masked, %Tempo{time: stepped_time} = passed_by) do
+    dated(time) == dated(stepped_time) or candidate_count(masked) == candidate_count(passed_by)
+  end
+
+  defp dated(time), do: Enum.reject(time, &clock_entry?/1)
+
+  defp clock_entry?(entry), do: is_tuple(entry) and elem(entry, 0) in @clock_units
+
+  defp candidate_count(masked) do
+    case Enumeration.members(masked) do
+      {:ok, candidates} -> Enum.count(candidates)
+      {:error, _exception} -> :none
+    end
   end
 
   # A value that holds a set or a range, and nothing else that names several
@@ -1256,6 +1380,13 @@ defmodule Tempo.Math do
   defp duration_reaches?(duration_time, :day_of_year),
     do: Enum.any?(duration_time, fn {_unit, amount} -> amount != 0 end)
 
+  # A week keeps its days, so a step of whole weeks, or of years, passes a
+  # day of the week by: the Wednesday of some week, a week on, is the
+  # Wednesday of some week still. Days and the units of a time of day count
+  # from it, and so does the part of a week that is no whole one.
+  defp duration_reaches?(duration_time, :day_of_week),
+    do: Enum.any?(duration_time, &counts_from_day_of_week?/1)
+
   defp duration_reaches?(duration_time, mask_unit) do
     mask_depth = Keyword.fetch!(@unit_depth, mask_unit)
 
@@ -1263,6 +1394,10 @@ defmodule Tempo.Math do
       amount != 0 and Keyword.get(@unit_depth, unit, 0) >= mask_depth
     end)
   end
+
+  defp counts_from_day_of_week?({:week, weeks}), do: is_float(weeks) and weeks != trunc(weeks)
+  defp counts_from_day_of_week?({unit, _amount}) when unit in [:year, :month], do: false
+  defp counts_from_day_of_week?({_unit, amount}), do: amount != 0
 
   # The crisp arithmetic path. ISO 8601-2 margin-of-error (`±`) and
   # significant-digits (`S`) annotations ride on a component value as
@@ -1435,38 +1570,54 @@ defmodule Tempo.Math do
   # ------------------------------------------------------------------
   # Unspecified-digit mask arithmetic
   #
-  # A mask (`195X`, `2020-XX`, `19XX-XX`) denotes a *block* of candidate
-  # values. A shift moves the block: fill *every* mask to its min and max
-  # candidate, shift both crisply, then re-express the result. A
-  # block-aligned single-year shift stays a mask (`195X` + `P10Y` →
-  # `196X`); anything else becomes a one-of set spanning the shifted block
-  # (`195X` + `P1Y` → `~o"[1951Y..1960Y]"`).
+  # A mask (`195X`, `2020-XX`, `19XX-XX`) stands for candidate values, and a
+  # step that counts from it moves each of them. Where the candidates are one
+  # block, and the step keeps them one, the block's first and last candidate
+  # bound what they land on: a block-aligned step of a year mask stays a mask
+  # (`195X` + `P10Y` → `196X`), and any other is one of the values between
+  # the two (`195X` + `P1Y` → `~o"[1951Y..1960Y]"`). Where they are not, each
+  # candidate is stepped, and the answer is the set of their spans: the days
+  # `2026Y6MX5D` stands for, a day on, are the 6th, the 16th and the 26th,
+  # and not every day from the 6th to the 26th.
 
   # Masks are only resolved on units the arithmetic understands; a mask on
   # any other unit falls through to the crisp path unchanged.
-  @maskable_units [:year, :month, :day, :day_of_year, :hour, :minute, :second]
+  @maskable_units [
+    :year,
+    :month,
+    :week,
+    :day,
+    :day_of_year,
+    :day_of_week,
+    :hour,
+    :minute,
+    :second
+  ]
 
   # An unspecified unit other than the year (`X*D`, any day) is every value
   # the unit takes, as a mask of all its digits is (`XXD`), and a shift that
   # reaches it moves that block: `2026Y6MX*D` plus a day is one of 2 June to 1
-  # July, where it was read as the unit's last value. An unspecified year is
-  # any year, which a step carries as it is.
-  defp unspecified_as_masks(%Tempo{time: time} = tempo, duration_time) do
-    %{tempo | time: Enum.map(time, &unspecified_as_mask(&1, duration_time))}
+  # July, where it was read as the unit's last value. A week and a day of
+  # the week are blocks alike: `2026Y25WX*K` plus a day is one of the seven
+  # days from the Tuesday of week 25. An unspecified year is any year, which
+  # a step carries as it is.
+  defp unspecified_as_masks(%Tempo{time: time} = tempo, reached) do
+    %{tempo | time: Enum.map(time, &unspecified_as_mask(&1, reached))}
   end
 
-  defp unspecified_as_mask({unit, :any} = component, duration_time)
+  defp unspecified_as_mask({unit, :any} = component, reached)
        when unit in @maskable_units and unit != :year do
-    if duration_reaches?(duration_time, unit),
+    if reached == :every or duration_reaches?(reached, unit),
       do: {unit, {:mask, every_digit(unit)}},
       else: component
   end
 
-  defp unspecified_as_mask(component, _duration_time), do: component
+  defp unspecified_as_mask(component, _reached), do: component
 
-  # A day of the year is written in three digits, and every other unit a
-  # mask is read on in two.
+  # A day of the year is written in three digits, a day of the week in one,
+  # and every other unit a mask is read on in two.
   defp every_digit(:day_of_year), do: [:X, :X, :X]
+  defp every_digit(:day_of_week), do: [:X]
   defp every_digit(_unit), do: [:X, :X]
 
   defp find_masks(time) do
@@ -1476,54 +1627,152 @@ defmodule Tempo.Math do
     end)
   end
 
-  defp shift_masked(%Tempo{time: time, calendar: calendar} = tempo, masks, duration) do
-    if trailing_masks?(time) do
-      # A contiguous (trailing) block shifts as a whole, so its min and
-      # max candidate bound it exactly.
-      # A step either end cannot take is the stepper's error, which
-      # `add_general/2` names.
-      with {:ok, min_time} <- fill_masks(time, calendar, :min),
-           {:ok, max_time} <- fill_masks(time, calendar, :max),
-           {:ok, first} <- add_crisp(%{tempo | time: min_time}, duration),
-           {:ok, last} <- add_crisp(%{tempo | time: max_time}, duration) do
-        remask_or_set(masks, first, last)
+  # `written` is the value as it was written, and `masked` the same value
+  # with each unspecified unit the step reaches as the mask of every digit
+  # it is.
+  defp shift_masked(written, masked, %Tempo.Duration{} = duration) do
+    if block_stays_whole?(masked, duration),
+      do: shift_block(written, masked, duration),
+      else: shift_each_candidate(masked, duration)
+  end
+
+  # The block's first and last candidate, stepped as the values they are.
+  # What they land on bounds the block where it is written to the unit the
+  # masks are on; a step that writes a finer unit (25 hours on from some day
+  # of June) lands each candidate apart from the next.
+  defp shift_block(written, %Tempo{time: time, calendar: calendar} = masked, duration) do
+    with {:ok, min_time} <- fill_masks(time, calendar, :min),
+         {:ok, max_time} <- fill_masks(time, calendar, :max),
+         {:ok, first} <- stepped_candidate(%{masked | time: min_time}, duration),
+         {:ok, last} <- stepped_candidate(%{masked | time: max_time}, duration) do
+      cond do
+        finest_unit(first.time) != finest_unit(time) -> shift_each_candidate(masked, duration)
+        not after?(first, last) -> remask_or_set(find_masks(time), first, last)
+        every_value_of_its_axis?(time) -> {:ok, written}
+        true -> shift_each_candidate(masked, duration)
       end
-    else
-      # A mask with a concrete component after it denotes *disjoint*
-      # blocks (`19XX-06-XX` is only the Junes), which a single range
-      # can't represent — shift each candidate and collect the exact
-      # spans into a coalesced IntervalSet.
-      shift_masked_disjoint(tempo, duration)
     end
   end
 
-  # Masks form a contiguous suffix — every component from the first mask
-  # onward is also masked. Such a value is a single block; a mask with a
-  # concrete component after it (`19XX-06-XX`) is not.
-  defp trailing_masks?(time) do
-    time
-    |> Enum.drop_while(&(not masked?(&1)))
-    |> Enum.all?(&masked?/1)
+  # A value with no year lies on an axis that comes round again, so a block
+  # of it can land across the axis's end: the hours from 22:00, two hours on,
+  # are 00:00 to 01:59 after 23:59. Such a block is no range from a first
+  # value up to a last, and is each of its candidates; one that was every
+  # value of the axis is every value of it still (`X*K`, any day of the
+  # week, a day on).
+  defp after?(first, last), do: Compare.order(first, last) == {:ok, :later}
+
+  defp every_value_of_its_axis?(time), do: Enum.all?(time, &every_value?/1)
+
+  # The unit a time list is written to. A day of the year and a day of the
+  # week are days, as the dates they name are.
+  defp finest_unit(time) do
+    case List.last(time) do
+      {unit, _held} when unit in [:day_of_year, :day_of_week] -> :day
+      {unit, _held} -> unit
+      _group_of_a_set -> :group
+    end
   end
+
+  # A candidate stepped as the one value it is: in its zone, and read as the
+  # answer of a step is.
+  defp stepped_candidate(candidate, duration) do
+    case stepped_value(candidate, duration) do
+      %Tempo{} = stepped -> {:ok, stepped}
+      {:error, _reason} = error -> error
+      _several_values -> {:error, :grouped_component}
+    end
+  end
+
+  # Whether the candidates are one run of values that a step keeps a run.
+  #
+  # They are one run where each unit before the first mask is one value,
+  # every unit from that mask on is masked, its candidates are consecutive,
+  # and each mask after it is every value of its unit: `2026Y1XMXXD` is the
+  # days from 1 October to 31 December, where `2026YXXM1XD` is ten days of
+  # each month.
+  #
+  # A step keeps them a run where it counts them as they are counted:
+  # months and years for a run of months or years, and the units of fixed
+  # length for any run. A run of days stepped by months or years is not
+  # kept: each day is brought into the month it lands in, so the 29th, 30th
+  # and 31st of January a month on are all the 28th of February, and no day
+  # lands on the 29th, 30th or 31st of March.
+  #
+  # In a calendar that steps its own dates a run of days by their numbers
+  # need not be a run in time (the days of the month a year begins within
+  # are not), so there each day is stepped; its years and its months are a
+  # run as they are counted.
+  defp block_stays_whole?(%Tempo{time: time, calendar: calendar} = masked, %Tempo.Duration{
+         time: duration_time
+       }) do
+    (finest_unit(time) in [:year, :month] or not stepped_by_its_calendar?(masked)) and
+      one_run?(time, duration_time, calendar)
+  end
+
+  defp one_run?(time, duration_time, calendar) do
+    case Enum.split_while(time, &(not masked?(&1))) do
+      {before, [{unit, {:mask, mask}} | finer]} ->
+        Enum.all?(before, &one_value?/1) and Enum.all?(finer, &every_value?/1) and
+          counted_as_stepped?(time, duration_time) and
+          run_of_values?(unit, mask, before, calendar)
+
+      _no_mask ->
+        false
+    end
+  end
+
+  # A unit before the masks that holds a set, a range or a group gives a
+  # block for each of its values.
+  defp one_value?({_unit, value}) when is_integer(value), do: true
+  defp one_value?({_unit, {value, options}}) when is_integer(value) and is_list(options), do: true
+  defp one_value?(_several_or_a_group), do: false
 
   defp masked?(entry), do: match?({_unit, {:mask, _mask}}, entry)
 
-  # The candidates are walked by the enumeration, which has no way to return
-  # an error and raises where a mask's candidates depend on a year the value
-  # does not carry. `Tempo.to_interval/1` resolves the same candidates and
-  # returns that as an error, so it is asked first.
-  defp shift_masked_disjoint(masked, duration) do
-    with {:ok, _candidates} <- Tempo.to_interval(masked),
-         {:ok, spans} <- shifted_spans(masked, duration),
+  defp every_value?({_unit, {:mask, mask}}), do: Enum.all?(mask, &(&1 == :X))
+  defp every_value?(_not_masked), do: false
+
+  defp counted_as_stepped?(time, duration_time) do
+    {finest, _held} = List.last(time)
+
+    finest in [:year, :month] or not Enum.any?(duration_time, &month_or_year_step?/1)
+  end
+
+  defp run_of_values?(unit, mask, before, calendar) do
+    case Mask.candidates(unit, mask, before, calendar) do
+      {:ok, [_ | _] = candidates} -> consecutive?(Enum.sort(candidates))
+      _none_or_cannot_say -> false
+    end
+  end
+
+  defp consecutive?([first | _rest] = values),
+    do: List.last(values) - first + 1 == Enum.count(values)
+
+  # Each candidate the masks stand for, stepped, and the set of their spans.
+  # The candidates are those the walk of the value yields, which returns as
+  # an error what depends on a year the value does not carry.
+  defp shift_each_candidate(masked, duration) do
+    with {:ok, candidates} <- candidates_of(masked),
+         {:ok, spans} <- shifted_spans(candidates, duration),
          {:ok, set} <- IntervalSet.new(spans) do
       IntervalSet.coalesce(set)
     end
   end
 
-  # The span of each candidate the masks stand for, shifted. The first
-  # candidate that cannot be shifted is the answer for them all.
-  defp shifted_spans(masked, duration) do
-    masked
+  # A value with no year to count its candidates in is unanchored, which
+  # `add_general/2` says of the value as it was written.
+  defp candidates_of(masked) do
+    case Enumeration.members(masked) do
+      {:error, %UnanchoredError{}} -> {:error, :unanchored}
+      candidates_or_error -> candidates_or_error
+    end
+  end
+
+  # The span of each candidate, shifted. The first candidate that cannot be
+  # shifted is the answer for them all.
+  defp shifted_spans(candidates, duration) do
+    candidates
     |> Enum.reduce_while({:ok, []}, fn candidate, {:ok, spans} ->
       case shifted_span(candidate, duration) do
         {:ok, span} -> {:cont, {:ok, [span | spans]}}
@@ -1537,7 +1786,7 @@ defmodule Tempo.Math do
   end
 
   defp shifted_span(candidate, duration) do
-    with {:ok, shifted} <- add_crisp(candidate, duration) do
+    with {:ok, shifted} <- stepped_candidate(candidate, duration) do
       one_span(Tempo.to_interval(shifted))
     end
   end
@@ -1783,8 +2032,18 @@ defmodule Tempo.Math do
 
   defp remask_or_set(_masks, first, last), do: one_of_range(first, last)
 
+  # The ends are the dates they name where they are a week and a day of it
+  # in a calendar of months, as a value's are when it is read.
   defp one_of_range(first, last) do
-    %Tempo.Set{type: :one, set: [%Tempo.Range{first: first, last: last}]}
+    %Tempo.Set{
+      type: :one,
+      set: [
+        %Tempo.Range{
+          first: Validation.calendar_date_from_week_date(first),
+          last: Validation.calendar_date_from_week_date(last)
+        }
+      ]
+    }
   end
 
   # Peel `{integer, keyword}` value annotations (margin-of-error,

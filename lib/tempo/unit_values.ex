@@ -190,9 +190,16 @@ defmodule Tempo.UnitValues do
   # its first month, whose dates are not in the order of their numbers, and
   # in a composite calendar, whose years and months change where its
   # calendars do.
-  @spec stepped_by_calendar?(integer(), module()) :: boolean()
-  def stepped_by_calendar?(year, calendar),
+  #
+  # `year` is a whole number, or what a time list holds for its year where
+  # that is no one number (a set, a mask, nothing): `years_begin_with_first_month?/2`
+  # says which years are then asked.
+  @spec stepped_by_calendar?(term(), module()) :: boolean()
+  def stepped_by_calendar?(year, calendar) when is_integer(year),
     do: composite?(calendar) or not year_begins_with_first_month?(year, calendar)
+
+  def stepped_by_calendar?(years, calendar),
+    do: composite?(calendar) or not years_begin_with_first_month?(years, calendar)
 
   ## Values that do not run on from one another
 

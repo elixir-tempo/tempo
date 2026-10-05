@@ -206,13 +206,34 @@ defmodule Tempo.DayOfYearTest do
     test "from a masked or an unspecified one is some day of the block, a step on" do
       {first, last} = {hd(dates(2026, [100])), hd(dates(2026, [199]))}
 
-      for step <- [[day: 1], [week: 1], [month: 1], [year: 1]] do
+      for step <- [[day: 1], [week: 1]] do
         assert walked(Tempo.shift(~o"2026Y1XXO", step)) ==
                  {Date.shift(first, step), Date.shift(last, step)},
                inspect(step)
       end
 
       assert walked(Tempo.shift(~o"2026YX*O", day: 1)) == {~D[2026-01-02], ~D[2027-01-01]}
+    end
+
+    # A month or a year on, each day is brought into the month it lands in,
+    # so the block is no run from its first day to its last: it was written
+    # as one, and named days no day of the block lands on.
+    test "from a masked one by months or years is each of its days, a step on" do
+      for step <- [[month: 1], [year: 1], [month: -2]] do
+        days = Tempo.shift(~o"2026Y1XXO", step)
+        expected = 2026 |> dates(100..199) |> Enum.map(&Date.shift(&1, step)) |> Enum.uniq()
+
+        assert %IntervalSet{} = days
+        assert {step, days_named(days)} == {step, Enum.sort(expected, Date)}
+      end
+    end
+
+    defp days_named(%IntervalSet{} = set) do
+      for member <- IntervalSet.members(set),
+          {:ok, last} = member |> Interval.to() |> Tempo.to_date(),
+          day <- Date.range(date(Interval.from(member)), Date.add(last, -1)) do
+        day
+      end
     end
 
     test "from a mask of years with one is each year's date, a step on" do

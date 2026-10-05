@@ -468,15 +468,18 @@ defmodule Tempo.ShiftOfSetsTest do
     end
   end
 
-  describe "what is no set of values" do
-    test "keeps the answer it had" do
-      # A mask is one of its values and a set all of them, so the two
-      # together are not stepped value by value.
-      assert {:error, %ConversionError{reason: :grouped_component}} =
-               Tempo.shift(~o"2026Y{6,7}MXXD", month: 1)
+  describe "a set beside a mask or a group" do
+    test "is each value the two stand for, where a mask is counted from or refused" do
+      # Some day of June or of July, a day on and a month on.
+      assert days_spanned(Tempo.shift(~o"2026Y{6,7}MXXD", day: 1)) == [{~D[2026-06-02], 61}]
+
+      assert days_spanned(Tempo.shift(~o"2026Y{6,7}MXXD", month: 1)) ==
+               [{~D[2026-07-01], 30}, {~D[2026-08-01], 31}]
 
       assert Tempo.shift(~o"2026Y{6,7}MXXD", year: 1) == ~o"2027Y{6,7}MXXD"
+    end
 
+    test "keeps the refusal of a group" do
       assert {:error, %ConversionError{reason: :grouped_component}} =
                Tempo.shift(Tempo.from_iso8601!("2026Y{1,2}G3MU"), month: 1)
     end
