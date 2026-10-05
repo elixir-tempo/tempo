@@ -4,6 +4,7 @@ defmodule Tempo.Math do
   alias Tempo.Compare
   alias Tempo.ConversionError
   alias Tempo.Duration
+  alias Tempo.Enumeration
   alias Tempo.Enumeration.Zone
   alias Tempo.Interval
   alias Tempo.IntervalEndpointsError
@@ -1221,15 +1222,25 @@ defmodule Tempo.Math do
     tempo = unspecified_as_masks(tempo, duration_time)
     masks = find_masks(tempo.time)
 
-    cond do
-      Enum.any?(masks, fn {unit, _mask} -> duration_reaches?(duration_time, unit) end) ->
-        shift_masked(tempo, masks, duration)
+    if Enum.any?(masks, fn {unit, _mask} -> duration_reaches?(duration_time, unit) end),
+      do: shift_masked(tempo, masks, duration),
+      else: shift_each_or_crisp(tempo, duration)
+  end
 
-      several_ordinal_dates?(tempo.time) ->
-        shift_ordinal_dates(tempo, duration)
+  # A value that holds a set or a range, and nothing else that names several
+  # values, is the values it names, and each is stepped. Any other is stepped
+  # as it stands: one value, or one whose mask or group the step passes by.
+  #
+  # A margin of error and significant digits ride on the unit they are
+  # written on, as they do on one value (`add_crisp_units/2`), so the values
+  # are those of the value without them.
+  defp shift_each_or_crisp(%Tempo{time: time} = tempo, duration) do
+    {crisp_time, annotations} = strip_component_annotations(time)
 
-      true ->
-        add_crisp(tempo, duration)
+    case Enumeration.expand(%{tempo | time: crisp_time}) do
+      {:ok, values} -> shift_each(values, tempo, duration, annotations)
+      {:error, _exception} = error -> error
+      :not_expandable -> add_crisp(tempo, duration)
     end
   end
 
@@ -1537,79 +1548,155 @@ defmodule Tempo.Math do
   defp one_span({:error, _reason} = error), do: error
 
   # ------------------------------------------------------------------
-  # Several days of the year
+  # A value that holds several values
   #
-  # A day of the year is the date it names: `2026Y100O` is read as 10 April.
-  # A value that holds a set of them, or a set of years with one, names a
-  # date for each, and a step reaches every one of those dates (decided
-  # 2026-10-04): each is stepped as the date it is. The dates they land on
-  # are written again as days of the year where the years and the days
-  # they hold name those dates and no others, and are the set of their
-  # spans where they do not, as two days that land in two years.
+  # A set or a range in a unit names a value for each of its members, and a
+  # step reaches every one of them (decided 2026-10-04): each is stepped as
+  # the one value it is, by any unit. What they land on is written again as
+  # one value where the values its units then hold name those and no others
+  # (a day on from `2026Y6M{1,15}D` is `2026Y6M{2,16}D`), and is the set of
+  # their spans where they do not: a day on from the 15th and the 30th of
+  # June is 16 June and 1 July, which no one month and set of days names.
+  #
+  # The set is never stepped as one value. Where every member takes a step
+  # alike that would give the same answer, but the members of a value in a
+  # zone do not: two hours on from 01:00 is 03:00 on most days and 04:00 on
+  # the day the clocks go forward, and a month on from the 30th and the 31st
+  # of January is the 28th of February once.
+  #
+  # A day of the year is the date it names (`2026Y100O` is read as 10 April)
+  # and a week date in a calendar of months is too, so those are the values
+  # stepped. They are written again on the axis the value was written on: as
+  # years and days of the year, or as years, weeks and days of the week.
 
-  defp several_ordinal_dates?([{:year, years}, {:day_of_year, days} | _rest]),
-    do: several?(years) or several?(days)
-
-  defp several_ordinal_dates?(_time), do: false
-
-  defp several?(values), do: is_list(values) or is_struct(values, Range)
-
-  # `Tempo.to_interval/1` resolves the dates the walk yields, and returns
-  # as an error what the walk would raise, so it is asked first.
-  defp shift_ordinal_dates(%Tempo{} = tempo, duration) do
-    with {:ok, _spans} <- Tempo.to_interval(tempo),
-         {:ok, landed} <- stepped_dates(tempo, duration) do
-      gathered(landed, Compare.effective_calendar(tempo.calendar))
-    end
-  end
-
-  # Each date the value names, stepped. The first that cannot be stepped is
-  # the answer for them all.
-  defp stepped_dates(%Tempo{} = tempo, duration) do
-    tempo
-    |> Enum.reduce_while({:ok, []}, fn date, {:ok, landed} ->
-      case add_to_value(date, duration) do
+  # Each value stepped, as the walk yields it. The first that cannot be
+  # stepped is the answer for them all.
+  defp shift_each(values, %Tempo{} = tempo, duration, annotations) do
+    values
+    |> Enum.reduce_while({:ok, []}, fn value, {:ok, landed} ->
+      case stepped_value(value, duration) do
         %Tempo{} = stepped -> {:cont, {:ok, [stepped | landed]}}
         {:error, _reason} = error -> {:halt, error}
         _several_values -> {:halt, {:error, :grouped_component}}
       end
     end)
     |> case do
-      {:ok, landed} -> {:ok, Enum.reverse(landed)}
+      {:ok, landed} -> landed |> Enum.reverse() |> Enum.uniq() |> gathered(tempo, annotations)
       {:error, _reason} = error -> error
     end
   end
 
-  # The dates a step landed on, as one value where the product of the years
-  # and the days of the year they hold is those dates, each with the same
-  # time of day, and as the set of their spans otherwise.
-  defp gathered(landed, calendar) do
-    ordinals = Enum.map(landed, &ordinal(&1, calendar))
-    years = ordinals |> Enum.map(&elem(&1, 0)) |> Enum.uniq() |> Enum.sort()
-    days = ordinals |> Enum.map(&elem(&1, 1)) |> Enum.uniq() |> Enum.sort()
+  # One value of the set stepped, and read as the answer of a step is.
+  defp stepped_value(value, duration) do
+    value
+    |> add_to_value(duration)
+    |> Validation.calendar_date_from_week_date()
+    |> Validation.calendar_date_from_ordinal_date()
+    |> NotBuilt.result()
+  end
 
-    with [%Tempo{time: after_the_day}] <- ordinals |> Enum.map(&elem(&1, 2)) |> Enum.uniq(),
-         true <- length(Enum.uniq(ordinals)) == length(years) * length(days) do
-      time = [{:year, one_or_set(years)}, {:day_of_year, one_or_set(days)} | after_the_day]
-      {:ok, %{Qualification.rewritten(hd(landed), time) | time: time}}
+  # The values a step landed on, as one value where the product of what each
+  # unit then holds is those values and no others, each alike in everything
+  # but its units, and as the set of their spans otherwise.
+  defp gathered(landed, %Tempo{time: time, calendar: calendar}, annotations) do
+    axis = written_on(time, Compare.effective_calendar(calendar))
+
+    with [frame] <- landed |> Enum.map(&%{&1 | time: []}) |> Enum.uniq(),
+         {:ok, time} <- landed |> Enum.map(&as_written(&1, axis)) |> one_value() do
+      time = reapply_component_annotations(time, annotations)
+      {:ok, %{requalified(frame, time, axis) | time: time}}
     else
-      _in_no_one_value -> spans_of(landed)
+      _in_no_one_value -> landed |> Enum.map(&annotated(&1, annotations)) |> spans_of()
     end
   end
 
-  # A date as its year, its day of that year, and the value it is but for
-  # its date: the time of day, the zone and the offset the dates must share
-  # to be written as one value.
-  defp ordinal(
-         %Tempo{time: [{:year, year}, {:month, month}, {:day, day} | rest]} = date,
-         calendar
-       )
-       when is_integer(year) and is_integer(month) and is_integer(day),
-       do:
-         {year, calendar.day_of_year(year, month, day), %{date | time: rest, qualifications: nil}}
+  defp annotated(%Tempo{time: time} = value, annotations),
+    do: %{value | time: reapply_component_annotations(time, annotations)}
 
-  # A value that is no calendar date is no day of a year to gather.
-  defp ordinal(%Tempo{} = other, _calendar), do: {other, other, :not_a_date}
+  # A date written again in other units is qualified in each of them by
+  # what qualified any unit of the date.
+  defp requalified(frame, _time, :as_it_is), do: frame
+  defp requalified(frame, time, _axis), do: Qualification.rewritten(frame, time)
+
+  # The axis a value's dates are written on, where the walk yields them as
+  # calendar dates: the days of a year, or the weeks of one in a calendar of
+  # months.
+  defp written_on([{:year, _years}, {:day_of_year, _days} | _rest], _calendar), do: :ordinal
+
+  defp written_on(time, calendar) do
+    if List.keymember?(time, :week, 0) and not Tempo.week_based_calendar?(calendar),
+      do: :week,
+      else: :as_it_is
+  end
+
+  # A date as its year and its day of that year.
+  defp as_written(
+         %Tempo{time: [{:year, year}, {:month, month}, {:day, day} | rest], calendar: calendar},
+         :ordinal
+       )
+       when is_integer(year) and is_integer(month) and is_integer(day) do
+    calendar = Compare.effective_calendar(calendar)
+    [{:year, year}, {:day_of_year, calendar.day_of_year(year, month, day)} | rest]
+  end
+
+  # A date as the week and the day of the week that name it, where the week
+  # its calendar gives it is read back as that date
+  # (`Validation.date_from_iso_week/4`), and as the date it is where it is
+  # not: a calendar other than the Gregorian counts ISO 8601's weeks in its
+  # own years, and its `iso_week_of_year/3` in the Gregorian year.
+  defp as_written(
+         %Tempo{time: [{:year, year}, {:month, month}, {:day, day} | rest] = time} = date,
+         :week
+       )
+       when is_integer(year) and is_integer(month) and is_integer(day) do
+    calendar = Compare.effective_calendar(date.calendar)
+
+    with {week_year, week} when is_integer(week) <- calendar.iso_week_of_year(year, month, day),
+         {weekday, _first, _last} <- calendar.day_of_week(year, month, day, :monday),
+         {:ok, %Date{year: ^year, month: ^month, day: ^day}} <-
+           Validation.date_from_iso_week(week_year, week, weekday, calendar) do
+      [{:year, week_year}, {:week, week}, {:day_of_week, weekday} | rest]
+    else
+      _no_week_reads_back_as_it -> time
+    end
+  end
+
+  defp as_written(%Tempo{time: time}, _axis), do: time
+
+  # Time lists of the same units as one, each unit holding the values the
+  # lists give it, where every combination of those values is one of the
+  # lists: `[day: 2]` and `[day: 16]` under one month are `[day: {2,16}]`.
+  defp one_value([first | _rest] = times) do
+    units = units_of(first)
+    held = for unit <- units, do: {unit, values_of(times, unit)}
+
+    if Enum.all?(times, &(units_of(&1) == units)) and Enum.all?(held, &whole_numbers?/1) and
+         product_size(held) == Enum.count(times),
+       do: {:ok, for({unit, values} <- held, do: {unit, one_or_set(values)})},
+       else: :several
+  end
+
+  defp units_of(time), do: for(entry <- time, do: elem(entry, 0))
+
+  defp values_of(times, unit) do
+    times
+    |> Enum.flat_map(fn time ->
+      case List.keyfind(time, unit, 0) do
+        {^unit, value} -> [value]
+        _absent -> []
+      end
+    end)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  # A unit that holds what is no whole number (a fraction of a second, a
+  # margin of error) is one value's only where every list has the same.
+  defp whole_numbers?({_unit, [_only]}), do: true
+  defp whole_numbers?({_unit, values}), do: Enum.all?(values, &is_integer/1)
+
+  defp product_size(held),
+    do: held |> Enum.map(fn {_unit, values} -> Enum.count(values) end) |> Enum.product()
 
   defp one_or_set([one]), do: one
   defp one_or_set(several), do: Parser.consolidate_ranges(several)

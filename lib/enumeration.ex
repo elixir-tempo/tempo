@@ -510,9 +510,16 @@ defmodule Tempo.Enumeration do
     if expandable?(time), do: members(tempo), else: :not_expandable
   end
 
+  @doc false
+  # Whether `expand/1` lists a value's members: it holds a set, and nothing
+  # else that names several values.
+  @spec names_each_value?(Tempo.t()) :: boolean()
+  def names_each_value?(%Tempo{time: time}) when is_list(time), do: expandable?(time)
+  def names_each_value?(%Tempo{}), do: false
+
   # Expandable when every component is a plain integer, an annotated integer
-  # (`{value, options}`, a margin of error), a range, or a list of those, and
-  # at least one component is set-valued.
+  # (`{value, options}`, a margin of error), a fraction of a second, a range,
+  # or a list of those, and at least one component is set-valued.
   defp expandable?(time), do: expandable?(time, false)
 
   defp expandable?([], set_valued?), do: set_valued?
@@ -529,8 +536,13 @@ defmodule Tempo.Enumeration do
        when is_integer(value) and is_list(options),
        do: expandable?(rest, set_valued?)
 
-  # Anything else (a mask, an unspecified unit, a group, a fraction of a
-  # second, a selection) is not expanded.
+  # A fraction of a second is one value, as a whole second is.
+  defp expandable?([{:microsecond, {value, precision}} | rest], set_valued?)
+       when is_integer(value) and is_integer(precision),
+       do: expandable?(rest, set_valued?)
+
+  # Anything else (a mask, an unspecified unit, a group, a selection) is not
+  # expanded.
   defp expandable?(_time, _set_valued?), do: false
 
   defp finite_values?([]), do: true

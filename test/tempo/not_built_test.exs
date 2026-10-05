@@ -247,25 +247,92 @@ defmodule Tempo.NotBuiltTest do
     end
   end
 
-  describe "a step by days from a value that holds several months or years" do
+  # A set names its values, and each is stepped by its calendar. A step by
+  # days from one was refused, as it was counted through the values the
+  # units hold, where the days of such a year are not in the order of their
+  # numbers.
+  describe "a step from a value that holds several months or years" do
+    defp held([value]), do: "#{value}"
+    defp held(values), do: "{#{Enum.join(values, ",")}}"
+
+    defp in_order(dates), do: dates |> Enum.uniq() |> Enum.sort_by(&Date.to_gregorian_days/1)
+
+    # The first day of each span an answer names.
+    defp landed(%Tempo{} = value, calendar),
+      do: first_days(Tempo.to_interval_set(value), calendar)
+
+    defp landed(%IntervalSet{} = set, calendar), do: first_days({:ok, set}, calendar)
+
     for calendar <- @turning do
-      test "is refused in #{inspect(calendar)}" do
+      test "is each of its dates stepped by the calendar, in #{inspect(calendar)}" do
         calendar = unquote(calendar)
 
-        for {text, by} <- [
-              {"1750Y{3,4}M15D", [day: 1]},
-              {"1750Y{2,3}M24D", [day: 1]},
-              {"1750Y{3,4}M25D", [day: -1]},
-              {"{1750,1751}Y3M24D", [day: 1]},
-              {"1750Y{3,4}M", [day: 1]},
-              {"{1750,1751}Y", [day: 1]},
-              {"1750Y{3,4}M15D", [week: 1]},
-              {"1750Y{3,4}M15DT23H", [hour: 2]}
+        for {years, months, days} <- [
+              {[1750], [3, 4], [15]},
+              {[1750], [2, 3], [24]},
+              {[1750], [3, 4], [25]},
+              {[1750, 1751], [3], [24]},
+              {[1750], [3], [24, 25]},
+              {[1750], [11, 12], [24, 25]},
+              {[1749, 1750], [1, 12], [1, 31]}
+            ],
+            {unit, part, by} <- [
+              {:day, :days, 1},
+              {:day, :days, -1},
+              {:week, :weeks, 1},
+              {:month, :months, 1}
             ] do
-          assert refused?(Tempo.shift(read(text, calendar), by), :shift, calendar),
-                 "#{text} #{inspect(by)}"
+          text = "#{held(years)}Y#{held(months)}M#{held(days)}D"
+
+          expected =
+            for year <- years, month <- months, day <- days do
+              {year, month, day} = calendar.plus(year, month, day, part, by, coerce: true)
+              Date.new!(year, month, day, calendar)
+            end
+
+          shifted = Tempo.shift(read(text, calendar), [{unit, by}])
+
+          assert {text, unit, by, landed(shifted, calendar)} ==
+                   {text, unit, by, in_order(expected)}
         end
       end
+
+      test "is each of its months and years from its first day, in #{inspect(calendar)}" do
+        calendar = unquote(calendar)
+
+        months = for month <- [3, 4], do: 1750 |> calendar.month(month) |> Enum.at(1)
+        years = for year <- [1750, 1751], do: year |> calendar.year() |> Enum.at(1)
+
+        assert landed(Tempo.shift(read("1750Y{3,4}M", calendar), day: 1), calendar) == months
+        assert landed(Tempo.shift(read("{1750,1751}Y", calendar), day: 1), calendar) == years
+      end
+
+      test "is refused beside a mask, in #{inspect(calendar)}" do
+        calendar = unquote(calendar)
+
+        for text <- ["1750Y{3,4}MXXD", "1750Y{3,4}M15DTXXH", "{1750,1751}Y3MXXD"] do
+          assert refused?(Tempo.shift(read(text, calendar), day: 1), :shift, calendar), text
+        end
+      end
+    end
+
+    test "reaches the day through a time of day" do
+      assert Tempo.shift(read("1750Y{3,4}M15DT23H", March25), hour: 2) ==
+               read("1750Y{3,4}M16DT1H", March25)
+    end
+
+    test "is refused where the calendar does not count the months a set names" do
+      # A year of England before 1751: its months are not listed.
+      for by <- [[day: 1], [month: 1], [year: 1]] do
+        assert refused?(Tempo.shift(read("1750Y{3,4}M15D", England), by), :shift, England)
+      end
+
+      # Its years and its days are, and so are the months of a later year.
+      assert Tempo.shift(read("{1749,1750}Y3M24D", England), day: 1) ==
+               read("{1750,1751}Y3M25D", England)
+
+      assert Tempo.shift(read("1752Y{8,9}M2D", England), month: 1) ==
+               read("1752Y{9,10}M2D", England)
     end
 
     test "is refused from an unspecified day of the month the year begins within" do

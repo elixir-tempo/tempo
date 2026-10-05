@@ -9,6 +9,7 @@ defmodule Tempo.SteppingTest do
   alias Calendrical.Hebrew
   alias Tempo.ConversionError
   alias Tempo.Interval
+  alias Tempo.IntervalEndpointsError
   alias Tempo.IntervalSet
   alias Tempo.UnanchoredError
 
@@ -157,17 +158,10 @@ defmodule Tempo.SteppingTest do
     end
   end
 
-  describe "a unit that holds several values" do
-    test "is not counted from, and its set is never collapsed" do
+  # A group names a span of values, and no values to step one by one.
+  describe "a unit that holds a group" do
+    test "is not counted from" do
       for {value, shift} <- [
-            {~o"2026Y6M{1,15}D", [day: 1]},
-            {~o"2026Y6M{1,15}D", [day: -1]},
-            {~o"2026Y{6,7}M15D", [month: 1]},
-            {~o"2026Y{6,7}M", [month: -1]},
-            {~o"{2026,2027}Y", [year: 1]},
-            {~o"2026Y6M15DT{9,17}H", [hour: 1]},
-            {~o"2026Y6M15DT{9,17}H", [hour: -1]},
-            {~o"2026Y25W{6,7}K"W, [day: 1]},
             {~o"2026Y6M3G4DU", [day: 1]},
             {~o"2026Y3G4MU", [month: 1]}
           ] do
@@ -178,34 +172,26 @@ defmodule Tempo.SteppingTest do
         assert Exception.message(error) =~ "holds several values"
       end
     end
+  end
 
-    test "is passed by where every value it names steps alike" do
+  # A set or a range names values, and each is stepped: a step from the unit
+  # that holds it was refused, as one its values do not take alike was
+  # (`shift_of_sets_test.exs` measures them).
+  describe "a unit that holds a set" do
+    test "is stepped value by value, whether or not its values step alike" do
       assert Tempo.shift(~o"2026Y{6,7}M15D", day: 1) == ~o"2026Y{6,7}M16D"
       assert Tempo.shift(~o"2026Y{6,7}M15D", day: -1) == ~o"2026Y{6,7}M14D"
       assert Tempo.shift(~o"2026Y{6,7}M15D", year: 1) == ~o"2027Y{6,7}M15D"
-
-      # The day after the 30th is not the same day in June and in July, nor
-      # the day before the 1st.
-      assert {:error, %ConversionError{reason: :grouped_component}} =
-               Tempo.shift(~o"2026Y{6,7}M30D", day: 1)
-
-      assert {:error, %ConversionError{reason: :grouped_component}} =
-               Tempo.shift(~o"2026Y{6,7}M1D", day: -1)
-    end
-
-    test "keeps its days a month on only where the month has them all" do
       assert Tempo.shift(~o"2026Y6M{1,15}D", month: 1) == ~o"2026Y7M{1,15}D"
-
-      # February has no 30th or 31st, and each day would be clamped to its own.
-      assert {:error, %ConversionError{reason: :grouped_component}} =
-               Tempo.shift(~o"2026Y1M{30,31}D", month: 1)
-    end
-
-    test "has no one year to carry into" do
       assert Tempo.shift(~o"{2026,2027}Y6M15D", day: 1) == ~o"{2026,2027}Y6M16D"
 
-      assert {:error, %ConversionError{reason: :grouped_component}} =
-               Tempo.shift(~o"{2026,2027}Y12M31D", day: 1)
+      # The day after the 30th of June and of July, and after the last day
+      # of two years.
+      assert Tempo.shift(~o"2026Y{6,7}M30D", day: 1) == ~o"2026Y7M{1,31}D"
+      assert Tempo.shift(~o"{2026,2027}Y12M31D", day: 1) == ~o"{2027,2028}Y1M1D"
+
+      # February has no 30th or 31st: a month on, both are its 28th.
+      assert Tempo.shift(~o"2026Y1M{30,31}D", month: 1) == ~o"2026Y2M28D"
     end
   end
 
@@ -230,7 +216,7 @@ defmodule Tempo.SteppingTest do
       for {text, error} <- [
             {"2M28D/P1D", UnanchoredError},
             {"P1D/3M1D", UnanchoredError},
-            {"2026Y6M{1,15}D/P1D", ConversionError}
+            {"2026Y6M{1,15}D/P1D", IntervalEndpointsError}
           ] do
         assert {:error, %^error{}} = Tempo.to_interval(Tempo.from_iso8601!(text)), text
       end

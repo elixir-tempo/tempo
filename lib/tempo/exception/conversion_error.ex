@@ -22,8 +22,9 @@ defmodule Tempo.ConversionError do
   * `:open_range` — one end of the range is unbounded.
 
   * `:grouped_component` — a step would count from a unit that holds
-    several values, such as the day after `~o"2026Y6M{1,15}D"`. Returned
-    by `Tempo.shift/3` too, for a shift that steps such a unit.
+    several values and names none of them to step one by one, such as the
+    day after `~o"2026Y6M3G4DU"`, the third group of four days of June.
+    Returned by `Tempo.shift/3` too, for a shift that steps such a unit.
 
   * `:counted_in_group` — a unit after a group counts from the group's
     start (ISO 8601-2 §5.4.2: `~o"2018Y2G3MU50D"` is the fiftieth day of

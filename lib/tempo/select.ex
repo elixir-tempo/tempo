@@ -115,6 +115,11 @@ defmodule Tempo.Select do
   writes it. Use the duration form (`~o"T21/PT8H"`) to say the same
   thing explicitly.
 
+  A window runs from one point to another, so one whose start or end
+  holds a set (`6M{1,15}D/P1D`) names no one span and returns a
+  `Tempo.IntervalEndpointsError`. Give a window for each value, in a
+  list.
+
   ## Negative components — "last N from the end"
 
   ISO 8601-2 §4.4.1 allows any integer component to be negative,
@@ -242,6 +247,7 @@ defmodule Tempo.Select do
   alias Tempo.Compare
   alias Tempo.ConversionError
   alias Tempo.Duration
+  alias Tempo.Enumeration
   alias Tempo.Interval
   alias Tempo.Interval.Steps
   alias Tempo.IntervalEndpointsError
@@ -1345,6 +1351,9 @@ defmodule Tempo.Select do
 
       :point ->
         project_onto_base(base, c_from)
+
+      {:error, _several_values} = error ->
+        error
     end
   end
 
@@ -1461,13 +1470,36 @@ defmodule Tempo.Select do
     end)
   end
 
+  # How a selector that is a span ends: at its own end, by a duration from
+  # its start, or as the point its start is. A span runs from one point to
+  # another, so an end that holds a set, which names several, gives no one
+  # span: the span from each of them is not built, and the ends were merged
+  # as they stood into a span that held the sets.
   defp span_endpoint(%Interval{recurrence: recurrence}) when recurrence != 1, do: :point
-  defp span_endpoint(%Interval{to: %Tempo{} = to}), do: {:to, to}
 
-  defp span_endpoint(%Interval{to: nil, duration: %Duration{} = duration}),
-    do: {:duration, duration}
+  defp span_endpoint(%Interval{from: from, to: to} = selector) do
+    case Enum.find([{"start", from}, {"end", to}], &names_several?/1) do
+      nil -> span_end(selector)
+      {end_name, value} -> {:error, several_values_error(selector, end_name, value)}
+    end
+  end
 
-  defp span_endpoint(%Interval{}), do: :point
+  defp span_end(%Interval{to: %Tempo{} = to}), do: {:to, to}
+  defp span_end(%Interval{to: nil, duration: %Duration{} = duration}), do: {:duration, duration}
+  defp span_end(%Interval{}), do: :point
+
+  defp names_several?({_end_name, %Tempo{} = value}), do: Enumeration.names_each_value?(value)
+  defp names_several?({_end_name, _no_value}), do: false
+
+  defp several_values_error(selector, end_name, value) do
+    IntervalEndpointsError.exception(
+      interval: selector,
+      operation: :select,
+      reason:
+        "#{inspect(selector)} has no one #{end_name} to select a span by: #{inspect(value)} " <>
+          "names several values. Select by each of them, or by the values themselves."
+    )
+  end
 
   # A span either end of which cannot land on the member (29 February, in a
   # common year) is skipped, as a point that cannot land is.

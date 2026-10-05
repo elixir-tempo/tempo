@@ -5927,12 +5927,17 @@ defmodule Tempo do
     `~o"1M31D"`), but `~o"1M31D"` plus one month lands on an unresolvable
     "Feb 31" and `~o"2M28D"` plus one day (Feb 29 or Mar 1?) both error.
 
+  * For a value that holds a set or a range (`~o"2026Y6M{1,15}D"`),
+    each value it names shifted: a `t:t/0` that holds them where one
+    value can, and a `t:Tempo.IntervalSet.t/0` of their spans where none
+    can — a day on from the 15th and the 30th of June is 16 June and
+    1 July.
+
   * `{:error, %Tempo.ConversionError{reason: :grouped_component}}` when
-    the shift would count from a unit that holds several values — a
-    set, a range, a group or unspecified digits. A step every one of
-    those values takes alike is computed, so `~o"2026Y{6,7}M15D"` plus
-    one day is the 16th of both months; plus one month it is an error,
-    since no one month follows both June and July.
+    the shift would count from a unit that holds a group, or unspecified
+    digits beside a set: neither names values to shift one by one. A
+    step that passes such a unit by is computed, so a year on from
+    `~o"2026Y{6,7}MXXD"` is `~o"2027Y{6,7}MXXD"`.
 
   * `{:error, reason}` when the value holds a selection and the shift
     steps a unit it does not carry: a month on `~o"2027Y4ML1K1IN"`, the
@@ -5976,13 +5981,22 @@ defmodule Tempo do
       iex> Tempo.shift(~o"2026-W25", day: 1)
       ~o"2026Y6M16D"
 
-  The 15th of June and of July, a day on and a month on:
+  A value that holds a set is shifted value by value. A day on from the
+  1st and the 15th of June is the 2nd and the 16th, and a month on from
+  the 15th of June and of July is the 15th of July and of August:
 
-      iex> Tempo.shift(~o"2026Y{6,7}M15D", day: 1)
-      ~o"2026Y{6..7}M16D"
+      iex> Tempo.shift(~o"2026Y6M{1,15}D", day: 1)
+      ~o"2026Y6M{2,16}D"
 
-      iex> match?({:error, %Tempo.ConversionError{}}, Tempo.shift(~o"2026Y{6,7}M15D", month: 1))
-      true
+      iex> Tempo.shift(~o"2026Y{6,7}M15D", month: 1)
+      ~o"2026Y{7..8}M15D"
+
+  A day on from the 15th and the 30th of June is 16 June and 1 July,
+  which no one value names, so the answer is the set of the two days:
+
+      iex> days = Tempo.shift(~o"2026Y6M{15,30}D", day: 1)
+      iex> days |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.Interval.from/1)
+      [~o"2026Y6M16D", ~o"2026Y7M1D"]
 
   On the night New York's clocks spring forward, five hours after 23:00
   is 05:00, and a day after noon is noon:
@@ -6418,11 +6432,17 @@ defmodule Tempo do
     counted from such a value is the same error: the second month
     after `~o"12M31D"` is a 31 February.
 
+  * `{:error, %Tempo.IntervalEndpointsError{}}` when an interval's
+    duration would be counted from a start or an end that names several
+    spans — the day after `~o"2026Y6M{1,15}D"` in `2026Y6M{1,15}D/P1D`.
+    The value on its own converts to a span for each value it names, and
+    a recurrence from it (`R2/2026Y6M{1,15}D/P1D`) to the occurrences
+    from each.
+
   * `{:error, %Tempo.ConversionError{reason: :grouped_component}}`
-    when a span's end would be counted from a unit that holds several
-    values — the day after `~o"2026Y6M{1,15}D"` in
-    `2026Y6M{1,15}D/P1D`. The value on its own converts to a span for
-    each value it names.
+    when a recurrence would be stepped from a start that names no one
+    value and no set of them — a group of a set, as in
+    `R3/2026Y{1,2}G3MU15D/P1D`.
 
   * `{:error, %Tempo.InvalidDateError{}}` when a mask names no date —
     `~o"2026-02-3X"`, as February has no 30th or 31st — or a set none
@@ -7253,7 +7273,9 @@ defmodule Tempo do
   # a closed `[from, from + duration)` interval. Preserves the
   # source interval's metadata — callers like `Tempo.ICal` need
   # event-level metadata (summary, location, …) to ride along
-  # onto every materialised occurrence.
+  # onto every materialised occurrence. A start that names several spans
+  # (`2026Y6M{1,15}D/P1D`) is no one point to count the duration from,
+  # whatever a step from each of its values lands on.
   defp materialise(
          %Tempo.Interval{
            from: %Tempo{time: time} = from,
@@ -7261,16 +7283,18 @@ defmodule Tempo do
            to: to,
            recurrence: 1,
            metadata: metadata
-         },
+         } = interval,
          opts
        )
        when to in [nil, :undefined] do
     if Keyword.has_key?(time, :selection) do
       selected_spans(from, &{&1, Math.add(&1, duration)}, metadata, opts)
     else
-      from
-      |> Math.add(duration)
-      |> derived_span(from, &%Tempo.Interval{from: from, to: &1, metadata: metadata})
+      with {:ok, _one_start} <- Interval.endpoints_as_points(interval) do
+        from
+        |> Math.add(duration)
+        |> derived_span(from, &%Tempo.Interval{from: from, to: &1, metadata: metadata})
+      end
     end
   end
 
@@ -7283,15 +7307,17 @@ defmodule Tempo do
            to: %Tempo{time: time} = to,
            recurrence: 1,
            metadata: metadata
-         },
+         } = interval,
          opts
        ) do
     if Keyword.has_key?(time, :selection) do
       selected_spans(to, &{Math.subtract(&1, duration), &1}, metadata, opts)
     else
-      to
-      |> Math.subtract(duration)
-      |> derived_span(to, &%Tempo.Interval{from: &1, to: to, metadata: metadata})
+      with {:ok, _one_end} <- Interval.endpoints_as_points(interval) do
+        to
+        |> Math.subtract(duration)
+        |> derived_span(to, &%Tempo.Interval{from: &1, to: to, metadata: metadata})
+      end
     end
   end
 

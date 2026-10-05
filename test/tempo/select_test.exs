@@ -611,6 +611,26 @@ defmodule Tempo.Select.Test do
       assert {:error, %Tempo.IntervalEndpointsError{reason: :open_start}} =
                Tempo.select(~o"../2026", ~o"12-25")
     end
+
+    # A span runs from one point to another. Its ends were merged as they
+    # stood, into one span from `2026Y6M{1,15}D` to `2026Y7M{1,15}D`.
+    test "a selector that is a span from, or to, a value that holds a set names no one span" do
+      for text <- ["6M{1,15}D/P1D", "6M{1,15}D/P1M", "6M{1,15}D/6M{2,16}D", "6M1D/6M{2,16}D"] do
+        assert {:error, %Tempo.IntervalEndpointsError{operation: :select} = error} =
+                 Tempo.select(~o"2026", Tempo.from_iso8601!(text)),
+               text
+
+        assert Exception.message(error) =~ "names several values"
+      end
+
+      # The values themselves are selected, each as the span it is.
+      assert {:ok, days} = Tempo.select(~o"2026", ~o"6M{1,15}D")
+
+      assert Enum.map(IntervalSet.members(days), &Interval.from/1) == [
+               ~o"2026-06-01",
+               ~o"2026-06-15"
+             ]
+    end
   end
 
   describe "a span is selected period by period" do

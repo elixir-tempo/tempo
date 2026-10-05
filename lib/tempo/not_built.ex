@@ -14,8 +14,9 @@ defmodule Tempo.NotBuilt do
   # `Calendrical.Reform.England` until 1751): a selection that counts days
   # within a month or a year, which the resolver counts as `1..n` of the
   # month a date names; a season, which is placed by the year it starts in;
-  # and a step by days from a value that holds several months or years,
-  # which is counted through the values and not asked of the calendar. The
+  # and a step by days from an unspecified day of the month the year begins
+  # within, or from several months or years beside a mask, which is counted
+  # through the values and not asked of the calendar. The
   # fourth is a month of a year whose months the calendar numbers as its
   # dates do, and not from the day the year begins (a year of
   # `Calendrical.Reform.England` before 1751): no one span of the year. The
@@ -24,7 +25,7 @@ defmodule Tempo.NotBuilt do
   # RFC 5545 counts in the Gregorian calendar. The sixth is in every calendar
   # of months: a week selected from within a month, the week of the month.
 
-  alias Tempo.{Compare, ConversionError, Duration, Interval, UnitValues}
+  alias Tempo.{Compare, ConversionError, Duration, Enumeration, Interval, UnitValues}
 
   # The units a selection is resolved within when the period it is given is
   # finer than a month.
@@ -277,12 +278,13 @@ defmodule Tempo.NotBuilt do
   defp no_finer_than_a_month?(no_start), do: no_start in [nil, :undefined]
 
   @doc false
-  # A step that reaches the day, from a value that holds several years or
-  # months, or an unspecified day of the month its year begins within, in a
-  # year that does not begin with its first month. Such a step is counted
-  # through the values the units hold, where the days of that year are not
-  # in the order of their numbers; one whole date is stepped by its
-  # calendar, and so is each date a mask stands for.
+  # A step that reaches the day, from a value that holds an unspecified day
+  # of the month its year begins within, or several years or months beside
+  # a mask or a group, in a year that does not begin with its first month.
+  # Such a step is counted through the values the units hold, where the days
+  # of that year are not in the order of their numbers. One whole date is
+  # stepped by its calendar, and so is each date a set names and each a mask
+  # stands for.
   @spec shift(Tempo.t(), list()) :: :ok | {:error, ConversionError.t()}
   def shift(%Tempo{calendar: calendar}, _duration_time)
       when calendar in [nil | @first_month_first],
@@ -292,24 +294,32 @@ defmodule Tempo.NotBuilt do
       when is_list(time) and is_list(duration_time) do
     calendar = Compare.effective_calendar(calendar)
 
-    if counted_where_the_year_turns?(time, duration_time, calendar),
+    if counted_where_the_year_turns?(tempo, duration_time, calendar),
       do: {:error, error(tempo, :shift, calendar)},
       else: :ok
   end
 
   def shift(_value, _duration_time), do: :ok
 
-  defp counted_where_the_year_turns?(time, duration_time, calendar) do
+  defp counted_where_the_year_turns?(%Tempo{time: time} = tempo, duration_time, calendar) do
     years = year_of(time)
 
     not UnitValues.years_begin_with_first_month?(years, calendar) and
-      reaches_the_day?(duration_time) and counted_through_the_values?(time, years, calendar)
+      (months_not_listed?(time, years, calendar) or
+         (reaches_the_day?(duration_time) and counted_through_the_values?(tempo, years, calendar)))
   end
 
+  # The months a set names are listed by the calendar's count of them, which
+  # a year whose months are not counted from its start has none of: a step
+  # by any unit has no values to reach there.
+  defp months_not_listed?(time, years, calendar),
+    do: several?(value_of(time, :month)) and not months_counted?(years, calendar)
+
   # A value that holds days of the year is stepped date by date, each by its
-  # calendar, whatever it holds.
-  defp counted_through_the_values?(time, years, calendar) do
-    not List.keymember?(time, :day_of_year, 0) and
+  # calendar, whatever it holds, and so is one that holds sets and nothing
+  # else that names several values.
+  defp counted_through_the_values?(%Tempo{time: time} = tempo, years, calendar) do
+    not List.keymember?(time, :day_of_year, 0) and not Enumeration.names_each_value?(tempo) and
       (several?(years) or several?(value_of(time, :month)) or
          unspecified_day_of_turning_month?(time, years, calendar))
   end
