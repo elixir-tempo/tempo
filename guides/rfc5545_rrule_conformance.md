@@ -59,7 +59,7 @@ RFC 5545 defines each BY-rule as either **EXPAND** (generates additional candida
 
 * `BYSETPOS` is always applied last as a LIMIT across the candidate set.
 
-In a `YEARLY` rule the parts that name a day hold at once, so the days selected are those that satisfy every one of them: `BYMONTH=3;BYYEARDAY=100` selects nothing, day 100 being 10 April, `BYMONTH=3,4;BYYEARDAY=80,100` is 21 March and 10 April, each once, and `BYMONTHDAY=15;BYYEARDAY=74` is 15 March in the years whose 74th day it is. Two readings are Tempo's where a rule leaves the day or the month to DTSTART: a day of the month with no month (`FREQ=YEARLY;BYMONTHDAY=15`) is a day of DTSTART's month, and DTSTART's day in a month that does not have it (the 31st, in `BYMONTH=4`) is that month's last day.
+In a `YEARLY` rule the parts that name a day hold at once, so the days selected are those that satisfy every one of them: `BYMONTH=3;BYYEARDAY=100` selects nothing, day 100 being 10 April, `BYMONTH=3,4;BYYEARDAY=80,100` is 21 March and 10 April, each once, and `BYMONTHDAY=15;BYYEARDAY=74` is 15 March in the years whose 74th day it is. Two readings are Tempo's where a rule leaves the day or the month to DTSTART: a day of the month with no month (`FREQ=YEARLY;BYMONTHDAY=15`) is a day of DTSTART's month, and DTSTART's day in a month that does not have it (the 31st in a monthly rule or in `BYMONTH=4`, 29 February in a yearly one) is that month's last day, where RFC 5545 passes over a date that does not exist.
 
 ### RDATE and EXDATE
 

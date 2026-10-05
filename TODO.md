@@ -6,6 +6,14 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Open
 
+### Correctness
+
+* [ ] **A rule read from an RRULE omits a start's day that a period does not have** — decided 2026-10-05: a rule read from an RRULE, iCalendar or JSCalendar lists no occurrence where a month or a year lacks DTSTART's day, as RFC 5545 §3.3.10 says and the calendar the file came from shows, and an ISO 8601 recurrence stays its start plus n cadences, on the period's last day; the rule holds which, as RFC 7529's `SKIP` (`OMIT`, the default, `BACKWARD`, `FORWARD`) and JSCalendar's `skip` name it. Now `FREQ=MONTHLY` from 31 January lists 28 February and 30 April, `FREQ=YEARLY` from 29 February 2024 lists 28 February 2025, and the 31st in `BYMONTH=4` is 30 April.
+
+* [ ] **A computed event expands in a month and a week** — decided 2026-10-05: an event is each of its days that falls in the period, for a year, a month and a week, and a daily or finer candidate is kept when it is the event's day. Now `Tempo.select(~o"2026Y4M", ~o"L(easter)eN")` and the selection of ISO week 14 select nothing though Easter 2026 is 5 April, and `R2/2026-01-05/P1M/FL(easter)eN` is 5 April 2026 and 2037, the 5th when it is Easter, where it is to be the Easter of each month that has one.
+
+* [ ] **The RRULE writer writes only what RFC 5545 allows the frequency** — decided 2026-10-05: `Tempo.RRule.to_string/1` writes the allowed equivalent where there is one, a numeric `BYDAY` outside a monthly or yearly rule as `BYDAY` with `BYSETPOS` (`R/2026-06-01/P1W/FL3K2IN` is now `FREQ=WEEKLY;BYDAY=2WE`), and returns a `Tempo.ConversionError` naming the part and the frequency for the rest: `BYWEEKNO` outside a yearly rule, `BYYEARDAY` in a daily, weekly or monthly one and `BYMONTHDAY` in a weekly one.
+
 ### Conformance and completeness
 
 * [ ] **A day with no month selected in a year is a day of the year** — `2026YL-1DN` is 31 December and `2026YL45DN` 14 February, as the value `2026Y-1D` and `Tempo.select(~o"2026", ~o"-1D")` read it, where the selection reads the day in the year's first month (31 January). An RRULE's `BYMONTHDAY` keeps its own rule, DTSTART's month. Decided 2026-10-04; with it a constraint of `select/2` and a selection go through one resolver, and the matrix's selections take the form in.
@@ -31,12 +39,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **Traditional months that are sets or masks** — `2026Y{1,2}m` parses as a mask (`traditional_month: {:mask, [[1..2]]}`) and a masked one (`1Xm`) is a `ConversionError` from `Enum` and `to_interval/2`: nothing lists the traditional months a year has, which is Calendrical's to answer. Found 2026-10-03.
 
 * [ ] **The resolver measured for the monthly and weekly frequencies** — `Tempo.RRule.YearlyPartsTest` asks every day of four years, with `Date` alone, whether each part of a yearly rule holds for it, and found three defects that no example of RFC 5545 reaches. The same measure for monthly and weekly rules, and for a position and an ordinal weekday, would give those frequencies the confidence the yearly one now has. Found 2026-10-05.
-
-* [ ] **A yearly rule's day of the month with no month, and its start's day in a shorter month** — two readings RFC 5545 leaves open, now written in the conformance guide: `FREQ=YEARLY;BYMONTHDAY=15` is the 15th of DTSTART's month (libical's reading, where dateutil lists the 15th of every month), and DTSTART's 31st in `BYMONTH=4` is 30 April, where the RFC passes over a date that does not exist. To confirm or change each. Found 2026-10-05.
-
-* [ ] **A computed event in a period shorter than a year** — an event expands a yearly candidate and limits every other: `Tempo.select(~o"2026Y4M", ~o"L(easter)eN")` and a week's selection select nothing though Easter 2026 is 5 April, in ISO week 14, and `R/../P1M/FL(easter)eN` keeps a month only when its start's day is Easter. To decide whether an event expands in a month and a week too (the Easter in April), as a day of the month does in a month, where a monthly rule now reads "the start's day, when it is Easter". Found 2026-10-05.
-
-* [ ] **The RRULE writer writes parts RFC 5545 forbids for the frequency** — `Tempo.RRule.to_string/1` writes each selection token as its BY-part whatever the cadence: a numeric `BYDAY` in a weekly or a daily rule (`R/2026-06-01/P1W/FL3K2IN` is `FREQ=WEEKLY;BYDAY=2WE`, where `BYDAY=WE;BYSETPOS=2` says the same and is allowed), `BYWEEKNO` outside a yearly rule, `BYYEARDAY` in a daily, weekly or monthly one and `BYMONTHDAY` in a weekly one. Tempo reads each back as it was and a strict reader rejects the rule; to decide whether the writer refuses them or writes the allowed equivalent where there is one. Found 2026-10-05.
 
 * [ ] **A shift reaches each value of a set** — `~o"2026Y6M{1,15}D"` plus a day is `~o"2026Y6M{2,16}D"`: each value the set names is shifted and the results gathered into the value where one unit can hold them, and into an interval set where it cannot (`{15,30}D` plus a day is 16 June and 1 July), where a shift from a unit that holds several values is a `ConversionError`. Decided 2026-10-04. An unspecified day of a week is one case: `Tempo.shift(~o"2026Y25WX*K", day: 1)` is the next week's Monday alone (`~o"2026-06-22"`), where `~o"2026Y6MX*D"` plus a day is the days from 2 June to 1 July. Done for a value that holds days of the year (2026-10-05), which is stepped date by date and gathered as decided here: `gathered/2` in `lib/math.ex` is what the month and week axes are to be brought to.
 
@@ -125,6 +127,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A yearly rule's day of the month with no month is a day of DTSTART's month** — decided 2026-10-05, as it is: `FREQ=YEARLY;BYMONTHDAY=15` is the 15th of DTSTART's month, what a rule leaves unsaid being DTSTART's, as libical reads it and the conformance guide now says; dateutil lists the 15th of every month. 2026-10-05.
 
 * [x] **In a yearly rule the parts that name a day hold at once** — in the resolver a day of the year, an event and a day of the month apply in that order at yearly scope, the first naming the days and each after it limiting them, and after a `BYMONTH` expansion a day of the year and an event keep to the candidate's month (`swap_in_selected_month/3`), so each day is listed once. `Tempo.RRule.YearlyPartsTest` asks every day of four years, with `Date` alone, whether each part of some 300 rules holds for it. 2026-10-05.
 
