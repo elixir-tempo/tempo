@@ -53,9 +53,10 @@ defmodule Tempo.RRule.RscaleSkipTest do
     end
 
     test "is the ISO 8601 recurrence of the same start, each occurrence as long as the start" do
-      {:ok, rule} = read("RSCALE=GREGORIAN;FREQ=MONTHLY;SKIP=BACKWARD;COUNT=3", ~D[2026-01-31])
+      {:ok, %Interval{} = rule} =
+        read("RSCALE=GREGORIAN;FREQ=MONTHLY;SKIP=BACKWARD;COUNT=3", ~D[2026-01-31])
 
-      assert %Interval{rule | metadata: %{}} == ~o"R3/2026-01-31/P1M"
+      assert %{rule | metadata: %{}} == ~o"R3/2026-01-31/P1M"
       assert RRule.to_string(rule) == {:ok, "COUNT=3;FREQ=MONTHLY;BYMONTHDAY=-1"}
     end
 
