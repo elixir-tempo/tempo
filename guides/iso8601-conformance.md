@@ -170,6 +170,8 @@ iex> Tempo.to_iso8601(Tempo.from_iso8601!("2026-06-15/2026-06-16"))
 
 An end may be cut down to one bare number, which is then the start's last component: `2026-06-15/20` ends on the 20th, `2026-06-15T10:30/45` at 10:45, `2026-W25/27` in week 27 and `2026-166/170` on the year's 170th day. A day and a time (`2007-11-13T09:00/15T17:00`), a week and its day (`2026-W25-1/W26-5`) and a day of the week (`2026-W25-1/5`) are read the same way.
 
+The omission is allowed only where it is unambiguous, and in the basic format digits alone are a date: four are a year (§5.3.5). So `20260615/0720` ends in the year 720 and `20260615T1030/1130` in the year 1130, each before its start, and the error says so and names the forms that are not ambiguous: the extended format (`2026-06-15/07-20`) and a time of day with its `T` (`20260615T1030/T1130`).
+
 ```elixir
 iex> Tempo.from_iso8601!("2026-06-15/20") == Tempo.from_iso8601!("2026-06-15/2026-06-20")
 true

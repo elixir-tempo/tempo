@@ -422,5 +422,53 @@ defmodule Tempo.Parser.Interval.Test do
       assert interval.to == nil
       assert interval.duration
     end
+
+    test "an end of four digits in the basic format is a year, and the error says so" do
+      # The omission is allowed "provided that the resulting expression is
+      # unambiguous", and four digits alone are a year (§5.3.5).
+      assert {:error, %Tempo.IntervalEndpointsError{} = error} =
+               Tempo.from_iso8601("20260615/0720")
+
+      message = Exception.message(error)
+      assert message =~ ~s(The end "0720" of "20260615/0720" is read as the year 720)
+      assert message =~ "`2026-06-15/07-20`"
+      assert message =~ "`20260615/T0720`"
+
+      assert {:error, %Tempo.IntervalEndpointsError{} = error} =
+               Tempo.from_iso8601("20260615T1030/1130")
+
+      message = Exception.message(error)
+      assert message =~ "is read as the year 1130"
+      assert message =~ "`20260615T1030/T1130`"
+
+      # Digits that are no month and day are shown as a time of day alone.
+      {:error, error} = Tempo.from_iso8601("20260615/1315")
+      refute Exception.message(error) =~ "13-15"
+      assert Exception.message(error) =~ "`20260615/T1315`"
+    end
+
+    test "an end of six digits after a basic time is a year and a month, and the error says so" do
+      assert {:error, %Tempo.InvalidDateError{} = error} =
+               Tempo.from_iso8601("20260615T103000/113000")
+
+      assert Exception.message(error) =~ "is read as the year 1130 and the month 00"
+      assert Exception.message(error) =~ "`20260615T103000/T113000`"
+    end
+
+    test "the forms the error names are read, and a year after the start is a year" do
+      assert Tempo.from_iso8601!("2026-06-15/07-20") ==
+               Tempo.from_iso8601!("2026-06-15/2026-07-20")
+
+      assert Tempo.from_iso8601!("20260615T1030/T1130") ==
+               Tempo.from_iso8601!("2026-06-15T10:30/2026-06-15T11:30")
+
+      assert Tempo.from_iso8601!("20260615/2027") == Tempo.from_iso8601!("2026-06-15/2027")
+
+      # An end written in full that is before its start keeps the plain error.
+      {:error, error} = Tempo.from_iso8601("20260615/20260601")
+
+      assert Exception.message(error) ==
+               "interval :from endpoint is not earlier than its :to endpoint"
+    end
   end
 end

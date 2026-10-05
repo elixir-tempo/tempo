@@ -882,9 +882,75 @@ defmodule Tempo do
 
   defp do_from_iso8601(string, requested_calendar) do
     with {:ok, {tokens, extended}} <- Tokenizer.tokenize(string) do
-      from_tokens(tokens, extended, requested_calendar)
+      tokens |> from_tokens(extended, requested_calendar) |> named_as_written(string)
     end
   end
+
+  # An interval's end may leave out the components it shares with its start
+  # "provided that the resulting expression is unambiguous" (ISO 8601-1
+  # §5.5.1), and in the basic format digits alone are a date: four are a year
+  # and six a year and a month (§5.3.5). So `20260615/0720` ends in the year
+  # 720 and `20260615T1030/1130` in the year 1130, each before its start
+  # (decided 2026-10-05). The error for such an end says how it was read and
+  # how the end is written without the ambiguity, where it said only that the
+  # start was not earlier than the end.
+  defp named_as_written({:error, %error{} = exception}, string)
+       when error in [IntervalEndpointsError, InvalidDateError] do
+    basic_end = ~r/\A(?<date>\d{8})(?<time>T\d{2,6})?\/(?<end>\d{4}|\d{6})\z/
+
+    case Regex.named_captures(basic_end, string) do
+      %{"date" => date, "time" => time, "end" => digits} ->
+        {:error, with_reason(exception, basic_end_reason(string, date, time, digits))}
+
+      nil ->
+        {:error, exception}
+    end
+  end
+
+  defp named_as_written(result, _string), do: result
+
+  defp with_reason(%IntervalEndpointsError{} = exception, reason),
+    do: %{exception | reason: reason}
+
+  defp with_reason(%InvalidDateError{} = exception, reason),
+    do: %{exception | reason: reason, unit: nil, value: nil, valid_range: nil}
+
+  defp basic_end_reason(string, date, time, digits) do
+    "The end #{inspect(digits)} of #{inspect(string)} is read as #{basic_end_reading(digits)}: " <>
+      "in the basic format digits alone are a date (ISO 8601-1 §5.3.5), and an interval's end " <>
+      "may leave out its higher components only where the result is unambiguous (§5.5.1). " <>
+      basic_end_advice(date, time, digits)
+  end
+
+  defp basic_end_reading(<<year::binary-4>>), do: "the year #{String.to_integer(year)}"
+
+  defp basic_end_reading(<<year::binary-4, month::binary-2>>),
+    do: "the year #{String.to_integer(year)} and the month #{month}"
+
+  # An end of four digits after a date may be meant for its month and day,
+  # which the extended format writes without the ambiguity, or for a time of
+  # day, which keeps its `T` in the basic format as an end after a time does.
+  defp basic_end_advice(<<year::binary-4, month::binary-2, day::binary-2>>, "", digits) do
+    case month_and_day(digits) do
+      nil ->
+        "Write a time of day with its `T` (`#{year}#{month}#{day}/T#{digits}`), or the end in full."
+
+      month_day ->
+        "Write a month and a day in the extended format (`#{year}-#{month}-#{day}/#{month_day}`), " <>
+          "a time of day with its `T` (`#{year}#{month}#{day}/T#{digits}`), or the end in full."
+    end
+  end
+
+  defp basic_end_advice(date, time, digits) do
+    "Write a time of day with its `T` (`#{date}#{time}/T#{digits}`), or the end in full."
+  end
+
+  defp month_and_day(<<month::binary-2, day::binary-2>>) do
+    if String.to_integer(month) in 1..12 and String.to_integer(day) in 1..31,
+      do: "#{month}-#{day}"
+  end
+
+  defp month_and_day(_six_digits), do: nil
 
   # Everything after tokenization. Shared by `from_iso8601/1,2` and by
   # the profile parsers (`parse_date/1` and friends), which differ only
