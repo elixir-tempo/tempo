@@ -313,6 +313,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* An interval's end written with a time of day is read as the value is when it is written alone: a set, a range, an unspecified unit or a mask in it (`2026Y6M{1,15}DT10H/PT1H`, `R2/2026Y6M15DT{9,17}H/P1D`, `2026Y6M15DTX*H/2026Y6M16D`) was left as the tokenizer wrote it, which nothing reads. `inspect/1` and `Tempo.to_iso8601/1` raised for such an interval, `Tempo.to_interval/2` and `Tempo.select/2` raised or used the unread end, and a recurrence from such a start was refused where it is the occurrences from each value.
+
 * `Tempo.shift/3` reaches each value a set or a range names, in every calendar: `~o"2026Y6M{1,15}D"` plus a day is `~o"2026Y6M{2,16}D"`, and where no one value names what they land on the answer is the `Tempo.IntervalSet` of their spans (the 15th and the 30th of June a day on are 16 June and 1 July), where a step from the unit that holds the set was a `Tempo.ConversionError`. A set is no longer stepped as one value either, so hours added to a set of days in a zone land on each day's own reading, a date a set names in no year or month of its own is not stepped (`~o"{2024,2025}Y2M29D"` plus a day is 1 March 2024 alone), and week dates step by a year or a month as the dates they are.
 
 * An interval counted by a duration from a start or an end that holds a set (`2026Y6M{1,15}D/P1D`) is a `Tempo.IntervalEndpointsError` that names the interval as it is written, and so is such a span given to `Tempo.select/2` as a selector, which gave one span whose ends held the sets (`2026Y6M{1,15}D/7M{1,15}D`).

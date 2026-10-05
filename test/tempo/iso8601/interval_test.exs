@@ -471,4 +471,83 @@ defmodule Tempo.Parser.Interval.Test do
                "interval :from endpoint is not earlier than its :to endpoint"
     end
   end
+
+  # An end with a time of day is its own form to the tokenizer, and the
+  # parser passed that form by: what it holds stayed as the tokenizer wrote
+  # it (`day: {:all_of, [1, 15]}`, `hour: {:mask, :"X*"}`), which nothing
+  # reads. `inspect/1` and `Tempo.to_iso8601/1` raised a `FunctionClauseError`
+  # or a `Protocol.UndefinedError`, and `Tempo.to_interval/2` raised or gave
+  # a span from the unread end.
+  describe "an end written with a time of day" do
+    @ends_with_a_time [
+      "2026Y6M{1,15}DT10H",
+      "2026Y6M{1..5}DT10H",
+      "2026Y6M15DT{9,17}H",
+      "2026Y6M15DT10H{0,30}M",
+      "2026Y6M15DT10H30M{0,30}S",
+      "2026Y{6,7}M15DT10H",
+      "2026Y6MX*DT10H",
+      "2026Y6M15DTX*H",
+      "2026Y6M1XDT10H",
+      "2026Y6M15DT1XH",
+      "2026-06-{01,15}T10:00",
+      "T{9,14}H",
+      "T9H{0,30}M",
+      "TX*H"
+    ]
+
+    test "is read as the value it is when written alone" do
+      for text <- @ends_with_a_time do
+        value = Tempo.from_iso8601!(text)
+
+        assert %Interval{from: ^value, duration: %Tempo.Duration{}} =
+                 Tempo.from_iso8601!(text <> "/PT1H"),
+               text
+
+        assert %Interval{to: ^value} = Tempo.from_iso8601!("PT1H/" <> text), text
+        assert %Interval{from: ^value} = Tempo.from_iso8601!("R2/" <> text <> "/P1D"), text
+      end
+
+      assert %Interval{from: from, to: to} =
+               Tempo.from_iso8601!("2026Y6M{1,15}DT10H/2026Y7M{1,15}DT10H")
+
+      assert from == Tempo.from_iso8601!("2026Y6M{1,15}DT10H")
+      assert to == Tempo.from_iso8601!("2026Y7M{1,15}DT10H")
+    end
+
+    test "is written back, and read again as the same interval" do
+      for text <- @ends_with_a_time,
+          form <- [text <> "/PT1H", "PT1H/" <> text, "R2/#{text}/P1D"] do
+        interval = Tempo.from_iso8601!(form)
+
+        assert {:ok, written} = Tempo.to_iso8601(interval), form
+        assert Tempo.from_iso8601!(written) == interval, form
+        assert inspect(interval) =~ "~o", form
+      end
+    end
+
+    test "is converted, or refused, as the end without the time of day is" do
+      # A recurrence from a start that holds a set is one from each value.
+      {:ok, occurrences} = Tempo.to_interval(Tempo.from_iso8601!("R2/2026Y6M{1,15}DT10H/P1D"))
+
+      assert Enum.map(Tempo.IntervalSet.members(occurrences), &Interval.from/1) == [
+               Tempo.from_iso8601!("2026-06-01T10"),
+               Tempo.from_iso8601!("2026-06-02T10"),
+               Tempo.from_iso8601!("2026-06-15T10"),
+               Tempo.from_iso8601!("2026-06-16T10")
+             ]
+
+      # A span from a start that names several is no one span.
+      for form <- ["2026Y6M{1,15}DT10H/2026Y7M1D", "2026Y6M15DT{9,17}H/PT1H", "T{9,14}H/T16H"] do
+        assert {:error, %Tempo.IntervalEndpointsError{}} =
+                 Tempo.to_interval(Tempo.from_iso8601!(form)),
+               form
+      end
+
+      # An unspecified hour is the span of its day, read from the point it
+      # starts at.
+      assert Tempo.to_interval(Tempo.from_iso8601!("2026Y6M15DTX*H/2026Y6M16D")) ==
+               {:ok, Tempo.from_iso8601!("2026-06-15/2026-06-16")}
+    end
+  end
 end

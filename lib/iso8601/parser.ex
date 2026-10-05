@@ -418,8 +418,15 @@ defmodule Tempo.Iso8601.Parser do
 
   # Date and time parsing
 
-  def parse_date([{:date, date} | rest]) do
-    [{:date, parse_date(date)} | parse_date(rest)]
+  # An end of an interval, as the form the tokenizer gave it: a date, a date
+  # with a time of day, or a time of day. Each is read as a value written
+  # alone is, so a set, an unspecified unit or a mask in it is the same
+  # under a time of day as without one. An end with a time of day was passed
+  # by, and kept the tokenizer's `{:all_of, …}` and `{:mask, :"X*"}`, which
+  # nothing reads.
+  def parse_date([{form, tokens} | rest])
+      when form in [:date, :datetime, :time_of_day] and is_list(tokens) do
+    [{form, parse_date(tokens)} | parse_date(rest)]
   end
 
   def parse_date([{:repeat_rule, date} | rest]) do

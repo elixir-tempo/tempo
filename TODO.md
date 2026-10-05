@@ -8,7 +8,7 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Correctness
 
-* [ ] **A set before a time of day in an interval's or a recurrence's end is left unread** — `R2/2026Y6M{1,15}DT10H/PT1H` and `2026Y6M15DT{9,17}H/PT1H` hold `day: {:all_of, [1, 15]}` where a value holds the list, so `inspect/1` and `Tempo.to_iso8601/1` raise a `FunctionClauseError`, `Tempo.to_interval/2` raises a `ConversionError` or refuses where a recurrence from a set of days converts, and `Tempo.select/2` by such a span raises. It is the larger cause in the matrix baseline (35 cells). Found 2026-10-05.
+* [ ] **A selection of a time of day after a time of day cannot be written** — `2026Y6M15DT10HLT30MN`, the thirtieth minute of an hour, converts (`2026Y6M15DT10H30M/T31M`), and `inspect/1`, `Tempo.to_iso8601/1` and `to_iso8601!/1` raise a `FunctionClauseError` for it. It is 35 of the 41 cells of the matrix baseline. Found 2026-10-03, by the matrix.
 
 * [ ] **A step from an unspecified or masked week or day of the week is one value** — `Tempo.shift(~o"2026Y25WX*K", day: 1)` is the next week's Monday alone (`~o"2026-06-22"`), `~o"2026YX*W"` plus a week is `~o"2027Y1W"`, the Wednesday of any week (`2026YX*W3K`) plus five days is 4 January 2027 and `~o"X*K"` plus a day is `~o"1K"`, where `~o"2026Y6MX*D"` plus a day is one of the days from 2 June to 1 July; a masked week or day of the week (`2026Y2XW`, `2026Y25WXK`) is refused. On the month axis a step finer than the masked unit names every value between the ends of its block: `~o"2026Y6MX*D"` plus an hour is `[2026Y6M1DT1H..2026Y6M30DT1H]`, and `~o"202XY"` plus a month every month from February 2020 to February 2029, where the hours are thirty and the Februaries ten. Found 2026-10-05.
 
@@ -123,6 +123,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **An interval's end written with a time of day is read** — the parser passed by an end the tokenizer gave as a date with a time, or as a time, so a set, a range, an unspecified unit or a mask in it stayed `{:all_of, …}` or `{:mask, :"X*"}`: `inspect/1` and `to_iso8601/1` raised, `to_interval/2` and `select/2` raised or used the unread end, and a recurrence from such a start was refused. One clause of `parse_date/1` in `lib/iso8601/parser.ex` reads each form as a value written alone. 2026-10-06.
 
 * [x] **A shift reaches each value of a set** — decided 2026-10-04. Each value a set or a range names is stepped as the one value it is, in every calendar and zone, and what they land on is one value where one names it and the set of their spans where none does; a set is no longer stepped as one value, which gave other answers in a zone, for a date its set names in no year of its own and for week dates by a year. `shift_each/3` and `gathered/2` in `lib/math.ex`, measured by `Tempo.ShiftOfSetsTest` against `NaiveDateTime.shift/2` and `DateTime.add/3`. 2026-10-06.
 
