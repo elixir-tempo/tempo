@@ -15,6 +15,7 @@ defmodule Tempo.Iso8601.SetMembersTest do
 
   import Tempo.Sigils
 
+  alias Tempo.IntervalSet
   alias Tempo.Iso8601.Parser
   alias Tempo.UnitValues
 
@@ -163,7 +164,7 @@ defmodule Tempo.Iso8601.SetMembersTest do
     test "converts to the span of each year" do
       {:ok, set} = Tempo.to_interval(~o"{-5..-3}Y")
 
-      assert Enum.map(Tempo.IntervalSet.members(set), &Tempo.to_iso8601!/1) ==
+      assert Enum.map(IntervalSet.members(set), &Tempo.to_iso8601!/1) ==
                ["-5Y/-4Y", "-4Y/-3Y", "-3Y/-2Y"]
     end
 
