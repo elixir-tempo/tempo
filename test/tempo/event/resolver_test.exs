@@ -5,6 +5,7 @@ defmodule Tempo.Event.ResolverTest do
 
   import Tempo.Sigils
 
+  alias Calendrical.Hebrew
   alias Tempo.Event
   alias Tempo.Interval
   alias Tempo.IntervalSet
@@ -72,6 +73,21 @@ defmodule Tempo.Event.ResolverTest do
 
       assert [interval] = IntervalSet.members(set)
       assert Interval.from(interval) == ~o"2026Y10M1D"
+    end
+
+    test "is asked for the Gregorian years a year of another calendar runs through" do
+      # The Hebrew year 5786 runs from 23 September 2025 to 11 September 2026:
+      # the fiscal year that starts in it is 2026's, and its third quarter is
+      # 2025's, which starts on 1 October.
+      hebrew_year = Tempo.from_iso8601!("5786Y", Hebrew)
+
+      for {event, date} <- [{"fiscal-year-start", ~D[2026-04-01]}, {"fiscal-q3", ~D[2025-10-01]}] do
+        {:ok, recurrence} = Tempo.from_iso8601("R/../P1Y/FL(#{event})eN", Hebrew)
+        {:ok, set} = Tempo.to_interval(recurrence, within: hebrew_year)
+
+        assert [interval] = IntervalSet.members(set)
+        assert Tempo.to_date(Interval.from(interval)) == {:ok, Date.convert!(date, Hebrew)}
+      end
     end
   end
 

@@ -788,11 +788,13 @@ defmodule Tempo.RRule.Selection do
   end
 
   # Computed event (`(easter)e`, `(march-equinox)e`, …) — EXPAND for
-  # FREQ=YEARLY: resolve the event's date in each candidate year via
-  # `Tempo.Event` and emit it as a day-resolution occurrence. An unknown event
-  # or a year the resolver cannot reach (an equinox outside Astro's range) drops
-  # silently, like any other invalid combination. For finer FREQs it is a LIMIT:
-  # keep candidates already sitting on the event's date.
+  # FREQ=YEARLY: resolve the event in each candidate year via `Tempo.Event`
+  # and emit each date it falls on there as a day-resolution occurrence (one
+  # in a Gregorian year; one, none or two in a year of another calendar). An
+  # unknown event or a year the resolver cannot reach (an equinox outside
+  # Astro's range) drops silently, like any other invalid combination. For
+  # finer FREQs it is a LIMIT: keep candidates already sitting on the event's
+  # date.
   defp apply_role(:expand, {:event, name}, candidates, _scope, _selection, _wkst) do
     Enum.flat_map(candidates, fn candidate -> expand_event(candidate, name) end)
   end
@@ -1524,17 +1526,59 @@ defmodule Tempo.RRule.Selection do
     swap_dates(candidate, dates)
   end
 
-  # Resolve a computed event in the candidate's year and emit its date as a
-  # single day-resolution occurrence, in the candidate's own calendar. A year
-  # the resolver cannot reach, or an unknown event, yields no occurrence.
+  # Resolve a computed event in the candidate's year and emit each date it
+  # falls on there as a day-resolution occurrence, in the candidate's own
+  # calendar. A year the resolver cannot reach, or an unknown event, yields
+  # no occurrence.
   defp expand_event(%Interval{from: %Tempo{time: time, calendar: calendar}} = candidate, name) do
-    with year when is_integer(year) <- Keyword.get(time, :year),
-         {:ok, %Date{} = iso_date} <- Event.date(name, year, calendar),
-         {:ok, %Date{} = date} <- Date.convert(iso_date, calendar) do
-      [swap_date(candidate, date.year, date.month, date.day)]
-    else
-      _ -> []
+    case Keyword.get(time, :year) do
+      year when is_integer(year) ->
+        dates = for date <- event_dates_in_year(name, year, calendar), do: date_units(date)
+        swap_dates(candidate, dates)
+
+      _no_year ->
+        []
     end
+  end
+
+  defp date_units(%Date{year: year, month: month, day: day}), do: {year, month, day}
+
+  # An event is computed for a year of the Gregorian calendar and falls in it
+  # (`Tempo.Event.date/3`), so in the Gregorian calendar the event of a
+  # candidate's year is the event of that year. A year of another calendar
+  # runs through one, two or three Gregorian years, from the first of its
+  # days to the last as Calendrical gives them: the event is asked for in
+  # each, and the dates that fall in the candidate's year are the year's.
+  # They are one Easter in a Hebrew year, and none or two September equinoxes
+  # in a Hebrew year that begins after one or runs on to a second.
+  defp event_dates_in_year(name, year, Calendrical.Gregorian) do
+    case event_date(name, year, Calendrical.Gregorian) do
+      {:ok, %Date{} = date} -> [date]
+      _no_event -> []
+    end
+  end
+
+  defp event_dates_in_year(name, year, calendar) do
+    for gregorian_year <- gregorian_years(year, calendar),
+        {:ok, %Date{year: ^year} = date} <- [event_date(name, gregorian_year, calendar)],
+        do: date
+  end
+
+  # The Gregorian years a year of `calendar` runs through, none for a year
+  # the calendar does not have.
+  defp gregorian_years(year, calendar) do
+    with %Date{year: first} <- Calendrical.first_gregorian_day_of_year(year, calendar),
+         %Date{year: last} <- Calendrical.last_gregorian_day_of_year(year, calendar) do
+      first..last//1
+    else
+      _no_such_year -> []
+    end
+  end
+
+  # The date an event falls on in a Gregorian year, as a date of `calendar`.
+  defp event_date(name, gregorian_year, calendar) do
+    with {:ok, %Date{} = date} <- Event.date(name, gregorian_year, calendar),
+         do: Date.convert(date, calendar)
   end
 
   # LIMIT form (finer FREQs): does the candidate's date fall on the event?
@@ -1542,11 +1586,22 @@ defmodule Tempo.RRule.Selection do
     with year when is_integer(year) <- Keyword.get(time, :year),
          month when is_integer(month) <- Keyword.get(time, :month),
          day when is_integer(day) <- Keyword.get(time, :day),
-         {:ok, %Date{} = iso_date} <- Event.date(name, year, calendar),
-         {:ok, %Date{} = date} <- Date.convert(iso_date, calendar) do
-      date.month == month and date.day == day
+         {:ok, gregorian_year} <- gregorian_year_of(year, month, day, calendar),
+         {:ok, %Date{} = date} <- event_date(name, gregorian_year, calendar) do
+      date_units(date) == {year, month, day}
     else
       _ -> false
+    end
+  end
+
+  # The Gregorian year a date of `calendar` falls in, which is the year an
+  # event that falls on the date is computed for.
+  defp gregorian_year_of(year, _month, _day, Calendrical.Gregorian), do: {:ok, year}
+
+  defp gregorian_year_of(year, month, day, calendar) do
+    with {:ok, %Date{} = date} <- Date.new(year, month, day, calendar),
+         {:ok, %Date{year: gregorian_year}} <- Date.convert(date, Calendrical.Gregorian) do
+      {:ok, gregorian_year}
     end
   end
 

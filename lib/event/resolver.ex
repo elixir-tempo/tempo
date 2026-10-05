@@ -56,7 +56,9 @@ defmodule Tempo.Event.Resolver do
   Computes the date of one of the resolver's events in a given year.
 
   Tempo calls this only for a `name` the resolver's `known/0` claims, once per
-  candidate year while a recurrence's occurrences are listed.
+  candidate year while a recurrence's occurrences are listed. A recurrence of
+  another calendar than the Gregorian calls it for each Gregorian year a year
+  of its own runs through, and keeps the dates that fall in that year.
 
   ### Arguments
 

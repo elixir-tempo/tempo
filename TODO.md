@@ -8,7 +8,7 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Correctness
 
-* [ ] **A computed event in another calendar than the Gregorian is the event of the Gregorian year of that number** — `R2/5786Y/P1Y/FL(easter)eN` in the Hebrew calendar is `9546Y7M19D` and `9547Y6M16D`, the Easters of the Gregorian years 5786 and 5787 written as Hebrew dates, where the Easter that falls in the Hebrew year 5786 is 5 April 2026; `Tempo.select(hebrew_year, rule)` selects nothing for the same reason. Known to answer wrongly: the event is to be asked for the Gregorian years the period overlaps, or refused by the rule for 2.0 until it is. Found 2026-10-05.
+* [ ] **In a yearly rule the parts that name a day do not all hold at once** — RFC 5545 gives a yearly rule the days that satisfy every part it holds, and Tempo applies them one after another: a month does not limit a day of the year or a computed event beside it (`FREQ=YEARLY;BYMONTH=3;BYYEARDAY=100` is 10 April, `R/../P1Y/FL3M(easter)eN` is every Easter where `Tempo.explain/1` says "in March, on Easter"), several months list the day once each (`BYMONTH=3,4;BYYEARDAY=80,100` lists 21 March and 10 April twice), and a day of the month replaces a day of the year (`BYMONTHDAY=15;BYYEARDAY=74` is 15 March in a leap year, when day 74 is the 14th). To measure against the days of the year that satisfy every part. Found 2026-10-05.
 
 ### Conformance and completeness
 
@@ -34,11 +34,15 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **Traditional months that are sets or masks** — `2026Y{1,2}m` parses as a mask (`traditional_month: {:mask, [[1..2]]}`) and a masked one (`1Xm`) is a `ConversionError` from `Enum` and `to_interval/2`: nothing lists the traditional months a year has, which is Calendrical's to answer. Found 2026-10-03.
 
+* [ ] **A computed event in a period shorter than a year** — an event expands a yearly candidate and limits every other: `Tempo.select(~o"2026Y4M", ~o"L(easter)eN")` and a week's selection select nothing though Easter 2026 is 5 April, in ISO week 14, and `R/../P1M/FL(easter)eN` keeps a month only when its start's day is Easter. To decide whether an event expands in a month and a week too (the Easter in April), as a day of the month does in a month, where a monthly rule now reads "the start's day, when it is Easter". Found 2026-10-05.
+
 * [ ] **The RRULE writer writes parts RFC 5545 forbids for the frequency** — `Tempo.RRule.to_string/1` writes each selection token as its BY-part whatever the cadence: a numeric `BYDAY` in a weekly or a daily rule (`R/2026-06-01/P1W/FL3K2IN` is `FREQ=WEEKLY;BYDAY=2WE`, where `BYDAY=WE;BYSETPOS=2` says the same and is allowed), `BYWEEKNO` outside a yearly rule, `BYYEARDAY` in a daily, weekly or monthly one and `BYMONTHDAY` in a weekly one. Tempo reads each back as it was and a strict reader rejects the rule; to decide whether the writer refuses them or writes the allowed equivalent where there is one. Found 2026-10-05.
 
 * [ ] **A shift reaches each value of a set** — `~o"2026Y6M{1,15}D"` plus a day is `~o"2026Y6M{2,16}D"`: each value the set names is shifted and the results gathered into the value where one unit can hold them, and into an interval set where it cannot (`{15,30}D` plus a day is 16 June and 1 July), where a shift from a unit that holds several values is a `ConversionError`. Decided 2026-10-04. An unspecified day of a week is one case: `Tempo.shift(~o"2026Y25WX*K", day: 1)` is the next week's Monday alone (`~o"2026-06-22"`), where `~o"2026Y6MX*D"` plus a day is the days from 2 June to 1 July. Done for a value that holds days of the year (2026-10-05), which is stepped date by date and gathered as decided here: `gathered/2` in `lib/math.ex` is what the month and week axes are to be brought to.
 
 ### Errors and API
+
+* [ ] **A counted recurrence skips the years an event cannot be computed for** — `Tempo.to_interval(~o"R2/0500Y/P1Y/FL(march-equinox)eN")` is the equinoxes of 1000 and 1001, since Astro computes none before 1000 CE and a year with no occurrence is passed over as one a rule does not select. The same in a window is no occurrence. To decide whether a year the event cannot be computed for is an error naming the event's range. Found 2026-10-05.
 
 * [ ] **An impossible date's error names too little** — `Tempo.on(~o"2M29D", ~o"2027")` returns an `InvalidDateError` with only its reason ("29 is not valid. The valid values are 1..28"), naming no year, month or calendar.
 
@@ -121,6 +125,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A computed event in a year of another calendar** — the resolver asks `Tempo.Event.date/3` for each Gregorian year a candidate's year runs through (`Calendrical.first_gregorian_day_of_year/2` and `last_gregorian_day_of_year/2`) and keeps the dates that fall in that year, one, none or two; a candidate limited by an event is asked for the Gregorian year its own date falls in. `Tempo.EventCalendarTest` holds nine calendars, seven events and five years each against `Tempo.Event.date/2` converted by `Date.convert!/2`, with a count, a window, `Tempo.select/2`, a daily and a weekly rule, a weekday beside the event and a §12.10 window on it. 2026-10-05.
 
 * [x] **An event's name may hold digits** — the grammar reads a computed event's name as a letter, then letters, digits and hyphens, so `(fiscal-q3)e`, a name the `Tempo.Event.Resolver` documentation registers, is read in a selection where it was a `Tempo.ParseError`; a name that begins with a hyphen is no longer read. Found beside the events of other calendars. 2026-10-05.
 

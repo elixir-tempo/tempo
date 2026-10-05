@@ -287,6 +287,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A computed event in a recurrence or a selection of another calendar than the Gregorian is each day it falls on in the calendar's own year, asked for in the Gregorian years that year runs through: `R2/5786Y/P1Y/FL(easter)eN` in the Hebrew calendar is 18 Nisan 5786 and 19 Nisan 5787 (5 April 2026 and 28 March 2027), where it was the Easters of the Gregorian years 5786 and 5787, and `Tempo.select/2` of a Hebrew year selected none. A year holds one such day, none or two (the Hebrew year 5786 has no September equinox and 5787 two), and a §12.10 window on the event (`FLLL(easter)eN/-P7DN5K-1IN`, Good Friday) is anchored on the same day.
+
 * A computed event's name may hold digits after its first letter, so `(fiscal-q3)e`, a name the `Tempo.Event.Resolver` documentation registers, is read in a selection where it was a `Tempo.ParseError`. A name begins with a letter, so `(-q)e` is no longer read.
 
 * `Tempo.RRule.to_string/1` writes a day of the week counted from the end of the week as the weekday it is (`FL-1KN` is `BYDAY=SU`) and returns a `Tempo.ConversionError` for a day no week has (`FL8KN`), where it raised a `KeyError` for both.

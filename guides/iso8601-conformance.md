@@ -306,6 +306,18 @@ Tempo.to_interval(~o"R/../P1Y/FL(march-equinox@+09:00)eN", within: ~o"2002Y")
 #   → 2002-03-21
 ```
 
+An event is a day on the time line, worked out for a year of the Gregorian calendar. In a recurrence or a selection of another calendar it is each day the event falls on in the calendar's own year, written in that calendar: one Easter in a Hebrew year, and one September equinox, none or two, as the year begins and ends:
+
+```elixir
+# "Easter, in the Hebrew year 5786" is 18 Nisan, 5 April 2026
+Tempo.to_interval(~o"R/../P1Y/FL(easter)eN[u-ca=hebrew]", within: ~o"5786Y[u-ca=hebrew]")
+#   → 5786Y7M18D
+
+# 5786 begins the day after one September equinox and ends before the next
+Tempo.to_interval(~o"R/../P1Y/FL(september-equinox)eN[u-ca=hebrew]", within: ~o"5786Y[u-ca=hebrew]")
+#   → no occurrences
+```
+
 An unknown event name parses but resolves to no occurrences, so a typo yields an empty result rather than a crash, as do a zone on an event with no instant (`(easter@+09:00)e`) and a zone that is not one. Like `q`, an `e` selection round-trips through `inspect/1`/`Tempo.to_iso8601/1`; there is no RFC 5545 equivalent, so `Tempo.RRule.to_string/1` cannot express it.
 
 ### Traditional month — the `m` marker

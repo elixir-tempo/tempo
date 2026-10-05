@@ -23,6 +23,13 @@ defmodule Tempo.Event do
   once per period, when a recurrence such as `~o"R/../P1Y/FL(easter)eN"` is
   converted to its occurrences within a window. The primary public API is `date/2` (or `date/3`).
 
+  An event is a day on the time line, and `date/3` works it out for a year of
+  the Gregorian calendar. A recurrence or a selection of another calendar asks
+  for it in each Gregorian year its own year runs through, and lists the dates
+  that fall in that year, in its own calendar: the Easter of the Hebrew year
+  5786 is 18 Nisan, which is 5 April 2026, and a Hebrew year holds one
+  September equinox, none or two, as it begins and ends.
+
   A consumer application can add its own `(name)e` events — a fiscal calendar,
   a liturgical feast, any algorithm-fixed date — by implementing the
   `Tempo.Event.Resolver` behaviour and registering it with `config :ex_tempo,
