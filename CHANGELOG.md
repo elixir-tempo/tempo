@@ -301,6 +301,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A range of years that holds a year before year 1 is walked and converted as each of its years: `Enum.to_list(~o"{-5..-3}Y")` is the three years and `~o"{-1..1}Y"` the years either side of year 0, where each was a `Tempo.ConversionError` that took the range's negative end for a count from the end. A set of such years (`{-5,-3}Y`) was listed already.
+
 * A selector of `Tempo.select/2` written on another axis than its base selects the spans it names that start in the base: `Tempo.select(~o"2026-W25", ~o"15D")` and `Tempo.select(~o"2026-06", ~o"166O")` are 15 June 2026, where a day of a month from a week and a day of the year from a day were values of two axes (`2026Y25W15D`, `2026Y6M15D100O`), and a day of the year from a month, or a month and a day from a week, selected nothing. A week that runs across two months or two years selects in each, so `~o"1D"` from the week of 29 June is 1 July.
 
 * A constraint of `Tempo.select/2` names values among those its period has, as an integer index and a selection do: a count from the end that reaches past the period's start selects nothing (`Tempo.select(~o"2026-06", ~o"-45D")` was 17 June, the count taken from the end a second time), and a set or a range passes over a value the period lacks and keeps the rest (`~o"{1,30}D"` selects the 1st from February, where it selected nothing). A week a month does not have (`~o"25W"` from June) selects nothing, where it was a week no value names, and a value written twice (`~o"{1,-31}D"` from January) is selected once.

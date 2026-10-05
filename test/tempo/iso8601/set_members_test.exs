@@ -128,4 +128,47 @@ defmodule Tempo.Iso8601.SetMembersTest do
       assert Enum.to_list(~o"{2020,-3}Y") == [~o"-3Y", ~o"2020Y"]
     end
   end
+
+  describe "a range of years before the era" do
+    # A year below zero is a year before year 1 (ISO 8601-2 §4.4.1), never a
+    # count from the end, so a range of them is each of its years. The walk
+    # took a negative end of a range for a count from the end and refused to
+    # list it.
+    defp years(value), do: Enum.map(value, &Tempo.year/1)
+
+    test "is each of its years" do
+      for {text, expected} <- [
+            {"{-5..-3}Y", -5..-3//1},
+            {"{-3..2}Y", -3..2//1},
+            {"{-1..1}Y", -1..1//1},
+            {"{-9..-1//4}Y", -9..-1//4},
+            {"{-0005..-0003}", -5..-3//1}
+          ] do
+        value = Tempo.from_iso8601!(text)
+
+        assert {text, years(value)} == {text, Enum.to_list(expected)}
+        assert {text, Enum.count(value)} == {text, Range.size(expected)}
+      end
+    end
+
+    test "is each of its years beside another member, and under finer units" do
+      assert years(~o"{-5..-3,10}Y") == [-5, -4, -3, 10]
+
+      assert Enum.to_list(~o"{-5..-3}Y6M15D") == [~o"-5Y6M15D", ~o"-4Y6M15D", ~o"-3Y6M15D"]
+
+      assert Enum.to_list(~o"{-2..-1}Y{1,2}M") ==
+               [~o"-2Y1M", ~o"-2Y2M", ~o"-1Y1M", ~o"-1Y2M"]
+    end
+
+    test "converts to the span of each year" do
+      {:ok, set} = Tempo.to_interval(~o"{-5..-3}Y")
+
+      assert Enum.map(Tempo.IntervalSet.members(set), &Tempo.to_iso8601!/1) ==
+               ["-5Y/-4Y", "-4Y/-3Y", "-3Y/-2Y"]
+    end
+
+    test "a count from the end of another unit is still counted" do
+      assert Enum.to_list(~o"-5Y{-2..-1}M") == [~o"-5Y11M", ~o"-5Y12M"]
+    end
+  end
 end
