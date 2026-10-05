@@ -23,6 +23,7 @@ defmodule Tempo.RRule.PeriodPartsTest do
   alias Tempo.ConversionError
   alias Tempo.Interval
   alias Tempo.IntervalSet
+  alias Tempo.RRule
 
   # What is written, as text and as the numbers and ranges it names.
   @days_of_month [
@@ -224,7 +225,7 @@ defmodule Tempo.RRule.PeriodPartsTest do
     test "limits a rule whose candidates are days, as it did" do
       # A rule read from an RRULE states its start's day: the 15th of each
       # month, kept where it is in ISO week 25.
-      rule = Tempo.RRule.parse!("FREQ=MONTHLY;BYWEEKNO=25;COUNT=2", from: ~o"2026-01-15")
+      rule = RRule.parse!("FREQ=MONTHLY;BYWEEKNO=25;COUNT=2", from: ~o"2026-01-15")
       assert spans(Tempo.to_interval(rule)) == [{~D[2026-06-15], 1}, {~D[2032-06-15], 1}]
     end
   end
