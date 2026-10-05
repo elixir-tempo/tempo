@@ -287,6 +287,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A computed event's name may hold digits after its first letter, so `(fiscal-q3)e`, a name the `Tempo.Event.Resolver` documentation registers, is read in a selection where it was a `Tempo.ParseError`. A name begins with a letter, so `(-q)e` is no longer read.
+
 * `Tempo.RRule.to_string/1` writes a day of the week counted from the end of the week as the weekday it is (`FL-1KN` is `BYDAY=SU`) and returns a `Tempo.ConversionError` for a day no week has (`FL8KN`), where it raised a `KeyError` for both.
 
 * `Tempo.day_of_year/1`, `Tempo.day_of_week/1` and `Tempo.quarter_of_year/1` raise an `ArgumentError` for a value that holds several days of the year (`2026Y{100,200}O`), as they do for one that holds several months or days, where they answered for 1 January. `Tempo.trunc/2` takes such a value to `:day`, its days of the year, where it was a `Tempo.ResolutionError`.

@@ -280,7 +280,7 @@ The lowercase family — `q` (week start), `e` (computed event), `m`/`+m` (tradi
 
 ### Computed events — the `e` designator
 
-ISO 8601-2 has no notation for a recurrence whose date is fixed by an **algorithm** rather than the calendar: Easter (the paschal computus), an astronomical event (an equinox or solstice), or one of the 24 East Asian solar terms (jié-qì). This is the one family of holiday rules the standard genuinely cannot express, so Tempo adds a single project-specific selection designator, `e`, whose value is the event name in parentheses:
+ISO 8601-2 has no notation for a recurrence whose date is fixed by an **algorithm** rather than the calendar: Easter (the paschal computus), an astronomical event (an equinox or solstice), or one of the 24 East Asian solar terms (jié-qì). This is the one family of holiday rules the standard genuinely cannot express, so Tempo adds a single project-specific selection designator, `e`, whose value is the event name in parentheses, a lowercase letter followed by lowercase letters, digits and hyphens:
 
 ```text
 R/../P1Y/FL(easter)eN              Easter Sunday, every year

@@ -122,6 +122,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Done
 
+* [x] **An event's name may hold digits** — the grammar reads a computed event's name as a letter, then letters, digits and hyphens, so `(fiscal-q3)e`, a name the `Tempo.Event.Resolver` documentation registers, is read in a selection where it was a `Tempo.ParseError`; a name that begins with a hyphen is no longer read. Found beside the events of other calendars. 2026-10-05.
+
 * [x] **An RRULE is written from a recurrence of another calendar only where it reads the same** — `Tempo.NotBuilt.rrule/1` refuses, as `:rrule`, a recurrence of another calendar than the Gregorian that steps by months or years or selects by a month, a day of one, a day of the year or a week of the year, which RFC 5545 counts in the Gregorian calendar. One that steps by weeks, days or less and selects by weekday and time of day is written, its end as the Gregorian date it is and, in a calendar of weeks, its `WKST` as the day the calendar's weeks begin; `Tempo.RRule.OtherCalendarTest` reads each written rule again in the Gregorian calendar and compares its occurrences with the recurrence's. 2026-10-05.
 
 * [x] **A week of a calendar of months converts to an interval walked by days** — `Tempo.Iso8601.Unit.walked_by/2` names the unit a span is said to be walked by, `:day` for the days of a week where the calendar has months, and the interval, `Tempo.Interval.granularity/1` and `Tempo.explain/1` read it; the stepper fills a week to either unit as its first day, so the walk is what it was. A calendar of weeks keeps `day_of_week`. 2026-10-05.

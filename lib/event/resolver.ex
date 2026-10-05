@@ -45,7 +45,9 @@ defmodule Tempo.Event.Resolver do
   ### Returns
 
   * A list of the lowercase event-name strings the resolver owns, each usable
-    as `(name)e` in a selection.
+    as `(name)e` in a selection. A name is a lowercase letter followed by
+    lowercase letters, digits and hyphens (`fiscal-q3`); one written otherwise
+    is not read in a selection.
 
   """
   @callback known() :: [String.t()]

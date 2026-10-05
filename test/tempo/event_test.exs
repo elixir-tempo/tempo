@@ -91,6 +91,20 @@ defmodule Tempo.EventTest do
       end
     end
 
+    test "an event's name is a letter, then letters, digits and hyphens" do
+      for iso <- ["R/../P1Y/FL(fiscal-q3)eN", "2026YL(fiscal-q3)eN", "R/../P1Y/FL(q)eN"] do
+        {:ok, value} = Tempo.from_iso8601(iso)
+        assert Tempo.to_iso8601!(value) == iso
+      end
+
+      {:ok, value} = Tempo.from_iso8601("R/../P1Y/FL(fiscal-q3)eN")
+      assert value.repeat_rule.time == [selection: [event: "fiscal-q3"]]
+
+      for iso <- ["R/../P1Y/FL(3q)eN", "R/../P1Y/FL(-q)eN", "R/../P1Y/FL()eN"] do
+        assert {:error, %Tempo.ParseError{}} = Tempo.from_iso8601(iso)
+      end
+    end
+
     test "a hyphenated event name round-trips through to_iso8601/1 and inspect/1" do
       {:ok, value} = Tempo.from_iso8601("R/../P1Y/FL(march-equinox)eN")
 

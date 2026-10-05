@@ -461,14 +461,16 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # standard form: an algorithmically resolved recurrence such as Easter or an
   # astronomical event. The event name is a lowercase identifier delimited by
   # parentheses and closed by the lowercase `e` designator, e.g. `(easter)e`,
-  # `(march-equinox)e`. Lowercase marks it a Tempo extension (uppercase `E` is
-  # the EDTF long-year exponent). An event that happens at an instant may name
-  # the zone whose date it takes after an `@` — an IANA zone or a `±HH:MM`
-  # offset, `(march-equinox@+09:00)e` — kept as part of the name. It resolves
-  # per period via `Tempo.Event`.
+  # `(march-equinox)e`: a letter, then letters, digits and hyphens, so a
+  # registered name such as `fiscal-q3` is written as any other. Lowercase
+  # marks it a Tempo extension (uppercase `E` is the EDTF long-year exponent).
+  # An event that happens at an instant may name the zone whose date it takes
+  # after an `@` — an IANA zone or a `±HH:MM` offset, `(march-equinox@+09:00)e`
+  # — kept as part of the name. It resolves per period via `Tempo.Event`.
   def selection_event do
     ignore(string("("))
-    |> ascii_string([?a..?z, ?-], min: 1)
+    |> ascii_string([?a..?z], 1)
+    |> ascii_string([?a..?z, ?0..?9, ?-], min: 0)
     |> optional(
       string("@")
       |> ascii_string([?a..?z, ?A..?Z, ?0..?9, ?_, ?/, ?+, ?-, ?:], min: 1)

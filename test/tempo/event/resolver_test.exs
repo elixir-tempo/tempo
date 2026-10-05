@@ -65,6 +65,14 @@ defmodule Tempo.Event.ResolverTest do
 
       assert IntervalSet.members(set) == []
     end
+
+    test "is read when its name holds a digit" do
+      {:ok, recurrence} = Tempo.from_iso8601("R/../P1Y/FL(fiscal-q3)eN")
+      {:ok, set} = Tempo.to_interval(recurrence, within: ~o"2026")
+
+      assert [interval] = IntervalSet.members(set)
+      assert Interval.from(interval) == ~o"2026Y10M1D"
+    end
   end
 
   describe "an event no resolver claims" do
