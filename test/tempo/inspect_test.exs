@@ -196,4 +196,39 @@ defmodule Tempo.Iso8601.InspectTest do
       assert reparsed.extended.zone_id == original.extended.zone_id
     end
   end
+
+  # A time of day was written by clauses for one, two and three of its
+  # units, each taking what followed the first as a unit. A selection after
+  # an hour or a minute is no unit, so `inspect/1` and `Tempo.to_iso8601/1`
+  # raised a `FunctionClauseError` for a value that reads and converts.
+  describe "a selection within a time of day" do
+    @selected_within_a_time [
+      "2026Y6M15DT10HLT30MN",
+      "2026Y6M15DT10HLT-1MN",
+      "2026Y6M15DT10HLT{0,30}MN",
+      "2026Y6M15DT10HLT{0..2}MN",
+      "2026Y6M15DT10HLT{58..-1}MN",
+      "2026Y6M15DT10HLT30M15SN",
+      "2026Y6M15DT10H30MLT15SN",
+      "T10HLT30MN",
+      "T10H30MLT{0,30}SN"
+    ]
+
+    test "is written as it is read" do
+      for text <- @selected_within_a_time do
+        value = Tempo.from_iso8601!(text)
+
+        assert Tempo.to_iso8601(value) == {:ok, text}
+        assert Tempo.to_iso8601!(value) == text
+        assert inspect(value) == ~s(~o"#{text}")
+      end
+    end
+
+    test "leaves a time of day with nothing after it as it was written" do
+      assert Tempo.to_iso8601(~o"2026Y6M15DT10H30M15S") == {:ok, "2026Y6M15DT10H30M15S"}
+      assert Tempo.to_iso8601(~o"T10H30M") == {:ok, "T10H30M"}
+      assert Tempo.to_iso8601(~o"T10H30M15.5S") == {:ok, "T10H30M15.5S"}
+      assert Tempo.to_iso8601(~o"2026Y6M15DLT10H30MN") == {:ok, "2026Y6M15DLT10H30MN"}
+    end
+  end
 end

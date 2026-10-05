@@ -695,28 +695,12 @@ defmodule Tempo.Inspect do
     [inspect_value(first), inspect_value([second | t])]
   end
 
-  # The next three clauses are to ensure we only put one "T"
-  # in the output. Three because :hour, :minute, :second
-
-  defp inspect_value([{unit, _value1} = first, second, third])
-       when unit in [:hour, :minute, :second] do
-    [?T, inspect_value(first), inspect_value(second), inspect_value(third)]
+  # A time of day is written after one `T`, at its first unit.
+  defp inspect_value([{unit, _value} | _rest] = time) when unit in [:hour, :minute, :second] do
+    [?T | inspect_time_of_day(time)]
   end
 
-  defp inspect_value([{unit, _value1} = first, second])
-       when unit in [:hour, :minute, :second] do
-    [?T, inspect_value(first) | inspect_value(second)]
-  end
-
-  defp inspect_value([{unit, _value1} = first])
-       when unit in [:hour, :minute, :second] do
-    [?T, inspect_value(first)]
-  end
-
-  # Making sure the ?T time marker is inserted the
-  # first time we encounter a time unit of :hour, :minute
-  # or :second
-
+  # A selection writes the `T` of the first time unit it selects by.
   defp inspect_value([{:selection, selection} | rest]) do
     selection =
       Enum.reduce(selection, {[], nil}, fn
@@ -1183,6 +1167,15 @@ defmodule Tempo.Inspect do
   defp inspect_value({:interval, interval}), do: inspect_value(interval)
   defp inspect_value({:duration, duration}), do: inspect_value(duration)
   defp inspect_value(:undefined), do: ".."
+
+  # The units of a time of day after its `T`, and then what follows them: a
+  # selection within the time (`T10HLT30MN`, the thirtieth minute of the
+  # hour), which is written as a selection is.
+  defp inspect_time_of_day([{unit, _value} = entry | rest])
+       when unit in [:hour, :minute, :second],
+       do: [inspect_value(entry) | inspect_time_of_day(rest)]
+
+  defp inspect_time_of_day(rest), do: inspect_value(rest)
 
   defp group_time_designator(unit) when unit in [:hour, :minute, :second], do: ?T
   defp group_time_designator(_unit), do: []
