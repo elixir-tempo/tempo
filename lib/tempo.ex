@@ -3367,12 +3367,9 @@ defmodule Tempo do
   @spec at(t() | Interval.t(), t() | Interval.t()) ::
           {:ok, t() | Interval.t()} | {:error, error_reason()}
   def at(%__MODULE__{} = value, %__MODULE__{} = other) do
-    with :ok <- one_value(value),
-         :ok <- one_value(other),
-         :ok <- one_calendar(value, other) do
-      value = without_unspecified_year(value)
-      other = without_unspecified_year(other)
-      place(value, other, anchored?(value), anchored?(other))
+    with {:ok, placed} <- place_on(value, other),
+         :ok <- Validation.validate_zone_existence(placed) do
+      {:ok, placed}
     end
   end
 
@@ -3385,6 +3382,21 @@ defmodule Tempo do
        "at/2 and on/2 place a Tempo value on a value or an interval, not " <>
          "#{inspect(value)} on #{inspect(other)}."
      )}
+  end
+
+  # One value placed on another, and not yet held to the clock of its zone:
+  # `at/2` holds it there, as a value that is read is (02:30 on the night
+  # clocks go forward names no time, and nor does a day the zone leaves
+  # out). A recurrence's start placed on its window is not held: its first
+  # occurrence is then the reading the clock shows (`as_the_clock_shows/1`).
+  defp place_on(%__MODULE__{} = value, %__MODULE__{} = other) do
+    with :ok <- one_value(value),
+         :ok <- one_value(other),
+         :ok <- one_calendar(value, other) do
+      value = without_unspecified_year(value)
+      other = without_unspecified_year(other)
+      place(value, other, anchored?(value), anchored?(other))
+    end
   end
 
   # A month, a week and a day are numbered by their calendar: the sixth month
@@ -3473,13 +3485,7 @@ defmodule Tempo do
       else: placed(graft(other, value))
   end
 
-  # A value placed in a zone is held to the zone's clock as one that is read
-  # is: 02:30 on the night clocks go forward names no time there, and nor
-  # does a day the zone leaves out.
-  defp placed(%__MODULE__{} = tempo) do
-    with :ok <- Validation.validate_zone_existence(tempo), do: {:ok, tempo}
-  end
-
+  defp placed(%__MODULE__{} = tempo), do: {:ok, tempo}
   defp placed(error), do: error
 
   # An unspecified year (`X*Y6M`) is no year, so it is where the year of the
@@ -6728,21 +6734,21 @@ defmodule Tempo do
        )
        when is_integer(weekday) do
     case at_resolution(window_from, :week) do
-      %__MODULE__{} = week -> at(week, start)
+      %__MODULE__{} = week -> place_on(week, start)
       {:error, _no_week} -> weekday_on_or_after(window_from, weekday, finer)
     end
   end
 
   defp placed_start(window_from, unit, start) do
     with %__MODULE__{} = base <- at_resolution(window_from, placement_unit(unit)),
-         do: at(base, start)
+         do: place_on(base, start)
   end
 
   defp weekday_on_or_after(window_from, weekday, finer) do
     with %__MODULE__{} = day <- at_resolution(window_from, :day),
          {:ok, date} <- to_date(day) do
       first = date |> Kday.kday_on_or_after(weekday) |> from_date()
-      if finer == [], do: {:ok, first}, else: at(first, %{first | time: finer})
+      if finer == [], do: {:ok, first}, else: place_on(first, %{first | time: finer})
     end
   end
 
@@ -8198,7 +8204,9 @@ defmodule Tempo do
   defp recurrence_candidates(from, cadence, :contiguous, metadata) do
     occurrence_metadata = strip_span_directives(metadata)
 
-    Stream.unfold(from, &contiguous_candidate(&1, cadence, occurrence_metadata))
+    from
+    |> as_the_clock_shows()
+    |> Stream.unfold(&contiguous_candidate(&1, cadence, occurrence_metadata))
   end
 
   # Contiguous occurrences whose starts are each `from + i × cadence`: a
@@ -8212,7 +8220,7 @@ defmodule Tempo do
     occurrence_metadata = strip_span_directives(metadata)
 
     Stream.unfold(
-      {0, from},
+      {0, as_the_clock_shows(from)},
       &candidate_from_the_start(&1, from, cadence, occurrence_metadata)
     )
   end
@@ -8293,13 +8301,30 @@ defmodule Tempo do
   defp stepped_candidate(:stopped, _from, _cadence, _occurrence_end_fn, _metadata), do: nil
 
   defp stepped_candidate(step, from, cadence, occurrence_end_fn, metadata) do
-    with %Tempo{} = start <- add_n_durations(from, cadence, step),
+    with %Tempo{} = start <- nth_start(from, cadence, step),
          %Tempo{} = stop <- occurrence_end_fn.(start, step) do
       {{start, %Tempo.Interval{from: start, to: stop, metadata: metadata}}, step + 1}
     else
       failed -> {step_failure(failed), :stopped}
     end
   end
+
+  defp nth_start(from, _cadence, 0), do: as_the_clock_shows(from)
+  defp nth_start(from, cadence, step), do: add_n_durations(from, cadence, step)
+
+  # A start with no year, placed on a window, can be a reading the clock
+  # skips there: 02:30 on the night clocks go forward, or the day a zone
+  # leaves out. The first occurrence is then the reading that long after, as
+  # RFC 5545 §3.3.5 has it and as a step that lands there is, and each
+  # occurrence after it is stepped from the start as it is written. A start
+  # that is read is never such a reading, which is refused.
+  @no_step %Tempo.Duration{time: [day: 0]}
+
+  defp as_the_clock_shows(%Tempo{extended: %{zone_id: zone}} = start) when is_binary(zone) do
+    if Zone.zone_status(start) == :gap, do: Math.add(start, @no_step), else: start
+  end
+
+  defp as_the_clock_shows(start), do: start
 
   # A start or an end the cadence could not be stepped to, as the candidate
   # that ends the walk. A value that holds unspecified digits steps to a set

@@ -135,6 +135,52 @@ defmodule Tempo.RecurrenceAcrossGapTest do
     end
   end
 
+  describe "a recurrence with no year, placed on a window that starts where the clock skips it" do
+    @night_of_the_change ~o"2024-03-10[America/New_York]/2024-03-14[America/New_York]"
+
+    test "starts on the reading that long after, and is at its time of day from then" do
+      placed = Tempo.to_interval(~o"R3/T02H30M0S/P1D", within: @night_of_the_change)
+
+      assert starts(placed) == expected(~N[2024-03-10 02:30:00], "America/New_York", 1, 3)
+
+      {:ok, occurrences} = placed
+
+      assert Enum.map(IntervalSet.members(occurrences), &Tempo.to_iso8601!(Interval.from(&1))) ==
+               [
+                 "2024Y3M10DT3H30M0S[America/New_York]",
+                 "2024Y3M11DT2H30M0S[America/New_York]",
+                 "2024Y3M12DT2H30M0S[America/New_York]"
+               ]
+    end
+
+    test "of hours counts on from that reading" do
+      placed = Tempo.to_interval(~o"R3/T02H30M0S/PT1H", within: @night_of_the_change)
+      first = instant(~N[2024-03-10 02:30:00], "America/New_York")
+
+      assert starts(placed) == for(step <- 0..2, do: first + step * 3_600)
+    end
+
+    test "has occurrences that are each read back" do
+      for recurrence <- [~o"R3/T02H30M0S/P1D", ~o"R3/T02H30M0S/PT1H", ~o"R3/T02H0M0S/P1W"] do
+        {:ok, occurrences} = Tempo.to_interval(recurrence, within: @night_of_the_change)
+
+        for occurrence <- IntervalSet.members(occurrences) do
+          text = Tempo.to_iso8601!(occurrence)
+          assert {text, {:ok, occurrence}} == {text, Tempo.from_iso8601(text)}
+        end
+      end
+    end
+
+    test "is as it was where the window starts a day before" do
+      placed =
+        Tempo.to_interval(~o"R3/T02H30M0S/P1D",
+          within: ~o"2024-03-09[America/New_York]/2024-03-14[America/New_York]"
+        )
+
+      assert starts(placed) == expected(~N[2024-03-09 02:30:00], "America/New_York", 1, 3)
+    end
+  end
+
   describe "a recurrence the clock does not move" do
     test "of hours counts the time that passes" do
       {:ok, occurrences} = Tempo.to_interval(~o"R4/2024-03-09T02:30:00[America/New_York]/PT24H")

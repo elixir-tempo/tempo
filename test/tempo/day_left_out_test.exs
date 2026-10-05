@@ -105,8 +105,10 @@ defmodule Tempo.DayLeftOutTest do
     |> Tempo.from_iso8601!()
     |> Tempo.to_interval()
     |> spans()
-    |> Enum.map(&elem(&1, 0))
+    |> starts_of()
   end
+
+  defp starts_of(spans), do: Enum.map(spans, &elem(&1, 0))
 
   defp selector(text), do: Tempo.from_iso8601!(text)
 
@@ -285,6 +287,24 @@ defmodule Tempo.DayLeftOutTest do
 
         assert Enum.at(starts, 2) == settled(day, 1, zone)
         assert {text, occurrence_starts(text)} == {text, starts}
+      end
+    end
+
+    test "with no year, placed on a window that starts on it, starts on the day after" do
+      for {zone, day} <- @left_out do
+        # The day's number in each month, from the month that leaves it out.
+        recurrence = Tempo.from_iso8601!("R3/#{day.day}D/P1M")
+
+        window =
+          Tempo.from_iso8601!(
+            "#{Date.to_iso8601(Date.beginning_of_month(day))}[#{zone}]/" <>
+              "#{Date.to_iso8601(Date.shift(day, month: 4))}[#{zone}]"
+          )
+
+        starts = for step <- 0..2, do: settled(Date.shift(day, month: step), 1, zone)
+
+        assert {zone, recurrence |> Tempo.to_interval(within: window) |> spans() |> starts_of()} ==
+                 {zone, starts}
       end
     end
 

@@ -323,6 +323,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A recurrence with no year, placed on a window that starts where the clock skips its start, has its first occurrence on the reading that long after, as RFC 5545 has it, and each one after at its own time of day: `R3/T02H30M/P1D` within the days from 10 March 2024 in New York is 03:30 that night and 02:30 on the nights after. The first was on 02:30, which the clock skips and nothing reads.
+
 * Nothing gives a day its zone leaves out. In Samoa, which had no 30 December 2011, the 29th ends where the 31st begins and meets it, a step of days, months or years that lands on the 30th is the 31st (the 29th where it runs back), a recurrence has that occurrence on the 31st, once, and a walk, `Tempo.round/2` and `Tempo.select/2` pass over the day, where each gave a date that is then not read.
 
 * A recurrence of days or weeks from a time of day in a zone keeps that time of day after an occurrence the clock moves: `R4/2024-03-09T02:30[America/New_York]/P1D` is 02:30, 03:30 on the night clocks go forward, then 02:30 again, where every occurrence after that night was 03:30. A rule read from an RRULE (`FREQ=DAILY`) is so too.
