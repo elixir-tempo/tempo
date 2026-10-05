@@ -22,6 +22,7 @@ defmodule Tempo.EventCalendarTest do
   alias Calendrical.NRF
   alias Calendrical.Persian
   alias Tempo.Event
+  alias Tempo.EventError
   alias Tempo.Interval
   alias Tempo.IntervalSet
 
@@ -288,11 +289,15 @@ defmodule Tempo.EventCalendarTest do
                [~D[2002-03-21]]
     end
 
-    test "is no occurrence in a year the event cannot be computed for" do
-      # Astro computes an equinox from 1000 CE, and the Persian year 100 is
-      # in the eighth century.
+    test "is an error in a year the event cannot be computed for" do
+      # Astro computes an equinox from 1000 CE, and the Persian year 100
+      # begins in 721: the error names the year of the Gregorian calendar the
+      # event was asked for.
       equinoxes = read("R/../P1Y/FL(march-equinox)eN", Persian)
-      assert dates(Tempo.to_interval(equinoxes, within: read("0100Y", Persian))) == []
+
+      assert Tempo.to_interval(equinoxes, within: read("0100Y", Persian)) ==
+               {:error,
+                %EventError{event: "march-equinox", year: 721, reason: :year_out_of_range}}
     end
   end
 end

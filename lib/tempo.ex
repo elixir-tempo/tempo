@@ -111,6 +111,7 @@ defmodule Tempo do
   alias Tempo.Duration
   alias Tempo.Enumeration
   alias Tempo.Enumeration.Zone
+  alias Tempo.EventError
   alias Tempo.Explain
   alias Tempo.FloatingTempoError
   alias Tempo.Interval
@@ -6361,6 +6362,8 @@ defmodule Tempo do
     `~o"2026-02-3X"`, as February has no 30th or 31st — or a set none
     of whose values exists does, `~o"2026Y{2,6}M31D"`.
 
+  * `{:error, %Tempo.EventError{}}` when a computed event has no date where the value asks for it: a year the event is not computed for (`~o"R2/0500Y/P1Y/FL(march-equinox)eN"`, an equinox being computed from 1000 CE), or a name no resolver knows. The error names the event and the year.
+
   ### Examples
 
       iex> {:ok, tempo} = Tempo.from_iso8601("2026-01")
@@ -6869,7 +6872,8 @@ defmodule Tempo do
   # way, so none repeats and they come in time order, never coalesced. The walk
   # ends once the horizon passes with no occurrence, or where a window cannot be
   # materialised (beyond a calendar's range); an error in the first window is
-  # returned.
+  # returned, and a computed event with no date in a later one is raised when
+  # the walk reaches it (`walked/5`).
   defp lazy_occurrences(value, window_from, opts) do
     base = value |> cadence_unit() |> walk_base()
     walk_opts = Keyword.delete(opts, :coalesce)
@@ -6905,11 +6909,21 @@ defmodule Tempo do
   end
 
   # A window's occurrences that start in it, and the walk's next state; a window
-  # that cannot be materialised ends the walk.
+  # that cannot be materialised ends the walk. One in which a computed event
+  # has no date does not end it quietly, which would say the event stops
+  # happening: the walk goes back to its smallest window, so that it gives
+  # every occurrence before the year the event is not computed for, and there
+  # it raises the event's error, as `Enum` raises for a walk it cannot make.
   defp walked({:ok, set}, window_from, window_to, step, horizon) do
     found = set |> IntervalSet.members() |> Enum.filter(&starts_from?(&1, window_from))
     {found, {window_to, step + 1, horizon_after(horizon, found)}}
   end
+
+  defp walked({:error, %EventError{}}, window_from, _window_to, step, horizon) when step > 0,
+    do: {[], {window_from, 0, horizon}}
+
+  defp walked({:error, %EventError{} = no_date}, _window_from, _window_to, _step, _horizon),
+    do: raise(no_date)
 
   defp walked({:error, _reason}, _window_from, _window_to, _step, _horizon), do: nil
 
@@ -7972,6 +7986,19 @@ defmodule Tempo do
     |> Stream.take_while(&walking?(&1, start_predicate))
     |> Stream.take(@recurrence_safety_cap)
     |> Stream.flat_map(&selected(&1, selection_fn))
+    |> until_failure()
+  end
+
+  # A walk ends with its first failure: a step the cadence could not take, or
+  # a selection that has no answer for a candidate (a computed event with no
+  # date in its year). The failure is the walk's last element, which
+  # `walked/2` returns as its error.
+  defp until_failure(occurrences) do
+    Stream.transform(occurrences, :walking, fn
+      _occurrence, :failed -> {:halt, :failed}
+      {:error, _reason} = failure, :walking -> {[failure], :failed}
+      occurrence, :walking -> {[occurrence], :walking}
+    end)
   end
 
   # A step the cadence could not take is the walk's last candidate, kept so
@@ -8086,9 +8113,13 @@ defmodule Tempo do
     origin_day = origin_day_of(interval)
 
     fn candidate ->
-      candidate
-      |> Selection.apply(rule, freq, origin_day: origin_day, keep_span: explicit_span?)
-      |> resize_selected_occurrences(resize?)
+      case Selection.apply(candidate, rule, freq,
+             origin_day: origin_day,
+             keep_span: explicit_span?
+           ) do
+        {:error, _reason} = failure -> [failure]
+        occurrences -> resize_selected_occurrences(occurrences, resize?)
+      end
     end
   end
 
@@ -9620,16 +9651,33 @@ defmodule Tempo do
     finer_context = Keyword.delete(context, :year)
 
     with {:ok, window} <- within_window(opts),
-         {:ok, years} <- selection_years(tempo, Keyword.get(context, :year), window) do
-      for year <- years,
-          member <- context_members(%{tempo | time: [{:year, year} | finer_context]}),
-          occurrence <- member_selection(member, rule, cadence) do
-        occurrence
-      end
+         {:ok, years} <- selection_years(tempo, Keyword.get(context, :year), window),
+         members = selection_members(tempo, years, finer_context),
+         {:ok, occurrences} <- members_selection(members, rule, cadence) do
+      occurrences
       |> IntervalSet.new()
       |> keep_occurrences_in_window(window)
       |> with_trailing_units(trailing)
     end
+  end
+
+  # Each period of the context the selection resolves in: a year, or a month
+  # of a year, of each year the context names.
+  defp selection_members(tempo, years, finer_context) do
+    for year <- years,
+        member <- context_members(%{tempo | time: [{:year, year} | finer_context]}),
+        do: member
+  end
+
+  # The dates the selection picks in every period, or the error of the first
+  # period it has no answer for.
+  defp members_selection(members, rule, cadence) do
+    Enum.reduce_while(members, {:ok, []}, fn member, {:ok, occurrences} ->
+      case member_selection(member, rule, cadence) do
+        {:error, _reason} = error -> {:halt, error}
+        selected -> {:cont, {:ok, occurrences ++ selected}}
+      end
+    end)
   end
 
   # The dates the selection picks in one period of the context: the period,
@@ -9639,9 +9687,12 @@ defmodule Tempo do
     {start, recurrence} =
       fill_selection_start(member, %Tempo.Interval{from: member, repeat_rule: rule})
 
-    %Tempo.Interval{from: start, to: Math.add(start, cadence)}
-    |> Selection.apply(rule, freq_of(cadence), origin_day: origin_day_of(recurrence))
-    |> resize_selected_occurrences(true)
+    candidate = %Tempo.Interval{from: start, to: Math.add(start, cadence)}
+
+    case Selection.apply(candidate, rule, freq_of(cadence), origin_day: origin_day_of(recurrence)) do
+      {:error, _reason} = error -> error
+      occurrences -> resize_selected_occurrences(occurrences, true)
+    end
   end
 
   # The years a context names — a year, a list of years and ranges, a mask
@@ -10954,6 +11005,8 @@ defmodule Tempo do
   (`~o"2026-06-15/.."`) gives a lazy set, walked as far as it is
   taken. What is selected keeps the metadata of what it is selected
   from. See `Tempo.Select` for the full vocabulary.
+
+  A computed event is selected from the year, the month or the week it falls in (`Tempo.select(~o"2026Y4M", ~o"L(easter)eN")` is 5 April). One with no date where it is asked for, a year it is not computed for or a name no resolver knows, is `{:error, %Tempo.EventError{}}`.
 
   ### Examples
 

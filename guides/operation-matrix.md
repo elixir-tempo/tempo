@@ -156,6 +156,8 @@ Each error in the table is an exception module, returned in an `{:error, excepti
 
 * **`Tempo.UnboundedRecurrenceError`** — a recurrence with no count and no end, which needs a `:within` window.
 
+* **`Tempo.EventError`** — a computed event (`(easter)e`) has no date where a recurrence or a selection asks for it: a year the event is not computed for, or a name no resolver knows. It names the event and the year.
+
 * **`Tempo.UnboundedSetError`** — the days of a span with no end, which cannot be counted or listed.
 
 * **`ArgumentError`** — the value is of another kind than the function takes: a duration given to a function of a date, an interval or a set to a function of one value.

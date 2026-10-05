@@ -320,7 +320,7 @@ Tempo.to_interval(~o"R/../P1Y/FL(september-equinox)eN[u-ca=hebrew]", within: ~o"
 #   → no occurrences
 ```
 
-An unknown event name parses but resolves to no occurrences, so a typo yields an empty result rather than a crash, as do a zone on an event with no instant (`(easter@+09:00)e`) and a zone that is not one. Like `q`, an `e` selection round-trips through `inspect/1`/`Tempo.to_iso8601/1`; there is no RFC 5545 equivalent, so `Tempo.RRule.to_string/1` cannot express it.
+An event that has no date where it is asked for is an error, a `Tempo.EventError` that names the event and the year: a name no resolver knows, a year the event is not computed for (an equinox and a solstice are computed from 1000 CE to 3000 CE), a zone on an event with no instant (`(easter@+09:00)e`) and a zone that is not one. No occurrence would say that the event did not happen. Like `q`, an `e` selection round-trips through `inspect/1`/`Tempo.to_iso8601/1`; there is no RFC 5545 equivalent, so `Tempo.RRule.to_string/1` cannot express it.
 
 ### Traditional month — the `m` marker
 

@@ -7,6 +7,7 @@ defmodule Tempo.Event.ResolverTest do
 
   alias Calendrical.Hebrew
   alias Tempo.Event
+  alias Tempo.EventError
   alias Tempo.Interval
   alias Tempo.IntervalSet
 
@@ -60,11 +61,12 @@ defmodule Tempo.Event.ResolverTest do
       assert Interval.from(interval) == ~o"2026Y4M1D"
     end
 
-    test "yields zero occurrences for a year the resolver reports it cannot compute" do
+    test "returns the resolver's reason for a year it reports it cannot compute" do
       {:ok, recurrence} = Tempo.from_iso8601("R/../P1Y/FL(fiscal-year-start)eN")
-      {:ok, set} = Tempo.to_interval(recurrence, within: ~o"1999")
 
-      assert IntervalSet.members(set) == []
+      assert Tempo.to_interval(recurrence, within: ~o"1999") ==
+               {:error,
+                %EventError{event: "fiscal-year-start", year: 1999, reason: :before_fiscal_epoch}}
     end
 
     test "is read when its name holds a digit" do
@@ -96,10 +98,11 @@ defmodule Tempo.Event.ResolverTest do
       assert Event.date("brigadoon", 2026) == {:error, {:unknown_event, "brigadoon"}}
     end
 
-    test "yields zero occurrences rather than raising" do
+    test "is an error where a recurrence asks for it" do
       {:ok, recurrence} = Tempo.from_iso8601("R/../P1Y/FL(brigadoon)eN")
-      assert {:ok, set} = Tempo.to_interval(recurrence, within: ~o"2026")
-      assert IntervalSet.members(set) == []
+
+      assert Tempo.to_interval(recurrence, within: ~o"2026") ==
+               {:error, %EventError{event: "brigadoon", reason: :unknown_event}}
     end
   end
 end

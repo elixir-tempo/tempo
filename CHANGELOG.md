@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A computed event with no date where a recurrence or a selection asks for it is an error, the new `Tempo.EventError`, which names the event and the year: `Tempo.to_interval(~o"R/../P1Y/FL(march-equinox)eN", within: ~o"0500Y")`, an equinox being computed from 1000 CE, and `(brigadoon)e`, a name no resolver knows, where each was no occurrence and `R2/0500Y/P1Y/FL(march-equinox)eN` was the equinoxes of 1000 and 1001. A registered `Tempo.Event.Resolver`'s `{:error, reason}` is the error's `:reason`, a zone on an event with no instant is one too, and a walk raises it.
+
 * A computed event is each of its days that falls in the period it is selected in, a year, a month or a week: `Tempo.select(~o"2026Y4M", ~o"L(easter)eN")` and the selection from ISO week 14 are 5 April 2026, where a month and a week selected nothing unless they started on the event. `R2/2026-01-05/P1M/FL(easter)eN` is the Easter of each month that has one, 5 April 2026 and 28 March 2027, where it was the 5th of a month when that was Easter (2026 and 2037); a daily or finer recurrence keeps the occurrences on the event's day, as before.
 
 * `Tempo.RRule.to_string/1` writes a rule only as RFC 5545 §3.3.10 allows its frequency: a numbered weekday outside a monthly rule and a yearly rule with no `BYWEEKNO` is the weekday and its position (`R/2026-06-01/P1W/FL3K2IN` is `FREQ=WEEKLY;BYDAY=WE;BYSETPOS=2`, where it was `BYDAY=2WE`). `BYMONTHDAY` in a weekly rule, `BYYEARDAY` in a daily, weekly or monthly one, `BYWEEKNO` in any but a yearly one and a `BYSETPOS` with no other part return a `Tempo.ConversionError` naming the part and the frequency, where each was written.

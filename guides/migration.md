@@ -94,6 +94,8 @@ These keep their names and change their meaning:
 
 * **A recurrence across the end of a month** — its occurrences are consecutive, each ending where the next starts.
 
+* **A computed event** — each of its days that falls in a year, a month or a week, where 1.x found it in a year alone; and one with no date where it is asked for (a year it is not computed for, a name no resolver knows) is a `Tempo.EventError`, where 1.x gave no occurrence.
+
 * **A rule read from an RRULE with a start** — states what RFC 5545 takes from the start (a weekly rule's weekday, a monthly rule's day of the month, a yearly rule's month and day), so a month that lacks the day is passed over and each occurrence is as long as the start is precise, where 1.x listed the month's last day and occurrences a cadence long.
 
 * **A value with no zone beside one with a zone** — refused by the set operations and the sorter, where the floating one was read as UTC.

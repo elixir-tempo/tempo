@@ -57,6 +57,7 @@ defmodule Tempo.RRule.Selection do
   alias Calendrical.Kday
   alias Tempo.Compare
   alias Tempo.Event
+  alias Tempo.EventError
   alias Tempo.Interval
   alias Tempo.Mask
   alias Tempo.Math
@@ -104,6 +105,8 @@ defmodule Tempo.RRule.Selection do
     rejection, `[candidate]` on passthrough or LIMIT accept,
     `[c1, c2, …]` on EXPAND.
 
+  * `{:error, %Tempo.EventError{}}` when the selection holds a computed event that has no date where it is asked for: a year outside those it is computed for, or a name no resolver knows.
+
   ### Examples
 
       iex> candidate = %Tempo.Interval{from: ~o"2022-06-15", to: ~o"2022-06-16"}
@@ -117,7 +120,8 @@ defmodule Tempo.RRule.Selection do
       []
 
   """
-  @spec apply(Interval.t(), Tempo.t() | nil, atom(), keyword()) :: [Interval.t()]
+  @spec apply(Interval.t(), Tempo.t() | nil, atom(), keyword()) ::
+          [Interval.t()] | {:error, EventError.t()}
   def apply(candidate, repeat_rule, freq, options \\ [])
 
   def apply(%Interval{} = candidate, nil, _freq, _options), do: [candidate]
@@ -144,6 +148,10 @@ defmodule Tempo.RRule.Selection do
       |> with_units(units, Keyword.get(context, :keep_span, false))
     end)
   end
+
+  # What the parts of a selection give is a list of occurrences, or the
+  # error of a computed event that has no date where the selection asks for
+  # one (`Tempo.EventError`), which every step from there hands on as it is.
 
   # No selection shape we recognise — pass through rather than
   # crash. Future phases replace this catch-all with a specific
@@ -234,6 +242,7 @@ defmodule Tempo.RRule.Selection do
   # The units after a selection apply to every date it picks (ISO 8601-2
   # §12.11.2): the selection, its position applied last of all, picks the
   # day, and `T9H` then makes it 09:00 that day (§12.9 Example 5).
+  defp with_units({:error, _reason} = error, _units, _keep_span?), do: error
   defp with_units(occurrences, [], _keep_span?), do: occurrences
 
   defp with_units(occurrences, units, keep_span?) do
@@ -319,7 +328,7 @@ defmodule Tempo.RRule.Selection do
       candidate
       |> map_endpoints(&week_unit_as_month/1)
       |> select.(Enum.map(selection, &week_selector_as_month/1), week_period_as_month(freq))
-      |> Enum.map(&map_endpoints(&1, fn unit -> month_unit_as_week(unit) end))
+      |> in_week_terms()
     else
       select.(candidate, selection, freq)
     end
@@ -327,6 +336,11 @@ defmodule Tempo.RRule.Selection do
 
   defp in_calendar_terms(candidate, selection, freq, select),
     do: select.(candidate, selection, freq)
+
+  defp in_week_terms({:error, _reason} = error), do: error
+
+  defp in_week_terms(occurrences),
+    do: Enum.map(occurrences, &map_endpoints(&1, fn unit -> month_unit_as_week(unit) end))
 
   defp week_calendar?(calendar) do
     Code.ensure_loaded?(calendar) and function_exported?(calendar, :calendar_base, 0) and
@@ -403,17 +417,29 @@ defmodule Tempo.RRule.Selection do
   defp resolve_in_period(candidate, selection, freq, wkst) do
     {years, selection} = Keyword.pop(selection, :year)
 
-    if period_selected?(candidate, years) do
-      selection
-      |> Enum.sort_by(&application_order_key/1)
-      |> Enum.reduce({[candidate], freq}, fn entry, {candidates, scope} ->
-        {apply_entry(entry, candidates, scope, selection, wkst), scope_after(entry, scope)}
-      end)
-      |> elem(0)
-    else
-      []
+    if period_selected?(candidate, years),
+      do: resolve_parts(candidate, selection, freq, wkst),
+      else: []
+  end
+
+  # Each part in the order it applies, the scope it leaves handed to the
+  # next, until one has no answer.
+  defp resolve_parts(candidate, selection, freq, wkst) do
+    selection
+    |> Enum.sort_by(&application_order_key/1)
+    |> Enum.reduce_while({[candidate], freq}, &resolve_part(&1, &2, selection, wkst))
+    |> selected()
+  end
+
+  defp resolve_part(entry, {candidates, scope}, selection, wkst) do
+    case apply_entry(entry, candidates, scope, selection, wkst) do
+      {:error, _reason} = error -> {:halt, error}
+      selected -> {:cont, {selected, scope_after(entry, scope)}}
     end
   end
+
+  defp selected({:error, _reason} = error), do: error
+  defp selected({occurrences, _scope}), do: occurrences
 
   defp period_selected?(_candidate, nil), do: true
   defp period_selected?(candidate, years), do: year_selected?(year_of(candidate), years)
@@ -463,23 +489,41 @@ defmodule Tempo.RRule.Selection do
          wkst
        ) do
     inner_selection = scope ++ inner_selection(inner)
-    starts = apply_selection(candidate, inner_selection, freq)
 
     # `:origin_day`/`:keep_span`/`:wkst` are passthrough context, not
     # selectors, so they do not make a window non-terminal.
-    case Enum.reject(within, fn {key, _value} -> key in [:origin_day, :keep_span, :wkst] end) do
-      [] ->
-        # A terminal window (no inner selectors) is itself the occurrence: the
-        # interval from the window's start for the given duration (§12.11.3 Example 1).
-        Enum.map(starts, fn start -> window_interval(start, duration) end)
+    selectors =
+      Enum.reject(within, fn {key, _value} -> key in [:origin_day, :keep_span, :wkst] end)
 
-      selectors ->
-        Enum.flat_map(starts, fn start ->
-          start
-          |> window_days(duration)
-          |> apply_window_selectors(selectors, wkst)
-        end)
-    end
+    candidate
+    |> apply_selection(inner_selection, freq)
+    |> selected_in_windows(duration, selectors, wkst)
+  end
+
+  defp selected_in_windows({:error, _reason} = error, _duration, _selectors, _wkst), do: error
+
+  # A terminal window (no inner selectors) is itself the occurrence: the
+  # interval from the window's start for the given duration (§12.11.3 Example 1).
+  defp selected_in_windows(starts, duration, [], _wkst),
+    do: Enum.map(starts, fn start -> window_interval(start, duration) end)
+
+  defp selected_in_windows(starts, duration, selectors, wkst) do
+    each_candidate(starts, fn start ->
+      case start |> window_days(duration) |> apply_window_selectors(selectors, wkst) do
+        {:error, _reason} = error -> error
+        occurrences -> {:ok, occurrences}
+      end
+    end)
+  end
+
+  # Each candidate's occurrences in turn, or the first error one of them is.
+  defp each_candidate(candidates, occurrences_of) do
+    Enum.reduce_while(candidates, [], fn candidate, selected ->
+      case occurrences_of.(candidate) do
+        {:ok, occurrences} -> {:cont, selected ++ occurrences}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
   end
 
   defp inner_selection(%Tempo{time: [selection: selection]}), do: selection
@@ -491,8 +535,11 @@ defmodule Tempo.RRule.Selection do
   defp apply_window_selectors(day_candidates, outer, wkst) do
     outer
     |> Enum.sort_by(&application_order_key/1)
-    |> Enum.reduce(day_candidates, fn entry, candidates ->
-      apply_entry(entry, candidates, :day, outer, wkst)
+    |> Enum.reduce_while(day_candidates, fn entry, candidates ->
+      case apply_entry(entry, candidates, :day, outer, wkst) do
+        {:error, _reason} = error -> {:halt, error}
+        selected -> {:cont, selected}
+      end
     end)
   end
 
@@ -821,28 +868,35 @@ defmodule Tempo.RRule.Selection do
   # day-resolution occurrence (one in a Gregorian year; one, none or two in a
   # year of another calendar; one or none in a month or a week). An unknown
   # event or a year the resolver cannot reach (an equinox outside Astro's
-  # range) drops silently, like any other invalid combination. For finer
-  # FREQs it is a LIMIT: keep candidates already sitting on the event's date.
+  # range) is the selection's error, a `Tempo.EventError`: no occurrence
+  # would say the event did not happen. For finer FREQs it is a LIMIT: keep
+  # candidates already sitting on the event's date.
   defp apply_role(:expand, {:event, name}, candidates, :year, selection, _wkst) do
-    Enum.flat_map(candidates, fn candidate ->
-      candidate |> event_dates(name) |> swap_in_selected_month(candidate, selection)
+    each_candidate(candidates, fn candidate ->
+      with {:ok, dates} <- event_dates(candidate, name),
+           do: {:ok, swap_in_selected_month(dates, candidate, selection)}
     end)
   end
 
   defp apply_role(:expand, {:event, name}, candidates, :month, _selection, _wkst) do
-    Enum.flat_map(candidates, fn candidate ->
-      swap_dates(candidate, candidate |> event_dates(name) |> in_month_of(candidate))
+    each_candidate(candidates, fn candidate ->
+      with {:ok, dates} <- event_dates(candidate, name),
+           do: {:ok, swap_dates(candidate, in_month_of(dates, candidate))}
     end)
   end
 
   defp apply_role(:expand, {:event, name}, candidates, :week, _selection, wkst) do
-    Enum.flat_map(candidates, fn candidate ->
-      swap_dates(candidate, event_dates_in_week(candidate, name, wkst))
+    each_candidate(candidates, fn candidate ->
+      with {:ok, dates} <- event_dates_in_week(candidate, name, wkst),
+           do: {:ok, swap_dates(candidate, dates)}
     end)
   end
 
   defp apply_role(:limit, {:event, name}, candidates, _scope, _selection, _wkst) do
-    Enum.filter(candidates, fn candidate -> on_event_date?(candidate, name) end)
+    each_candidate(candidates, fn candidate ->
+      with {:ok, on_its_day?} <- on_event_date(candidate, name),
+           do: {:ok, if(on_its_day?, do: [candidate], else: [])}
+    end)
   end
 
   # BYWEEKNO — EXPAND for YEARLY (only valid FREQ per RFC).
@@ -1581,15 +1635,16 @@ defmodule Tempo.RRule.Selection do
   end
 
   # Resolve a computed event in the candidate's year: each date it falls on
-  # there, in the candidate's own calendar. A year the resolver cannot reach,
-  # or an unknown event, has none.
+  # there, in the candidate's own calendar, or the error of an event that has
+  # no date in a year it is asked for.
   defp event_dates(%Interval{from: %Tempo{time: time, calendar: calendar}}, name) do
     case Keyword.get(time, :year) do
       year when is_integer(year) ->
-        for date <- event_dates_in_year(name, year, calendar), do: date_units(date)
+        with {:ok, dates} <- event_dates_in_year(name, year, calendar),
+             do: {:ok, Enum.map(dates, &date_units/1)}
 
       _no_year ->
-        []
+        {:ok, []}
     end
   end
 
@@ -1600,20 +1655,28 @@ defmodule Tempo.RRule.Selection do
   # days are in, a week at the turn of a year being in two.
   defp event_dates_in_week(%Interval{from: %Tempo{calendar: calendar}} = candidate, name, wkst) do
     case week_date_range(candidate, wkst) do
-      nil ->
-        []
-
-      days ->
-        in_week = MapSet.new(days, fn {year, month, day, _weekday} -> {year, month, day} end)
-
-        days
-        |> Enum.map(&elem(&1, 0))
-        |> Enum.uniq()
-        |> Enum.flat_map(&event_dates_in_year(name, &1, calendar))
-        |> Enum.map(&date_units/1)
-        |> Enum.filter(&MapSet.member?(in_week, &1))
+      nil -> {:ok, []}
+      days -> event_dates_among(days, name, calendar)
     end
   end
+
+  defp event_dates_among(days, name, calendar) do
+    in_week = MapSet.new(days, fn {year, month, day, _weekday} -> {year, month, day} end)
+
+    days
+    |> Enum.map(&elem(&1, 0))
+    |> Enum.uniq()
+    |> Enum.reduce_while({:ok, []}, fn year, {:ok, dates} ->
+      case event_dates_in_year(name, year, calendar) do
+        {:ok, more} -> {:cont, {:ok, dates ++ Enum.map(more, &date_units/1)}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+    |> kept(&MapSet.member?(in_week, &1))
+  end
+
+  defp kept({:ok, dates}, keep?), do: {:ok, Enum.filter(dates, keep?)}
+  defp kept({:error, _reason} = error, _keep?), do: error
 
   # An event is computed for a year of the Gregorian calendar and falls in it
   # (`Tempo.Event.date/3`), so in the Gregorian calendar the event of a
@@ -1624,16 +1687,19 @@ defmodule Tempo.RRule.Selection do
   # They are one Easter in a Hebrew year, and none or two September equinoxes
   # in a Hebrew year that begins after one or runs on to a second.
   defp event_dates_in_year(name, year, Calendrical.Gregorian) do
-    case event_date(name, year, Calendrical.Gregorian) do
-      {:ok, %Date{} = date} -> [date]
-      _no_event -> []
-    end
+    with {:ok, date} <- event_date(name, year, Calendrical.Gregorian), do: {:ok, [date]}
   end
 
   defp event_dates_in_year(name, year, calendar) do
-    for gregorian_year <- gregorian_years(year, calendar),
-        {:ok, %Date{year: ^year} = date} <- [event_date(name, gregorian_year, calendar)],
-        do: date
+    year
+    |> gregorian_years(calendar)
+    |> Enum.reduce_while({:ok, []}, fn gregorian_year, {:ok, dates} ->
+      case event_date(name, gregorian_year, calendar) do
+        {:ok, %Date{year: ^year} = date} -> {:cont, {:ok, dates ++ [date]}}
+        {:ok, _in_another_year} -> {:cont, {:ok, dates}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
   end
 
   # The Gregorian years a year of `calendar` runs through, none for a year
@@ -1648,21 +1714,43 @@ defmodule Tempo.RRule.Selection do
   end
 
   # The date an event falls on in a Gregorian year, as a date of `calendar`.
+  # An event with none there is an error that names it and the year: no date
+  # would say that the year has no equinox, or that a name no resolver
+  # knows is an event that never happens.
   defp event_date(name, gregorian_year, calendar) do
     with {:ok, %Date{} = date} <- Event.date(name, gregorian_year, calendar),
-         do: Date.convert(date, calendar)
+         {:ok, %Date{} = date} <- Date.convert(date, calendar) do
+      {:ok, date}
+    else
+      no_date -> {:error, event_error(name, gregorian_year, no_date)}
+    end
   end
 
-  # LIMIT form (finer FREQs): does the candidate's date fall on the event?
-  defp on_event_date?(%Interval{from: %Tempo{time: time, calendar: calendar}}, name) do
+  defp event_error(name, _year, {:error, {:unknown_event, _name}}),
+    do: EventError.exception(event: name, reason: :unknown_event)
+
+  defp event_error(name, _year, {:error, {:unzoned_event, _event}}),
+    do: EventError.exception(event: name, reason: :unzoned_event)
+
+  defp event_error(name, year, {:error, reason}),
+    do: EventError.exception(event: name, year: year, reason: reason)
+
+  # What a registered resolver gave that is no date.
+  defp event_error(name, year, other),
+    do: EventError.exception(event: name, year: year, reason: {:not_a_date, other})
+
+  # LIMIT form (finer FREQs): does the candidate's date fall on the event? A
+  # candidate that is no one date is on no event's day.
+  defp on_event_date(%Interval{from: %Tempo{time: time, calendar: calendar}}, name) do
     with year when is_integer(year) <- Keyword.get(time, :year),
          month when is_integer(month) <- Keyword.get(time, :month),
          day when is_integer(day) <- Keyword.get(time, :day),
          {:ok, gregorian_year} <- gregorian_year_of(year, month, day, calendar),
          {:ok, %Date{} = date} <- event_date(name, gregorian_year, calendar) do
-      date_units(date) == {year, month, day}
+      {:ok, date_units(date) == {year, month, day}}
     else
-      _ -> false
+      {:error, %EventError{}} = error -> error
+      _no_one_date -> {:ok, false}
     end
   end
 

@@ -6,10 +6,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Open
 
-### Correctness
-
-* [ ] **An event that cannot be computed is an error** — decided 2026-10-05: `Tempo.to_interval/2` and `Tempo.select/2` return an error naming the event and the year for a year the event cannot be computed for, the unknown name for a name no resolver claims, and a registered resolver's own `{:error, reason}`, where each was no occurrence: `R2/0500Y/P1Y/FL(march-equinox)eN` is the equinoxes of 1000 and 1001, Astro computing none before 1000 CE, and `(brigadoon)e` selects nothing.
-
 ### Conformance and completeness
 
 * [ ] **A day with no month selected in a year is a day of the year** — `2026YL-1DN` is 31 December and `2026YL45DN` 14 February, as the value `2026Y-1D` and `Tempo.select(~o"2026", ~o"-1D")` read it, where the selection reads the day in the year's first month (31 January). An RRULE's `BYMONTHDAY` keeps its own rule, DTSTART's month. Decided 2026-10-04; with it a constraint of `select/2` and a selection go through one resolver, and the matrix's selections take the form in.
@@ -123,6 +119,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **An event that cannot be computed is an error** — the resolver's event functions return `{:error, %Tempo.EventError{}}` (new: `:event`, `:year`, `:reason`) for a year the event is not computed for, a name no resolver knows, a zone it cannot take a date in and a registered resolver's own error, and `Tempo.RRule.Selection.apply/4` hands it on through every step; a walk ends at it (`until_failure/1`), so `Tempo.to_interval/2`, `Tempo.select/2` and a value's own selection return it and `Enum` raises it; a walk with no end gives every occurrence before the year and raises there (`walked/5`). The first and last years an equinox is computed for still answer. 2026-10-05.
 
 * [x] **A computed event expands in a month and a week** — in the resolver an event's role is to expand a yearly, a monthly and a weekly candidate (`role/3`): its dates in the candidate's month (`in_month_of/2`), or among the seven days of its week (`event_dates_in_week/3`, the event asked for each year the week is in), and a weekday or a day of the month beside it limits that day. `Tempo.EventTest` places each event of seven years in its month by its own fields and in its week by `:calendar.iso_week_number/1`; `Tempo.EventCalendarTest` does the months and weeks of eight other calendars. 2026-10-05.
 

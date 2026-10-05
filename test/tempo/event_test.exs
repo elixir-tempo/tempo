@@ -3,6 +3,7 @@ defmodule Tempo.EventTest do
   import Tempo.Sigils
 
   alias Tempo.Event
+  alias Tempo.EventError
   alias Tempo.Interval
   alias Tempo.IntervalSet
 
@@ -139,17 +140,103 @@ defmodule Tempo.EventTest do
       assert dates == ["2026-04-05", "2027-03-28", "2028-04-16"]
     end
 
-    test "an unknown event materialises to no occurrences rather than raising" do
-      assert event_dates("R/../P1Y/FL(brigadoon)eN") == []
-    end
-
     test "an event in a zone lands on its date there" do
       assert event_dates("R/../P1Y/FL(march-equinox@+09:00)eN", ~o"2002Y") == ["2002-03-21"]
 
       assert event_dates("R/../P1Y/FL(june-solstice@America/Santiago)eN", ~o"2021Y") ==
                ["2021-06-20"]
+    end
+  end
 
-      assert event_dates("R/../P1Y/FL(easter@+09:00)eN") == []
+  describe "a computed event that has no date where it is asked for" do
+    # No occurrence would say that the event did not happen, so each is an
+    # error that names the event and the year.
+    defp no_date(iso, options) do
+      {:ok, rule} = Tempo.from_iso8601(iso)
+      Tempo.to_interval(rule, options)
+    end
+
+    test "is an error for a name no resolver knows" do
+      unknown = %EventError{event: "brigadoon", reason: :unknown_event}
+
+      assert no_date("R/../P1Y/FL(brigadoon)eN", within: ~o"2026Y") == {:error, unknown}
+      assert no_date("R/../P1M/FL(brigadoon)eN", within: ~o"2026Y") == {:error, unknown}
+      assert no_date("R/../P1D/FL(brigadoon)eN", within: ~o"2026Y4M") == {:error, unknown}
+      assert no_date("2026YL(brigadoon)eN", []) == {:error, unknown}
+      assert Tempo.select(~o"2026Y", ~o"L(brigadoon)eN") == {:error, unknown}
+      assert Tempo.select(~o"2026-04-05", ~o"L(brigadoon)eN") == {:error, unknown}
+
+      # A window on the event has no start.
+      assert no_date("R/../P1Y/FLLL(brigadoon)eN/-P7DN5K-1IN", within: ~o"2026Y") ==
+               {:error, unknown}
+
+      assert Exception.message(unknown) =~ ~s(No computed event is named "brigadoon")
+    end
+
+    test "is an error for a year the event is not computed for" do
+      # Astro computes an equinox from 1000 CE to 3000 CE.
+      out_of_range = fn year ->
+        %EventError{event: "march-equinox", year: year, reason: :year_out_of_range}
+      end
+
+      assert no_date("R/../P1Y/FL(march-equinox)eN", within: ~o"0500Y") ==
+               {:error, out_of_range.(500)}
+
+      assert no_date("R2/0500Y/P1Y/FL(march-equinox)eN", []) == {:error, out_of_range.(500)}
+      assert no_date("0500YL(march-equinox)eN", []) == {:error, out_of_range.(500)}
+      assert Tempo.select(~o"0500Y", ~o"L(march-equinox)eN") == {:error, out_of_range.(500)}
+
+      # A window that reaches a year with no date has no answer.
+      assert no_date("R/../P1Y/FL(march-equinox)eN", within: ~o"0999Y/1002Y") ==
+               {:error, out_of_range.(999)}
+
+      assert no_date("R5/2998Y/P1Y/FL(march-equinox)eN", []) == {:error, out_of_range.(3001)}
+
+      assert Exception.message(out_of_range.(500)) =~
+               ~s(The event "march-equinox" cannot be computed for the year 500)
+    end
+
+    test "is no error in the first and the last year the event is computed for" do
+      assert event_dates("R/../P1Y/FL(march-equinox)eN", ~o"1000Y") == ["1000-03-20"]
+      assert event_dates("R/../P1Y/FL(march-equinox)eN", ~o"3000Y") == ["3000-03-20"]
+
+      # A counted recurrence that ends in range never asks for the year after.
+      {:ok, set} = no_date("R3/2998Y/P1Y/FL(march-equinox)eN", [])
+      assert IntervalSet.count(set) == 3
+    end
+
+    test "is an error for a zone the event cannot take a date in" do
+      assert no_date("R/../P1Y/FL(easter@+09:00)eN", within: ~o"2026Y") ==
+               {:error, %EventError{event: "easter@+09:00", reason: :unzoned_event}}
+
+      assert no_date("R/../P1Y/FL(march-equinox@Nowhere/City)eN", within: ~o"2026Y") ==
+               {:error,
+                %EventError{
+                  event: "march-equinox@Nowhere/City",
+                  year: 2026,
+                  reason: {:invalid_zone, "Nowhere/City"}
+                }}
+    end
+
+    test "is raised by a walk" do
+      assert_raise EventError, ~r/cannot be computed for the year 500/, fn ->
+        Enum.to_list(~o"R2/0500Y/P1Y/FL(march-equinox)eN")
+      end
+    end
+
+    test "is raised by a walk with no end when it reaches the year, and not before" do
+      for cadence <- ["P1Y", "P1D"] do
+        {:ok, equinoxes} = no_date("R/../#{cadence}/FL(march-equinox)eN", within: ~o"2996Y/..")
+        years = fn occurrences -> Enum.map(occurrences, &Tempo.year(Interval.from(&1))) end
+
+        # Every equinox to the last year one is computed for.
+        assert equinoxes |> IntervalSet.walk() |> Enum.take(5) |> years.() ==
+                 [2996, 2997, 2998, 2999, 3000]
+
+        assert_raise EventError, ~r/cannot be computed for the year 3001/, fn ->
+          equinoxes |> IntervalSet.walk() |> Enum.take(6)
+        end
+      end
     end
   end
 

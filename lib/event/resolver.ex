@@ -15,8 +15,8 @@ defmodule Tempo.Event.Resolver do
   date with `date/3`. Once registered, the name is usable anywhere a built-in
   event is: `~o"R/../P1Y/FL(fiscal-year-start)eN"` lists its occurrences within a window
   exactly as `(easter)e` does, and `Tempo.Event.known/0` lists it. A name no
-  resolver claims resolves to nothing, so a recurrence over an unknown event
-  yields zero occurrences rather than raising.
+  resolver claims has no date, and a recurrence or a selection that asks for
+  it returns a `Tempo.EventError` whose `:reason` is `:unknown_event`.
 
   The registry is read each time occurrences are listed, so `config :ex_tempo,
   :event_resolvers` can be set at compile time or at runtime, and several
@@ -75,9 +75,7 @@ defmodule Tempo.Event.Resolver do
   * `{:ok, date}` with the event's `Date`, in any calendar Tempo can convert
     from — `Calendar.ISO` is the usual choice.
 
-  * `{:error, reason}` when the event cannot be computed for that year; Tempo
-    turns it into zero occurrences. The callback returns a tagged tuple rather
-    than raising, so a bad year never crashes the listing of occurrences.
+  * `{:error, reason}` when the event cannot be computed for that year. Tempo returns it as the `:reason` of a `Tempo.EventError` that names the event and the year, in place of the occurrences: a year with no occurrence would say the event did not happen. The callback returns a tagged tuple rather than raising, so a bad year never crashes the listing of occurrences.
 
   """
   @callback date(name :: String.t(), year :: integer(), calendar :: module()) ::

@@ -34,7 +34,7 @@ defmodule Tempo.Event do
   a liturgical feast, any algorithm-fixed date — by implementing the
   `Tempo.Event.Resolver` behaviour and registering it with `config :ex_tempo,
   :event_resolvers`. Registered names resolve here alongside the built-ins and
-  appear in `known/0`; a name no resolver claims yields zero occurrences.
+  appear in `known/0`. A name no resolver claims, and a year an event is not computed for, is an error where a recurrence or a selection asks for the event (`Tempo.EventError`), never an answer with its occurrences missing.
 
   """
 
@@ -321,7 +321,7 @@ defmodule Tempo.Event do
   # A name that is not built in is offered to each registered resolver
   # (`config :ex_tempo, :event_resolvers`) in turn; the first whose `known/0`
   # claims it computes it. A name no resolver claims is the unknown-event error,
-  # which the selection resolver turns into zero occurrences.
+  # which the selection resolver returns as a `Tempo.EventError`.
   defp resolve_via_resolvers(name, year, calendar) do
     Enum.find_value(registered_resolvers(), {:error, {:unknown_event, name}}, fn resolver ->
       if name in resolver.known(), do: resolver.date(name, year, calendar)
