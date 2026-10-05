@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A shift coarser than an unspecified unit keeps the unspecified digits only where they stand for the values landed on and for no others: `Tempo.shift(~o"2020-06-XX", month: 1)` is `~o"[2020Y7M1D..2020Y7M30D]"`, where it was `~o"2020-07-XX"`, some day of July with the 31st that no day of June lands on. A month on from some day of January is `~o"2020-02-XX"` still, each of whose days is landed on, and a February of no year a month on is a `Tempo.UnanchoredError`.
+
 * A value whose every reading the clock skips in its zone is a `Tempo.ZoneGapError`, at an hour and a date as at a minute: the hour a spring-forward skips (`2026-03-29T02[Europe/Paris]`) and a day a zone left out (`2011-12-30[Pacific/Apia]`) were read, and ordered by their fields. `Tempo.new/1`, `Tempo.in_zone/2`, `Tempo.at/2` and `Tempo.on/2` return the error too, for a minute as well, where they held a value `from_iso8601/2` refuses.
 
 * A set of whole numbers written with no designator is a set of years only where each has four digits, as a year alone has: `{19,20}` is the centuries 19 and 20 and `{196,197}` two decades, as `[19,20]` and each member alone are, where they were the years 19 and 20, and `{1,2}` is an error. Years of fewer digits are written with the designator (`{19,20}Y`) or with four digits (`{0019,0020}`).

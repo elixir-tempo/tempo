@@ -276,19 +276,16 @@ defmodule Tempo.Mask do
   # compare digit-by-digit: `:X` matches any digit, a digit set
   # (`{0,2,4,6,8}`) any of its digits; any other element must match
   # exactly.
-  defp padded_matches_mask?(candidate, mask, width) do
-    padded =
-      candidate
-      |> Integer.to_string()
-      |> String.pad_leading(width, "0")
+  # A value's digits, with zeros before them to the mask's width, held to
+  # the mask. A value of more digits than the mask has matches none.
+  defp padded_matches_mask?(candidate, mask, width) when candidate >= 0 do
+    digits = Integer.digits(candidate)
+    zeros = width - length(digits)
 
-    digits =
-      padded
-      |> String.graphemes()
-      |> Enum.map(&String.to_integer/1)
-
-    length(digits) == width and digits_match?(digits, mask)
+    zeros >= 0 and digits_match?(List.duplicate(0, zeros) ++ digits, mask)
   end
+
+  defp padded_matches_mask?(_below_zero, _mask, _width), do: false
 
   defp digits_match?([], []), do: true
 

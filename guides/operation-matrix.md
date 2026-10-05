@@ -132,7 +132,7 @@ The three tables are three levels of guarantee.
 |---|---|---|---|---|---|---|---|---|---|---|
 | Unspecified year `X*Y` | 1 of 11 | none | none | 1 of 21 | none | 9 of 11 | none | 3 of 5 | 13 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.RoundingError`, `Tempo.UnanchoredError` |
 | Interval from a masked day `2026Y6MXXD/P1M` | 3 of 11 | none | 8 of 9 | all | all | 2 of 11 | 2 of 8 | all | 5 of 18 | `ArgumentError`, `Tempo.ConversionError` |
-| Masked day, no year `2MXXD` | 4 of 11 | none | 2 of 9 | all | all | 9 of 11 | 2 of 8 | 4 of 5 | 13 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.RoundingError`, `Tempo.UnanchoredError` |
+| Masked day, no year `2MXXD` | 4 of 11 | none | 2 of 9 | all | all | 8 of 11 | 2 of 8 | 4 of 5 | 13 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.RoundingError`, `Tempo.UnanchoredError` |
 
 <!-- matrix: end -->
 

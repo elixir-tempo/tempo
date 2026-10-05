@@ -1233,8 +1233,10 @@ defmodule Tempo.Math do
 
   # A value's masks and unspecified units stand for several values. A step
   # coarser than every one of them never touches a masked unit, so the crisp
-  # path shifts around them and keeps them (`2020-XX` + `P1Y` → `2021-XX`):
-  # the mask path is for a step that reaches one.
+  # path shifts around them (`2020-XX` + `P1Y` → `2021-XX`), and they are
+  # kept where they still stand for what the values land on
+  # (`kept_where_the_masks_stand_for_it/3`): the mask path is for a step that
+  # reaches one, and for one that does not leave the masks standing.
   #
   # That holds where the values a mask stands for take the step alike. They
   # do not in a named zone, where a step of hours, minutes or seconds is
@@ -1258,7 +1260,188 @@ defmodule Tempo.Math do
 
     if Enum.any?(masks, fn {unit, _mask} -> duration_reaches?(duration_time, unit) end),
       do: shift_past_masks(tempo, masked, duration),
-      else: tempo |> shift_each_or_crisp(duration) |> stepped_or_each_candidate(tempo, duration)
+      else: shift_coarser_than_masks(tempo, duration)
+  end
+
+  defp shift_coarser_than_masks(tempo, duration) do
+    tempo
+    |> shift_each_or_crisp(duration)
+    |> stepped_or_each_candidate(tempo, duration)
+    |> kept_where_the_masks_stand_for_it(tempo, duration)
+  end
+
+  # A step coarser than a mask passes it by, and the mask is kept where it
+  # still stands for what its values land on, and for nothing else (decided
+  # 2026-10-06). A month on from some day of January is some day of
+  # February, each of whose days one of them lands on. A month on from some
+  # day of June is one of 1 to 30 July: no day of June lands on the 31st,
+  # which the mask moved to July would name. There the values landed on are
+  # the answer, as they are for a step that counts from the mask.
+  #
+  # Only a date's units are counted within the units before them (a month's
+  # days, a year's weeks), so a mask on a time of day stands for what it did
+  # wherever its date lands, and the dates alone are asked.
+  defp kept_where_the_masks_stand_for_it({:ok, %Tempo{} = passed_by} = kept, tempo, duration) do
+    masked = unspecified_as_masks(tempo, :every)
+
+    if stand_for_what_is_landed_on?(dates_of(masked), dates_of(passed_by), duration),
+      do: kept,
+      else: shift_masked(tempo, masked, duration)
+  end
+
+  defp kept_where_the_masks_stand_for_it(answer, _tempo, _duration), do: answer
+
+  defp dates_of(%Tempo{time: time} = value), do: %{value | time: dated(time)}
+
+  # `from` is the dates of the value that is stepped, and `onto` those of the
+  # value the stepper gives, its masks moved with it.
+  #
+  # Where each is one run of values, and the step keeps a run a run, they
+  # are the same values where they begin and end on the same ones: two
+  # steps answer. Otherwise each value `from` stands for is stepped, and
+  # they are held to those `onto` stands for.
+  defp stand_for_what_is_landed_on?(%Tempo{time: time} = from, onto, duration) do
+    cond do
+      find_masks(time) == [] -> true
+      same_values?(from, onto) -> true
+      block_stays_whole?(from, duration) -> ends_landed_on(from, duration) == ends_of(onto)
+      true -> landed_on(from, duration) == stood_for(onto)
+    end
+  end
+
+  # Whether each masked unit takes the same values where the value is and
+  # where the stepper puts it, under each value of a masked unit before it.
+  # Every value a mask stands for then lands on its own number, and the mask
+  # stands for them still: the days of June are the days of the June a year
+  # on, and no value need be stepped to say so. A unit written after a mask
+  # is held to being a value in both, or in neither: the 29th of some month
+  # of 2027 is of eleven months, and of twelve in 2028.
+  defp same_values?(%Tempo{time: from, calendar: calendar}, %Tempo{} = onto) do
+    %Tempo{time: onto} = unspecified_as_masks(onto, :every)
+    same_values?(from, onto, {[], []}, false, calendar)
+  end
+
+  defp same_values?([], [], _context, _under_a_mask?, _calendar), do: true
+
+  defp same_values?(
+         [{unit, value} | from],
+         [{unit, landed} | onto],
+         {before, landed_before},
+         false,
+         calendar
+       )
+       when is_integer(value) and is_integer(landed) do
+    context = {before ++ [{unit, value}], landed_before ++ [{unit, landed}]}
+    same_values?(from, onto, context, false, calendar)
+  end
+
+  defp same_values?([{unit, value} | from], [{unit, value} | onto], context, true, calendar)
+       when is_integer(value) do
+    {before, landed_before} = context
+
+    if a_value_in_both_or_neither?(value, values_in_both(unit, context, calendar)) do
+      context = {before ++ [{unit, value}], landed_before ++ [{unit, value}]}
+      same_values?(from, onto, context, true, calendar)
+    else
+      false
+    end
+  end
+
+  defp same_values?(
+         [{unit, {:mask, mask}} | from],
+         [{unit, {:mask, mask}} | onto],
+         context,
+         _under_a_mask?,
+         calendar
+       ) do
+    case values_in_both(unit, context, calendar) do
+      {values, values} -> under_each_value?(values, unit, from, onto, context, calendar)
+      _other_values -> false
+    end
+  end
+
+  defp same_values?(_from, _onto, _context, _under_a_mask?, _calendar), do: false
+
+  defp a_value_in_both_or_neither?(value, {values, landed_values}),
+    do: value in values == value in landed_values
+
+  defp a_value_in_both_or_neither?(_value, :unknown), do: false
+
+  defp under_each_value?(_values, _unit, [], [], _context, _calendar), do: true
+
+  defp under_each_value?(values, unit, from, onto, {before, landed_before}, calendar) do
+    Enum.all?(values, fn value ->
+      context = {before ++ [{unit, value}], landed_before ++ [{unit, value}]}
+      same_values?(from, onto, context, true, calendar)
+    end)
+  end
+
+  # The values a unit takes where the value is and where it lands, as two
+  # ranges, or `:unknown` where either depends on what the value does not
+  # hold or is of a calendar that lists them.
+  defp values_in_both(unit, {before, landed_before}, calendar) do
+    with {:ok, %Range{} = values} <- UnitValues.in_period(unit, before, calendar),
+         {:ok, %Range{} = landed_values} <- UnitValues.in_period(unit, landed_before, calendar) do
+      {values, landed_values}
+    else
+      _not_known -> :unknown
+    end
+  end
+
+  # The first and the last value of a run, stepped.
+  defp ends_landed_on(%Tempo{time: time, calendar: calendar} = from, duration) do
+    with {:ok, min_time} <- fill_masks(time, calendar, :min),
+         {:ok, max_time} <- fill_masks(time, calendar, :max),
+         {:ok, first} <- stepped_candidate(%{from | time: min_time}, duration),
+         {:ok, last} <- stepped_candidate(%{from | time: max_time}, duration) do
+      {first.time, last.time}
+    end
+  end
+
+  # The first and the last value a masked value stands for, where they are
+  # one run: a value that is no run, or stands for none (the thirties of
+  # February), begins and ends nowhere.
+  defp ends_of(%Tempo{calendar: calendar} = onto) do
+    %Tempo{time: time} = masked = unspecified_as_masks(onto, :every)
+
+    with true <- one_run?(time, [], calendar),
+         {:ok, min_time} <- fill_masks(time, calendar, :min),
+         {:ok, max_time} <- fill_masks(time, calendar, :max) do
+      {as_answered(%{masked | time: min_time}).time, as_answered(%{masked | time: max_time}).time}
+    else
+      _no_run -> :no_run
+    end
+  end
+
+  # A value as a step answers with it: a week and a day of it in a calendar
+  # of months, and a day of the year, are the date they name.
+  defp as_answered(%Tempo{} = value) do
+    value
+    |> Validation.calendar_date_from_week_date()
+    |> Validation.calendar_date_from_ordinal_date()
+  end
+
+  defp landed_on(from, duration) do
+    with {:ok, candidates} <- candidates_of(from),
+         {:ok, landed} <- each_stepped(candidates, duration) do
+      landed |> Enum.map(& &1.time) |> Enum.sort() |> Enum.dedup()
+    end
+  end
+
+  defp each_stepped(candidates, duration) do
+    Enum.reduce_while(candidates, {:ok, []}, fn candidate, {:ok, landed} ->
+      case stepped_candidate(candidate, duration) do
+        {:ok, stepped} -> {:cont, {:ok, [stepped | landed]}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp stood_for(onto) do
+    case candidates_of(onto) do
+      {:ok, candidates} -> candidates |> Enum.map(&as_answered(&1).time) |> Enum.sort()
+      {:error, _reason} -> :none
+    end
   end
 
   # A step coarser than a mask can still depend on what the mask stands for:
@@ -1711,10 +1894,11 @@ defmodule Tempo.Math do
   #
   # A step keeps them a run where it counts them as they are counted:
   # months and years for a run of months or years, and the units of fixed
-  # length for any run. A run of days stepped by months or years is not
-  # kept: each day is brought into the month it lands in, so the 29th, 30th
-  # and 31st of January a month on are all the 28th of February, and no day
-  # lands on the 29th, 30th or 31st of March.
+  # length for any run. A run of days across months, stepped by months or
+  # years, is not kept: each day is brought into the month it lands in, so
+  # the 31st of October a month on is the 30th of November, and no day lands
+  # on the 31st of December. The days of one month are kept, and the weeks
+  # of one year (`of_one_period?/2`).
   #
   # In a calendar that steps its own dates a run of days by their numbers
   # need not be a run in time (the days of the month a year begins within
@@ -1731,7 +1915,7 @@ defmodule Tempo.Math do
     case Enum.split_while(time, &(not masked?(&1))) do
       {before, [{unit, {:mask, mask}} | finer]} ->
         Enum.all?(before, &one_value?/1) and Enum.all?(finer, &every_value?/1) and
-          counted_as_stepped?(time, duration_time) and
+          (counted_as_stepped?(time, duration_time) or of_one_period?(unit, before, finer)) and
           run_of_values?(unit, mask, before, calendar)
 
       _no_mask ->
@@ -1755,6 +1939,16 @@ defmodule Tempo.Math do
 
     finest in [:year, :month] or not Enum.any?(duration_time, &month_or_year_step?/1)
   end
+
+  # The days of one month are a run a step of months or years keeps: each is
+  # brought into the month it lands in, so they end on that month's last day
+  # at most and are every day before it from the first. The weeks of one
+  # year are a run alike, where no day of the week is written after them:
+  # the fifty-third is the last week of a year that has fifty-two. A week
+  # and a day of it are the date they name, which is stepped as that date.
+  defp of_one_period?(:day, before, _finer), do: match?({:month, _month}, List.last(before))
+  defp of_one_period?(:week, before, []), do: match?({:year, _year}, List.last(before))
+  defp of_one_period?(_unit, _before, _finer), do: false
 
   defp run_of_values?(unit, mask, before, calendar) do
     case Mask.candidates(unit, mask, before, calendar) do

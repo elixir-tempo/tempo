@@ -6012,11 +6012,14 @@ defmodule Tempo do
 
   * For a value that holds unspecified digits (`~o"2026-06-XX"`, some
     day of June), each value they stand for shifted: the value with its
-    unspecified digits where the shift passes them by (an hour on is
-    `~o"2026Y6MXXDT1H"`), a `t:Tempo.Set.t/0` that is one of a run of
-    values where they are a run the shift keeps one (a day on is
-    `~o"[2026Y6M2D..2026Y7M1D]"`), and a `t:Tempo.IntervalSet.t/0` of
-    their spans otherwise.
+    unspecified digits where the shift passes them by and they stand for
+    the values landed on still (an hour on is `~o"2026Y6MXXDT1H"`, and
+    eight months on `~o"2027Y2MXXD"`, each day of that February landed
+    on), a `t:Tempo.Set.t/0` that is one of a run of values where they
+    are a run the shift keeps one (a day on is
+    `~o"[2026Y6M2D..2026Y7M1D]"`, and a month on
+    `~o"[2026Y7M1D..2026Y7M30D]"`, no day of June landing on the 31st of
+    July), and a `t:Tempo.IntervalSet.t/0` of their spans otherwise.
 
   * `{:error, %Tempo.ConversionError{reason: :grouped_component}}` when
     the shift would count from a unit that holds a group, which names a

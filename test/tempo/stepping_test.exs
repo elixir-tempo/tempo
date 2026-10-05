@@ -448,8 +448,12 @@ defmodule Tempo.SteppingTest do
       assert List.last(starts) == ~o"2027-01-15"
     end
 
-    test "a shift coarser than the unit keeps it unspecified" do
-      assert Tempo.shift(~o"2026Y6MX*D", month: 1) == ~o"2026Y7MX*D"
+    test "a shift coarser than the unit keeps it unspecified where every value is landed on" do
+      assert Tempo.shift(~o"2026Y6MX*D", year: 1) == ~o"2027Y6MX*D"
+      assert Tempo.shift(~o"2026Y1MX*D", month: 1) == ~o"2026Y2MX*D"
+
+      # No day of June lands on the 31st of July (decided 2026-10-06).
+      assert Tempo.shift(~o"2026Y6MX*D", month: 1) == ~o"[2026Y7M1D..2026Y7M30D]"
     end
   end
 end

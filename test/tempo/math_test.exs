@@ -221,9 +221,13 @@ defmodule Tempo.Math.Test do
       assert inspect(Math.add(~o"195X", ~o"P1Y")) == ~S|~o"[1951Y..1960Y]"|
     end
 
-    test "a shift coarser than the mask keeps the mask intact" do
+    test "a shift coarser than the mask keeps the mask where it stands for what is landed on" do
       assert Math.add(~o"2020-XX", ~o"P1Y") == ~o"2021-XX"
-      assert Math.add(~o"2020-06-XX", ~o"P1M") == ~o"2020-07-XX"
+      assert Math.add(~o"2020-06-XX", ~o"P1Y") == ~o"2021-06-XX"
+      assert Math.add(~o"2020-01-XX", ~o"P1M") == ~o"2020-02-XX"
+
+      # No day of June lands on the 31st of July (decided 2026-10-06).
+      assert Math.add(~o"2020-06-XX", ~o"P1M") == ~o"[2020Y7M1D..2020Y7M30D]"
     end
 
     test "a shift that reaches a sub-year mask crosses boundaries as a one-of set" do
