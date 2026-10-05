@@ -13,9 +13,9 @@ Parse defects are still turning up after months of work, and each one was found 
 | Class | Examples | Standing |
 |---|---|---|
 | An earlier alternative takes the text | `09.5` tokenized as a century, `2026-06-15/20` reading `20` as a century, `0S1` in `FL1KT10H0M0S1IN` | First fixed, others open |
-| A form no combinator reads | `6MT10H`, `{2020/2021,2023/2024}`, `{2026-06-15?,2026-06~}`, `2018Y9MTLT8H20MN3I` | First fixed, others open |
+| A form no combinator reads | `6MT10H`, `{2020/2021,2023/2024}`, `{2026-06-15?,2026-06~}`, `2018Y9MTLT8H20MN3I` | First three fixed; the last is a divergence the conformance guide describes |
 | Accepted, then failing later | `20.5C`, `1XC`, `{19,20}C` raised after tokenizing | Fixed |
-| Written but not read | A qualified set written per member, `45.{0..9}S` | First fixed, second open |
+| Written but not read | A qualified set written per member, `45.{0..9}S` | Fixed |
 
 Three facts about the parser explain why the suite did not find them.
 

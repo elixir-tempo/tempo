@@ -978,6 +978,24 @@ defmodule Tempo.Validation do
     end
   end
 
+  # A set of seconds takes the fraction written after it, as one second
+  # does (below): `{45,46}.5S` is 45.5 and 46.5 seconds. It stayed a
+  # `:fraction`, which nothing after the parser reads.
+  def resolve([{:second, seconds}, {:fraction, {digits, digit_count}} | rest], calendar)
+      when is_list(seconds) and is_integer(digits) do
+    microsecond = Microsecond.from_fraction(digits, digit_count)
+    resolve([{:second, seconds}, {:microsecond, microsecond} | rest], calendar)
+  end
+
+  # The fractions of a second written as a set (`45.{0..9}S`, the form
+  # `Tempo.extend/2` gives a second) are the microseconds of each, after
+  # one second or after each of a set of them.
+  def resolve([{:second, seconds}, {:fractions, written} | rest], calendar) do
+    with {:ok, microseconds} <- microseconds_written(written) do
+      resolve([{:second, seconds}, {:microsecond, microseconds} | rest], calendar)
+    end
+  end
+
   # A set or a range of hours, minutes, seconds or days of the week is held
   # to the values the unit takes, as one of days or months is: `T{22..25}H`
   # names two hours no day has.
@@ -1109,6 +1127,78 @@ defmodule Tempo.Validation do
   end
 
   ### Helpers
+
+  # The most fractions of a second a range may name. A value holds each
+  # fraction it names, so a range is listed as it is read: a thousand is each
+  # millisecond of a second, and with no bound a text of twenty characters
+  # would list a million.
+  @most_fractions_in_a_range 1_000
+
+  # The finest a fraction of a second is held: a microsecond.
+  @most_fraction_digits 6
+
+  # How many of the fractions written an error shows.
+  @fractions_shown 8
+
+  # The microseconds of the fractions of a second written as a set, one by
+  # one (`.{0,5}`) or from a first to a last (`.{50..59}`). Each is written
+  # with as many digits, which are the precision the set is held to.
+  defp microseconds_written({:range, {first, digits}, {last, digits}} = written) do
+    cond do
+      digits > @most_fraction_digits ->
+        fractions_error(written, "are finer than a microsecond")
+
+      first > last ->
+        fractions_error(written, "run back from the first to the last")
+
+      last - first >= @most_fractions_in_a_range ->
+        fractions_error(written, "are more than a thousand in one range")
+
+      true ->
+        {:ok, for(fraction <- first..last, do: Microsecond.from_fraction(fraction, digits))}
+    end
+  end
+
+  defp microseconds_written({:range, _first, _last} = written),
+    do: fractions_error(written, "are not written with as many digits as each other")
+
+  defp microseconds_written([{_fraction, digits} | _rest] = written) do
+    cond do
+      Enum.any?(written, fn {_fraction, count} -> count != digits end) ->
+        fractions_error(written, "are not written with as many digits as each other")
+
+      digits > @most_fraction_digits ->
+        fractions_error(written, "are finer than a microsecond")
+
+      true ->
+        {:ok, written |> Enum.map(&microsecond_written/1) |> Enum.sort() |> Enum.dedup()}
+    end
+  end
+
+  defp microsecond_written({fraction, digits}), do: Microsecond.from_fraction(fraction, digits)
+
+  defp fractions_error(written, what_is_wrong) do
+    {:error,
+     ParseError.exception(
+       reason:
+         "The fractions of a second in .{#{fractions_text(written)}} #{what_is_wrong}. " <>
+           "A set of them is written one by one or from a first to a last, each with " <>
+           "as many digits and none finer than a microsecond."
+     )}
+  end
+
+  defp fractions_text({:range, first, last}),
+    do: fraction_text(first) <> ".." <> fraction_text(last)
+
+  # The first few of a long list say what was written.
+  defp fractions_text(written) do
+    {shown, more} = Enum.split(written, @fractions_shown)
+    text = Enum.map_join(shown, ",", &fraction_text/1)
+    if more == [], do: text, else: text <> ",…"
+  end
+
+  defp fraction_text({fraction, digits}),
+    do: fraction |> Integer.to_string() |> String.pad_leading(digits, "0")
 
   # A group is kept as declared, so it renders as written; one that
   # starts beyond its container (months 13..15 of a twelve-month year)

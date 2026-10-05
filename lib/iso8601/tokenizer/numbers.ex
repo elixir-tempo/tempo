@@ -233,9 +233,40 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
       maybe_negative_integer(opts)
     ])
     |> unwrap_and_tag(:second)
-    |> optional(fraction())
+    |> optional(choice([fraction(), fractions()]))
     |> ignore(string(indicator))
   end
+
+  # The fractions of a second as a set after the decimal sign: `45.{0..9}S`
+  # is the ten tenths of the second, the form `Tempo.extend/2` gives a second
+  # and `inspect/1` writes, which was not read. They are written from a first
+  # to a last or one by one, and are kept as written, each with the count of
+  # its digits: `Tempo.Validation.resolve/2` holds them to one precision and
+  # lists the fractions a range names, so a range costs nothing here. A
+  # negative count is no fraction, and neither is a set of one of (`[...]`).
+  def fractions do
+    decimal_sign()
+    |> ignore(string("{"))
+    |> choice([
+      fraction_digits()
+      |> ignore(string(".."))
+      |> concat(fraction_digits())
+      |> reduce(:fraction_range),
+      fraction_digits()
+      |> repeat(ignore(string(",")) |> concat(fraction_digits()))
+      |> reduce(:fraction_list)
+    ])
+    |> ignore(string("}"))
+    |> unwrap_and_tag(:fractions)
+  end
+
+  defp fraction_digits, do: times(ascii_char([?0..?9]), min: 1) |> reduce(:reduce_fraction)
+
+  @doc false
+  def fraction_range([first, last]), do: {:range, first, last}
+
+  @doc false
+  def fraction_list(fractions), do: fractions
 
   def positive_integer_or_integer_set(tag, opts) do
     choice([
@@ -316,13 +347,24 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
     |> unwrap_and_tag(:significant)
   end
 
+  # A fraction's digits end where the number does. A dash after them is a
+  # date's separator, and a second decimal sign with digits another fraction:
+  # neither follows a number with a fraction. A comma, a closing brace or
+  # bracket and the two full stops of a range do, in a set: its members are
+  # separated by commas, where a comma is never a decimal sign
+  # (`Tempo.Iso8601.Tokenizer.Helpers.decimal_comma/0`), so
+  # `{2021-06-15.5,2021-06-16}` is half past the 15th and the 16th.
   def fraction do
     decimal_sign()
     |> times(ascii_char([?0..?9]), min: 1)
-    |> lookahead_not(number_separator())
+    |> lookahead_not(choice([dash(), second_fraction()]))
     |> reduce(:reduce_fraction)
     |> unwrap_and_tag(:fraction)
   end
+
+  # A decimal sign and a digit after a fraction's digits. A comma is one
+  # only outside a set, where it separates the members.
+  defp second_fraction, do: decimal_sign() |> ascii_char([?0..?9])
 
   # A decimal fraction of a time of day's last unit. A time shift may follow
   # it, and one behind UTC starts with a minus sign (`10:30:45.5-03:30`), so
@@ -333,11 +375,16 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
   # decimal sign (`Tempo.Iso8601.Tokenizer.Helpers.decimal_comma/0`). Outside
   # one, after a comma and digits a dash is taken for a time shift only when
   # what follows it is written as one.
+  #
+  # A fraction written with a full stop may be followed by what ends a
+  # member of a set: a comma, a closing brace or bracket, or the two full
+  # stops of a range (`{T10:30:45.5,T11:00}`). It was refused there, so a
+  # member of a set had no fraction of a second in the extended format.
   def time_fraction do
     choice([
       ignore(ascii_char([?.]))
       |> times(ascii_char([?0..?9]), min: 1)
-      |> lookahead_not(choice([decimal_separator(), ascii_char([?], ?}])])),
+      |> lookahead_not(second_fraction()),
       decimal_comma()
       |> times(ascii_char([?0..?9]), min: 1)
       |> lookahead_not(
@@ -369,14 +416,6 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
   # `.123` differ in resolution even though both reduce to 123.
   def reduce_fraction(digit_chars) do
     {List.to_integer(digit_chars), length(digit_chars)}
-  end
-
-  def number_separator do
-    choice([
-      dash(),
-      decimal_separator(),
-      ascii_char([?], ?}])
-    ])
   end
 
   def error_range do

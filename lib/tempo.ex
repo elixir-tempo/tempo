@@ -3566,7 +3566,7 @@ defmodule Tempo do
 
   The months of a year and the days of a month depend on which year or month it is. Under a value naming several, they are written from the first to the last (`{1..-1}`), and each year or month is walked by its own.
 
-  A second is written as its ten tenths and a fraction of a second as its next decimal place, down to a microsecond, which has no finer unit. Such a value inspects with the fractions as a set after the decimal sign (`45.{0..9}S`), a notation `from_iso8601/1` does not read.
+  A second is written as its ten tenths and a fraction of a second as its next decimal place, down to a microsecond, which has no finer unit. Such a value is written with the fractions as a set after the decimal sign (`45.{0..9}S`), which `from_iso8601/1` reads back where a range names no more than a thousand fractions.
 
   A value that ends in a group is written as the values the group names, in the group's own unit: the second group of three months of 2026 is its April to June. A group stops where its container does (the third ten days of a February are its 21st to its 28th or 29th), so one under several years or months is written only where it names the same values in each.
 

@@ -313,6 +313,10 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* The fractions of a second written as a set are read: `T10H30M45.{0..9}S`, the form `Tempo.extend/2` gives a second and `inspect/1` writes, and a fraction after a set of seconds (`T10H30M{45,50}.5S`), on which `inspect/1` raised. The fractions are written one by one or from a first to a last with as many digits each, and a range names at most a thousand.
+
+* A member of a set is read with a qualifier (`{2026-06-15?,2026-06~}`, `{2020?..2030}`), qualified as it would be alone, and with a fraction before the comma or the brace that follows it (`{T10:30:45.5,T11:00}`). Both were a parse error.
+
 * A reading the clock skips, in a value coarser than a minute, is read with the offset before the gap (RFC 5545 §3.3.5), where it was read as UTC: the hour a spring-forward skips (`~o"2026-03-29T02[Europe/Paris]"`) is the hour from 03:00, where its span ran to 05:00 and an hour on from the same hour in New York was 22:00 the day before. A day or a month whose first reading is skipped, where clocks go forward at midnight (`~o"2023-04-28[Africa/Cairo]"`), starts when the clock changes, where it started two hours late.
 
 * `Tempo.shift/3` of a value that holds unspecified digits lands each value they stand for and names no other: a day on from some day of week 25 (`~o"2026Y25WX*K"`) is one of the seven days from the Tuesday, where it was the next Monday alone, and an unspecified week steps so too. An hour on from some day of June is `~o"2026Y6MXXDT1H"`, where it was any hour from 01:00 on the 1st to 01:00 on the 30th, a mask whose values are not one run (`~o"2026Y6MX5D"`) gives the set of their spans, and each is stepped in its zone and by its calendar.

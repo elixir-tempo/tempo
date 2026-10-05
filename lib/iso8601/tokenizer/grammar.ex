@@ -918,19 +918,30 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   def time_or_range(combinator \\ empty()) do
     combinator
     |> choice([
-      interval_or_time_or_duration()
+      member_value()
       |> ignore(string(".."))
-      |> interval_or_time_or_duration()
+      |> member_value()
       |> reduce(:range),
       replace(string(".."), :undefined)
-      |> interval_or_time_or_duration()
+      |> member_value()
       |> reduce(:range),
-      interval_or_time_or_duration()
+      member_value()
       |> replace(string(".."), :undefined)
       |> reduce(:range),
-      interval_or_time_or_duration()
+      member_value()
     ])
     |> label("date, time, interval, duration or range")
+  end
+
+  # What a member of a set is: an interval, a duration, or a date or a time
+  # with its qualifiers.
+  defp member_value(combinator \\ empty()) do
+    combinator
+    |> choice([
+      parsec({Tempo.Iso8601.Tokenizer.Set, :interval_parser}),
+      parsec({Tempo.Iso8601.Tokenizer.Set, :duration_parser}),
+      parsec({Tempo.Iso8601.Tokenizer.Date, :qualified_member})
+    ])
   end
 
   # Ranges here split into two kinds:

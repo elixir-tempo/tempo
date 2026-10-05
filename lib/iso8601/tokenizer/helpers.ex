@@ -274,6 +274,37 @@ defmodule Tempo.Iso8601.Tokenizer.Helpers do
   defp extended_entry(nil), do: []
   defp extended_entry(segments), do: [extended: segments]
 
+  @doc false
+  # A member of a set with its qualifiers, read as a value written alone
+  # is (ISO 8601-2 §8.2): a qualifier after the member qualifies the whole
+  # of it (§8.2.1), and one before it the first component it is written with
+  # (§8.2.3). Each goes into the member's own tokens, where
+  # `Tempo.Iso8601.AST.build/2` reads it.
+  def merge_member_qualification([{tag, inner}]) when tag in [:date, :datetime, :time_of_day],
+    do: {tag, inner}
+
+  def merge_member_qualification([{tag, inner}, {:qualification, complete}])
+      when tag in [:date, :datetime, :time_of_day],
+      do: {tag, inner ++ [qualification: complete]}
+
+  def merge_member_qualification([{:qualification, leading}, {tag, inner} | trailing])
+      when tag in [:date, :datetime, :time_of_day] do
+    {tag, qualified} = merge_member_qualification([{tag, inner} | trailing])
+    {tag, qualified ++ first_component_qualification(inner, leading)}
+  end
+
+  # The component a qualifier before a value qualifies: the first of them,
+  # or the whole value where it is written with none of these.
+  @qualified_from_the_left [:year, :month, :week, :day, :day_of_year, :day_of_week] ++
+                             [:hour, :minute, :second]
+
+  defp first_component_qualification(inner, qualifier) do
+    case Enum.find(inner, &(is_tuple(&1) and elem(&1, 0) in @qualified_from_the_left)) do
+      nil -> [qualification: qualifier]
+      component -> [individual_qualification: {elem(component, 0), qualifier}]
+    end
+  end
+
   # Some calendars have 13 months
   # Seasons are recognised as months 21..32 so we have to allow them
   # Quarters are recognised as months 33..36 so we have to allow them

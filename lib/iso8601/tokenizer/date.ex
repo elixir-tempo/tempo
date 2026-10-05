@@ -33,6 +33,17 @@ defmodule Tempo.Iso8601.Tokenizer.Date do
                 |> reduce(:merge_endpoint_qualification),
                 export_combinator: true
 
+  # A member of a set: a date, a date and time or a time, with the qualifiers
+  # a value written alone takes (`{2026-06-15?,2026-06~}`). A member was read
+  # with none, so a set held no qualified value but through a qualifier of
+  # one of its components.
+  defcombinator :qualified_member,
+                optional(qualification())
+                |> parsec({Tempo.Iso8601.Tokenizer.Date, :datetime_or_date_or_time})
+                |> optional(qualification())
+                |> reduce(:merge_member_qualification),
+                export_combinator: true
+
   # The end of an interval written as a day and a time of day, the year and
   # the month left out: `2007-11-13T09:00/15T17:00` ends on the 15th at
   # 17:00 (ISO 8601-1:2019 §5.5.1). No value is written so on its own, where

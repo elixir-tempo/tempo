@@ -594,6 +594,13 @@ defmodule Tempo.Iso8601.Parser do
     [{:domain, %{domain | filter: filter}} | parse_date(rest)]
   end
 
+  # The fractions of a second written as a set (`45.{0..9}S`) are digits
+  # and how many were written, which the reading of the value turns into
+  # microseconds: they are no set of numbers to put in order here.
+  def parse_date([{:fractions, fractions} | rest]) when is_list(fractions) do
+    [{:fractions, fractions} | parse_date(rest)]
+  end
+
   def parse_date([{component, {:all_of, list}} | rest]) do
     [{component, reduce_members(component, list)} | parse_date(rest)]
   end
@@ -920,17 +927,21 @@ defmodule Tempo.Iso8601.Parser do
   defp by_ones?(%Range{first: first, last: last, step: step}),
     do: step == 1 and first <= last and same_end?(first, last)
 
-  # Ranges must have the same keys. One written backwards never reaches
-  # here (`backwards_range/1`).
+  # Ranges must have the same units. One written backwards never reaches
+  # here (`backwards_range/1`). A qualifier of an end is no unit of it:
+  # `{2020Y?..2030Y}` runs from an uncertain 2020 to 2030.
+  @qualifiers [:qualification, :individual_qualification, :group_qualification]
 
   defp validate_range(from, to) do
-    if Keyword.keys(from) == Keyword.keys(to) do
+    if units_written(from) == units_written(to) do
       {:range, [from, to]}
     else
       raise ParseError,
             "Time ranges must have the same time units on both sides. Found #{inspect(from)}..#{inspect(to)}"
     end
   end
+
+  defp units_written(tokens), do: Keyword.keys(tokens) -- @qualifiers
 
   # If the duration direction is negative, negate all the units —
   # shape-aware, since a fractional second reduces to a

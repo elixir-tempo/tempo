@@ -96,6 +96,7 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 | **Set of dates — all of** | `{1960,1961,1962}`, `{1960..1970}` |
 | **Set of dates — one of** | `[1984,1986,1988]`, `[1667..1672]` |
 | **Range in set** | `[1900..2000]`, `{-1640-06..-1200-01}` |
+| **A qualified member of a set** | `{2026-06-15?,2026-06~}`, `{2020?..2030}`. Each member is qualified as it would be alone (§8). |
 | **Groups** | `5G10DU` (5th group of 10 days), `2018Y4G60DU6D` (2018, day 6 of the 4th group of 60 days), `1933Y1G80DU` (the first 80 days of 1933), `2026Y2G13WU` (weeks 14–26), `T16H1GT15MU` (16:00–16:15) |
 | **A value within a group** | `2018Y9M2DT3GT8HU0H30M` (30 minutes into the third eight hours: 16:30), `2018Y2G3MU2M` (May) |
 | **Selections** | `L1MN`, `L2MI3N` (1st month, 3rd instance of the 2nd month). A value holding one converts to the dates it picks in each period of its context (§12.11): `2018Y3ML1K1IN` is 5 March 2018, and `XXX{0,2,4,6,8}Y11MLLL1K1IN/P9DN2K1IN` (US Election Day) resolves one year at a time. |
@@ -218,6 +219,8 @@ These syntaxes are Tempo conveniences, not part of any standard:
 * **Explicit suffixes** — `2022Y11M20D` instead of `2022-11-20`. Used by the `~o` sigil as the canonical output form.
 
 * **Repeat rule** — `/F` combinator inside a parsed expression.
+
+* **The fractions of a second as a set** — `T10H30M45.{0..9}S` is the ten tenths of the second, the form `Tempo.extend/2` gives a second, and `T10H30M{45,50}.5S` the same fraction of each of a set of seconds. The fractions are written one by one (`.{0,5}`) or from a first to a last (`.{50..59}`), with as many digits each, and a range names at most a thousand.
 
 * **A time of day under a year, a month or a week** — `2026T17`, `2026-06T17` and `6MT10H` are that time on the first day of what is written, and are held with the day (`2026Y1M1DT17H`). This one diverges from the standard, which wants the date of a date and time complete: see "Partial or divergent" under Part 1.
 
