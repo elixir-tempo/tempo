@@ -153,6 +153,8 @@ defmodule Tempo.RRule do
 
   The output has no leading `RRULE:` prefix and no `DTSTART`: an RRULE is a recurrence pattern, not a full iCalendar record, so a caller writing the full record adds `DTSTART` from the interval's start.
 
+  A recurrence that steps by months or years and names no day keeps the last day of a month that lacks its start's, where a reader of RFC 5545 passes over that month, so the rule written for one says the days outright: `~o"R5/2026-01-31/P1M"` is `COUNT=5;FREQ=MONTHLY;BYMONTHDAY=-1`, the last day of each month, and one from the 30th is the last of the days up to it, `BYMONTHDAY=28,29,30;BYSETPOS=-1`. A rule read from an RRULE states its start's day and is written with it.
+
   An RRULE is read in the Gregorian calendar (RFC 5545), and RFC 7529's `RSCALE`, which names another, is not written. A recurrence of another calendar is written where an RFC 5545 reader finds the days it selects: one that steps by weeks, days or less and selects by weekday and time of day. Its end is written as the Gregorian date it is, in a calendar of weeks `WKST` is the day the calendar's weeks begin, and the `DTSTART` a caller adds is the Gregorian date of its start (`Tempo.to_calendar/2`).
 
   ### Arguments
@@ -164,6 +166,8 @@ defmodule Tempo.RRule do
   * `{:ok, rrule}` with the rule as a string.
 
   * `{:error, %Tempo.ConversionError{}}` when the value has no RRULE form — it is not an interval, its cadence has more than one unit, or its selection has an entry RRULE cannot express.
+
+  * `{:error, %Tempo.ConversionError{}}` when no one rule says a recurrence that keeps the last day of a month without its start's day: its rule holds a position or several times of day, which the `BYSETPOS` of the last of several days would count, or it names months of a year that are of different lengths about that day.
 
   * `{:error, %Tempo.ConversionError{}}` whose `:reason` is `:not_built` for a recurrence of another calendar than the Gregorian that steps or selects by a month, a year, a week of the year or a day of one, which an RFC 5545 reader would count in the Gregorian calendar.
 
@@ -180,6 +184,9 @@ defmodule Tempo.RRule do
       iex> {:ok, weekly} = Tempo.from_iso8601("R/2026Y25W/P1W/FL3KN", Calendrical.NRF)
       iex> Tempo.RRule.to_string(weekly)
       {:ok, "FREQ=WEEKLY;BYDAY=TU;WKST=SU"}
+
+      iex> Tempo.RRule.to_string(~o"R5/2026-01-31/P1M")
+      {:ok, "COUNT=5;FREQ=MONTHLY;BYMONTHDAY=-1"}
 
       iex> {:error, %Tempo.ConversionError{}} = Tempo.RRule.to_string(~o"2022-06-15")
 

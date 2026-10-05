@@ -883,7 +883,7 @@ ISO 8601 wants the date of a date and time complete, so reading such text at all
 
 ## A rule read from an RRULE states what it takes from its start
 
-`Tempo.RRule.parse/2` given a `:from` that is a calendar date writes into the rule what RFC 5545 takes from DTSTART, as ISO 8601-2 Annex C says a converted rule must: a weekly rule's weekday, a monthly rule's day of the month, a yearly rule's month and day. A day that a month lacks is then passed over, as RFC 5545 has it, where 1.x listed the month's last day, and each occurrence is as long as the start is precise, where it was a cadence long. `Tempo.ICal.parse/2` and `Tempo.JSCalendar.parse/2` list the same occurrences. An ISO 8601 recurrence is as it was: `~o"R3/2026-01-31/P1M"` is 31 January, 28 February and 31 March.
+`Tempo.RRule.parse/2` given a `:from` that is a calendar date writes into the rule what RFC 5545 takes from DTSTART, as ISO 8601-2 Annex C says a converted rule must: a weekly rule's weekday, a monthly rule's day of the month, a yearly rule's month and day. A day that a month lacks is then passed over, as RFC 5545 has it, where 1.x listed the month's last day, and each occurrence is as long as the start is precise, where it was a cadence long. `Tempo.ICal.parse/2` and `Tempo.JSCalendar.parse/2` list the same occurrences. An ISO 8601 recurrence is as it was: `~o"R3/2026-01-31/P1M"` is 31 January, 28 February and 31 March, and `Tempo.RRule.to_string/1` now writes it as the rule that lists those days, `COUNT=3;FREQ=MONTHLY;BYMONTHDAY=-1`, where it wrote `COUNT=3;FREQ=MONTHLY`.
 
 <!-- guides:skip -->
 

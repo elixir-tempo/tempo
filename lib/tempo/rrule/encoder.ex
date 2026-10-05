@@ -112,7 +112,8 @@ defmodule Tempo.RRule.Encoder do
     # What RRULE has no form for in any calendar is refused first, each by
     # its own name. What is left would be written, and is refused where it
     # would be read in the Gregorian calendar as another rule.
-    with {:ok, freq_and_interval_parts} <- freq_and_interval(time, interval),
+    with {:ok, interval} <- keeping_last_day(interval),
+         {:ok, freq_and_interval_parts} <- freq_and_interval(time, interval),
          {:ok, bound_part} <- bound_part(interval),
          {:ok, by_parts} <- by_parts(interval.repeat_rule, interval),
          :ok <- NotBuilt.rrule(interval) do
@@ -135,6 +136,205 @@ defmodule Tempo.RRule.Encoder do
        target: :rrule
      )}
   end
+
+  ## The start's day in a period that lacks it
+
+  # The selection tokens that name the day of an occurrence, so that it is
+  # not the start's.
+  @names_the_day [
+    :day,
+    :day_of_week,
+    :byday,
+    :day_of_year,
+    :week,
+    :calendar_week,
+    :event,
+    :nearest_weekday,
+    :or_day,
+    :interval
+  ]
+
+  # The selection tokens that make several times of one day.
+  @times [:hour, :minute, :second]
+
+  # A recurrence that selects no day is its start and n cadences on, and
+  # where a month or a year lacks the start's day it keeps the period's last:
+  # 31 January, 28 February, 31 March. A reader of RFC 5545 passes over such
+  # a period (§3.3.10), so the rule written for one says the days outright:
+  # the last day of the month (`BYMONTHDAY=-1`) where the start's day is at
+  # or past the end of every month the rule reaches, and otherwise the last
+  # of the days up to the start's (`BYMONTHDAY=28,29,30;BYSETPOS=-1`). A
+  # rule that names its day, a start whose day every month reached has, a
+  # step of weeks or less and a recurrence of another calendar (refused by
+  # name below) are written as they are.
+  defp keeping_last_day(%Tempo.Interval{} = interval) do
+    case day_left_to_start(interval) do
+      {day, months, calendar} -> last_day_stated(interval, day, months, calendar)
+      :none -> {:ok, interval}
+    end
+  end
+
+  # The start's day of the month and the months the recurrence puts it in,
+  # where it steps by months or years in the Gregorian calendar and its rule
+  # names no day.
+  defp day_left_to_start(%Tempo.Interval{
+         from: %Tempo{time: time, calendar: calendar},
+         duration: %Tempo.Duration{time: [{unit, _count}]},
+         repeat_rule: rule
+       })
+       when unit in [:month, :year] and calendar in [Calendrical.Gregorian, Calendar.ISO, nil] do
+    calendar = Compare.effective_calendar(calendar)
+
+    with {:ok, selection} <- selection_of(rule),
+         [year, month, day] when is_integer(year) and is_integer(month) and is_integer(day) <-
+           Enum.map([:year, :month, :day], &Keyword.get(time, &1)),
+         false <- Enum.any?(selection, fn {token, _value} -> token in @names_the_day end),
+         [_ | _] = months <- months_reached(unit, month, selection, calendar) do
+      {day, months, calendar}
+    else
+      _names_its_day_or_has_no_date -> :none
+    end
+  end
+
+  defp day_left_to_start(_interval), do: :none
+
+  # A rule's selection and the units after it, which are parts of it too. A
+  # rule of another shape has no RRULE form, and is refused by its own name.
+  defp selection_of(nil), do: {:ok, []}
+
+  defp selection_of(%Tempo{time: [{:selection, selection} | units]}),
+    do: {:ok, selection ++ units}
+
+  defp selection_of(_another_shape), do: :error
+
+  # The months a start's day is put in: those the rule names, and with none
+  # named every month for a step of months and the start's for one of years.
+  defp months_reached(unit, start_month, selection, calendar) do
+    case UnitValues.in_any_year(:month, [], calendar) do
+      {:ok, every_month, _longest} ->
+        months_named(Keyword.get(selection, :month), unit, start_month, every_month)
+
+      {:error, _cannot_say} ->
+        []
+    end
+  end
+
+  defp months_named(nil, :month, _start_month, every_month), do: Enum.to_list(every_month)
+  defp months_named(nil, :year, start_month, _every_month), do: [start_month]
+
+  defp months_named(named, _unit, _start_month, every_month),
+    do: UnitValues.named(named, every_month)
+
+  # The last day each month reached has in every year, and in its longest.
+  defp month_ends(months, calendar) do
+    for month <- months,
+        {:ok, every, longest} <- [UnitValues.in_any_year(:day, [month: month], calendar)],
+        do: {every.last, longest.last}
+  end
+
+  defp last_day_stated(interval, day, months, calendar) do
+    ends = month_ends(months, calendar)
+    shortest = ends |> Enum.map(&elem(&1, 0)) |> Enum.min(fn -> day end)
+
+    cond do
+      # Every month reached has the day in every year.
+      day <= shortest ->
+        {:ok, interval}
+
+      # The day is at or past the end of every month reached: its last day.
+      Enum.all?(ends, fn {_every, longest} -> day >= longest end) ->
+        {:ok, with_days(interval, -1, [])}
+
+      one_set_a_period?(interval, months) ->
+        last_of_days(interval, shortest..day//1)
+
+      true ->
+        {:error,
+         no_one_rule(
+           interval,
+           "its months are of different lengths, and a yearly rule has one BYMONTHDAY for them all"
+         )}
+    end
+  end
+
+  # BYSETPOS counts within a period of the rule's frequency: a month of a
+  # monthly rule, and the year of a yearly one, which is one month's days
+  # where the rule reaches one month.
+  defp one_set_a_period?(%Tempo.Interval{duration: %Tempo.Duration{time: [{:month, _count}]}}, _),
+    do: true
+
+  defp one_set_a_period?(_yearly, months), do: match?([_], months)
+
+  # The last of the days up to the start's is a position, which would count
+  # a position the rule already holds and the several times of a day it names.
+  defp last_of_days(interval, days) do
+    {:ok, selection} = selection_of(interval.repeat_rule)
+
+    if Keyword.has_key?(selection, :instance) or several_times?(selection) do
+      {:error,
+       no_one_rule(
+         interval,
+         "the last of the days up to its start's is a BYSETPOS, which would count " <>
+           "the position or the times of day the rule holds"
+       )}
+    else
+      {:ok, with_days(interval, [days], instance: -1)}
+    end
+  end
+
+  defp several_times?(selection) do
+    Enum.any?(selection, fn {token, value} ->
+      token in @times and not is_integer(value)
+    end)
+  end
+
+  defp no_one_rule(interval, why) do
+    ConversionError.exception(
+      reason:
+        "RRULE has no one rule for #{inspect(interval)}, which keeps the last day of a month " <>
+          "that lacks its start's day: #{why}.",
+      value: interval,
+      target: :rrule
+    )
+  end
+
+  # The rule with the days stated: after its years and months, with the
+  # start's month for a yearly rule that names none, and a position last.
+  defp with_days(%Tempo.Interval{repeat_rule: rule} = interval, days, position) do
+    {selection, units} = selection_and_units(rule)
+
+    {coarser, finer} =
+      Enum.split_with(selection, fn {token, _value} -> token in [:year, :month] end)
+
+    stated = coarser ++ month_of_start(interval, coarser) ++ [{:day, days}] ++ finer ++ position
+
+    %{
+      interval
+      | repeat_rule: %Tempo{
+          time: [{:selection, stated} | units],
+          calendar: Calendrical.Gregorian
+        }
+    }
+  end
+
+  defp selection_and_units(%Tempo{time: [{:selection, selection} | units]}),
+    do: {selection, units}
+
+  defp selection_and_units(nil), do: {[], []}
+
+  # `BYMONTHDAY` with no `BYMONTH` in a yearly rule is read as a day of the
+  # start's month by some and of every month by others, so the month is said.
+  defp month_of_start(
+         %Tempo.Interval{
+           from: %Tempo{time: time},
+           duration: %Tempo.Duration{time: [{:year, _count}]}
+         },
+         coarser
+       ) do
+    if Keyword.has_key?(coarser, :month), do: [], else: [month: Keyword.get(time, :month)]
+  end
+
+  defp month_of_start(_monthly, _coarser), do: []
 
   ## FREQ + INTERVAL
 

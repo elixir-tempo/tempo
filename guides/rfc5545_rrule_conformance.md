@@ -67,7 +67,7 @@ A rule takes from DTSTART what it does not say, as ISO 8601-2 Annex C.3 lists it
 
 A day so stated is passed over where a month or a year lacks it, as RFC 5545 §3.3.10 says of an instance with an invalid date: that rule lists the months of 31 days, and `FREQ=YEARLY` from 29 February the leap years. An occurrence is as long as its start is precise, a day for a date, which is the length RFC 5545 gives an event with no `DTEND`; an event's `DTEND` or `DURATION` sets it otherwise.
 
-An ISO 8601 recurrence is not a rule of RFC 5545. `~o"R/2026-01-31/P1M"` selects nothing: it is its start and n months on, 28 February and 30 April among them, each occurrence a month long.
+An ISO 8601 recurrence is not a rule of RFC 5545. `~o"R/2026-01-31/P1M"` selects nothing: it is its start and n months on, 28 February and 30 April among them, each occurrence a month long. `Tempo.RRule.to_string/1` writes it as the rule that lists those days for a reader of RFC 5545, `FREQ=MONTHLY;BYMONTHDAY=-1`, the last day of each month; one from the 30th is the last of the days up to it, `BYMONTHDAY=28,29,30;BYSETPOS=-1`, and one from 29 February `FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=-1`. Where no one rule says it, the recurrence holding a position or several times of day already, or naming months of different lengths in a year, the writer returns a `Tempo.ConversionError`.
 
 ### RDATE and EXDATE
 

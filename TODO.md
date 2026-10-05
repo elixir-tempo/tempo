@@ -8,8 +8,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Correctness
 
-* [ ] **An ISO 8601 recurrence from a day a period lacks is written as the RRULE that says the same** — decided 2026-10-05: an ISO 8601 recurrence keeps the period's last day and a reader of RFC 5545 omits it, so `Tempo.RRule.to_string/1` writes the RFC's idiom, the last day of the month (`R5/2026-01-31/P1M` is `COUNT=5;FREQ=MONTHLY;BYMONTHDAY=-1`) or the last of the days up to the start's (`BYMONTHDAY=28,29,30;BYSETPOS=-1`; `FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=28,29;BYSETPOS=-1` from 29 February), and returns a `Tempo.ConversionError` for a rule that already holds a position or expands times, which the idiom's `BYSETPOS` would count. Now it writes `COUNT=5;FREQ=MONTHLY`, which a reader lists without February and April.
-
 * [ ] **The RRULE writer writes only what RFC 5545 allows the frequency** — decided 2026-10-05: `Tempo.RRule.to_string/1` writes the allowed equivalent where there is one, a numeric `BYDAY` outside a monthly or yearly rule as `BYDAY` with `BYSETPOS` (`R/2026-06-01/P1W/FL3K2IN` is now `FREQ=WEEKLY;BYDAY=2WE`), and returns a `Tempo.ConversionError` naming the part and the frequency for the rest: `BYWEEKNO` outside a yearly rule, `BYYEARDAY` in a daily, weekly or monthly one and `BYMONTHDAY` in a weekly one.
 
 * [ ] **A computed event expands in a month and a week** — decided 2026-10-05: an event is each of its days that falls in the period, for a year, a month and a week, and a daily or finer candidate is kept when it is the event's day. Now `Tempo.select(~o"2026Y4M", ~o"L(easter)eN")` and the selection of ISO week 14 select nothing though Easter 2026 is 5 April, and `R2/2026-01-05/P1M/FL(easter)eN` is 5 April 2026 and 2037, the 5th when it is Easter, where it is to be the Easter of each month that has one.
@@ -129,6 +127,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **An ISO 8601 recurrence from a day a period lacks is written as the RRULE that says the same** — `keeping_last_day/1` in `Tempo.RRule.Encoder`: a Gregorian recurrence that steps by months or years and names no day has its days stated before it is written, `BYMONTHDAY=-1` where the start's day is at or past the end of every month reached and otherwise the last of the days up to it with `BYSETPOS=-1`, the month lengths asked of `Tempo.UnitValues.in_any_year/3`; a rule that holds a position or several times, and a year's months of different lengths, are a `ConversionError`. `Tempo.RRule.LastDayTest` reads each written rule again and holds its dates to `Date.shift/2`. 2026-10-05.
 
 * [x] **A JSCalendar rule's `rscale` is reported** — `Tempo.JSCalendar.parse/2` returns `{:error, {:unsupported_rscale, name}}` for a rule of another calendar than the Gregorian, where it read a Hebrew rule as a Gregorian one; expanding such a rule in the calendar it names is the feature left. 2026-10-05.
 
