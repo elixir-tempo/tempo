@@ -8192,6 +8192,22 @@ defmodule Tempo do
     Stream.unfold(from, &contiguous_candidate(&1, cadence, occurrence_metadata))
   end
 
+  # Contiguous occurrences whose starts are each `from + i × cadence`: a
+  # cadence of days or weeks from a time of day in a zone. A step that lands
+  # on a reading the clock skips is moved to the reading that long after
+  # (02:30 on the night of a spring-forward is 03:30), and the step after it
+  # is taken from the start again, where it was taken from the moved
+  # reading and every later occurrence kept the moved time. One step for
+  # each occurrence, as on the path above.
+  defp recurrence_candidates(from, cadence, :contiguous_from_the_start, metadata) do
+    occurrence_metadata = strip_span_directives(metadata)
+
+    Stream.unfold(
+      {0, from},
+      &candidate_from_the_start(&1, from, cadence, occurrence_metadata)
+    )
+  end
+
   # General path: each start is `from + i × cadence` (scaled, so
   # month/year cadences don't clamp-drift) and the `to` comes from the
   # end function.
@@ -8214,6 +8230,19 @@ defmodule Tempo do
     case Math.add(start, cadence) do
       %Tempo{} = next_start ->
         {{start, %Tempo.Interval{from: start, to: next_start, metadata: metadata}}, next_start}
+
+      failed ->
+        {step_failure(failed), :stopped}
+    end
+  end
+
+  defp candidate_from_the_start(:stopped, _from, _cadence, _metadata), do: nil
+
+  defp candidate_from_the_start({step, start}, from, cadence, metadata) do
+    case add_n_durations(from, cadence, step + 1) do
+      %Tempo{} = next_start ->
+        occurrence = %Tempo.Interval{from: start, to: next_start, metadata: metadata}
+        {{start, occurrence}, {step + 1, next_start}}
 
       failed ->
         {step_failure(failed), :stopped}
@@ -8391,7 +8420,9 @@ defmodule Tempo do
         fn start, _i -> Math.add(start, span) end
 
       contiguous_occurrences?(cadence, interval) ->
-        :contiguous
+        if settled_by_the_clock?(from, cadence),
+          do: :contiguous_from_the_start,
+          else: :contiguous
 
       consecutive_occurrences?(cadence, interval) ->
         fn _start, i -> add_n_durations(from, cadence, i + 1) end
@@ -8432,6 +8463,19 @@ defmodule Tempo do
   end
 
   defp contiguous_occurrences?(_cadence, _interval), do: false
+
+  # A step of days or weeks from a time of day in a zone keeps the reading
+  # of the clock, and is moved where the clock skips it. A step of hours or
+  # less counts time that has passed and lands on no such reading, and a
+  # date has no reading to be moved.
+  defp settled_by_the_clock?(
+         %Tempo{extended: %{zone_id: zone}, time: time},
+         %Tempo.Duration{time: [{unit, _amount} | _]}
+       )
+       when is_binary(zone) and unit in [:week, :day],
+       do: List.keymember?(time, :hour, 0)
+
+  defp settled_by_the_clock?(_from, _cadence), do: false
 
   # Termination predicates for the recurrence loop.
   defp under_until?(%Tempo{} = from, %Tempo{} = until) do
