@@ -1171,6 +1171,57 @@ defmodule Tempo.RRule.SelectionTest do
     end
   end
 
+  describe "a week selected by a recurrence that starts at a year" do
+    # A week selected from a year is a week of its ISO 8601 week-year
+    # (decided 2026-10-05), which starts on the Monday of week 1: up to three
+    # days before 1 January. A start that is a year holds its occurrences to
+    # that Monday, where it held them to 1 January and dropped the week 1 of
+    # its own first year.
+    #
+    # The measure is `Date` alone: 4 January is always in week 1.
+
+    defp monday_of_week_1(year) do
+      fourth = Date.new!(year, 1, 4)
+      Date.add(fourth, 1 - Date.day_of_week(fourth))
+    end
+
+    defp first_days(recurrence, options \\ []) do
+      {:ok, set} = Tempo.to_interval(recurrence, options)
+
+      for occurrence <- IntervalSet.members(set) do
+        {:ok, date} =
+          occurrence |> Interval.from() |> Tempo.extend_resolution(:day) |> Tempo.to_date()
+
+        date
+      end
+    end
+
+    test "lists week 1 of each year from its first, wherever the week starts" do
+      for year <- 2018..2030 do
+        expected = for step <- 0..2, do: monday_of_week_1(year + step)
+
+        assert {year, first_days(Tempo.from_iso8601!("R3/#{year}/P1Y/FL1WN"))} == {year, expected}
+
+        assert {year, first_days(Tempo.from_iso8601!("R3/#{year}/P1Y/FL1W1KN"))} ==
+                 {year, expected}
+      end
+    end
+
+    test "lists it within a window of the year" do
+      # Week 1 of 2026 starts on 29 December 2025 and runs into the window.
+      assert first_days(~o"R/2026/P1Y/FL1WN", within: ~o"2026") == [~D[2025-12-29]]
+      assert first_days(~o"R/../P1Y/FL1WN", within: ~o"2026") == [~D[2025-12-29]]
+    end
+
+    test "a start that is a date holds its occurrences to that date, as DTSTART does" do
+      # The Monday of week 1 of 2026 is 29 December 2025, before the start.
+      rule = RRule.parse!("FREQ=YEARLY;BYWEEKNO=1;BYDAY=MO;COUNT=2", from: ~o"2026-01-01")
+      assert first_days(rule) == [~D[2027-01-04], ~D[2028-01-03]]
+
+      assert first_days(~o"R2/2026-01-01/P1Y/FL1W1KN") == [~D[2027-01-04], ~D[2028-01-03]]
+    end
+  end
+
   describe "a year in a recurrence selection" do
     # ISO 8601-2 §12.2 has no year selection rule. A year in a recurrence's
     # selection limits it to the occurrences a listed year's period selects, as

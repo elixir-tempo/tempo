@@ -311,6 +311,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A recurrence that starts at a year and selects a week lists that year's own week first, wherever the week starts: `R2/2026/P1Y/FL1WN` is weeks 1 of 2026 and 2027, the first from 29 December 2025, as the value `2026YL1WN` is, where it dropped that week as one before its start and listed 2027 and 2028. A start that is a date still holds its occurrences to that date, as RFC 5545's DTSTART does.
+
 * A selection in a whole week or month selects by the days of that period: `Tempo.select(~o"2026-W25", ~o"L15DN")` and the value `2026Y25WL16DN` are 15 and 16 June 2026, and `Tempo.select(~o"2026-06", ~o"L166ON")` is 15 June, where a day of the month or of the year limited the period by the day it starts on (the whole week, or nothing). A recurrence that starts at a week is matched by a week or a month (`R2/2026-W25/P1W/FL25WN` is week 25 of 2026 and 2027, where it matched none and walked to its horizon), a weekly rule's `BYMONTHDAY` beside a `BYDAY` is the days that are both, and `2026Y25WL25WN` is the week.
 
 * A time of day selected within a window is selected where it starts within the window: of the twelve hours from a Monday, `LLL1K1IN/PT12HNT{9,13}HN` is that Monday's 09:00, where it was 09:00 and 13:00 on the Monday and on the day before. A window that crosses midnight selects on both days (01:00 the next morning in the four hours from 22:00), and a position counts what is left.

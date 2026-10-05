@@ -7100,12 +7100,12 @@ defmodule Tempo do
          opts
        )
        when is_integer(n) and n > 1 do
-    {from, interval} = fill_selection_start(from, interval)
+    {from, floor, interval} = selection_start(from, interval)
     step = if direction == -1, do: Duration.negate(duration), else: duration
 
     walk =
       iterate_recurrence(
-        from,
+        {from, floor},
         step,
         occurrence_end_fn(from, duration, interval),
         fn _start -> true end,
@@ -7137,11 +7137,11 @@ defmodule Tempo do
          } = interval,
          opts
        ) do
-    {from, interval} = fill_selection_start(from, interval)
+    {from, floor, interval} = selection_start(from, interval)
 
     walk =
       iterate_recurrence(
-        from,
+        {from, floor},
         duration,
         occurrence_end_fn(from, duration, interval),
         &under_until?(&1, until),
@@ -7194,11 +7194,11 @@ defmodule Tempo do
          _opts
        )
        when to in [nil, :undefined] do
-    {from, interval} = fill_selection_start(from, interval)
+    {from, floor, interval} = selection_start(from, interval)
     step = if direction == -1, do: Duration.negate(duration), else: duration
 
     case iterate_recurrence(
-           from,
+           {from, floor},
            step,
            occurrence_end_fn(from, duration, interval),
            fn _start -> true end,
@@ -7547,10 +7547,10 @@ defmodule Tempo do
     with {:ok, window_to} <- bound_upper(within),
          {_forward, backward} = window_reach(interval),
          {:ok, walk_to} <- reach_end(window_to, interval, backward),
-         {from, interval} = fill_selection_start(from, interval),
+         {from, floor, interval} = selection_start(from, interval),
          {:ok, intervals} <-
            iterate_recurrence(
-             from,
+             {from, floor},
              duration,
              occurrence_end_fn(from, duration, interval),
              &under_bound?(&1, walk_to),
@@ -7953,7 +7953,7 @@ defmodule Tempo do
   # combinations (e.g. `BYMONTHDAY=31` for months that never have
   # 31 days — the filter would reject every candidate forever).
   defp iterate_recurrence(
-         %Tempo{} = from,
+         {%Tempo{} = from, %Tempo{} = floor},
          %Tempo.Duration{} = cadence,
          occurrence_end,
          start_predicate,
@@ -7964,7 +7964,7 @@ defmodule Tempo do
        when is_function(start_predicate, 1) and is_function(selection_fn, 1) do
     from
     |> period_occurrences(cadence, occurrence_end, start_predicate, selection_fn, metadata)
-    |> from_the_start(from)
+    |> from_the_start(floor)
     |> Stream.take(output_limit)
     |> Enum.to_list()
     |> walked(from)
@@ -8411,6 +8411,37 @@ defmodule Tempo do
       {:error, _} = err -> err
     end
   end
+
+  # A recurrence's start as its walk takes it (`fill_selection_start/2`), and
+  # the floor its occurrences are held to come at or after: the start as it
+  # is written, but for a year whose rule selects a week of the year. A week
+  # selected from a year is a week of its ISO 8601 week-year (decided
+  # 2026-10-05), which starts on the Monday of week 1, up to three days before
+  # 1 January: week 1 of 2026 starts on 29 December 2025 and is the first
+  # occurrence of `R/2026/P1Y/FL1WN`, as it is the value `2026YL1WN`. A start
+  # that is a date holds its occurrences to that date, as DTSTART does.
+  defp selection_start(%Tempo{} = from, %Tempo.Interval{} = interval) do
+    {start, filled} = fill_selection_start(from, interval)
+    {start, start_floor(from, interval, start), filled}
+  end
+
+  defp start_floor(
+         %Tempo{time: [year: year], calendar: calendar} = from,
+         %Tempo.Interval{repeat_rule: %Tempo{time: [{:selection, selection} | _units]}},
+         start
+       )
+       when is_integer(year) do
+    with true <- List.keymember?(selection, :week, 0),
+         false <- week_based_calendar?(Compare.effective_calendar(calendar)),
+         {:ok, %Date{} = monday} <- Validation.date_from_iso_week(year, 1, 1, calendar),
+         {:ok, %Date{} = monday} <- Date.convert(monday, calendar) do
+      %{from | time: [year: monday.year, month: monday.month, day: monday.day]}
+    else
+      _the_start -> start
+    end
+  end
+
+  defp start_floor(_from, _interval, start), do: start
 
   # A written start coarser than the grain its selection names —
   # `R/2020Y/P4Y/FL11M3DN`, a year starting a day selection — is filled down to
