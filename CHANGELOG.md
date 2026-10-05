@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A week selected from a year by `Tempo.select/2` is a week of that year's ISO 8601 week-year, wherever it starts: `Tempo.select(~o"2026", ~o"1W")` is `2026Y1W/2W`, the week from 29 December 2025, and `~o"1W1K"` that Monday, as the value `2026YL1W1KN` is, where each selected nothing because the week does not start in the calendar year, and `Tempo.select(~o"2020/2030", ~o"1W")` is ten weeks where it was seven. A selection gives each week to its own year too, so `Tempo.select(~o"2025", ~o"L1WN")` is `2025Y1W/2W`, where it was 2026's.
+
 * A selection that names a week and is resolved in a month returns a `Tempo.ConversionError` whose `:reason` is `:not_built` and whose `:target` is `:week_of_month`, as a week given to `Tempo.select/2` for a month does: `Tempo.select(~o"2026-06", ~o"L23WN")`, `2026Y6ML23WN` and `R/2026Y6M/P1M/FL23WN` were the whole month where its first day was in the ISO week of that number, and nothing otherwise. A rule whose start is a date, as one read from an RRULE has it, keeps or drops that day by its week of the year as before.
 
 * A selection's window (ISO 8601-2 §12.10) that has no length, or is shorter than a unit selected within it, is a `Tempo.ParseError` when the value is read: `LLL1K1IN/PT12HN1K1IN`, a Monday in twelve hours, and `LL45DN/P0DN`, where the first selected the day the window starts on and the second gave an interval of no length. A window is measured in the units a duration measures exactly, so one written in months or years is not judged, and a window of hours that selects a time of day is read.

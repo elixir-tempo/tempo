@@ -68,6 +68,13 @@ defmodule Tempo.Select do
   selected twice or outside the span. A day-of-week selector keeps the
   matching days of the whole span.
 
+  A week selected from a year is kept whole. It is a week of that year's
+  ISO 8601 week-year, which runs from the Monday of its week 1 and so
+  starts up to three days before 1 January, or after it:
+  `Tempo.select(~o"2026", ~o"1W")` is the week from 29 December 2025, and
+  `~o"1W1K"` that Monday. Each week is one year's, so a span of years
+  still selects none twice.
+
   An open-ended span gives a lazy set, selected period by period as it
   is walked:
 
@@ -119,7 +126,7 @@ defmodule Tempo.Select do
   ```elixir
   Tempo.select(~o"2026",    ~o"-1M")   #=> December 2026 (last month of year)
   Tempo.select(~o"2026",    ~o"-1D")   #=> Dec 31 2026 (last day of year)
-  Tempo.select(~o"2026",    ~o"-1W")   #=> week 52 of 2026 (last ISO week)
+  Tempo.select(~o"2026",    ~o"-1W")   #=> week 53 of 2026 (last ISO week)
   Tempo.select(~o"2026-06", ~o"-1D")   #=> Jun 30 2026 (last day of month)
   Tempo.select(~o"2026-02", ~o"-1D")   #=> Feb 28 2026 (leap-aware — Feb 29 in 2024)
   Tempo.select(~o"2026-06-15", ~o"-1H") #=> 23:00 (last hour of day)
@@ -654,11 +661,61 @@ defmodule Tempo.Select do
   # The selection in one period: the selector applied to the period,
   # keeping what starts in it, so no two periods select the same span
   # and nothing outside the span is selected.
+  defp select_in_period(period, selector) when is_function(selector, 1),
+    do: select_in_period(period, selector.(period))
+
   defp select_in_period(period, selector) do
     with {:ok, %IntervalSet{} = selected} <- select_period(period, selector) do
-      {:ok, selected |> IntervalSet.members() |> Enum.filter(&starts_in?(&1, period))}
+      {:ok, selected |> IntervalSet.members() |> starting_in(period, selector)}
     end
   end
+
+  # What each constraint of a list selects is kept by that constraint's own
+  # span, where the list is resolved (`select_period/2`).
+  defp starting_in(members, _period, [%Tempo{} | _]), do: members
+
+  defp starting_in(members, period, selector) do
+    span = span_selected_in(period, selector)
+    Enum.filter(members, &starts_in?(&1, span))
+  end
+
+  # The span a selection is kept by starting in: the period, but for a week
+  # selected from a year. A week of a year is a week of its ISO 8601
+  # week-year (decided 2026-10-05), which runs from the Monday of its week 1
+  # to the Monday of the next year's and so starts up to three days before
+  # the calendar year or after it: week 1 of 2026 starts on 29 December 2025
+  # and is 2026's, as the value `2026YL1WN` has it, and the week that starts
+  # on 28 December 2026 is 2026's week 53 and no week of 2027. Each week is
+  # the week of one year, so a span of years still selects none twice.
+  defp span_selected_in(
+         %Interval{from: %Tempo{time: [year: year], calendar: calendar} = from} = period,
+         selector
+       )
+       when is_integer(year) do
+    with true <- names_week_of_year?(selector),
+         false <- Tempo.week_based_calendar?(Compare.effective_calendar(calendar)),
+         {:ok, first} <- week_time_to_date([year: year, week: 1], calendar),
+         {:ok, next} <- week_time_to_date([year: year + 1, week: 1], calendar) do
+      %Interval{
+        from: build_day_tempo(from, first.year, first.month, first.day, calendar),
+        to: build_day_tempo(from, next.year, next.month, next.day, calendar)
+      }
+    else
+      _the_period -> period
+    end
+  end
+
+  defp span_selected_in(period, _selector), do: period
+
+  defp names_week_of_year?(%Tempo{time: time}) when is_list(time) do
+    Enum.any?(time, fn
+      {:week, _weeks} -> true
+      {:selection, selection} -> List.keymember?(selection, :week, 0)
+      _other -> false
+    end)
+  end
+
+  defp names_week_of_year?(_selector), do: false
 
   # A selected span with no place in the period's order (a day of no year
   # selected from a time of day) starts nowhere in it.
@@ -799,11 +856,8 @@ defmodule Tempo.Select do
   end
 
   defp select_period(period, [%Tempo{} | _] = constraints) do
-    with :ok <- one_calendar(period, constraints) do
-      if Enum.any?(constraints, &holds_selection?/1),
-        do: constraints |> collect(&selected_members(period, &1)) |> selection_set(),
-        else: select_projections(period, constraints)
-    end
+    with :ok <- one_calendar(period, constraints),
+         do: constraints |> collect(&select_in_period(period, &1)) |> selection_set()
   end
 
   defp select_period(period, [%Interval{} | _] = constraints) do
@@ -829,7 +883,7 @@ defmodule Tempo.Select do
       rule = in_calendar_of(rule, from)
       recurrence = %Interval{recurrence: :infinity, duration: cadence, repeat_rule: rule}
 
-      Tempo.to_interval_set(recurrence, within: period)
+      Tempo.to_interval_set(recurrence, within: span_selected_in(period, rule))
     end
   end
 
@@ -892,11 +946,6 @@ defmodule Tempo.Select do
          do: {:ok, IntervalSet.members(selected)}
   end
 
-  defp selected_members(period, selector) do
-    with {:ok, %IntervalSet{} = selected} <- select_period(period, selector),
-         do: {:ok, IntervalSet.members(selected)}
-  end
-
   # A value's units and its ISO 8601-2 selection: the units before the
   # selection, `:none` without one, and `:unreadable` when units follow it.
   defp selection_parts(time) do
@@ -906,9 +955,6 @@ defmodule Tempo.Select do
       {_units, _selection_and_more} -> :unreadable
     end
   end
-
-  defp holds_selection?(%Tempo{time: time}), do: Enum.any?(time, &selection_unit?/1)
-  defp holds_selection?(_constraint), do: false
 
   defp selection_unit?({:selection, _selection}), do: true
   defp selection_unit?(_unit), do: false

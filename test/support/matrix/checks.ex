@@ -748,12 +748,12 @@ defmodule Tempo.Matrix.Checks do
   end
 
   # The same parts as the constraint of `Tempo.select/2` on the period. A
-  # position is a selection's alone, parts that are no value's text
-  # (`6M3K`) cannot be asked, and `select/2` keeps what lies in its base,
-  # so a year's weeks, which reach into the years beside it, are not asked
-  # either.
+  # position is a selection's alone, and parts that are no value's text
+  # (`6M3K`) cannot be asked. A week selected from a year is a week of its
+  # ISO 8601 week-year, which reaches into the years beside it, and is asked
+  # since `select/2` keeps it by that year (2026-10-05).
   defp selection_as_select(%{selection: %{parts: parts} = datum} = entry, _value) do
-    if Keyword.has_key?(parts, :instance) or reaches_past_period?(datum) do
+    if Keyword.has_key?(parts, :instance) do
       :skip
     else
       period = Selections.period_text(datum)

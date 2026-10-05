@@ -983,19 +983,69 @@ defmodule Tempo.Select.Test do
         # 28 December is always in the last ISO 8601 week of its year.
         {^year, last} = :calendar.iso_week_number({year, 12, 28})
 
-        # A selection starts in its period, so a week 1 that begins in the
-        # December before is not selected from its year.
-        expected =
-          for week <- named_among(written, last),
-              monday = monday_of_week(year, week),
-              monday.year == year,
-              do: {monday, 7}
+        # A week of a year is a week of its ISO week-year, wherever it
+        # starts: week 1 of 2026 begins on 29 December 2025.
+        expected = for week <- named_among(written, last), do: {monday_of_week(year, week), 7}
 
         base = Tempo.from_iso8601!("#{year}Y")
         selected = spans(base, Tempo.from_iso8601!(text))
 
         assert {year, text, selected} == {year, text, expected}
       end
+    end
+
+    test "a week of a year is a week of its ISO week-year, written either way" do
+      # The measure is `Date` alone: the Monday of the week, from 4 January.
+      # A week that starts in the December before was selected from neither
+      # year by a constraint, and from the year before by a selection.
+      for year <- 2018..2030, {text, written} <- @weeks, form <- ["", "L"] do
+        {^year, last} = :calendar.iso_week_number({year, 12, 28})
+        expected = for week <- named_among(written, last), do: {monday_of_week(year, week), 7}
+
+        selector = Tempo.from_iso8601!(if form == "L", do: "L#{text}N", else: text)
+        selected = spans(Tempo.from_iso8601!("#{year}Y"), selector)
+
+        assert {year, text, form, selected} == {year, text, form, expected}
+      end
+    end
+
+    test "a day of a week of a year is that week's, though it lies in the year beside it" do
+      for year <- 2018..2030,
+          {week, weekday} <- [{1, 1}, {1, 4}, {-1, 7}, {-1, 1}],
+          form <- ["", "L"] do
+        {^year, last} = :calendar.iso_week_number({year, 12, 28})
+        week_number = if week < 0, do: last + 1 + week, else: week
+        expected = [{Date.add(monday_of_week(year, week_number), weekday - 1), 1}]
+
+        text = "#{week}W#{weekday}K"
+        selector = Tempo.from_iso8601!(if form == "L", do: "L#{text}N", else: text)
+        selected = spans(Tempo.from_iso8601!("#{year}Y"), selector)
+
+        assert {year, text, form, selected} == {year, text, form, expected}
+      end
+    end
+
+    test "each week is one year's, so a span of years selects none twice" do
+      expected = for year <- 2020..2029, do: {monday_of_week(year, 1), 7}
+
+      assert spans(~o"2020/2030", ~o"1W") == expected
+      assert spans(~o"2020/2030", ~o"L1WN") == expected
+
+      # 2026 has 53 weeks and 2027 has 52: the week that starts on 28
+      # December 2026 is 2026's last, and no week of 2027.
+      assert spans(~o"2026", ~o"53W") == [{~D[2026-12-28], 7}]
+      assert spans(~o"2027", ~o"L53WN") == []
+      assert spans(~o"2027", ~o"53W") == []
+    end
+
+    test "a week is kept by its week-year in a list, from a function and in an open span" do
+      assert spans(~o"2026", [~o"1W", ~o"12-25"]) == [{~D[2025-12-29], 7}, {~D[2026-12-25], 1}]
+      assert spans(~o"2026", fn _year -> ~o"1W" end) == [{~D[2025-12-29], 7}]
+
+      {:ok, weeks} = Tempo.select(~o"2026/..", ~o"1W")
+
+      assert weeks |> IntervalSet.walk() |> Enum.take(2) |> Enum.map(&Interval.from/1) ==
+               [~o"2026Y1W", ~o"2027Y1W"]
     end
 
     test "is passed over among the months of a year, some of which have thirteen" do
