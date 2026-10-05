@@ -7,6 +7,7 @@ defmodule Tempo.SteppingTest do
   import Tempo.Sigils
 
   alias Calendrical.Hebrew
+  alias Calendrical.ISOWeek
   alias Tempo.ConversionError
   alias Tempo.Interval
   alias Tempo.IntervalEndpointsError
@@ -113,6 +114,51 @@ defmodule Tempo.SteppingTest do
       assert Tempo.shift(~o"2026Y53W", week: 1) == ~o"2027Y1W"
       assert Tempo.shift(~o"2027Y52W", week: 1) == ~o"2028Y1W"
       assert {:ok, _week} = Tempo.to_interval(~o"2026Y25W")
+    end
+  end
+
+  # A year on from week 53 was week 53 of the year it landed in, which five
+  # years of six do not have: `2026Y53W` plus a year was `2027Y53W`, and a
+  # recurrence of years from it ended each occurrence on such a week.
+  describe "a week stepped by years" do
+    defp weeks_in(year) do
+      {^year, weeks} = :calendar.iso_week_number({year, 12, 28})
+      weeks
+    end
+
+    test "is the last week of a year that has no week of its number" do
+      for year <- 2015..2032,
+          week <- [1, 26, 52, 53],
+          week <= weeks_in(year),
+          by <- [-6, -1, 1, 5, 6] do
+        landed = min(week, weeks_in(year + by))
+
+        assert {year, week, by, Tempo.shift(Tempo.from_iso8601!("#{year}Y#{week}W"), year: by)} ==
+                 {year, week, by, Tempo.from_iso8601!("#{year + by}Y#{landed}W")}
+      end
+    end
+
+    test "is the week its calendar steps to, in a calendar of weeks" do
+      for year <- [2020, 2026], week <- [1, 52, 53], day <- [1, 7], by <- [-1, 1, 6] do
+        {to_year, to_week, to_day} = ISOWeek.plus(year, week, day, :years, by)
+
+        assert Tempo.shift(Tempo.from_iso8601!("#{year}Y#{week}W#{day}K", ISOWeek), year: by) ==
+                 Tempo.from_iso8601!("#{to_year}Y#{to_week}W#{to_day}K", ISOWeek)
+      end
+    end
+
+    test "gives a recurrence of years, and a span of one, weeks their years have" do
+      assert spans(Tempo.from_iso8601!("R3/2026Y53W/P1Y")) == [
+               {~o"2026Y53W", ~o"2027Y52W"},
+               {~o"2027Y52W", ~o"2028Y52W"},
+               {~o"2028Y52W", ~o"2029Y52W"}
+             ]
+
+      assert span(Tempo.from_iso8601!("2026Y53W/P1Y")) == {~o"2026Y53W", ~o"2027Y52W"}
+    end
+
+    test "leaves a week with no year as it is written" do
+      assert Tempo.shift(~o"53W", year: 1) == ~o"53W"
     end
   end
 

@@ -313,6 +313,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A week stepped by years is the last week of a year that has no week of its number, as a day past the end of its month is the month's last: `Tempo.shift(~o"2026Y53W", year: 1)` is `~o"2027Y52W"`, where it was `~o"2027Y53W"`, a week 2027 does not have. A calendar of weeks steps its week dates so too, and a recurrence of years from week 53 (`R3/2026Y53W/P1Y`) no longer ends an occurrence on such a week.
+
 * A selection within a time of day is written: `inspect/1`, `Tempo.to_iso8601/1` and `Tempo.to_iso8601!/1` raised a `FunctionClauseError` for a value such as `2026Y6M15DT10HLT30MN`, the thirtieth minute of an hour, which reads and converts.
 
 * An interval's end written with a time of day is read as the value is when it is written alone: a set, a range, an unspecified unit or a mask in it (`2026Y6M{1,15}DT10H/PT1H`, `R2/2026Y6M15DT{9,17}H/P1D`, `2026Y6M15DTX*H/2026Y6M16D`) was left as the tokenizer wrote it, which nothing reads. `inspect/1` and `Tempo.to_iso8601/1` raised for such an interval, `Tempo.to_interval/2` and `Tempo.select/2` raised or used the unread end, and a recurrence from such a start was refused where it is the occurrences from each value.

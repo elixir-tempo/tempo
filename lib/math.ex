@@ -2027,9 +2027,12 @@ defmodule Tempo.Math do
   defp maybe_clamp({:error, _reason} = error, _duration_time, _calendar), do: error
 
   defp maybe_clamp({:ok, time}, duration_time, calendar) do
-    if Keyword.has_key?(duration_time, :month) or Keyword.has_key?(duration_time, :year),
-      do: clamp_day_to_month(time, calendar),
-      else: {:ok, time}
+    if Keyword.has_key?(duration_time, :month) or Keyword.has_key?(duration_time, :year) do
+      with {:ok, time} <- clamp_day_to_month(time, calendar),
+           do: clamp_week_to_year(time, calendar)
+    else
+      {:ok, time}
+    end
   end
 
   # Sub-second durations are applied as a single signed shift of the
@@ -2280,6 +2283,27 @@ defmodule Tempo.Math do
   defp step_n_units(time, unit, n, calendar) when n < 0 do
     with {:ok, stepped} <- subtract_unit(time, unit, calendar) do
       step_n_units(stepped, unit, n + 1, calendar)
+    end
+  end
+
+  # After a year step a week may be past the last of the year it lands in:
+  # week 53, a year on from a year that has one, in a year that has 52. It
+  # is that year's last week, as a day past the end of its month is the
+  # month's last day, and as a calendar of weeks steps its own dates
+  # (`Calendrical.ISOWeek.plus/6`). With no year a week is left as it is
+  # written, and so is one that holds several values.
+  defp clamp_week_to_year(time, calendar) do
+    case {component(time, :week), year_of(time)} do
+      {{:ok, week}, {:ok, _year}} -> clamp_integer_week(time, week, calendar)
+      _no_week_or_no_one_year -> {:ok, time}
+    end
+  end
+
+  defp clamp_integer_week(time, week, calendar) do
+    case UnitValues.at_or_before(:week, week, time, calendar) do
+      {:ok, ^week} -> {:ok, time}
+      {:ok, last} -> {:ok, put_component(time, :week, last)}
+      {:error, _cannot_count} -> {:ok, time}
     end
   end
 

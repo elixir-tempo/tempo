@@ -10,8 +10,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **A step from an unspecified or masked week or day of the week is one value** — `Tempo.shift(~o"2026Y25WX*K", day: 1)` is the next week's Monday alone (`~o"2026-06-22"`), `~o"2026YX*W"` plus a week is `~o"2027Y1W"`, the Wednesday of any week (`2026YX*W3K`) plus five days is 4 January 2027 and `~o"X*K"` plus a day is `~o"1K"`, where `~o"2026Y6MX*D"` plus a day is one of the days from 2 June to 1 July; a masked week or day of the week (`2026Y2XW`, `2026Y25WXK`) is refused. On the month axis a step finer than the masked unit names every value between the ends of its block: `~o"2026Y6MX*D"` plus an hour is `[2026Y6M1DT1H..2026Y6M30DT1H]`, and `~o"202XY"` plus a month every month from February 2020 to February 2029, where the hours are thirty and the Februaries ten. Found 2026-10-05.
 
-* [ ] **A year on from week 53 is week 53 of a year that has 52** — `Tempo.shift(~o"2026Y53W", year: 1)` is `~o"2027Y53W"`, a week 2027 does not have, and in a calendar of weeks a week date steps so too (`2026Y53W1K[u-ca=iso-week]` plus a year). Found 2026-10-05.
-
 * [ ] **A reading inside a clock change's gap is taken as UTC** — an hour with no minutes is read where the whole hour is skipped (`~o"2026-03-29T02[Europe/Paris]"`, where `T02:30` there is a `ZoneGapError`): its span is `T2H/T5H`, an hour on is 05:00, and `~o"2026-03-08T02[America/New_York]"` plus an hour is 22:00 the day before. A day whose first reading is skipped (`~o"2023-04-28[Africa/Cairo]"`, where the clocks went forward at midnight) is placed two hours late, so an hour on is 04:00, and a set that names a skipped reading at a minute (`2026Y3M{28,29}DT2H30M[Europe/Paris]`) is read, with a span of `T2H30M/T4H31M`. Found 2026-10-05.
 
 ### Conformance and completeness
@@ -121,6 +119,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A year on from week 53 is the last week of a year that has 52** — `Tempo.shift(~o"2026Y53W", year: 1)` was `~o"2027Y53W"`, in a calendar of weeks too, and `R3/2026Y53W/P1Y` ended its occurrences on such weeks. The stepper brings a week into the year it lands in after a year step (`clamp_week_to_year/2`, asking `Tempo.UnitValues.at_or_before/4`), as it brings a day into its month. Measured against `:calendar.iso_week_number/1` and `Calendrical.ISOWeek.plus/6`. 2026-10-06.
 
 * [x] **A selection within a time of day is written** — `inspect/1`, `Tempo.to_iso8601/1` and `to_iso8601!/1` raised a `FunctionClauseError` for `2026Y6M15DT10HLT30MN`, the thirtieth minute of an hour, which reads and converts: `Tempo.Inspect` wrote a time of day by clauses for one, two and three units, each taking what followed the first as a unit. One clause writes the units and then what follows them, and the matrix baseline falls from 41 cells to 6. 2026-10-06.
 
