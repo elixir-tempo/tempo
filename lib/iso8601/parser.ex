@@ -660,7 +660,7 @@ defmodule Tempo.Iso8601.Parser do
   end
 
   def parse_date([{component, {:mask, list}} | rest]) when is_list(list) do
-    [{component, {:mask, reduce_sublists(list)}} | parse_date(rest)]
+    [{component, mask_or_number(list)} | parse_date(rest)]
   end
 
   def parse_date([h | t]) do
@@ -769,6 +769,22 @@ defmodule Tempo.Iso8601.Parser do
   end
 
   # Helpers
+
+  # A mask with every digit written is the number its digits write. The
+  # tokenizer gives one for a unit of the basic format that an unspecified
+  # digit or a set follows directly (`202606XX`, `T1030{45,50}`): the month
+  # was held as `{:mask, [0, 6]}`, so the value was not the one the extended
+  # format writes (`2026-06-XX`) and did not read back from its own text.
+  defp mask_or_number([:negative | digits] = mask) do
+    if all_digits?(digits), do: -Integer.undigits(digits), else: {:mask, reduce_sublists(mask)}
+  end
+
+  defp mask_or_number(mask) do
+    if all_digits?(mask), do: Integer.undigits(mask), else: {:mask, reduce_sublists(mask)}
+  end
+
+  defp all_digits?([_digit | _rest] = digits), do: Enum.all?(digits, &(&1 in 0..9))
+  defp all_digits?([]), do: false
 
   def reduce_sublists(list) do
     Enum.map(list, fn

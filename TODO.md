@@ -8,11 +8,13 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Correctness
 
+* [ ] **A date in the basic format in a set of all is read as a year** — `{20260615,20260616}` is the years 20260615 and 20260616, `{202606,202607}` and `{2026166,2026167}` years too, and `{20260615..20260620}` a range of them, where each is a date alone and in a set of one of (`[20260615,20260616]` is two dates). A year of more than four digits is written with a sign (ISO 8601-1 §4.4). Found 2026-10-06.
+
 * [ ] **`Tempo.new/1` does not check its `:calendar` and `:zone`** — `calendar: :hebrew` and `calendar: String` raise an `UndefinedFunctionError` and `calendar: "gregorian"` a `FunctionClauseError`, where a calendar that is no calendar module is an error; `zone: 123` and `zone: :utc` are held and not written, and `zone: "Not/AZone"` is held as a zone, which is then read as UTC. Found 2026-10-06.
 
-* [ ] **A time in the basic format before a set holds a unit as a mask** — `T1030{45,50}` reads its minute as `{:mask, [3, 0]}` and `20260615T10{30,45}` its hour as `{:mask, [1, 0]}`, so neither equals the same time in the extended format (`T10:30:{45,50}`) or reads back from its own text. Found 2026-10-06.
-
 ### Conformance and completeness
+
+* [ ] **The basic format with unspecified digits or a set in a time alone and in a week date** — `T10XX`, `T10{30,45}`, `2026WXX1`, `2026W{25,26}1` and `2026W{25,26}` are not read, where each is read in the extended format (`T10:XX`, `2026-W{25,26}-1`) and `20260615T10XX` is read after a date. Found 2026-10-06.
 
 * [ ] **Sets of durations (ISO 8601-2 §6.5)** — `{P1M2S..P1M5S}` and `[P1M2S,P1M3S]` are refused since 2026-10-06, where a duration's units were read as a date's. To build: a member that is a `Tempo.Duration` (the `~o` sigil's match has a clause for one already), a range of durations and its expansion, and what each operation gives a set of them. To decide first: whether units written with no designator (`{1M2S..1M5S}`, §6.4 example 3, which the standard calls durations too) stay the times of day they are read as. Found 2026-10-06.
 
@@ -125,6 +127,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A unit of the basic format before unspecified digits or a set is its number** — the tokenizer's number takes its mask alternative where an `X` or a `{` follows the digits, so `202606XX` had the month `{:mask, [0, 6]}`, `2026XX15` the year `{:mask, [2, 0, 2, 6]}` and `T1030{45,50}` the minute `{:mask, [3, 0]}`: not the value the extended format writes, no `year/1` or `month/1`, and stepped as a mask. `mask_or_number/1` in `lib/iso8601/parser.ex` reads a mask with every digit written as the number. Measure: the extended format, in `test/tempo/iso8601/unspecified_digit_test.exs`. 2026-10-06.
 
 * [x] **A time shift is whole hours, minutes and seconds** — the shift's units were read by the combinators of a time of day, so a set, a range or a mask raised in `from_iso8601/1`, a fraction of a second, a group or a selection in `inspect/1`, and a fraction of an hour (`Z1.5H`, `+01.5`) in `Tempo.relation/2`; a sign inside (`Z1H-30M`) read back as another value, the minus sign `−` was kept as a unit, and `Z0S` of §7.4 was not read, behind an assertion that could not fail. The grammar reads whole numbers (`shift_units/0`, `shift_hour/0` in `lib/iso8601/tokenizer/grammar.ex`), `validate_time_shift/1` holds any shift to that shape and to minutes and seconds under 60 (so `Tempo.new/1` checks its `:shift`), the IXDTF offset's minutes are under 60, and `Zone.offset_to_shift/1` keeps an offset's seconds. Measure: `test/tempo/iso8601/time_shift_test.exs`, against `DateTime`. 2026-10-06.
 

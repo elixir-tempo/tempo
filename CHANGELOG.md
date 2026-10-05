@@ -315,6 +315,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A unit of the basic format that unspecified digits or a set follow is the number it is written as: `202606XX` is June 2026 with its day unspecified, as `2026-06-XX` is, and `T1030{45,50}` equals `T10:30:{45,50}`. The unit was held as a mask of its own digits, so the value did not read back from its own text, had no `Tempo.year/1` or `Tempo.month/1`, and was stepped as an unspecified unit is.
+
 * A time shift is a whole number of hours, minutes and seconds: one written with a set, a range, unspecified digits, a group, a selection or a fraction (`Z{1,2}H`, `Z1H0M5.5S`, `+01.5`) is a parse error, where it raised when the value was read, written or compared. `Z0S` and `Z30M` (ISO 8601-2 §7.4 and §7.10) are read, and so is a shift written with the minus sign (`−05:30`).
 
 * An offset that is not a whole number of minutes keeps its seconds in the shift it is written as: a time in New York's local mean time is `Z-4H56M2S[America/New_York]` from `Tempo.shift_zone/2` and `Tempo.from_elixir/1`, where the two seconds were dropped.
