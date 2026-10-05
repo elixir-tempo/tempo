@@ -5,12 +5,6 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   import Tempo.Iso8601.Tokenizer.Helpers
   import Tempo.Iso8601.Tokenizer.Extended, only: [extended_suffix: 0]
 
-  # NOTES
-
-  # Doesn't not correctly parse negative centuries and decades
-  # since elixir does not support the idea of -0.
-  # See ISO8601 4.4.1.7 and 4.4.1.8
-
   def iso8601_tokenizer do
     optional(qualification())
     |> choice([
@@ -792,14 +786,29 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # decade
 
   def implicit_decade do
-    maybe_negative_integer(3)
+    before_year_one_or_not(positive_integer(3))
     |> unwrap_and_tag(:decade)
   end
 
   def explicit_decade do
-    maybe_negative_number(min: 1)
+    before_year_one_or_not(positive_number(min: 1))
     |> ignore(string("J"))
     |> unwrap_and_tag(:decade)
+  end
+
+  # The number of a decade or a century, with its minus sign kept apart from
+  # it. One before year one is the years its digits begin, read with their
+  # sign (ISO 8601-2 §4.4.1.7 and §4.4.1.8): `-19` is the years -1999 to
+  # -1900, and the negative zero century `-00` the years -99 to 0, which the
+  # zero century `00` is not. As a negative number it was the hundred years
+  # from -1900 up, and `-00` was `00`.
+  defp before_year_one_or_not(number) do
+    choice([
+      ignore(negative())
+      |> concat(number |> reduce(:form_number))
+      |> unwrap_and_tag(:before_year_one),
+      number |> reduce(:form_number)
+    ])
   end
 
   # A decimal fraction belongs to an hour, a minute or a second alone (ISO
@@ -811,14 +820,14 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # `[19,20]` and of `[19..20]` was read as the hour 19, beside the century
   # the second member is.
   def implicit_century do
-    maybe_negative_integer(2)
+    before_year_one_or_not(positive_integer(2))
     |> lookahead_not(colon())
     |> lookahead_not(decimal_sign() |> concat(digit()))
     |> unwrap_and_tag(:century)
   end
 
   def explicit_century do
-    maybe_negative_number(min: 1)
+    before_year_one_or_not(positive_number(min: 1))
     |> ignore(string("C"))
     |> unwrap_and_tag(:century)
   end

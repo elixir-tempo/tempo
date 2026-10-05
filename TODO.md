@@ -8,7 +8,7 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Correctness
 
-* [ ] **Sets and ranges the parser reads into values that are not right** — found 2026-10-06 beside the parser items done that day, each at HEAD before them, and left where each fix was finding more than it closed: a negative century or decade names the wrong years and is written in a form that is not read (`-19` is −1900 to −1801, written `-18G100YU`); a range of seasons in a set has intervals for its ends, and its text is not read (`{2022-21..2022-24}`); a qualified century in a set, and a qualified range of them, read back as another value (`{19?,20}`, `{19C..20C}?`); `{19,20}` is the years 19 and 20 where `[19,20]` is two centuries (to decide); and a set at the end of an interval is an error where it could be an abbreviated end (`2026-06-15/{20,21}`). Not to be worked cell by cell: the remedy at the level of the class is the generator of [plans/parser-formal-grammar.md](plans/parser-formal-grammar.md), which is deferred and the user's to take up.
+* [ ] **Sets and ranges the parser reads into values that are not right** — found 2026-10-06 beside the parser items done that day, each at HEAD before them, and left where each fix was finding more than it closed: a range of seasons in a set has intervals for its ends, and its text is not read (`{2022-21..2022-24}`); a qualified century in a set, and a qualified range of them, read back as another value (`{19?,20}`, `{19C..20C}?`); `{19,20}` is the years 19 and 20 where `[19,20]` is two centuries (to decide); and a set at the end of an interval is an error where it could be an abbreviated end (`2026-06-15/{20,21}`). Not to be worked cell by cell: the remedy at the level of the class is the generator of [plans/parser-formal-grammar.md](plans/parser-formal-grammar.md), which is deferred and the user's to take up.
 
 ### Conformance and completeness
 
@@ -125,6 +125,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A century or a decade before year one** — `-19` was the years −1900 to −1801, where ISO 8601-2 §4.4.1.8 gives −1999 to −1900, the negative zero century `-00` was the century `00`, and each was written as a group with a negative count (`-18G100YU`), which is not read. The tokenizer keeps the sign apart from the number (`before_year_one_or_not/1`), the parser reads the years, and `inspect/1` writes `-19C` and `-196J`. Measure: the examples of §4.4.1.7 and §4.4.1.8, in `test/tempo/iso8601/parser_test.exs`. 2026-10-06.
 
 * [x] **Assertions that could not fail** — eighteen assertions of the parser's tests were `assert f(text)` with the expected value left on the next line, or with none, which a parse error passes: twelve in `dates_times_test.exs` (with an empty test), four in `parser_test.exs` and two in `set_test.exs`, two of which hid a defect (`Z0S` was not read, and a duration in a set was read as a date). Each asserts what it names, found by scanning every `assert` for one with no comparison at its top level. 2026-10-06.
 

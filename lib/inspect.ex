@@ -778,6 +778,18 @@ defmodule Tempo.Inspect do
     Kernel.inspect(value)
   end
 
+  # A century or a decade before year one is no group counted from the
+  # first year, and is written as it is read, with its sign: `-19C` is the
+  # years -1999 to -1900 and `-0C` the years -99 to 0 (ISO 8601-2 §4.4.1.8).
+  # It was written as a group with a negative count, which is not read.
+  defp inspect_value({:year, {:group, %Range{first: first, last: last}}})
+       when first < 0 and last - first == 99 and rem(last, 100) == 0,
+       do: [?-, Integer.to_string(div(-last, 100)), ?C]
+
+  defp inspect_value({:year, {:group, %Range{first: first, last: last}}})
+       when first < 0 and last - first == 9 and rem(last, 10) == 0,
+       do: [?-, Integer.to_string(div(-last, 10)), ?J]
+
   # A group renders as the `nGsizeU` it was declared as. Its values count
   # from the unit's first (month 1, hour 0), so the nth group of `size`
   # starts `(n - 1) * size` past it. A time unit's size is written as a

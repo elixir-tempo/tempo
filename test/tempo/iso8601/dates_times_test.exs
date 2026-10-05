@@ -49,12 +49,16 @@ defmodule Tempo.Parser.DatesTimes.Test do
     assert Tokenizer.tokenize("-3W") == {:ok, {[date: [week: -3]], nil}}
     assert Tokenizer.tokenize("-7O") == {:ok, {[date: [day_of_year: -7]], nil}}
     assert Tokenizer.tokenize("-306O") == {:ok, {[date: [day_of_year: -306]], nil}}
-    assert Tokenizer.tokenize("-019") == {:ok, {[date: [decade: -19]], nil}}
     assert Tokenizer.tokenize("-1985") == {:ok, {[date: [year: -1985]], nil}}
-    assert Tokenizer.tokenize("-12J") == {:ok, {[date: [decade: -12]], nil}}
-    assert Tokenizer.tokenize("-19") == {:ok, {[date: [century: -19]], nil}}
-    assert Tokenizer.tokenize("-12C") == {:ok, {[date: [century: -12]], nil}}
-    assert Tokenizer.tokenize("-00") == {:ok, {[date: [century: 0]], nil}}
+
+    # A decade or a century before year one keeps its sign apart from its
+    # number, so that `-00` is told from `00` (ISO 8601-2 §4.4.1.7, §4.4.1.8).
+    assert Tokenizer.tokenize("-019") == {:ok, {[date: [decade: {:before_year_one, 19}]], nil}}
+    assert Tokenizer.tokenize("-12J") == {:ok, {[date: [decade: {:before_year_one, 12}]], nil}}
+    assert Tokenizer.tokenize("-19") == {:ok, {[date: [century: {:before_year_one, 19}]], nil}}
+    assert Tokenizer.tokenize("-12C") == {:ok, {[date: [century: {:before_year_one, 12}]], nil}}
+    assert Tokenizer.tokenize("-00") == {:ok, {[date: [century: {:before_year_one, 0}]], nil}}
+    assert Tokenizer.tokenize("00") == {:ok, {[date: [century: 0]], nil}}
   end
 
   test "Exponential values section 4.4.2" do

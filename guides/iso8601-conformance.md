@@ -111,6 +111,8 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 | **Exponents on year** | `2018E3` style — parsed by `numbers.ex` `exponent()` |
 | **Significant-digit annotations** (short form) | `1950S2`, `-1859S5`, `Y3388E2S3` |
 | **Year-zero** (`0000`, `-0000`) | Parses as year 0. Interpretation per astronomical convention (year 0 = 1 BCE) is the caller's responsibility. |
+| **Decades and centuries** (§4.3.5, §4.3.6) | `196J` and `196` (1960 to 1969), `16C` and `16` (1600 to 1699), held as groups of years and written `197G10YU`, `17G100YU` |
+| **Decades and centuries before year one** (§4.4.1.7, §4.4.1.8) | `-19` and `-19C` (the years −1999 to −1900), `-12J` (−129 to −120), and the negative zero forms `-00`, `-0C` (−99 to 0) and `-000`, `-0J` (−9 to 0), written with their sign: `-19C` |
 | **Day of the year** (§4.3.4) | `350O`, `1985Y102O` (12 April 1985) |
 | **Time shift in the explicit form** (§7.4) | `Z`, `Z8H`, `Z-5H30M`, `Z7H33M14S`, `Z0S` — whole hours, minutes and seconds, any that are zero left out (§7.10). A shift is at most 24 hours, so the standard's `Z28H` is refused. |
 

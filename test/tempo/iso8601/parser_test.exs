@@ -72,8 +72,92 @@ defmodule Tempo.Iso8601.Parser.Test do
     end
 
     test "a number is still its years" do
-      assert Tempo.from_iso8601("-12C") == {:ok, AST.build(year: {:group, -1200..-1101})}
+      assert Tempo.from_iso8601("12C") == {:ok, AST.build(year: {:group, 1200..1299})}
       assert Tempo.from_iso8601("0J") == {:ok, AST.build(year: {:group, 0..9})}
+    end
+  end
+
+  # ISO 8601-2 §4.4.1.7 and §4.4.1.8: a decade or a century before year one
+  # is the years its digits begin, read with their sign. Tempo read the
+  # number as a negative one and counted a hundred years up from it, so
+  # `-19` was the years -1900 to -1801, the negative zero century `-00` was
+  # the zero century, and what `inspect/1` wrote of either (`-18G100YU`) was
+  # not read.
+  #
+  # The years are the standard's own, from the examples of the two clauses
+  # and of §4.3.5 and §4.3.6.
+  describe "a century or a decade before year one" do
+    @before_year_one [
+      {"-19", -1999..-1900},
+      {"-12C", -1299..-1200},
+      {"-00", -99..0},
+      {"-0C", -99..0},
+      {"-019", -199..-190},
+      {"-12J", -129..-120},
+      {"-000", -9..0},
+      {"-0J", -9..0}
+    ]
+
+    @from_year_zero [
+      {"16C", 1600..1699},
+      {"0C", 0..99},
+      {"00", 0..99},
+      {"196J", 1960..1969},
+      {"0J", 0..9},
+      {"000", 0..9}
+    ]
+
+    defp years(text) do
+      {:ok, %Tempo.Interval{from: from, to: to}} = Tempo.to_interval(Tempo.from_iso8601!(text))
+      Tempo.year(from)..(Tempo.year(to) - 1)//1
+    end
+
+    test "is the years the standard gives it" do
+      for {text, first..last//_} <- @before_year_one ++ @from_year_zero do
+        assert {text, years(text)} == {text, first..last//1}
+      end
+    end
+
+    test "is told from the century or the decade of the same digits" do
+      assert years("-00") != years("00")
+      assert years("-000") != years("000")
+
+      # They share year 0 alone.
+      assert MapSet.intersection(MapSet.new(years("-00")), MapSet.new(years("00"))) ==
+               MapSet.new([0])
+    end
+
+    test "reads back from its own text, which is written with its sign" do
+      for {text, _years} <- @before_year_one do
+        value = Tempo.from_iso8601!(text)
+        assert {text, Tempo.from_iso8601(Tempo.to_iso8601!(value))} == {text, {:ok, value}}
+      end
+
+      assert Tempo.to_iso8601!(Tempo.from_iso8601!("-19")) == "-19C"
+      assert Tempo.to_iso8601!(Tempo.from_iso8601!("-00")) == "-0C"
+      assert Tempo.to_iso8601!(Tempo.from_iso8601!("-019")) == "-19J"
+      assert Tempo.to_iso8601!(Tempo.from_iso8601!("-000")) == "-0J"
+    end
+
+    test "is read in a set, a range and an interval" do
+      assert %Tempo.Set{set: [first, second]} = Tempo.from_iso8601!("[-19,-20]")
+      assert {first, second} == {Tempo.from_iso8601!("-19"), Tempo.from_iso8601!("-20")}
+
+      for text <- ["[-19,-20]", "{-20C..-19C}", "-19C/-18C", "-196/-195"] do
+        value = Tempo.from_iso8601!(text)
+        assert {text, Tempo.from_iso8601(Tempo.to_iso8601!(value))} == {text, {:ok, value}}
+      end
+    end
+
+    test "leaves a century and a decade from year zero as they were written" do
+      assert Tempo.to_iso8601!(Tempo.from_iso8601!("19")) == "20G100YU"
+      assert Tempo.to_iso8601!(Tempo.from_iso8601!("196")) == "197G10YU"
+    end
+
+    test "is one whole number" do
+      for text <- ["-1.5C", "-1XC", "{-19,-20}C", "-1.5J"] do
+        assert {^text, {:error, %Tempo.ParseError{}}} = {text, Tempo.from_iso8601(text)}
+      end
     end
   end
 

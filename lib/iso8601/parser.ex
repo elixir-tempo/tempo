@@ -482,12 +482,27 @@ defmodule Tempo.Iso8601.Parser do
     [{:repeat_rule, parse_date(date)} | parse_date(rest)]
   end
 
-  def parse_date([{:century, century} | rest]) when is_integer(century) do
+  def parse_date([{:century, century} | rest]) when is_integer(century) and century >= 0 do
     parse_date([{:year, {:group, (century * 100)..((century + 1) * 100 - 1)}} | rest])
   end
 
-  def parse_date([{:decade, decade} | rest]) when is_integer(decade) do
+  def parse_date([{:decade, decade} | rest]) when is_integer(decade) and decade >= 0 do
     parse_date([{:year, {:group, (decade * 10)..((decade + 1) * 10 - 1)}} | rest])
+  end
+
+  # A century or a decade before year one is the years its digits begin,
+  # read with their sign (ISO 8601-2 §4.4.1.8 and §4.4.1.7): `-19` is the
+  # years -1999 to -1900 and `-12J` the years -129 to -120. The negative
+  # zero century (`-00`, `-0C`) is the years -99 to 0, and overlaps the zero
+  # century at year 0 alone.
+  def parse_date([{:century, {:before_year_one, century}} | rest])
+      when is_integer(century) and century >= 0 do
+    parse_date([{:year, {:group, (-century * 100 - 99)..(-century * 100)}} | rest])
+  end
+
+  def parse_date([{:decade, {:before_year_one, decade}} | rest])
+      when is_integer(decade) and decade >= 0 do
+    parse_date([{:year, {:group, (-decade * 10 - 9)..(-decade * 10)}} | rest])
   end
 
   # A century or a decade is the hundred or the ten years its whole number
