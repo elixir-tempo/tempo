@@ -455,11 +455,11 @@ defmodule Tempo.RRule.Encoder do
          |> Enum.reject(&(&1 in @rrule_tokens))
          |> Enum.uniq() do
       [] ->
-        with {:ok, selection} <- weekdays_named(selection, calendar, interval) do
-          {week_start, selection} = week_start(selection, interval)
-
-          {:ok,
-           encode_selection(selection) ++ Enum.flat_map(units ++ week_start, &encode_by_entry/1)}
+        with {:ok, selection} <- weekdays_named(selection, calendar, interval),
+             {week_start, selection} = week_start(selection, interval),
+             selection = recombine_ordinal_byday(selection, numbered_byday?(selection, interval)),
+             :ok <- allowed_at_frequency(selection ++ units, interval) do
+          {:ok, Enum.flat_map(selection ++ units ++ week_start, &encode_by_entry/1)}
         end
 
       tokens ->
@@ -578,27 +578,102 @@ defmodule Tempo.RRule.Encoder do
   # rather than the equivalent-but-verbose `BYDAY=MO;BYSETPOS=2`. A genuine
   # set-position over several weekdays keeps `day_of_week` as a list and is
   # left untouched, so it still encodes as `BYDAY=…;BYSETPOS=…`.
-  defp encode_selection(selection) do
-    selection
-    |> recombine_ordinal_byday()
-    |> Enum.flat_map(&encode_by_entry/1)
+  #
+  # RFC 5545 §3.3.10 allows a numbered `BYDAY` in a MONTHLY rule and in a
+  # YEARLY rule with no `BYWEEKNO`, and nowhere else. Where it is not allowed
+  # the pair is left as it is, the weekday and the position that say the same.
+  defp numbered_byday?(selection, interval) do
+    case frequency(interval) do
+      :month -> true
+      :year -> not Keyword.has_key?(selection, :week)
+      _finer_or_weekly -> false
+    end
   end
+
+  defp frequency(%Tempo.Interval{duration: %Tempo.Duration{time: [{unit, _count}]}}), do: unit
+  defp frequency(_interval), do: nil
 
   # Fuse a single-weekday `day_of_week` immediately followed by `instance`
   # back into an ordinal `:byday` entry (the inverse of the §12.9 lowering in
   # `Tempo.RRule.Rule.push_byday/2`). Adjacency is guaranteed: the lowering
   # emits the pair together, ahead of any time element. A list-valued
   # `day_of_week` is a real multi-weekday set-position and is not fused.
-  defp recombine_ordinal_byday([{:day_of_week, day}, {:instance, ordinals} | rest])
+  defp recombine_ordinal_byday(selection, false), do: selection
+
+  defp recombine_ordinal_byday([{:day_of_week, day}, {:instance, ordinals} | rest], true)
        when is_integer(day) do
-    [{:byday, ordinal_byday_pairs(day, ordinals)} | recombine_ordinal_byday(rest)]
+    [{:byday, ordinal_byday_pairs(day, ordinals)} | recombine_ordinal_byday(rest, true)]
   end
 
-  defp recombine_ordinal_byday([entry | rest]), do: [entry | recombine_ordinal_byday(rest)]
-  defp recombine_ordinal_byday([]), do: []
+  defp recombine_ordinal_byday([entry | rest], true),
+    do: [entry | recombine_ordinal_byday(rest, true)]
+
+  defp recombine_ordinal_byday([], true), do: []
 
   defp ordinal_byday_pairs(day, ordinals) do
     ordinals |> List.wrap() |> expand_ranges() |> Enum.map(&{&1, day})
+  end
+
+  # RFC 5545 §3.3.10: "The BYMONTHDAY rule part MUST NOT be specified when
+  # the FREQ rule part is set to WEEKLY", "The BYYEARDAY rule part MUST NOT be
+  # specified when the FREQ rule part is set to DAILY, WEEKLY, or MONTHLY" and
+  # "The BYWEEKNO rule part MUST NOT be used when the FREQ rule part is set to
+  # anything other than YEARLY".
+  @forbidden_at %{
+    day: [:week],
+    day_of_year: [:day, :week, :month],
+    week: [:second, :minute, :hour, :day, :week, :month]
+  }
+
+  # The parts beside which RFC 5545 allows a `BYSETPOS`: every other `BY`
+  # part ("MUST only be used in conjunction with another BYxxx rule part").
+  @by_parts [:month, :day, :day_of_year, :week, :day_of_week, :byday, :hour, :minute, :second]
+
+  # A rule is written only as RFC 5545 allows its frequency. A part the RFC
+  # forbids there is named with the frequency, and is never written for a
+  # reader to reject or to read as another rule.
+  defp allowed_at_frequency(parts, interval) do
+    unit = frequency(interval)
+
+    case Enum.find_value(parts, &forbidden(&1, unit, parts)) do
+      nil -> :ok
+      why -> {:error, not_allowed(why, interval)}
+    end
+  end
+
+  defp forbidden({:byday, pairs}, unit, parts) do
+    numbered? = Enum.any?(pairs, fn {ordinal, _day} -> ordinal != nil end)
+
+    cond do
+      not numbered? -> nil
+      unit == :month -> nil
+      unit == :year and not Keyword.has_key?(parts, :week) -> nil
+      unit == :year -> "a numbered BYDAY beside BYWEEKNO"
+      true -> "a numbered BYDAY in a #{Map.get(@freq_for, unit, inspect(unit))} rule"
+    end
+  end
+
+  defp forbidden({:instance, _positions}, _unit, parts) do
+    if Enum.any?(parts, fn {token, _value} -> token in @by_parts end),
+      do: nil,
+      else: "BYSETPOS with no other BY part"
+  end
+
+  defp forbidden({token, _value}, unit, _parts) do
+    if unit in Map.get(@forbidden_at, token, []),
+      do: "#{by_part_name(token)} in a #{Map.fetch!(@freq_for, unit)} rule"
+  end
+
+  defp by_part_name(:day), do: "BYMONTHDAY"
+  defp by_part_name(:day_of_year), do: "BYYEARDAY"
+  defp by_part_name(:week), do: "BYWEEKNO"
+
+  defp not_allowed(why, interval) do
+    ConversionError.exception(
+      reason: "RFC 5545 does not allow #{why}: #{inspect(interval)}",
+      value: interval,
+      target: :rrule
+    )
   end
 
   defp encode_by_entry({:month, v}), do: ["BYMONTH=#{list_csv(v)}"]

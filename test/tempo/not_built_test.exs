@@ -399,7 +399,7 @@ defmodule Tempo.NotBuiltTest do
             {"R2/5786Y6M1D/P1Y", Hebrew},
             {"R2/5786Y6M1D/P1M", Hebrew},
             {"R2/5786Y6M1D/P1D/FL15DN", Hebrew},
-            {"R2/5786Y6M1D/P1D/FL100ON", Hebrew},
+            {"R2/5786Y6M1DT0H/PT1H/FL100ON", Hebrew},
             {"R2/2026Y/P1Y/FL10W3KN", NRF},
             {"R2/2026Y/P1Y/FL25W2KN", ISOWeek}
           ] do

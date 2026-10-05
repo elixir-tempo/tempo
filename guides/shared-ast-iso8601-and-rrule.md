@@ -154,6 +154,8 @@ Because ISO 8601 can describe more than RRULE, and RRULE needs specific features
 
 * A selection with no RRULE `BY*` part: a calendar week (`w`), a traditional month (`m`), a computed event (`e`), a year, a selection window (ISO 8601-2 §12.10), or a cron nearest weekday or day-of-month-or-weekday. The error names each one rather than dropping it.
 
+* A part RFC 5545 §3.3.10 forbids at the rule's frequency: `BYMONTHDAY` in a weekly rule, `BYYEARDAY` in a daily, weekly or monthly one, `BYWEEKNO` in any but a yearly one, and a `BYSETPOS` with no other `BY` part. The error names the part and the frequency. A numbered weekday is written as the RFC allows it there: `BYDAY=2WE` in a monthly rule and in a yearly rule with no `BYWEEKNO`, and the weekday and its position elsewhere (`FREQ=WEEKLY;BYDAY=WE;BYSETPOS=2`), which Tempo reads as the same rule.
+
 * A recurrence that keeps the last day of a month without its start's day (`R/2026-01-30/P1M`) and that no one rule says: the last of the days up to the start's is written with `BYSETPOS`, which would count a position or several times of day the rule already holds, and a yearly rule has one `BYMONTHDAY` for months of different lengths. One with neither is written (`BYMONTHDAY=28,29,30;BYSETPOS=-1`, or `BYMONTHDAY=-1` from the 31st).
 
 * A recurrence of another calendar than the Gregorian that steps or selects by a month, a year, a week of the year or a day of one. RFC 5545 counts them in the Gregorian calendar and RFC 7529's `RSCALE`, which names another, is not written, so the error's `:reason` is `:not_built`.

@@ -8,8 +8,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Correctness
 
-* [ ] **The RRULE writer writes only what RFC 5545 allows the frequency** — decided 2026-10-05: `Tempo.RRule.to_string/1` writes the allowed equivalent where there is one, a numeric `BYDAY` outside a monthly or yearly rule as `BYDAY` with `BYSETPOS` (`R/2026-06-01/P1W/FL3K2IN` is now `FREQ=WEEKLY;BYDAY=2WE`), and returns a `Tempo.ConversionError` naming the part and the frequency for the rest: `BYWEEKNO` outside a yearly rule, `BYYEARDAY` in a daily, weekly or monthly one and `BYMONTHDAY` in a weekly one.
-
 * [ ] **A computed event expands in a month and a week** — decided 2026-10-05: an event is each of its days that falls in the period, for a year, a month and a week, and a daily or finer candidate is kept when it is the event's day. Now `Tempo.select(~o"2026Y4M", ~o"L(easter)eN")` and the selection of ISO week 14 select nothing though Easter 2026 is 5 April, and `R2/2026-01-05/P1M/FL(easter)eN` is 5 April 2026 and 2037, the 5th when it is Easter, where it is to be the Easter of each month that has one.
 
 * [ ] **An event that cannot be computed is an error** — decided 2026-10-05: `Tempo.to_interval/2` and `Tempo.select/2` return an error naming the event and the year for a year the event cannot be computed for, the unknown name for a name no resolver claims, and a registered resolver's own `{:error, reason}`, where each was no occurrence: `R2/0500Y/P1Y/FL(march-equinox)eN` is the equinoxes of 1000 and 1001, Astro computing none before 1000 CE, and `(brigadoon)e` selects nothing.
@@ -127,6 +125,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **The RRULE writer writes only what RFC 5545 allows the frequency** — in `Tempo.RRule.Encoder` a weekday and its position are fused into a numbered `BYDAY` only in a monthly rule and a yearly rule with no `BYWEEKNO` (`numbered_byday?/2`), and `allowed_at_frequency/2` returns a `ConversionError` naming the part and the frequency for `BYMONTHDAY` in a weekly rule, `BYYEARDAY` in a daily, weekly or monthly one, `BYWEEKNO` outside a yearly one, a numbered `BYDAY` on several weekdays where it is not allowed and a `BYSETPOS` alone. `Tempo.RRule.AllowedPartsTest` holds the RFC's own sentences as its table. 2026-10-05.
 
 * [x] **An ISO 8601 recurrence from a day a period lacks is written as the RRULE that says the same** — `keeping_last_day/1` in `Tempo.RRule.Encoder`: a Gregorian recurrence that steps by months or years and names no day has its days stated before it is written, `BYMONTHDAY=-1` where the start's day is at or past the end of every month reached and otherwise the last of the days up to it with `BYSETPOS=-1`, the month lengths asked of `Tempo.UnitValues.in_any_year/3`; a rule that holds a position or several times, and a year's months of different lengths, are a `ConversionError`. `Tempo.RRule.LastDayTest` reads each written rule again and holds its dates to `Date.shift/2`. 2026-10-05.
 

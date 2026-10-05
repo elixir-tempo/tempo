@@ -155,6 +155,8 @@ defmodule Tempo.RRule do
 
   A recurrence that steps by months or years and names no day keeps the last day of a month that lacks its start's, where a reader of RFC 5545 passes over that month, so the rule written for one says the days outright: `~o"R5/2026-01-31/P1M"` is `COUNT=5;FREQ=MONTHLY;BYMONTHDAY=-1`, the last day of each month, and one from the 30th is the last of the days up to it, `BYMONTHDAY=28,29,30;BYSETPOS=-1`. A rule read from an RRULE states its start's day and is written with it.
 
+  A rule is written only as RFC 5545 allows its frequency. A numbered weekday is a numbered `BYDAY` in a monthly rule and in a yearly rule with no `BYWEEKNO` (`BYDAY=2WE`), and elsewhere the weekday and its position, which say the same (`BYDAY=WE;BYSETPOS=2`). A part the RFC forbids at the rule's frequency is an error that names both. A rule with times of day is for a `DTSTART` with a time: RFC 5545 has a reader ignore `BYHOUR`, `BYMINUTE` and `BYSECOND` beside a start that is a date.
+
   An RRULE is read in the Gregorian calendar (RFC 5545), and RFC 7529's `RSCALE`, which names another, is not written. A recurrence of another calendar is written where an RFC 5545 reader finds the days it selects: one that steps by weeks, days or less and selects by weekday and time of day. Its end is written as the Gregorian date it is, in a calendar of weeks `WKST` is the day the calendar's weeks begin, and the `DTSTART` a caller adds is the Gregorian date of its start (`Tempo.to_calendar/2`).
 
   ### Arguments
@@ -166,6 +168,8 @@ defmodule Tempo.RRule do
   * `{:ok, rrule}` with the rule as a string.
 
   * `{:error, %Tempo.ConversionError{}}` when the value has no RRULE form — it is not an interval, its cadence has more than one unit, or its selection has an entry RRULE cannot express.
+
+  * `{:error, %Tempo.ConversionError{}}` for a part RFC 5545 forbids at the rule's frequency: `BYMONTHDAY` in a weekly rule, `BYYEARDAY` in a daily, weekly or monthly one, `BYWEEKNO` in any but a yearly one, a numbered `BYDAY` on several weekdays outside a monthly or yearly rule, and a `BYSETPOS` with no other `BY` part.
 
   * `{:error, %Tempo.ConversionError{}}` when no one rule says a recurrence that keeps the last day of a month without its start's day: its rule holds a position or several times of day, which the `BYSETPOS` of the last of several days would count, or it names months of a year that are of different lengths about that day.
 

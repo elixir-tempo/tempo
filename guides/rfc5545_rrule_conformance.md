@@ -61,6 +61,10 @@ RFC 5545 defines each BY-rule as either **EXPAND** (generates additional candida
 
 In a `YEARLY` rule the parts that name a day hold at once, so the days selected are those that satisfy every one of them: `BYMONTH=3;BYYEARDAY=100` selects nothing, day 100 being 10 April, `BYMONTH=3,4;BYYEARDAY=80,100` is 21 March and 10 April, each once, and `BYMONTHDAY=15;BYYEARDAY=74` is 15 March in the years whose 74th day it is.
 
+### What the writer allows a frequency
+
+RFC 5545 §3.3.10 forbids some parts at some frequencies: `BYMONTHDAY` in a `WEEKLY` rule, `BYYEARDAY` in a `DAILY`, `WEEKLY` or `MONTHLY` one, `BYWEEKNO` in any but a `YEARLY` one, a numbered `BYDAY` outside a `MONTHLY` rule and a `YEARLY` rule with no `BYWEEKNO`, and a `BYSETPOS` with no other `BY` part. `Tempo.RRule.parse/2` reads such a rule, as many calendars write them, and `Tempo.RRule.to_string/1` does not write one: a numbered weekday is written as the weekday and its position where the number is not allowed (`FREQ=WEEKLY;BYDAY=WE;BYSETPOS=2`), and every other forbidden part is a `Tempo.ConversionError` that names the part and the frequency.
+
 ### What a rule takes from DTSTART
 
 A rule takes from DTSTART what it does not say, as ISO 8601-2 Annex C.3 lists it: a `WEEKLY` rule with no `BYDAY` its weekday, a `MONTHLY` rule with no `BYMONTHDAY` and no `BYDAY` its day of the month, and a `YEARLY` rule its month and its day, so `FREQ=YEARLY;BYMONTHDAY=15` is the 15th of DTSTART's month. A rule read with a start states each part, as Annex C.4 has a conversion do: `FREQ=MONTHLY` from 31 January is `~o"R/2026-01-31/P1M/FL31DN"`, and `Tempo.RRule.to_string/1` writes it `FREQ=MONTHLY;BYMONTHDAY=31`, which RFC 5545 reads as the rule it was.
