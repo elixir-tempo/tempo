@@ -483,7 +483,7 @@ A few ISO 8601 constructs are genuinely ambiguous; Tempo resolves them as follow
 | `Z` without offset | "UTC is known, local offset unknown" (per RFC 5322 / IXDTF) | Stored as `shift: [hour: 0]`. No distinction from `+00:00`. |
 | `-00:00` | ISO 8601:2000 forbade; ISO 8601:2019 permits | Permitted; equivalent to `Z`. |
 | Leading qualifier on a date (`?2022-06-15`) | §8.2.3: left of a component qualifies that component | Individual qualification of the leftmost (coarsest) component — `?2022-06-15` qualifies the year alone (`%{year: :uncertain}`), not the whole value. See §3 "Component qualification". |
-| A set of whole numbers with no designator (`{1960,1961}`, `{20260615,20260616}`) | §6.1 shows a set of years; ISO 8601-1 §4.4 writes a year of more than four digits with a sign | A set of years where each number has four digits or fewer, or a minus sign. Otherwise each member is read as it is alone, so `{20260615,20260616}` is two dates, as `[20260615,20260616]` is. |
+| A set of whole numbers with no designator (`{1960,1961}`, `{19,20}`, `{20260615,20260616}`) | §6.1 shows a set of years; ISO 8601-1 writes a year with four digits, or with more after a sign (§4.4) | A set of years where each number has four digits, or more after a minus sign. Otherwise each member is read as it is alone, as in a set of one of: `{19,20}` is two centuries and `{20260615,20260616}` two dates. Years of fewer digits are written with the designator (`{19,20}Y`). |
 
 ## 7. Test coverage
 

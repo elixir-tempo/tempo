@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A set of whole numbers written with no designator is a set of years only where each has four digits, as a year alone has: `{19,20}` is the centuries 19 and 20 and `{196,197}` two decades, as `[19,20]` and each member alone are, where they were the years 19 and 20, and `{1,2}` is an error. Years of fewer digits are written with the designator (`{19,20}Y`) or with four digits (`{0019,0020}`).
+
 * `Tempo.new/1` returns a `Tempo.InvalidCalendarError` for a `:calendar` that is not a calendar module and a `Tempo.UnknownZoneError` for a `:zone` the time zone database does not have, where it held whatever it was given. `calendar: :hebrew` raised once the value had a month, and a zone that is none was read as UTC.
 
 * A time shift's minutes and seconds are from 0 to 59: `+01:60`, `Z1H60S` and the IXDTF offset `[+01:60]` are errors, where they were read as two hours and the like. `Tempo.new/1` returns an `ArgumentError` for a `:shift` that is not whole hours, minutes and seconds from the hour down with its sign on the first unit that is not zero, where it held whatever it was given.

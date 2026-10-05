@@ -550,11 +550,12 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   end
 
   # The years of a set written with no designator (`{1960,1961}`, ISO 8601-2
-  # §6.1). A year of more than four digits is written with a sign (ISO 8601-1
-  # §4.4), so a whole number of five digits or more with none is no year: any
-  # whole numbers were taken for years, and `{20260615,20260616}` was the
-  # years 20260615 and 20260616, where each is a date alone and in a set of
-  # one of. A set whose members are not years is read member by member
+  # §6.1), each as a year is written alone: four digits, or five and more
+  # after a minus sign (ISO 8601-1 §4.4). Any whole numbers were taken for
+  # years, so `{20260615,20260616}` was the years 20260615 and 20260616,
+  # where each is a date alone, and `{19,20}` the years 19 and 20, where each
+  # is a century alone and in a set of one of (decided 2026-10-06). A set
+  # whose members are not years is read member by member
   # (`Tempo.Iso8601.Tokenizer.Set`'s `:set_all`).
   def list_of_year_or_range(combinator \\ empty()) do
     combinator
@@ -578,7 +579,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   defp set_year do
     choice([
       negative() |> positive_integer(min: 5) |> reduce(:form_number),
-      maybe_negative_integer(min: 1, max: 4)
+      maybe_negative_integer(4)
     ])
     |> lookahead_not(digit())
   end

@@ -285,9 +285,10 @@ defmodule Tempo.Parser.Set.Test do
 
   # A set of whole numbers written with no designator was a set of years
   # whatever its numbers: `{20260615,20260616}` was the years 20260615 and
-  # 20260616. A year of more than four digits is written with a sign (ISO
-  # 8601-1 §4.4), so a whole number of five digits or more with none is no
-  # year, and the set is read member by member, as a set of one of is.
+  # 20260616, and `{19,20}` the years 19 and 20. A year is written with four
+  # digits, or with more after a sign (ISO 8601-1 §4.4), so a set whose
+  # numbers are not written so is read member by member, as a set of one of
+  # is: each member is what it is alone (decided 2026-10-06).
   describe "a set of whole numbers written with no designator" do
     defp read(text), do: Tempo.from_iso8601!(text)
 
@@ -321,7 +322,7 @@ defmodule Tempo.Parser.Set.Test do
       assert {first, last} == {read("20260615"), read("20260620")}
     end
 
-    test "is a set of years where each has four digits or fewer, or a minus sign" do
+    test "is a set of years where each has four digits, or more after a minus sign" do
       assert read("{1960,1961}") == ~o"{1960,1961}Y"
       assert read("{0019,0020}") == ~o"{19,20}Y"
       assert read("{-1640,1200}") == ~o"{-1640,1200}Y"
@@ -330,15 +331,52 @@ defmodule Tempo.Parser.Set.Test do
       assert read("{1960,1961}-06") == ~o"{1960,1961}Y6M"
     end
 
-    test "is refused where a member of five digits is neither a year nor a date" do
-      for text <- ["{12022,12023}", "{19999,2000}", "{12345}"] do
+    test "is the centuries or the decades its members are alone" do
+      for members <- [
+            ["19", "20"],
+            ["196", "197"],
+            ["2020", "20"],
+            ["19", "196", "1960"],
+            ["-19", "-20"],
+            ["19"]
+          ] do
+        text = "{" <> Enum.join(members, ",") <> "}"
+
+        assert {text, read(text)} ==
+                 {text, %Tempo.Set{type: :all, set: Enum.map(members, &read/1)}}
+
+        assert %Tempo.Set{type: :one, set: one_of} = read("[" <> Enum.join(members, ",") <> "]")
+        assert {text, one_of} == {text, Enum.map(members, &read/1)}
+      end
+    end
+
+    test "is a range of centuries where its ends are centuries" do
+      assert %Tempo.Set{set: [%Tempo.Range{first: first, last: last}]} = read("{19..20}")
+      assert {first, last} == {read("19"), read("20")}
+    end
+
+    test "qualifies each of its members where it is qualified as a whole" do
+      assert %Tempo.Set{set: [first, second]} = read("{19,20}?")
+      assert {first, second} == {read("19?"), read("20?")}
+    end
+
+    test "is refused where a member is neither a year nor a value alone" do
+      for text <- ["{12022,12023}", "{19999,2000}", "{12345}", "{1,2}", "{1}", "{1..2}"] do
         assert {^text, {:error, %Tempo.ParseError{}}} = {text, Tempo.from_iso8601(text)}
+      end
+    end
+
+    test "is refused before a month where its members are no years" do
+      for text <- ["{19,20}-06", "{19,20}-06-15", "{196,197}-06"] do
+        assert {^text, {:error, _not_a_date}} = {text, Tempo.from_iso8601(text)}
       end
     end
 
     test "is a set of years of any digits where the designator says so" do
       assert read("{20260615,20260616}Y").time == [year: [20_260_615..20_260_616]]
       assert read("{12022,12023}Y").time == [year: [12_022..12_023]]
+      assert read("{19,20}Y").time == [year: [19..20]]
+      assert read("{1,2}Y").time == [year: [1..2]]
     end
 
     test "is no time of day, which is written after a T" do

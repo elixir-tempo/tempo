@@ -8,7 +8,7 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Correctness
 
-* [ ] **Sets and ranges the parser reads into values that are not right** — found 2026-10-06 beside the parser items done that day, each at HEAD before them, and left where each fix was finding more than it closed: a range of seasons in a set has intervals for its ends, and its text is not read (`{2022-21..2022-24}`); a qualified season keeps no qualifier (`2022-21?`); `{19,20}` is the years 19 and 20 where `[19,20]` is two centuries (to decide); and a set at the end of an interval is an error where it could be an abbreviated end (`2026-06-15/{20,21}`). Not to be worked cell by cell: the remedy at the level of the class is the generator of [plans/parser-formal-grammar.md](plans/parser-formal-grammar.md), which is deferred and the user's to take up.
+* [ ] **Sets and ranges the parser reads into values that are not right** — found 2026-10-06 beside the parser items done that day, each at HEAD before them, and left where each fix was finding more than it closed: a range of seasons in a set has intervals for its ends, and its text is not read (`{2022-21..2022-24}`); a qualified season keeps no qualifier (`2022-21?`); and a set at the end of an interval is an error where it could be an abbreviated end (`2026-06-15/{20,21}`). Not to be worked cell by cell: the remedy at the level of the class is the generator of [plans/parser-formal-grammar.md](plans/parser-formal-grammar.md), which is deferred and the user's to take up.
 
 ### Conformance and completeness
 
@@ -125,6 +125,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **`{19,20}` is the centuries its members are alone** — decided 2026-10-06: a year in a set with no designator has four digits, or more after a minus sign (`set_year/0` in the tokenizer), so `{19,20}`, `{196,197}` and `{2020,20}` are read member by member, as `[19,20]` is, and `{1,2}` is an error. `{19,20}Y` and `{0019,0020}` are the years. 2026-10-06.
 
 * [x] **A qualifier after a value that holds a group** — `Qualification.complete/2` qualified the units of the time list, where a group is still as it is tokenized when a value is built and held no unit: `20G100YU?` and `1G3MU?` lost the qualifier, `2026Y1G3MU?` was qualified in its year alone and written `2026?Y1G3MU`, `T16H1GT15MU?` was written in a form that is not read, and a qualified century (`19?`, `{19?,20}`) read back as another value. A group is the unit it is counted in (`units_of/1` in `lib/tempo/qualification.ex`). 2026-10-06.
 
