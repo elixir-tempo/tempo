@@ -880,6 +880,186 @@ defmodule Tempo.Select.Test do
     end
   end
 
+  describe "a value its period does not have, in a constraint" do
+    # A constraint names values among those its unit takes in the period: a
+    # count from the end is counted back from the last of them, and a value
+    # the period does not have is passed over, as an integer index is. A count
+    # that reaches past the period's start names nothing: it was counted from
+    # the end a second time, so `-45D` selected the 17th from June.
+    #
+    # The measure is worked out apart from the library: what is written is
+    # counted here among `1..last`, and `Date`, `:calendar` and the calendar
+    # itself say what the last is and which dates the values are.
+
+    # What is written, as the numbers it names among `1..last`.
+    defp named_among(written, last) do
+      written
+      |> Enum.flat_map(fn
+        %Range{first: first, last: final, step: step} ->
+          Enum.to_list(counted(first, last)..counted(final, last)//step)
+
+        number ->
+          [counted(number, last)]
+      end)
+      |> Enum.filter(&(&1 in 1..last))
+      |> Enum.uniq()
+      |> Enum.sort()
+    end
+
+    defp counted(number, last) when number < 0, do: last + 1 + number
+    defp counted(number, _last), do: number
+
+    # The day each selected span starts on, and how many days long it is.
+    defp spans(base, selector) do
+      {:ok, set} = Tempo.select(base, selector)
+
+      for member <- IntervalSet.members(set) do
+        {:ok, from} =
+          member |> Interval.from() |> Tempo.extend_resolution(:day) |> Tempo.to_date()
+
+        {:ok, to} = member |> Interval.to() |> Tempo.extend_resolution(:day) |> Tempo.to_date()
+        {from, Date.diff(to, from)}
+      end
+    end
+
+    @days [
+      {"-1D", [-1]},
+      {"-28D", [-28]},
+      {"-29D", [-29]},
+      {"-30D", [-30]},
+      {"-31D", [-31]},
+      {"-32D", [-32]},
+      {"-45D", [-45]},
+      {"29D", [29]},
+      {"31D", [31]},
+      {"{1,31}D", [1, 31]},
+      {"{-45,1}D", [-45, 1]},
+      {"{1,15,-31}D", [1, 15, -31]},
+      {"{25..35}D", [25..35//1]},
+      {"{-45..-28}D", [-45..-28//1]},
+      {"{25..35//2}D", [25..35//2]}
+    ]
+
+    test "is passed over among the days of a month" do
+      for year <- 2024..2026, month <- 1..12, {text, written} <- @days do
+        last = Date.days_in_month(Date.new!(year, month, 1))
+        expected = for day <- named_among(written, last), do: {Date.new!(year, month, day), 1}
+
+        base = Tempo.from_iso8601!("#{year}Y#{month}M")
+        selected = spans(base, Tempo.from_iso8601!(text))
+
+        assert {year, month, text, selected} == {year, month, text, expected}
+      end
+    end
+
+    @days_of_year [
+      {"-1O", [-1]},
+      {"-365O", [-365]},
+      {"-366O", [-366]},
+      {"-367O", [-367]},
+      {"-400O", [-400]},
+      {"366O", [366]},
+      {"{1,366}O", [1, 366]},
+      {"{360..366}O", [360..366//1]},
+      {"{-400,-1}O", [-400, -1]}
+    ]
+
+    test "is passed over among the days of a year" do
+      for year <- 2023..2028, {text, written} <- @days_of_year do
+        last = if Date.leap_year?(Date.new!(year, 1, 1)), do: 366, else: 365
+
+        expected =
+          for day <- named_among(written, last), do: {Date.add(Date.new!(year, 1, 1), day - 1), 1}
+
+        base = Tempo.from_iso8601!("#{year}Y")
+        selected = spans(base, Tempo.from_iso8601!(text))
+
+        assert {year, text, selected} == {year, text, expected}
+      end
+    end
+
+    @weeks [
+      {"-1W", [-1]},
+      {"-52W", [-52]},
+      {"-53W", [-53]},
+      {"-54W", [-54]},
+      {"-60W", [-60]},
+      {"53W", [53]},
+      {"{1,53}W", [1, 53]},
+      {"{51..53}W", [51..53//1]}
+    ]
+
+    # The Monday of an ISO 8601 week: 4 January is always in week 1.
+    defp monday_of_week(year, week) do
+      fourth = Date.new!(year, 1, 4)
+      Date.add(fourth, 1 - Date.day_of_week(fourth) + 7 * (week - 1))
+    end
+
+    test "is passed over among the weeks of a year" do
+      for year <- 2020..2028, {text, written} <- @weeks do
+        # 28 December is always in the last ISO 8601 week of its year.
+        {^year, last} = :calendar.iso_week_number({year, 12, 28})
+
+        # A selection starts in its period, so a week 1 that begins in the
+        # December before is not selected from its year.
+        expected =
+          for week <- named_among(written, last),
+              monday = monday_of_week(year, week),
+              monday.year == year,
+              do: {monday, 7}
+
+        base = Tempo.from_iso8601!("#{year}Y")
+        selected = spans(base, Tempo.from_iso8601!(text))
+
+        assert {year, text, selected} == {year, text, expected}
+      end
+    end
+
+    test "is passed over among the months of a year, some of which have thirteen" do
+      hebrew = fn text -> Tempo.from_iso8601!(text, Hebrew) end
+
+      for year <- 5784..5790,
+          {text, written} <- [{"-13M", [-13]}, {"-12M", [-12]}, {"{12,13}M", [12, 13]}] do
+        expected = named_among(written, Hebrew.months_in_year(year))
+
+        {:ok, set} = Tempo.select(hebrew.("#{year}Y"), hebrew.(text))
+        selected = for member <- IntervalSet.members(set), do: Tempo.month(Interval.from(member))
+
+        assert {year, text, selected} == {year, text, expected}
+      end
+    end
+
+    test "with a month, a time of day, in a list and across a span" do
+      assert spans(~o"2026", ~o"2M{28,29}D") == [{~D[2026-02-28], 1}]
+      assert spans(~o"2026", ~o"-1M-45D") == []
+
+      {:ok, set} = Tempo.select(~o"2026-06", ~o"{-45,1}DT10H")
+      assert Enum.map(IntervalSet.members(set), &Interval.from/1) == [~o"2026Y6M1DT10H"]
+
+      assert spans(~o"2026-02", [~o"{1,30}D", ~o"-45D", ~o"-1D"]) ==
+               [{~D[2026-02-01], 1}, {~D[2026-02-28], 1}]
+
+      assert spans(~o"2026-06/2026-09", ~o"{1,31}D") ==
+               Enum.map(
+                 [~D[2026-06-01], ~D[2026-07-01], ~D[2026-07-31], ~D[2026-08-01], ~D[2026-08-31]],
+                 &{&1, 1}
+               )
+    end
+
+    test "is passed over as the same values written as a selection are" do
+      for {base, text} <- [
+            {~o"2026-06", "-45D"},
+            {~o"2026-06", "{1,31}D"},
+            {~o"2026-02", "{25..35}D"},
+            {~o"2026", "{1,366}O"},
+            {~o"2028", "{1,53}W"}
+          ] do
+        assert {text, spans(base, Tempo.from_iso8601!(text))} ==
+                 {text, spans(base, Tempo.from_iso8601!("L#{text}N"))}
+      end
+    end
+  end
+
   describe "an ISO 8601-2 selection" do
     defp selected(base, selector) do
       {:ok, set} = Tempo.select(base, selector)

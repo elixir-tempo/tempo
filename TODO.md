@@ -6,6 +6,12 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Open
 
+### Correctness
+
+* [ ] **A selector on another axis than its period's is merged into a value that is none** — `Tempo.select/2` merges a constraint onto its period's start and keeps the period's own units beside the constraint's: a day of the year from a day or a week (`Tempo.select(~o"2026-06-15", ~o"100O")` is `2026Y6M15D100O/101O`, and `~o"166O"`, which is 15 June, selects nothing from June), a day of a month from a week (`~o"2026-W25"` and `~o"15D"` give `2026Y25W15D/16D`, and `~o"6M15D"` nothing) and a week from a month (`2026Y6M1W/2W`, the week of the month that `select_test.exs` reads by its fields: its walk yields `2026Y6M1W1K`, a set operation on it is a `ResolutionError` and `Tempo.to_string/2` says "Jun 29, 2025 – Jun 4, 2026"). Found 2026-10-05.
+
+* [ ] **A day selected in a week by a selection is the whole week** — `Tempo.select(~o"2026-W25", ~o"L15DN")` and `~o"L166ON"` are the week of 15 June, since they name its first day, and nothing where they name another of its days: the resolver limits a candidate that is a week by the day it starts on. A rule read from an RRULE has a day for its candidate and is right. Found 2026-10-05.
+
 ### Conformance and completeness
 
 * [ ] **A day with no month selected in a year is a day of the year** — `2026YL-1DN` is 31 December and `2026YL45DN` 14 February, as the value `2026Y-1D` and `Tempo.select(~o"2026", ~o"-1D")` read it, where the selection reads the day in the year's first month (31 January). An RRULE's `BYMONTHDAY` keeps its own rule, DTSTART's month. Decided 2026-10-04; with it a constraint of `select/2` and a selection go through one resolver, and the matrix's selections take the form in.
@@ -119,6 +125,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A value its period does not have, in a constraint of `Tempo.select/2`** — the merge named a count from the end with `UnitValues.from_end/2`, which gives a number below the first value for a count that reaches past it, and validation counted that from the end again (`-45D` from June was the 17th, `-400O` from a year 28 November, `-60W` week 48); and a set or a range one of whose values the period lacks failed validation whole and selected nothing. `named_in_period/2` in `lib/tempo/select.ex` now asks `UnitValues.named/2` for the values each unit names where the units before it fix them, which passes over what the period lacks, and a unit that names nothing selects nothing. Measured in `test/tempo/select_test.exs` against `Date`, `:calendar` and the Hebrew calendar's months, for every month of three years, six years' days and nine years' weeks; of 516 cells of plain constraints and periods 31 changed, each of them one of these. Found beside the day with no month, 2026-10-05.
 
 * [x] **An event that cannot be computed is an error** — the resolver's event functions return `{:error, %Tempo.EventError{}}` (new: `:event`, `:year`, `:reason`) for a year the event is not computed for, a name no resolver knows, a zone it cannot take a date in and a registered resolver's own error, and `Tempo.RRule.Selection.apply/4` hands it on through every step; a walk ends at it (`until_failure/1`), so `Tempo.to_interval/2`, `Tempo.select/2` and a value's own selection return it and `Enum` raises it; a walk with no end gives every occurrence before the year and raises there (`walked/5`). The first and last years an equinox is computed for still answer. 2026-10-05.
 

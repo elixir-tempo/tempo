@@ -154,6 +154,12 @@ defmodule Tempo.Select do
   `Tempo.select(~o"2026", [-1])` is December. An index the period
   does not have, such as `[30]` on February, selects nothing there.
 
+  A value a period does not have is passed over wherever it is written.
+  A set or a range keeps the values the period has, so `~o"{1,30}D"`
+  selects the 1st from February and `~o"{25..35}D"` the 25th to the 30th
+  from June; and a count from the end that reaches past the period's
+  start, such as `~o"-45D"` from a month, selects nothing.
+
   ## A calendar of weeks
 
   A base in a calendar of weeks, such as `Calendrical.ISOWeek`, is
@@ -1339,17 +1345,20 @@ defmodule Tempo.Select do
     base_time = base_from.time
     base_res = Interval.resolution(base)
 
-    merged_time =
-      base_time
-      |> prune_off_axis_defaults(c_time, base_res)
-      |> merge_with_constraint(c_time)
-      |> propagate_last_for_negatives(c_time, base_res)
-      |> trim_finer_than_constraint(c_time)
-      |> reorder_coarse_to_fine()
-      |> resolve_negatives(calendar)
-
-    validated_projection(%Tempo{base_from | time: merged_time})
+    base_time
+    |> prune_off_axis_defaults(c_time, base_res)
+    |> merge_with_constraint(c_time)
+    |> propagate_last_for_negatives(c_time, base_res)
+    |> trim_finer_than_constraint(c_time)
+    |> reorder_coarse_to_fine()
+    |> named_in_period(calendar)
+    |> validated_merge(base_from)
   end
+
+  defp validated_merge({:ok, merged_time}, %Tempo{} = base_from),
+    do: validated_projection(%{base_from | time: merged_time})
+
+  defp validated_merge(:none, _base_from), do: nil
 
   defp project_merge(%Interval{} = base, c_time) do
     with %Tempo{} = merged <- merged_constraint_tempo(base, c_time) do
@@ -1533,31 +1542,62 @@ defmodule Tempo.Select do
     |> Enum.sort_by(fn {unit, _} -> unit_index(unit) || 9_999 end)
   end
 
-  # A unit counted from the end (ISO 8601-2 §4.4.1) is the value
-  # `Tempo.UnitValues` counts back to among those the unit takes in the units
-  # before it: the months of the year, the days of the month, the weeks and
-  # the days of the year, the days of the week, the hours of the day. A day
-  # with no month before it is a day of the year, as a value's is. A year is
-  # never counted from the end: a negative year is a year before year 1.
-  defp resolve_negatives(time, calendar) do
-    time
-    |> Enum.reduce({[], []}, fn {unit, value}, {resolved, context} ->
-      entry = {unit, from_end(unit, value, context, calendar)}
-      {[entry | resolved], context ++ [entry]}
+  # What a unit is written as names values among those the unit takes in the
+  # units before it (`Tempo.UnitValues`): the months of the year, the days of
+  # the month, the weeks and the days of the year, the hours of the day. A
+  # count from the end (ISO 8601-2 §4.4.1) is the value it counts back to, and
+  # a value the period does not have is passed over, as an index is: `{1,30}D`
+  # selects the 1st from February, and a count that reaches past the period's
+  # start (`-45D` from a month) selects nothing. So does a constraint one of
+  # whose units names no value there, which is `:none`.
+  #
+  # A day with no month before it is a day of the year, as a value's is. A
+  # year is never counted from the end: a negative year is a year before
+  # year 1.
+  defp named_in_period(time, calendar) do
+    Enum.reduce_while(time, {:ok, []}, fn {unit, written}, {:ok, context} ->
+      case named(unit, written, context, calendar) do
+        :none -> {:halt, :none}
+        value -> {:cont, {:ok, context ++ [{unit, value}]}}
+      end
     end)
-    |> elem(0)
-    |> Enum.reverse()
   end
 
-  defp from_end(unit, value, context, calendar)
-       when is_integer(value) and value < 0 and unit != :year do
-    case unit_values(unit, context, calendar) do
-      {:ok, values} -> UnitValues.from_end(value, values)
-      {:error, _reason} -> value
+  # The values are asked for where the units before fix them: under a set of
+  # months a day is left as it is written, and each of the dates the merged
+  # value names is checked when it is converted.
+  defp named(unit, written, context, calendar) when unit != :year do
+    with true <- counted?(written) and Enum.all?(context, &one_value?/1),
+         {:ok, values} <- unit_values(unit, context, calendar) do
+      named_among(written, values)
+    else
+      _as_written -> written
     end
   end
 
-  defp from_end(_unit, value, _context, _calendar), do: value
+  defp named(_year, written, _context, _calendar), do: written
+
+  # The values named, each once however it is written: `{1,-31}D` names the
+  # 1st of January once.
+  defp named_among(written, values) do
+    case UnitValues.named(written, values) do
+      [] -> :none
+      [value] -> value
+      several -> several
+    end
+  end
+
+  # A whole number, a range of them, or several of either: what
+  # `Tempo.UnitValues.named/2` counts. A fraction, a mask and a group are
+  # read by the conversion.
+  defp counted?(written) when is_integer(written) or is_struct(written, Range), do: true
+
+  defp counted?([_ | _] = written),
+    do: Enum.all?(written, &(is_integer(&1) or is_struct(&1, Range)))
+
+  defp counted?(_written), do: false
+
+  defp one_value?({_unit, value}), do: is_integer(value)
 
   defp unit_values(:day, context, calendar) do
     if Keyword.has_key?(context, :month),

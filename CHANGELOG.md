@@ -297,6 +297,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A constraint of `Tempo.select/2` names values among those its period has, as an integer index and a selection do: a count from the end that reaches past the period's start selects nothing (`Tempo.select(~o"2026-06", ~o"-45D")` was 17 June, the count taken from the end a second time), and a set or a range passes over a value the period lacks and keeps the rest (`~o"{1,30}D"` selects the 1st from February, where it selected nothing). A week a month does not have (`~o"25W"` from June) selects nothing, where it was a week no value names, and a value written twice (`~o"{1,-31}D"` from January) is selected once.
+
 * `Tempo.JSCalendar.parse/2` returns `{:error, {:unsupported_rscale, name}}` for a recurrence rule whose `rscale` names another calendar than the Gregorian, where it counted a Hebrew rule's months and days as Gregorian ones.
 
 * In a yearly rule the parts that name a day all hold at once, as RFC 5545 has them: a month limits a day of the year and a computed event beside it (`FREQ=YEARLY;BYMONTH=3;BYYEARDAY=100` selects nothing, where it was 10 April, and `R/../P1Y/FL3M(easter)eN` is Easter in the years it falls in March, where it was every Easter), and several months list a day once, where `BYMONTH=3,4;BYYEARDAY=80,100` listed 21 March and 10 April twice. A day of the month keeps a day of the year that is one (`BYMONTHDAY=15;BYYEARDAY=74` is 15 March but in a leap year, where it was the 15th every year), and an event one that is its day.
