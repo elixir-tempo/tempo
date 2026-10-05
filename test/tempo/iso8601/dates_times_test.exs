@@ -231,79 +231,74 @@ defmodule Tempo.Parser.DatesTimes.Test do
                  ]
                ], nil}}
 
-    assert Tokenizer.tokenize("19850412T232030+0400")
+    assert Tokenizer.tokenize("19850412T232030+0400") ==
+             {:ok,
+              {[
+                 datetime: [
+                   year: 1985,
+                   month: 4,
+                   day: 12,
+                   hour: 23,
+                   minute: 20,
+                   second: 30,
+                   time_shift: [hour: 4, minute: 0]
+                 ]
+               ], nil}}
 
-    {:ok,
-     [
-       datetime: [
-         year: 1985,
-         month: 4,
-         day: 12,
-         hour: 23,
-         minute: 20,
-         second: 30,
-         time_shift: [hour: 4, minute: 0]
-       ]
-     ]}
+    assert Tokenizer.tokenize("1985-04-12T23:20:30") ==
+             {:ok,
+              {[
+                 datetime: [
+                   year: 1985,
+                   month: 4,
+                   day: 12,
+                   hour: 23,
+                   minute: 20,
+                   second: 30
+                 ]
+               ], nil}}
 
-    assert Tokenizer.tokenize("1985-04-12T23:20:30")
+    assert Tokenizer.tokenize("1985-04-12T23:20:30Z") ==
+             {:ok,
+              {[
+                 datetime: [
+                   year: 1985,
+                   month: 4,
+                   day: 12,
+                   hour: 23,
+                   minute: 20,
+                   second: 30,
+                   time_shift: [hour: 0]
+                 ]
+               ], nil}}
 
-    {:ok,
-     [
-       datetime: [
-         year: 1985,
-         month: 4,
-         day: 12,
-         hour: 23,
-         minute: 20,
-         second: 30
-       ]
-     ]}
+    assert Tokenizer.tokenize("1985-04-12T23:20:30+04:00") ==
+             {:ok,
+              {[
+                 datetime: [
+                   year: 1985,
+                   month: 4,
+                   day: 12,
+                   hour: 23,
+                   minute: 20,
+                   second: 30,
+                   time_shift: [hour: 4, minute: 0]
+                 ]
+               ], nil}}
 
-    assert Tokenizer.tokenize("1985-04-12T23:20:30Z")
-
-    {:ok,
-     [
-       datetime: [
-         year: 1985,
-         month: 4,
-         day: 12,
-         hour: 23,
-         minute: 20,
-         second: 30,
-         time_shift: [hour: 0]
-       ]
-     ]}
-
-    assert Tokenizer.tokenize("1985-04-12T23:20:30+04:00")
-
-    {:ok,
-     [
-       datetime: [
-         year: 1985,
-         month: 4,
-         day: 12,
-         hour: 23,
-         minute: 20,
-         second: 30,
-         time_shift: [hour: 4, minute: 0]
-       ]
-     ]}
-
-    assert Tokenizer.tokenize("1985-04-12T23:20:30+04")
-
-    {:ok,
-     [
-       datetime: [
-         year: 1985,
-         month: 4,
-         day: 12,
-         hour: 23,
-         minute: 20,
-         second: 30,
-         time_shift: [hour: 4]
-       ]
-     ]}
+    assert Tokenizer.tokenize("1985-04-12T23:20:30+04") ==
+             {:ok,
+              {[
+                 datetime: [
+                   year: 1985,
+                   month: 4,
+                   day: 12,
+                   hour: 23,
+                   minute: 20,
+                   second: 30,
+                   time_shift: [hour: 4]
+                 ]
+               ], nil}}
 
     assert Tokenizer.tokenize("1985102T232030") ==
              {:ok,
@@ -462,18 +457,17 @@ defmodule Tempo.Parser.DatesTimes.Test do
                  ]
                ], nil}}
 
-    assert Tokenizer.tokenize("1985-102T10:15Z")
-
-    {:ok,
-     [
-       datetime: [
-         year: 1985,
-         day_of_year: 102,
-         hour: 10,
-         minute: 15,
-         time_shift: [hour: 0]
-       ]
-     ]}
+    assert Tokenizer.tokenize("1985-102T10:15Z") ==
+             {:ok,
+              {[
+                 datetime: [
+                   year: 1985,
+                   day_of_year: 102,
+                   hour: 10,
+                   minute: 15,
+                   time_shift: [hour: 0]
+                 ]
+               ], nil}}
 
     assert Tokenizer.tokenize("1985W155T1015+0400") ==
              {:ok,
@@ -524,16 +518,21 @@ defmodule Tempo.Parser.DatesTimes.Test do
                ], nil}}
   end
 
-  test "Date Error parsing" do
-    # Extended format
-    assert Tokenizer.tokenize("+0019850412")
-    assert Tokenizer.tokenize("+001985-04-12")
-    assert Tokenizer.tokenize("+001985-04")
-    assert Tokenizer.tokenize("+001985")
-    assert Tokenizer.tokenize("+00198")
-    assert Tokenizer.tokenize("+0019")
+  # A year written with a sign and five digits or more is an expanded year
+  # (ISO 8601-1 §4.4), whatever follows it. These six asserted nothing: each
+  # was `assert Tokenizer.tokenize(text)`, which a parse error passes too.
+  test "an expanded year, written with a sign and five digits or more" do
+    assert Tokenizer.tokenize("+0019850412") == {:ok, {[date: [year: 19_850_412]], nil}}
+
+    assert Tokenizer.tokenize("+001985-04-12") ==
+             {:ok, {[date: [year: 1985, month: 4, day: 12]], nil}}
+
+    assert Tokenizer.tokenize("+001985-04") == {:ok, {[date: [year: 1985, month: 4]], nil}}
+    assert Tokenizer.tokenize("+001985") == {:ok, {[date: [year: 1985]], nil}}
+    assert Tokenizer.tokenize("+00198") == {:ok, {[date: [year: 198]], nil}}
   end
 
-  test "Time Error Parsing" do
+  test "a year of four digits with a plus sign is not an expanded year" do
+    assert {:error, %Tempo.ParseError{}} = Tokenizer.tokenize("+0019")
   end
 end

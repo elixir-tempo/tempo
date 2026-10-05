@@ -468,14 +468,13 @@ defmodule Tempo.Iso8601.Parser.Test do
 
   test "Section 7.6 Time with Time Shift" do
     # Section 7.6 Example 1
-    assert Tempo.from_iso8601("T23H20M50SZ")
-
-    {:ok,
-     %Tempo{
-       calendar: Calendrical.Gregorian,
-       time: [hour: 23, minute: 20, second: 50],
-       shift: [hour: 0]
-     }}
+    assert Tempo.from_iso8601("T23H20M50SZ") ==
+             {:ok,
+              %Tempo{
+                calendar: Calendrical.Gregorian,
+                time: [hour: 23, minute: 20, second: 50],
+                shift: [hour: 0]
+              }}
 
     # Section 7.6 Example 2
     assert Tempo.from_iso8601("T23H20M50SZ-5H0M") ==
@@ -498,30 +497,28 @@ defmodule Tempo.Iso8601.Parser.Test do
 
   test "Section 7.7 Date and Time of Day" do
     # Section 7.7.2 Example 1
-    assert Tempo.from_iso8601("1985Y4M12DT23H20M30S")
-
-    {:ok,
-     %Tempo{
-       calendar: Calendrical.Gregorian,
-       time: [year: 1985, month: 4, day: 12, hour: 23, minute: 20, second: 30]
-     }}
+    assert Tempo.from_iso8601("1985Y4M12DT23H20M30S") ==
+             {:ok,
+              %Tempo{
+                calendar: Calendrical.Gregorian,
+                time: [year: 1985, month: 4, day: 12, hour: 23, minute: 20, second: 30]
+              }}
 
     # Section 7.7.3 Example 1
-    assert Tempo.from_iso8601("1985Y4M12DT23H20M30SZ8H")
-
-    {:ok,
-     %Tempo{
-       calendar: Calendrical.Gregorian,
-       time: [
-         year: 1985,
-         month: 4,
-         day: 12,
-         hour: 23,
-         minute: 20,
-         second: 30
-       ],
-       shift: [hour: 8]
-     }}
+    assert Tempo.from_iso8601("1985Y4M12DT23H20M30SZ8H") ==
+             {:ok,
+              %Tempo{
+                calendar: Calendrical.Gregorian,
+                time: [
+                  year: 1985,
+                  month: 4,
+                  day: 12,
+                  hour: 23,
+                  minute: 20,
+                  second: 30
+                ],
+                shift: [hour: 8]
+              }}
   end
 
   test "Section 7.8 Decades" do
