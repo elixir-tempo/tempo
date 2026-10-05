@@ -98,7 +98,7 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 
 * **A day with no month, selected in a year** — a day of the year (decided 2026-10-04); to build, in `TODO.md`.
 
-* **A weekday in a calendar whose week does not start on Monday** — `K` counts the days of the week the value is in: the calendar's own in a calendar of weeks, ISO 8601's in a calendar of months (decided 2026-10-05). The value `2026Y25W3K` in `NRF` is its third day, Tuesday, and a selection and `Tempo.select/2` there read Wednesday: to build, in `TODO.md`.
+* **A weekday in a calendar whose week does not start on Monday** — `K` counts the days of the week the value is in: the calendar's own in a calendar of weeks, ISO 8601's in a calendar of months (decided 2026-10-05). The value `2026Y25W3K` in `NRF` is its third day, Tuesday, and so are a selection and a rule there since 2026-10-05, where they read Wednesday. A selector given to `Tempo.select/2` is read in the calendar it is written in (decided the same day, when it was seen that `Tempo.workdays/1` is a Gregorian `K` value): `~o"3K"` selects Wednesdays from an `NRF` week and `~o"3K[u-ca=nrf]"` Tuesdays from any span. Held in `test/tempo/week_calendar_test.exs` against the weekday Elixir gives each date.
 
 * **Traditional months in a selection** — a set, a mask or a count from the end. In `TODO.md`.
 
@@ -120,7 +120,7 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 
 ## Decisions
 
-* 2026-10-05, the user, six questions put after the run through the Correctness items, each answered as recommended and each an item of `TODO.md`: a month selected with a day, in a year that does not begin with its first month, is the month the date names; `K` counts the days of the week the value is in (the third day of an `NRF` week is Tuesday); `Tempo.select/2` refuses a selector that holds a month or a day of another calendar than the span's; a week of a calendar of months converts to an interval with `unit: day`; a day of the year from the walk is the calendar date (built the same day: the walk yields dates, and a shift reaches each date a set of them names, held in `test/tempo/day_of_year_test.exs` against `Date`); and for 2.0 an area known to answer wrongly and not yet built returns a named error (built the same day: `Tempo.NotBuilt`).
+* 2026-10-05, the user, six questions put after the run through the Correctness items, each answered as recommended and each an item of `TODO.md`: a month selected with a day, in a year that does not begin with its first month, is the month the date names; `K` counts the days of the week the value is in (the third day of an `NRF` week is Tuesday; a selector given to `Tempo.select/2` is a value of its own and is read in its own calendar, asked again the same day); `Tempo.select/2` refuses a selector that holds a month or a day of another calendar than the span's; a week of a calendar of months converts to an interval with `unit: day`; a day of the year from the walk is the calendar date (built the same day: the walk yields dates, and a shift reaches each date a set of them names, held in `test/tempo/day_of_year_test.exs` against `Date`); and for 2.0 an area known to answer wrongly and not yet built returns a named error (built the same day: `Tempo.NotBuilt`).
 
 * 2026-10-04, the user — a finding in Calendrical is confirmed against its latest `main` and then recorded in its `TODO.md`.
 

@@ -1,7 +1,9 @@
 defmodule Tempo.RRule.Encoder do
   @moduledoc false
 
+  alias Tempo.Compare
   alias Tempo.ConversionError
+  alias Tempo.UnitValues
 
   # Converts a `%Tempo.Interval{}` back into an RFC 5545 RRULE
   # string. Pure AST → text; no parsing. Called via
@@ -234,13 +236,15 @@ defmodule Tempo.RRule.Encoder do
   # A selection encodes only when every token has an RRULE BY-part; one
   # that has none is an error naming it, never a part silently dropped. The
   # units after a selection (`L5K2INT9H`) are BY-parts too.
-  defp by_parts(%Tempo{time: [{:selection, selection} | units]}, interval) do
+  defp by_parts(%Tempo{time: [{:selection, selection} | units], calendar: calendar}, interval) do
     case (selection ++ units)
          |> Keyword.keys()
          |> Enum.reject(&(&1 in @rrule_tokens))
          |> Enum.uniq() do
       [] ->
-        {:ok, encode_selection(selection) ++ Enum.flat_map(units, &encode_by_entry/1)}
+        with {:ok, selection} <- weekdays_named(selection, calendar, interval) do
+          {:ok, encode_selection(selection) ++ Enum.flat_map(units, &encode_by_entry/1)}
+        end
 
       tokens ->
         {:error,
@@ -274,6 +278,47 @@ defmodule Tempo.RRule.Encoder do
        value: interval,
        target: :rrule
      )}
+  end
+
+  # BYDAY names weekdays, and a selection holds days of the week of its
+  # rule's calendar, the last of them written `-1K`. Each is written as the
+  # weekday it is there (`Tempo.UnitValues.iso_weekday_from_day_of_week/2`):
+  # the third day is Wednesday in a calendar of months and Tuesday in a
+  # calendar of weeks that start on Sunday. A day no week has is no weekday
+  # for a BYDAY to name.
+  defp weekdays_named(selection, calendar, interval) do
+    calendar = Compare.effective_calendar(calendar)
+
+    Enum.reduce_while(selection, {:ok, []}, fn entry, {:ok, named} ->
+      case weekday_named(entry, calendar) do
+        {:day_of_week, []} -> {:halt, {:error, no_such_weekday(entry, interval)}}
+        entry -> {:cont, {:ok, named ++ [entry]}}
+      end
+    end)
+  end
+
+  defp weekday_named({:day_of_week, days}, calendar) do
+    case UnitValues.in_period(:day_of_week, [], calendar) do
+      {:ok, week} -> {:day_of_week, days |> UnitValues.named(week) |> weekdays(calendar)}
+      {:error, _cannot_count} -> {:day_of_week, days}
+    end
+  end
+
+  defp weekday_named(entry, _calendar), do: entry
+
+  # One weekday is written as a number, so that with a position after it it
+  # is an ordinal weekday again (`2MO`).
+  defp weekdays([day], calendar), do: UnitValues.iso_weekday_from_day_of_week(day, calendar)
+
+  defp weekdays(days, calendar),
+    do: Enum.map(days, &UnitValues.iso_weekday_from_day_of_week(&1, calendar))
+
+  defp no_such_weekday({:day_of_week, days}, interval) do
+    ConversionError.exception(
+      reason: "RRULE has no form for a day of the week that no week has: #{inspect(days)}",
+      value: interval,
+      target: :rrule
+    )
   end
 
   # Each selection token maps to one RRULE BY-part, with one recombination

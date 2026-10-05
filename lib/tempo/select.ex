@@ -162,6 +162,14 @@ defmodule Tempo.Select do
   month and a day belong to, so a selector naming a month, a day of one
   or a day of the year returns a `Tempo.ConversionError`.
 
+  A day of the week is a day of the week of the value that holds it: the
+  calendar's own week in a calendar of weeks, and ISO 8601's, which starts
+  on Monday, in a calendar of months. So a selector is read in the calendar
+  it is written in. `~o"3K"`, written in the Gregorian calendar, selects
+  Wednesdays from a base in any calendar, as `Tempo.workdays/1` selects
+  the weekdays it names; `~o"3K[u-ca=nrf]"`, written in a calendar whose
+  weeks start on Sunday, selects Tuesdays.
+
   """
 
   alias Tempo.Compare
@@ -1047,11 +1055,8 @@ defmodule Tempo.Select do
   #
   # Units after the weekday (`~o"1KT10H"`, each Monday at 10:00) are merged
   # onto each of the days it selects.
-  defp project_onto_base(
-         %Interval{from: %Tempo{calendar: calendar}} = base,
-         %Tempo{time: c_time}
-       ) do
-    case day_of_week_only(c_time, calendar) do
+  defp project_onto_base(%Interval{} = base, %Tempo{time: c_time, calendar: selector_calendar}) do
+    case day_of_week_only(c_time, selector_calendar) do
       {:ok, weekdays} -> base |> weekdays_in(weekdays) |> on_each_day(after_day_of_week(c_time))
       :no -> project_merge(base, c_time)
     end
@@ -1480,7 +1485,15 @@ defmodule Tempo.Select do
   # `:day`, `:week`). The days it names are those `Tempo.UnitValues` reads
   # among the days of the week: a number, a count from the end (`-1`, the
   # last), a range (`{6..-1}`) or several of them.
-  defp day_of_week_only(c_time, calendar) do
+  #
+  # A day of the week is read in the calendar of the value that holds it,
+  # which is the selector's: the third day is Wednesday in a selector
+  # written in a calendar of months, and Tuesday in one written in a
+  # calendar of weeks that start on Sunday. The weekdays it names are
+  # given as ISO 8601 numbers them, which is how a day of any span's
+  # calendar is asked for its weekday (`weekdays_in/2`), so a selector
+  # selects the same weekdays in whatever calendar the span is in.
+  defp day_of_week_only(c_time, selector_calendar) do
     case Keyword.get(c_time, :day_of_week) do
       nil ->
         :no
@@ -1489,15 +1502,20 @@ defmodule Tempo.Select do
         if Enum.any?([:year, :month, :day, :week], &Keyword.has_key?(c_time, &1)) do
           :no
         else
-          {:ok, weekdays_named(dow, calendar)}
+          {:ok, weekdays_named(dow, Compare.effective_calendar(selector_calendar))}
         end
     end
   end
 
   defp weekdays_named(written, calendar) do
-    case UnitValues.in_period(:day_of_week, [], Compare.effective_calendar(calendar)) do
-      {:ok, days} -> UnitValues.named(written, days)
-      {:error, _reason} -> []
+    case UnitValues.in_period(:day_of_week, [], calendar) do
+      {:ok, days} ->
+        written
+        |> UnitValues.named(days)
+        |> Enum.map(&UnitValues.iso_weekday_from_day_of_week(&1, calendar))
+
+      {:error, _reason} ->
+        []
     end
   end
 

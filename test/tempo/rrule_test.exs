@@ -301,6 +301,23 @@ defmodule Tempo.RRuleTest do
     end
   end
 
+  # BYDAY names weekdays, and a selection holds days of the week, which can
+  # be counted from the end of the week or be a day no week has: the encoder
+  # raised a `KeyError` for both.
+  describe "a selection's days of the week as BYDAY" do
+    test "a day counted from the end of the week is the weekday it is" do
+      assert RRule.to_string(~o"R/2026-01-01/P1W/FL-1KN") == {:ok, "FREQ=WEEKLY;BYDAY=SU"}
+      assert RRule.to_string(~o"R/2026-01-01/P1W/FL{6..-1}KN") == {:ok, "FREQ=WEEKLY;BYDAY=SA,SU"}
+    end
+
+    test "a day no week has is an error" do
+      assert {:error, %Tempo.ConversionError{target: :rrule, reason: reason}} =
+               RRule.to_string(~o"R/2026-01-01/P1W/FL8KN")
+
+      assert reason =~ "a day of the week that no week has"
+    end
+  end
+
   describe "COUNT=1 with a BY-rule materialises the first matching occurrence" do
     # Regression: a count-1 recurrence carrying a BY-filter used to
     # return the raw DTSTART period, bypassing the selection — so

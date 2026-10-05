@@ -16,6 +16,7 @@ defmodule Tempo.WeekCalendarTest do
   alias Tempo.IntervalSet
   alias Tempo.InvalidDateError
   alias Tempo.ResolutionError
+  alias Tempo.RRule
 
   defp read_back(value), do: value |> Tempo.to_iso8601!() |> Tempo.from_iso8601!()
 
@@ -367,9 +368,10 @@ defmodule Tempo.WeekCalendarTest do
                  &Tempo.from_iso8601!(&1, ISOWeek)
                )
 
-      # The NRF calendar's weeks start on a Sunday, so its Tuesday is day 3.
+      # The NRF calendar's weeks start on a Sunday, and the second day of one
+      # is the day its values hold as 2: a Monday.
       assert occurrence_starts("R3/2026-W01-1/P1W/FL2KN", NRF) ==
-               Enum.map(["2026-W01-3", "2026-W02-3", "2026-W03-3"], &Tempo.from_iso8601!(&1, NRF))
+               Enum.map(["2026-W01-2", "2026-W02-2", "2026-W03-2"], &Tempo.from_iso8601!(&1, NRF))
     end
 
     # A date of a calendar of weeks holds its week where a month is held,
@@ -432,6 +434,118 @@ defmodule Tempo.WeekCalendarTest do
 
       assert {:ok, selected} = Tempo.select(Tempo.from_iso8601!("2026-W25", ISOWeek), ~o"L2KN")
       assert Enum.map(IntervalSet.members(selected), &Interval.from/1) == [tuesday]
+    end
+  end
+
+  # `K` counts the days of the week of the value that holds it: the
+  # calendar's own week in a calendar of weeks, and ISO 8601's, which starts
+  # on Monday, in a calendar of months. The NRF calendar's weeks start on a
+  # Sunday, so its third day is a Tuesday, where the ISO week calendar's and
+  # the Gregorian calendar's is a Wednesday. A selection read it as ISO
+  # 8601's in every calendar, and so disagreed with the value beside it.
+  describe "a day of the week is a day of its value's own week" do
+    @monday 1
+    @tuesday 2
+    @wednesday 3
+    @saturday 6
+    @sunday 7
+
+    defp read(text, calendar), do: Tempo.from_iso8601!(text, calendar)
+
+    # The weekday of the day a value starts on, from Elixir's own calendar.
+    defp weekday(%Tempo{} = value) do
+      {:ok, date} = value |> Tempo.trunc(:day) |> Tempo.to_date()
+      date |> Date.convert!(Calendar.ISO) |> Date.day_of_week()
+    end
+
+    defp weekdays({:ok, %IntervalSet{} = set}),
+      do: set |> IntervalSet.members() |> Enum.map(&(&1 |> Interval.from() |> weekday()))
+
+    defp starts({:ok, %IntervalSet{} = set}),
+      do: set |> IntervalSet.members() |> Enum.map(&Interval.from/1)
+
+    test "in a value" do
+      assert weekday(read("2026Y25W3K", NRF)) == @tuesday
+      assert weekday(read("2026Y25W3K", ISOWeek)) == @wednesday
+      assert weekday(~o"2026-W25-3") == @wednesday
+    end
+
+    test "in a value's selection, which is the value's own day" do
+      assert starts(Tempo.to_interval(read("2026Y25WL3KN", NRF))) == [read("2026Y25W3K", NRF)]
+      assert weekdays(Tempo.to_interval(read("2026Y25WL3KN", NRF))) == [@tuesday]
+      assert weekdays(Tempo.to_interval(read("2026Y25WL3KN", ISOWeek))) == [@wednesday]
+    end
+
+    test "counted from the end of the week, and in a range" do
+      assert weekdays(Tempo.to_interval(read("2026Y25WL-1KN", NRF))) == [@saturday]
+      assert weekdays(Tempo.to_interval(read("2026Y25WL-1KN", ISOWeek))) == [@sunday]
+      assert weekdays(Tempo.to_interval(read("2026Y25WL{2..6}KN", NRF))) == [1, 2, 3, 4, 5]
+      assert weekdays(Tempo.to_interval(read("2026Y25WL{1,7}KN", NRF))) == [@sunday, @saturday]
+    end
+
+    test "in a recurrence's rule, with a week and with a position" do
+      assert weekdays(Tempo.to_interval(read("R3/2026Y25W/P1W/FL3KN", NRF))) ==
+               [@tuesday, @tuesday, @tuesday]
+
+      assert starts(Tempo.to_interval(read("2026YL10W3KN", NRF))) == [read("2026Y10W3K", NRF)]
+      assert starts(Tempo.to_interval(read("2026YL3K1IN", NRF))) == [read("2026Y1W3K", NRF)]
+
+      {weeks, _days_in_the_last} = NRF.weeks_in_year(2026)
+
+      assert starts(Tempo.to_interval(read("2026YL3K-1IN", NRF))) ==
+               [read("2026Y#{weeks}W3K", NRF)]
+    end
+
+    test "in a selector, which is read in the calendar it is written in" do
+      week = read("2026Y25W", NRF)
+
+      assert starts(Tempo.select(week, read("3K", NRF))) == [read("2026Y25W3K", NRF)]
+      assert weekdays(Tempo.select(week, read("3K", NRF))) == [@tuesday]
+
+      # A selector written with the sigil is in the Gregorian calendar, where
+      # the third day of the week is ISO 8601's Wednesday.
+      assert weekdays(Tempo.select(week, ~o"3K")) == [@wednesday]
+      assert weekdays(Tempo.select(week, read("3K", ISOWeek))) == [@wednesday]
+      assert weekdays(Tempo.select(week, [~o"1K", ~o"3K"])) == [@monday, @wednesday]
+      assert weekdays(Tempo.select(week, read("3KT10H", NRF))) == [@tuesday]
+    end
+
+    test "in a selector written in a calendar of weeks, for a span in a calendar of months" do
+      # 19 to 25 July 2026 is NRF week 25, a Sunday to a Saturday.
+      days = ~o"2026-07-19/2026-07-26"
+
+      assert starts(Tempo.select(days, read("3K", NRF))) == [~o"2026-07-21"]
+      assert starts(Tempo.select(days, ~o"3K")) == [~o"2026-07-22"]
+      assert weekdays(Tempo.select(days, read("{1,-1}K", NRF))) == [@sunday, @saturday]
+    end
+
+    test "in a rule given as a selector" do
+      week = read("2026Y25W", NRF)
+
+      assert weekdays(Tempo.select(week, read("L3KN", NRF))) == [@tuesday]
+      assert weekdays(Tempo.select(week, ~o"L3KN")) == [@wednesday]
+    end
+
+    test "leaves workdays and weekends the weekdays they name" do
+      week = read("2026Y25W", NRF)
+
+      assert weekdays(Tempo.select(week, Tempo.workdays(:US))) == [1, 2, 3, 4, 5]
+      assert weekdays(Tempo.select(week, Tempo.weekends(:US))) == [@sunday, @saturday]
+      assert weekdays(Tempo.select(week, Tempo.workdays(:SA))) == [@sunday, 1, 2, 3, 4]
+    end
+
+    test "is named by its calendar's weekday in an explanation and an RRULE" do
+      assert to_string(Tempo.explain(read("2026Y25WL3KN", NRF))) =~ "selects on a Tuesday"
+      assert to_string(Tempo.explain(read("2026Y25WL3KN", ISOWeek))) =~ "selects on a Wednesday"
+
+      assert RRule.to_string(read("R2/2026Y25W/P1W/FL3KN", NRF)) ==
+               {:ok, "COUNT=2;FREQ=WEEKLY;BYDAY=TU"}
+
+      assert RRule.to_string(read("R2/2026Y25W/P1W/FL{1,-1}KN", NRF)) ==
+               {:ok, "COUNT=2;FREQ=WEEKLY;BYDAY=SU,SA"}
+
+      assert RRule.to_string(read("R2/2026Y25W/P1W/FL3KN", ISOWeek)) ==
+               {:ok, "COUNT=2;FREQ=WEEKLY;BYDAY=WE"}
     end
   end
 end

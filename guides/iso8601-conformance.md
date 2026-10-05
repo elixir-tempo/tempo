@@ -199,6 +199,8 @@ A calendar suffix after a set is the calendar of every member, of each end of a 
 
 A calendar of weeks (`[u-ca=iso-week]`, `[u-ca=nrf]`) has no months, so a whole date written with a month and a day, or as a day of the year, is read as the Gregorian day and converted into it: `2026-06-15[u-ca=iso-week]` is day 1 of week 25, and `2025-12-29[u-ca=iso-week]` is day 1 of week 1 of 2026. Only a whole date converts: a month alone, a day with no year or a unit holding several values (`2026Y6M{1,15}D`) is an error there, where a set of whole dates (`{2026-06-01,2026-06-15}`) converts each. A qualification of the year, the month or the day it was written with qualifies the whole converted date, since each of its units is worked out from all of them: `2026-?06-15[u-ca=iso-week]` is `2026-W25-1?`.
 
+A day of the week (`K`) is a day of the week of the value that holds it: the calendar's own week in a calendar of weeks, and ISO 8601's, which starts on Monday, in a calendar of months. The third day is a Wednesday in the Gregorian and the ISO week calendars and a Tuesday in `[u-ca=nrf]`, whose weeks start on Sunday, in a value (`2026Y25W3K`), in a selection (`2026Y25WL3KN`) and in a recurrence's rule alike. A selector given to `Tempo.select/2` is read in the calendar it is written in, so `~o"3K"` selects Wednesdays from a span in any calendar, as `Tempo.workdays/1` selects the weekdays it names, and `~o"3K[u-ca=nrf]"` selects Tuesdays.
+
 ## 5. Project-specific extensions (not in ISO 8601)
 
 These syntaxes are Tempo conveniences, not part of any standard:

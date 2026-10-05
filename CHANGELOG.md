@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A day of the week (`K`) is a day of the week of the value that holds it, the calendar's own week in a calendar of weeks and ISO 8601's in a calendar of months, in a selection and a recurrence's rule as in a value: in `Calendrical.NRF`, whose weeks start on Sunday, `2026Y25WL3KN` and `R/2026Y25W/P1W/FL3KN` select Tuesday, the value `2026Y25W3K`, where they selected Wednesday. A selector given to `Tempo.select/2` is read in the calendar it is written in (`~o"3K[u-ca=nrf]"` selects Tuesdays from any span, and `~o"3K"` and `Tempo.workdays/1` the weekdays they name), and `Tempo.explain/1` and `Tempo.RRule.to_string/1` name the weekday the calendar gives the day.
+
 * A day of the year from a value is the calendar date, as it is read: `Enum.to_list(~o"2026Y{100,200}O")` is `[~o"2026-04-10", ~o"2026-07-19"]`, a masked or an unspecified one (`2026Y1XXO`, `2026YX*O`) is walked by its dates too, and `~o"2026-04-10" in ~o"2026Y{100,200}O"` is true, where the walk gave `2026Y100O`, a value read as that date and not equal to it. A shift reaches each date such a value names and writes them again as days of the year where one value holds them (`Tempo.shift(~o"2026Y{100,200}O", day: 1)` is `~o"2026Y{101,201}O"`, a month on `~o"2026Y{130,231}O"`, and two days that land in two years are an interval set), where a step by days or weeks was a `Tempo.ResolutionError` and one by months left the value as it was.
 
 * What Tempo does not yet work out, and is known to answer wrongly, is refused by name: a `Tempo.ConversionError` whose `:reason` is `:not_built`, whose `:target` says what was asked for and whose new `:calendar` field names the calendar, each listed in [What each operation gives each value](guides/operation-matrix.md#what-is-not-built). In a calendar whose year does not begin with its first month (Calendrical's Julian `March25`, `March1`, `Sept1` and `Dec25`, and `Calendrical.Reform.England` until 1751) that is a selection that counts days within a month or a year (`1750Y12ML-1DN`), a season and a step by days from a value that holds several months or years, and in `Calendrical.Reform.England` before 1751 a month of a year, where each gave an answer.
@@ -278,6 +280,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* `Tempo.RRule.to_string/1` writes a day of the week counted from the end of the week as the weekday it is (`FL-1KN` is `BYDAY=SU`) and returns a `Tempo.ConversionError` for a day no week has (`FL8KN`), where it raised a `KeyError` for both.
 
 * `Tempo.day_of_year/1`, `Tempo.day_of_week/1` and `Tempo.quarter_of_year/1` raise an `ArgumentError` for a value that holds several days of the year (`2026Y{100,200}O`), as they do for one that holds several months or days, where they answered for 1 January. `Tempo.trunc/2` takes such a value to `:day`, its days of the year, where it was a `Tempo.ResolutionError`.
 

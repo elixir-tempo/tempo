@@ -1470,4 +1470,97 @@ defmodule Tempo.UnitValues do
       _first_day_of_a_month -> nil
     end
   end
+
+  ## The days of a week
+  #
+  # `K` counts the days of the week of the value that holds it: the
+  # calendar's own week in a calendar of weeks, whose dates hold that day,
+  # and ISO 8601's week, which starts on Monday, in a calendar of months
+  # (decided 2026-10-05). So a day of the week is a number of its value's
+  # calendar, and the weekday it names is asked of that calendar, here,
+  # wherever it meets a date of another calendar or a weekday's name.
+
+  @doc """
+  Returns the weekday a day of the week names in a calendar, as ISO 8601 numbers the weekdays.
+
+  In a calendar of months a day of the week is ISO 8601's, so it is its own weekday. In a calendar of weeks it is a day of the calendar's own week, and the weekday depends on the day those weeks start on: the third day is Wednesday in `Calendrical.ISOWeek`, whose weeks start on Monday, and Tuesday in `Calendrical.NRF`, whose weeks start on Sunday.
+
+  ### Arguments
+
+  * `day_of_week` is a day of the week as a value of the calendar holds it, from 1 to 7.
+
+  * `calendar` is the calendar module of the value that holds the day.
+
+  ### Returns
+
+  * The weekday from 1, Monday, to 7, Sunday. A number that is no day of a week is returned as it is.
+
+  ### Examples
+
+      iex> Tempo.UnitValues.iso_weekday_from_day_of_week(3, Calendrical.Gregorian)
+      3
+
+      iex> Tempo.UnitValues.iso_weekday_from_day_of_week(3, Calendrical.ISOWeek)
+      3
+
+      iex> Tempo.UnitValues.iso_weekday_from_day_of_week(3, Calendrical.NRF)
+      2
+
+  """
+  @spec iso_weekday_from_day_of_week(integer(), module()) :: integer()
+  def iso_weekday_from_day_of_week(day_of_week, calendar) when day_of_week in 1..7 do
+    if Tempo.week_based_calendar?(calendar),
+      do: weekday_of_week_day(calendar, day_of_week),
+      else: day_of_week
+  end
+
+  def iso_weekday_from_day_of_week(no_day_of_a_week, _calendar), do: no_day_of_a_week
+
+  @doc """
+  Returns the day of the week a calendar gives a weekday, the weekday numbered as ISO 8601 numbers it.
+
+  The inverse of `iso_weekday_from_day_of_week/2`: Wednesday is the third day of the week in a calendar of months and in `Calendrical.ISOWeek`, and the fourth in `Calendrical.NRF`, whose weeks start on Sunday.
+
+  ### Arguments
+
+  * `iso_weekday` is the weekday from 1, Monday, to 7, Sunday.
+
+  * `calendar` is the calendar module the day of the week is wanted in.
+
+  ### Returns
+
+  * The day of the week from 1 to 7, as a value of the calendar holds it. A number that is no weekday is returned as it is.
+
+  ### Examples
+
+      iex> Tempo.UnitValues.day_of_week_from_iso_weekday(3, Calendrical.Gregorian)
+      3
+
+      iex> Tempo.UnitValues.day_of_week_from_iso_weekday(3, Calendrical.NRF)
+      4
+
+  """
+  @spec day_of_week_from_iso_weekday(integer(), module()) :: integer()
+  def day_of_week_from_iso_weekday(iso_weekday, calendar) when iso_weekday in 1..7 do
+    if Tempo.week_based_calendar?(calendar),
+      do: Enum.find(1..7, &(weekday_of_week_day(calendar, &1) == iso_weekday)),
+      else: iso_weekday
+  end
+
+  def day_of_week_from_iso_weekday(no_weekday, _calendar), do: no_weekday
+
+  @doc false
+  # The day a calendar is asked to count a week's days from, for the number
+  # `K` gives one of its dates: its own first day in a calendar of weeks,
+  # and Monday in a calendar of months.
+  @spec week_counted_from(module()) :: :default | :monday
+  def week_counted_from(calendar),
+    do: if(Tempo.week_based_calendar?(calendar), do: :default, else: :monday)
+
+  # Every week of a calendar of weeks starts on the same weekday, so the
+  # first week of any year answers for them all.
+  defp weekday_of_week_day(calendar, day_of_week) do
+    {iso_weekday, _first, _last} = calendar.day_of_week(@any_year, 1, day_of_week, :monday)
+    iso_weekday
+  end
 end

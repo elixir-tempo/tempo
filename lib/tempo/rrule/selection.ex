@@ -120,7 +120,7 @@ defmodule Tempo.RRule.Selection do
 
   def apply(
         %Interval{} = candidate,
-        %Tempo{time: [{:selection, selection} | units]},
+        %Tempo{time: [{:selection, selection} | units], calendar: rule_calendar},
         freq,
         options
       ) do
@@ -132,6 +132,7 @@ defmodule Tempo.RRule.Selection do
     # occurrences carry an explicit span rides along the same way.
     # Handlers that don't consume the tags pass them through.
     context = selection_context(options)
+    selection = days_of_week_in_candidate_calendar(selection, rule_calendar, candidate)
 
     in_calendar_terms(candidate, selection, freq, fn candidate, selection, freq ->
       candidate
@@ -244,6 +245,55 @@ defmodule Tempo.RRule.Selection do
   # weekly period a month's — and what it selects is written back as weeks,
   # so `FL2KN` picks each week's Tuesday and `L1K1IN` the first Monday of the
   # week year.
+  # A selection's days of the week are counted in the calendar of the rule
+  # that holds them: the calendar's own week in a calendar of weeks, and ISO
+  # 8601's in a calendar of months. A rule given to `Tempo.select/2` can be
+  # written in another calendar than the candidate it is resolved in, and
+  # where the two start their weeks on different days its days are written
+  # again as the days the candidate's calendar gives the same weekdays: the
+  # third day of a rule written in the Gregorian calendar, Wednesday, is the
+  # fourth of a week that starts on Sunday.
+  defp days_of_week_in_candidate_calendar(
+         selection,
+         rule_calendar,
+         %Interval{from: %Tempo{calendar: calendar}}
+       ) do
+    from = Compare.effective_calendar(rule_calendar)
+    to = Compare.effective_calendar(calendar)
+
+    if from == to or same_week_start?(from, to),
+      do: selection,
+      else: Enum.map(selection, &day_of_week_in_calendar(&1, from, to))
+  end
+
+  defp days_of_week_in_candidate_calendar(selection, _rule_calendar, _candidate), do: selection
+
+  defp same_week_start?(from, to) do
+    UnitValues.iso_weekday_from_day_of_week(1, from) ==
+      UnitValues.iso_weekday_from_day_of_week(1, to)
+  end
+
+  defp day_of_week_in_calendar({:day_of_week, days}, from, to) do
+    case UnitValues.in_period(:day_of_week, [], from) do
+      {:ok, week} ->
+        {:day_of_week, days |> UnitValues.named(week) |> Enum.map(&same_weekday(&1, from, to))}
+
+      {:error, _cannot_count} ->
+        {:day_of_week, days}
+    end
+  end
+
+  defp day_of_week_in_calendar({:selection, nested}, from, to),
+    do: {:selection, Enum.map(nested, &day_of_week_in_calendar(&1, from, to))}
+
+  defp day_of_week_in_calendar(entry, _from, _to), do: entry
+
+  defp same_weekday(day, from, to) do
+    day
+    |> UnitValues.iso_weekday_from_day_of_week(from)
+    |> UnitValues.day_of_week_from_iso_weekday(to)
+  end
+
   defp in_calendar_terms(
          %Interval{from: %Tempo{calendar: calendar}} = candidate,
          selection,
@@ -1027,20 +1077,26 @@ defmodule Tempo.RRule.Selection do
   ## BYDAY (weekday filter / expander)
   ## ------------------------------------------------------------
 
+  # The number `K` gives the candidate's day: its day of the week as the
+  # selection's calendar counts it, which is the calendar's own week in a
+  # calendar of weeks and ISO 8601's, from Monday, in a calendar of months
+  # (`Tempo.UnitValues.week_counted_from/1`).
   defp weekday_of(%Interval{from: %Tempo{time: time, calendar: calendar}}) do
     with year when is_integer(year) <- Keyword.get(time, :year),
          month when is_integer(month) <- Keyword.get(time, :month),
          day when is_integer(day) <- Keyword.get(time, :day) do
-      calendar.day_of_week(year, month, day, :monday)
-      |> normalise_day_of_week()
+      day_of_week(calendar, year, month, day, UnitValues.week_counted_from(calendar))
     else
       _ -> nil
     end
   end
 
+  defp day_of_week(calendar, year, month, day, counted_from),
+    do: calendar.day_of_week(year, month, day, counted_from) |> normalise_day_of_week()
+
   # `Calendar.day_of_week/4` can return `:undefined` or a tuple
   # depending on the calendar implementation; coerce to a 1..7
-  # integer (ISO, Monday=1) or `nil` when the calendar refuses.
+  # integer or `nil` when the calendar refuses.
   defp normalise_day_of_week(dow) when is_integer(dow) and dow in 1..7, do: dow
   defp normalise_day_of_week({dow, _first, _last}) when is_integer(dow), do: dow
   defp normalise_day_of_week(_), do: nil
@@ -1049,9 +1105,21 @@ defmodule Tempo.RRule.Selection do
   # entry. Used by the POSIX OR filter, where the entries are plain
   # weekdays (the ordinal is `nil`), so only the weekday is compared.
   defp weekday_matches?(%Interval{} = candidate, byday_entries) do
-    case weekday_of(candidate) do
+    case named_weekday_of(candidate) do
       nil -> false
       weekday -> Enum.any?(byday_entries, fn {_ordinal, day} -> day == weekday end)
+    end
+  end
+
+  # The weekday a BYDAY entry names is ISO 8601's, Monday the first, in
+  # whatever calendar the candidate is.
+  defp named_weekday_of(%Interval{from: %Tempo{time: time, calendar: calendar}}) do
+    with year when is_integer(year) <- Keyword.get(time, :year),
+         month when is_integer(month) <- Keyword.get(time, :month),
+         day when is_integer(day) <- Keyword.get(time, :day) do
+      day_of_week(calendar, year, month, day, :monday)
+    else
+      _ -> nil
     end
   end
 
@@ -1131,9 +1199,11 @@ defmodule Tempo.RRule.Selection do
          days,
          weekdays
        ) do
+    counted_from = UnitValues.week_counted_from(calendar)
+
     matching =
       for day <- each_value(days),
-          normalise_day_of_week(calendar.day_of_week(year, month, day, :monday)) in weekdays,
+          day_of_week(calendar, year, month, day, counted_from) in weekdays,
           do: {year, month, day}
 
     swap_dates(candidate, matching)
@@ -1155,11 +1225,10 @@ defmodule Tempo.RRule.Selection do
          day when is_integer(day) <- Keyword.get(time, :day),
          {:ok, date} <- Date.new(year, month, day, calendar),
          %Date{} = week_start <- Kday.kday_on_or_before(date, wkst) do
-      for d <- seven_days_from(week_start) do
-        d_dow =
-          calendar.day_of_week(d.year, d.month, d.day, :monday) |> normalise_day_of_week()
+      counted_from = UnitValues.week_counted_from(calendar)
 
-        {d.year, d.month, d.day, d_dow}
+      for d <- seven_days_from(week_start) do
+        {d.year, d.month, d.day, day_of_week(calendar, d.year, d.month, d.day, counted_from)}
       end
     else
       _ -> nil
@@ -1696,10 +1765,21 @@ defmodule Tempo.RRule.Selection do
   # (BYDAY ordinals aren't meaningful under WEEKLY per RFC).
   # The nil-ordinal pair delegates to the matching period's
   # no-ordinal expander.
-  defp resolve_byday_pair(%Interval{} = candidate, {nil, weekday}, _start, _end, scope, _wkst) do
+  defp resolve_byday_pair(
+         %Interval{from: %Tempo{calendar: calendar}} = candidate,
+         {nil, weekday},
+         _start,
+         _end,
+         scope,
+         _wkst
+       ) do
+    # A BYDAY entry names its weekday, where the expanders take the day of
+    # the week the candidate's calendar gives it.
+    day_of_week = UnitValues.day_of_week_from_iso_weekday(weekday, calendar)
+
     case scope do
-      :month -> expand_weekdays_in_month(candidate, [weekday])
-      :year -> expand_weekdays_in_year(candidate, [weekday])
+      :month -> expand_weekdays_in_month(candidate, [day_of_week])
+      :year -> expand_weekdays_in_year(candidate, [day_of_week])
     end
   end
 

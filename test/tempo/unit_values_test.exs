@@ -579,4 +579,46 @@ defmodule Tempo.UnitValuesTest do
       end
     end
   end
+
+  describe "iso_weekday_from_day_of_week/2 and day_of_week_from_iso_weekday/2" do
+    # The weekday of each day of a week of the calendar, from its own date
+    # converted to Elixir's calendar: every week of a calendar of weeks
+    # starts on the same day.
+    defp weekday_of_week_day(calendar, {year, week}, day) do
+      Date.new!(year, week, day, calendar) |> Date.convert!(Calendar.ISO) |> Date.day_of_week()
+    end
+
+    test "a day of a calendar of weeks is the weekday its dates fall on" do
+      for calendar <- [Calendrical.NRF, Calendrical.ISOWeek],
+          week <- [{2026, 25}, {2024, 1}, {2031, 52}],
+          day <- 1..7 do
+        weekday = weekday_of_week_day(calendar, week, day)
+
+        assert UnitValues.iso_weekday_from_day_of_week(day, calendar) == weekday
+        assert UnitValues.day_of_week_from_iso_weekday(weekday, calendar) == day
+      end
+    end
+
+    test "a day of a calendar of months is ISO 8601's weekday" do
+      for calendar <- [Calendrical.Gregorian, Calendrical.Hebrew, Calendrical.Persian],
+          day <- 1..7 do
+        assert UnitValues.iso_weekday_from_day_of_week(day, calendar) == day
+        assert UnitValues.day_of_week_from_iso_weekday(day, calendar) == day
+      end
+    end
+
+    test "a number that is no day of a week is left as it is" do
+      for calendar <- [Calendrical.Gregorian, Calendrical.NRF], number <- [0, 8, -1] do
+        assert UnitValues.iso_weekday_from_day_of_week(number, calendar) == number
+        assert UnitValues.day_of_week_from_iso_weekday(number, calendar) == number
+      end
+    end
+
+    test "a week's days are counted from the calendar's own first day or from Monday" do
+      assert UnitValues.week_counted_from(Calendrical.NRF) == :default
+      assert UnitValues.week_counted_from(Calendrical.ISOWeek) == :default
+      assert UnitValues.week_counted_from(Calendrical.Gregorian) == :monday
+      assert UnitValues.week_counted_from(Calendrical.Hebrew) == :monday
+    end
+  end
 end

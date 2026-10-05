@@ -1876,10 +1876,10 @@ defmodule Tempo.Explain do
     pairs
     |> Enum.map(fn
       {nil, weekday} ->
-        "a #{weekdays_phrase(weekday, calendar)}"
+        "a #{named_weekdays_phrase(weekday, calendar)}"
 
       {position, weekday} ->
-        "the #{position_phrase(position)} #{weekdays_phrase(weekday, calendar)}"
+        "the #{position_phrase(position)} #{named_weekdays_phrase(weekday, calendar)}"
     end)
     |> or_join()
   end
@@ -1918,7 +1918,23 @@ defmodule Tempo.Explain do
     end
   end
 
+  # A selection's days of the week by name: each is a day of the week of the
+  # selection's calendar, and the weekday it names there is asked of
+  # `Tempo.UnitValues` (the third day of a week that starts on Sunday is
+  # Tuesday).
   defp weekdays_phrase(written, calendar) do
+    case counted(written, :day_of_week, calendar) do
+      {:ok, days} -> days |> Enum.map(&day_of_week_name(&1, calendar)) |> or_join()
+      :as_written -> weekday_name(written)
+    end
+  end
+
+  defp day_of_week_name(day, calendar),
+    do: day |> UnitValues.iso_weekday_from_day_of_week(calendar) |> weekday_name()
+
+  # An RRULE's BYDAY names its weekdays themselves, Monday the first, in
+  # whatever calendar the rule is resolved.
+  defp named_weekdays_phrase(written, calendar) do
     case counted(written, :day_of_week, calendar) do
       {:ok, weekdays} -> weekdays |> Enum.map(&weekday_name/1) |> or_join()
       :as_written -> weekday_name(written)
