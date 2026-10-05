@@ -1,19 +1,21 @@
 defmodule Tempo.InvalidCalendarError do
   @moduledoc """
-  Exception returned (or raised, by the `!` variants) when a calendar
-  argument to `Tempo.from_iso8601/2` is not a usable calendar module.
+  Exception returned (or raised, by the `!` variants) when the calendar
+  given to `Tempo.from_iso8601/2`, `Tempo.parse/2` or `Tempo.new/1` is not
+  a usable calendar module.
 
-  This most often happens when a namespace is passed instead of a
-  concrete calendar — for example `Calendrical.Islamic`, whose concrete
-  forms are `Calendrical.Islamic.Civil`, `Calendrical.Islamic.UmmAlQura`,
-  and so on.
+  A calendar is a module, such as `Calendrical.Hebrew`, and never the name
+  of one (`:hebrew`, `"hebrew"`). The error is also returned when a
+  namespace is passed instead of a concrete calendar — for example
+  `Calendrical.Islamic`, whose concrete forms are
+  `Calendrical.Islamic.Civil`, `Calendrical.Islamic.UmmAlQura`, and so on.
 
   """
 
   defexception [:calendar, :reason]
 
   @type t :: %__MODULE__{
-          calendar: module() | nil,
+          calendar: term(),
           reason: atom() | String.t() | nil
         }
 
@@ -24,7 +26,8 @@ defmodule Tempo.InvalidCalendarError do
 
   @impl true
   def message(%__MODULE__{calendar: calendar}) when not is_nil(calendar) do
-    "#{inspect(calendar)} is not a usable calendar module. If it is a namespace " <>
+    "#{inspect(calendar)} is not a usable calendar module. A calendar is a module such " <>
+      "as `Calendrical.Hebrew`, never the name of one. If it is a namespace " <>
       "(such as `Calendrical.Islamic`), use a concrete calendar like " <>
       "`Calendrical.Islamic.Civil` instead."
   end

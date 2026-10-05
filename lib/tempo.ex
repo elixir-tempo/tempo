@@ -291,9 +291,11 @@ defmodule Tempo do
     time-scale component must be present.
 
     Maps are convenient for interop with Elixir's standard date
-    and time types: a `t:Date.t/0`, `t:Time.t/0`, `t:NaiveDateTime.t/0`,
-    or a bare `Calendrical.parse/2` `:map` result can be passed
-    directly. `Calendar.ISO` (Elixir's default) is silently
+    and time types: the fields of a `t:Date.t/0`, a `t:Time.t/0` or a
+    `t:NaiveDateTime.t/0` (as `Map.from_struct/1` gives them), or a
+    bare `Calendrical.parse/2` `:map` result, can be passed
+    directly, and `from_elixir/2` takes the struct itself.
+    `Calendar.ISO` (Elixir's default) is silently
     normalised to `Calendrical.Gregorian` so calendar-aware
     validation works.
 
@@ -344,11 +346,13 @@ defmodule Tempo do
     `Calendrical.Gregorian`. A calendar of weeks, such as
     `Calendrical.ISOWeek`, has no months: a `:year`, `:month` and
     `:day`, or a `:year` and `:day_of_year`, given for one are the
-    Gregorian day, converted into it.
+    Gregorian day, converted into it. A calendar is a module and
+    never the name of one: `:hebrew` is an error.
 
   * `:zone` is an IANA time-zone name as a binary (e.g.
     `"Australia/Sydney"`). Sets `extended.zone_id`. A date with a
-    zone and no time of day is that day in the zone.
+    zone and no time of day is that day in the zone. A name the
+    time zone database does not have is an error.
 
   * `:shift` is a manual UTC offset expressed as `[hour: n]` or
     `[hour: n, minute: m]`, with a `:second` too if the offset has
@@ -378,7 +382,10 @@ defmodule Tempo do
   * `{:ok, t()}` on success.
 
   * `{:error, reason}` when components are missing, have
-    non-integer values, mix axes, or name a non-existent zone.
+    non-integer values or mix axes; when the calendar is not a
+    calendar module (a `Tempo.InvalidCalendarError`) or the zone is
+    not one the time zone database has (a `Tempo.UnknownZoneError`);
+    and when the shift is not whole hours, minutes and seconds.
 
   ### Examples
 
@@ -414,6 +421,10 @@ defmodule Tempo do
       iex> {:error, _} = Tempo.new(year: 2026, month: 13)
 
       iex> {:error, _} = Tempo.new(year: 2026, month: 6, week: 24)
+
+      iex> {:error, %Tempo.InvalidCalendarError{}} = Tempo.new(year: 5787, calendar: :hebrew)
+
+      iex> {:error, %Tempo.UnknownZoneError{}} = Tempo.new(year: 2026, zone: "Mars/Olympus")
 
       iex> {:ok, tempo} = Tempo.new(%{year: 2026, month: 6, day: 15})
       iex> tempo.time
@@ -495,11 +506,38 @@ defmodule Tempo do
   end
 
   defp validate_options(options) do
-    with :ok <- validate_qualification(Keyword.get(options, :qualification)),
+    with :ok <- validate_calendar(Keyword.get(options, :calendar)),
+         :ok <- validate_zone(Keyword.get(options, :zone)),
+         :ok <- validate_qualification(Keyword.get(options, :qualification)),
          :ok <- validate_metadata(Keyword.get(options, :metadata, %{})) do
       validate_tags(Keyword.get(options, :tags, %{}))
     end
   end
+
+  # A calendar is a module (`Calendrical.Hebrew`), never the name of one
+  # (`:hebrew`, "hebrew"). What was given was held as the value's calendar
+  # and called as a module where the value was first checked or used, which
+  # raised.
+  defp validate_calendar(nil), do: :ok
+
+  defp validate_calendar(calendar) do
+    if calendar_module?(calendar),
+      do: :ok,
+      else: {:error, InvalidCalendarError.exception(calendar: calendar)}
+  end
+
+  # A zone is the name of one the time zone database has. What was given
+  # was held as the value's zone: an unknown one is read as UTC, and what
+  # is no name was not written with the value.
+  defp validate_zone(nil), do: :ok
+
+  defp validate_zone(zone) when is_binary(zone) do
+    if TimeZoneDatabase.zone_exists?(zone),
+      do: :ok,
+      else: {:error, UnknownZoneError.exception(zone_id: zone)}
+  end
+
+  defp validate_zone(zone), do: {:error, UnknownZoneError.exception(zone_id: zone)}
 
   defp validate_qualification(nil), do: :ok
   defp validate_qualification(value) when value in @qualification_values, do: :ok
@@ -1090,12 +1128,12 @@ defmodule Tempo do
   # calendar module first. Passing a namespace like `Calendrical.Islamic`
   # (whose concrete forms are `.Civil`, `.UmmAlQura`, …) must return a
   # clean error, not crash deep in validation with `UndefinedFunctionError`.
-  defp resolve_calendar(calendar, _extended) when is_atom(calendar) do
-    if Code.ensure_loaded?(calendar) and function_exported?(calendar, :months_in_year, 1) do
-      {:ok, calendar_iso_as_gregorian(calendar)}
-    else
-      {:error, InvalidCalendarError.exception(calendar: calendar)}
-    end
+  # What is no module at all (a string, a number) is refused the same way:
+  # it raised a `FunctionClauseError`.
+  defp resolve_calendar(calendar, _extended) do
+    if calendar_module?(calendar),
+      do: {:ok, calendar_iso_as_gregorian(calendar)},
+      else: {:error, InvalidCalendarError.exception(calendar: calendar)}
   end
 
   @doc false

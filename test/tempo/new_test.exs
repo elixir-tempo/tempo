@@ -611,4 +611,110 @@ defmodule Tempo.NewTest do
       assert {:ok, _} = Tempo.new(month: 8, day: 30, calendar: Calendrical.Hebrew)
     end
   end
+
+  # A calendar is a module, never the name of one. What was given as
+  # `:calendar` was held as the value's calendar and called as a module where
+  # the value was checked: `calendar: :hebrew` with a month raised an
+  # `UndefinedFunctionError`, a string a `FunctionClauseError`, and a year
+  # alone was returned in the calendar `:hebrew`.
+  describe "Tempo.new/1 — the calendar it is given" do
+    @not_calendars [:hebrew, :gregorian, "hebrew", "Calendrical.Hebrew", String, NoSuch.Calendar] ++
+                     [Calendrical.Islamic, 42, 4.2, {:hebrew}, [Calendrical.Hebrew], %{}]
+
+    test "is refused where it is no calendar module" do
+      for given <- @not_calendars,
+          components <- [[year: 5787], [year: 5787, month: 6, day: 15], [month: 6]] do
+        assert {:error, %Tempo.InvalidCalendarError{calendar: ^given} = error} =
+                 Tempo.new(components ++ [calendar: given])
+
+        assert Exception.message(error) =~ inspect(given)
+        assert Exception.message(error) =~ "is not a usable calendar module"
+      end
+    end
+
+    test "is refused in a map too, and by new!/1" do
+      assert {:error, %Tempo.InvalidCalendarError{calendar: :hebrew}} =
+               Tempo.new(%{year: 5787, month: 6, day: 15, calendar: :hebrew})
+
+      assert_raise Tempo.InvalidCalendarError, fn -> Tempo.new!(year: 5787, calendar: :hebrew) end
+    end
+
+    test "is the value's calendar where it is one" do
+      assert {:ok, %Tempo{calendar: Calendrical.Hebrew}} =
+               Tempo.new(year: 5787, month: 6, day: 15, calendar: Calendrical.Hebrew)
+
+      assert {:ok, %Tempo{calendar: Calendrical.Gregorian}} =
+               Tempo.new(year: 2026, calendar: Calendar.ISO)
+
+      assert {:ok, %Tempo{calendar: Calendrical.Gregorian}} = Tempo.new(year: 2026, calendar: nil)
+    end
+  end
+
+  # The same of the calendar `Tempo.from_iso8601/2` and `Tempo.parse/2` are
+  # given: the name of a calendar was an error, and a string or a number
+  # raised a `FunctionClauseError`.
+  describe "the calendar from_iso8601/2 and parse/2 are given" do
+    test "is refused where it is no calendar module" do
+      # A list in the calendar's place is the options, so one is given as
+      # the `:calendar` option alone.
+      for given <- @not_calendars, not is_list(given) do
+        assert {:error, %Tempo.InvalidCalendarError{calendar: ^given}} =
+                 Tempo.from_iso8601("5787-06-15", given)
+      end
+
+      for given <- @not_calendars do
+        assert {:error, %Tempo.InvalidCalendarError{calendar: ^given}} =
+                 Tempo.from_iso8601("5787-06-15", calendar: given)
+
+        assert {:error, %Tempo.InvalidCalendarError{calendar: ^given}} =
+                 Tempo.parse("5787-06-15", calendar: given)
+      end
+    end
+
+    test "is the value's calendar where it is one" do
+      assert {:ok, %Tempo{calendar: Calendrical.Hebrew}} =
+               Tempo.from_iso8601("5787-06-15", Calendrical.Hebrew)
+
+      assert {:ok, %Tempo{calendar: Calendrical.Gregorian}} =
+               Tempo.from_iso8601("2026-06-15", Calendar.ISO)
+    end
+  end
+
+  # A zone is the name of one the time zone database has. What was given as
+  # `:zone` was held as the value's zone: one that is no zone is read as UTC,
+  # and what is no name at all was not written with the value.
+  describe "Tempo.new/1 — the zone it is given" do
+    test "is refused where it names no zone" do
+      for given <- [
+            "Not/AZone",
+            "Europe/Pariss",
+            "",
+            "+01:00",
+            :utc,
+            123,
+            {1, 2},
+            ["Europe/Paris"]
+          ] do
+        assert {:error, %Tempo.UnknownZoneError{zone_id: ^given} = error} =
+                 Tempo.new(year: 2026, month: 6, day: 15, zone: given)
+
+        assert Exception.message(error) =~ inspect(given)
+      end
+    end
+
+    test "is the value's zone where the database has it" do
+      assert Tempo.new(year: 2026, month: 6, day: 15, hour: 10, zone: "Europe/Paris") ==
+               Tempo.from_iso8601("2026-06-15T10[Europe/Paris]")
+
+      assert {:ok, %Tempo{extended: nil}} = Tempo.new(year: 2026, month: 6, day: 15, zone: nil)
+    end
+
+    test "is refused as it is by in_zone/2 and shift_zone/2" do
+      assert {:error, %Tempo.UnknownZoneError{zone_id: "Not/AZone"}} =
+               Tempo.in_zone(~o"2026-06-15T10:00:00", "Not/AZone")
+
+      assert {:error, %Tempo.UnknownZoneError{zone_id: "Not/AZone"}} =
+               Tempo.shift_zone(~o"2026-06-15T10:00:00Z", "Not/AZone")
+    end
+  end
 end

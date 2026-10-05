@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* `Tempo.new/1` returns a `Tempo.InvalidCalendarError` for a `:calendar` that is not a calendar module and a `Tempo.UnknownZoneError` for a `:zone` the time zone database does not have, where it held whatever it was given. `calendar: :hebrew` raised once the value had a month, and a zone that is none was read as UTC.
+
 * A time shift's minutes and seconds are from 0 to 59: `+01:60`, `Z1H60S` and the IXDTF offset `[+01:60]` are errors, where they were read as two hours and the like. `Tempo.new/1` returns an `ArgumentError` for a `:shift` that is not whole hours, minutes and seconds from the hour down with its sign on the first unit that is not zero, where it held whatever it was given.
 
 * A selector of `Tempo.select/2` that is as coarse as the period it is selected from, or coarser, is a filter that keeps the period where it starts in what the selector names, as a weekday selector keeps a day: `Tempo.select(days, ~o"6M")` is the days that are in June, where it was the month of June, once, from 1 June, and `Tempo.select(~o"2026-06-15", ~o"6M")` is 15 June, where it was nothing. The period kept is the period as it is written, for a selection too (`~o"L6MN"` from 1 June was `2026Y6M/2D`), and units finer than the period are placed within the periods the coarser ones keep (`~o"6MT10H"`).
@@ -314,6 +316,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* `Tempo.from_iso8601/2` and `Tempo.parse/2` return a `Tempo.InvalidCalendarError` for a calendar that is a string or a number, as they do for the name of one, where they raised a `FunctionClauseError`.
 
 * A set of whole numbers written with no designator is a set of years only where each has four digits or fewer, or a minus sign: `{20260615,20260616}` is the two dates, as `[20260615,20260616]` is, where it was the years 20260615 and 20260616. Two digits before a comma or a range in a set are the century they are alone, where `[19,20]` held the hour 19 beside the century 20.
 
