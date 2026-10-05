@@ -8,8 +8,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Correctness
 
-* [ ] **A JSCalendar rule's `rscale` is not read** — `Tempo.JSCalendar.parse/2` reads a rule that names another calendar (`"rscale":"hebrew"`) as a rule of the Gregorian: its months and its days of the month are counted in the wrong calendar. Known to answer wrongly, so a named error until a rule is expanded in the calendar it names. Found 2026-10-05.
-
 * [ ] **An ISO 8601 recurrence from a day a period lacks is written as the RRULE that says the same** — decided 2026-10-05: an ISO 8601 recurrence keeps the period's last day and a reader of RFC 5545 omits it, so `Tempo.RRule.to_string/1` writes the RFC's idiom, the last day of the month (`R5/2026-01-31/P1M` is `COUNT=5;FREQ=MONTHLY;BYMONTHDAY=-1`) or the last of the days up to the start's (`BYMONTHDAY=28,29,30;BYSETPOS=-1`; `FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=28,29;BYSETPOS=-1` from 29 February), and returns a `Tempo.ConversionError` for a rule that already holds a position or expands times, which the idiom's `BYSETPOS` would count. Now it writes `COUNT=5;FREQ=MONTHLY`, which a reader lists without February and April.
 
 * [ ] **The RRULE writer writes only what RFC 5545 allows the frequency** — decided 2026-10-05: `Tempo.RRule.to_string/1` writes the allowed equivalent where there is one, a numeric `BYDAY` outside a monthly or yearly rule as `BYDAY` with `BYSETPOS` (`R/2026-06-01/P1W/FL3K2IN` is now `FREQ=WEEKLY;BYDAY=2WE`), and returns a `Tempo.ConversionError` naming the part and the frequency for the rest: `BYWEEKNO` outside a yearly rule, `BYYEARDAY` in a daily, weekly or monthly one and `BYMONTHDAY` in a weekly one.
@@ -36,7 +34,7 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **Sets the parser does not read** — a qualified member (`{2026-06-15?,2026-06~}`); the fractions of a second as a set (`T10H30M45.{0..9}S`), the form `extend/2` gives a second and `inspect/1` writes; and a fraction before a comma or the closing brace (`{T10:30:45.5,T11:00}`, `{2021-06-15.5}`), which the lookahead after a fraction's digits refuses, so a set's member has no fraction of a second. Found 2026-10-02 to 2026-10-04.
 
-* [ ] **RFC 7529's `RSCALE` and `SKIP` in an RRULE string, and `skip: forward`** — `Tempo.RRule.parse/2` returns `{:error, {:unknown_rule_part, "SKIP"}}` for `RSCALE=GREGORIAN;SKIP=BACKWARD`, which the rule struct's `:skip` now holds (`:omit` and `:backward`, read from JSCalendar), and no reader builds `FORWARD`, the first day of the period after. Found 2026-10-05.
+* [ ] **RFC 7529's `RSCALE` and `SKIP`, and a rule counted in another calendar** — `Tempo.RRule.parse/2` returns `{:error, {:unknown_rule_part, "SKIP"}}` for `RSCALE=GREGORIAN;SKIP=BACKWARD`, which the rule struct's `:skip` now holds (`:omit` and `:backward`, read from JSCalendar), and no reader builds `FORWARD`, the first day of the period after. `Tempo.JSCalendar.parse/2` reports an `rscale` other than `gregorian`; a rule is already counted in the calendar of its start, so reading one is converting the start. Found 2026-10-05.
 
 * [ ] **Week-of-month selections, and calendar-aware RRULE `BYWEEKNO`** — parse `2026Y6M2W` ("2nd week of June", a positional `W` after a month) and materialise it via `Calendrical.week_of_month/3`; and replace the hard-coded ISO week walk still used by RRULE `BYWEEKNO` with Calendrical's calendar-aware functions. Month and native week-of-year selections are done. Plan in [plans/recurrence-selection-resolution.md](plans/recurrence-selection-resolution.md).
 
@@ -131,6 +129,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A JSCalendar rule's `rscale` is reported** — `Tempo.JSCalendar.parse/2` returns `{:error, {:unsupported_rscale, name}}` for a rule of another calendar than the Gregorian, where it read a Hebrew rule as a Gregorian one; expanding such a rule in the calendar it names is the feature left. 2026-10-05.
 
 * [x] **A rule read from an RRULE states what RFC 5545 takes from its start** — `Tempo.RRule.Rule.to_selection/2`, by which `Tempo.RRule.parse/2`, `Tempo.ICal` and `Tempo.JSCalendar` build a rule, writes into it what ISO 8601-2 Annex C.3 lists: a weekly rule's weekday, a monthly rule's day of the month, a yearly rule's month (for a Gregorian start) and day. A day a month lacks is passed over, as RFC 5545 has it, an occurrence is as long as its start is precise, and an ISO 8601 recurrence is unchanged. The rule struct has a `:skip`, which JSCalendar's `skip` sets (`backward` keeps the last day, `forward` is an error). `Tempo.RRule.StartPartsTest` works each rule's dates out with `Date` alone. 2026-10-05.
 

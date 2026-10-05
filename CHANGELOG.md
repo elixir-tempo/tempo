@@ -289,6 +289,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.JSCalendar.parse/2` returns `{:error, {:unsupported_rscale, name}}` for a recurrence rule whose `rscale` names another calendar than the Gregorian, where it counted a Hebrew rule's months and days as Gregorian ones.
+
 * In a yearly rule the parts that name a day all hold at once, as RFC 5545 has them: a month limits a day of the year and a computed event beside it (`FREQ=YEARLY;BYMONTH=3;BYYEARDAY=100` selects nothing, where it was 10 April, and `R/../P1Y/FL3M(easter)eN` is Easter in the years it falls in March, where it was every Easter), and several months list a day once, where `BYMONTH=3,4;BYYEARDAY=80,100` listed 21 March and 10 April twice. A day of the month keeps a day of the year that is one (`BYMONTHDAY=15;BYYEARDAY=74` is 15 March but in a leap year, where it was the 15th every year), and an event one that is its day.
 
 * A computed event in a recurrence or a selection of another calendar than the Gregorian is each day it falls on in the calendar's own year, asked for in the Gregorian years that year runs through: `R2/5786Y/P1Y/FL(easter)eN` in the Hebrew calendar is 18 Nisan 5786 and 19 Nisan 5787 (5 April 2026 and 28 March 2027), where it was the Easters of the Gregorian years 5786 and 5787, and `Tempo.select/2` of a Hebrew year selected none. A year holds one such day, none or two (the Hebrew year 5786 has no September equinox and 5787 two), and a §12.10 window on the event (`FLLL(easter)eN/-P7DN5K-1IN`, Good Friday) is anchored on the same day.

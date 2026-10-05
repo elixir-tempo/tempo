@@ -195,6 +195,23 @@ defmodule Tempo.JSCalendarTest do
       assert monthly.(~s(,"skip":"forward")) == {:error, {:unsupported_skip, "forward"}}
     end
 
+    test "a rule counted in another calendar than the Gregorian is reported" do
+      yearly = fn rule ->
+        Tempo.JSCalendar.parse(event(~s(
+          "start":"2026-04-05T09:00:00","duration":"PT1H",
+          "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"yearly","count":2#{rule}}]
+        )))
+      end
+
+      # A Hebrew rule's months are not the Gregorian calendar's.
+      assert yearly.(~s(,"rscale":"hebrew")) == {:error, {:unsupported_rscale, "hebrew"}}
+
+      assert {:ok, gregorian} = yearly.(~s(,"rscale":"gregorian"))
+      assert {:ok, unsaid} = yearly.("")
+      assert spans(gregorian) == spans(unsaid)
+      assert spans(unsaid) == ["2026Y4M5DT9H0M0S/T10H0M0S", "2027Y4M5DT9H0M0S/T10H0M0S"]
+    end
+
     test "byDay carries its ordinal" do
       assert {:ok, set} =
                Tempo.JSCalendar.parse(event(~s(

@@ -76,6 +76,10 @@ if Code.ensure_loaded?(JSCalendar) do
     set expresses that — the patches are on the object for a caller
     who knows which locale they want.
 
+    A rule's `skip` is read. `omit`, the default, passes over a month or a year that lacks the start's day, so a rule on the 31st lists the months of 31 days, and `backward` keeps the last day of such a month.
+
+    Three things a rule can say are reported, each as `{:error, {reason, value}}`, rather than read as something they are not: a `skip` of `forward`, the first day of the month after (`:unsupported_skip`); an `rscale` other than `gregorian`, a rule counted in another calendar (`:unsupported_rscale`); and a leap month such as `"3L"` (`:unsupported_month`).
+
     """
 
     alias JSCalendar.Event
@@ -432,7 +436,8 @@ if Code.ensure_loaded?(JSCalendar) do
     defp to_rule(%RecurrenceRule{} = rule) do
       with {:ok, freq} <- frequency(rule.frequency),
            {:ok, months} <- months(rule.by_month),
-           {:ok, skip} <- skip(rule.skip) do
+           {:ok, skip} <- skip(rule.skip),
+           :ok <- gregorian(rule.rscale) do
         {:ok,
          %Rule{
            freq: freq,
@@ -472,6 +477,13 @@ if Code.ensure_loaded?(JSCalendar) do
     defp skip("omit"), do: {:ok, :omit}
     defp skip("backward"), do: {:ok, :backward}
     defp skip(other), do: {:error, {:unsupported_skip, other}}
+
+    # RFC 8984 §4.3.3: `rscale` names the calendar a rule counts its months
+    # and its days in, "gregorian" where it does not say. A rule of another
+    # calendar is reported rather than counted in the Gregorian.
+    defp gregorian(nil), do: :ok
+    defp gregorian(rscale) when rscale in ["gregorian", "gregory"], do: :ok
+    defp gregorian(other), do: {:error, {:unsupported_rscale, other}}
 
     defp weekday("mo"), do: 1
     defp weekday("tu"), do: 2
