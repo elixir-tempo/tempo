@@ -306,6 +306,8 @@ Tempo.to_interval(~o"R/../P1Y/FL(march-equinox@+09:00)eN", within: ~o"2002Y")
 #   → 2002-03-21
 ```
 
+An event is each of its days that falls in the period it is selected in, a year, a month or a week: `Tempo.select(~o"2026Y4M", ~o"L(easter)eN")` is 5 April, and `R/../P1M/FL(easter)eN` lists the Easter of each month that has one. In a recurrence that steps by days or less it keeps the occurrences that are on its day.
+
 An event is a day on the time line, worked out for a year of the Gregorian calendar. In a recurrence or a selection of another calendar it is each day the event falls on in the calendar's own year, written in that calendar: one Easter in a Hebrew year, and one September equinox, none or two, as the year begins and ends:
 
 ```elixir

@@ -185,6 +185,78 @@ defmodule Tempo.EventTest do
     end
   end
 
+  describe "a computed event in a period" do
+    # An event is each of its days that falls in the period: a year, a month
+    # or a week. The measure is the event's date in each year, from
+    # `Tempo.Event.date/2`, placed in its month by its own fields and in its
+    # ISO 8601 week by `:calendar.iso_week_number/1`.
+    @in_periods ~w(easter orthodox-easter new-moon december-solstice qingming)
+
+    defp selected(span, event) do
+      {:ok, set} = Tempo.select(span, Tempo.from_iso8601!("L(#{event})eN"))
+
+      for interval <- IntervalSet.members(set) do
+        {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
+        date
+      end
+    end
+
+    test "is selected from the month it falls in, and from no other" do
+      for event <- @in_periods, year <- 2024..2030, month <- 1..12 do
+        {:ok, date} = Event.date(event, year)
+        in_the_month = if date.month == month, do: [date], else: []
+
+        assert {event, year, month, selected(Tempo.from_iso8601!("#{year}Y#{month}M"), event)} ==
+                 {event, year, month, in_the_month}
+      end
+    end
+
+    test "is selected from the week it falls in, and from neither week beside it" do
+      for event <- @in_periods, year <- 2024..2030 do
+        {:ok, date} = Event.date(event, year)
+        {week_year, week} = :calendar.iso_week_number(Date.to_erl(date))
+        its_week = Tempo.from_iso8601!("#{week_year}Y#{week}W")
+
+        assert {event, year, selected(its_week, event)} == {event, year, [date]}
+
+        for beside <- [Tempo.shift(its_week, week: -1), Tempo.shift(its_week, week: 1)] do
+          assert {event, year, selected(beside, event)} == {event, year, []}
+        end
+      end
+    end
+
+    test "is listed by a recurrence that steps by months or by weeks" do
+      for event <- @in_periods, cadence <- ["P1M", "P1W"] do
+        expected = for year <- 2024..2030, {:ok, date} <- [Event.date(event, year)], do: date
+
+        assert {event, cadence, event_dates("R/../#{cadence}/FL(#{event})eN", ~o"2024Y/2031Y")} ==
+                 {event, cadence, Enum.map(expected, &Date.to_iso8601/1)}
+      end
+    end
+
+    test "is the Easter of each month that has one, counted from a start" do
+      {:ok, set} = Tempo.to_interval(~o"R2/2026-01-05/P1M/FL(easter)eN")
+
+      assert Enum.map(IntervalSet.members(set), &Interval.from/1) ==
+               [~o"2026-04-05", ~o"2027-03-28"]
+    end
+
+    test "is limited by a weekday beside it" do
+      assert event_dates("R/../P1M/FL(easter)e7KN", ~o"2026Y/2029Y") ==
+               ["2026-04-05", "2027-03-28", "2028-04-16"]
+
+      assert event_dates("R/../P1M/FL(easter)e1KN", ~o"2026Y/2029Y") == []
+      assert event_dates("R/../P1W/FL(easter)e7KN", ~o"2026Y") == ["2026-04-05"]
+      assert event_dates("R/../P1W/FL(easter)e1KN", ~o"2026Y") == []
+    end
+
+    test "keeps a day that is its day, and a period finer than a day on it" do
+      assert selected(~o"2026-04-05", "easter") == [~D[2026-04-05]]
+      assert selected(~o"2026-04-06", "easter") == []
+      assert event_dates("R/../P1D/FL(easter)eN", ~o"2026Y") == ["2026-04-05"]
+    end
+  end
+
   describe "computed-event recurrence — explain/1" do
     test "reads the event as prose" do
       assert Tempo.explain(~o"R/../P1Y/FL(easter)eN") =~ "on Easter"

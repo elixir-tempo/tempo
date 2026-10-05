@@ -8,8 +8,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Correctness
 
-* [ ] **A computed event expands in a month and a week** — decided 2026-10-05: an event is each of its days that falls in the period, for a year, a month and a week, and a daily or finer candidate is kept when it is the event's day. Now `Tempo.select(~o"2026Y4M", ~o"L(easter)eN")` and the selection of ISO week 14 select nothing though Easter 2026 is 5 April, and `R2/2026-01-05/P1M/FL(easter)eN` is 5 April 2026 and 2037, the 5th when it is Easter, where it is to be the Easter of each month that has one.
-
 * [ ] **An event that cannot be computed is an error** — decided 2026-10-05: `Tempo.to_interval/2` and `Tempo.select/2` return an error naming the event and the year for a year the event cannot be computed for, the unknown name for a name no resolver claims, and a registered resolver's own `{:error, reason}`, where each was no occurrence: `R2/0500Y/P1Y/FL(march-equinox)eN` is the equinoxes of 1000 and 1001, Astro computing none before 1000 CE, and `(brigadoon)e` selects nothing.
 
 ### Conformance and completeness
@@ -125,6 +123,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A computed event expands in a month and a week** — in the resolver an event's role is to expand a yearly, a monthly and a weekly candidate (`role/3`): its dates in the candidate's month (`in_month_of/2`), or among the seven days of its week (`event_dates_in_week/3`, the event asked for each year the week is in), and a weekday or a day of the month beside it limits that day. `Tempo.EventTest` places each event of seven years in its month by its own fields and in its week by `:calendar.iso_week_number/1`; `Tempo.EventCalendarTest` does the months and weeks of eight other calendars. 2026-10-05.
 
 * [x] **The RRULE writer writes only what RFC 5545 allows the frequency** — in `Tempo.RRule.Encoder` a weekday and its position are fused into a numbered `BYDAY` only in a monthly rule and a yearly rule with no `BYWEEKNO` (`numbered_byday?/2`), and `allowed_at_frequency/2` returns a `ConversionError` naming the part and the frequency for `BYMONTHDAY` in a weekly rule, `BYYEARDAY` in a daily, weekly or monthly one, `BYWEEKNO` outside a yearly one, a numbered `BYDAY` on several weekdays where it is not allowed and a `BYSETPOS` alone. `Tempo.RRule.AllowedPartsTest` holds the RFC's own sentences as its table. 2026-10-05.
 

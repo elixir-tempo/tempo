@@ -149,6 +149,36 @@ defmodule Tempo.EventCalendarTest do
     end
   end
 
+  describe "a computed event in a month or a week of another calendar" do
+    # The calendars of months whose years begin with their first month, and
+    # the two of weeks, whose dates hold a week where another's hold a month.
+    @months [Hebrew, Persian, Coptic, UmmAlQura, Buddhist, Julian]
+    @weeks [NRF, ISOWeek]
+
+    for {calendar, year} <- @years, calendar in @months or calendar in @weeks do
+      test "is selected from the period of #{inspect(calendar)} it falls in" do
+        calendar = unquote(calendar)
+        year = unquote(year)
+        unit = if calendar in @weeks, do: "W", else: "M"
+
+        for event <- @events, date <- event |> event_dates(year, calendar) |> in_year(year) do
+          selector = read("L(#{event})eN", calendar)
+          period = read("#{year}Y#{date.month}#{unit}", calendar)
+          before = read("#{year}Y#{max(date.month - 1, 1)}#{unit}", calendar)
+
+          assert {event, dates(Tempo.select(period, selector))} == {event, [date]}
+
+          if date.month > 1 do
+            others = event |> event_dates(year, calendar) |> in_year(year)
+            in_before = Enum.filter(others, &(&1.month == date.month - 1))
+
+            assert {event, dates(Tempo.select(before, selector))} == {event, in_before}
+          end
+        end
+      end
+    end
+  end
+
   describe "a computed event that limits a recurrence of another calendar" do
     test "keeps the days of a daily recurrence that are the event's" do
       for {calendar, first_day} <- [

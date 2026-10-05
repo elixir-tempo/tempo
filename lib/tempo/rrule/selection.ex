@@ -33,7 +33,9 @@ defmodule Tempo.RRule.Selection do
   selection (`w`, Tempo's extension) expands and limits as `BYWEEKNO`
   does, in the weeks the calendar numbers itself.
 
-  In a `YEARLY` rule the parts that name a day all hold at once, so the days selected are those that satisfy every one. `BYYEARDAY`, a computed event (`e`, Tempo's extension, which expands a `YEARLY` rule and limits a finer one) and `BYMONTHDAY` apply in that order: the first of them the rule holds names the days, and each after it keeps those it names too. `BYMONTH` keeps a day of the year and an event to the months it lists, each day listed once: `BYMONTH=3;BYYEARDAY=100` selects nothing, day 100 being 10 April, and `3M(easter)e` is Easter in the years it falls in March.
+  In a `YEARLY` rule the parts that name a day all hold at once, so the days selected are those that satisfy every one. `BYYEARDAY`, a computed event (`e`, Tempo's extension) and `BYMONTHDAY` apply in that order: the first of them the rule holds names the days, and each after it keeps those it names too. `BYMONTH` keeps a day of the year and an event to the months it lists, each day listed once: `BYMONTH=3;BYYEARDAY=100` selects nothing, day 100 being 10 April, and `3M(easter)e` is Easter in the years it falls in March.
+
+  A computed event is each of its days that falls in the period it is selected in: it expands a `YEARLY`, a `MONTHLY` and a `WEEKLY` rule, so the Easter of April 2026 and of its fourteenth week are both 5 April, and it limits a `DAILY` rule and a finer one to the candidates on its day. A weekday or a day of the month beside it limits that day.
 
   A year (`Y`), which RFC 5545 has no part for and ISO 8601-2 §12.2 no
   selection rule, limits the periods a selection resolves in, as a
@@ -675,12 +677,21 @@ defmodule Tempo.RRule.Selection do
   # §3.3.10): the first of them to apply names the days, and each one after it
   # keeps those it names too. A day of the year applies before an event, and
   # a day of the month after both.
-  defp role({:event, _name}, :year, selection) do
+  #
+  # An event is each of its days that falls in the period, a year, a month
+  # or a week: the Easter of April 2026 and of its fourteenth week are both
+  # 5 April. A day, and a period finer than one, is kept when it is the
+  # event's day.
+  defp role({:event, _name}, scope, selection) when scope in [:year, :month, :week] do
     if Keyword.has_key?(selection, :day_of_year), do: :limit, else: :expand
   end
 
   defp role({:day, _days}, :year, selection) do
     if day_named_before_day_of_month?(selection), do: :limit, else: :expand
+  end
+
+  defp role({:day, _days}, :month, selection) do
+    if Keyword.has_key?(selection, :event), do: :limit, else: :expand
   end
 
   defp role({token, _value}, scope, _selection)
@@ -805,16 +816,28 @@ defmodule Tempo.RRule.Selection do
   end
 
   # Computed event (`(easter)e`, `(march-equinox)e`, …) — EXPAND for
-  # FREQ=YEARLY: resolve the event in each candidate year via `Tempo.Event`
-  # and emit each date it falls on there as a day-resolution occurrence (one
-  # in a Gregorian year; one, none or two in a year of another calendar). An
-  # unknown event or a year the resolver cannot reach (an equinox outside
-  # Astro's range) drops silently, like any other invalid combination. For
-  # finer FREQs it is a LIMIT: keep candidates already sitting on the event's
-  # date.
-  defp apply_role(:expand, {:event, name}, candidates, _scope, selection, _wkst) do
+  # FREQ=YEARLY, MONTHLY and WEEKLY: resolve the event via `Tempo.Event` and
+  # emit each date it falls on in the candidate's year, month or week as a
+  # day-resolution occurrence (one in a Gregorian year; one, none or two in a
+  # year of another calendar; one or none in a month or a week). An unknown
+  # event or a year the resolver cannot reach (an equinox outside Astro's
+  # range) drops silently, like any other invalid combination. For finer
+  # FREQs it is a LIMIT: keep candidates already sitting on the event's date.
+  defp apply_role(:expand, {:event, name}, candidates, :year, selection, _wkst) do
     Enum.flat_map(candidates, fn candidate ->
       candidate |> event_dates(name) |> swap_in_selected_month(candidate, selection)
+    end)
+  end
+
+  defp apply_role(:expand, {:event, name}, candidates, :month, _selection, _wkst) do
+    Enum.flat_map(candidates, fn candidate ->
+      swap_dates(candidate, candidate |> event_dates(name) |> in_month_of(candidate))
+    end)
+  end
+
+  defp apply_role(:expand, {:event, name}, candidates, :week, _selection, wkst) do
+    Enum.flat_map(candidates, fn candidate ->
+      swap_dates(candidate, event_dates_in_week(candidate, name, wkst))
     end)
   end
 
@@ -974,9 +997,13 @@ defmodule Tempo.RRule.Selection do
   # hold at once, and a date is listed by the month it is in and no other.
   defp swap_in_selected_month(dates, candidate, selection) do
     if month_selected?(selection),
-      do: swap_dates(candidate, Enum.filter(dates, &(elem(&1, 1) == month_of(candidate)))),
+      do: swap_dates(candidate, in_month_of(dates, candidate)),
       else: swap_dates(candidate, dates)
   end
+
+  # Those of some dates of a candidate's year that are in its month.
+  defp in_month_of(dates, candidate),
+    do: Enum.filter(dates, &(elem(&1, 1) == month_of(candidate)))
 
   # A computed event (`(easter)e`) names one day, as BYMONTHDAY does, so a
   # BYDAY beside it limits that day rather than expanding the period.
@@ -1004,7 +1031,10 @@ defmodule Tempo.RRule.Selection do
     end
   end
 
-  defp no_ordinal_byday_role(:week, _selection), do: {:expand, :week}
+  defp no_ordinal_byday_role(:week, selection) do
+    if Keyword.has_key?(selection, :event), do: :limit, else: {:expand, :week}
+  end
+
   defp no_ordinal_byday_role(_, _), do: :limit
 
   # BYDAY-with-ordinal period scope (for `nth_kday` counting):
@@ -1564,6 +1594,26 @@ defmodule Tempo.RRule.Selection do
   end
 
   defp date_units(%Date{year: year, month: month, day: day}), do: {year, month, day}
+
+  # The days of an event that fall in the candidate's week, the seven days
+  # from `wkst` that hold its date. The event is resolved in each year those
+  # days are in, a week at the turn of a year being in two.
+  defp event_dates_in_week(%Interval{from: %Tempo{calendar: calendar}} = candidate, name, wkst) do
+    case week_date_range(candidate, wkst) do
+      nil ->
+        []
+
+      days ->
+        in_week = MapSet.new(days, fn {year, month, day, _weekday} -> {year, month, day} end)
+
+        days
+        |> Enum.map(&elem(&1, 0))
+        |> Enum.uniq()
+        |> Enum.flat_map(&event_dates_in_year(name, &1, calendar))
+        |> Enum.map(&date_units/1)
+        |> Enum.filter(&MapSet.member?(in_week, &1))
+    end
+  end
 
   # An event is computed for a year of the Gregorian calendar and falls in it
   # (`Tempo.Event.date/3`), so in the Gregorian calendar the event of a

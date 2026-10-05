@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A computed event is each of its days that falls in the period it is selected in, a year, a month or a week: `Tempo.select(~o"2026Y4M", ~o"L(easter)eN")` and the selection from ISO week 14 are 5 April 2026, where a month and a week selected nothing unless they started on the event. `R2/2026-01-05/P1M/FL(easter)eN` is the Easter of each month that has one, 5 April 2026 and 28 March 2027, where it was the 5th of a month when that was Easter (2026 and 2037); a daily or finer recurrence keeps the occurrences on the event's day, as before.
+
 * `Tempo.RRule.to_string/1` writes a rule only as RFC 5545 §3.3.10 allows its frequency: a numbered weekday outside a monthly rule and a yearly rule with no `BYWEEKNO` is the weekday and its position (`R/2026-06-01/P1W/FL3K2IN` is `FREQ=WEEKLY;BYDAY=WE;BYSETPOS=2`, where it was `BYDAY=2WE`). `BYMONTHDAY` in a weekly rule, `BYYEARDAY` in a daily, weekly or monthly one, `BYWEEKNO` in any but a yearly one and a `BYSETPOS` with no other part return a `Tempo.ConversionError` naming the part and the frequency, where each was written.
 
 * `Tempo.RRule.to_string/1` writes a recurrence that keeps the last day of a month without its start's day as the rule that lists those days for a reader of RFC 5545, who passes over such a month: `~o"R5/2026-01-31/P1M"` is `COUNT=5;FREQ=MONTHLY;BYMONTHDAY=-1` and one from the 30th `BYMONTHDAY=28,29,30;BYSETPOS=-1`, where each was `FREQ=MONTHLY`, read without February. A recurrence no one rule says, one that holds a position or several times of day already or names months of different lengths in a year, returns a `Tempo.ConversionError`.
