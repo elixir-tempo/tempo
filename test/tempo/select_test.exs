@@ -2,6 +2,10 @@ defmodule Tempo.Select.Test do
   use ExUnit.Case, async: false
   import Tempo.Sigils
 
+  alias Calendrical.Hebrew
+  alias Calendrical.ISOWeek
+  alias Calendrical.NRF
+  alias Tempo.ConversionError
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.InvalidDateError
@@ -1024,6 +1028,111 @@ defmodule Tempo.Select.Test do
     test "a base without metadata selects days without it" do
       {:ok, days} = Tempo.select(~o"2027-07-19/2027-07-21", Tempo.workdays(:AU))
       assert metadata_of(days) == [%{}, %{}]
+    end
+  end
+
+  # A selector is a value of its own calendar: its month, its day and its
+  # week are numbers of that calendar. They were read in the span's, so
+  # `~o"6M15D"` selected the fifteenth of a Hebrew year's sixth month, and
+  # `~o"6M-1D"`, already June's 30th, nothing from a month of 29 days.
+  describe "a selector of another calendar than the span's" do
+    defp read(text, calendar), do: Tempo.from_iso8601!(text, calendar)
+
+    defp selected_starts({:ok, %IntervalSet{} = set}),
+      do: set |> IntervalSet.members() |> Enum.map(&Interval.from/1)
+
+    defp selected_dates(selected) do
+      for start <- selected_starts(selected) do
+        {:ok, date} = Tempo.to_date(start)
+        date
+      end
+    end
+
+    test "is refused where it holds a month, a day, a day of the year, a week or a year" do
+      year = read("5786Y", Hebrew)
+
+      for text <- ~w(6M 6M15D 6M-1D 15D -1D 100O 25W 25W3K 2026Y6M15D
+                     L6M15DN L15DN L100ON L25WN 4ML1K1IN) do
+        assert {:error, %ConversionError{target: Hebrew} = error} =
+                 Tempo.select(year, Tempo.from_iso8601!(text)),
+               text
+
+        message = Exception.message(error)
+        assert message =~ "Calendrical.Gregorian", text
+        assert message =~ "Calendrical.Hebrew", text
+      end
+    end
+
+    test "is refused in an interval, in a list, from a function and for an open span" do
+      year = read("5786Y", Hebrew)
+
+      assert {:error, %ConversionError{}} = Tempo.select(year, ~o"6M/8M")
+      assert {:error, %ConversionError{}} = Tempo.select(year, [~o"T10H", ~o"6M"])
+      assert {:error, %ConversionError{}} = Tempo.select(year, fn _period -> ~o"6M" end)
+      assert {:error, %ConversionError{}} = Tempo.select(read("5786Y6M1D/..", Hebrew), ~o"15D")
+    end
+
+    test "is refused whichever of the two calendars the span is in" do
+      assert {:error, %ConversionError{target: Calendrical.Gregorian}} =
+               Tempo.select(~o"2026", read("6M15D", Hebrew))
+
+      assert {:error, %ConversionError{target: Calendrical.Gregorian}} =
+               Tempo.select(~o"2026", read("L6M15DN", Hebrew))
+    end
+
+    test "selects where it is written in the span's calendar" do
+      year = read("5786Y", Hebrew)
+      last = Hebrew.days_in_month(5786, 6)
+
+      assert selected_starts(Tempo.select(year, read("6M-1D", Hebrew))) ==
+               [read("5786Y6M#{last}D", Hebrew)]
+
+      assert selected_starts(Tempo.select(year, read("6M15D", Hebrew))) == [
+               read("5786Y6M15D", Hebrew)
+             ]
+    end
+
+    test "a time of day and a day of the week select from a span in any calendar" do
+      month = read("5786Y6M", Hebrew)
+
+      wednesdays =
+        for date <- Hebrew.month(5786, 6),
+            date |> Date.convert!(Calendar.ISO) |> Date.day_of_week() == 3,
+            do: date
+
+      assert selected_dates(Tempo.select(month, ~o"3K")) == wednesdays
+      assert selected_dates(Tempo.select(month, ~o"L3K1IN")) == [hd(wednesdays)]
+
+      assert selected_starts(Tempo.select(read("5786Y6M1D", Hebrew), ~o"T10H")) ==
+               [read("5786Y6M1DT10H", Hebrew)]
+    end
+
+    test "a week of the Gregorian calendar and of the ISO week calendar are ISO 8601's alike" do
+      assert selected_starts(Tempo.select(read("2026Y", ISOWeek), ~o"25W")) == [
+               read("2026Y25W", ISOWeek)
+             ]
+
+      assert selected_starts(Tempo.select(~o"2026Y", read("25W", ISOWeek))) == [~o"2026Y25W"]
+
+      assert {:error, %ConversionError{target: NRF}} = Tempo.select(read("2026Y", NRF), ~o"25W")
+
+      assert {:error, %ConversionError{target: Calendrical.Gregorian}} =
+               Tempo.select(~o"2026Y", read("25W", NRF))
+    end
+
+    test "a rule of another calendar that selects by weekday answers in the span's" do
+      # The third day of an NRF week is a Tuesday: 21 July 2026.
+      assert selected_starts(Tempo.select(~o"2026-07-19/2026-07-26", read("L3KN", NRF))) ==
+               [~o"2026-07-21"]
+    end
+
+    test "a span in a calendar of weeks keeps the error that says what selects in it" do
+      for selector <- [~o"6M", ~o"L6M15DN"] do
+        assert {:error, %ConversionError{reason: reason}} =
+                 Tempo.select(read("2026Y", NRF), selector)
+
+        assert reason =~ "is a calendar of weeks"
+      end
     end
   end
 end

@@ -258,15 +258,26 @@ defmodule Tempo.RRule.Selection do
          rule_calendar,
          %Interval{from: %Tempo{calendar: calendar}}
        ) do
-    from = Compare.effective_calendar(rule_calendar)
-    to = Compare.effective_calendar(calendar)
+    days_of_week_in_calendar(
+      selection,
+      Compare.effective_calendar(rule_calendar),
+      Compare.effective_calendar(calendar)
+    )
+  end
 
+  defp days_of_week_in_candidate_calendar(selection, _rule_calendar, _candidate), do: selection
+
+  @doc false
+  # A selection's days of the week, counted in the calendar `from`, as the
+  # days the calendar `to` gives the same weekdays. Two calendars that start
+  # their weeks on the same day count them alike, and the selection is as it
+  # was.
+  @spec days_of_week_in_calendar(keyword(), module(), module()) :: keyword()
+  def days_of_week_in_calendar(selection, from, to) do
     if from == to or same_week_start?(from, to),
       do: selection,
       else: Enum.map(selection, &day_of_week_in_calendar(&1, from, to))
   end
-
-  defp days_of_week_in_candidate_calendar(selection, _rule_calendar, _candidate), do: selection
 
   defp same_week_start?(from, to) do
     UnitValues.iso_weekday_from_day_of_week(1, from) ==

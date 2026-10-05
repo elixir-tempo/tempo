@@ -170,6 +170,22 @@ defmodule Tempo.Select do
   the weekdays it names; `~o"3K[u-ca=nrf]"`, written in a calendar whose
   weeks start on Sunday, selects Tuesdays.
 
+  ## A selector of another calendar
+
+  A selector is a value of its own calendar. Its year, its month, its day
+  of one, its day of the year and its week are numbers of that calendar,
+  and are never read in the base's: the sixth month of a Hebrew year is not
+  June. So a selector that holds one selects only from a base of its own
+  calendar, and from a base of another returns a `Tempo.ConversionError`
+  naming both, as `Tempo.at/2` and `Tempo.on/2` do. Write the selector in
+  the base's calendar: `Tempo.from_iso8601!("6M15D", Calendrical.Hebrew)`,
+  or `~o"6M15D[u-ca=hebrew]"`.
+
+  A time of day and a day of the week select from a base in any calendar,
+  and what they select are values of the base's calendar. ISO 8601's weeks
+  are the Gregorian calendar's and the ISO week calendar's alike, so a week
+  written in either selects from a base in the other.
+
   """
 
   alias Tempo.Compare
@@ -183,6 +199,7 @@ defmodule Tempo.Select do
   alias Tempo.Iso8601.Unit
   alias Tempo.Math
   alias Tempo.NotBuilt
+  alias Tempo.RRule.Selection
   alias Tempo.UnboundedSetError
   alias Tempo.UnitValues
   alias Tempo.Validation
@@ -740,25 +757,33 @@ defmodule Tempo.Select do
     do: select_indices(period, indices)
 
   defp select_period(period, %Tempo{time: time} = constraint) do
-    case selection_parts(time) do
-      :none -> select_projections(period, [constraint])
-      {[], selection} -> select_by_rule(period, %{constraint | time: [selection: selection]})
-      {units, selection} -> select_narrowed(period, constraint, units, selection)
-      :unreadable -> {:error, unrecognised_selector(constraint)}
+    with :ok <- one_calendar(period, constraint) do
+      case selection_parts(time) do
+        :none -> select_projections(period, [constraint])
+        {[], selection} -> select_by_rule(period, %{constraint | time: [selection: selection]})
+        {units, selection} -> select_narrowed(period, constraint, units, selection)
+        :unreadable -> {:error, unrecognised_selector(constraint)}
+      end
     end
   end
 
-  defp select_period(period, %Interval{} = constraint),
-    do: select_projections(period, [constraint])
-
-  defp select_period(period, [%Tempo{} | _] = constraints) do
-    if Enum.any?(constraints, &holds_selection?/1),
-      do: constraints |> collect(&selected_members(period, &1)) |> selection_set(),
-      else: select_projections(period, constraints)
+  defp select_period(period, %Interval{} = constraint) do
+    with :ok <- one_calendar(period, constraint),
+         do: select_projections(period, [constraint])
   end
 
-  defp select_period(period, [%Interval{} | _] = constraints),
-    do: select_projections(period, constraints)
+  defp select_period(period, [%Tempo{} | _] = constraints) do
+    with :ok <- one_calendar(period, constraints) do
+      if Enum.any?(constraints, &holds_selection?/1),
+        do: constraints |> collect(&selected_members(period, &1)) |> selection_set(),
+        else: select_projections(period, constraints)
+    end
+  end
+
+  defp select_period(period, [%Interval{} | _] = constraints) do
+    with :ok <- one_calendar(period, constraints),
+         do: select_projections(period, constraints)
+  end
 
   defp select_period(period, fun) when is_function(fun, 1),
     do: select_period(period, fun.(period))
@@ -773,10 +798,33 @@ defmodule Tempo.Select do
   defp select_by_rule(%Interval{from: %Tempo{} = from} = period, rule) do
     {unit, _precision} = Tempo.resolution(from)
     cadence = %Duration{time: [{cadence_unit(unit), 1}]}
+    rule = in_calendar_of(rule, from)
     recurrence = %Interval{recurrence: :infinity, duration: cadence, repeat_rule: rule}
 
     Tempo.to_interval_set(recurrence, within: period)
   end
+
+  # A rule written in another calendar than the period's holds only what
+  # selects in any calendar (`one_calendar/2`), and is resolved in the
+  # period's, so that what it selects are values of the period's calendar:
+  # its days of the week are written as the days that calendar gives the
+  # same weekdays.
+  defp in_calendar_of(
+         %Tempo{time: [selection: selection], calendar: written} = rule,
+         %Tempo{calendar: calendar}
+       ) do
+    from = Compare.effective_calendar(written)
+    to = Compare.effective_calendar(calendar)
+
+    if from == to do
+      rule
+    else
+      selection = Selection.days_of_week_in_calendar(selection, from, to)
+      %{rule | time: [selection: selection], calendar: calendar}
+    end
+  end
+
+  defp in_calendar_of(rule, _period_start), do: rule
 
   defp cadence_unit(unit) when unit in [:day_of_year, :day_of_week], do: :day
   defp cadence_unit(unit), do: unit
@@ -1167,6 +1215,109 @@ defmodule Tempo.Select do
       :ok -> merge_constraint(base, c_time)
       {:error, _not_built} = error -> error
     end
+  end
+
+  # A selector is a value of its own calendar. Its year, its month, its day
+  # of one, its day of the year and its week are numbers of that calendar, so
+  # they are selected only from a span of the same calendar and are never
+  # read in the span's: the sixth month of a Hebrew year is not June, as
+  # `Tempo.at/2` and `Tempo.on/2` have it. A time of day is the same in every
+  # calendar and a day of the week names a weekday (`day_of_week_only/2`), so
+  # both select from any span. ISO 8601's weeks are the Gregorian calendar's
+  # and the ISO week calendar's alike, so a week written in one selects from
+  # the other.
+  defp one_calendar(%Interval{from: %Tempo{calendar: calendar}}, selectors) do
+    span_calendar = Compare.effective_calendar(calendar)
+
+    selectors
+    |> List.wrap()
+    |> Enum.find_value(:ok, &of_another_calendar(&1, span_calendar))
+  end
+
+  defp one_calendar(_period, _selectors), do: :ok
+
+  # The error for a selector that holds a unit numbered by another calendar
+  # than the span's, and `nil` for one that selects from the span.
+  defp of_another_calendar(%Tempo{time: time, calendar: written} = selector, span_calendar)
+       when is_list(time) do
+    written = Compare.effective_calendar(written)
+
+    if written != span_calendar and numbered_by_calendar?(time, written, span_calendar),
+      do: {:error, another_calendar_error(selector, written, span_calendar)}
+  end
+
+  defp of_another_calendar(%Interval{from: from, to: to}, span_calendar),
+    do: Enum.find_value([from, to], &of_another_calendar(&1, span_calendar))
+
+  defp of_another_calendar(_selector, _span_calendar), do: nil
+
+  @numbered_by_calendar [
+    :year,
+    :month,
+    :traditional_month,
+    :day,
+    :day_of_year,
+    :calendar_week,
+    :nearest_weekday,
+    :or_day
+  ]
+
+  @iso_week_calendars [Calendrical.Gregorian, Calendrical.ISOWeek]
+
+  defp numbered_by_calendar?(time, written, span_calendar) do
+    same_weeks? = written in @iso_week_calendars and span_calendar in @iso_week_calendars
+    Enum.any?(time, &unit_numbered_by_calendar?(&1, same_weeks?))
+  end
+
+  # A selection's tokens are a rule's units, and a window in one holds dates.
+  defp unit_numbered_by_calendar?({:selection, selection}, same_weeks?),
+    do: Enum.any?(selection, &unit_numbered_by_calendar?(&1, same_weeks?))
+
+  defp unit_numbered_by_calendar?({:interval, %Interval{from: from, to: to}}, same_weeks?) do
+    Enum.any?([from, to], fn
+      %Tempo{time: time} when is_list(time) ->
+        Enum.any?(time, &unit_numbered_by_calendar?(&1, same_weeks?))
+
+      _open_or_counted ->
+        false
+    end)
+  end
+
+  defp unit_numbered_by_calendar?({:week, _weeks}, same_weeks?), do: not same_weeks?
+
+  defp unit_numbered_by_calendar?(entry, _same_weeks?) when is_tuple(entry),
+    do: elem(entry, 0) in @numbered_by_calendar
+
+  defp unit_numbered_by_calendar?(_other, _same_weeks?), do: false
+
+  # A span in a calendar of weeks keeps the error that says what such a
+  # calendar is selected by.
+  defp another_calendar_error(%Tempo{time: time} = selector, written, span_calendar) do
+    if Tempo.week_based_calendar?(span_calendar) and selects_by_month?(time) do
+      selects_by_month_error(span_calendar, time)
+    else
+      ConversionError.exception(
+        value: selector,
+        target: span_calendar,
+        reason:
+          "#{inspect(selector)} is a selector written in #{inspect(written)}, and the span it " <>
+            "selects from is in #{inspect(span_calendar)}. A month, a week and a day are " <>
+            "numbered by their calendar, so a selector that holds one selects only from a " <>
+            "span of its own: write it in the span's calendar, which `Tempo.from_iso8601/2` " <>
+            "takes and a `[u-ca=…]` suffix names. A time of day and a day of the week select " <>
+            "from a span in any calendar."
+      )
+    end
+  end
+
+  @by_month [:month, :traditional_month, :day, :day_of_year]
+
+  defp selects_by_month?(time) do
+    Enum.any?(time, fn
+      {:selection, selection} -> selects_by_month?(selection)
+      entry when is_tuple(entry) -> elem(entry, 0) in @by_month
+      _other -> false
+    end)
   end
 
   defp selects_by_month_error(calendar, c_time) do
