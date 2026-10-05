@@ -3,6 +3,7 @@ defmodule Tempo.Parser.Interval.Test do
 
   alias Tempo.Compare
   alias Tempo.Interval
+  alias Tempo.IntervalSet
   alias Tempo.Iso8601.Tokenizer
 
   test "Intervals" do
@@ -530,7 +531,7 @@ defmodule Tempo.Parser.Interval.Test do
       # A recurrence from a start that holds a set is one from each value.
       {:ok, occurrences} = Tempo.to_interval(Tempo.from_iso8601!("R2/2026Y6M{1,15}DT10H/P1D"))
 
-      assert Enum.map(Tempo.IntervalSet.members(occurrences), &Interval.from/1) == [
+      assert Enum.map(IntervalSet.members(occurrences), &Interval.from/1) == [
                Tempo.from_iso8601!("2026-06-01T10"),
                Tempo.from_iso8601!("2026-06-02T10"),
                Tempo.from_iso8601!("2026-06-15T10"),
