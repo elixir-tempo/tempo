@@ -162,6 +162,58 @@ defmodule Tempo.Parser.Selection.Test do
     assert Exception.message(e) =~ ":month is greater than the selection max of :day"
   end
 
+  # What stands beside a selection was compared with its units as a unit is,
+  # and what is no unit raised a `KeyError`: a time shift after a selection,
+  # the qualification of the component before one, and a second selection.
+  describe "what is no unit beside a selection" do
+    test "a time shift after one is the value's" do
+      assert {:ok, in_utc} = Tempo.from_iso8601("L1KNZ")
+      assert {:ok, west} = Tempo.from_iso8601("L1KNZ-5H")
+
+      # The shift a time of day written with it has, on the selection read
+      # with none.
+      assert in_utc.shift == Tempo.from_iso8601!("T10HZ").shift
+      assert west.shift == Tempo.from_iso8601!("T10HZ-5H").shift
+      assert %{in_utc | shift: nil} == Tempo.from_iso8601!("L1KN")
+      assert %{west | shift: nil} == Tempo.from_iso8601!("L1KN")
+
+      assert Tempo.to_iso8601(in_utc) == {:ok, "L1KNZ"}
+      assert Tempo.to_iso8601(west) == {:ok, "L1KNZ-5H"}
+    end
+
+    test "the qualification of the component before one is that component's" do
+      for {text, unit, qualification} <- [
+            {"2026?YL1KN", :year, :uncertain},
+            {"2026Y6~ML1KN", :month, :approximate},
+            {"2026Y6M15%DL1KN", :day, :uncertain_and_approximate}
+          ] do
+        assert {:ok, value} = Tempo.from_iso8601(text)
+        assert {text, Tempo.qualification(value, unit)} == {text, qualification}
+
+        # What is written of it reads back as the value.
+        {:ok, written} = Tempo.to_iso8601(value)
+        assert {text, Tempo.from_iso8601(written)} == {text, {:ok, value}}
+      end
+    end
+
+    test "a second selection is refused: a rule's parts are written in one" do
+      for text <- [
+            "L1KNL2KN",
+            "L1KNL1KNL1KN",
+            "2026YL6MNL15DN",
+            "2026YL1KNL1DN",
+            "L1KNL(easter)eN",
+            "LL1KN/P1DNL2KN"
+          ] do
+        assert {:error, %Tempo.ParseError{} = error} = Tempo.from_iso8601(text)
+        assert {text, Exception.message(error) =~ "A value holds one selection"} == {text, true}
+      end
+
+      # The parts of the rule in one selection are read.
+      assert {:ok, _the_fifteenth_of_june} = Tempo.from_iso8601("2026YL6M15DN")
+    end
+  end
+
   # A time of day selected in a month is on the month's first day, as a time
   # of day under a month is in a value (user, 2026-10-04). ISO 8601-2
   # §12.11.1 example 2 reads it on each day, the third instance of 08:20 in

@@ -595,10 +595,22 @@ defmodule Tempo.Iso8601.Parser do
     end
   end
 
+  # Two selections one after the other are no one rule: the parts of a rule
+  # are written in one selection (ISO 8601-2 §12.2). The second was compared
+  # with the first as a unit is, which raised a `KeyError`.
+  def parse_date([{:selection, first}, {:selection, second} | _rest]) do
+    raise ParseError,
+          "A value holds one selection, and #{inspect(first)} and #{inspect(second)} are two: " <>
+            "the parts of a rule are written in one, as `L6M15DN` is"
+  end
+
+  # What precedes a selection may be no unit at all (the qualification of
+  # `2026?YL1KN` is an entry of its own), and is then not held to the
+  # selection's order, as it is not held to a group's.
   def parse_date([{unit_1, value_1}, {:selection, selection} | rest]) do
     {min, _max} = selection_min_max(selection)
 
-    if Unit.compare(unit_1, min) == :lt do
+    if Unit.fetch_sort_key(unit_1) != :error and Unit.compare(unit_1, min) == :lt do
       raise ParseError,
             "#{inspect(unit_1)} is less than the selection min of #{inspect(min)}"
     else
@@ -606,6 +618,7 @@ defmodule Tempo.Iso8601.Parser do
     end
   end
 
+  # Nor is what follows one (the `Z` of `L1KNZ` is a time shift).
   def parse_date([{:selection, selection}, {unit_2, value_2} | rest]) do
     {_min, max} = selection_min_max(selection)
 
@@ -614,7 +627,7 @@ defmodule Tempo.Iso8601.Parser do
             "Selection time units must be in decreasing time scale order. Found #{inspect(selection)}."
     end
 
-    if Unit.compare(max, unit_2) == :lt do
+    if Unit.fetch_sort_key(unit_2) != :error and Unit.compare(max, unit_2) == :lt do
       raise ParseError,
             "#{inspect(unit_2)} is greater than the selection max of #{inspect(max)}"
     else
