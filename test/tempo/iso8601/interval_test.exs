@@ -551,4 +551,36 @@ defmodule Tempo.Parser.Interval.Test do
                {:ok, Tempo.from_iso8601!("2026-06-15/2026-06-16")}
     end
   end
+
+  describe "an end that is a group of a unit, with its higher order components left out" do
+    # A group is counted in a unit (`3G3MU`, the third group of three
+    # months), and an end written with one takes what is left out of it from
+    # the start, as an end written with a month does (ISO 8601-1 §5.5.1). It
+    # took nothing, and an interval of two quarters is written with its
+    # end's year left out: its own text was read as another value, with an
+    # end no span was read from.
+    test "takes them from the start" do
+      for {abbreviated, in_full} <- [
+            {"2026Y1G3MU/3G3MU", "2026Y1G3MU/2026Y3G3MU"},
+            {"2026Y3M/3G3MU", "2026Y3M/2026Y3G3MU"},
+            {"2026Y1G6MU/2G6MU", "2026Y1G6MU/2026Y2G6MU"},
+            {"2026Y6M1G10DU/2G10DU", "2026Y6M1G10DU/2026Y6M2G10DU"},
+            {"2026Y6M1G10DU/7M1G10DU", "2026Y6M1G10DU/2026Y7M1G10DU"}
+          ] do
+        assert {abbreviated, Tempo.from_iso8601!(abbreviated)} ==
+                 {abbreviated, Tempo.from_iso8601!(in_full)}
+      end
+    end
+
+    test "is how an interval of a year's divisions is written, and it reads back" do
+      for text <- ["2026-33/2026-35", "2026-37/2026-39", "2026-40/2026-41", "2026-33/2027-34"] do
+        value = Tempo.from_iso8601!(text)
+
+        assert {text, Tempo.from_iso8601(Tempo.to_iso8601!(value))} == {text, {:ok, value}}
+      end
+
+      assert Tempo.to_interval(Tempo.from_iso8601!("2026Y1G3MU/3G3MU")) ==
+               Tempo.to_interval(Tempo.from_iso8601!("2026-01/2026-07"))
+    end
+  end
 end

@@ -325,6 +325,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* An end of an interval that is a group of a unit takes its higher order components from the start, as an end written with a month does: `2026Y1G3MU/3G3MU` ends at the third quarter of 2026. It took none, so an interval of two quarters (`2026-33/2026-35`), which is written with its end's year left out, was read back as another value.
+
 * A season keeps what its value holds beside its units: `2026-21?` is the spring of 2026 with each end uncertain (`2026Y3M?/6M?`), where the qualifier was dropped, and a season written with a suffix of its own as a member of a set keeps its zone. At an end of an interval a season is where its span starts, as a month is: `2026-21/2026-23` is March to the start of September, where it was an interval of two intervals that nothing read.
 
 * A zone the time zone database does not have, which RFC 9557 has passed over unless it is marked critical, is written as it was written and in the zone's place (`2026Y6M15D[Made/Up_Zone]`), and reads back as the same value. It was written `[unknown_zone=Made/Up_Zone]`, which no suffix reads.

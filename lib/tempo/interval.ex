@@ -726,16 +726,29 @@ defmodule Tempo.Interval do
   # surfaces far from the parse that caused it.
   defp inherit_from_start(%Tempo{time: to_units} = to, %Tempo{time: from_units} = from)
        when is_list(to_units) and is_list(from_units) do
-    with [{coarsest, _value} | _rest] <- to_units,
-         rank when is_integer(rank) <- unit_rank(coarsest) do
-      borrowed = higher_order_than(from_units, rank)
-      qualified_with_start(%{to | time: borrowed ++ to_units}, to, from, Keyword.keys(borrowed))
-    else
-      _not_inheritable -> to
+    case unit_rank(coarsest_unit(to_units)) do
+      rank when is_integer(rank) ->
+        borrowed = higher_order_than(from_units, rank)
+        qualified_with_start(%{to | time: borrowed ++ to_units}, to, from, Keyword.keys(borrowed))
+
+      _not_inheritable ->
+        to
     end
   end
 
   defp inherit_from_start(to, _from), do: to
+
+  # The coarsest unit an end is written with. A group is the unit it is
+  # counted in, and here it is as it is tokenized: the third group of three
+  # months (`3G3MU`) is written with months, and takes its year from the
+  # start as a month does. It took none, so an interval of two quarters,
+  # which is written with its end's year left out (`2026Y1G3MU/3G3MU`), was
+  # read back as another value, whose end no span was read from.
+  defp coarsest_unit([{:group, [_ | _] = group} | _rest]),
+    do: Enum.find_value(group, fn {unit, _counted} -> unit_rank(unit) && unit end)
+
+  defp coarsest_unit([{unit, _value} | _rest]), do: unit
+  defp coarsest_unit(_no_units), do: nil
 
   # The components an end takes from its start come as the start holds them,
   # qualified or not. An end qualified as a whole (`…/07-20?`, ISO 8601-2
