@@ -1,7 +1,8 @@
 defmodule Tempo.Iso8601.SetFormsTest do
   @moduledoc """
   Sets the parser did not read, or read as another value: a member written
-  with a qualifier, a set of one value in a unit, a fraction before the comma
+  with a qualifier, a set of one value in a unit, a set of days of the year
+  after its year in the extended and the basic format, a fraction before the comma
   or the brace that follows a member, a fraction after a set of seconds, and
   the fractions of a second as a set, the form `Tempo.extend/2` gives a second
   and `inspect/1` writes.
@@ -13,6 +14,9 @@ defmodule Tempo.Iso8601.SetFormsTest do
 
   import Tempo.Sigils
 
+  alias Tempo.Compare
+  alias Tempo.Interval
+  alias Tempo.IntervalSet
   alias Tempo.ParseError
 
   defp read(text), do: Tempo.from_iso8601!(text)
@@ -21,6 +25,17 @@ defmodule Tempo.Iso8601.SetFormsTest do
   defp set_of(members, {open, close}), do: read(open <> Enum.join(members, ",") <> close)
 
   defp reads_back?(value), do: read(Tempo.to_iso8601!(value)) == value
+
+  # The spans a value names, each as the instants it starts and ends at.
+  defp spans(value) do
+    case Tempo.to_interval(value) do
+      {:ok, %Interval{} = span} -> [bounds(span)]
+      {:ok, %IntervalSet{} = set} -> Enum.map(IntervalSet.members(set), &bounds/1)
+    end
+  end
+
+  defp bounds(%Interval{} = span),
+    do: {Compare.to_utc_seconds(Interval.from(span)), Compare.to_utc_seconds(Interval.to(span))}
 
   @braces [{"{", "}"}, {"[", "]"}]
 
@@ -132,6 +147,52 @@ defmodule Tempo.Iso8601.SetFormsTest do
     test "has the span its member has" do
       assert {:ok, decade} = Tempo.to_interval(read("{198X}"))
       assert {:ok, decade} == Tempo.to_interval(read("198X"))
+    end
+  end
+
+  describe "a set of days of the year in the extended and the basic format" do
+    # A day of the year is three digits after its year (`2026-166`,
+    # `2026166`). A set written there was read as the year's months whatever
+    # the width of its members, so `2026-{001}` was January and
+    # `2026-{001,166}` an error that named the months.
+    @days_of_the_year [
+      {"2026-{001,166}", ["2026-001", "2026-166"]},
+      {"2026-{166,001}", ["2026-001", "2026-166"]},
+      {"2026-{001,166,365}", ["2026-001", "2026-166", "2026-365"]},
+      {"2026-{001..003}", ["2026-001", "2026-002", "2026-003"]},
+      {"2026-{001,166..168}", ["2026-001", "2026-166", "2026-167", "2026-168"]},
+      {"2026{001,166}", ["2026001", "2026166"]},
+      {"2026{001..003}", ["2026001", "2026002", "2026003"]},
+      {"2026-{100,200}T10", ["2026-100T10", "2026-200T10"]}
+    ]
+
+    test "is each day as it is read alone" do
+      for {set, days} <- @days_of_the_year do
+        assert {set, spans(read(set))} == {set, Enum.flat_map(days, &spans(read(&1)))}
+      end
+    end
+
+    test "of one day is that day" do
+      assert read("2026-{001}") == read("2026-001")
+      assert read("2026{001}") == read("2026001")
+      assert read("2026-{001}") == ~o"2026-01-01"
+    end
+
+    test "is the year's months where its members are not three digits each" do
+      assert read("2026-{01,03}") == read("2026Y{1,3}M")
+      assert read("2026-{6,7}-15") == read("2026Y{6,7}M15D")
+      assert read("2026{01,03}15") == read("2026Y{1,3}M15D")
+    end
+
+    test "is held to the days its year has" do
+      assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("2026-{001,366}")
+      assert {:ok, _days} = Tempo.from_iso8601("2028-{001,366}")
+    end
+
+    test "reads back from its own text" do
+      for {set, _days} <- @days_of_the_year do
+        assert {set, reads_back?(read(set))} == {set, true}
+      end
     end
   end
 

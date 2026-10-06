@@ -67,6 +67,10 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   def implicit_date do
     choice([
       implicit_week_date(),
+      # A year and a set of days of the year, each of three digits, which a
+      # set of months would otherwise take.
+      parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_year_p})
+      |> concat(days_of_year_set()),
       parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_year_p})
       |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_month_p}))
       |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_day_of_month_p})),
@@ -86,6 +90,13 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   def extended_date do
     choice([
       extended_week_date(),
+
+      # A year and a set of days of the year, each of three digits
+      # (`2026-{001,166}`), which a set of months would otherwise take:
+      # `2026-{001}` was read as January.
+      parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_year_p})
+      |> ignore(dash())
+      |> concat(days_of_year_set()),
 
       # Year-Month-Day, with ISO 8601-2 §8 component-level
       # qualification at each hyphen boundary. A qualifier to the
@@ -188,6 +199,11 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   end
 
   # Ordinal date
+
+  defp days_of_year_set do
+    parsec({Tempo.Iso8601.Tokenizer.Set, :day_of_year_set_all})
+    |> unwrap_and_tag(:day_of_year)
+  end
 
   def implicit_ordinal_date do
     parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_year_p})
@@ -1125,6 +1141,29 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # written backwards is marked with `-1` for the parser to refuse.
   defp iterable_range(first, last) when last >= first, do: first..last//1
   defp iterable_range(first, last), do: first..last//-1
+
+  # The days of the year in a set of the extended or the basic format: each
+  # is three digits, as a day of the year is written there (`2026-166`), and
+  # a range runs from one of them to another. A set of any other width after
+  # a year is the year's months.
+  def list_of_day_of_year_or_range(combinator \\ empty()) do
+    combinator
+    |> day_of_year_or_range()
+    |> repeat(ignore(string(",")) |> day_of_year_or_range())
+    |> label("list of days of the year or ranges of them")
+  end
+
+  defp day_of_year_or_range(combinator) do
+    combinator
+    |> choice([
+      wrap(three_digits() |> string("..") |> concat(three_digits()))
+      |> reduce(:range)
+      |> post_traverse({__MODULE__, :range_of_whole_numbers, []}),
+      three_digits()
+    ])
+  end
+
+  defp three_digits, do: positive_integer(3) |> lookahead_not(digit())
 
   def list_of_integer_or_range(combinator \\ empty()) do
     combinator
