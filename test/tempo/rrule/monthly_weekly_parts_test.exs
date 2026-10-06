@@ -66,6 +66,8 @@ defmodule Tempo.RRule.MonthlyWeeklyPartsTest do
     [{2, 2}, {nil, 3}]
   ]
 
+  @positions [[1], [-1], [2, -2], [5]]
+
   # Hours written out of the order of time, and a minute with no hour, which
   # is in the day's first, or in its start's.
   @times [[hour: [9]], [hour: [14, 9]], [hour: [9], minute: [0, 30]], [minute: [15]]]
@@ -380,7 +382,7 @@ defmodule Tempo.RRule.MonthlyWeeklyPartsTest do
           [nil, [2, 6, 12]],
           [nil, [29, 30, 31], [1, -31]],
           [nil, [{nil, 1}, {nil, 3}, {nil, 5}], [{2, 2}, {nil, 3}], [{-2, 7}, {1, 6}]],
-          [[1], [-1], [2, -2], [5]],
+          @positions,
           [nil]
         )
 
@@ -430,7 +432,7 @@ defmodule Tempo.RRule.MonthlyWeeklyPartsTest do
           @week_starts,
           [nil, [2, 6, 12]],
           [nil, [{nil, 1}, {nil, 3}, {nil, 5}], [{nil, 6}, {nil, 7}]],
-          [[1], [-1], [2, -2], [5]],
+          @positions,
           [nil]
         )
 
@@ -484,6 +486,55 @@ defmodule Tempo.RRule.MonthlyWeeklyPartsTest do
 
       assert days("FREQ=MONTHLY;BYWEEKNO=25;BYMONTHDAY=15,16,17", @the_31st) ==
                [~D[2026-06-15], ~D[2026-06-16], ~D[2026-06-17]]
+    end
+  end
+
+  describe "every rule the parts make" do
+    # Some sixty thousand rules and starts, in about half a minute on
+    # sixteen cores: they run with `mix test --include exhaustive`, and the
+    # tests above and below hold a part of them in every run.
+    @describetag :exhaustive
+    @describetag timeout: 1_200_000
+
+    test "of a month" do
+      rules =
+        monthly(
+          @intervals,
+          @months,
+          @days_of_month,
+          @weekdays_of_month,
+          [nil | @positions],
+          [nil | @times]
+        )
+
+      assert disagreements(rules, [@the_31st, @leap_day, @midweek]) == []
+    end
+
+    test "of a week" do
+      rules =
+        weekly(
+          @intervals,
+          @week_starts,
+          @months,
+          @weekdays_of_week,
+          [nil | @positions],
+          [nil | @times]
+        )
+
+      assert disagreements(rules, [@the_31st, @leap_day, @midweek]) == []
+    end
+
+    test "of a year" do
+      rules =
+        yearly(
+          @intervals,
+          @months,
+          @days_of_month,
+          @weekdays_of_year ++ @weekdays_of_month,
+          [nil | @positions]
+        )
+
+      assert disagreements(rules, [@the_31st, @leap_day, @midweek]) == []
     end
   end
 
