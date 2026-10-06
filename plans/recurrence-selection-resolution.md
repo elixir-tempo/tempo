@@ -1,6 +1,6 @@
 # Recurrence selection resolution
 
-**Status:** in progress, 2026-09-21
+**Status:** in progress, 2026-10-07
 
 An unanchored recurrence materialises against a `:bound` alone. Each
 occurrence should land at the grain the selection names — day for
@@ -39,12 +39,7 @@ hard-coded ISO walk.
 
 ## Still to do
 
-The `week_dates_in_year/3` ISO walk (Monday-first, Jan-4 anchor) is
-**still** what RRULE `BYWEEKNO` uses, and it is wrong for non-ISO calendars.
-Calendrical is the source of truth: `week_of_year/3`, `weeks_in_year/2`,
-`min_days_in_first_week` with `min_days_for_territory/1` /
-`min_days_for_locale/1`, and per-calendar schemes (`NRF`, `BasicWeek`,
-`Julian`, ISO).
+RRULE `BYWEEKNO` numbers its weeks as RFC 5545 §3.3.10 does, from `WKST` with week 1 the week that holds the year's fourth day, and the walk is Calendrical's in any calendar: `Tempo.Validation.week_starts/3` takes the fourth day of the year from `Calendrical.date_from_day_of_year/3`, the week start on or before it from `Calendrical.Kday`, and each week after from `Calendrical.next/2`. The hard-coded ISO walk (`week_dates_in_year/3`) is gone. A calendar's own weeks are the `w` selection (`:calendar_week`), which asks the calendar's `week_of_year/3`.
 
 Week **of month** ("the 2nd week of June") needs no new designator: the
 natural spelling is `2026Y6M2W` — a `W` component read positionally, week-of-
@@ -58,6 +53,6 @@ extension plus materialisation via `Calendrical.week_of_month/3`.
 
 * [x] Native week-of-year selection (`FL10WN`) yields a week span, resolved by the calendar; RRULE `BYWEEKNO` unchanged.
 
-* [ ] Parse `W` after a month (`2026Y6M2W`) as week-of-month, and materialise it via `Calendrical.week_of_month/3`.
+* [ ] Parse `W` after a month (`2026Y6M2W`) as week-of-month, and materialise it via `Calendrical.week_of_month/3`. Waits on a decision: Calendrical counts whole weeks, week 1 the one that holds the month's first day, so 29 and 30 June 2026 are in week 1 of July (`TODO.md`, "Week-of-month selections").
 
-* [ ] Replace the hard-coded ISO `week_dates_in_year/3` on the RRULE `BYWEEKNO` path with Calendrical's calendar-aware week functions.
+* [x] Replace the hard-coded ISO `week_dates_in_year/3` on the RRULE `BYWEEKNO` path with Calendrical's calendar-aware week functions (`Tempo.Validation.week_starts/3`).
