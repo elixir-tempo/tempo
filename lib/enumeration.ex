@@ -999,14 +999,6 @@ defmodule Tempo.Enumeration do
     Enum.map(0..9, fn i -> {parent_value + i * step, precision} end)
   end
 
-  def maybe_add_implicit_enumeration(%Tempo{} = tempo) do
-    if explicitly_enumerable?(tempo) do
-      tempo
-    else
-      add_implicit_enumeration(tempo)
-    end
-  end
-
   def merge(base, from) do
     Enum.reduce(from, base, fn {unit, value}, acc ->
       Keyword.update(acc, unit, value, fn _existing -> value end)

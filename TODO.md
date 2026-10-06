@@ -94,8 +94,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **`ClockTest` timing** — "process-local override does not leak to peer processes" failed once under load (passing in isolation and on re-runs): `assert_receive`'s default 100 ms timeout is short on a busy machine.
 
-* [ ] **`Tempo.Enumeration.maybe_add_implicit_enumeration/1` has no caller** — remove it. Found 2026-10-03.
-
 * [ ] **The exhaustive matrix on a schedule** — `mix test --include exhaustive` runs 1.2 million cells in about sixteen minutes on sixteen cores, so it is run by hand; a weekly CI job would hold it. The default suite runs the 324,000 cells of the smaller corpus in half a minute.
 
 ## In progress
@@ -123,6 +121,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **`Tempo.Enumeration.maybe_add_implicit_enumeration/1` removed** — it had no caller. 2026-10-07.
 
 * [x] **Set operations across a week calendar's resolutions** — `Tempo.difference(~o"2026"W, ~o"2026-W25"W)` and every other operation between a year and a week or a day of one, in `Calendrical.ISOWeek` and `Calendrical.NRF`, was a `ResolutionError`: a year, having no week in its units, was taken for a value of the month axis, and the week could not be written as a date of a month. A year of a calendar of weeks is on the week axis as it stands (`years_of_weeks?/1` in `lib/operations.ex`) and is extended to the week or the day as any coarser operand is. A month is not read in such a calendar (`2026-06` in `Calendrical.NRF` is a `ConversionError`), so no pair on two axes arises there. 2026-10-07.
 
