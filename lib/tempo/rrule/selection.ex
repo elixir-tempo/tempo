@@ -1035,6 +1035,15 @@ defmodule Tempo.RRule.Selection do
   end
 
   defp role({:day_of_week, _days}, scope, selection), do: no_ordinal_byday_role(scope, selection)
+
+  # A numbered weekday beside a part that names the day keeps the day or
+  # drops it (RFC 5545 §3.3.10, Notes 1 and 2), as a weekday with no number
+  # does: the 15th that is a Wednesday, and never the 15th that is a first
+  # Monday. With no such part it makes the days it names.
+  defp role({:byday, _pairs}, scope, selection) when scope in [:month, :year] do
+    if names_a_day?(selection), do: :limit, else: :expand
+  end
+
   defp role({:byday, _pairs}, _scope, _selection), do: :expand
 
   defp role({unit, _values}, scope, _selection) when unit in [:hour, :minute, :second] do
@@ -1291,6 +1300,18 @@ defmodule Tempo.RRule.Selection do
 
     Enum.flat_map(candidates, fn candidate ->
       expand_byday_pairs(candidate, pairs, period, wkst)
+    end)
+  end
+
+  # BYDAY with ordinals beside a part that names the day — LIMIT: a day is
+  # kept where it is one the pairs name in its month or its year.
+  defp apply_role(:limit, {:byday, pairs}, candidates, scope, selection, wkst) do
+    period = byday_ordinal_scope(scope, selection)
+
+    Enum.filter(candidates, fn candidate ->
+      candidate
+      |> expand_byday_pairs(pairs, period, wkst)
+      |> Enum.any?(&same_date?(&1, candidate))
     end)
   end
 
@@ -2342,6 +2363,10 @@ defmodule Tempo.RRule.Selection do
         []
     end
   end
+
+  # Whether two candidates are on one date.
+  defp same_date?(%Interval{from: %Tempo{time: time}}, %Interval{from: %Tempo{time: other}}),
+    do: Keyword.take(time, [:year, :month, :day]) == Keyword.take(other, [:year, :month, :day])
 
   # `nth_kday` may return a date outside the intended period
   # when the ordinal exceeds the number of matching weekdays

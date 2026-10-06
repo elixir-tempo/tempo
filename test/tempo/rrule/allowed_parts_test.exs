@@ -90,6 +90,33 @@ defmodule Tempo.RRule.AllowedPartsTest do
                {:ok, "FREQ=YEARLY;BYWEEKNO=20;BYDAY=WE;BYSETPOS=2"}
     end
 
+    test "is the weekday and its position where a number would count something else" do
+      # A position counts among the days the rule's other parts leave, and a
+      # number among the weekdays of the month: the first of the 15ths that
+      # are Mondays is a day, and the 15th that is a first Monday is none.
+      assert written("R/2026-06-01/P1M/FL15D1K1IN") ==
+               {:ok, "FREQ=MONTHLY;BYMONTHDAY=15;BYDAY=MO;BYSETPOS=1"}
+
+      assert written("R/2026-06-01/P1Y/FL100O1K1IN") ==
+               {:ok, "FREQ=YEARLY;BYYEARDAY=100;BYDAY=MO;BYSETPOS=1"}
+
+      # In a yearly rule of several months a number counts in each of them,
+      # and a position across them all. A monthly rule's period is one month.
+      assert written("R/2026-06-01/P1Y/FL{3,4}M1K1IN") ==
+               {:ok, "FREQ=YEARLY;BYMONTH=3,4;BYDAY=MO;BYSETPOS=1"}
+
+      assert written("R/2026-06-01/P1M/FL{3,4}M1K1IN") ==
+               {:ok, "FREQ=MONTHLY;BYMONTH=3,4;BYDAY=1MO"}
+    end
+
+    test "is written as it was read where a position would count something else" do
+      for rrule <- ["FREQ=YEARLY;BYMONTH=3,4;BYDAY=1MO", "FREQ=MONTHLY;BYMONTHDAY=15;BYDAY=1MO"] do
+        {:ok, rule} = RRule.parse(rrule, from: ~o"2026-06-01")
+
+        assert {rrule, RRule.to_string(rule)} == {rrule, {:ok, rrule}}
+      end
+    end
+
     test "reads as the same rule, a numbered BYDAY or a weekday and its position" do
       for text <- ["R/2026-06-01/P1W/FL3K2IN", "R/2026-06-01/P1M/FL3K2IN"] do
         rule = Tempo.from_iso8601!(text)

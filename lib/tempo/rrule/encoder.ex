@@ -4,6 +4,7 @@ defmodule Tempo.RRule.Encoder do
   alias Tempo.Compare
   alias Tempo.ConversionError
   alias Tempo.NotBuilt
+  alias Tempo.RRule.Rule
   alias Tempo.RRule.Selection
   alias Tempo.UnitValues
 
@@ -588,12 +589,22 @@ defmodule Tempo.RRule.Encoder do
   # RFC 5545 §3.3.10 allows a numbered `BYDAY` in a MONTHLY rule and in a
   # YEARLY rule with no `BYWEEKNO`, and nowhere else. Where it is not allowed
   # the pair is left as it is, the weekday and the position that say the same.
+  #
+  # It is left as it is, too, where a numbered `BYDAY` would say something
+  # else (`Tempo.RRule.Rule.numbered_weekday_is_position?/3`): beside a day
+  # of the month or of the year, which a position counts among and a number
+  # does not (`L15D1K1IN` is the 15th when it is a Monday, and
+  # `BYMONTHDAY=15;BYDAY=1MO` no day at all), and in a yearly rule of several
+  # months, where a number counts in each.
   defp numbered_byday?(selection, interval) do
-    case frequency(interval) do
-      :month -> true
-      :year -> not Keyword.has_key?(selection, :week)
-      _finer_or_weekly -> false
-    end
+    frequency = frequency(interval)
+
+    frequency in [:month, :year] and
+      Rule.numbered_weekday_is_position?(
+        frequency,
+        Keyword.get(selection, :month),
+        Enum.any?([:day, :day_of_year, :week], &Keyword.has_key?(selection, &1))
+      )
   end
 
   defp frequency(%Tempo.Interval{duration: %Tempo.Duration{time: [{unit, _count}]}}), do: unit

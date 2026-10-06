@@ -209,7 +209,7 @@ defmodule Tempo.RRule.Rule do
   re-parseable ISO 8601 form. `byday` precedes the time elements because a
   weekday after `T…H…M` is out of resolution order and will not round-trip.
 
-  An ordinal weekday on one weekday (`BYDAY=2FR`) becomes a weekday and a position (`5K2I`), and a position applies last within a selection, so the hours, minutes and seconds the rule names follow the selection instead of joining it: `BYDAY=2FR;BYHOUR=9` is `L5K2INT9H`, as ISO 8601-2 §12.9 writes 09:00 on the second Tuesday. Beside a `BYSETPOS`, which takes the selection's one position, the ordinal stays an RRULE-only `:byday`.
+  An ordinal weekday on one weekday (`BYDAY=2FR`) becomes a weekday and a position (`5K2I`), and a position applies last within a selection, so the hours, minutes and seconds the rule names follow the selection instead of joining it: `BYDAY=2FR;BYHOUR=9` is `L5K2INT9H`, as ISO 8601-2 §12.9 writes 09:00 on the second Tuesday. Beside a `BYSETPOS`, which takes the selection's one position, the ordinal stays an RRULE-only `:byday`, as it does where a position would count something else: beside a `BYMONTHDAY`, a `BYYEARDAY` or a `BYWEEKNO`, which narrow what a position counts, and in a yearly rule of several months, where an ordinal counts in each.
 
   A rule takes from its start what it does not say, and ISO 8601-2 (Annex C.3 and C.4) has a conversion state each part explicitly. With a start that is a calendar date, a WEEKLY rule with no `BYDAY` selects its start's weekday, a MONTHLY rule with no `BYMONTHDAY` and no `BYDAY` its start's day of the month, and a YEARLY rule with no `BYYEARDAY` its start's month and day of the month, or with `BYWEEKNO` its start's weekday. A day so stated is passed over in a month that lacks it, as RFC 5545 §3.3.10 passes over an instance with an invalid date: a MONTHLY rule from 31 January lists the months of 31 days. The month is stated for a start in the Gregorian calendar alone, since the step from year to year keeps a month that a leap month renumbers. A rule whose `:skip` is `:backward` states no day of the month and no month, and keeps the last day of a period that lacks its start's. Without a start a rule states nothing: a `BYWEEKNO` rule keeps every day of its weeks.
 
@@ -259,7 +259,7 @@ defmodule Tempo.RRule.Rule do
         |> push_or_day(rule.bymonthday_or_byday)
         |> push_by(rule.byyearday, :day_of_year)
         |> push_by(rule.byweekno, :week)
-        |> push_byday(rule.byday, rule.bysetpos)
+        |> push_byday(rule.byday, position_of_numbered_weekday(rule))
         |> push_times(rule, not times_after_selection?(rule))
         |> push_by(rule.bysetpos, :instance)
         |> push_wkst(rule.wkst)
@@ -278,12 +278,10 @@ defmodule Tempo.RRule.Rule do
 
   # Whether an ordinal weekday's position picks the day before its times
   # refine it, so the times follow the selection.
-  defp times_after_selection?(%__MODULE__{byday: [_ | _] = byday, bysetpos: nil} = rule) do
-    single_weekday_ordinals(byday) != nil and
+  defp times_after_selection?(%__MODULE__{} = rule) do
+    position_of_numbered_weekday(rule) != nil and
       Enum.any?([rule.byhour, rule.byminute, rule.bysecond], &(&1 not in [nil, []]))
   end
-
-  defp times_after_selection?(_rule), do: false
 
   defp push_times(acc, rule, true) do
     acc
@@ -408,27 +406,71 @@ defmodule Tempo.RRule.Rule do
   #   * every entry a bare weekday → `{:day_of_week, …}`;
   #   * ordinals all on ONE weekday (`2MO`, `1MO,3MO`) → `{:day_of_week, d}` +
   #     `{:instance, ords}` (weekday then position, the ISO order — `day_of_week`
-  #     is prepended after `:instance` so it lands first once the list reverses);
+  #     is prepended after `:instance` so it lands first once the list reverses),
+  #     where the two say the same (`position_of_numbered_weekday/1`);
   #   * ordinals across DISTINCT weekdays (`2MO,2WE`, `1MO,-1FR`, mixed) have no
   #     single-position ISO form, so they stay `{:byday, entries}` (RRULE-only);
   #   * an ordinal beside a BYSETPOS, which takes the selection's one position,
-  #     stays `{:byday, entries}` too.
-  defp push_byday(acc, nil, _bysetpos), do: acc
-  defp push_byday(acc, [], _bysetpos), do: acc
+  #     and one beside a part that narrows what a position counts, stay
+  #     `{:byday, entries}` too.
+  defp push_byday(acc, nil, _position), do: acc
+  defp push_byday(acc, [], _position), do: acc
 
-  defp push_byday(acc, entries, bysetpos) when is_list(entries) do
+  defp push_byday(acc, entries, position) when is_list(entries) do
     cond do
       Enum.all?(entries, fn {ordinal, _day} -> is_nil(ordinal) end) ->
         push_day_of_week(acc, Enum.map(entries, fn {nil, day} -> day end))
 
-      is_nil(bysetpos) and single_weekday_ordinals(entries) != nil ->
-        {day, ordinals} = single_weekday_ordinals(entries)
+      position != nil ->
+        {day, ordinals} = position
         [{:instance, ordinals}, {:day_of_week, day} | acc]
 
       true ->
         [{:byday, entries} | acc]
     end
   end
+
+  # The weekday and the positions a rule's numbered weekday is written as
+  # (`2MO` as `1K2I`), or `nil` where the rule has none on one weekday, has a
+  # BYSETPOS for the selection's one position, or would not say the same
+  # (`numbered_weekday_is_position?/3`).
+  defp position_of_numbered_weekday(%__MODULE__{byday: [_ | _] = byday, bysetpos: nil} = rule) do
+    if numbered_weekday_is_position?(rule.freq, rule.bymonth, names_another_day?(rule)),
+      do: single_weekday_ordinals(byday)
+  end
+
+  defp position_of_numbered_weekday(_rule), do: nil
+
+  defp names_another_day?(%__MODULE__{} = rule) do
+    names_day_of_month?(rule) or not (empty?(rule.byyearday) and empty?(rule.byweekno))
+  end
+
+  @doc false
+  # Whether a numbered weekday (`BYDAY=2MO`) and the weekday with a position
+  # (`1K2I`, `BYDAY=MO;BYSETPOS=2`) say the same in a rule. A number counts
+  # the weekdays of a month, or of a year that names no month, and a position
+  # counts what the rule's other parts leave of its period's set. So they
+  # differ where the rule names another day — a day of the month or of the
+  # year, a week — which narrows the set before the position counts (the
+  # 15th that is a first Monday is no day, where the first of the 15ths that
+  # are Mondays is one), and in a yearly rule of several months, where a
+  # number counts in each month and a position across them all.
+  @spec numbered_weekday_is_position?(frequency() | nil, term(), boolean()) :: boolean()
+  def numbered_weekday_is_position?(frequency, months, names_another_day?) do
+    not names_another_day? and not (frequency == :year and several?(months))
+  end
+
+  # Months as a rule lists them, or as a selection holds them: one number,
+  # or a list of numbers and ranges.
+  defp several?(months) do
+    case months |> List.wrap() |> Enum.flat_map(&each_month/1) do
+      [_first, _second | _rest] -> true
+      _one_or_none -> false
+    end
+  end
+
+  defp each_month(%Range{} = months), do: Enum.to_list(months)
+  defp each_month(month), do: [month]
 
   # `{day, ordinals}` when every entry carries a non-nil ordinal on a single
   # distinct weekday; `nil` otherwise. One ordinal collapses to an integer.
