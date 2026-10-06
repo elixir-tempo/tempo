@@ -778,11 +778,36 @@ defmodule Tempo.Operations do
 
   defp canonicalize_axes(a_set, b_set) do
     case {week_axis?(a_set), week_axis?(b_set)} do
-      {true, false} -> month_axis_operands(a_set, b_set, :first)
-      {false, true} -> month_axis_operands(a_set, b_set, :second)
+      {true, false} -> one_axis(a_set, b_set, :first, years_of_weeks?(b_set))
+      {false, true} -> one_axis(a_set, b_set, :second, years_of_weeks?(a_set))
       _same_axis -> {:ok, a_set, b_set}
     end
   end
+
+  # In a calendar of weeks a year is made of its weeks, and starts where its
+  # first week does, so a year and a week of it are on one axis as they
+  # stand: the year is extended to the week, or to the day of the week, as
+  # any coarser operand is (`align_resolution/2`). They were taken for two
+  # axes, and the week could not be written as a date of a month, which
+  # such a calendar need not have.
+  defp one_axis(a_set, b_set, _week_operand, true), do: {:ok, a_set, b_set}
+
+  defp one_axis(a_set, b_set, week_operand, false),
+    do: month_axis_operands(a_set, b_set, week_operand)
+
+  defp years_of_weeks?(%IntervalSet{} = set) do
+    endpoints =
+      for %Interval{from: from, to: to} <- IntervalSet.members(set),
+          %Tempo{} = endpoint <- [from, to],
+          do: endpoint
+
+    endpoints != [] and Enum.all?(endpoints, &year_of_weeks?/1)
+  end
+
+  defp year_of_weeks?(%Tempo{time: [{:year, year}], calendar: calendar}) when is_integer(year),
+    do: Tempo.week_based_calendar?(calendar)
+
+  defp year_of_weeks?(%Tempo{}), do: false
 
   defp month_axis_operands(a_set, b_set, :first) do
     with {:ok, converted} <- map_endpoints(a_set, &month_axis_endpoint/1) do

@@ -627,6 +627,73 @@ defmodule Tempo.Operations.Test do
     end
   end
 
+  describe "a year and a week of it in a calendar of weeks" do
+    # A calendar of weeks makes its years of weeks, so a year and a week of
+    # it are on one axis as they stand. They were taken for two, and the
+    # week could not be written as a date of a month.
+    defp ends(set),
+      do:
+        for(member <- IntervalSet.members(set), do: {Interval.from(member), Interval.to(member)})
+
+    for calendar <- [Calendrical.ISOWeek, Calendrical.NRF] do
+      @calendar calendar
+
+      test "a year less a week of it is the weeks before and after, in #{inspect(calendar)}" do
+        year = Tempo.from_iso8601!("2026", @calendar)
+        week = Tempo.from_iso8601!("2026-W25", @calendar)
+        {:ok, before_it} = Tempo.from_iso8601("2026-W01/2026-W25", @calendar)
+        {:ok, after_it} = Tempo.from_iso8601("2026-W26/2027-W01", @calendar)
+
+        {:ok, rest} = Tempo.difference(year, week)
+
+        assert ends(rest) == [
+                 {Interval.from(before_it), Interval.to(before_it)},
+                 {Interval.from(after_it), Interval.to(after_it)}
+               ]
+
+        assert Tempo.complement(week, within: year) == {:ok, rest}
+        assert Tempo.symmetric_difference(year, week) == {:ok, rest}
+      end
+
+      test "a week is within its year, in #{inspect(calendar)}" do
+        year = Tempo.from_iso8601!("2026", @calendar)
+        week = Tempo.from_iso8601!("2026-W25", @calendar)
+        {:ok, span} = Tempo.to_interval(week)
+
+        assert {:ok, within} = Tempo.intersection(year, week)
+        assert ends(within) == [{Interval.from(span), Interval.to(span)}]
+        assert Tempo.intersection(week, year) == {:ok, within}
+
+        assert {:ok, nothing} = Tempo.difference(week, year)
+        assert Tempo.empty?(nothing)
+      end
+
+      test "a year less a day of a week is split at the day, in #{inspect(calendar)}" do
+        year = Tempo.from_iso8601!("2026", @calendar)
+        day = Tempo.from_iso8601!("2026-W25-3", @calendar)
+        {:ok, span} = Tempo.to_interval(day)
+
+        {:ok, rest} = Tempo.difference(year, day)
+        [{_start, until}, {from, _end}] = ends(rest)
+
+        assert until == Interval.from(span)
+        assert from == Interval.to(span)
+      end
+    end
+
+    test "the year of ISO 8601's weeks less its last week is its other weeks" do
+      # 2026 has fifty-three weeks by ISO 8601, as Erlang counts them.
+      assert :calendar.iso_week_number({2026, 12, 31}) == {2026, 53}
+
+      year = Tempo.from_iso8601!("2026", Calendrical.ISOWeek)
+      last = Tempo.from_iso8601!("2026-W53", Calendrical.ISOWeek)
+
+      {:ok, rest} = Tempo.difference(year, last)
+
+      assert Tempo.exactly?(rest, ~o"P52W")
+    end
+  end
+
   describe "zone-crossing" do
     test "equal?/2 across zones — same UTC instant compares equal" do
       # Both these intervals represent the same one-hour window,

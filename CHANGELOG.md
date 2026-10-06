@@ -327,6 +327,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A year and a week of it are combined in a calendar of weeks: `Tempo.difference/2` of 2026 and its week 25 in `Calendrical.ISOWeek` is the weeks before and after, where every set operation between a year and a week or a day of one returned a `Tempo.ResolutionError`. Such a calendar makes its years of weeks, so the two are on one axis as they stand.
+
 * The basic format is read where a number goes on into unspecified digits or a set: a minute after an hour alone (`T10XX`, `T10{30,45}`) and a week after a year (`2026WXX1`, `2026W{25,26}`), as each is in the extended format (`T10:XX`, `2026-W{25,26}`). They were read as far as the hour, and as a week alone, with the rest left over.
 
 * A span in a zone walked by hours, minutes or seconds gives its values in the order of time and within it where the clock goes back: the day Troll's clocks go back from 03:00 to 01:00 lists 01:00, 02:00, 01:00, 02:00, where it listed each hour's two occurrences together, `00:58/01:02` on the night New York's clocks go back is four minutes, where the walk gave the second 01:00 and 01:01 too, and a span from the first showing of an hour to the second (`01:57-04:00/01:02-05:00[America/New_York]`) is walked through both. The walk is by the time elapsed between the zone's changes wherever they land on its steps, so it and `Enum.count/1`, `Enum.at/2` and `Enum.member?/2` are one answer, and a step from a start written with an offset carries the offset its own moment has.
