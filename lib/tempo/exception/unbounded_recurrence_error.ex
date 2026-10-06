@@ -7,6 +7,11 @@ defmodule Tempo.UnboundedRecurrenceError do
   Supply a `:within` window — the Tempo value whose occurrences you
   want — or give the rule a count or an end.
 
+  It is also returned for a recurrence that has an end and does not
+  come to it in the 10,000 periods a walk takes, or has more than
+  10,000 occurrences before it: `:reason` says which, and a narrower
+  `:within` window is the remedy there too.
+
   """
 
   defexception [:interval, :reason]

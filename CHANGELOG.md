@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A recurrence that does not come to its end in the 10,000 periods a walk takes, or has more than 10,000 occurrences before it, is a `Tempo.UnboundedRecurrenceError`. The occurrences found by then were returned as if they were all of them.
+
 * A string is refused before it is read where it holds a number of more than 128 digits or selections more than sixteen deep, as one over 8,192 bytes or with sets more than six deep already was. These are the bounds that keep the time to read a string in proportion to its length, and each is far past what a value is written with.
 
 * `Tempo.Schedule.task/3` takes `:within` as a window, a Tempo value or an interval, as every other `:within` is: `within: ~o"2026-06"` is a task done in June. It took a `{from, to}` pair, which is now refused with the window to write in its place.
@@ -356,6 +358,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* The occurrences of a recurrence in a window long after its start are found: `R/1990-01-01/P1D` within June 2026 is its thirty days, and an hourly rule from 2020 has its twenty-four hours of a day this year, where each gave none, the walk having given up before it came to the window. A recurrence that was cut short said nothing, so `FREQ=MINUTELY;BYHOUR=9;BYMINUTE=0;COUNT=30` gave seven occurrences and `R20000/2026-06-01/P1D` ten thousand; each is now refused by name.
 
 * A suffix key written twice in an IXDTF suffix is read the first time, as RFC 9557 §3.3 requires: `[u-ca=chinese][u-ca=japanese]` is the Chinese calendar and `[foo=a][foo=b]` holds `a`, where the last was read. With a critical one among them that names another value (`[!u-ca=chinese][u-ca=japanese]`) the string is a `Tempo.ParseError`.
 

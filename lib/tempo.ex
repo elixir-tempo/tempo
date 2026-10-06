@@ -6642,6 +6642,15 @@ defmodule Tempo do
     handle the disjunction themselves), a recurrence with no end and
     no `:within` window, or a leftover `:bound` option.
 
+  * `{:error, %Tempo.UnboundedRecurrenceError{}}` when a recurrence
+    does not come to its end, a count, an `UNTIL` or the close of the
+    `:within` window, in 10,000 periods of its cadence, or has more than
+    10,000 occurrences before it. What was found is then not all of its
+    occurrences, so none are given. A walk kept to a `:within` window
+    begins at the first period that can reach the window, however long
+    before it the recurrence starts, so a daily rule from 1990 has its
+    days of this month; a rule with a count is counted from its start.
+
   * `{:error, %Tempo.UnanchoredError{}}` when the value has no
     concrete year and resolving the span would depend on the missing
     one — `~o"X*Y2M28D"` (February is 28 or 29 days), or a yearless
@@ -7366,7 +7375,7 @@ defmodule Tempo do
 
     walk =
       iterate_recurrence(
-        {from, floor},
+        {from, floor, 0},
         step,
         occurrence_end_fn(from, duration, interval),
         fn _start -> true end,
@@ -7399,12 +7408,15 @@ defmodule Tempo do
          opts
        ) do
     {from, floor, interval} = selection_start(from, interval)
+    occurrence_end = occurrence_end_fn(from, duration, interval)
+    within = Keyword.get(opts, :within)
+    first = first_period_reaching({from, duration, occurrence_end}, interval, within)
 
     walk =
       iterate_recurrence(
-        {from, floor},
+        {from, floor, first},
         duration,
-        occurrence_end_fn(from, duration, interval),
+        occurrence_end,
         &under_until?(&1, until),
         selection_fn(interval, duration),
         interval.metadata
@@ -7459,7 +7471,7 @@ defmodule Tempo do
     step = if direction == -1, do: Duration.negate(duration), else: duration
 
     case iterate_recurrence(
-           {from, floor},
+           {from, floor, 0},
            step,
            occurrence_end_fn(from, duration, interval),
            fn _start -> true end,
@@ -7815,17 +7827,81 @@ defmodule Tempo do
          {_forward, backward} = window_reach(interval),
          {:ok, walk_to} <- reach_end(window_to, interval, backward),
          {from, floor, interval} = selection_start(from, interval),
+         occurrence_end = occurrence_end_fn(from, duration, interval),
+         first = first_period_reaching({from, duration, occurrence_end}, interval, within),
          {:ok, intervals} <-
            iterate_recurrence(
-             {from, floor},
+             {from, floor, first},
              duration,
-             occurrence_end_fn(from, duration, interval),
+             occurrence_end,
              &under_bound?(&1, walk_to),
              selection_fn(interval, duration),
              interval.metadata
            ),
          {:ok, kept} <- keep_within(intervals, opts) do
       IntervalSet.new(kept, coalesce: coalesce_opt(opts))
+    end
+  end
+
+  # The first period a walk kept to a window has to make: the first that is
+  # not over before the window opens. A walk began at the recurrence's start
+  # however long before the window that was, and takes ten thousand periods
+  # at most, so a recurrence of days from 1990 never came to June 2026 and
+  # gave no occurrences there, as if it had none.
+  #
+  # A period is over where the occurrence of the period after it has ended
+  # by the window's start, and the start of the period two on, carried on by
+  # as far as an occurrence reaches past its period (`window_reach/1`), has
+  # not passed it. The count of periods doubles while that holds and halves
+  # back, and each start is one step of the calendar's arithmetic from the
+  # recurrence's own (`nth_start/3`), so a start at a month's end never
+  # drifts.
+  defp first_period_reaching(_walk, _interval, nil), do: 0
+
+  defp first_period_reaching(walk, interval, within) do
+    case bound_lower(within) do
+      %Tempo{} = window_from ->
+        {forward, _backward} = window_reach(interval)
+        reach = Enum.uniq(forward ++ spanned_durations(interval.metadata))
+        over? = &over_before?(&1, walk, reach, window_from)
+
+        if over?.(0), do: first_not(over?, 0, 1), else: 0
+
+      _no_lower_edge ->
+        0
+    end
+  end
+
+  defp over_before?(period, {from, cadence, occurrence_end}, reach, window_from) do
+    with %Tempo{} = next <- nth_start(from, cadence, period + 1),
+         %Tempo{} = after_next <- nth_start(from, cadence, period + 2),
+         %Tempo{} = ended <- occurrence_ended(occurrence_end, next, period + 1, after_next),
+         %Tempo{} = reached <- carried(after_next, reach, :on) do
+      under_until?(ended, window_from) and under_until?(reached, window_from)
+    else
+      _no_such_step -> false
+    end
+  end
+
+  # Where the occurrence of a period ends: what the walk's own end function
+  # gives, or the start of the next period where the occurrences are
+  # contiguous.
+  defp occurrence_ended(occurrence_end, start, period, _next_start)
+       when is_function(occurrence_end, 2),
+       do: occurrence_end.(start, period)
+
+  defp occurrence_ended(_contiguous, _start, _period, next_start), do: next_start
+
+  # No recurrence is passed over for more periods than this without being
+  # walked: the seconds of thirty-four thousand years.
+  @most_periods_passed_over 1_099_511_627_776
+
+  # The least count `over?` does not hold of, given that it holds of `over`.
+  defp first_not(over?, over, count) do
+    cond do
+      count > @most_periods_passed_over -> over + 1
+      over?.(count) -> first_not(over?, count, count * 2)
+      true -> narrow_unreached(over?, over, count)
     end
   end
 
@@ -8222,21 +8298,61 @@ defmodule Tempo do
   # combinations (e.g. `BYMONTHDAY=31` for months that never have
   # 31 days — the filter would reject every candidate forever).
   defp iterate_recurrence(
-         {%Tempo{} = from, %Tempo{} = floor},
+         {%Tempo{} = from, %Tempo{} = floor, first},
          %Tempo.Duration{} = cadence,
          occurrence_end,
          start_predicate,
          selection_fn,
          metadata,
-         output_limit \\ @recurrence_safety_cap
+         output_limit \\ :every
        )
-       when is_function(start_predicate, 1) do
+       when is_function(start_predicate, 1) and is_integer(first) do
     from
-    |> period_occurrences(cadence, occurrence_end, start_predicate, selection_fn, metadata)
+    |> period_occurrences(cadence, occurrence_end, start_predicate, selection_fn, metadata, first)
     |> from_the_start(floor)
-    |> Stream.take(output_limit)
+    |> as_many_as(output_limit)
     |> Enum.to_list()
     |> walked(from)
+  end
+
+  # The occurrences a walk is asked for: a count of them, or every one it
+  # has before its end, which are no more than `@recurrence_safety_cap`.
+  defp as_many_as(occurrences, count) when is_integer(count), do: Stream.take(occurrences, count)
+  defp as_many_as(occurrences, :every), do: no_more_than_the_cap(occurrences, :occurrences)
+
+  # A walk takes at most `@recurrence_safety_cap` periods of its cadence, and
+  # gives at most that many occurrences where it has no count. Past either
+  # it fails. It was cut short there and said nothing, so
+  # `FREQ=MINUTELY;BYHOUR=9;BYMINUTE=0;COUNT=30` gave seven occurrences,
+  # `R20000/2026-06-01/P1D` ten thousand, and a rule that selects nothing
+  # none, as if it had none. A walk that has what it was asked for before
+  # the cap never meets the failure, which is its last element (`walked/2`).
+  defp no_more_than_the_cap(walked, counted) do
+    Stream.transform(walked, 0, fn
+      _element, :past -> {:halt, :past}
+      _element, @recurrence_safety_cap -> {[{:error, walk_too_long_error(counted)}], :past}
+      element, count -> {[element], count + 1}
+    end)
+  end
+
+  defp walk_too_long_error(:periods) do
+    UnboundedRecurrenceError.exception(
+      reason:
+        "A recurrence is walked for at most #{@recurrence_safety_cap} periods of its cadence, and " <>
+          "this one has not come to its end in them: its count, its UNTIL or the end of its " <>
+          ":within window. What was found is not all of its occurrences, so none are given. " <>
+          "Give it a narrower :within window, or write the rule at a coarser frequency, as " <>
+          "FREQ=DAILY;BYHOUR=9 is for FREQ=HOURLY;BYHOUR=9."
+    )
+  end
+
+  defp walk_too_long_error(:occurrences) do
+    UnboundedRecurrenceError.exception(
+      reason:
+        "A recurrence gives at most #{@recurrence_safety_cap} occurrences at once, and this one " <>
+          "has more before its end. What was found is not all of them, so none are given. " <>
+          "Give it a narrower :within window."
+    )
   end
 
   # The occurrences a walk gave. A step its cadence could not take ends the
@@ -8291,8 +8407,8 @@ defmodule Tempo do
     end
   end
 
-  defp occurrences_back_to(_to, _back, _metadata, _k, _more?, occurrences),
-    do: {:ok, occurrences}
+  defp occurrences_back_to(_to, _back, _metadata, _k, _more?, _occurrences),
+    do: {:error, walk_too_long_error(:occurrences)}
 
   # The occurrence `k` cadences back from the end: it ends `k` durations before
   # the end and starts one duration earlier.
@@ -8324,20 +8440,39 @@ defmodule Tempo do
          cadence,
          occurrence_end,
          start_predicate,
+         selection_fn,
+         metadata,
+         first \\ 0
+       )
+
+  defp period_occurrences(
+         from,
+         cadence,
+         occurrence_end,
+         start_predicate,
          {:each_start_once, selection_fn},
-         metadata
+         metadata,
+         first
        ) do
     from
-    |> period_occurrences(cadence, occurrence_end, start_predicate, selection_fn, metadata)
+    |> period_occurrences(cadence, occurrence_end, start_predicate, selection_fn, metadata, first)
     |> Stream.uniq_by(&start_of/1)
   end
 
-  defp period_occurrences(from, cadence, occurrence_end, start_predicate, selection_fn, metadata)
+  defp period_occurrences(
+         from,
+         cadence,
+         occurrence_end,
+         start_predicate,
+         selection_fn,
+         metadata,
+         first
+       )
        when is_function(selection_fn, 1) do
     from
-    |> recurrence_candidates(cadence, occurrence_end, metadata)
+    |> recurrence_candidates(cadence, occurrence_end, metadata, first)
     |> Stream.take_while(&walking?(&1, start_predicate))
-    |> Stream.take(@recurrence_safety_cap)
+    |> no_more_than_the_cap(:periods)
     |> Stream.flat_map(&selected(&1, selection_fn))
     |> until_failure()
   end
@@ -8368,11 +8503,14 @@ defmodule Tempo do
   # Contiguous fast path: walk the starts once and pair each with the
   # next, so occurrence i's `to` is occurrence i+1's `from`. One
   # `Math.add` per occurrence instead of two.
-  defp recurrence_candidates(from, cadence, :contiguous, metadata) do
+  #
+  # Each path starts at period `first`, which is 0 for a walk from the
+  # recurrence's own start, and each start is `from + i × cadence`.
+  defp recurrence_candidates(from, cadence, :contiguous, metadata, first) do
     occurrence_metadata = strip_span_directives(metadata)
 
     from
-    |> as_the_clock_shows()
+    |> nth_start(cadence, first)
     |> Stream.unfold(&contiguous_candidate(&1, cadence, occurrence_metadata))
   end
 
@@ -8383,11 +8521,11 @@ defmodule Tempo do
   # is taken from the start again, where it was taken from the moved
   # reading and every later occurrence kept the moved time. One step for
   # each occurrence, as on the path above.
-  defp recurrence_candidates(from, cadence, :contiguous_from_the_start, metadata) do
+  defp recurrence_candidates(from, cadence, :contiguous_from_the_start, metadata, first) do
     occurrence_metadata = strip_span_directives(metadata)
 
     Stream.unfold(
-      {0, as_the_clock_shows(from)},
+      {first, nth_start(from, cadence, first)},
       &candidate_from_the_start(&1, from, cadence, occurrence_metadata)
     )
   end
@@ -8395,11 +8533,11 @@ defmodule Tempo do
   # General path: each start is `from + i × cadence` (scaled, so
   # month/year cadences don't clamp-drift) and the `to` comes from the
   # end function.
-  defp recurrence_candidates(from, cadence, occurrence_end_fn, metadata)
+  defp recurrence_candidates(from, cadence, occurrence_end_fn, metadata, first)
        when is_function(occurrence_end_fn, 2) do
     occurrence_metadata = strip_span_directives(metadata)
 
-    0
+    first
     |> Stream.unfold(
       &stepped_candidate(&1, from, cadence, occurrence_end_fn, occurrence_metadata)
     )
@@ -8430,7 +8568,7 @@ defmodule Tempo do
   # candidate.
   defp contiguous_candidate(:stopped, _cadence, _metadata), do: nil
 
-  defp contiguous_candidate(start, cadence, metadata) do
+  defp contiguous_candidate(%Tempo{} = start, cadence, metadata) do
     case Math.add(start, cadence) do
       %Tempo{} = next_start ->
         {{start, %Tempo.Interval{from: start, to: next_start, metadata: metadata}}, next_start}
@@ -8440,9 +8578,12 @@ defmodule Tempo do
     end
   end
 
+  defp contiguous_candidate(no_first_start, _cadence, _metadata),
+    do: {step_failure(no_first_start), :stopped}
+
   defp candidate_from_the_start(:stopped, _from, _cadence, _metadata), do: nil
 
-  defp candidate_from_the_start({step, start}, from, cadence, metadata) do
+  defp candidate_from_the_start({step, %Tempo{} = start}, from, cadence, metadata) do
     case start_after(step, start, from, cadence) do
       {next_step, %Tempo{} = next_start} ->
         occurrence = %Tempo.Interval{from: start, to: next_start, metadata: metadata}
@@ -8452,6 +8593,9 @@ defmodule Tempo do
         {step_failure(failed), :stopped}
     end
   end
+
+  defp candidate_from_the_start({_step, no_first_start}, _from, _cadence, _metadata),
+    do: {step_failure(no_first_start), :stopped}
 
   # The start after `start`, and the step that reaches it. A step onto a day
   # the zone leaves out is moved to the day after, where the step after it
