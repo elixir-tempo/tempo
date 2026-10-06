@@ -2635,9 +2635,27 @@ defmodule Tempo.Math do
   # stepping for anything without an integer `[year, month, day, hour]`
   # prefix (partials, masks, groups).
   defp apply_n_units(time, unit, n, calendar) when unit in [:hour, :minute, :second] do
-    case fast_add_time_of_day(time, unit, n, calendar) do
+    with :fallback <- fast_add_time_of_day(time, unit, n, calendar),
+         :fallback <- fast_add_on_the_clock(time, unit, n) do
+      step_n_units(time, unit, n, calendar)
+    end
+  end
+
+  # Weeks and the days of a week are the calendar's to count on where the
+  # value names a week of a year (`weeks_by_the_calendar/3`,
+  # `days_of_week_by_the_calendar/3`), in one step where a week at a time
+  # took as many as the count.
+  defp apply_n_units(time, :week, n, calendar) do
+    case weeks_by_the_calendar(time, n, calendar) do
       {:ok, new_time} -> {:ok, new_time}
-      :fallback -> step_n_units(time, unit, n, calendar)
+      :by_count -> step_n_units(time, :week, n, calendar)
+    end
+  end
+
+  defp apply_n_units(time, :day_of_week, n, calendar) do
+    case days_of_week_by_the_calendar(time, n, calendar) do
+      {:ok, new_time} -> {:ok, new_time}
+      :by_count -> step_n_units(time, :day_of_week, n, calendar)
     end
   end
 
@@ -2782,17 +2800,22 @@ defmodule Tempo.Math do
   # that were present are written back, preserving the value's
   # resolution. Wall clock, like the stepper — the zone rides on `shift`,
   # untouched.
+  #
+  # A date of a calendar of weeks is its year, its week and its day of the
+  # week, which the calendar's `plus/5` takes as a month calendar's takes a
+  # year, a month and a day.
   defp fast_add_time_of_day(time, unit, n, calendar) do
+    {middle, day_unit} = units_of_a_date(time, calendar)
+
     with {:ok, year} <- year_of(time),
-         {:ok, month} <- component(time, :month),
-         {:ok, day} <- component(time, :day),
+         {:ok, month} <- component(time, middle),
+         {:ok, day} <- component(time, day_unit),
          {:ok, hour} <- component(time, :hour),
          {:ok, minute} <- clock_or_zero(time, :minute),
          {:ok, second} <- clock_or_zero(time, :second),
          {:ok, _date} <- Date.new(year, month, day, calendar) do
       total = hour * 3600 + minute * 60 + second + n * unit_seconds(unit)
       day_carry = Integer.floor_div(total, @seconds_in_day)
-      rem_tod = Integer.mod(total, @seconds_in_day)
 
       {year, month, day} =
         calendar.plus(year, month, day, :days, day_carry)
@@ -2800,17 +2823,106 @@ defmodule Tempo.Math do
       new_time =
         time
         |> put_component(:year, year)
-        |> put_component(:month, month)
-        |> put_component(:day, day)
-        |> put_component(:hour, div(rem_tod, 3600))
-        |> put_component(:minute, div(rem(rem_tod, 3600), 60))
-        |> put_component(:second, rem(rem_tod, 60))
+        |> put_component(middle, month)
+        |> put_component(day_unit, day)
+        |> put_time_of_day(Integer.mod(total, @seconds_in_day))
 
       {:ok, new_time}
     else
       _ -> :fallback
     end
   end
+
+  defp units_of_a_date(time, calendar) do
+    if List.keymember?(time, :week, 0) and Tempo.week_based_calendar?(calendar),
+      do: {:week, :day_of_week},
+      else: {:month, :day}
+  end
+
+  # Writes a time of day, in seconds from midnight, into the clock units a
+  # value tracks.
+  defp put_time_of_day(time, seconds) do
+    time
+    |> put_component(:hour, div(seconds, 3600))
+    |> put_component(:minute, div(rem(seconds, 3600), 60))
+    |> put_component(:second, rem(seconds, 60))
+  end
+
+  # A time of day with no date comes round again each day: so many hours on
+  # from 22:00 is the time the clock shows then, whatever the day. The clock
+  # has twenty-four hours of sixty minutes of sixty seconds on every day a
+  # value with no date could be of, so the count is one sum, where an hour
+  # at a time took as many steps as the count.
+  defp fast_add_on_the_clock([{:hour, hour} | _finer] = time, unit, n) when is_integer(hour) do
+    with {:ok, minute} <- clock_or_zero(time, :minute),
+         {:ok, second} <- clock_or_zero(time, :second) do
+      total = hour * 3600 + minute * 60 + second + n * unit_seconds(unit)
+      {:ok, put_time_of_day(time, Integer.mod(total, @seconds_in_day))}
+    else
+      _several_or_unspecified -> :fallback
+    end
+  end
+
+  defp fast_add_on_the_clock(_time, _unit, _n), do: :fallback
+
+  # A week of a calendar of weeks so many weeks on is the calendar's own
+  # `plus/5`. A week of a Gregorian year is one of ISO 8601's, counted on
+  # from its first day by the calendar and named again by its week
+  # (`iso_week_of_year/3`). Any other value is counted a week at a time.
+  defp weeks_by_the_calendar([{:year, year}, {:week, week} | rest], n, calendar)
+       when is_integer(year) and is_integer(week) and week > 0 do
+    cond do
+      Tempo.week_based_calendar?(calendar) ->
+        week_of_a_calendar_of_weeks(year, week, rest, n, calendar)
+
+      calendar == Calendrical.Gregorian ->
+        iso_week_on(year, week, rest, n, calendar)
+
+      true ->
+        :by_count
+    end
+  end
+
+  defp weeks_by_the_calendar(_time, _n, _calendar), do: :by_count
+
+  defp week_of_a_calendar_of_weeks(year, week, rest, n, calendar) do
+    with true <- function_exported?(calendar, :plus, 5) and calendar.valid_date?(year, week, 1),
+         {year, week, _day} <- calendar.plus(year, week, 1, :weeks, n) do
+      {:ok, [{:year, year}, {:week, week} | rest]}
+    else
+      _by_count -> :by_count
+    end
+  end
+
+  defp iso_week_on(year, week, rest, n, calendar) do
+    with {:ok, %Date{} = first} <- Validation.date_from_iso_week(year, week, 1, calendar),
+         {year, month, day} <- calendar.plus(first.year, first.month, first.day, :weeks, n),
+         {week_year, week} when is_integer(week_year) and is_integer(week) <-
+           calendar.iso_week_of_year(year, month, day) do
+      {:ok, [{:year, week_year}, {:week, week} | rest]}
+    else
+      _by_count -> :by_count
+    end
+  end
+
+  # A day of a week of a calendar of weeks so many days on is the calendar's
+  # own `plus/5` too.
+  defp days_of_week_by_the_calendar(
+         [{:year, year}, {:week, week}, {:day_of_week, day} | rest],
+         n,
+         calendar
+       )
+       when is_integer(year) and is_integer(week) and is_integer(day) do
+    with true <- Tempo.week_based_calendar?(calendar),
+         true <- function_exported?(calendar, :plus, 5) and calendar.valid_date?(year, week, day),
+         {year, week, day} <- calendar.plus(year, week, day, :days, n) do
+      {:ok, [{:year, year}, {:week, week}, {:day_of_week, day} | rest]}
+    else
+      _by_count -> :by_count
+    end
+  end
+
+  defp days_of_week_by_the_calendar(_time, _n, _calendar), do: :by_count
 
   # A clock unit the value does not track counts from zero, and is not
   # written back.

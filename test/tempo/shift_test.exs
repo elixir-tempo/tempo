@@ -65,12 +65,87 @@ defmodule Tempo.ShiftTest do
       end
     end
 
+    test "of hours, minutes or seconds from a time of day with no date is the clock's" do
+      # The measure is `Time.add/3`, which comes round at midnight as a time
+      # of day with no date does. An hour at a time took as many steps as
+      # the count: 22 ms for a hundred thousand hours.
+      for {time, start} <- [
+            {~o"T22H", ~T[22:00:00]},
+            {~o"T22H30M", ~T[22:30:00]},
+            {~o"T23H59M59S", ~T[23:59:59]}
+          ],
+          {unit, counts} <- [
+            hour: [1, 2, 25, 100_000, -1, -49],
+            minute: [1, 61, 1_440, 100_000, -31],
+            second: [1, 86_400, 86_401, -1]
+          ],
+          count <- counts do
+        shifted =
+          time
+          |> Tempo.shift(%Tempo.Duration{time: [{unit, count}]})
+          |> Tempo.extend_resolution(:second)
+          |> Tempo.to_time()
+
+        assert {time, unit, count, shifted} ==
+                 {time, unit, count, {:ok, Time.add(start, count, unit)}}
+      end
+    end
+
+    test "of weeks, days or hours in a calendar of weeks is the calendar's" do
+      # The measure is `Date` and `NaiveDateTime` in `Calendrical.ISOWeek`,
+      # whose dates are a year, a week and a day of the week.
+      for {week, day} <- [{1, 1}, {25, 3}, {53, 7}], count <- [1, 7, 53, 1_000, -1, -400] do
+        date = Date.new!(2026, week, day, Calendrical.ISOWeek)
+        value = Tempo.from_date(date)
+
+        assert {week, day, count, Tempo.to_date(Tempo.shift(value, ~o"P1W" |> times(count)))} ==
+                 {week, day, count, {:ok, Date.shift(date, week: count)}}
+
+        assert {week, day, count, Tempo.to_date(Tempo.shift(value, ~o"P1D" |> times(count)))} ==
+                 {week, day, count, {:ok, Date.add(date, count)}}
+      end
+
+      at_ten = Tempo.from_iso8601!("2026-W25-3T10", Calendrical.ISOWeek)
+      naive = NaiveDateTime.new!(2026, 25, 3, 10, 0, 0, {0, 0}, Calendrical.ISOWeek)
+
+      for count <- [1, 14, 15, 60_000, -11, -60_000] do
+        expected = NaiveDateTime.add(naive, count, :hour)
+        shifted = Tempo.shift(at_ten, %Tempo.Duration{time: [hour: count]})
+
+        assert {count, Tempo.to_iso8601!(shifted)} ==
+                 {count,
+                  "#{expected.year}Y#{expected.month}W#{expected.day}KT#{expected.hour}H[u-ca=iso-week]"}
+      end
+    end
+
+    test "of weeks from a week of a Gregorian year is ISO 8601's week that many on" do
+      # The measure is `:calendar.iso_week_number/1` of the Monday that many
+      # weeks on from the week's own, which is 4 January's week for week 1.
+      for {year, week} <- [{2026, 1}, {2026, 25}, {2026, 53}, {2020, 53}],
+          count <- [1, 52, 53, 1_000, -1, -53, -1_000] do
+        fourth = Date.new!(year, 1, 4)
+        monday = Date.add(fourth, 1 - Date.day_of_week(fourth) + 7 * (week - 1))
+        {on_year, on_week} = :calendar.iso_week_number(Date.to_erl(Date.add(monday, 7 * count)))
+
+        shifted =
+          "#{year}Y#{week}W"
+          |> Tempo.from_iso8601!()
+          |> Tempo.shift(%Tempo.Duration{time: [week: count]})
+
+        assert {year, week, count, Tempo.to_iso8601!(shifted)} ==
+                 {year, week, count, "#{on_year}Y#{on_week}W"}
+      end
+    end
+
     test "of months is the months counted on where a value names no day" do
       assert Tempo.shift(~o"2026-06", ~o"P100000M") == ~o"10359Y10M"
       assert Tempo.shift(~o"2026-06", ~o"P-24000M") == ~o"26Y6M"
       assert Tempo.shift(~o"2026", ~o"P10000Y") == ~o"12026Y"
     end
   end
+
+  defp times(%Tempo.Duration{time: [{unit, 1}]}, count),
+    do: %Tempo.Duration{time: [{unit, count}]}
 
   describe "Tempo.shift/2 with a duration value" do
     test "accepts a Tempo.Duration directly" do
