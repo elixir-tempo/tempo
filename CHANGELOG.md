@@ -299,6 +299,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Changed
 
+* A week date of the Gregorian calendar is validated four times faster, its date asked of `Calendrical.ISOWeek`, the calendar that is ISO 8601's weeks: 13.5 µs for a year, a week and a day where it took 51.
+
 * Sets and the windows of a selection are read faster, each place of a string being read once: `LL3K4IN/P5DN` in 0.4 ms where it took 10.7, `{2026-06-15,2026-06-20,2026-07-01}` in 3.5 ms where it took 9.3, and `{2026,2027}-06-15` in 1.4 ms where it took 4.4.
 
 * A shift on the week axis, and of a time of day with no date, takes the time of one step too: a week date of a calendar of weeks plus 60,000 hours takes 21 µs where it took 17 ms, and `~o"T22H"` plus a hundred thousand hours 27 µs where it took 22 ms. A rule that never selects there says so in under a second, where `R3/T22H/PT1H/FLT25HN` took twelve and a weekly rule in `Calendrical.ISOWeek` fifty-eight.
