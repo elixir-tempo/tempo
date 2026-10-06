@@ -51,7 +51,7 @@ defmodule Tempo.Validation do
     with :ok <- validate_leap_second(units, tempo),
          :ok <- validate_time_shift(tempo.shift),
          :ok <- NotBuilt.month(tempo, calendar) do
-      units = collapse_single_member_sets(units)
+      units = sets_of_one_as_their_member(units)
       written = written_calendar(units, calendar)
 
       case resolve_as_written(units, written, calendar) do
@@ -358,20 +358,9 @@ defmodule Tempo.Validation do
   # not `days_in_month(2020, [12..12])` — and a value written as a
   # one-member set is otherwise indistinguishable from one written
   # plainly.
-  #
-  # It is collapsed before the value is read, so that it is read as its
-  # member is: a week and the one day of it in a set (`2026Y25W{1}K`) are
-  # the date they name, as `2026Y25W1K` is, and were a week and a day that
-  # the value written back did not read as. And again after, for a set that
-  # reading it leaves one member of (`{-1..-1}M`). A set of one mask is the
-  # mask (`{198X}`), and one of a year with significant digits or a margin
-  # of error that year (`{1950S2}`): each was a set no span could be read
-  # from.
   defp collapse_single_member_sets(units) when is_list(units) do
     Enum.map(units, fn
       {unit, [value]} when is_integer(value) -> {unit, value}
-      {unit, [{:mask, _digits} = mask]} -> {unit, mask}
-      {unit, [{value, [_ | _]} = annotated]} when is_integer(value) -> {unit, annotated}
       {unit, [first..first//_step]} -> {unit, first}
       {unit, first..first//_step} -> {unit, first}
       other -> other
@@ -379,6 +368,29 @@ defmodule Tempo.Validation do
   end
 
   defp collapse_single_member_sets(units), do: units
+
+  # A set of one member as it is written is its member before the value is
+  # read, so that it is read as its member is: a week and the one day of it
+  # in a set (`2026Y25W{1}K`) are the date they name, as `2026Y25W1K` is,
+  # and were a week and a day that the value written back did not read as.
+  # A set of one mask is the mask (`{198X}`), and one of a year with
+  # significant digits or a margin of error that year (`{1950S2}`): each
+  # was a set no span could be read from.
+  #
+  # A range with nothing around it is not one of these. It is how the walk
+  # asks for a count from the end to be resolved where it stands (`-1..-1`,
+  # `Tempo.Enumeration`), and is collapsed once that is done.
+  defp sets_of_one_as_their_member(units) when is_list(units) do
+    Enum.map(units, fn
+      {unit, [value]} when is_integer(value) -> {unit, value}
+      {unit, [{:mask, _digits} = mask]} -> {unit, mask}
+      {unit, [{value, [_ | _]} = annotated]} when is_integer(value) -> {unit, annotated}
+      {unit, [first..first//_step]} -> {unit, first}
+      other -> other
+    end)
+  end
+
+  defp sets_of_one_as_their_member(units), do: units
 
   # A count-from-the-end bound on a unit whose extent is fixed — the
   # clock units and the day-of-week — can always be resolved, because
