@@ -924,7 +924,7 @@ defmodule Tempo.Math do
 
   defp add_to_value(tempo, duration) do
     case wall_zone(tempo) do
-      nil -> add_wall(tempo, duration)
+      nil -> tempo |> add_wall(duration) |> landed_in_its_zone(duration)
       zone -> add_zoned(tempo, duration, zone)
     end
   end
@@ -995,6 +995,21 @@ defmodule Tempo.Math do
 
   defp wall_zone(%Tempo{}), do: nil
 
+  # A value coarser than a day in a zone (a month, a week, a year) is stepped
+  # on the wall clock, and what a step of days or of hours from it lands on
+  # is a date or a time in that zone: one the clock skips is moved as a step
+  # from a date is (`settle/4`). Four days on from the last week of 2011 in
+  # Samoa was 30 December, which the zone left out.
+  defp landed_in_its_zone(
+         %Tempo{extended: %{zone_id: zone}, shift: shift} = landed,
+         %Tempo.Duration{time: step}
+       )
+       when is_binary(zone) and zone != "" and zone not in @fixed_zones do
+    if zoned_datetime?(landed.time), do: settle(landed, zone, shift, step), else: landed
+  end
+
+  defp landed_in_its_zone(landed, _duration), do: landed
+
   defp zoned_datetime?([{:year, year}, {:month, month}, {:day, day} | clock])
        when is_integer(year) and is_integer(month) and is_integer(day),
        do: Enum.all?(clock, &clock_component?/1)
@@ -1046,13 +1061,19 @@ defmodule Tempo.Math do
         reading = TimeZoneDatabase.period_at_wall(zone, wall_reading(stepped))
         settle_reading(stepped, shift, reading)
 
-      Zone.zone_status(stepped) == :gap ->
+      on_a_day_left_out?(stepped) ->
         add_wall(stepped, %Tempo.Duration{time: [day: direction(step)]})
 
       true ->
         stepped
     end
   end
+
+  # A week stepped by days is a day of that week until the step is done
+  # (`add_where_built/2`), and is asked as the calendar date it names: four
+  # days on from the last week of 2011 in Samoa is its Friday, 30 December.
+  defp on_a_day_left_out?(%Tempo{} = stepped),
+    do: stepped |> Validation.calendar_date_from_week_date() |> Zone.on_a_day_left_out?()
 
   defp direction(step) do
     case Enum.find(step, fn {_unit, amount} -> amount != 0 end) do

@@ -1,7 +1,9 @@
 defmodule Tempo.Enumeration.Zone do
   @moduledoc false
 
+  alias Tempo.Math
   alias Tempo.TimeZoneDatabase
+  alias Tempo.Validation
 
   # Shared DST classification for enumeration. Both `Enumerable.Tempo`
   # (implicit-span walk) and `Enumerable.Tempo.Interval` (explicit
@@ -78,6 +80,46 @@ defmodule Tempo.Enumeration.Zone do
   end
 
   def on_a_day_left_out?(_value), do: false
+
+  @doc """
+  Whether a value is one its zone's clock shows: any value but one the clock
+  skips the whole of, which is the hour a spring-forward skips, a minute or
+  a second inside one, and a day its zone leaves out
+  (`Tempo.Validation.validate_zone_existence/1`).
+
+  One written is refused when it is read, so this is asked of a value an
+  operation has made: a member of a set in a unit, a value a mask stands
+  for, the first value of a finer unit. A value the clock skips part of (a
+  day whose first hour is skipped, the hour of a half-hour change) is shown.
+  """
+  @spec shown?(Tempo.t()) :: boolean()
+  def shown?(%Tempo{} = value), do: Validation.validate_zone_existence(value) == :ok
+
+  @doc """
+  A value as its zone's clock shows it: the value, or where the clock skips
+  the whole of it, the reading the clock shows at that moment.
+
+  Midnight in Cairo on 28 April 2023, when the clocks went from 00:00 to
+  01:00, is 01:00, and 02:00 on Lord Howe Island on the morning its clocks
+  go to 02:30 is 02:30. It is where a value that starts on such a reading
+  is compared from already (`Tempo.Compare.to_utc_seconds/1`), and what a
+  step of nothing from it lands on (`Tempo.Math.add/2`).
+  """
+  @spec shown_by_the_clock(Tempo.t()) :: Tempo.t()
+  def shown_by_the_clock(%Tempo{extended: %{zone_id: zone}} = value) when is_binary(zone) do
+    if shown?(value), do: value, else: moved_on(value)
+  end
+
+  def shown_by_the_clock(%Tempo{} = value), do: value
+
+  @no_step %Tempo.Duration{time: [day: 0]}
+
+  defp moved_on(value) do
+    case Math.add(value, @no_step) do
+      %Tempo{} = shown -> shown
+      _no_one_reading -> value
+    end
+  end
 
   @doc """
   Convert a total UTC offset in seconds to a `%Tempo{}` `:shift`

@@ -325,6 +325,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A value in a zone gives no reading its clock skips: a set or unspecified digits that name the skipped hour, or a day the zone left out, convert to the spans of the values the clock shows (`2024-03-10T{01,02,03}[America/New_York]` is the hours from 01:00 and from 03:00, `2011-12-3X[Pacific/Apia]` the 31st alone), `Tempo.extend_resolution/2` starts on the reading shown (28 April 2023 in Cairo starts at 01:00), and `Enum.at/2`, `Enum.slice/2` and `Enum.member?/2` count a day's hours from it. A step of days or hours from a week, a month or a year, and the walk of a week's days, pass over the hour and the day skipped as a step from a date does.
+
 * An end of an interval that is a group of a unit takes its higher order components from the start, as an end written with a month does: `2026Y1G3MU/3G3MU` ends at the third quarter of 2026. It took none, so an interval of two quarters (`2026-33/2026-35`), which is written with its end's year left out, was read back as another value.
 
 * A season keeps what its value holds beside its units: `2026-21?` is the spring of 2026 with each end uncertain (`2026Y3M?/6M?`), where the qualifier was dropped, and a season written with a suffix of its own as a member of a set keeps its zone. At an end of an interval a season is where its span starts, as a month is: `2026-21/2026-23` is March to the start of September, where it was an interval of two intervals that nothing read.

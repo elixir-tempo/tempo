@@ -74,7 +74,7 @@ defimpl Enumerable, for: Tempo.Interval do
         %Tempo{} = element
       ) do
     unit = iteration_unit(interval, from)
-    from = Steps.fill_to_unit(from, unit, calendar)
+    from = counted_from(from, unit, calendar)
 
     # An end or an element with no year, or one that holds a set or a mask,
     # has no place on the time line to compare by, so the walk answers. So it
@@ -209,7 +209,7 @@ defimpl Enumerable, for: Tempo.Interval do
       # Fill both bounds: the closed-form step counters read unit
       # components from each side, and start-of-unit filling names the
       # same boundary instant under the half-open convention.
-      from = Steps.fill_to_unit(from, unit, calendar)
+      from = counted_from(from, unit, calendar)
       to = Steps.fill_to_unit(to, unit, calendar)
 
       case Steps.count_steps(from, to, unit, calendar) do
@@ -220,6 +220,15 @@ defimpl Enumerable, for: Tempo.Interval do
       :not_supported
     end
   end
+
+  # The value the steps are counted from: the start filled to the unit they
+  # are counted in, and where the clock of its zone skips that reading, the
+  # one it shows at that moment. A day in Cairo on which the clocks went
+  # from midnight to 01:00 is walked from 01:00, and the first of its hours
+  # was given as 00:00, which the walk passes over and no value is read
+  # from, and 01:00 was held to be no hour of the day.
+  defp counted_from(from, unit, calendar),
+    do: from |> Steps.fill_to_unit(unit, calendar) |> Zone.shown_by_the_clock()
 
   # The unit the interval is walked by from `from`, which is its start or
   # the start a duration was counted to (`Tempo.Interval.granularity/1`).
@@ -499,13 +508,16 @@ defimpl Enumerable, for: Tempo.Interval do
         # matches the DST-aware `Tempo.Interval.Steps` count/slice and
         # the implicit `Enumerable.Tempo` walk: skip a spring-forward
         # gap hour, emit a fall-back hour twice with its two offsets.
-        case Zone.zone_status(current) do
+        # The value asked is the one given, a week's day as the date it
+        # names: the days of the last week of 2011 in Samoa were walked
+        # through 30 December, which the zone left out.
+        yielded = yielded(current)
+
+        case Zone.zone_status(yielded) do
           :gap ->
             do_reduce({:after, current}, to, {:cont, acc}, fun)
 
           {:ambiguous, first_shift, second_shift} ->
-            yielded = yielded(current)
-
             emit_fold(
               [%{yielded | shift: first_shift}, %{yielded | shift: second_shift}],
               current,
@@ -515,7 +527,7 @@ defimpl Enumerable, for: Tempo.Interval do
             )
 
           :ok ->
-            do_reduce({:after, current}, to, fun.(yielded(current), acc), fun)
+            do_reduce({:after, current}, to, fun.(yielded, acc), fun)
         end
     end
   end

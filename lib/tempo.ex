@@ -4029,12 +4029,24 @@ defmodule Tempo do
       iex> Tempo.extend_resolution(~o"2026-W25", :day)
       ~o"2026Y6M15D"
 
+  A value in a zone starts on the reading its clock shows. Clocks in
+  Cairo went from midnight to 01:00 on 28 April 2023, so that day
+  starts at 01:00:
+
+      iex> Tempo.extend_resolution(~o"2023-04-28[Africa/Cairo]", :hour)
+      ~o"2023Y4M28DT1H[Africa/Cairo]"
+
   """
   @spec extend_resolution(tempo :: t, target_unit :: time_unit()) ::
           t | {:error, error_reason()}
+  # The first value of a finer unit is one the clock of the value's zone
+  # skips where it goes forward at that moment, and the value starts then on
+  # the reading the clock shows, which is where it is compared from already.
+  # It was given the skipped reading, which no value is read from, and so
+  # were the spans an operation on sets fills its ends to.
   def extend_resolution(%Tempo{} = tempo, target_unit) do
     with %Tempo{} = extended <- extend_resolution_as_written(tempo, target_unit),
-         do: extended |> as_calendar_date() |> NotBuilt.result()
+         do: extended |> as_calendar_date() |> Zone.shown_by_the_clock() |> NotBuilt.result()
   end
 
   def extend_resolution(value, _target_unit),
@@ -8829,11 +8841,19 @@ defmodule Tempo do
     case find_non_contiguous_mask(time, [], calendar) do
       nil -> {:ok, tempo}
       {new_time} -> {:ok, %{tempo | time: new_time}}
-      {:span, first, last} -> {:span, %{tempo | time: first}, %{tempo | time: last}}
-      {:members, times} -> {:members, Enum.map(times, &%{tempo | time: &1})}
+      {:span, first, last} -> {:span, first_shown(%{tempo | time: first}), %{tempo | time: last}}
+      {:members, times} -> {:members, times |> Enum.map(&%{tempo | time: &1}) |> shown()}
       {:error, reason} -> {:error, Mask.error(tempo, reason)}
     end
   end
+
+  # What a mask stands for in a zone are the values its clock shows: the
+  # thirties of December 2011 in Samoa are the 31st alone, the zone having
+  # left the 30th out. A run of them starts on the first the clock shows,
+  # and one of a list that it skips the whole of is no member.
+  defp first_shown(%__MODULE__{} = first), do: Zone.shown_by_the_clock(first)
+
+  defp shown(members), do: Enum.filter(members, &Zone.shown?/1)
 
   defp find_non_contiguous_mask([], _previous, _calendar), do: nil
 

@@ -3,6 +3,7 @@ defmodule Tempo.Enumeration do
 
   alias Tempo.Compare
   alias Tempo.ConversionError
+  alias Tempo.Enumeration.Zone
   alias Tempo.InvalidDateError
   alias Tempo.Iso8601.Group
   alias Tempo.Iso8601.Parser
@@ -419,7 +420,24 @@ defmodule Tempo.Enumeration do
   # Every value a walk names, in the order it names them, or the error that
   # stops it.
   @spec members(Tempo.t()) :: {:ok, [Tempo.t()]} | {:error, Exception.t()}
-  def members(%Tempo{} = tempo), do: tempo |> walk() |> gather([])
+  def members(%Tempo{} = tempo) do
+    with {:ok, values} <- tempo |> walk() |> gather([]) do
+      {:ok, shown_by_the_clock(values, tempo)}
+    end
+  end
+
+  # In a zone, a value the clock skips the whole of is no value: the hour a
+  # spring-forward skips, and the day a zone leaves out. One written alone
+  # is refused when it is read, and a set in a unit that names one names it
+  # as it names the 30th of February, a value its context does not hold: it
+  # drops out. So it is no member here, where a conversion, a step and the
+  # values a mask stands for are taken from, as it is none of the walk
+  # through `Enum`. It was a member, and gave spans that started on a
+  # reading no value is read from.
+  defp shown_by_the_clock(values, %Tempo{extended: %{zone_id: zone}}) when is_binary(zone),
+    do: Enum.filter(values, &Zone.shown?/1)
+
+  defp shown_by_the_clock(values, _no_zone), do: values
 
   defp gather(walk, gathered) do
     case next(walk) do
