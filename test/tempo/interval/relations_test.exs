@@ -16,6 +16,8 @@ defmodule Tempo.Interval.RelationsTest do
   alias Tempo.Interval
   alias Tempo.Interval.Relations
 
+  doctest Tempo.Interval.Relations
+
   # A generator over non-empty subsets of the thirteen.
   defp relation_set do
     Relations.full()

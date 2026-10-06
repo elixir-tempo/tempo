@@ -307,8 +307,5 @@ defmodule Tempo.Interval.Composition do
   def relations, do: @order
 
   @doc false
-  def table, do: @composition
-
-  @doc false
   def compose(relation1, relation2), do: get_in(@composition, [relation1, relation2])
 end

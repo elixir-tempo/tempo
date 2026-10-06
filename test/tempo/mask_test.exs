@@ -3,6 +3,8 @@ defmodule Tempo.MaskTest do
 
   alias Tempo.Mask
 
+  doctest Tempo.Mask
+
   @cal Calendrical.Gregorian
 
   describe "valid_values/4 across units" do

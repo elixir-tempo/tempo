@@ -16,6 +16,8 @@ defmodule Tempo.Network.QualitativeTest do
   alias Tempo.Network.Qualitative
   alias Tempo.Network.Solver
 
+  doctest Tempo.Network.Qualitative
+
   defp dated_network do
     Network.new()
     |> Network.add_period(:a, from: ~o"2000", to: ~o"2005")

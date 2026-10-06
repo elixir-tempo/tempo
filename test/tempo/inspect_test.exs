@@ -2,6 +2,8 @@ defmodule Tempo.Iso8601.InspectTest do
   use ExUnit.Case, async: true
   import Tempo.Sigils
 
+  doctest Tempo.Inspect
+
   test "Inspect" do
     assert inspect(Tempo.from_iso8601!("2022Y12M31D")) == "~o\"2022Y12M31D\""
     assert inspect(Tempo.from_iso8601!("2022Y12M31D1H10M59S")) == "~o\"2022Y12M31DT1H10M59S\""

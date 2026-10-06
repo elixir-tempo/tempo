@@ -3,6 +3,8 @@ defmodule Tempo.Iso8601.LeapSecond.Test do
 
   alias Tempo.LeapSeconds
 
+  doctest Tempo.LeapSeconds
+
   # Policy: ISO 8601 permits `:60` syntactically as a positive
   # leap second. Tempo rejects it at parse regardless of date,
   # matching Elixir/OTP stdlib (`Calendar.ISO.valid_time?/4`,

@@ -34,12 +34,23 @@ defmodule Tempo.MixProject do
       #  * the tokenizer grammar modules — their functions are NimbleParsec
       #    combinator builders that run at *compile* time to assemble the
       #    parser, so runtime line-coverage cannot see them execute.
+      #  * the modules of `test/support` — the measures the library is held
+      #    to, which are compiled with the tests and are not the library.
+      #    The lines of theirs a run leaves are the exhaustive tier's.
       test_coverage: [
         ignore_modules: [
           ~r/Error$/,
           Tempo.Iso8601.Tokenizer.Numbers,
           Tempo.Iso8601.Tokenizer.Grammar,
-          Tempo.Iso8601.Tokenizer.Helpers
+          Tempo.Iso8601.Tokenizer.Helpers,
+          ~r/^Tempo\.Matrix\./,
+          Tempo.BesideAGap,
+          Tempo.ChangeOfTheClock,
+          Tempo.GeneratedSets,
+          Tempo.GeneratedSets.Check,
+          Tempo.GregorianEasterTest,
+          Tempo.Iso8601.Edtf.Corpus,
+          Tempo.Network.ChronoLog
         ]
       ],
       dialyzer: [

@@ -27,7 +27,7 @@ defmodule Tempo.Range do
   defstruct [:first, :last]
 
   @doc false
-  def new(first, last, calendar \\ Calendrical.Gregorian) do
+  def new(first, last, calendar) do
     first = AST.build(first, calendar)
     last = AST.build(last, calendar)
     %__MODULE__{first: first, last: last}

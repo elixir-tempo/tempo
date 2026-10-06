@@ -23,6 +23,8 @@ defmodule Tempo.DayLeftOutTest do
   alias Tempo.RRule
   alias Tempo.TimeZoneDatabase
 
+  doctest Tempo.TimeZoneDatabase
+
   # Each zone of the IANA database that left a day out, and the day.
   @left_out [
     # Samoa, and Tokelau with it, went from 29 to 31 December 2011.

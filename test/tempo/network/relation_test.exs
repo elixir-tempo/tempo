@@ -111,6 +111,93 @@ defmodule Tempo.Network.RelationTest do
     end
   end
 
+  # Each relation is said in words in the module's documentation, and is
+  # what the constraints it becomes say of two periods' boundaries. The
+  # words are written here as comparisons of whole numbers, and held against
+  # the constraints for every pair of periods that starts and ends within
+  # five steps: a relation and its dual that were swapped, or a boundary
+  # that was the wrong one, would hold of other pairs.
+  describe "to_atomic/1 — every relation, of every pair of small periods" do
+    @in_words %{
+      contemporary: &__MODULE__.contemporary?/4,
+      strictly_contemporary: &__MODULE__.strictly_contemporary?/4,
+      includes: &__MODULE__.includes?/4,
+      included_in: &__MODULE__.included_in?/4,
+      overlaps: &__MODULE__.overlaps?/4,
+      overlapped_by: &__MODULE__.overlapped_by?/4,
+      starts_during: &__MODULE__.starts_during?/4,
+      includes_start: &__MODULE__.includes_start?/4,
+      ends_during: &__MODULE__.ends_during?/4,
+      includes_end: &__MODULE__.includes_end?/4,
+      before: &__MODULE__.before?/4,
+      after: &__MODULE__.after?/4,
+      immediately_precedes: &__MODULE__.immediately_precedes?/4,
+      immediately_follows: &__MODULE__.immediately_follows?/4,
+      synchronous_start: &__MODULE__.synchronous_start?/4,
+      synchronous_end: &__MODULE__.synchronous_end?/4,
+      equals: &__MODULE__.equals?/4,
+      starts: &__MODULE__.starts?/4,
+      started_by: &__MODULE__.started_by?/4,
+      finishes: &__MODULE__.finishes?/4,
+      finished_by: &__MODULE__.finished_by?/4
+    }
+
+    test "holds where its words do" do
+      periods = for from <- 0..4, to <- 0..4, from < to, do: {from, to}
+
+      for {type, in_words?} <- @in_words, {a1, a2} <- periods, {b1, b2} <- periods do
+        boundaries = %{{:start, :a} => a1, {:end, :a} => a2, {:start, :b} => b1, {:end, :b} => b2}
+
+        # A constraint `{x, y, k}` says x is no more than k after y.
+        holds? =
+          type
+          |> Relation.new(:a, :b)
+          |> Relation.to_atomic()
+          |> Enum.all?(fn {x, y, k} -> boundaries[x] - boundaries[y] <= k end)
+
+        assert {type, {a1, a2}, {b1, b2}, holds?} ==
+                 {type, {a1, a2}, {b1, b2}, in_words?.(a1, a2, b1, b2)}
+      end
+    end
+  end
+
+  # A and B overlap; and by more than a boundary they share.
+  def contemporary?(a1, a2, b1, b2), do: b1 <= a2 and a1 <= b2
+  def strictly_contemporary?(a1, a2, b1, b2), do: b1 < a2 and a1 < b2
+
+  # A contains B, and is contained by it.
+  def includes?(a1, a2, b1, b2), do: a1 <= b1 and b2 <= a2
+  def included_in?(a1, a2, b1, b2), do: b1 <= a1 and a2 <= b2
+
+  # A overlaps B and comes first, and comes after.
+  def overlaps?(a1, a2, b1, b2), do: a1 <= b1 and b1 <= a2 and a2 <= b2
+  def overlapped_by?(a1, a2, b1, b2), do: b1 <= a1 and a1 <= b2 and b2 <= a2
+
+  # A's start is within B, and B's within A; then their ends.
+  def starts_during?(a1, _a2, b1, b2), do: b1 <= a1 and a1 <= b2
+  def includes_start?(a1, a2, b1, _b2), do: a1 <= b1 and b1 <= a2
+  def ends_during?(_a1, a2, b1, b2), do: b1 <= a2 and a2 <= b2
+  def includes_end?(a1, a2, _b1, b2), do: a1 <= b2 and b2 <= a2
+
+  # A is over before B starts, and the dual.
+  def before?(_a1, a2, b1, _b2), do: a2 < b1
+  def after?(a1, _a2, _b1, b2), do: b2 < a1
+
+  # A ends where B starts, and starts where B ends.
+  def immediately_precedes?(_a1, a2, b1, _b2), do: a2 == b1
+  def immediately_follows?(a1, _a2, _b1, b2), do: a1 == b2
+
+  # A boundary shared.
+  def synchronous_start?(a1, _a2, b1, _b2), do: a1 == b1
+  def synchronous_end?(_a1, a2, _b1, b2), do: a2 == b2
+  def equals?(a1, a2, b1, b2), do: a1 == b1 and a2 == b2
+
+  # A start shared, A ending no later, and no earlier; then an end shared.
+  def starts?(a1, a2, b1, b2), do: a1 == b1 and a2 <= b2
+  def started_by?(a1, a2, b1, b2), do: a1 == b1 and b2 <= a2
+  def finishes?(a1, a2, b1, b2), do: a2 == b2 and b1 <= a1
+  def finished_by?(a1, a2, b1, b2), do: a2 == b2 and a1 <= b1
+
   describe "to_atomic/1 — boundary comparisons" do
     test "the five comparisons cover the boundary lattice" do
       # end(A) < start(B) — strict before.

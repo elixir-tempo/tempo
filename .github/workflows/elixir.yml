@@ -120,7 +120,15 @@ jobs:
         run: mix compile --warnings-as-errors
 
       - name: Run tests
+        if: ${{ !matrix.lint }}
         run: mix test
+
+      # The lint row runs the tests once, under coverage: `mix test --cover`
+      # fails below the threshold, the default 90%, with the modules of
+      # `test/support` and the generated parsers left out (`mix.exs`).
+      - name: Run tests with coverage
+        if: matrix.lint
+        run: mix test --cover
 
       - name: Restore PLT cache
         if: matrix.lint

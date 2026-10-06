@@ -10,6 +10,28 @@ defmodule Tempo.SigilMatchTest do
   # leaving `calendar`, `shift`, `extended` and `qualifications`
   # unconstrained.
 
+  # `~TEMPO` is the long form of `~o`, for code where `~o` may be taken for
+  # another sigil: the same value, the same pattern and the same bindings.
+  describe "~TEMPO[...], the long form of ~o[...]" do
+    test "is the value ~o is" do
+      assert ~TEMPO"2026-06-15T10:30" == ~o"2026-06-15T10:30"
+      assert ~TEMPO"2026-06-15/2026-06-20" == ~o"2026-06-15/2026-06-20"
+      assert ~TEMPO"P1Y2M" == ~o"P1Y2M"
+      assert ~TEMPO"2026-W25-3"W == ~o"2026-W25-3"W
+    end
+
+    test "matches what ~o matches, and binds what it binds" do
+      today = Tempo.new!(year: 2026, month: 4, day: 24)
+
+      assert match?(~TEMPO[2026Y], today)
+      refute match?(~TEMPO[2025Y], today)
+      assert match?(~TEMPO[2026Y4M], today) == match?(~o[2026Y4M], today)
+
+      assert ~TEMPO[2026Y4M]D = today
+      assert day == 24
+    end
+  end
+
   describe "match?/2 with ~o[...]" do
     test "year-only sigil matches any Tempo starting with that year" do
       today = Tempo.new!(year: 2026, month: 4, day: 24)

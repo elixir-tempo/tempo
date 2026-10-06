@@ -135,6 +135,28 @@ defmodule Tempo.IntervalSet.Test do
       assert found.time == [year: 2022, month: 1, day: 15]
     end
 
+    # `Enum.zip/2` and `Stream.zip/2` take a value, suspend the walk and
+    # resume it, and stop it where the other side ends: within a member, at
+    # the end of one, and after the last. Each is the whole walk's values.
+    test "a walk taken in step with another yields the whole walk's values" do
+      jan = interval(~o"2022Y1M")
+      mar = interval(~o"2022Y3M")
+      {:ok, set} = Tempo.IntervalSet.new([jan, mar])
+
+      walked = Enum.to_list(set)
+
+      for count <- [0, 1, 15, 31, 32, 61, 62, 70] do
+        beside = Enum.to_list(1..count//1)
+
+        assert {count, Enum.zip(set, beside)} == {count, Enum.zip(walked, beside)}
+
+        assert {count, set |> Stream.zip(Stream.cycle([:beside])) |> Enum.take(count)} ==
+                 {count, walked |> Enum.zip(Stream.cycle([:beside])) |> Enum.take(count)}
+      end
+
+      assert Enum.zip(set, set) == Enum.zip(walked, walked)
+    end
+
     test "count/member?/slice return {:error, __MODULE__}" do
       {:ok, set} = Tempo.IntervalSet.new([interval(~o"2022Y1M")])
       assert Enumerable.count(set) == {:error, Enumerable.Tempo.IntervalSet}
