@@ -583,4 +583,88 @@ defmodule Tempo.Parser.Interval.Test do
                Tempo.to_interval(Tempo.from_iso8601!("2026-01/2026-07"))
     end
   end
+
+  describe "the zone written with one end of an interval" do
+    @unix_epoch :calendar.datetime_to_gregorian_seconds({{1970, 1, 1}, {0, 0, 0}})
+
+    defp moment(%Tempo{} = value), do: trunc(Compare.to_utc_seconds(value)) - @unix_epoch
+
+    defp zone_and_offset(%Tempo{extended: extended, shift: shift}),
+      do: {extended && extended.zone_id, shift}
+
+    test "is the other end's without the offset written beside it" do
+      zone = "America/New_York"
+
+      # The day before New York's clocks go forward its offset is -05:00,
+      # and the end's -04:00 was given to the start.
+      {:ok, span} = Tempo.from_iso8601("2024-03-09T12/2024-03-10T12-04:00[America/New_York]")
+
+      assert zone_and_offset(Interval.from(span)) == {zone, nil}
+      assert zone_and_offset(Interval.to(span)) == {zone, [hour: -4, minute: 0]}
+
+      assert moment(Interval.from(span)) ==
+               DateTime.to_unix(DateTime.new!(~D[2024-03-09], ~T[12:00:00], zone))
+
+      # And forward, from the start to an end with none.
+      {:ok, span} = Tempo.from_iso8601("2024-11-03T01-04:00[America/New_York]/2024-11-03T03")
+
+      assert zone_and_offset(Interval.to(span)) == {zone, nil}
+    end
+
+    test "leaves the start the first occurrence of a reading the clock shows twice" do
+      # The span of the first 01:00 on the night New York's clocks go back
+      # ends where the second begins, and is written with that offset at its
+      # end. Read back, its start was the second 01:00 too.
+      {:ok, span} = Tempo.to_interval(Tempo.from_iso8601!("2024-11-03T01[America/New_York]"))
+      {:ok, text} = Tempo.to_iso8601(span)
+
+      assert text == "2024Y11M3DT1H/2024Y11M3DT1HZ-5H[America/New_York]"
+
+      {:ok, read} = Tempo.from_iso8601(text)
+
+      assert Interval.from(read) == Interval.from(span)
+      assert Interval.to(read) == Interval.to(span)
+      assert moment(Interval.to(read)) - moment(Interval.from(read)) == 3600
+    end
+
+    test "is the zone of an end written with an offset the zone shows there" do
+      zone = "America/New_York"
+
+      {:ok, span} =
+        Tempo.from_iso8601("2024-03-10T01-05:00/2024-03-10T03-04:00[America/New_York]")
+
+      assert zone_and_offset(Interval.from(span)) == {zone, [hour: -5, minute: 0]}
+      assert zone_and_offset(Interval.to(span)) == {zone, [hour: -4, minute: 0]}
+
+      {:ok, span} =
+        Tempo.from_iso8601("2024-03-10T01-05:00[America/New_York]/2024-03-10T03-04:00")
+
+      assert zone_and_offset(Interval.to(span)) == {zone, [hour: -4, minute: 0]}
+    end
+
+    test "is not the zone of an end written with an offset the zone does not show there" do
+      {:ok, span} = Tempo.from_iso8601("2024-03-09T12+02:00/2024-03-10T12[America/New_York]")
+
+      assert zone_and_offset(Interval.from(span)) == {nil, [hour: 2, minute: 0]}
+      assert zone_and_offset(Interval.to(span)) == {"America/New_York", nil}
+    end
+
+    test "is each end's own where both name one" do
+      {:ok, span} =
+        Tempo.from_iso8601("2024-03-09T12[Europe/Paris]/2024-03-10T12[America/New_York]")
+
+      assert zone_and_offset(Interval.from(span)) == {"Europe/Paris", nil}
+      assert zone_and_offset(Interval.to(span)) == {"America/New_York", nil}
+    end
+
+    test "an offset alone is both ends', as ISO 8601-1 §5.5.1 has it" do
+      {:ok, span} = Tempo.from_iso8601("2018-01-15T10:00+05:00/2018-02-20T10:00")
+
+      assert zone_and_offset(Interval.to(span)) == {nil, [hour: 5, minute: 0]}
+
+      {:ok, span} = Tempo.from_iso8601("2024-03-09T12/2024-03-10T12Z")
+
+      assert zone_and_offset(Interval.from(span)) == {nil, [hour: 0]}
+    end
+  end
 end

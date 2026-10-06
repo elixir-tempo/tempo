@@ -87,6 +87,26 @@ defmodule Tempo.ChangeOfTheClockTest do
     end
   end
 
+  describe "the span of a day on which the clock changes, and of each of its hours" do
+    for {zone, date, change} <- ChangeOfTheClock.gaps() ++ ChangeOfTheClock.folds() do
+      @zone zone
+      @date date
+
+      test "in #{zone} on #{date}, #{change}, is written and read as itself" do
+        day = ChangeOfTheClock.day(@zone, @date)
+
+        for value <- [day | Enum.to_list(day)] do
+          {:ok, span} = Tempo.to_interval(value)
+          {:ok, text} = Tempo.to_iso8601(span)
+          {:ok, read} = Tempo.from_iso8601(text)
+
+          assert {text, Interval.from(read), Interval.to(read)} ==
+                   {text, Interval.from(span), Interval.to(span)}
+        end
+      end
+    end
+  end
+
   describe "an hour the clock skips part of" do
     test "is the part the clock shows" do
       # Lord Howe Island's clocks go from 02:00 to 02:30, so the hour from

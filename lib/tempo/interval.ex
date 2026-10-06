@@ -417,17 +417,51 @@ defmodule Tempo.Interval do
   def propagate_endpoint_frame(from, to), do: {from, to}
 
   defp propagate_zone({%Tempo{} = from, %Tempo{} = to}),
-    do: propagate_zone(from, to, Tempo.floating?(from), Tempo.floating?(to))
+    do: propagate_zone(from, to, placed_by(from), placed_by(to))
 
   defp propagate_zone({from, to}), do: {from, to}
 
-  defp propagate_zone(from, to, true = _floating_from, false = _floating_to),
-    do: {copy_frame(to, from), to}
+  # An end with no frame takes the other's. A named zone is taken without
+  # the offset written beside it, which is the zone's offset at the end it
+  # was written with and may be another at this one:
+  # `2024-03-09T12/2024-03-10T12-04:00[America/New_York]` starts at -05:00,
+  # the day before New York's clocks go forward, and the start was given
+  # -04:00. Nor is the offset this end's occurrence of a reading the clock
+  # shows twice: `T1H/T1HZ-5H[America/New_York]`, the first 01:00 on the
+  # night New York's clocks go back, which is how that hour's span is
+  # written, was read as starting at the second.
+  defp propagate_zone(from, to, :floating, :zone), do: {copy_zone(to, from), to}
+  defp propagate_zone(from, to, :zone, :floating), do: {from, copy_zone(from, to)}
+  defp propagate_zone(from, to, :floating, :offset), do: {copy_frame(to, from), to}
+  defp propagate_zone(from, to, :offset, :floating), do: {from, copy_frame(from, to)}
 
-  defp propagate_zone(from, to, false = _floating_from, true = _floating_to),
-    do: {from, copy_frame(from, to)}
+  # An end written with an offset alone is in the zone named with the other
+  # where the zone shows that offset at its reading, as both ends of a span
+  # across a change of the clock are written
+  # (`T1HZ-5H0M/T3HZ-4H0M[America/New_York]`): the zone is written once, and
+  # an offset is no zone of an end's own. An offset the zone does not show
+  # there is another frame, and the end keeps it.
+  defp propagate_zone(from, to, :offset, :zone), do: {in_the_zone_of(to, from), to}
+  defp propagate_zone(from, to, :zone, :offset), do: {from, in_the_zone_of(from, to)}
 
-  defp propagate_zone(from, to, _floating_from, _floating_to), do: {from, to}
+  defp propagate_zone(from, to, _from_frame, _to_frame), do: {from, to}
+
+  # What an end is placed on the time line by: a named zone, an offset
+  # alone, or nothing.
+  defp placed_by(%Tempo{extended: %{zone_id: zone}}) when is_binary(zone) and zone != "",
+    do: :zone
+
+  defp placed_by(%Tempo{} = value),
+    do: if(Tempo.floating?(value), do: :floating, else: :offset)
+
+  defp in_the_zone_of(%Tempo{} = source, %Tempo{} = target) do
+    zoned = copy_zone(source, target)
+
+    case Compare.validate_zone_offset(zoned) do
+      :ok -> zoned
+      {:error, _another_frame} -> target
+    end
+  end
 
   # A `[u-ca=…]` at the end names the calendar the interval is written in,
   # and an endpoint carrying none of its own inherits it — the same
@@ -474,6 +508,10 @@ defmodule Tempo.Interval do
   defp copy_frame(%Tempo{} = source, %Tempo{} = target) do
     %{target | shift: source.shift, extended: put_zone_fields(target.extended, source.extended)}
   end
+
+  # The zone alone, the target keeping whatever offset it was written with.
+  defp copy_zone(%Tempo{} = source, %Tempo{} = target),
+    do: %{target | extended: put_zone_fields(target.extended, source.extended)}
 
   defp put_zone_fields(target_extended, nil), do: target_extended
 
