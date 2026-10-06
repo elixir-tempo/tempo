@@ -355,6 +355,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A suffix key written twice in an IXDTF suffix is read the first time, as RFC 9557 §3.3 requires: `[u-ca=chinese][u-ca=japanese]` is the Chinese calendar and `[foo=a][foo=b]` holds `a`, where the last was read. With a critical one among them that names another value (`[!u-ca=chinese][u-ca=japanese]`) the string is a `Tempo.ParseError`.
+
 * A selection with a time shift after it (`L1KNZ`) or a qualified component before it (`2026?YL1KN`) is read, and two selections one after the other in a value (`L1KNL2KN`) are a `Tempo.ParseError` that says a rule's parts are written in one. Each raised a `KeyError`.
 
 * The time taken to read or to refuse a string is in proportion to its length. `Tempo.from_iso8601("LLLL")`, four selections opened one inside the next, took over a minute to refuse and eight would have taken years; six sets one inside the next took up to six seconds, eight thousand digits three quarters of a second, and a string over the length limit was then read as a locale's words by `Tempo.parse/2`, which took seconds more.

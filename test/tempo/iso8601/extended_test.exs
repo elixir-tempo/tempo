@@ -5,6 +5,8 @@ defmodule Tempo.Iso8601.Extended.Test do
   alias Tempo.Interval
   alias Tempo.Iso8601.Tokenizer
 
+  doctest Tempo.Iso8601.Tokenizer.Extended
+
   ## Backward compatibility — no suffix
 
   describe "no extended suffix" do
@@ -241,6 +243,74 @@ defmodule Tempo.Iso8601.Extended.Test do
 
       # First wins, second is ignored
       assert extended.zone_id == "Europe/Paris"
+    end
+
+    # A time zone given as an offset after the first position is no second
+    # zone either: ignored, or an error where it is critical.
+    test "an offset after a zone is ignored when elective, and rejected when critical" do
+      with_one = Tempo.from_iso8601("2022-11-20T10:30:00[Europe/Paris]")
+
+      assert Tempo.from_iso8601("2022-11-20T10:30:00[Europe/Paris][+08:45]") == with_one
+
+      assert {:error, %Tempo.DuplicateZoneError{}} =
+               Tempo.from_iso8601("2022-11-20T10:30:00[Europe/Paris][!+08:45]")
+    end
+  end
+
+  # RFC 9557 §3.3: "An application that encounters duplicate use of a suffix
+  # key in elective suffixes ... MUST choose the first suffix that has that
+  # key", and a string with a critical one among them that names another
+  # value is erroneous. The texts are the RFC's own. The last suffix was the
+  # one read, critical or not.
+  describe "a suffix key written twice" do
+    test "is read the first time" do
+      assert Tempo.from_iso8601("2022-07-08T00:14:07Z[u-ca=chinese][u-ca=japanese]") ==
+               Tempo.from_iso8601("2022-07-08T00:14:07Z[u-ca=chinese]")
+
+      assert Tempo.from_iso8601("2022-07-08T00:14:07Z[foo=a][bar=b][foo=c]") ==
+               Tempo.from_iso8601("2022-07-08T00:14:07Z[foo=a][bar=b]")
+
+      # A calendar of several parts, and one written in the hyphen form.
+      assert Tempo.from_iso8601("2022-07-08[u-ca=islamic-civil][u-ca=islamic-umalqura]") ==
+               Tempo.from_iso8601("2022-07-08[u-ca=islamic-civil]")
+
+      assert Tempo.from_iso8601("2022-07-08[u-ca-hebrew][u-ca=gregory]") ==
+               Tempo.from_iso8601("2022-07-08[u-ca-hebrew]")
+    end
+
+    test "is an error where one of the two is critical and they differ" do
+      for text <- [
+            "2022-07-08T00:14:07Z[!u-ca=chinese][u-ca=japanese]",
+            "2022-07-08T00:14:07Z[u-ca=chinese][!u-ca=japanese]",
+            "2022-07-08[u-ca=islamic-civil][!u-ca=islamic-umalqura]",
+            "2022-07-08[u-ca=hebrew][!u-ca-gregory]"
+          ] do
+        assert {:error, %Tempo.ParseError{} = error} = Tempo.from_iso8601(text)
+        assert {text, Exception.message(error) =~ "is written twice"} == {text, true}
+      end
+    end
+
+    test "is no error where the two are one value" do
+      assert Tempo.from_iso8601("2022-07-08[!u-ca=hebrew][u-ca=hebrew]") ==
+               Tempo.from_iso8601("2022-07-08[!u-ca=hebrew]")
+    end
+  end
+
+  # An extension of BCP 47 in the hyphen form that is no extension is kept
+  # as written where it is elective, and is an error where it is critical.
+  describe "a u extension that is not one" do
+    test "is an error when critical, and kept when elective" do
+      for extension <- ["u-zz", "u-ca-", "u-ca-nosuchcalendar"] do
+        assert {:error, %Tempo.ParseError{} = error} =
+                 Tempo.from_iso8601("2026-06-15T10:30[!#{extension}]")
+
+        assert {extension, Exception.message(error) =~ "Invalid u extension"} == {extension, true}
+
+        assert {:ok, kept} = Tempo.from_iso8601("2026-06-15T10:30[#{extension}]")
+
+        assert {extension, Tempo.to_iso8601(kept)} ==
+                 {extension, {:ok, "2026Y6M15DT10H30M[#{extension}]"}}
+      end
     end
   end
 

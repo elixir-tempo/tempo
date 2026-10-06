@@ -291,7 +291,7 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
   }
 
   defp build_extended(segments) do
-    build_extended(segments, @empty_extended, 0)
+    build_extended(segments, @empty_extended, 0, %{})
   end
 
   # The first segment is the time-zone position: either a bare
@@ -299,14 +299,68 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
   # position is consumed subsequent segments must be tagged
   # suffixes.
 
-  defp build_extended([], acc, _index), do: {:ok, acc}
+  # A suffix key written twice is read once, the first time (RFC 9557 §3.3:
+  # an application "MUST choose the first suffix that has that key"), and a
+  # critical one among them that names another value makes the string
+  # erroneous: `[!u-ca=chinese][u-ca=japanese]` and
+  # `[u-ca=chinese][!u-ca=japanese]` are the RFC's own examples. The last was
+  # the one read, critical or not. `keys` holds each key met, with its
+  # values and whether it was critical.
 
-  defp build_extended([segment | rest], acc, index) do
+  defp build_extended([], acc, _index, _keys), do: {:ok, acc}
+
+  defp build_extended([segment | rest], acc, index, keys) do
     {critical, payload} = split_critical(segment)
+    keyed = keyed(payload)
 
-    with {:ok, acc} <- apply_payload(payload, critical, acc, index) do
-      build_extended(rest, acc, index + 1)
+    case written_before(keyed, critical, keys) do
+      :first ->
+        with {:ok, acc} <- apply_payload(payload, critical, acc, index) do
+          build_extended(rest, acc, index + 1, met(keys, keyed, critical))
+        end
+
+      :again ->
+        build_extended(rest, acc, index + 1, keys)
+
+      {:error, _exception} = error ->
+        error
     end
+  end
+
+  # The key of a suffix that has one, and its values: a tag (`[key=value]`),
+  # and a calendar in the hyphen form (`[u-ca-hebrew]`), whose key is the
+  # tag's `u-ca`.
+  defp keyed({:tag, [key: key, values: values]}), do: {key, values}
+  defp keyed({:zone, "u-ca-" <> calendar}), do: {"u-ca", String.split(calendar, "-")}
+  defp keyed(_zone_or_offset), do: nil
+
+  defp met(keys, nil, _critical), do: keys
+  defp met(keys, {key, values}, critical), do: Map.put(keys, key, {values, critical})
+
+  defp written_before(nil, _critical, _keys), do: :first
+
+  defp written_before({key, values}, critical, keys) do
+    case Map.get(keys, key) do
+      nil ->
+        :first
+
+      {^values, _first_critical} ->
+        :again
+
+      {first, first_critical} when critical or first_critical ->
+        {:error, two_values(key, first, values)}
+
+      {_first, _first_critical} ->
+        :again
+    end
+  end
+
+  defp two_values(key, first, second) do
+    ParseError.exception(
+      reason:
+        "The suffix key #{inspect(key)} is written twice, as #{inspect(Enum.join(first, "-"))} " <>
+          "and as #{inspect(Enum.join(second, "-"))}, and one of the two is critical"
+    )
   end
 
   defp split_critical([{:critical, critical} | rest]) do
