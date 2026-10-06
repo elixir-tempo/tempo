@@ -179,6 +179,49 @@ defmodule Tempo.FormatTest do
     end
   end
 
+  describe "Tempo.to_string/2 — a year before 1" do
+    test "is shown with its era at each resolution" do
+      # The formats CLDR gives a date of today leave the era out, so 15
+      # March of 45 BC was "Mar 15, 45", the words for a day ninety years
+      # later. ISO 8601's year -44 is 45 BC, and its year 0 is 1 BC.
+      assert Tempo.to_string(~o"-0044-03-15", locale: :en) == {:ok, "Mar 15, 45 BC"}
+      assert Tempo.to_string(~o"-0044-03", locale: :en) == {:ok, "Mar 1#{@en_dash_sep}31, 45 BC"}
+      assert Tempo.to_string(~o"-0044", locale: :en) == {:ok, "Jan#{@en_dash_sep}Dec 45 BC"}
+      assert Tempo.to_string(~o"0000-03-15", locale: :en) == {:ok, "Mar 15, 1 BC"}
+
+      assert Tempo.to_string(~o"-0044-03-15T10:30", locale: :en) ==
+               {:ok, "Mar 15, 45 BC, 10:30#{@nbsp}AM"}
+
+      assert Tempo.to_string(~o"-0044-03-15", locale: :de) == {:ok, "15. März 45 v. Chr."}
+    end
+
+    test "is shown with its era at both ends of a span" do
+      assert Tempo.to_string(~o"-0044/0014", locale: :en) ==
+               {:ok, "45 BC#{@en_dash_sep}13 AD"}
+
+      assert Tempo.to_string(~o"-0044-03-15/0014-08-19", locale: :en) ==
+               {:ok, "Mar 15, 45 BC#{@en_dash_sep}Aug 18, 14 AD"}
+
+      assert Tempo.to_string(~o"-0044-03-15/-0044-03-20", locale: :en) ==
+               {:ok, "Mar 15#{@en_dash_sep}19, 45 BC"}
+
+      assert Tempo.to_string(~o"-0044-03-15T10:30/-0044-03-15T12:00", locale: :en) ==
+               {:ok, "Mar 15, 45 BC, 10:30#{@en_dash_sep}11:59#{@nbsp}AM"}
+    end
+
+    test "is counted as its calendar counts it" do
+      # The Julian calendar has no year 0, and its year -44 is 44 BC.
+      ides = Tempo.from_iso8601!("-0044-03-15", Calendrical.Julian)
+
+      assert Tempo.to_string(ides, locale: :en) == {:ok, "Mar 15, 44 BC"}
+    end
+
+    test "leaves a year of the era, and a format the caller names, as they were" do
+      assert Tempo.to_string(~o"0044-03-15", locale: :en) == {:ok, "Mar 15, 44"}
+      assert Tempo.to_string(~o"-0044-03-15", locale: :en, format: :long) == {:ok, "March 15, 45"}
+    end
+  end
+
   describe "Tempo.to_string/2 — a week of a calendar of weeks" do
     # A unit of that calendar, as a month is of the Gregorian, worded as the
     # locale words one (CLDR's `yw`). It was its first and last days,

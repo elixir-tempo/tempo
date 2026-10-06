@@ -345,6 +345,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.to_string/2` shows a year before 1 with its era, and names the era at both ends of a span that has such an end: `~o"-0044-03-15"` is "Mar 15, 45 BC" and `~o"-0044/0014"` "45 BC – 13 AD". They were "Mar 15, 45" and "45 – 13", the words for dates of this era, since the formats CLDR gives a date of today leave the era out; a `:format` the caller names is used as it is.
+
 * The Julian calendar has no year 0, and Tempo no longer gives it one: `0000Y` read in `Calendrical.Julian` is a `Tempo.InvalidDateError`, the year after `-1Y` is `1Y` in a step, a walk, a span's end and a recurrence, and a range, a mask, a decade or a century of years names the years the calendar has. Years and months were counted on as numbers there, so a year back from 15 January of year 1 was a date of year 0, the span of 31 December of -1 ended on one, and a walk of the years from -2 to 2 listed five.
 
 * A year mask written with leading zeros is walked: `~o"000X"` is the years 0 to 9 and `~o"00XX"` the years 0 to 99, as their spans are. `Enum.count/1` and every other walk of one raised a `Tempo.InvalidDateError`, the zeros having been matched against the digits of years that have none.

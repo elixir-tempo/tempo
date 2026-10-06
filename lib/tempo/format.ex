@@ -840,19 +840,28 @@ defmodule Tempo.Format do
 
   defp counted_month_as_named(time, _calendar), do: time
 
-  defp default_format_for_unit(:year, _tempo), do: :y
+  # A value of a year before 1 is shown with its era, which the formats
+  # for a date of today leave out: `-0044-03-15` is "Mar 15, 45 BC", where
+  # it was "Mar 15, 45", the words for a day ninety years later.
+  defp default_format_for_unit(unit, tempo) do
+    if before_the_era?(tempo),
+      do: format_with_era(unit, tempo),
+      else: format_for_unit(unit, tempo)
+  end
+
+  defp format_for_unit(:year, _tempo), do: :y
   # A month of no particular year is its name alone.
-  defp default_format_for_unit(:month, %Tempo{time: time}) do
+  defp format_for_unit(:month, %Tempo{time: time}) do
     if Keyword.has_key?(time, :year), do: :yMMM, else: :MMM
   end
 
-  defp default_format_for_unit(:day, _tempo), do: :medium
+  defp format_for_unit(:day, _tempo), do: :medium
 
   # `:h` and `:hm` are time-only skeletons. They are right for a value
   # with no date and wrong for one that has both halves, where
   # `:medium` names each and follows the components present — showing
   # seconds for a second-resolution value and omitting them otherwise.
-  defp default_format_for_unit(unit, tempo) when unit in [:hour, :minute] do
+  defp format_for_unit(unit, tempo) when unit in [:hour, :minute] do
     if time_only?(tempo) do
       (unit == :hour && :h) || :hm
     else
@@ -860,8 +869,35 @@ defmodule Tempo.Format do
     end
   end
 
-  defp default_format_for_unit(:second, _tempo), do: :medium
-  defp default_format_for_unit(_other, _tempo), do: :medium
+  defp format_for_unit(:second, _tempo), do: :medium
+  defp format_for_unit(_other, _tempo), do: :medium
+
+  # CLDR's skeletons that name the era (`G`) beside the fields a value of
+  # each resolution holds.
+  defp format_with_era(:year, _tempo), do: :Gy
+  defp format_with_era(:month, _tempo), do: :GyMMM
+  defp format_with_era(:hour, _tempo), do: :GyMMMdj
+  defp format_with_era(:minute, _tempo), do: :GyMMMdjm
+  defp format_with_era(:second, _tempo), do: :GyMMMdjms
+  defp format_with_era(_day_or_another, _tempo), do: :GyMMMd
+
+  # Whether a value's year is before year 1 of the Gregorian calendar's
+  # era, or of a calendar CLDR words as it does the Gregorian (the Julian):
+  # the era CLDR's formats for a date take as read is the one today is in.
+  defp before_the_era?(%Tempo{time: [{:year, year} | _units], calendar: calendar})
+       when is_integer(year) do
+    calendar = Compare.effective_calendar(calendar)
+
+    worded_as_gregorian?(calendar) and match?({_year, 0}, calendar.year_of_era(year))
+  end
+
+  defp before_the_era?(_value), do: false
+
+  defp worded_as_gregorian?(calendar) do
+    Code.ensure_loaded?(calendar) and function_exported?(calendar, :cldr_calendar_type, 0) and
+      function_exported?(calendar, :year_of_era, 1) and
+      calendar.cldr_calendar_type() == :gregorian
+  end
 
   ## ---------------------------------------------------------
   ## Interval formatting helpers (shared by %Tempo{} expansion
@@ -914,13 +950,31 @@ defmodule Tempo.Format do
   # from `:style`). We pick the fields from the coarsest resolution
   # among the two endpoints so a year-month interval doesn't try to
   # render an absent day.
+  #
+  # A span with an end before year 1 names the era at both ends, by the
+  # skeleton of the fields it shows ("Mar 15, 45 BC – Aug 19, 14 AD"),
+  # where the caller names no format.
   defp with_default_interval_options(options, %Tempo{} = from, %Tempo{} = to) do
-    options = Keyword.put_new(options, :format, :medium)
+    fields = interval_fields_for(from, to)
 
-    case interval_fields_for(from, to) do
-      :as_they_hold -> options
-      fields -> Keyword.put_new(options, :fields, fields)
+    if not Keyword.has_key?(options, :format) and (before_the_era?(from) or before_the_era?(to)) do
+      Keyword.put(options, :format, interval_format_with_era(fields, from))
+    else
+      options
+      |> Keyword.put_new(:format, :medium)
+      |> with_fields(fields)
     end
+  end
+
+  defp with_fields(options, :as_they_hold), do: options
+  defp with_fields(options, fields), do: Keyword.put_new(options, :fields, fields)
+
+  # Months alone, or the days and the times of day the ends are written to.
+  defp interval_format_with_era(:year_and_month, _from), do: :GyMMM
+
+  defp interval_format_with_era(_date_or_as_they_hold, %Tempo{} = from) do
+    {unit, _span} = Tempo.resolution(from)
+    format_with_era(unit, from)
   end
 
   # Two months of no year (`6M/9M`, June to August of any year) are shown
@@ -974,9 +1028,11 @@ defmodule Tempo.Format do
   end
 
   defp format_year_only_interval(%Tempo{} = from, %Tempo{} = to, options) do
+    year_format = if before_the_era?(from) or before_the_era?(to), do: :Gy, else: :y
+
     year_opts =
       options
-      |> Keyword.put(:format, :y)
+      |> Keyword.put(:format, year_format)
       |> Keyword.drop([:fields])
 
     with {:ok, from_str} <- Localize.Date.to_string(to_locale_map(from), year_opts),

@@ -6361,6 +6361,17 @@ defmodule Tempo do
       iex> Tempo.to_string(~o"6M/9M")
       {:ok, "Jun\u2009\u2013\u2009Aug"}
 
+  A year before 1 is shown with its era where no `:format` is given, and a span with such an end names the era at both. ISO 8601's year -44 is 45 BC, and the Julian calendar's is 44 BC:
+
+      iex> Tempo.to_string(~o"-0044-03-15")
+      {:ok, "Mar 15, 45 BC"}
+
+      iex> Tempo.to_string(~o"-0044/0014")
+      {:ok, "45 BC\u2009\u2013\u200913 AD"}
+
+      iex> Tempo.to_string(Tempo.from_iso8601!("-0044-03-15", Calendrical.Julian))
+      {:ok, "Mar 15, 44 BC"}
+
   A week of a calendar of weeks is worded as the locale words one:
 
       iex> week = Tempo.from_iso8601!("2026-W25", Calendrical.ISOWeek)

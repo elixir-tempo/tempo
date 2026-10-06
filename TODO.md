@@ -94,6 +94,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Done
 
+* [x] **A year before 1 shown with no era** — `Tempo.to_string(~o"-0044-03-15")` was "Mar 15, 45", the words for a date of AD 45. A value whose year is of the era before the one CLDR's date formats take as read, in a calendar worded as the Gregorian is, is shown by the skeleton that names the era (`format_with_era/2` and `before_the_era?/1` in `lib/tempo/format.ex`), at each resolution and at both ends of a span. Found beside the Julian calendar's year 0. 2026-10-07.
+
 * [x] **A year the calendar does not have** — the Julian calendar has no year 0 (Calendrical: the day after 31 December of -1 is 1 January of 1), and Tempo read one there, stepped onto it, walked through it and ended a span on it. One answer says the year so many on and the years between two (`Tempo.UnitValues.years_on/3`, `years_between/3`, `year?/2`, the count across the gap Calendrical's `plus/5`), and every carry into a year, the O(1) steps of a walk, a year read, and the years of a range, a mask, a decade and a century ask it. A count of months is Calendrical's `plus/5` too (`months_by_count/3`), which made it one step. Held against `Date` in `Calendrical.Julian` by `Tempo.NoYearZeroTest`. 2026-10-07.
 
 * [x] **A property that met a reading the clock skips** — `Tempo.Reference.Test`'s property of `in_zone/2` matched `{:ok, placed}` for every generated reading, and the generator reaches one a zone's clock skips (02:00 on 11 March 2007 in New York) once in some thousands of runs, which `in_zone/2` refuses since 2026-10-06. The property now holds each answer to what `DateTime.from_naive/2` says of the reading. 2026-10-07.
