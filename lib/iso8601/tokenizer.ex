@@ -16,6 +16,7 @@ defmodule Tempo.Iso8601.Tokenizer do
   import Tempo.Iso8601.Tokenizer.Grammar
 
   alias Tempo.Iso8601.Tokenizer.Extended
+  alias Tempo.Iso8601.Tokenizer.Plain
   alias Tempo.ParseError
 
   # Guard against pathological input. Legitimate ISO 8601 / IXDTF
@@ -65,7 +66,46 @@ defmodule Tempo.Iso8601.Tokenizer do
      )}
   end
 
+  # A plain date or time of day is read by its bytes
+  # (`Tempo.Iso8601.Tokenizer.Plain`), alone or before an IXDTF suffix, and
+  # every other form by the grammar.
   def tokenize(string) do
+    case plain(string) do
+      {:ok, _tokens_and_suffix} = read -> read
+      :general -> tokenize_by_grammar(string)
+    end
+  end
+
+  # The suffix (`[Europe/Paris]`, `[u-ca=hebrew]`) is what follows the first
+  # `[`, and is read by the grammar's own rule for one, so that a plain
+  # value in a zone is not sent through every other form first. Anything
+  # the two do not read between them is the whole grammar's to answer.
+  defp plain(string) do
+    case :binary.match(string, "[") do
+      :nomatch -> with {:ok, tokens} <- Plain.tokens(string), do: {:ok, {tokens, nil}}
+      {at, 1} -> plain_with_suffix(string, at)
+    end
+  end
+
+  defp plain_with_suffix(string, at) do
+    with {:ok, tokens} <- Plain.tokens(binary_part(string, 0, at)),
+         {:ok, suffix, "", %{}, _line, _column} <-
+           suffix_only(binary_part(string, at, byte_size(string) - at)),
+         {:ok, _tokens_and_suffix} = read <- Extended.split_extended(tokens ++ suffix) do
+      read
+    else
+      _not_read -> :general
+    end
+  end
+
+  @doc false
+  # The grammar's reading of a string, whatever its form: what
+  # `tokenize/1` gives for every string, and the measure the scan of the
+  # plain forms is held to.
+  def tokenize_by_grammar(string) when byte_size(string) > @max_input_bytes,
+    do: tokenize(string)
+
+  def tokenize_by_grammar(string) do
     if nesting_exceeds_limit?(string) do
       {:error,
        ParseError.exception(
@@ -267,6 +307,10 @@ defmodule Tempo.Iso8601.Tokenizer do
   # combinator, so the grammar is split across modules without changing
   # behaviour.
   defparsec :iso8601, iso8601_tokenizer()
+
+  # The IXDTF suffix alone, which follows a value the scan of the plain
+  # forms has read (`plain_with_suffix/2`).
+  defparsec :suffix_only, Extended.extended_suffix() |> eos()
 
   # A second entry point admitting *only* a duration. `duration_parser`
   # already tags its result `:duration`, so the token shape matches what

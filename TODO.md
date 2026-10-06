@@ -48,7 +48,7 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **Validating a week date costs twenty times a calendar date** — a week and a day of it validate in 42 µs where a year, month and day take 2 µs, after the week's own lookup was made one step of Calendrical's arithmetic, so `2026Y25W3K` is read in 106 µs where `2026Y6M15D` takes 48. Profile validation of the week axis. Measured 2026-10-04.
 
-* [ ] **Parser cost by shape** — bare dates still pay the backtracking tax: `tokenize/1` takes ~360 µs for `2026-06-15` and ~430 µs for `20260615`, against ~40 µs for `2026Y6M15D` (measured 2026-09-24). Take a shape histogram of a real consumer's calls; if it is mostly dates, choice ordering in the single `defparsec :iso8601` entry point is the whole story. Any hand-rolled scanner must be conservative and differentially tested against the general parser.
+* [ ] **Parser cost by shape** — a plain date or timestamp is read by a scan of its bytes since 2026-10-07 (`Tempo.Iso8601.Tokenizer.Plain`: `2026-06-15` in 14 µs where it took 440, a timestamp with `Z`, a shift or an IXDTF suffix in 20 to 40), held to the grammar's reading by `Tempo.Iso8601.Tokenizer.PlainTest`. Every other form still pays the grammar's order of alternatives: the basic format (`20260615`, 530 µs), a week date or a day of the year (500 µs), an interval (490 µs), a time of day alone (290 to 450 µs), a duration (220 µs), a qualified or a negative year (480 µs), where the explicit form `2026Y6M15D` takes 65, and a set in a unit (`{2026,2027}-06-15`) 4.5 ms. Take a shape histogram of a real consumer's calls before choosing the next: any further scanner must be as conservative, and held to the grammar the same way.
 
 ### Features
 
@@ -93,6 +93,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **Plain dates and timestamps read by a scan** — the commonest forms paid for every alternative the grammar tries before them, an interval and a duration and each explicit form: 440 µs for `2026-06-15` where `2026Y6M15D` took 53. `Tempo.Iso8601.Tokenizer.Plain` reads a year, a year and a month, a calendar date and a date with a time of day, a fraction and a shift by their bytes, leaves a field out of its usual range and every other form to the grammar, and hands an IXDTF suffix to the grammar's own rule for one (`plain_with_suffix/2`). Held to the grammar's reading (`tokenize_by_grammar/1`) for every text of its shapes, a hundred thousand under `--include exhaustive`. 2026-10-07.
 
 * [x] **A year before 1 shown with no era** — `Tempo.to_string(~o"-0044-03-15")` was "Mar 15, 45", the words for a date of AD 45. A value whose year is of the era before the one CLDR's date formats take as read, in a calendar worded as the Gregorian is, is shown by the skeleton that names the era (`format_with_era/2` and `before_the_era?/1` in `lib/tempo/format.ex`), at each resolution and at both ends of a span. Found beside the Julian calendar's year 0. 2026-10-07.
 

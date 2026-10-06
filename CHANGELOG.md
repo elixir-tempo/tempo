@@ -295,6 +295,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Changed
 
+* A plain date or timestamp (`2026-06-15`, `2026-06`, `2026-06-15T10:30:00Z`, with or without an IXDTF suffix) is read by a scan of its bytes: `Tempo.from_iso8601/1` takes 14 µs for a date where it took 440, and 38 µs for a timestamp in a named zone where it took 250. Every other form is read by the grammar as before, and the scan is held to the grammar's reading of each text of its shapes.
+
 * `Tempo.shift/2` by a count of months or years takes the time of one step, the calendar saying where the count lands: a hundred thousand months takes 14 µs where it took 29 ms, and ten thousand years 12 µs where it took a millisecond. A yearly rule that never selects (`FREQ=YEARLY;BYMONTH=4` from 31 January) says so in half a second where it took five and a half.
 
 * A `SKIP` beside `BYYEARDAY=366` is read, and the day passed over in a year of 365 days: RFC 7529 moves a day of the month, and not a day of the year. A `SKIP` beside a day counted from the end that a month can lack (`BYMONTHDAY=-31`) is `{:error, {:unsupported_skip, {skip, [bymonthday: [-31]]}}}`, for `FORWARD` as for `BACKWARD`.
