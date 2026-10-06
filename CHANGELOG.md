@@ -289,6 +289,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Changed
 
+* `Tempo.to_string/2` shows a week of a calendar of weeks as the locale's words for it, "week 25 of 2026" and "Woche 25 des Jahres 2026" (CLDR's `yw`), and a span of weeks from its first to its last, where it showed the first and last days in the calendar's notation ("2026-W25-1 – 2026-W25-7"). A week of a calendar of months is its days still.
+
 * A `:within` window with no start (`~o"../2027"`) is refused as one: "a :within window needs a start". It was refused further on, as an open-ended interval that cannot be a member of a set, and a value that needs no window was converted as if none were given.
 
 * A `Tempo.InvalidDateError` for a value its unit does not take says what the value was read as and carries it: 29 February 2027 is "29 is not valid for a day of 2027-02. The valid values are 1..28", with the error's `:unit`, `:year`, `:month` and `:calendar` set, where it was "29 is not valid. The valid values are 1..28" and they were `nil`. A calendar other than the Gregorian is named ("… of 5784-02 in Calendrical.Hebrew").
@@ -332,6 +334,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* `Tempo.to_string/2` shows a span of two months with no year by its months (`~o"6M/9M"` is "Jun – Aug", and `~o"11M/2M"` "Nov – Jan"), where it returned Localize's error for a missing year.
 
 * `Tempo.explain/1` words a window of hours or minutes in them: `R/2027-01-01/P1D/FLLT22HN/PT4HN` selects "the 4 hours from 22:00", where it was "the PT4H window from at 22:00".
 

@@ -6268,7 +6268,7 @@ defmodule Tempo do
   @doc """
   Format a Tempo value as a locale-aware string.
 
-  Routes through Localize so format patterns, month and weekday names, day periods, and punctuation all follow CLDR data for the chosen locale. The default format is keyed off the Tempo's resolution — a year renders as its first and last months, a month or a week as its first and last days, a day as that day, and so on. A week date is the day it names.
+  Routes through Localize so format patterns, month and weekday names, day periods, and punctuation all follow CLDR data for the chosen locale. The default format is keyed off the Tempo's resolution — a year renders as its first and last months, a month or a week as its first and last days, a day as that day, and so on. A week date is the day it names. A week of a calendar of weeks is a unit of that calendar, and renders as the locale's words for it ("week 25 of 2026").
 
   A value that names something other than its own one span renders as the span or spans `Tempo.to_interval/2` gives it: a mask its span (`~o"202X"` is 2020 to 2029), and a recurrence, a selection or a set its spans as a list in the locale. A one-of set renders as its alternatives ("2026 or 2027").
 
@@ -6324,10 +6324,21 @@ defmodule Tempo do
       iex> Tempo.to_string(~o"P3DT2H", format: :short)
       {:ok, "3 days, 2 hr"}
 
-  An interval is shown from its first value to its last:
+  An interval is shown from its first value to its last, and one of no year by the months and days it has:
 
       iex> Tempo.to_string(~o"2026/2026-03")
       {:ok, "Jan\u2009\u2013\u2009Feb 2026"}
+
+      iex> Tempo.to_string(~o"6M/9M")
+      {:ok, "Jun\u2009\u2013\u2009Aug"}
+
+  A week of a calendar of weeks is worded as the locale words one:
+
+      iex> week = Tempo.from_iso8601!("2026-W25", Calendrical.ISOWeek)
+      iex> Tempo.to_string(week)
+      {:ok, "week 25 of 2026"}
+      iex> Tempo.to_string(week, locale: "de")
+      {:ok, "Woche 25 des Jahres 2026"}
 
   A recurrence is its occurrences, as a list, and a one-of set its alternatives:
 

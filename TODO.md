@@ -74,8 +74,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **Workday adjustments: following, preceding and their modified forms** — the date-roll conventions of financial contracts: a day when it is a workday, otherwise the next (or the previous) one, and the modified forms that turn back when the adjusted day leaves the month. `nearest_workday/2` and `next_workday/2` are different rules; found comparing Tempo with bizdays' ANBIMA calendar, 2026-10-03. Analysis in [plans/anbima-calendar.md](plans/anbima-calendar.md).
 
-* [ ] **A span with no year in `to_string/2` can take Localize's interval** — Localize `main` writes an interval of two dates with no year in CLDR's interval format for the fields they hold: `%{month: 6}` to `%{month: 8}` is "Jun – Aug", and with a day on each end "Jun 15 – Sep 1", or "Jun 15 – 20" in one month. Both ends must hold the same fields, and no order is asked of them, so November to February is written too. It unblocks the Blocked item below once the lock moves. Found in the Localize session, 2026-10-04.
-
 ### Release and housekeeping
 
 * [ ] **Livebooks install 2.0 at the release** — `getting-started`, `tempo_tour`, `scheduling-workbook` and `uncertain-dates-workbook` install `{:ex_tempo, "~> 1.6"}` and the Melbourne deck `~> 1.6.3`, while their code uses the 2.0 names: at the 2.0.0 release each installs `~> 2.0`, as `everyday-holidays` already does.
@@ -98,12 +96,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **Vocabulary for 2.0** — one meaning per word and one word per meaning across Tempo and tempo_holidays: `:within` for `:bound`, "anchor" in one sense, no public "materialise", `Tempo.Allen` beside everyday predicates, `datetime`, "workday". Every decision is taken; the tasks are in [plans/vocabulary.md](plans/vocabulary.md). Fifteen of its sixteen tasks have landed, through tempo_holidays and the real-world livebook (`livebook/everyday-holidays.livemd`, and its tempo_holidays copy); `tempo_sql`'s move to `~> 2.0` remains, once 2.0.0 is on hex.
 
-## Blocked
-
-* [ ] **A span of two values with no year in `to_string/2`** — `Tempo.to_string(~o"6M/9M")` and `~o"6M15D/9M1D"` return Localize's `DateTimeIntervalFormatError` (`:mixed_endpoints`), where each end alone is shown ("Jun", "Jun 15"). Blocked on `Localize.Interval.to_string/3` taking a date with no year, the second Open item of its `TODO.md`: `Localize.Interval.to_string(%{month: 6, calendar: Calendrical.Gregorian}, %{month: 8, calendar: Calendrical.Gregorian})` is that error, since its `date_value?/1` wants a `:year`. Found 2026-10-03.
-
-* [ ] **A week calendar's week in `to_string/2`** — a week in a calendar of weeks reads as the locale's words, "week 25 of 2026" ("Woche 25 des Jahres 2026" in `de`), and two weeks "week 25 of 2026 – week 26 of 2026", where it is its first and last day today, "2026-W25-1 – 2026-W25-7"; `to_iso8601/1` is the notation. Decided 2026-10-04, replacing the "2026-W25" expected on 2026-10-02. Blocked on Tempo's lock moving to a Localize `main` that writes a year and a week with CLDR's `yw`, as it does since the Localize session of 2026-10-04.
-
 ## Deferred
 
 * [ ] **A formal grammar the parser is held to** — an ABNF transcribed from ISO 8601 clause by clause, a recogniser and a generator that check `from_iso8601/1` against it in both directions, and the standard's 573 examples as a table. Deferred (user, 2026-10-04) over the speed a generalised ABNF parser would lose; the plan keeps the tokenizer and runs the grammar in test support. A generator pilot on sets and ranges was taken up and done on 2026-10-06, with no grammar; the grammar files, the recogniser and the examples are still to weigh. Plan in [plans/parser-formal-grammar.md](plans/parser-formal-grammar.md).
@@ -113,6 +105,10 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A week calendar's week in `to_string/2`** — "week 25 of 2026" and "Woche 25 des Jahres 2026" (decided 2026-10-04), and a span of weeks from its first to its last, where it was the first and last days in the calendar's notation. Unblocked by the lock's move to a Localize that writes a year and a week with CLDR's `yw` (`render_weeks/3` in `lib/tempo/format.ex`). 2026-10-07.
+
+* [x] **A span of two values with no year in `to_string/2`** — `Tempo.to_string(~o"6M/9M")` is "Jun – Aug", where it returned Localize's error for a missing year: two months of no year are asked of `Localize.Interval.to_string/3` by the fields they hold, which it takes since the lock moved (`interval_fields_for/2`). A span with days was shown already. 2026-10-07.
 
 * [x] **`explain/1` words a window of hours in hours** — "the 4 hours from 22:00" where it was "the PT4H window from at 22:00": `window_phrase/2` in `lib/explain.ex` words a window of clock units, before or from its selection, and a time of day is named without its "at" as what a window runs from. 2026-10-07.
 

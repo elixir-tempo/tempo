@@ -159,6 +159,59 @@ defmodule Tempo.FormatTest do
     end
   end
 
+  describe "Tempo.to_string/2 — a span of months with no year" do
+    # June to August of whatever year. It was asked of Localize with a year,
+    # which it has none of, and was Localize's error for the missing field.
+    test "is shown by its months" do
+      assert Tempo.to_string(~o"6M/9M") == {:ok, "Jun\u2009\u2013\u2009Aug"}
+      assert Tempo.to_string(~o"6M/9M", format: :long) == {:ok, "June\u2009\u2013\u2009August"}
+      assert Tempo.to_string(~o"6M/9M", locale: "de") == {:ok, "Juni\u2013Aug."}
+      assert Tempo.to_string(~o"6M/7M") == {:ok, "Jun"}
+    end
+
+    test "is shown across the turn of the year" do
+      assert Tempo.to_string(~o"11M/2M") == {:ok, "Nov\u2009\u2013\u2009Jan"}
+    end
+
+    test "is shown by its days where it has them, as it was" do
+      assert Tempo.to_string(~o"6M15D/9M1D") == {:ok, "Jun 15\u2009\u2013\u2009Aug 31"}
+      assert Tempo.to_string(~o"2026-06/2026-09") == {:ok, "Jun\u2009\u2013\u2009Aug 2026"}
+    end
+  end
+
+  describe "Tempo.to_string/2 — a week of a calendar of weeks" do
+    # A unit of that calendar, as a month is of the Gregorian, worded as the
+    # locale words one (CLDR's `yw`). It was its first and last days,
+    # "2026-W25-1 – 2026-W25-7", which is the notation.
+    for calendar <- [Calendrical.ISOWeek, Calendrical.NRF] do
+      @calendar calendar
+
+      test "is the locale's words for it, in #{inspect(calendar)}" do
+        week = Tempo.from_iso8601!("2026-W25", @calendar)
+
+        assert Tempo.to_string(week) == {:ok, "week 25 of 2026"}
+        assert Tempo.to_string(week, locale: "de") == {:ok, "Woche 25 des Jahres 2026"}
+      end
+
+      test "a span of weeks is from its first to its last, in #{inspect(calendar)}" do
+        weeks = Tempo.from_iso8601!("2026-W25/2026-W27", @calendar)
+        one = Tempo.from_iso8601!("2026-W25/2026-W26", @calendar)
+
+        assert Tempo.to_string(weeks) ==
+                 {:ok, "week 25 of 2026\u2009\u2013\u2009week 26 of 2026"}
+
+        assert Tempo.to_string(one) == {:ok, "week 25 of 2026"}
+      end
+    end
+
+    test "a day of such a week is its date, and a week of a calendar of months its days" do
+      assert Tempo.to_string(Tempo.from_iso8601!("2026-W25-3", Calendrical.ISOWeek)) ==
+               {:ok, "2026-W25-3"}
+
+      assert Tempo.to_string(~o"2026-W25") == {:ok, "Jun 15\u2009\u2013\u200921, 2026"}
+    end
+  end
+
   describe "Tempo.to_string/2 on Tempo.IntervalSet" do
     test "joins its members as a list in the locale" do
       {:ok, two} = Tempo.union(~o"2022", ~o"2024")
