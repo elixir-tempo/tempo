@@ -67,7 +67,7 @@ defmodule Tempo.ClockTest do
           send(parent, {:peer_pinned, Test.utc_now()})
         end)
 
-      assert_receive {:peer_pinned, ~U[2030-01-01 00:00:00Z]}
+      assert_receive {:peer_pinned, ~U[2030-01-01 00:00:00Z]}, 1_000
       _ = task
 
       Test.reset()
@@ -129,7 +129,9 @@ defmodule Tempo.ClockTest do
           send(parent, {:peer_clock, Clock.clock()})
         end)
 
-      assert_receive {:peer_clock, peer_clock}
+      # A second and not the default tenth of one: the peer is one message
+      # away, and on a busy machine that has taken longer than 100 ms.
+      assert_receive {:peer_clock, peer_clock}, 1_000
       refute peer_clock == Tempo.Clock.Test
 
       Process.delete({Tempo.Clock, :clock})

@@ -78,8 +78,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **Coverage to 90%** — the CI lint row runs plain `mix test` until coverage reaches the default 90% threshold, then takes the reference workflow's `mix test --cover`. 85.5% today (2026-09-27) with the existing `ignore_modules`; `mix test --cover` lists the modules below it.
 
-* [ ] **`ClockTest` timing** — "process-local override does not leak to peer processes" failed once under load (passing in isolation and on re-runs): `assert_receive`'s default 100 ms timeout is short on a busy machine.
-
 * [ ] **The exhaustive matrix on a schedule** — `mix test --include exhaustive` runs 1.2 million cells in about sixteen minutes on sixteen cores, so it is run by hand; a weekly CI job would hold it. The default suite runs the 324,000 cells of the smaller corpus in half a minute.
 
 ## In progress
@@ -101,6 +99,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **`ClockTest` timing** — its two `assert_receive`s wait a second for a peer process's message, where the default tenth of one was short on a busy machine and failed once. 2026-10-07.
 
 * [x] **The length of a span with no year** — `Tempo.duration(~o"T22/T02")` is `PT4H`, where it was a `Tempo.UnanchoredError`: a span on a cycle whose units have one length each (a time of day, a day of the week) is measured by `Tempo.Interval.Cycle.microseconds/1`, as the length predicates measured it, and counted in its ends' unit (`cyclic_duration/1` in `lib/tempo/interval.ex`). A value with no year that names one is measured so (`~o"T10"` is `PT1H`). Months and days are refused still: their length is the year's. The matrix's own measure of a length reads a span's extent, which cuts one that runs through its cycle's end, and four cells of the published table changed. 2026-10-07.
 
