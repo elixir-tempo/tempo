@@ -273,6 +273,137 @@ defmodule Tempo.TimeZoneDatabase do
   end
 
   @doc """
+  The changes of a zone's clock between two moments: each moment its
+  offset from UTC changes, with the offset before and the offset after.
+
+  The `Calendar.TimeZoneDatabase` behaviour answers for one moment or one
+  reading and lists no changes, so they are found: the zone's period at
+  the start of each day is asked, and where two days differ the moment of
+  the change is found between them. Two changes in one day are both
+  found (Scoresbysund's clocks changed twice in an hour on 31 March 2024),
+  where the second does not put back the very period the first ended.
+
+  The days are asked in blocks of about a year, each found once for a
+  zone and kept for as long as the system runs, as `days_left_out/1`
+  keeps its days. A zone is on its local mean time before 1800, which
+  every zone in the IANA database is until its first change, so a block
+  before then is asked only at its two ends.
+
+  ### Arguments
+
+  * `zone` is an IANA zone name.
+
+  * `from` and `to` are moments in gregorian seconds, UTC.
+
+  ### Returns
+
+  * A list of `{moment, offset_before, offset_after}` in order of time,
+    for each change after `from` and no later than `to`: the moment in
+    gregorian seconds, UTC, and each offset in seconds. It is empty where
+    there is no change, for an unknown zone, and with no database
+    configured.
+
+  ### Examples
+
+      iex> from = :calendar.datetime_to_gregorian_seconds({{2026, 1, 1}, {0, 0, 0}})
+      iex> to = :calendar.datetime_to_gregorian_seconds({{2027, 1, 1}, {0, 0, 0}})
+      iex> Tempo.TimeZoneDatabase.changes("Etc/UTC", from, to)
+      []
+
+  """
+  @spec changes(String.t(), integer(), integer()) :: [{integer(), integer(), integer()}]
+  def changes(zone, from, to) when is_binary(zone) and is_integer(from) and is_integer(to) do
+    for block <- block_of(from)..block_of(to)//1,
+        {moment, _before, _later} = change <- changes_in(zone, block),
+        moment > from and moment <= to,
+        do: change
+  end
+
+  # A block of days whose starts are asked together, about a year long.
+  @days_in_a_block 366
+  @seconds_in_a_block @days_in_a_block * @seconds_per_day
+
+  defp block_of(moment), do: Integer.floor_div(moment, @seconds_in_a_block)
+
+  defp changes_in(zone, block) do
+    key = {__MODULE__, :changes, zone, block}
+
+    case :persistent_term.get(key, nil) do
+      nil -> found_changes(key, zone, block, database())
+      changes -> changes
+    end
+  end
+
+  # As for the days a zone leaves out: nothing is known with no database,
+  # and nothing is kept, nor for a name the database does not know.
+  defp found_changes(_key, _zone, _block, Calendar.UTCOnlyTimeZoneDatabase), do: []
+
+  defp found_changes(key, zone, block, _database) do
+    if zone_exists?(zone), do: kept_changes(key, zone, block), else: []
+  end
+
+  defp kept_changes(key, zone, block) do
+    changes =
+      zone
+      |> periods_at(moments_asked(block * @seconds_in_a_block))
+      |> Enum.chunk_every(2, 1, :discard)
+      |> Enum.flat_map(&changes_between(zone, &1))
+
+    :persistent_term.put(key, changes)
+    changes
+  end
+
+  @first_year_of_changes :calendar.datetime_to_gregorian_seconds({{1800, 1, 1}, {0, 0, 0}})
+
+  # Before the common era the adapter answers with one period, and asks
+  # nothing of the database.
+  defp moments_asked(first) when first + @seconds_in_a_block <= @gregorian_seconds_year_1,
+    do: []
+
+  defp moments_asked(first) when first + @seconds_in_a_block <= @first_year_of_changes,
+    do: [max(first, @gregorian_seconds_year_1), first + @seconds_in_a_block]
+
+  defp moments_asked(first),
+    do: Enum.map(0..@days_in_a_block, &(first + &1 * @seconds_per_day))
+
+  defp periods_at(zone, moments) do
+    for moment <- moments, {:ok, period} <- [period_at_utc(zone, moment)], do: {moment, period}
+  end
+
+  # The changes between two moments asked. One period at both is no change
+  # between them. Otherwise the first moment of another period is found,
+  # and the search goes on from it until the later period is reached.
+  defp changes_between(_zone, [{_from, period}, {_to, period}]), do: []
+
+  defp changes_between(zone, [{from, before}, {to, _later} = last]) do
+    moment = first_moment_of_another(zone, from, to, before)
+    {:ok, later} = period_at_utc(zone, moment)
+
+    change(moment, before, later) ++ changes_between(zone, [{moment, later}, last])
+  end
+
+  # A period that differs only in its name is no change of the clock.
+  defp change(moment, before, later) do
+    case {total_offset(before), total_offset(later)} do
+      {same, same} -> []
+      {before, later} -> [{moment, before, later}]
+    end
+  end
+
+  # `from` is in the period and `to` is not, and the first moment that is
+  # not is halved in on.
+  defp first_moment_of_another(_zone, from, to, _period) when to - from == 1, do: to
+
+  defp first_moment_of_another(zone, from, to, period) do
+    middle = div(from + to, 2)
+
+    case period_at_utc(zone, middle) do
+      {:ok, ^period} -> first_moment_of_another(zone, middle, to, period)
+      _another -> first_moment_of_another(zone, from, middle, period)
+    end
+  end
+
+  @doc """
   The total UTC offset of a period in seconds — the standard offset
   plus any daylight-saving adjustment.
 

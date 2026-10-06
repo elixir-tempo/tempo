@@ -1136,16 +1136,7 @@ defmodule Tempo.Math do
 
   defp keep_offset(other, _offset, _shift), do: other
 
-  # An offset in the shape the value wrote its own: one given as `-05:00`
-  # keeps its minutes when it becomes `-04:00`.
-  defp offset_as_written(offset, shift) do
-    written = Zone.offset_to_shift(offset)
-
-    if is_list(shift) and Keyword.has_key?(shift, :minute) and
-         not Keyword.has_key?(written, :minute),
-       do: written ++ [minute: 0],
-       else: written
-  end
+  defp offset_as_written(offset, shift), do: Zone.offset_as_written(offset, shift)
 
   # Moves the wall clock by whole offsets, in the coarsest clock unit that
   # counts them whole, so an hour does not add minutes to a value that has

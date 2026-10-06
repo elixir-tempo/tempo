@@ -53,6 +53,7 @@ defmodule Tempo.Interval do
   alias Tempo.Compare
   alias Tempo.ConversionError
   alias Tempo.Duration
+  alias Tempo.Enumeration.Zone
   alias Tempo.FloatingTempoError
   alias Tempo.Interval.Cycle
   alias Tempo.Interval.Steps
@@ -1046,15 +1047,32 @@ defmodule Tempo.Interval do
     end
   end
 
-  # The span runs to one unit past the value. A clock unit of a value in
-  # a named zone is a unit of elapsed time, ending on the reading the wall
-  # clock shows then (`Tempo.Math.add/2`): the hour a fall-back repeats
-  # ends where its second occurrence begins, and the hour before a
-  # spring-forward gap ends on the gap's far side. A day in a named zone
-  # ends on the next day the zone has: 29 December 2011 in Samoa ends where
-  # the 31st begins, the zone having left the 30th out.
+  # The span runs to one unit past the value. A minute, a second or a
+  # fraction of one in a named zone is a unit of elapsed time, ending on
+  # the reading the wall clock shows then (`Tempo.Math.add/2`): the minute
+  # a fall-back repeats ends where the next begins in its own occurrence,
+  # and the minute before a spring-forward gap ends on the gap's far side.
+  # A day in a named zone ends on the next day the zone has: 29 December
+  # 2011 in Samoa ends where the 31st begins, the zone having left the 30th
+  # out.
+  #
+  # An hour ends where its clock next leaves it (`Zone.end_of_hour/1`),
+  # which an elapsed hour from its start is only where the clock changes by
+  # whole hours on the hour: 02:00 on Lord Howe Island on the morning its
+  # clocks go from 02:00 to 02:30 is the half hour to 03:00, and was given
+  # an end at 03:30, over the hour after it.
+  defp span_bounds(%Tempo{extended: %{zone_id: zone}} = tempo, time, :hour, _calendar)
+       when is_binary(zone) do
+    lower = %{tempo | time: time}
+
+    case Zone.end_of_hour(lower) do
+      {:ok, upper} -> {:ok, {lower, upper}}
+      :error -> bounds_by_the_clock(tempo, time, :hour)
+    end
+  end
+
   defp span_bounds(%Tempo{extended: %{zone_id: zone}} = tempo, time, unit, _calendar)
-       when is_binary(zone) and unit in [:hour, :minute, :second, :microsecond],
+       when is_binary(zone) and unit in [:minute, :second, :microsecond],
        do: bounds_by_the_clock(tempo, time, unit)
 
   # Nearly every zone leaves no day out, and a day in one ends on the day

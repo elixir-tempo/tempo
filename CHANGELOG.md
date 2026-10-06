@@ -219,6 +219,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Added
 
+* `Tempo.TimeZoneDatabase.changes/3` — the moments a zone's clock changes between two moments, each with the offset before and after. The `Calendar.TimeZoneDatabase` behaviour lists none, so they are found by asking each day's start, and kept.
+
 * `Tempo.TimeZoneDatabase.days_left_out/1` — the calendar days a zone's clock never showed, where the zone moved across the date line: 30 December 2011 in Samoa, 31 December 1844 in Manila. They are found once for each zone and kept.
 
 * `Tempo.RRule.parse/2` reads RFC 7529's `RSCALE` and `SKIP` for the Gregorian calendar: `SKIP=BACKWARD` keeps the last day of a month or a year without its start's day, each occurrence as long as the start is precise (`RSCALE=GREGORIAN;FREQ=MONTHLY;SKIP=BACKWARD` from 31 January lists 28 February), and `SKIP=OMIT` is RFC 5545's rule, where each was `{:error, {:unknown_rule_part, _}}`. `SKIP=FORWARD`, an `RSCALE` other than `GREGORIAN` and a `SKIP` with no `RSCALE` are reported, as `Tempo.JSCalendar.parse/2` reports them.
@@ -324,6 +326,10 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* An hour its zone's clock skips part of is the part the clock shows, where its span ran an elapsed hour from its start and over the next hour's: 02:00 on Lord Howe Island on the morning its clocks go from 02:00 to 02:30 is the half hour to 03:00, and 03:00 on the Chatham Islands, whose clocks go from 02:45 to 03:45, the quarter hour from 03:45. It is an hour of its day in a walk as it is in `Enum.count/1`, an hour a fall-back shows the end of twice runs through both, and such an hour meets the hours beside it in `Tempo.relation/2`, as the day whose first hour is skipped meets the hour before it.
+
+* `Enum.count/1`, `Enum.at/2`, `Enum.member?/2` and `Enum.slice/2` of hours or minutes in a zone are answered by a walk where the zone's clock changes between them by other than whole units on the unit, as Lord Howe Island's does by half an hour and the Chatham Islands' at a quarter to the hour. They were counted by the time elapsed, which gave an hour the clock shows no place and another two.
 
 * A value in a zone gives no reading its clock skips: a set or unspecified digits that name the skipped hour, or a day the zone left out, convert to the spans of the values the clock shows (`2024-03-10T{01,02,03}[America/New_York]` is the hours from 01:00 and from 03:00, `2011-12-3X[Pacific/Apia]` the 31st alone), `Tempo.extend_resolution/2` starts on the reading shown (28 April 2023 in Cairo starts at 01:00), and `Enum.at/2`, `Enum.slice/2` and `Enum.member?/2` count a day's hours from it. A step of days or hours from a week, a month or a year, and the walk of a week's days, pass over the hour and the day skipped as a step from a date does.
 

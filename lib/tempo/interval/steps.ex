@@ -156,13 +156,11 @@ defmodule Tempo.Interval.Steps do
     Date.diff(date_of!(to_time, calendar), date_of!(from_time, calendar))
   end
 
-  defp count_date_steps(%Tempo{} = from, %Tempo{} = to, :hour, calendar) do
-    div(elapsed_seconds(from, to, calendar), @seconds_per_hour)
-  end
+  defp count_date_steps(%Tempo{} = from, %Tempo{} = to, :hour, calendar),
+    do: count_on_the_clock(from, to, @seconds_per_hour, calendar)
 
-  defp count_date_steps(%Tempo{} = from, %Tempo{} = to, :minute, calendar) do
-    div(elapsed_seconds(from, to, calendar), @seconds_per_minute)
-  end
+  defp count_date_steps(%Tempo{} = from, %Tempo{} = to, :minute, calendar),
+    do: count_on_the_clock(from, to, @seconds_per_minute, calendar)
 
   defp count_date_steps(%Tempo{} = from, %Tempo{} = to, :second, calendar) do
     elapsed_seconds(from, to, calendar)
@@ -175,6 +173,46 @@ defmodule Tempo.Interval.Steps do
   end
 
   defp count_date_steps(_from, _to, _unit, _calendar), do: :not_supported
+
+  # Hours and minutes in a named zone are counted by the time elapsed, which
+  # is the count of the values a walk gives only where each change of the
+  # zone's clock between the two ends is by a whole number of the unit, on
+  # a reading the steps land on. A walk gives the hours the clock shows, a
+  # value for each: where Lord Howe Island's clocks go forward half an hour
+  # an hour is half as long, and where the Chatham Islands' go from 02:45
+  # to 03:45 an hour is three quarters of one and the next a quarter, so
+  # steps of an elapsed hour pass over hours the clock shows. There the
+  # walk answers.
+  defp count_on_the_clock(from, to, unit_seconds, calendar) do
+    if dst_correct?(from, to, calendar) do
+      from_utc = trunc(Compare.to_utc_seconds(from))
+      to_utc = trunc(Compare.to_utc_seconds(to))
+
+      if changes_on_the_steps?(from, from_utc, to_utc, unit_seconds),
+        do: div(to_utc - from_utc, unit_seconds),
+        else: :not_supported
+    else
+      div(wall_seconds(to.time, calendar) - wall_seconds(from.time, calendar), unit_seconds)
+    end
+  end
+
+  # A change at the start is not one the steps cross. One at the end is: the
+  # last of the steps counted is the one that lands there (`on_step?/4`).
+  defp changes_on_the_steps?(
+         %Tempo{time: time, calendar: calendar} = from,
+         from_utc,
+         to_utc,
+         unit
+       ) do
+    reading = wall_seconds(time, calendar)
+
+    from
+    |> zone_id()
+    |> TimeZoneDatabase.changes(from_utc, to_utc)
+    |> Enum.all?(fn {moment, before, later} ->
+      rem(later - before, unit) == 0 and rem(moment + before - reading, unit) == 0
+    end)
+  end
 
   # `count_date_steps/4` counts the whole units between the two ends cut to
   # the unit. The steps in `[from, to)` are those, and one more when the step

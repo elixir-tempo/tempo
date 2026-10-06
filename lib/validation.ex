@@ -2114,8 +2114,8 @@ defmodule Tempo.Validation do
     2026-10-06): a minute inside the gap, the hour a spring-forward
     skips, a day a zone leaves out. A value the clock skips part of
     (a day or a month whose first hour is skipped, the hour of a
-    half-hour change) is not refused: it is read with the offset
-    before the gap, as the time that long after the clock changed
+    half-hour change) is not refused: it starts when the clock comes
+    out of the gap, the first moment it shows a reading of the value
     (`Tempo.Compare.to_utc_seconds/1`).
 
   * The value carries an IANA zone id on `extended.zone_id`.
@@ -2167,8 +2167,8 @@ defmodule Tempo.Validation do
   #
   # A value the clock skips only part of is some time: the hour of a
   # half-hour change (Lord Howe Island), and the day or the month whose
-  # first hour is skipped where clocks go forward at midnight. It is read
-  # with the offset before the gap (`Tempo.Compare.to_utc_seconds/1`).
+  # first hour is skipped where clocks go forward at midnight. It starts
+  # when the clock comes out of the gap (`Tempo.Compare.to_utc_seconds/1`).
   defp check_wall_time_in_zone(%Tempo{time: time}, zone) do
     case wall_readings(time) do
       # Pre-common-era wall times cannot fall into a zone-transition

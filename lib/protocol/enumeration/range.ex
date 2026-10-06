@@ -226,9 +226,14 @@ defimpl Enumerable, for: Tempo.Interval do
   # one it shows at that moment. A day in Cairo on which the clocks went
   # from midnight to 01:00 is walked from 01:00, and the first of its hours
   # was given as 00:00, which the walk passes over and no value is read
-  # from, and 01:00 was held to be no hour of the day.
-  defp counted_from(from, unit, calendar),
-    do: from |> Steps.fill_to_unit(unit, calendar) |> Zone.shown_by_the_clock()
+  # from, and 01:00 was held to be no hour of the day. A start written to
+  # the unit is one that was read, and the clock shows it.
+  defp counted_from(from, unit, calendar) do
+    case Steps.fill_to_unit(from, unit, calendar) do
+      ^from -> from
+      filled -> Zone.shown_by_the_clock(filled)
+    end
+  end
 
   # The unit the interval is walked by from `from`, which is its start or
   # the start a duration was counted to (`Tempo.Interval.granularity/1`).

@@ -413,14 +413,54 @@ defmodule Tempo.Compare do
   defp order_points(%Tempo{} = a, %Tempo{} = b) do
     if structural?(a, b) do
       case compare_time(a.time, b.time) do
-        :lt -> :earlier
-        :gt -> :later
         :eq -> :same
+        order -> order_in_one_zone(a, b, order)
       end
     else
       compare_via_utc(a, b)
     end
   end
+
+  # Two readings of one zone's clock are in the order of their units, and
+  # are compared so without asking the zone, but for one pair: a value whose
+  # first reading the clock skips, and the reading the clock shows when it
+  # comes out of that gap. They are one moment. The day in Cairo on which
+  # the clocks went from midnight to 01:00 starts at 01:00, and 02:00 on
+  # Lord Howe Island on the morning its clocks go to 02:30 starts at 02:30,
+  # so the hour before each ends where the day or the hour starts, and was
+  # held to run into it.
+  #
+  # The reading is within the value, so one is written with the units of
+  # the other and more: any other pair is in the order of its units. Where
+  # the zone's clock changes within a day or so of them (its changes are
+  # kept, `Tempo.TimeZoneDatabase.changes/3`), the two are compared as the
+  # moments they are.
+  defp order_in_one_zone(a, b, order) do
+    if across_a_change?(a, b),
+      do: compare_via_utc(a, b),
+      else: order_of(order)
+  end
+
+  defp order_of(:lt), do: :earlier
+  defp order_of(:gt), do: :later
+
+  # More than any offset a zone has had, and any change of one.
+  @a_day_or_so 27 * 3_600
+
+  defp across_a_change?(
+         %Tempo{extended: %{zone_id: zone}, time: [{:year, year} | _rest] = a_time} = a,
+         %Tempo{time: [{:year, _year} | _b_rest] = b_time}
+       )
+       when is_binary(zone) and zone != "" and is_integer(year) do
+    if List.starts_with?(a_time, b_time) or List.starts_with?(b_time, a_time) do
+      reading = wall_seconds(a_time, year, effective_calendar(a.calendar))
+      TimeZoneDatabase.changes(zone, reading - @a_day_or_so, reading + @a_day_or_so) != []
+    else
+      false
+    end
+  end
+
+  defp across_a_change?(_a, _b), do: false
 
   # Structural comparison of the time lists is calendar-blind — `5786`
   # (Hebrew) would read as later than `2025` (Gregorian) — so it is only
@@ -783,7 +823,19 @@ defmodule Tempo.Compare do
       point = dated_point!(value)
 
     wall = wall_seconds(time, year, effective_calendar(point.calendar))
-    wall - resolve_offset_seconds(extended, shift, wall)
+    wall - resolve_offset_seconds(extended, shift, wall, wall_seconds_spanned(time))
+  end
+
+  # How much of the wall clock a value spans from its first reading, by the
+  # finest unit it is written to: an hour, a day, or more than any gap is
+  # long. A value written to the minute or finer is one reading.
+  defp wall_seconds_spanned(time) do
+    case List.last(time) do
+      {unit, _value} when unit in [:minute, :second, :microsecond] -> 0
+      {:hour, _hour} -> 3_600
+      {unit, _day} when unit in [:day, :day_of_week, :day_of_year] -> 86_400
+      _coarser -> :infinity
+    end
   end
 
   @doc false
@@ -1087,13 +1139,13 @@ defmodule Tempo.Compare do
   # Pre-common-era wall instants precede every IANA rule — local-mean-
   # time era, so treat as
   # UTC exactly like the no-info fallback below.
-  defp resolve_offset_seconds(%{zone_id: zone_id}, _shift, wall_seconds)
+  defp resolve_offset_seconds(%{zone_id: zone_id}, _shift, wall_seconds, _spanned)
        when is_binary(zone_id) and zone_id != "" and
               wall_seconds < @gregorian_seconds_year_1 do
     0
   end
 
-  defp resolve_offset_seconds(%{zone_id: zone_id} = extended, shift, wall_seconds)
+  defp resolve_offset_seconds(%{zone_id: zone_id} = extended, shift, wall_seconds, spanned)
        when is_binary(zone_id) and zone_id != "" do
     case TimeZoneDatabase.period_at_wall(zone_id, wall_seconds) do
       {:ok, period} ->
@@ -1102,17 +1154,8 @@ defmodule Tempo.Compare do
       {:ambiguous, first, second} ->
         ambiguous_offset([first, second], explicit_offset_seconds(extended, shift))
 
-      # A reading the clock skips (a spring-forward, a day a zone leaves
-      # out) is read with the offset before the gap, as RFC 5545 §3.3.5
-      # reads it, so it is the time that much after the clock changed:
-      # 02:30 on the night Paris moves from 02:00 to 03:00 is 03:30. A value
-      # the clock skips the whole of is refused when it is read
-      # (`Tempo.Validation.validate_zone_existence/1`), and this is what a
-      # value it skips part of reaches: the day or the month whose first
-      # reading is skipped, which starts when the clock changes, and the
-      # hour of a half-hour change.
-      {:gap, {before, _gap_starts}, _after} ->
-        TimeZoneDatabase.total_offset(before)
+      {:gap, before, later} ->
+        skipped_offset(before, later, wall_seconds, spanned)
 
       # A zone the database does not know, or no configured database: read
       # by the offset written with the value, and as UTC where there is none.
@@ -1121,16 +1164,48 @@ defmodule Tempo.Compare do
     end
   end
 
-  defp resolve_offset_seconds(%{zone_offset: minutes}, _shift, _wall)
+  defp resolve_offset_seconds(%{zone_offset: minutes}, _shift, _wall, _spanned)
        when is_integer(minutes) do
     minutes * 60
   end
 
-  defp resolve_offset_seconds(_extended, shift, _wall) when is_list(shift) do
+  defp resolve_offset_seconds(_extended, shift, _wall, _spanned) when is_list(shift) do
     shift_to_seconds(shift)
   end
 
-  defp resolve_offset_seconds(_extended, _shift, _wall), do: 0
+  defp resolve_offset_seconds(_extended, _shift, _wall, _spanned), do: 0
+
+  # A reading the clock skips (a spring-forward, a day a zone leaves out) is
+  # read with the offset before the gap, as RFC 5545 §3.3.5 reads it, so it
+  # is the time that much after the clock changed: 02:30 on the night Paris
+  # moves from 02:00 to 03:00 is 03:30. A value the clock skips the whole of
+  # is refused when it is read
+  # (`Tempo.Validation.validate_zone_existence/1`).
+  #
+  # A value the clock skips part of starts when the clock comes out of the
+  # gap, the first moment it shows a reading of the value: the day or the
+  # month whose first hour is skipped, the hour of a half-hour change, and
+  # 03:00 on the Chatham Islands, whose clocks go from 02:45 to 03:45. That
+  # is the offset before the gap where the gap starts on the value's first
+  # reading, and it was read so where the gap had started before it, which
+  # put 03:00 there at 04:00, where the hour ends.
+  defp skipped_offset({before, gap_starts}, {_later, gap_ends}, wall_seconds, spanned) do
+    before = TimeZoneDatabase.total_offset(before)
+
+    if comes_out_within?(gap_ends, wall_seconds, spanned),
+      do: before + wall_seconds - gregorian_seconds(gap_starts),
+      else: before
+  end
+
+  defp comes_out_within?(_gap_ends, _wall_seconds, :infinity), do: true
+
+  defp comes_out_within?(gap_ends, wall_seconds, spanned),
+    do: gregorian_seconds(gap_ends) < wall_seconds + spanned
+
+  defp gregorian_seconds(%{year: year, month: month, day: day} = limit) do
+    Gregorian.date_to_iso_days(year, month, day) * 86_400 +
+      limit.hour * 3_600 + limit.minute * 60 + limit.second
+  end
 
   # Ambiguous wall time (DST fall-back): prefer the period whose
   # offset matches the explicit disambiguator, else the first period.

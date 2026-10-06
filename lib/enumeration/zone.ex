@@ -1,9 +1,11 @@
 defmodule Tempo.Enumeration.Zone do
   @moduledoc false
 
-  alias Tempo.Math
+  alias Tempo.Compare
   alias Tempo.TimeZoneDatabase
   alias Tempo.Validation
+
+  @seconds_in_an_hour 3_600
 
   # Shared DST classification for enumeration. Both `Enumerable.Tempo`
   # (implicit-span walk) and `Enumerable.Tempo.Interval` (explicit
@@ -38,22 +40,35 @@ defmodule Tempo.Enumeration.Zone do
   def zone_status(%Tempo{extended: %{zone_id: zone}} = tempo) when is_binary(zone) do
     with %NaiveDateTime{} = naive <- naive_from_tempo(tempo),
          db when is_atom(db) <- Calendar.get_time_zone_database() do
-      case DateTime.from_naive(naive, zone, db) do
-        {:gap, _before, _after} ->
-          :gap
-
-        {:ambiguous, first, second} ->
-          {:ambiguous, shift_from_datetime(first), shift_from_datetime(second)}
-
-        _ ->
-          :ok
-      end
+      naive |> DateTime.from_naive(zone, db) |> status(tempo, naive)
     else
       _ -> :ok
     end
   end
 
   def zone_status(_tempo), do: :ok
+
+  defp status({:gap, _before, shown}, tempo, naive),
+    do: if(shown_in_part?(tempo, naive, shown), do: :ok, else: :gap)
+
+  defp status({:ambiguous, first, second}, _tempo, _naive),
+    do: {:ambiguous, shift_from_datetime(first), shift_from_datetime(second)}
+
+  defp status(_shown_once_or_not_known, _tempo, _naive), do: :ok
+
+  # An hour whose first reading the clock skips is shown in part where the
+  # clock comes out of the gap before the hour ends: 02:00 on Lord Howe
+  # Island on the morning its clocks go from 02:00 to 02:30, and 03:00 on
+  # the Chatham Islands, whose clocks go from 02:45 to 03:45. It is a value
+  # the reader takes (`Tempo.Validation.validate_zone_existence/1`), and a
+  # walk gives it. A minute or a second is one reading, and is skipped.
+  defp shown_in_part?(%Tempo{time: time}, %NaiveDateTime{} = hour, %DateTime{} = shown) do
+    match?({:hour, _hour}, List.last(time)) and
+      NaiveDateTime.before?(
+        DateTime.to_naive(shown),
+        NaiveDateTime.add(hour, @seconds_in_an_hour)
+      )
+  end
 
   @doc """
   Whether a value is on a day its zone leaves out: a date, or a time of day
@@ -101,24 +116,233 @@ defmodule Tempo.Enumeration.Zone do
 
   Midnight in Cairo on 28 April 2023, when the clocks went from 00:00 to
   01:00, is 01:00, and 02:00 on Lord Howe Island on the morning its clocks
-  go to 02:30 is 02:30. It is where a value that starts on such a reading
-  is compared from already (`Tempo.Compare.to_utc_seconds/1`), and what a
-  step of nothing from it lands on (`Tempo.Math.add/2`).
+  go to 02:30 is 02:30. It is asked of the first value of a unit (the first
+  hour of a day, the first minute of an hour), which starts when the clock
+  first shows a reading of it: the first minute of 03:00 on the Chatham
+  Islands, whose clocks go from 02:45 to 03:45, is 03:45. A time written
+  inside a gap is another matter, and is the time that long after the
+  clock changed (RFC 5545 §3.3.5, `Tempo.Math.add/2`).
   """
   @spec shown_by_the_clock(Tempo.t()) :: Tempo.t()
   def shown_by_the_clock(%Tempo{extended: %{zone_id: zone}} = value) when is_binary(zone) do
-    if shown?(value), do: value, else: moved_on(value)
+    if shown?(value), do: value, else: on_the_reading_shown(value, zone)
   end
 
   def shown_by_the_clock(%Tempo{} = value), do: value
 
-  @no_step %Tempo.Duration{time: [day: 0]}
+  # `shown?/1` is false only for a date, or a date and a time of day, each
+  # unit one whole number.
+  defp on_the_reading_shown(
+         %Tempo{time: [year: year, month: month, day: day] ++ clock} = value,
+         zone
+       ) do
+    reading = {{year, month, day}, time_of_day(clock)}
 
-  defp moved_on(value) do
-    case Math.add(value, @no_step) do
-      %Tempo{} = shown -> shown
-      _no_one_reading -> value
+    case TimeZoneDatabase.period_at_wall(zone, :calendar.datetime_to_gregorian_seconds(reading)) do
+      {:gap, _before, {_later, shown}} -> %{value | time: units_at(value.time, shown)}
+      _shown_or_not_known -> value
     end
+  end
+
+  defp time_of_day(clock),
+    do: {clock[:hour] || 0, clock[:minute] || 0, clock[:second] || 0}
+
+  # The units of a value at another reading of the clock: the units it has,
+  # and the finer ones the reading needs. 02:00 moved to 02:30 is written
+  # to the minute, and a day moved to the next midnight stays a day.
+  defp units_at(time, %{
+         year: year,
+         month: month,
+         day: day,
+         hour: hour,
+         minute: minute,
+         second: second
+       }) do
+    fraction = for {:microsecond, _fraction} = unit <- time, do: unit
+
+    [year: year, month: month, day: day] ++
+      clock_units(hour, minute, second, finest_clock_unit(time)) ++ fraction
+  end
+
+  defp finest_clock_unit(time) do
+    Enum.find([:second, :minute, :hour], :day, &Keyword.has_key?(time, &1))
+  end
+
+  defp clock_units(hour, minute, second, finest) when second != 0 or finest == :second,
+    do: [hour: hour, minute: minute, second: second]
+
+  defp clock_units(hour, minute, _second, finest) when minute != 0 or finest == :minute,
+    do: [hour: hour, minute: minute]
+
+  defp clock_units(hour, _minute, _second, finest) when hour != 0 or finest == :hour,
+    do: [hour: hour]
+
+  defp clock_units(_hour, _minute, _second, :day), do: []
+
+  @doc """
+  The value an hour in a named zone ends at: the reading its clock shows
+  when it next leaves the hour.
+
+  That is the next hour for nearly every hour there is. It is another
+  reading where the clock changes on the way:
+
+  * the hour before a gap ends on the gap's far side (01:00 in New York on
+    the night its clocks go from 02:00 to 03:00 ends at 03:00), and an hour
+    a gap begins inside ends when the gap does (02:00 on the Chatham
+    Islands, whose clocks go from 02:45 to 03:45, ends at 03:45);
+
+  * an hour that starts inside a gap ends at the next hour, having started
+    when the clock came out of the gap (02:00 on Lord Howe Island, which
+    its clocks show from 02:30, ends at 03:00, half an hour on);
+
+  * an hour a fall-back shows the first reading of twice is one occurrence
+    of the two, and the first ends where the second begins (01:00 in New
+    York on the night its clocks go back from 02:00 to 01:00);
+
+  * an hour a fall-back shows the end of twice runs through both (01:00 on
+    Lord Howe Island, whose clocks go back from 02:00 to 01:30, ends at
+    the second 02:00, an hour and a half on).
+
+  An hour of elapsed time from the start is each of these only where the
+  clock changes by whole hours on the hour.
+
+  ### Arguments
+
+  * `hour` is a `t:Tempo.t/0` of a date and an hour in a named zone.
+
+  ### Returns
+
+  * `{:ok, value}`, the value the hour ends at, written to the hour, or
+    to the minute or the second where the clock comes out of a gap
+    between hours.
+
+  * `:error` for a value that is no Gregorian date and hour, or in a zone
+    the database does not know: the caller counts an elapsed hour.
+
+  """
+  @spec end_of_hour(Tempo.t()) :: {:ok, Tempo.t()} | :error
+  def end_of_hour(
+        %Tempo{
+          time: [year: year, month: month, day: day, hour: hour],
+          extended: %{zone_id: zone},
+          shift: shift,
+          calendar: calendar
+        } = value
+      )
+      when is_binary(zone) and is_integer(year) and year >= 1 and is_integer(month) and
+             is_integer(day) and hour in 0..23 and
+             calendar in [Calendrical.Gregorian, Calendar.ISO] do
+    starts = :calendar.datetime_to_gregorian_seconds({{year, month, day}, {hour, 0, 0}})
+
+    with {:ok, ending} <-
+           ending(zone, starts, TimeZoneDatabase.period_at_wall(zone, starts), shift) do
+      {:ok, at_ending(value, ending)}
+    end
+  end
+
+  def end_of_hour(%Tempo{}), do: :error
+
+  # Where the hour that starts on the reading `starts` ends, as
+  # `{reading, offset, shown twice?}`.
+  #
+  # An hour whose first reading the clock shows twice is the first of two
+  # occurrences unless it is written with the second's offset. The first
+  # runs for an hour, or until the second starts where the clock goes back
+  # by less than an hour (Colombo's went from 00:30 to 00:00 in 2006), and
+  # ends on whatever the clock shows then: the second 01:00 in New York,
+  # and on Troll, whose clocks go back from 03:00 to 01:00, the first 02:00
+  # for the first 01:00 and the second 01:00 for the first 02:00.
+  defp ending(zone, starts, {:ambiguous, first, second}, shift) do
+    {first, second} =
+      {TimeZoneDatabase.total_offset(first), TimeZoneDatabase.total_offset(second)}
+
+    if is_list(shift) and Compare.offset_seconds(shift) == second,
+      do: at_the_next_hour(zone, starts, second),
+      else: shown_at(zone, starts - first + min(@seconds_in_an_hour, first - second))
+  end
+
+  # Any other hour ends when the clock reaches the next, at the offset it
+  # shows the hour at: the offset after the gap for one that starts in a
+  # gap.
+  defp ending(zone, starts, {:ok, period}, _shift),
+    do: at_the_next_hour(zone, starts, TimeZoneDatabase.total_offset(period))
+
+  defp ending(zone, starts, {:gap, _before, {later, _limit}}, _shift),
+    do: at_the_next_hour(zone, starts, TimeZoneDatabase.total_offset(later))
+
+  defp ending(_zone, _starts, {:error, _reason}, _shift), do: :error
+
+  # The next hour as the clock shows it: at the offset the hour is in where
+  # the clock shows that reading twice, and the reading the clock jumps to
+  # where it skips it.
+  defp at_the_next_hour(zone, starts, offset) do
+    next = starts + @seconds_in_an_hour
+
+    case TimeZoneDatabase.period_at_wall(zone, next) do
+      {:ok, period} ->
+        {:ok, {next, TimeZoneDatabase.total_offset(period), false}}
+
+      {:ambiguous, first, second} ->
+        second = TimeZoneDatabase.total_offset(second)
+        shown = if offset == second, do: second, else: TimeZoneDatabase.total_offset(first)
+        {:ok, {next, shown, true}}
+
+      {:gap, _before, {later, comes_out}} ->
+        {:ok, {gregorian_seconds(comes_out), TimeZoneDatabase.total_offset(later), false}}
+
+      {:error, _reason} ->
+        :error
+    end
+  end
+
+  # What the clock shows at a moment.
+  defp shown_at(zone, moment) do
+    case TimeZoneDatabase.period_at_utc(zone, moment) do
+      {:ok, period} ->
+        offset = TimeZoneDatabase.total_offset(period)
+        {:ok, {moment + offset, offset, true}}
+
+      {:error, _reason} ->
+        :error
+    end
+  end
+
+  defp gregorian_seconds(%{
+         year: year,
+         month: month,
+         day: day,
+         hour: hour,
+         minute: minute,
+         second: second
+       }),
+       do: :calendar.datetime_to_gregorian_seconds({{year, month, day}, {hour, minute, second}})
+
+  # The value at an ending. A reading the clock shows twice carries its
+  # offset, which tells its two occurrences apart, and so does one of a
+  # value that was written with an offset.
+  defp at_ending(%Tempo{shift: shift} = value, {reading, offset, twice?}) do
+    {{year, month, day}, {hour, minute, second}} =
+      :calendar.gregorian_seconds_to_datetime(reading)
+
+    time = [year: year, month: month, day: day] ++ clock_units(hour, minute, second, :hour)
+
+    if twice? or is_list(shift),
+      do: %{value | time: time, shift: offset_as_written(offset, shift)},
+      else: %{value | time: time}
+  end
+
+  @doc """
+  An offset in seconds as a `:shift`, in the shape a value wrote its own:
+  one given as `-05:00` keeps its minutes when it becomes `-04:00`.
+  """
+  @spec offset_as_written(integer(), keyword() | nil) :: keyword()
+  def offset_as_written(offset, shift) do
+    written = offset_to_shift(offset)
+
+    if is_list(shift) and Keyword.has_key?(shift, :minute) and
+         not Keyword.has_key?(written, :minute),
+       do: written ++ [minute: 0],
+       else: written
   end
 
   @doc """
