@@ -9,6 +9,7 @@ defmodule Tempo.Iso8601.Group do
   alias Tempo.Math
   alias Tempo.NotBuilt
   alias Tempo.ParseError
+  alias Tempo.Qualification
   alias Tempo.UnitValues
   alias Tempo.Validation
 
@@ -28,7 +29,7 @@ defmodule Tempo.Iso8601.Group do
   def expand_groups(%Tempo{time: time} = tempo, calendar) do
     case expand_groups(time, tempo.calendar || calendar) do
       {:error, reason} -> {:error, reason}
-      %Tempo.Interval{} = interval -> {:ok, interval}
+      %Tempo.Interval{} = interval -> {:ok, as_the_value_is(interval, tempo)}
       time -> {:ok, %{tempo | time: time}}
     end
   end
@@ -42,7 +43,7 @@ defmodule Tempo.Iso8601.Group do
     with {:ok, from} <- expand_groups(tempo.from, calendar),
          {:ok, to} <- expand_groups(tempo.to, calendar),
          {:ok, duration} <- expand_groups(tempo.duration, calendar) do
-      {:ok, %{tempo | from: from, to: to, duration: duration}}
+      {:ok, %{tempo | from: start_of(from), to: start_of(to), duration: duration}}
     end
   end
 
@@ -199,6 +200,32 @@ defmodule Tempo.Iso8601.Group do
   def expand_groups(other, _calendar) do
     other
   end
+
+  # A season is a span of dates, and each end of it is as the value that
+  # named the season is: qualified by what qualified it, and with the zone,
+  # the calendar and the tags of its own suffix. `2026-21?` was the spring of
+  # 2026 with nothing uncertain about it, and a member of a set written with
+  # a zone of its own a spring in no zone.
+  #
+  # Each end's date is worked out from the year and the season together, so
+  # what qualifies either qualifies the date (`Tempo.Qualification.rewritten/2`).
+  defp as_the_value_is(%Tempo.Interval{from: from, to: to} = interval, %Tempo{} = value) do
+    %{interval | from: end_as_the_value_is(from, value), to: end_as_the_value_is(to, value)}
+  end
+
+  defp end_as_the_value_is(%Tempo{time: time, calendar: calendar}, %Tempo{} = value) do
+    %{Qualification.rewritten(value, time) | time: time, calendar: calendar}
+  end
+
+  defp end_as_the_value_is(open_end, _value), do: open_end
+
+  # An end of an interval is where its value starts, as a month's or a
+  # day's is: an interval from the spring of a year to its autumn
+  # (`2026-21/2026-23`) runs from the start of the one to the start of the
+  # other. Each end was the season's whole span, an interval of two
+  # intervals that nothing read.
+  defp start_of(%Tempo.Interval{from: start}), do: start
+  defp start_of(value_or_open_end), do: value_or_open_end
 
   # An error expanding the rest of the list is the list's error.
   defp prepend(_first, {:error, _reason} = error), do: error
