@@ -94,6 +94,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Done
 
+* [x] **A year mask written with leading zeros** — `~o"000X"` spanned ten years and matched none of them, so a walk of it raised: a year's digits were matched one for one against the mask's, and no year's begin with a zero. The zeros are the padding of a year written to four digits, and the mask is matched by the digits after them (`matches_mask?/2` in `lib/mask.ex`). Found beside the Julian calendar's year 0. 2026-10-07.
+
 * [x] **RFC 7529's `SKIP=FORWARD`, and a skip of a day the rule writes** — a rule's skip is held in its selection where it moves a day (`{:skip, :forward | :backward}`, written by `push_skip/2` in `lib/tempo/rrule/rule.ex`), and the resolver moves a day of the month its month lacks to the month's last day or the first of the month after (`expand_candidate_days/3` in `lib/tempo/rrule/selection.ex`); an occurrence an earlier period gave is given once (`moves_days?/1` in `lib/tempo.ex`), and `Tempo.RRule.to_string/1` writes `RSCALE=GREGORIAN` and the `SKIP`. Held by `Date` alone in `Tempo.RRule.RscaleSkipTest`. 2026-10-07.
 
 * [x] **The resolver measured for the monthly and weekly frequencies** — `Tempo.RRule.MonthlyWeeklyPartsTest` asks every day of each period, with `Date` alone, whether each part of a monthly, a weekly or a yearly rule read from an RRULE holds for it, with each time of day it names, a numbered weekday and a position: some sixty thousand rules and starts under `--include exhaustive`, and a part of them in every run. It found the four defects of the items below, each fixed. 2026-10-07.

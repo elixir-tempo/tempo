@@ -345,10 +345,29 @@ defmodule Tempo.Mask do
   # `XXXX` means 1000..9999 — so the candidate's digit count must equal
   # the mask width exactly. (Months and days *are* zero-padded, but those
   # go through `padded_matches_mask?/3`.)
+  #
+  # A mask that is written with leading zeros (`000X`, `00XX`) is of a year
+  # written to four digits, and its zeros are padding: it is matched by the
+  # digits after them, a year of fewer digits padded to their width, so
+  # `000X` is the years 0 to 9 and `00XX` the years 0 to 99. It matched no
+  # year, and a walk of one raised.
+  def matches_mask?(candidate, [0, _digit | _rest] = mask) do
+    significant = mask |> Enum.drop_while(&(&1 == 0)) |> at_least_one_digit()
+    digits = Integer.digits(candidate)
+    padding = length(significant) - length(digits)
+
+    padding >= 0 and
+      digits_equal_or_wildcard?(List.duplicate(0, padding) ++ digits, significant)
+  end
+
   def matches_mask?(candidate, mask) do
     digits = Integer.digits(candidate)
     length(digits) == length(mask) and digits_equal_or_wildcard?(digits, mask)
   end
+
+  # A mask of nothing but zeros is the year 0, whose one digit is a zero.
+  defp at_least_one_digit([]), do: [0]
+  defp at_least_one_digit(digits), do: digits
 
   # Per-position match between candidate digits and mask elements.
   # `:X` is a wildcard, a digit set matches any of its digits, and any

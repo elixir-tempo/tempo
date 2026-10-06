@@ -44,6 +44,39 @@ defmodule Tempo.MaskTest do
       refute Mask.matches_mask?(12, [1, 2, 3])
     end
 
+    test "a year written to four digits is matched by the digits after its leading zeros" do
+      # `000X` is the years 0 to 9 and `00XX` the years 0 to 99: the zeros
+      # are the padding of a year written to four digits. No year has four
+      # digits that begin with a zero, so the mask matched none, and a walk
+      # of `~o"000X"` raised where its span was ten years.
+      assert Enum.filter(0..120, &Mask.matches_mask?(&1, [0, 0, 0, :X])) == Enum.to_list(0..9)
+      assert Enum.filter(0..120, &Mask.matches_mask?(&1, [0, 0, :X, :X])) == Enum.to_list(0..99)
+
+      assert Enum.filter(0..120, &Mask.matches_mask?(&1, [0, 0, :X, 5])) ==
+               Enum.to_list(5..95//10)
+
+      assert Enum.filter(0..1200, &Mask.matches_mask?(&1, [0, :X, 0, :X])) ==
+               for(hundreds <- 0..9, units <- 0..9, do: hundreds * 100 + units)
+
+      # A year of four digits has no padding to pass over.
+      assert Enum.filter(0..2100, &Mask.matches_mask?(&1, [2, 0, 0, :X])) ==
+               Enum.to_list(2000..2009)
+
+      for {text, years} <- [
+            {"000X", 0..9},
+            {"00XX", 0..99},
+            {"0XXX", 0..999},
+            {"-000X", -9..0},
+            {"00X5", 5..95//10}
+          ] do
+        value = Tempo.from_iso8601!(text)
+        walked = for year <- value, do: Tempo.year(year)
+
+        assert {text, walked} == {text, Enum.to_list(years)}
+        assert {text, Enum.count(value)} == {text, Range.size(years)}
+      end
+    end
+
     test "negative masks only match negative candidates" do
       assert Mask.matches_mask?(-5, [:negative, 5])
       refute Mask.matches_mask?(5, [:negative, 5])

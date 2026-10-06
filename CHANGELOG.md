@@ -343,6 +343,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A year mask written with leading zeros is walked: `~o"000X"` is the years 0 to 9 and `~o"00XX"` the years 0 to 99, as their spans are. `Enum.count/1` and every other walk of one raised a `Tempo.InvalidDateError`, the zeros having been matched against the digits of years that have none.
+
 * A rule with `SKIP=BACKWARD` and a time of day, from a start that is a date, gives occurrences as long as the time is precise: `RSCALE=GREGORIAN;FREQ=MONTHLY;BYHOUR=9;SKIP=BACKWARD` from 31 January is an hour from nine on each month's last day, where each occurrence was a day long.
 
 * A week or a month selected alone within a §12.10 window keeps the days of the window that are in it, whatever the rule starts from: `R/../P1Y/FL11MLL1K1IN/P7DN45WN` and `Tempo.select(~o"2026Y", ~o"L11MLL1K1IN/P7DN45WN")` are the seven days from 2 November 2026, as the same rule from a date was. They selected nothing, the rule's start having been taken as coarsely as the week.
