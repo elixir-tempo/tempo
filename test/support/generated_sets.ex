@@ -301,18 +301,15 @@ defmodule Tempo.GeneratedSets do
     {:basic_day, "202606", "", ~w(01 15 28)},
     {:basic_year, "", "0615", ~w(2025 2026 2028)},
     {:basic_week, "2026W", "", ~w(01 25 52)},
+    {:basic_week_day, "2026W", "1", ~w(01 25 52)},
     {:basic_weekday, "2026W25", "", ~w(1 3 7)},
     {:basic_ordinal, "2026", "", ~w(001 166 365)},
     {:basic_hour_minute, "T", "30", ~w(00 09 14)},
     {:basic_minute, "T10", "", ~w(00 30 45)},
+    {:basic_minute_second, "T10", "15", ~w(00 30 45)},
     {:basic_second, "T1030", "", ~w(00 15 45)},
     {:basic_date_hour, "20260615T", "30", ~w(00 09 14)}
   ]
-
-  # The basic format's sets that are not read yet (`TODO.md`, "The basic
-  # format with unspecified digits or a set in a time alone and in a week
-  # date"). Each is held to being refused, so that reading one is noticed.
-  @not_read_yet [:basic_week, :basic_minute]
 
   defp unit_sets do
     for {family, before, after_it, [first, second, third]} <- @templates,
@@ -322,9 +319,6 @@ defmodule Tempo.GeneratedSets do
       unit_set(text, family, type, Enum.map(values, &(before <> &1 <> after_it)))
     end
   end
-
-  defp unit_set(text, family, _type, _members) when family in @not_read_yet,
-    do: %{text: text, family: family, expect: {:refused, Tempo.ParseError}}
 
   defp unit_set(text, family, type, members),
     do: %{text: text, family: family, expect: :read, type: type, members: members}

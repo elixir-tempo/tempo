@@ -327,6 +327,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* The basic format is read where a number goes on into unspecified digits or a set: a minute after an hour alone (`T10XX`, `T10{30,45}`) and a week after a year (`2026WXX1`, `2026W{25,26}`), as each is in the extended format (`T10:XX`, `2026-W{25,26}`). They were read as far as the hour, and as a week alone, with the rest left over.
+
 * A span in a zone walked by hours, minutes or seconds gives its values in the order of time and within it where the clock goes back: the day Troll's clocks go back from 03:00 to 01:00 lists 01:00, 02:00, 01:00, 02:00, where it listed each hour's two occurrences together, `00:58/01:02` on the night New York's clocks go back is four minutes, where the walk gave the second 01:00 and 01:01 too, and a span from the first showing of an hour to the second (`01:57-04:00/01:02-05:00[America/New_York]`) is walked through both. The walk is by the time elapsed between the zone's changes wherever they land on its steps, so it and `Enum.count/1`, `Enum.at/2` and `Enum.member?/2` are one answer, and a step from a start written with an offset carries the offset its own moment has.
 
 * A zone written with one end of an interval is the other end's without the offset written beside it, which is the zone's offset at that end alone: `2024-03-09T12/2024-03-10T12-04:00[America/New_York]` starts at -05:00, where the start was given -04:00, and the span of the first 01:00 on the night New York's clocks go back (`T1H/T1HZ-5H[America/New_York]`) reads back as itself, where its start was read as the second. An end written with an offset the zone shows there is in the zone too, so a span written with both offsets and the zone once reads back.

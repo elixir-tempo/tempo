@@ -180,8 +180,13 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
 
       # Can create ambiguity with implicit week dates so care is required
       # This should also cater for looking ahead for interval separators
-      # and probably other tokens
-      parsec({Tempo.Iso8601.Tokenizer.Date, :explicit_week_p}) |> lookahead_not(digit()),
+      # and probably other tokens. A number and a `W` are a year and the
+      # start of a week of the basic format where a digit follows
+      # (`2026W25`), and where an unspecified digit or a set does
+      # (`2026WXX1`, `2026W{25,26}`), which were taken for a week alone
+      # with something left over.
+      parsec({Tempo.Iso8601.Tokenizer.Date, :explicit_week_p})
+      |> lookahead_not(more_of_a_number()),
       explicit_day_of_year(),
       explicit_day_of_month(),
       explicit_day_of_week()
@@ -314,11 +319,19 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
       parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_hour_p})
       |> ignore(colon())
       |> concat(parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_minute_p})),
+      # An hour alone is the hour and the start of a minute of the basic
+      # format where a digit follows, and where an unspecified digit or a
+      # set does (`T10XX`, `T10{30,45}`), which were read as far as the
+      # hour.
       before_an_hour_alone
       |> parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_hour_p})
-      |> lookahead_not(digit())
+      |> lookahead_not(more_of_a_number())
     ])
   end
+
+  # What goes on a number written with no designator after it: a digit, an
+  # unspecified digit, or a set.
+  defp more_of_a_number, do: ascii_char([?0..?9, ?X, ?{])
 
   def explicit_time_of_day do
     ignore(optional(string("T")))

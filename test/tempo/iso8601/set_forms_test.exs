@@ -632,4 +632,42 @@ defmodule Tempo.Iso8601.SetFormsTest do
       assert {:error, _not_a_second} = Tempo.from_iso8601("2026Y6M15DT10H30M61.{0..9}S")
     end
   end
+
+  describe "the basic format with unspecified digits or a set where a number goes on" do
+    # A number of the basic format goes on into the next with no separator,
+    # and the next may be unspecified digits or a set. An hour alone and a
+    # week written with its designator were each read as far as the number,
+    # with the rest left over, where a digit after them was not.
+    for {basic, extended} <- [
+          {"T10XX", "T10:XX"},
+          {"T10X5", "T10:X5"},
+          {"T10{30,45}", "T10:{30,45}"},
+          {"T10{30..45}", "T10:{30..45}"},
+          {"T10XX15", "T10:XX:15"},
+          {"T10{30,45}15", "T10:{30,45}:15"},
+          {"2026WXX", "2026-WXX"},
+          {"2026WXX1", "2026-WXX-1"},
+          {"2026W{25,26}", "2026-W{25,26}"},
+          {"2026W{25,26}1", "2026-W{25,26}-1"},
+          {"2026W{25..27}1", "2026-W{25..27}-1"}
+        ] do
+      test "#{basic} is read as #{extended} is" do
+        assert {:ok, value} = Tempo.from_iso8601(unquote(basic))
+        assert Tempo.from_iso8601(unquote(extended)) == {:ok, value}
+      end
+    end
+
+    test "what was read is read as it was" do
+      assert Tempo.from_iso8601("T1030") == Tempo.from_iso8601("T10:30")
+      assert Tempo.from_iso8601("T10") == Tempo.from_iso8601("T10H")
+      assert Tempo.from_iso8601("2026W251") == Tempo.from_iso8601("2026-W25-1")
+      assert Tempo.from_iso8601("2026W25") == Tempo.from_iso8601("2026-W25")
+
+      # A week alone in the explicit form, and with a set of its days.
+      assert {:ok, week} = Tempo.from_iso8601("25W")
+      assert week.time == [week: 25]
+      assert {:ok, days} = Tempo.from_iso8601("25W{1,3}K")
+      assert days.time == [week: 25, day_of_week: [1, 3]]
+    end
+  end
 end
