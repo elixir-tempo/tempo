@@ -42,6 +42,36 @@ defmodule Tempo.ShiftTest do
     end
   end
 
+  describe "Tempo.shift/2 by a count of any size" do
+    test "of months or years is what the calendar says in one step" do
+      # The measure is `Date.shift/2`. A month and a year were stepped one
+      # at a time, so a hundred thousand months took thirty milliseconds
+      # where one takes ten microseconds, and a recurrence that steps to
+      # its nth candidate by one shift took the square of its count.
+      for date <- [~D[2026-01-31], ~D[2024-02-29], ~D[2026-06-15], ~D[0001-01-01]],
+          {unit, counts} <- [
+            month: [1, 11, 12, 13, 1_000, 100_000, -1, -13, -24_000],
+            year: [1, 4, 100, 10_000, -1, -400, -2_000]
+          ],
+          count <- counts do
+        {:ok, shifted} =
+          date
+          |> Tempo.from_date()
+          |> Tempo.shift(%Tempo.Duration{time: [{unit, count}]})
+          |> Tempo.to_date()
+
+        assert {date, unit, count, shifted} ==
+                 {date, unit, count, Date.shift(date, [{unit, count}])}
+      end
+    end
+
+    test "of months is the months counted on where a value names no day" do
+      assert Tempo.shift(~o"2026-06", ~o"P100000M") == ~o"10359Y10M"
+      assert Tempo.shift(~o"2026-06", ~o"P-24000M") == ~o"26Y6M"
+      assert Tempo.shift(~o"2026", ~o"P10000Y") == ~o"12026Y"
+    end
+  end
+
   describe "Tempo.shift/2 with a duration value" do
     test "accepts a Tempo.Duration directly" do
       assert Tempo.shift(~o"2026", ~o"P2Y") == ~o"2028Y"

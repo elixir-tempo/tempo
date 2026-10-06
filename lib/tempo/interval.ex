@@ -880,7 +880,7 @@ defmodule Tempo.Interval do
         group_boundary(tempo, time, unit, first, last, calendar)
 
       _ ->
-        case masked_widening(time) do
+        case masked_widening(time, calendar) do
           {:ok, {lower_time, upper_time}} ->
             {:ok, build_bounds(tempo, lower_time, upper_time), nil}
 
@@ -1212,10 +1212,10 @@ defmodule Tempo.Interval do
   #   matches the plan's "widest enclosing bound" rule:
   #   `1985-XX-XX` → `[1985, 1986)`.
 
-  defp masked_widening(time) do
+  defp masked_widening(time, calendar) do
     case find_first_mask(time, []) do
       nil -> :no_mask
-      {prefix, :year, mask} -> year_mask_bounds(prefix, mask)
+      {prefix, :year, mask} -> year_mask_bounds(prefix, mask, calendar)
       {prefix, _unit, _mask} -> parent_widen(prefix)
     end
   end
@@ -1242,20 +1242,31 @@ defmodule Tempo.Interval do
   # Negative: `[:negative, 1, :X, :X, :X]` → magnitude `(1000, 1999)` →
   #           signed values range from -1999 (most negative) to -1000
   #           (least negative), half-open upper = -999.
-  defp year_mask_bounds([], [:negative | digits]) do
+  #
+  # The years are those the calendar has: the Julian calendar has no year
+  # 0, so its `000X` starts with year 1 and its `-000X` ends where year 1
+  # starts.
+  defp year_mask_bounds([], [:negative | digits], calendar) do
     {mag_min, mag_max} = Mask.mask_bounds(digits)
-    {:ok, {[year: -mag_max], [year: -mag_min + 1]}}
+    {:ok, span_of_years(-mag_max, -mag_min, calendar)}
   end
 
-  defp year_mask_bounds([], digits) do
+  defp year_mask_bounds([], digits, calendar) do
     {min, max} = Mask.mask_bounds(digits)
-    {:ok, {[year: min], [year: max + 1]}}
+    {:ok, span_of_years(min, max, calendar)}
   end
 
   # A year mask appearing after some prefix doesn't make sense in
   # ISO 8601 — year is the coarsest unit. We leave it as a noop
   # rather than crash; callers will see the original time unchanged.
-  defp year_mask_bounds(_prefix, _mask), do: :no_mask
+  defp year_mask_bounds(_prefix, _mask, _calendar), do: :no_mask
+
+  defp span_of_years(first, last, calendar) do
+    first = if UnitValues.year?(first, calendar), do: first, else: first + 1
+    last = if UnitValues.year?(last, calendar), do: last, else: last - 1
+
+    {[year: first], [year: UnitValues.years_on(last, 1, calendar)]}
+  end
 
   # Widen to the parent: use the un-masked prefix as the lower
   # bound, increment the coarsest stated unit for the upper bound.
@@ -2372,9 +2383,9 @@ defmodule Tempo.Interval do
          %Tempo{time: [year: from_year]},
          %Tempo{time: [year: to_year]},
          :year,
-         _calendar
+         calendar
        ),
-       do: to_year - from_year
+       do: UnitValues.years_between(from_year, to_year, calendar)
 
   defp units_between(from, to, :month, calendar) do
     from = Steps.fill_to_unit(from, :month, calendar)

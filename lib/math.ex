@@ -102,7 +102,7 @@ defmodule Tempo.Math do
   # On an unanchored value (no `:year`) a whole-year step is a no-op: the
   # untracked year advances but the month/day/time axis is unchanged, so
   # "one year after January 31st" is January 31st. This is always unambiguous.
-  def add_unit(time, :year, _calendar) when is_list(time), do: step_year(time, 1)
+  def add_unit(time, :year, calendar) when is_list(time), do: step_year(time, 1, calendar)
 
   def add_unit(time, :month, calendar) when is_list(time) do
     case forward(time, :month) do
@@ -331,13 +331,18 @@ defmodule Tempo.Math do
     end
   end
 
-  defp step_year(time, by) do
+  # The year so many on is the calendar's to say: the Julian calendar has no
+  # year 0, and the year after its -1 is 1 (`Tempo.UnitValues.years_on/3`).
+  defp step_year(time, by, calendar) do
     case year_of(time) do
-      {:ok, year} -> {:ok, put_component(time, :year, year + by)}
+      {:ok, year} -> {:ok, put_component(time, :year, UnitValues.years_on(year, by, calendar))}
       :none -> {:ok, time}
       :several -> {:error, :grouped_component}
     end
   end
+
+  defp year_after(year, calendar), do: UnitValues.years_on(year, 1, calendar)
+  defp year_before(year, calendar), do: UnitValues.years_on(year, -1, calendar)
 
   # ── A step among a unit's values ──────────────────────────────
   #
@@ -350,9 +355,16 @@ defmodule Tempo.Math do
 
   defp next_day_of_year(time, year, day, calendar) do
     case UnitValues.following(:day_of_year, day, time, calendar) do
-      {:ok, next} -> {:ok, put_component(time, :day_of_year, next)}
-      :last -> time |> put_component(:year, year + 1) |> at_first(:day_of_year, calendar)
-      {:error, _reason} -> {:error, :unanchored}
+      {:ok, next} ->
+        {:ok, put_component(time, :day_of_year, next)}
+
+      :last ->
+        time
+        |> put_component(:year, year_after(year, calendar))
+        |> at_first(:day_of_year, calendar)
+
+      {:error, _reason} ->
+        {:error, :unanchored}
     end
   end
 
@@ -371,8 +383,11 @@ defmodule Tempo.Math do
 
   defp first_week_of_the_next_year(time, calendar) do
     case year_of(time) do
-      {:ok, year} -> time |> put_component(:year, year + 1) |> at_first(:week, calendar)
-      _none_or_several -> {:error, :unanchored}
+      {:ok, year} ->
+        time |> put_component(:year, year_after(year, calendar)) |> at_first(:week, calendar)
+
+      _none_or_several ->
+        {:error, :unanchored}
     end
   end
 
@@ -404,9 +419,14 @@ defmodule Tempo.Math do
   # names several years has no one year to move to.
   defp first_month_of_the_next_year(time, calendar) do
     case year_of(time) do
-      {:ok, year} -> time |> put_component(:year, year + 1) |> at_first(:month, calendar)
-      :none -> at_first(time, :month, calendar)
-      :several -> {:error, :grouped_component}
+      {:ok, year} ->
+        time |> put_component(:year, year_after(year, calendar)) |> at_first(:month, calendar)
+
+      :none ->
+        at_first(time, :month, calendar)
+
+      :several ->
+        {:error, :grouped_component}
     end
   end
 
@@ -584,9 +604,14 @@ defmodule Tempo.Math do
   # which a value with no year has where every year has as many months.
   defp last_month_of_previous_year(time, calendar) do
     case year_of(time) do
-      {:ok, year} -> time |> put_component(:year, year - 1) |> at_last(:month, calendar)
-      :none -> at_last(time, :month, calendar)
-      :several -> {:error, :grouped_component}
+      {:ok, year} ->
+        time |> put_component(:year, year_before(year, calendar)) |> at_last(:month, calendar)
+
+      :none ->
+        at_last(time, :month, calendar)
+
+      :several ->
+        {:error, :grouped_component}
     end
   end
 
@@ -650,7 +675,7 @@ defmodule Tempo.Math do
 
   # Mirror of the year no-op in `add_unit/3`: a whole-year step on an
   # unanchored value leaves its month/day/time axis untouched.
-  def subtract_unit(time, :year, _calendar) when is_list(time), do: step_year(time, -1)
+  def subtract_unit(time, :year, calendar) when is_list(time), do: step_year(time, -1, calendar)
 
   def subtract_unit(time, :month, calendar) when is_list(time) do
     case backward(time, :month) do
@@ -769,17 +794,29 @@ defmodule Tempo.Math do
   # year before, so it needs a year; any later week steps back cleanly.
   defp last_week_of_previous_year(time, calendar) do
     case year_of(time) do
-      {:ok, year} -> time |> put_component(:year, year - 1) |> at_last(:week, calendar)
-      :none -> {:error, :unanchored}
-      :several -> {:error, :grouped_component}
+      {:ok, year} ->
+        time |> put_component(:year, year_before(year, calendar)) |> at_last(:week, calendar)
+
+      :none ->
+        {:error, :unanchored}
+
+      :several ->
+        {:error, :grouped_component}
     end
   end
 
   defp previous_day_of_year(time, year, day, calendar) do
     case UnitValues.preceding(:day_of_year, day, time, calendar) do
-      {:ok, previous} -> {:ok, put_component(time, :day_of_year, previous)}
-      :first -> time |> put_component(:year, year - 1) |> at_last(:day_of_year, calendar)
-      {:error, _reason} -> {:error, :unanchored}
+      {:ok, previous} ->
+        {:ok, put_component(time, :day_of_year, previous)}
+
+      :first ->
+        time
+        |> put_component(:year, year_before(year, calendar))
+        |> at_last(:day_of_year, calendar)
+
+      {:error, _reason} ->
+        {:error, :unanchored}
     end
   end
 
@@ -2630,7 +2667,7 @@ defmodule Tempo.Math do
   defp apply_n_units(time, :month, n, calendar) do
     case date_by_the_calendar(time, :months, n, calendar) do
       {:ok, new_time} -> {:ok, new_time}
-      :by_count -> step_n_units(time, :month, n, calendar)
+      :by_count -> months_by_count(time, n, calendar)
     end
   end
 
@@ -2654,11 +2691,38 @@ defmodule Tempo.Math do
 
   defp date_by_the_calendar(_time, _date_part, _n, _calendar), do: :by_count
 
+  # A year counted on is its number and so many more, whatever else the
+  # value holds (`step_year/2`, which a step of one year is too): the day is
+  # clamped once, after every unit is applied.
   defp years_by_count(time, n, calendar) do
     case shift_years_by_calendar(time, n, calendar) do
       {:ok, new_time} -> {:ok, new_time}
       {:error, _reason} = error -> error
-      :fallback -> step_n_units(time, :year, n, calendar)
+      :fallback -> step_year(time, n, calendar)
+    end
+  end
+
+  # Months counted on through the years are the calendar's to count
+  # (`plus/5`), which says in one step what a month at a time says in as
+  # many as the count: it took time in proportion to the count, and a
+  # recurrence that steps to its nth candidate by one shift the square of
+  # it. Only the year and the month are taken from the answer, and the day
+  # is clamped once every unit is applied. A value with no one year or no
+  # one month, a month its year lacks, and a year whose months are not in
+  # the order of their numbers (`Tempo.UnitValues.stepped_by_calendar?/2`,
+  # where a value that is no date counts the months the calendar numbers)
+  # are stepped a month at a time still, and so is a calendar of weeks,
+  # which has no months.
+  defp months_by_count(time, n, calendar) do
+    with {:ok, year} <- year_of(time),
+         {:ok, month} <- component(time, :month),
+         false <- UnitValues.stepped_by_calendar?(year, calendar),
+         false <- Tempo.week_based_calendar?(calendar),
+         true <- function_exported?(calendar, :plus, 5) and calendar.valid_date?(year, month, 1),
+         {new_year, new_month, _day} <- calendar.plus(year, month, 1, :months, n) do
+      {:ok, time |> put_component(:year, new_year) |> put_component(:month, new_month)}
+    else
+      _a_month_at_a_time -> step_n_units(time, :month, n, calendar)
     end
   end
 

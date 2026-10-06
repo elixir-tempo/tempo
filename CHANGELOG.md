@@ -295,6 +295,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Changed
 
+* `Tempo.shift/2` by a count of months or years takes the time of one step, the calendar saying where the count lands: a hundred thousand months takes 14 µs where it took 29 ms, and ten thousand years 12 µs where it took a millisecond. A yearly rule that never selects (`FREQ=YEARLY;BYMONTH=4` from 31 January) says so in half a second where it took five and a half.
+
 * A `SKIP` beside `BYYEARDAY=366` is read, and the day passed over in a year of 365 days: RFC 7529 moves a day of the month, and not a day of the year. A `SKIP` beside a day counted from the end that a month can lack (`BYMONTHDAY=-31`) is `{:error, {:unsupported_skip, {skip, [bymonthday: [-31]]}}}`, for `FORWARD` as for `BACKWARD`.
 
 * `Tempo.to_string/2` shows a week of a calendar of weeks as the locale's words for it, "week 25 of 2026" and "Woche 25 des Jahres 2026" (CLDR's `yw`), and a span of weeks from its first to its last, where it showed the first and last days in the calendar's notation ("2026-W25-1 – 2026-W25-7"). A week of a calendar of months is its days still.
@@ -342,6 +344,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* The Julian calendar has no year 0, and Tempo no longer gives it one: `0000Y` read in `Calendrical.Julian` is a `Tempo.InvalidDateError`, the year after `-1Y` is `1Y` in a step, a walk, a span's end and a recurrence, and a range, a mask, a decade or a century of years names the years the calendar has. Years and months were counted on as numbers there, so a year back from 15 January of year 1 was a date of year 0, the span of 31 December of -1 ended on one, and a walk of the years from -2 to 2 listed five.
 
 * A year mask written with leading zeros is walked: `~o"000X"` is the years 0 to 9 and `~o"00XX"` the years 0 to 99, as their spans are. `Enum.count/1` and every other walk of one raised a `Tempo.InvalidDateError`, the zeros having been matched against the digits of years that have none.
 

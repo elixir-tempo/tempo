@@ -201,6 +201,58 @@ defmodule Tempo.UnitValues do
   def stepped_by_calendar?(years, calendar),
     do: composite?(calendar) or not years_begin_with_first_month?(years, calendar)
 
+  ## Years
+
+  # A calendar counts its years on through 0 unless it has no such year: the
+  # Julian calendar's year before 1 is -1, as Calendrical has it, and a date
+  # of its year 0 is no date. A year is a calendar's where 1 January, or the
+  # first day of its first month, of that year is a date of it.
+
+  @doc false
+  # Whether a calendar has the year. Every year but 0 is taken to be one.
+  @spec year?(term(), module()) :: boolean()
+  def year?(0, calendar),
+    do: not exported?(calendar, :valid_date?, 3) or calendar.valid_date?(0, 1, 1)
+
+  def year?(_year, _calendar), do: true
+
+  @doc false
+  # The year so many years on from a year, back where the count is
+  # negative, as the calendar counts its years. The count across a year the
+  # calendar lacks is Calendrical's (`plus/5`): two years on from the Julian
+  # calendar's -1 is 2.
+  @spec years_on(integer(), integer(), module()) :: integer()
+  def years_on(year, count, calendar) when is_integer(year) and is_integer(count) do
+    if one_side_of_zero?(year, year + count) or year?(0, calendar),
+      do: year + count,
+      else: counted_by_calendar(year, count, calendar)
+  end
+
+  @doc false
+  # How many years on from one year another is, the count `years_on/3` takes
+  # from the first to the second.
+  @spec years_between(integer(), integer(), module()) :: integer()
+  def years_between(from, to, calendar) when is_integer(from) and is_integer(to) do
+    cond do
+      one_side_of_zero?(from, to) or year?(0, calendar) -> to - from
+      to > from -> to - from - 1
+      true -> to - from + 1
+    end
+  end
+
+  defp one_side_of_zero?(year, other), do: (year > 0 and other > 0) or (year < 0 and other < 0)
+
+  # A year the calendar lacks (the Julian calendar's 0, should one be held)
+  # has no date to count from, and is counted on as a number.
+  defp counted_by_calendar(year, count, calendar) do
+    with true <- exported?(calendar, :plus, 5) and calendar.valid_date?(year, 1, 1),
+         {on, _month, _day} <- calendar.plus(year, 1, 1, :years, count) do
+      on
+    else
+      _as_a_number -> year + count
+    end
+  end
+
   ## Values that do not run on from one another
 
   # The ranges a unit's values are, the first and the last of them, each of

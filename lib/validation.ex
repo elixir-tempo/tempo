@@ -50,7 +50,8 @@ defmodule Tempo.Validation do
   def validate(%Tempo{time: units} = tempo, calendar) do
     with :ok <- validate_leap_second(units, tempo),
          :ok <- validate_time_shift(tempo.shift),
-         :ok <- NotBuilt.month(tempo, calendar) do
+         :ok <- NotBuilt.month(tempo, calendar),
+         {:ok, units} <- in_years_of_the_calendar(units, calendar) do
       units = sets_of_one_as_their_member(units)
       written = written_calendar(units, calendar)
 
@@ -107,6 +108,58 @@ defmodule Tempo.Validation do
 
   def validate(:undefined, _calendar) do
     {:ok, :undefined}
+  end
+
+  # A year the calendar does not have is no year to read: the Julian
+  # calendar's year before 1 is -1, and it has no year 0
+  # (`Tempo.UnitValues.year?/2`). A year written, a member of a set of years
+  # and an end of a range of them are asked; the years between a range's
+  # ends are those the calendar has.
+  #
+  # A century or a decade is the years of it that the calendar has, so the
+  # Julian calendar's first century (`00C`) starts with its year 1.
+  defp in_years_of_the_calendar(
+         [{:year, {:group, %Range{first: first, last: last, step: 1}}} | rest] = units,
+         calendar
+       ) do
+    cond do
+      first > last ->
+        {:ok, units}
+
+      not UnitValues.year?(first, calendar) ->
+        {:ok, [{:year, {:group, (first + 1)..last//1}} | rest]}
+
+      not UnitValues.year?(last, calendar) ->
+        {:ok, [{:year, {:group, first..(last - 1)//1}} | rest]}
+
+      true ->
+        {:ok, units}
+    end
+  end
+
+  defp in_years_of_the_calendar([{:year, years} | _units] = units, calendar) do
+    case Enum.reject(years_written(years), &UnitValues.year?(&1, calendar)) do
+      [] -> {:ok, units}
+      [year | _rest] -> {:error, no_such_year(year, calendar)}
+    end
+  end
+
+  defp in_years_of_the_calendar(units, _calendar), do: {:ok, units}
+
+  defp years_written(year) when is_integer(year), do: [year]
+  defp years_written(%Range{first: first, last: last}), do: [first, last]
+  defp years_written(years) when is_list(years), do: Enum.flat_map(years, &years_written/1)
+  defp years_written(_a_mask_or_a_group), do: []
+
+  defp no_such_year(year, calendar) do
+    InvalidDateError.exception(
+      unit: :year,
+      value: year,
+      calendar: calendar,
+      reason:
+        "#{year} is not a year#{calendar_text(calendar)}: the year before its year 1 is " <>
+          "#{UnitValues.years_on(1, -1, calendar)}."
+    )
   end
 
   defp validate_members(members, calendar) do

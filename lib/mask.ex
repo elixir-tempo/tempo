@@ -144,15 +144,24 @@ defmodule Tempo.Mask do
           calendar :: module()
         ) :: {:ok, [integer()]} | {:error, :unanchored | {:unmaskable, atom()}}
   # Year masks are digit-bounded — there is no calendar range for years —
-  # so their candidates come straight from the digit pattern.
-  def valid_values(:year, [:negative | rest], _previous, _calendar) do
+  # so their candidates come straight from the digit pattern, those the
+  # calendar has: the Julian calendar has no year 0, and its `000X` is the
+  # years 1 to 9.
+  def valid_values(:year, [:negative | rest], _previous, calendar) do
     {min, max} = mask_bounds(rest)
-    {:ok, for(candidate <- min..max, matches_mask?(candidate, rest), do: -candidate)}
+
+    {:ok,
+     for(
+       candidate <- min..max,
+       matches_mask?(candidate, rest) and UnitValues.year?(-candidate, calendar),
+       do: -candidate
+     )}
   end
 
-  def valid_values(:year, mask, _previous, _calendar) do
+  def valid_values(:year, mask, _previous, calendar) do
     {min, max} = mask_bounds(mask)
-    {:ok, Enum.filter(min..max, &matches_mask?(&1, mask))}
+
+    {:ok, Enum.filter(min..max, &(matches_mask?(&1, mask) and UnitValues.year?(&1, calendar)))}
   end
 
   def valid_values(unit, mask, previous, calendar) do

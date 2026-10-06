@@ -36,6 +36,10 @@ defmodule Tempo.InvalidDateError do
       when is_binary(reason) and not is_nil(range),
       do: reason
 
+  # A year a calendar does not have is said as it is: the calendar has no
+  # run of years to list beside it.
+  def message(%__MODULE__{unit: :year, reason: reason}) when is_binary(reason), do: reason
+
   def message(%__MODULE__{unit: unit, value: value, valid_range: range, year: y, month: m})
       when not is_nil(unit) and not is_nil(value) and not is_nil(range) do
     context = date_context(y, m)

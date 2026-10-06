@@ -140,8 +140,12 @@ defmodule Tempo.Interval.Steps do
     end
   end
 
-  defp count_date_steps(%Tempo{time: from_time}, %Tempo{time: to_time}, :year, _calendar) do
-    fetch_integer!(to_time, :year) - fetch_integer!(from_time, :year)
+  defp count_date_steps(%Tempo{time: from_time}, %Tempo{time: to_time}, :year, calendar) do
+    UnitValues.years_between(
+      fetch_integer!(from_time, :year),
+      fetch_integer!(to_time, :year),
+      calendar
+    )
   end
 
   defp count_date_steps(%Tempo{time: from_time}, %Tempo{time: to_time}, :month, calendar) do
@@ -304,9 +308,9 @@ defmodule Tempo.Interval.Steps do
       else: :not_supported
   end
 
-  defp nth_date_step(%Tempo{time: time} = tempo, n, :year, _calendar) do
+  defp nth_date_step(%Tempo{time: time} = tempo, n, :year, calendar) do
     year = Keyword.fetch!(time, :year)
-    %{tempo | time: Keyword.replace(time, :year, year + n)}
+    %{tempo | time: Keyword.replace(time, :year, UnitValues.years_on(year, n, calendar))}
   end
 
   defp nth_date_step(%Tempo{time: time} = tempo, n, :month, calendar) do
@@ -604,7 +608,7 @@ defmodule Tempo.Interval.Steps do
   @spec months_between(integer(), integer(), integer(), integer(), module()) :: integer()
   defp months_between(from_y, from_m, to_y, to_m, calendar) do
     if constant_twelve_months?(calendar, from_y, to_y) do
-      (to_y - from_y) * 12 + (to_m - from_m)
+      UnitValues.years_between(from_y, to_y, calendar) * 12 + (to_m - from_m)
     else
       months_in_years_between(from_y, to_y, calendar) + (to_m - from_m)
     end

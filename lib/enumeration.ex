@@ -736,7 +736,7 @@ defmodule Tempo.Enumeration do
     case Validation.validate(%Tempo{time: written, calendar: calendar}, calendar) do
       {:ok, %Tempo{time: validated}} ->
         case validated_value(validated, written) do
-          {:ok, value} -> listed(unit, value)
+          {:ok, value} -> listed(unit, value, calendar)
           :restated -> restated_candidate(unit, raw, ancestors, calendar)
         end
 
@@ -778,9 +778,13 @@ defmodule Tempo.Enumeration do
   # The whole numbers a validated value names. A range of years is each of
   # its years whatever its ends: a year below zero is a year before year 1
   # (ISO 8601-2 §4.4.1), never a count from the end, so `{-5..-3}Y` is three
-  # years and `{-1..1}Y` the years either side of year 0.
-  defp listed(:year, %Range{} = years), do: {:ok, Enum.to_list(years)}
-  defp listed(_unit, value), do: integers(value)
+  # years and `{-1..1}Y` the years from -1 to 1. Those are the years the
+  # calendar has between its ends: the Julian calendar has no year 0, and
+  # there the range is -1 and 1.
+  defp listed(:year, %Range{} = years, calendar),
+    do: {:ok, Enum.filter(years, &UnitValues.year?(&1, calendar))}
+
+  defp listed(_unit, value, _calendar), do: integers(value)
 
   # A count from the end is resolved by the calendar for date units and by
   # the unit's fixed extent for clock units, both in `Tempo.Validation`. A
