@@ -433,6 +433,26 @@ defmodule Tempo.Explain.Test do
     end
   end
 
+  describe "a window from a time of day" do
+    test "is worded in its hours and minutes" do
+      # It was "the PT4H window from at 22:00".
+      assert selects("R/2027-01-01/P1D/FLLT22HN/PT4HN") == "Selects: the 4 hours from 22:00."
+
+      assert selects("R/2027-01-01/P1D/FLLT22H30MN/PT90MN") ==
+               "Selects: the 90 minutes from 22:30."
+
+      assert selects("R/2027-01-01/P1D/FLLT9HN/PT1H30MN") ==
+               "Selects: the 1 hour, 30 minutes from 09:00."
+
+      assert selects("R/2027-01-01/P1D/FLLT22HN/PT-4HN") == "Selects: the 4 hours before 22:00."
+    end
+
+    test "names the time without its \"at\" in a window of days too" do
+      assert selects("R/2027-01-01/P1D/FLLT22HN/P2DN") == "Selects: the 2 days from 22:00."
+      assert selects("R/2027-01-01/P1W/FLL1KN/P3DN") == "Selects: the 3 days from a Monday."
+    end
+  end
+
   describe "IXDTF metadata" do
     test "zoned Tempo mentions the zone" do
       paris = Tempo.from_elixir(DateTime.new!(~D[2026-06-15], ~T[10:00:00], "Europe/Paris"))

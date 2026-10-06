@@ -333,6 +333,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.explain/1` words a window of hours or minutes in them: `R/2027-01-01/P1D/FLLT22HN/PT4HN` selects "the 4 hours from 22:00", where it was "the PT4H window from at 22:00".
+
 * A year and a week of it are combined in a calendar of weeks: `Tempo.difference/2` of 2026 and its week 25 in `Calendrical.ISOWeek` is the weeks before and after, where every set operation between a year and a week or a day of one returned a `Tempo.ResolutionError`. Such a calendar makes its years of weeks, so the two are on one axis as they stand.
 
 * The basic format is read where a number goes on into unspecified digits or a set: a minute after an hour alone (`T10XX`, `T10{30,45}`) and a week after a year (`2026WXX1`, `2026W{25,26}`), as each is in the extended format (`T10:XX`, `2026-W{25,26}`). They were read as far as the hour, and as a week alone, with the rest left over.

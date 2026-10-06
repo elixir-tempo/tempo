@@ -42,8 +42,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **`Schedule.task/3`'s `:within` is a pair** — it takes a `{from, to}` tuple, where every other `:within` takes a Tempo value or an interval.
 
-* [ ] **`explain/1` words a window of hours in ISO 8601** — `Tempo.explain(~o"R/2027-01-01/P1D/FLLT22HN/PT4HN")` says "the PT4H window from at 22:00" where it means the four hours from 22:00: `window_phrase/2` in `lib/explain.ex` words only a window of days or weeks, and a time-of-day selection's noun carries its "at".
-
 * [ ] **A struct with no calendar is half read** — `%Tempo{time: [year: 2026], calendar: nil}` converts, extends and walks in the default calendar, but `Enum.count/1` raises an `UndefinedFunctionError` (`Tempo.Interval.Steps.fill_to_unit/3`) and it inspects as `Tempo.from_iso8601!("2026Y", nil)`. Found 2026-10-03.
 
 ### Performance
@@ -115,6 +113,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **`explain/1` words a window of hours in hours** — "the 4 hours from 22:00" where it was "the PT4H window from at 22:00": `window_phrase/2` in `lib/explain.ex` words a window of clock units, before or from its selection, and a time of day is named without its "at" as what a window runs from. 2026-10-07.
 
 * [x] **An open-start window's error** — `within: ~o"../2027"` returned an `IntervalEndpointsError` about including an open interval in a set. `open_window_start/1` in `lib/tempo.ex`, which every function that takes a window asks, names it: "a :within window needs a start". 2026-10-07.
 

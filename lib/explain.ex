@@ -1736,10 +1736,16 @@ defmodule Tempo.Explain do
   defp inner_selection_of(%Tempo{time: [selection: selection]}), do: selection
   defp inner_selection_of(%Tempo{time: time}), do: time
 
-  defp window_phrase(%Tempo.Duration{time: time} = duration, inner_noun) do
+  # A window of hours, minutes or seconds is worded in them (`PT4H` from
+  # 22:00 is "the 4 hours from 22:00"). It was worded in ISO 8601, "the PT4H
+  # window", which the reader of an explanation is not asked to know.
+  defp window_phrase(%Tempo.Duration{time: time}, inner_noun) do
     cond do
+      not only_day_or_week?(time) and before?(time) ->
+        "the #{duration_prose(lengths(time))} before #{inner_noun}"
+
       not only_day_or_week?(time) ->
-        "the #{Tempo.to_iso8601!(duration)} window from #{inner_noun}"
+        "the #{duration_prose(time)} from #{inner_noun}"
 
       offset_in_days(time) < 0 ->
         "the #{day_count(-offset_in_days(time))} before #{inner_noun}"
@@ -1767,16 +1773,26 @@ defmodule Tempo.Explain do
        when is_integer(wd) and is_integer(i),
        do: "the #{ordinal(i)} #{weekday_name(wd)} of #{month_name(m, naming)}"
 
+  # A time of day is "at 22:00" as a clause and "22:00" as what a window
+  # runs from: "the 2 days from at 22:00" is "the 2 days from 22:00".
   defp selection_noun(other, naming) do
     case flat_selection_prose(other, naming) do
       "on " <> rest -> rest
       "in " <> rest -> rest
+      "at " <> rest -> rest
       prose -> prose
     end
   end
 
   defp only_day_or_week?(time),
     do: Enum.all?(time, fn {unit, _value} -> unit in [:day, :week] end)
+
+  # A window that runs back from its selection is written with each unit
+  # negative, and worded by their lengths.
+  defp before?(time),
+    do: Enum.all?(time, fn {_unit, value} -> is_integer(value) and value < 0 end)
+
+  defp lengths(time), do: Enum.map(time, fn {unit, value} -> {unit, abs(value)} end)
 
   defp offset_in_days(time) do
     Enum.reduce(time, 0, fn
