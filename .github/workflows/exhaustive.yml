@@ -1,0 +1,81 @@
+name: Exhaustive tests
+
+# The tests tagged `:exhaustive` are the long runs the push workflow leaves
+# out: the operation matrix's 1.2 million cells, every monthly, weekly and
+# yearly rule the parts make, and every text of the plain forms the scan
+# reads. They take about sixteen minutes on sixteen cores, and an hour or
+# more on a hosted runner, so they run once a week and when asked for.
+
+on:
+  schedule:
+    # Sundays at 03:00 UTC.
+    - cron: "0 3 * * 0"
+  workflow_dispatch:
+
+env:
+  MIX_ENV: test
+  LOCALIZE_DEFAULT_LOCALE: en
+
+permissions:
+  contents: read
+
+jobs:
+  exhaustive:
+    name: "Exhaustive tests (Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+
+    strategy:
+      matrix:
+        include:
+          # The lint row of `elixir.yml`, the latest Elixir on the latest
+          # OTP, verified against the release tags. Bump it with that row.
+          - elixir: "1.20.4-otp-29"
+            otp: "29.1.1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+
+      - name: Restore dependency cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            deps
+            _build
+            !_build/dev/dialyxir_*
+          key: mix-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            mix-${{ matrix.elixir }}-${{ matrix.otp }}-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      # `astro` downloads the JPL ephemeris on first application start and
+      # fails to boot without it, as in `elixir.yml`.
+      - name: Cache Astro ephemeris
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/astro
+          key: astro-ephemeris-de440s
+
+      - name: Pre-fetch Astro ephemeris
+        run: |
+          mkdir -p ~/.cache/astro
+          if [ ! -f ~/.cache/astro/de440s.bsp ]; then
+            curl -fSL --retry 5 --retry-all-errors --retry-delay 5 \
+              -o ~/.cache/astro/de440s.bsp \
+              https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp
+          fi
+
+      - name: Compile (warnings as errors)
+        run: mix compile --warnings-as-errors
+
+      - name: Run the exhaustive tests
+        run: mix test --only exhaustive
