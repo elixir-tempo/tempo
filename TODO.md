@@ -128,6 +128,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Done
 
+* [x] **A set of one year with significant digits or a margin of error, and the error for unspecified digits in a set** — found by the generator's second harvest of 2026-10-06: `{1950S2}` and `{1950±2}` stayed sets of one, which no span was read from, and are the year (`collapse_single_member_sets/1`); and `2026-{0X,1X}` was refused as "{:mask, [0, :X]} is not valid", where the error now says that a set in a unit below the year holds whole numbers and how the value is written (`{2026-0X,2026-1X}`). 2026-10-06.
+
 * [x] **A zone that is not known is written as it was written** — found beside the generator's second harvest of 2026-10-06: a value read with a zone the database does not have keeps it as a tag (`extended.tags["unknown_zone"]`), and `inspect/1` and `to_iso8601/1` wrote `[unknown_zone=Made/Up_Zone]`, which no suffix reads. It is written `[Made/Up_Zone]` in the zone's place (`zone_id_trailer/1` in `lib/inspect.ex`), and a U extension kept under that tag after the zone. 2026-10-06.
 
 * [x] **A member of a set with a suffix of its own** — found by the generator's second harvest of 2026-10-06: a set of values in two zones is written with each member's zone after it, and that text was a parse error, where an end of an interval took a suffix. `:qualified_member` in the tokenizer takes RFC 9557's suffix, its segments are validated for a member and for each end of a range (`validate_token/1` in `lib/iso8601/tokenizer/extended.ex`), and a member is in the calendar its suffix names (`maybe_resolve_endpoint_calendars/2`). 2026-10-06.

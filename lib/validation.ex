@@ -364,11 +364,14 @@ defmodule Tempo.Validation do
   # the date they name, as `2026Y25W1K` is, and were a week and a day that
   # the value written back did not read as. And again after, for a set that
   # reading it leaves one member of (`{-1..-1}M`). A set of one mask is the
-  # mask (`{198X}`), which was a set no span could be read from.
+  # mask (`{198X}`), and one of a year with significant digits or a margin
+  # of error that year (`{1950S2}`): each was a set no span could be read
+  # from.
   defp collapse_single_member_sets(units) when is_list(units) do
     Enum.map(units, fn
       {unit, [value]} when is_integer(value) -> {unit, value}
       {unit, [{:mask, _digits} = mask]} -> {unit, mask}
+      {unit, [{value, [_ | _]} = annotated]} when is_integer(value) -> {unit, annotated}
       {unit, [first..first//_step]} -> {unit, first}
       {unit, first..first//_step} -> {unit, first}
       other -> other
@@ -1797,6 +1800,7 @@ defmodule Tempo.Validation do
     case UnitValues.resolve(written, valid) do
       {:ok, resolved} -> {:ok, as_its_numbers(written, resolved)}
       {:error, {:not_taken, value, counted}} -> normalized_error(value, counted, valid)
+      {:error, {:not_taken, {:mask, digits}}} -> masked_member_error(digits, valid)
       {:error, {:not_taken, value}} -> not_valid_error(value, valid, valid)
       {:error, {:backwards, range}} -> backwards_error(range, range, valid)
       {:error, {:backwards, range, counted}} -> backwards_error(range, counted, valid)
@@ -1842,6 +1846,29 @@ defmodule Tempo.Validation do
            "a range runs from its first value up to its last"
      )}
   end
+
+  # A set in a unit holds whole numbers and ranges of them. One with
+  # unspecified digits is a value of its own, some one of several, and is a
+  # member of a set of whole values (`{2026-0X,2026-1X}`); a set of years
+  # holds them (`{198X,199X}`), a year being a value alone.
+  defp masked_member_error(digits, valid) do
+    written = Enum.map_join(digits, &mask_digit/1)
+
+    {:error,
+     InvalidDateError.exception(
+       value: {:mask, digits},
+       valid_range: valid,
+       reason:
+         "#{written} has unspecified digits, and a set in a unit below the year holds whole " <>
+           "numbers and ranges of them. Write it as a value of its own in a set of values, " <>
+           "as `{2026-0X,2026-1X}` is"
+     )}
+  end
+
+  defp mask_digit(:X), do: "X"
+  defp mask_digit(:negative), do: "-"
+  defp mask_digit(digit) when is_integer(digit), do: Integer.to_string(digit)
+  defp mask_digit(digits) when is_list(digits), do: "{" <> Enum.join(digits, ",") <> "}"
 
   defp not_valid_error(value, valid, valid_range) do
     {:error,

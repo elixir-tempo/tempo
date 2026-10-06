@@ -206,6 +206,8 @@ defmodule Tempo.Iso8601.SetFormsTest do
       {"2026-{06}-15", "2026-06-15"},
       {"T{9}H", "T9H"},
       {"{198X}", "198X"},
+      {"{1950S2}", "1950S2"},
+      {"{1950±2}", "1950±2"},
       {"{2026}", "2026"},
       {"2026Y{12..12}M", "2026Y12M"},
       {"2026Y6M{-1..-1}D", "2026Y6M30D"}
@@ -224,8 +226,31 @@ defmodule Tempo.Iso8601.SetFormsTest do
     end
 
     test "has the span its member has" do
-      assert {:ok, decade} = Tempo.to_interval(read("{198X}"))
-      assert {:ok, decade} == Tempo.to_interval(read("198X"))
+      for {set, member} <- [{"{198X}", "198X"}, {"{1950S2}", "1950S2"}] do
+        assert {:ok, span} = Tempo.to_interval(read(set))
+        assert {set, {:ok, span}} == {set, Tempo.to_interval(read(member))}
+      end
+    end
+  end
+
+  describe "a set in a unit below the year that holds unspecified digits" do
+    # A value with unspecified digits is some one of several, a value of its
+    # own: a set of whole values holds it, and a set of years does. In a unit
+    # below the year it was refused in the terms of the parser's own tokens.
+    test "is refused, and the error says how it is written" do
+      for text <- ["2026-{0X,1X}", "2026Y{0X,1X}M", "2026Y6M{1X,2X}D", "T{0X,1X}H"] do
+        assert {^text, {:error, %Tempo.InvalidDateError{reason: reason}}} =
+                 {text, Tempo.from_iso8601(text)}
+
+        assert reason =~ "has unspecified digits"
+        refute reason =~ ":mask"
+      end
+    end
+
+    test "is read as values of their own, and in a set of years" do
+      assert %Tempo.Set{set: [first, second]} = read("{2026-0X,2026-1X}")
+      assert {first, second} == {read("2026-0X"), read("2026-1X")}
+      assert %Tempo{} = read("{198X,199X}")
     end
   end
 
