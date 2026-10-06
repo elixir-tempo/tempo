@@ -58,8 +58,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **Lazy backend follow-ups** — splicing a lazy set into a busy list (needs a sorted stream merge), lazy set algebra (the research project under Deferred), and holiday generator sources. The refusal semantics must hold: an answer that needs an unbounded walk without a `:within` window refuses rather than hangs.
 
-* [ ] **Create a glossary guide** — a guide that tables every term Tempo uses (span, window, occurrence, resolution, floating, zoned, anchored, …) and defines it, so it doubles as the reference future development checks its vocabulary against (user, 2026-09-28). The decisions in [plans/vocabulary.md](plans/vocabulary.md) are its starting point.
-
 * [ ] **Workday adjustments: following, preceding and their modified forms** — the date-roll conventions of financial contracts: a day when it is a workday, otherwise the next (or the previous) one, and the modified forms that turn back when the adjusted day leaves the month. `nearest_workday/2` and `next_workday/2` are different rules; found comparing Tempo with bizdays' ANBIMA calendar, 2026-10-03. Analysis in [plans/anbima-calendar.md](plans/anbima-calendar.md).
 
 ### Release and housekeeping
@@ -91,6 +89,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A glossary guide** — `guides/glossary.md` tables the words Tempo's API and documentation use, some ninety of them in eight subjects, each with its one meaning and where it is met; it is in the docs' Reference group and the README's list, and is what a new name is checked against. Its references were checked against the documented functions. 2026-10-07.
 
 * [x] **A shift costs time in proportion to its count** — a count of months or years (`546f11d`), of weeks and days on the week axis, and of hours, minutes and seconds on a week date or on the clock alone is one step: the calendar's `plus/5` for a date of months or of weeks (`weeks_by_the_calendar/3`, `days_of_week_by_the_calendar/3`, `fast_add_time_of_day/4` in `lib/math.ex`), and the clock's own cycle for a time of day with no date (`fast_add_on_the_clock/3`). Held against `Date`, `NaiveDateTime`, `Time` and `:calendar.iso_week_number/1` in `Tempo.ShiftTest`, and against a step at a time over 7,668 shifts. Left: a weekday of no week (`~o"3K"` plus 10,000 days, 3 ms). 2026-10-07.
 

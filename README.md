@@ -258,6 +258,8 @@ Interactive, runnable tours for [Livebook](https://livebook.dev):
 
 * [ISO 8601 conformance](https://hexdocs.pm/ex_tempo/iso8601-conformance.html) — what's supported from the standards.
 
+* [Glossary](https://hexdocs.pm/ex_tempo/glossary.html) — every word Tempo's API and documentation use, with the one meaning each has.
+
 * [What each operation gives each value](https://hexdocs.pm/ex_tempo/operation-matrix.html) — every class of value against every kind of operation, generated from the code and checked by the tests.
 
 * [RFC 5545 RRULE conformance](https://hexdocs.pm/ex_tempo/rfc5545_rrule_conformance.html) — recurrence-rule coverage, property by property.

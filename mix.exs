@@ -179,6 +179,7 @@ defmodule Tempo.MixProject do
         "guides/falsehoods.md"
       ],
       Reference: [
+        "guides/glossary.md",
         "guides/operation-matrix.md",
         "guides/iso8601-conformance.md",
         "guides/rfc5545_rrule_conformance.md",

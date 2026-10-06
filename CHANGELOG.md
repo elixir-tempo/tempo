@@ -221,6 +221,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Added
 
+* A glossary guide (`guides/glossary.md`): every word Tempo's API and documentation use, with the one meaning each has and where it is met, grouped by subject.
+
 * `Tempo.RRule.parse/2` and `Tempo.JSCalendar.parse/2` read RFC 7529's `SKIP=FORWARD` (`"skip": "forward"`), the first day of the month after a month that lacks the rule's day, and move a day the rule writes itself as they move its start's: `RSCALE=GREGORIAN;FREQ=MONTHLY;BYMONTHDAY=31;SKIP=BACKWARD` is each month's last day, where it was `{:error, {:unsupported_skip, …}}`. `Tempo.RRule.to_string/1` writes such a rule with `RSCALE=GREGORIAN` and its `SKIP`, and two days moved to one date are one occurrence.
 
 * `Tempo.duration/1` measures a span with no year where it is as long on any day or in any week: `~o"T22/T02"` is `PT4H`, an hour alone `PT1H`, and Monday to Saturday (`~o"1K/6K"`) `P5D`, each of which was a `Tempo.UnanchoredError`. A span of months and days has the length of a year it has not got, and is that error still.
