@@ -397,6 +397,23 @@ defmodule Tempo.GeneratedSets do
     {:fraction, "T10:30:{15,45}.5", ["T10:30:15.5", "T10:30:45.5"]},
     {:group, "2018-{1,3,5}G2MU", ["2018-1G2MU", "2018-3G2MU", "2018-5G2MU"]},
     {:group, "2018Y{1,3}G3MU", ["2018Y1G3MU", "2018Y3G3MU"]},
+    # The units after a group of a set: the first is counted from the start
+    # of each group, and the ones after it are the units of any value.
+    {:after_a_group, "2018Y{1,3}G3MU15D", ["2018Y1G3MU15D", "2018Y3G3MU15D"]},
+    {:after_a_group, "2018Y{1,3}G3MU32D", ["2018Y1G3MU32D", "2018Y3G3MU32D"]},
+    {:after_a_group, "2018Y{1,3}G3MU15DT10H30M",
+     ["2018Y1G3MU15DT10H30M", "2018Y3G3MU15DT10H30M"]},
+    {:after_a_group, "2018Y{1,3}G3MU15DT10H30M45.25S",
+     ["2018Y1G3MU15DT10H30M45.25S", "2018Y3G3MU15DT10H30M45.25S"]},
+    {:after_a_group, "2018Y{1,3}G3MU15DT10.5H", ["2018Y1G3MU15DT10.5H", "2018Y3G3MU15DT10.5H"]},
+    {:after_a_group, "2018Y6M{1,3}G5DUT30H", ["2018Y6M1G5DUT30H", "2018Y6M3G5DUT30H"]},
+    {:after_a_group, "2018Y6M{1,3}G5DUT30H15M45.5S",
+     ["2018Y6M1G5DUT30H15M45.5S", "2018Y6M3G5DUT30H15M45.5S"]},
+    {:after_a_group, "2018Y6M15DT{1,3}G6HU90M", ["2018Y6M15DT1G6HU90M", "2018Y6M15DT3G6HU90M"]},
+    {:after_a_group, "2018Y6M15DT10H{1,3}G10MU90S",
+     ["2018Y6M15DT10H1G10MU90S", "2018Y6M15DT10H3G10MU90S"]},
+    {:after_a_group, "2018Y6M15DT10H{1,3}G10MU90.25S",
+     ["2018Y6M15DT10H1G10MU90.25S", "2018Y6M15DT10H3G10MU90.25S"]},
     {:selection, "2026YL{1,5}KN", ["2026YL1KN", "2026YL5KN"]},
     {:selection, "2026Y6ML{1,15}DN", ["2026Y6ML1DN", "2026Y6ML15DN"]},
     {:year_before, "{-0044,-0043}Y", ["-0044Y", "-0043Y"]},
@@ -407,6 +424,17 @@ defmodule Tempo.GeneratedSets do
   # value with unspecified digits is refused, and says how it is written.
   @unspecified_in_a_unit ["2026-{0X,1X}", "2026Y{0X,1X}M", "2026Y6M{1X,2X}D", "T{0X,1X}H"]
 
+  # A unit after a group of a set is held to its range when it is read, as
+  # it is after any value. The unit counted in the group is bounded where
+  # each group is taken apart, and is no unit at 0 where it counts from 1.
+  @out_of_range_after_a_group [
+    "2018Y{1,3}G3MU15DT25H",
+    "2018Y{1,3}G3MU15DT10H61M",
+    "2018Y{1,3}G3MU15DT10H30M61S",
+    "2018Y6M{1,3}G5DUT30H61M",
+    "2018Y{1,3}G3MU0D"
+  ]
+
   defp composed_sets do
     read =
       for {family, text, members} <- @composed do
@@ -414,8 +442,12 @@ defmodule Tempo.GeneratedSets do
       end
 
     refused =
-      for text <- @unspecified_in_a_unit do
-        %{text: text, family: :unspecified_in_a_unit, expect: {:refused, Tempo.InvalidDateError}}
+      for {family, texts} <- [
+            unspecified_in_a_unit: @unspecified_in_a_unit,
+            out_of_range_after_a_group: @out_of_range_after_a_group
+          ],
+          text <- texts do
+        %{text: text, family: family, expect: {:refused, Tempo.InvalidDateError}}
       end
 
     read ++ refused

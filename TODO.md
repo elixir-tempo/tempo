@@ -88,6 +88,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Done
 
+* [x] **What follows a group of a set is resolved when read** — found beside the coverage tests: no clause of the resolver read the three-element entry a group of a set is (`{1,2}G3MU`), so nothing after one was resolved. An hour 25 was read and refused only by `to_interval/2`, and a fraction of a second was left as the parser's token, on which `inspect/1` and `to_iso8601/1` raised. The units after the one counted in the group are resolved as any value's are, a unit counted from 1 is none at 0, and the set generator holds the forms read and the forms refused. 2026-10-07.
+
 * [x] **The exhaustive tests on a schedule** — `.github/workflows/exhaustive.yml` runs `mix test --only exhaustive` each Sunday and when asked for, on the lint row's Elixir and OTP with its caches: the matrix's 1.2 million cells, every monthly, weekly and yearly rule the parts make, and every text of the plain forms. The actions and the toolchain of both workflows were checked against their latest releases, and are current. 2026-10-07.
 
 * [x] **A glossary guide** — `guides/glossary.md` tables the words Tempo's API and documentation use, some eighty of them in eight subjects, each with its one meaning and where it is met; it is in the docs' Reference group and the README's list, and is what a new name is checked against. Its references were checked against the documented functions. 2026-10-07.

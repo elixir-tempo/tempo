@@ -1174,6 +1174,22 @@ defmodule Tempo.Validation do
     end
   end
 
+  # A group of a set (`{1,2}G3MU`) is an entry of three elements, which no
+  # clause above reads, so nothing after one was resolved: an hour 25 after
+  # one was read (`2026Y{1,2}G3MU15DT25H`), and a fraction of a second was
+  # left as the parser's `:fraction`, which nothing after the parser reads
+  # and `inspect/1` raised on.
+  #
+  # The unit after the group is counted from the start of each group it
+  # names (the day of `{1,2}G3MU32D` is 1 February and 2 May), so it is
+  # bounded where each group is taken apart, in `Tempo.to_interval/2`. The
+  # units after that one are what they are after any value.
+  def resolve([{_unit, {:group, _members}, _size} = group | rest], calendar) do
+    with rest when is_list(rest) <- resolve_after_a_group_of_a_set(rest, calendar) do
+      [group | rest]
+    end
+  end
+
   # A year still to be expanded — a set, a range, a mask, an unspecified
   # year — bounds the days of its months only once each of its values is
   # known.
@@ -1210,6 +1226,44 @@ defmodule Tempo.Validation do
   end
 
   ### Helpers
+
+  # The units that count from 1, so that 0 names none of them.
+  @counted_from_one [:month, :week, :calendar_week, :day, :day_of_year, :day_of_week]
+
+  # The units after a group of a set. The first is counted in each group, and
+  # is no unit at 0 where it counts from 1; the units after it are resolved
+  # as the units of any value are.
+  #
+  # A second counted in a group (`T10H{1,2}G10MU45.25S`) takes the fraction
+  # written after it, as any second does.
+  defp resolve_after_a_group_of_a_set(
+         [{:second, _seconds} = counted, {:fraction, {digits, digit_count}} | rest],
+         calendar
+       ) do
+    microsecond = Microsecond.from_fraction(digits, digit_count)
+
+    with rest when is_list(rest) <- resolve([{:microsecond, microsecond} | rest], calendar),
+         do: [counted | rest]
+  end
+
+  defp resolve_after_a_group_of_a_set(
+         [{:second, _seconds} = counted, {:fractions, written} | rest],
+         calendar
+       ) do
+    with {:ok, microseconds} <- microseconds_written(written),
+         rest when is_list(rest) <- resolve([{:microsecond, microseconds} | rest], calendar),
+         do: [counted | rest]
+  end
+
+  defp resolve_after_a_group_of_a_set([{unit, value} = counted | rest], calendar) do
+    if unit in @counted_from_one and names_zero?(value) do
+      {:error, zeroth_error(unit)}
+    else
+      with rest when is_list(rest) <- resolve(rest, calendar), do: [counted | rest]
+    end
+  end
+
+  defp resolve_after_a_group_of_a_set(units, calendar), do: resolve(units, calendar)
 
   # The most fractions of a second a range may name. A value holds each
   # fraction it names, so a range is listed as it is read: a thousand is each
