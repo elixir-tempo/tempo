@@ -887,8 +887,12 @@ defmodule Tempo.Interval do
           {:widen, prefix, unit} ->
             widened_span(tempo, prefix, unit, calendar)
 
-          {:error, _} = err ->
-            err
+          # Each names the value, which the widening is not given.
+          :unanchored ->
+            {:error, UnanchoredError.exception(value: tempo)}
+
+          {:error, %ConversionError{} = error} ->
+            {:error, %{error | value: tempo}}
 
           :no_mask ->
             concrete_boundary(tempo, calendar)
@@ -1256,17 +1260,10 @@ defmodule Tempo.Interval do
   # Widen to the parent: use the un-masked prefix as the lower
   # bound, increment the coarsest stated unit for the upper bound.
   # `1985-XX-XX` → prefix `[year: 1985]` → `[[year: 1985], [year: 1986]]`.
-  defp parent_widen([]) do
-    # No un-masked prefix — nothing to place the span on. Shouldn't
-    # happen in practice (the parser always resolves a year before
-    # finer units can appear), but return a clear error if it does.
-    {:error,
-     ConversionError.exception(
-       reason:
-         "Cannot convert a masked Tempo with no un-masked coarser unit to an interval — " <>
-           "nothing to place the span on."
-     )}
-  end
+  # No unit before the mask to place the span on (`XXM`, some month of no
+  # year; `TX*H`, any hour of no day): the value has no place on the time
+  # line, as a day of no year has none.
+  defp parent_widen([]), do: :unanchored
 
   defp parent_widen(prefix) do
     # Use the LAST (finest) un-masked unit as the span's unit.

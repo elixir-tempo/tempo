@@ -374,9 +374,12 @@ defmodule Tempo.ToInterval.Test do
       assert Tempo.within?(~o"2026-06-15", ~o"2026Y6MX*D")
     end
 
-    test "alone, with no unit before it, has no span" do
-      for value <- [~o"X*M", ~o"X*D", ~o"X*W", ~o"X*K", ~o"TX*H"] do
-        assert {:error, %Tempo.ConversionError{}} = Tempo.to_interval(value)
+    test "alone, with no unit before it, has no span, and the error names it" do
+      # It has no place on the time line, as a day of no year has none. The
+      # error was a `Tempo.ConversionError` that named no value.
+      for value <- [~o"X*M", ~o"X*D", ~o"X*W", ~o"X*K", ~o"TX*H", ~o"XXM", ~o"XXD", ~o"TXXH"] do
+        assert {:error, %Tempo.UnanchoredError{value: ^value} = error} = Tempo.to_interval(value)
+        assert Exception.message(error) =~ inspect(value)
       end
     end
   end

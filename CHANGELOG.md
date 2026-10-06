@@ -289,6 +289,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Changed
 
+* `Tempo.to_interval/2` of a value that is unspecified digits with no unit before them (`~o"XXM"`, `~o"X*M"`, `~o"TX*H"`) returns a `Tempo.UnanchoredError` that names the value, as `~o"XXD"` did, where it returned a `Tempo.ConversionError` whose `value` was `nil`.
+
 * The error for an interval's end of four or six digits in the basic format says how the end was read and how to write it: `Tempo.from_iso8601("20260615/0720")` returns a `Tempo.IntervalEndpointsError` that names the year 720, ISO 8601-1 §5.5.1 and the unambiguous forms (`2026-06-15/07-20`, `20260615/T0720`), where it said "interval :from endpoint is not earlier than its :to endpoint". The reading is unchanged: four digits alone are a year.
 
 * The certainty functions relate two values of many candidates along their runs and not pair by pair: `Tempo.overlap_certainty/2` of two masked values of 1,440 candidates each takes 70 milliseconds where it took 27 seconds.

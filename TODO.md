@@ -50,8 +50,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **A struct with no calendar is half read** — `%Tempo{time: [year: 2026], calendar: nil}` converts, extends and walks in the default calendar, but `Enum.count/1` raises an `UndefinedFunctionError` (`Tempo.Interval.Steps.fill_to_unit/3`) and it inspects as `Tempo.from_iso8601!("2026Y", nil)`. Found 2026-10-03.
 
-* [ ] **A mask with no unit before it names no value in its error** — `Tempo.to_interval/2` of `~o"XXM"`, `~o"X*M"` or `~o"TX*H"` returns a `ConversionError` whose `value` is `nil` ("Cannot convert a masked Tempo with no un-masked coarser unit to an interval"). Found 2026-10-03.
-
 ### Performance
 
 * [ ] **A never-matching selector walks the whole horizon** — `Tempo.select/2` over an open-ended span walks a thousand years of periods before a selector that never matches ends: 30 ms of years, 0.2 s of months, about 10 s of days, minutes of hours. An index selector on a fixed-range unit could end after its first empty period, a daylight-saving gap day aside. A recurrence's rule that selects nothing is as slow where the search has no bound of its own: twelve seconds where its start has no year (`R3/T22H/PT1H/FLT25HN`) and over forty-five in a calendar of weeks (`R2/2026-W25/P1W/FL8KN` in `Calendrical.ISOWeek`), where a Gregorian one answers in under a second.
@@ -121,6 +119,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A mask with no unit before it names its value in its error** — `Tempo.to_interval/2` of `~o"XXM"`, `~o"X*M"` or `~o"TX*H"` returns a `Tempo.UnanchoredError` with the value, as `~o"XXD"` did, where `parent_widen/1` in `lib/tempo/interval.ex` returned a `ConversionError` with none; the error for a prefix that holds a set carries the value too. 2026-10-07.
 
 * [x] **`Tempo.Enumeration.maybe_add_implicit_enumeration/1` removed** — it had no caller. 2026-10-07.
 
