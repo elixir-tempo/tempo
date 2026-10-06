@@ -128,6 +128,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Done
 
+* [x] **A zone that is not known is written as it was written** — found beside the generator's second harvest of 2026-10-06: a value read with a zone the database does not have keeps it as a tag (`extended.tags["unknown_zone"]`), and `inspect/1` and `to_iso8601/1` wrote `[unknown_zone=Made/Up_Zone]`, which no suffix reads. It is written `[Made/Up_Zone]` in the zone's place (`zone_id_trailer/1` in `lib/inspect.ex`), and a U extension kept under that tag after the zone. 2026-10-06.
+
 * [x] **A member of a set with a suffix of its own** — found by the generator's second harvest of 2026-10-06: a set of values in two zones is written with each member's zone after it, and that text was a parse error, where an end of an interval took a suffix. `:qualified_member` in the tokenizer takes RFC 9557's suffix, its segments are validated for a member and for each end of a range (`validate_token/1` in `lib/iso8601/tokenizer/extended.ex`), and a member is in the calendar its suffix names (`maybe_resolve_endpoint_calendars/2`). 2026-10-06.
 
 * [x] **A range of a year's divisions in a set** — `{2026-21..2026-22}` was a range whose two ends were intervals: nothing walked it and its own text was not read. A range from a season, a quarter, a quadrimester or a semester to another of its kind is each of them between, in the order of their numbers and from one year to the next (`expand_member/2` in `lib/iso8601/group.ex`), and it is held to being a run in time; one that is none, from one kind to another, open at an end or of more than a thousand is an `InvalidDateError`. 2026-10-06.

@@ -461,6 +461,13 @@ defmodule Tempo.Inspect do
     ["[", critical, zone_id, "]"]
   end
 
+  # A zone the time zone database does not have is kept as it was written,
+  # since RFC 9557 has a suffix that is not understood passed over. It is
+  # written so and in the zone's place, first, which is where it is read as
+  # one again: it was written as `[unknown_zone=…]`, which no suffix reads.
+  defp zone_id_trailer(%{tags: %{"unknown_zone" => written}}),
+    do: ["[", format_tag_value(written), "]"]
+
   defp zone_id_trailer(_), do: []
 
   # An IXDTF numeric offset (`[+08:45]`) is stored as signed minutes from UTC;
@@ -571,13 +578,24 @@ defmodule Tempo.Inspect do
 
   defp hoist_calendar_suffix(endpoint), do: {inspect_value(endpoint), []}
 
-  defp tags_trailer(%{tags: tags}) when is_map(tags) and map_size(tags) > 0 do
-    Enum.map(tags, fn {k, v} ->
-      ["[", k, "=", format_tag_value(v), "]"]
-    end)
+  # The suffix kept as it was written is in the zone's place where the value
+  # has no zone (`zone_id_trailer/1`), and here, after the zone, where it has
+  # one: a U extension that names no calendar.
+  defp tags_trailer(%{tags: tags} = extended) when is_map(tags) and map_size(tags) > 0 do
+    tags
+    |> Enum.reject(&written_in_the_zones_place?(&1, extended))
+    |> Enum.map(&tag_trailer/1)
   end
 
   defp tags_trailer(_), do: []
+
+  defp written_in_the_zones_place?({"unknown_zone", _written}, extended),
+    do: not is_binary(Map.get(extended, :zone_id))
+
+  defp written_in_the_zones_place?(_tag, _extended), do: false
+
+  defp tag_trailer({"unknown_zone", written}), do: ["[", format_tag_value(written), "]"]
+  defp tag_trailer({key, value}), do: ["[", key, "=", format_tag_value(value), "]"]
 
   defp format_tag_value(values) when is_list(values), do: Enum.join(values, "-")
   defp format_tag_value(value), do: to_string(value)

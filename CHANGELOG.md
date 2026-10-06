@@ -325,6 +325,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A zone the time zone database does not have, which RFC 9557 has passed over unless it is marked critical, is written as it was written and in the zone's place (`2026Y6M15D[Made/Up_Zone]`), and reads back as the same value. It was written `[unknown_zone=Made/Up_Zone]`, which no suffix reads.
+
 * A member of a set, and an end of a range in one, is read with a suffix of its own, as an end of an interval is: `{2026-06-15T10:30[Europe/Paris],2026-06-15T10:30[America/New_York]}`, which is how a set of values in two zones is written, was a parse error. A member's zone, calendar and tags are its own, and the set's suffix is each member's that has none.
 
 * A range from one division of a year to another in a set (`{2026-21..2026-23}`, `{2026-33..2027-34}`: seasons, quarters, quadrimesters and semesters) is each division between them, where it was a range whose ends were intervals, which nothing walked and whose own text was not read. One that is no run in time (the seasons numbered 21 to 24, whose winter begins the December before), from one kind to another, or open at an end is an `InvalidDateError`.

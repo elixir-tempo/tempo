@@ -85,6 +85,29 @@ defmodule Tempo.Iso8601.Extended.Test do
       assert extended.zone_id == nil
       assert extended.tags["unknown_zone"] == ["Made/Up_Zone"]
     end
+
+    test "a zone that is not known is written as it was written, and reads back" do
+      # It was written `[unknown_zone=Made/Up_Zone]`, which no suffix reads.
+      for text <- [
+            "2022-11-20T10:30:00Z[Made/Up_Zone]",
+            "2022-11-20[Made/Up_Zone]",
+            "2022-11-20[Made/Up_Zone][u-ca=hebrew]",
+            "2022-11-20[Made/Up_Zone][foo=bar]",
+            "2022-11-20[Made/Up_Zone]/2022-11-21",
+            "{2022-11-20[Made/Up_Zone],2022-11-21}",
+            "2022-11-20[Europe/Paris][u-nu-latn]",
+            "2022-11-20[u-nu-latn]"
+          ] do
+        {:ok, value} = Tempo.from_iso8601(text)
+        written = Tempo.to_iso8601!(value)
+
+        refute written =~ "unknown_zone"
+        assert {text, Tempo.from_iso8601(written)} == {text, {:ok, value}}
+      end
+
+      assert Tempo.to_iso8601!(Tempo.from_iso8601!("2022-11-20[Made/Up_Zone][u-ca=hebrew]")) ==
+               "2022Y11M20D[Made/Up_Zone][u-ca=hebrew]"
+    end
   end
 
   ## Numeric offset
