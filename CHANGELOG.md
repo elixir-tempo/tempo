@@ -339,6 +339,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A week or a month selected alone within a §12.10 window keeps the days of the window that are in it, whatever the rule starts from: `R/../P1Y/FL11MLL1K1IN/P7DN45WN` and `Tempo.select(~o"2026Y", ~o"L11MLL1K1IN/P7DN45WN")` are the seven days from 2 November 2026, as the same rule from a date was. They selected nothing, the rule's start having been taken as coarsely as the week.
+
 * A numbered weekday beside a day of the month keeps the day or drops it, as RFC 5545 has it (`FREQ=MONTHLY;BYMONTHDAY=-1;BYDAY=5MO` is the last day of a month that is its fifth Monday, where it was nothing, and `BYMONTHDAY=15;BYDAY=2TU,WE` no longer passes over the 15th), and in a yearly rule of several months it is counted in each (`FREQ=YEARLY;BYMONTH=3,4;BYDAY=1MO` is the first Monday of March and of April, where it was March's alone). `Tempo.RRule.to_string/1` writes a weekday and a position as `BYDAY=MO;BYSETPOS=1` wherever `BYDAY=1MO` would count something else, and a rule read from such an RRULE is held as written, so it is not shown as an ISO 8601 selection that says another thing.
 
 * A rule that names a minute or a second and no hour, from a start that is a date, puts it in the day's first hour where a position or a numbered weekday is beside it: `FREQ=WEEKLY;BYDAY=MO,WE,FR;BYMINUTE=15;BYSETPOS=2` and `R/2026-01-05/P1M/FL5K-1INT15M` give a quarter past midnight (`T0H15M`). They gave a day with a minute and no hour (`2026Y2M4DT15M`), which `Tempo.to_naive_datetime/1` could not read.

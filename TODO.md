@@ -96,6 +96,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Done
 
+* [x] **A week or a month selected alone within a window** — `R/../P1Y/FL11MLL1K1IN/P7DN45WN` selected nothing where the rule had no start or a year for one: a rule's start is taken at the grain of its last part, a year for a week, which held no day for the window to run from. A selection that holds a window starts from a day (`in_a_window/2` in `lib/tempo.ex`), and the week keeps the days of the window that are in it, as it did for a rule from a date. 2026-10-07.
+
 * [x] **A numbered weekday beside another part** — `BYDAY=1MO` was read as a weekday and a position, which counts what the rule's other parts leave where a number counts the weekdays of the month, and a `BYDAY` of several numbered weekdays made its days whatever was beside it. A number is a position only where the two say the same (`numbered_weekday_is_position?/3` in `lib/tempo/rrule/rule.ex`, which `Tempo.RRule.to_string/1` asks too), and beside a part that names the day it keeps or drops the day (`apply_role(:limit, {:byday, _}, …)` in `lib/tempo/rrule/selection.ex`). Found by the measure of `Tempo.RRule.MonthlyWeeklyPartsTest`. 2026-10-07.
 
 * [x] **A minute with no hour to be in** — a rule's start is filled down to the unit its last part names, so a minute named before a position (`BYMINUTE=15;BYSETPOS=2`) or after a selection (`L5K-1INT15M`) was put on a day with no hour; a minute or a second placed on a date now takes the clock units before it at their start (`with_the_clock_units_before/2` in `lib/tempo/rrule/selection.ex`). Found by the measure of `Tempo.RRule.MonthlyWeeklyPartsTest`. 2026-10-07.

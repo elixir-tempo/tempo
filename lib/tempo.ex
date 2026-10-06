@@ -8853,12 +8853,24 @@ defmodule Tempo do
     # declared `time_unit()` return elides the selection-only keys (`:byday`,
     # `:day_of_week`) this must normalise.
     case selection |> Enum.reject(&match?({:wkst, _day}, &1)) |> List.last() do
-      {finest_unit, _value} -> calendar_start_unit(finest_unit)
+      {finest_unit, _value} -> finest_unit |> calendar_start_unit() |> in_a_window(selection)
       nil -> :day
     end
   end
 
   defp start_unit(%Tempo.Interval{}), do: :day
+
+  # A §12.10 window runs from a day, whatever is selected within it. A week
+  # or a month selected there keeps the days of the window that are in it,
+  # and a start as coarse as they are would hold no day for the window to
+  # start on: the week alone in the seven days from a first Monday
+  # (`LLL1K1IN/P7DN45WN`) selected nothing. A time of day selected within a
+  # window starts as finely as the time.
+  defp in_a_window(unit, selection) do
+    if List.keymember?(selection, :interval, 0) and coarser_unit?(unit, :day),
+      do: :day,
+      else: unit
+  end
 
   # A week-of-year selection starts from its enclosing year (a dayless
   # year value), not the week axis: `at_resolution/2` has no path from a

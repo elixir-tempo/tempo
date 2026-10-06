@@ -968,10 +968,42 @@ defmodule Tempo.RRule.SelectionTest do
       assert {:ok, _rule} = Tempo.from_iso8601("R/../P1Y/FLLL1K1IN/P1MN45WN")
     end
 
-    # The first Monday of November, as a `Date`.
-    defp first_monday_of_november(year) do
-      first = Date.new!(year, 11, 1)
+    # The first Monday of a month, and of November, as a `Date`.
+    defp first_monday(year, month) do
+      first = Date.new!(year, month, 1)
       Date.add(first, Integer.mod(1 - Date.day_of_week(first), 7))
+    end
+
+    defp first_monday_of_november(year), do: first_monday(year, 11)
+
+    defp days_from(date, count), do: for(day <- 0..(count - 1), do: Date.add(date, day))
+
+    defp iso_week(date) do
+      {_week_year, week} = :calendar.iso_week_number(Date.to_erl(date))
+      week
+    end
+
+    # A selection in a year, by each way it is asked: as the rule of a
+    # recurrence with no start, with a year for its start and with a date,
+    # selected from the year, and written after it in a value. Each answer is
+    # the days its occurrences start on.
+    defp each_way(selection, year) do
+      within = Tempo.from_iso8601!("#{year}Y")
+
+      [
+        {"no start", holiday_dates("R/../P1Y/F#{selection}", within)},
+        {"from a year", holiday_dates("R/#{year}/P1Y/F#{selection}", within)},
+        {"from a date", holiday_dates("R/#{year}-01-01/P1Y/F#{selection}", within)},
+        {"select/2", starts(Tempo.select(within, Tempo.from_iso8601!(selection)))},
+        {"a value", starts(Tempo.to_interval(Tempo.from_iso8601!("#{year}Y#{selection}")))}
+      ]
+    end
+
+    defp starts({:ok, %IntervalSet{} = set}) do
+      for member <- IntervalSet.members(set) do
+        {:ok, date} = member |> Interval.from() |> Tempo.to_date()
+        Date.to_iso8601(date)
+      end
     end
 
     test "a time of day is selected where it starts within the window" do
@@ -1028,6 +1060,39 @@ defmodule Tempo.RRule.SelectionTest do
 
       assert occurrence_spans("R/../P1Y/FL11MLL1K1IN/PT12HNT{9,10}H1IN", ~o"2026Y") ==
                ["2026Y11M2DT9H/T10H"]
+    end
+
+    test "a week or a month selected alone keeps the days of the window that are in it" do
+      # The measure is `Date` and `:calendar` alone: each day of the window
+      # is asked the ISO week, or the month, it is in. A week alone selected
+      # nothing where the rule had no start, or a year for one: the start was
+      # taken as coarsely as the week, and held no day for the window to run
+      # from.
+      for year <- 2024..2029, days <- [7, 14, 30], weeks <- [[45], [45, 46]] do
+        expected =
+          for date <- days_from(first_monday_of_november(year), days),
+              iso_week(date) in weeks,
+              do: Date.to_iso8601(date)
+
+        selection = "L11MLL1K1IN/P#{days}DN{#{Enum.join(weeks, ",")}}WN"
+
+        for {way, selected} <- each_way(selection, year) do
+          assert {year, selection, way, selected} == {year, selection, way, expected}
+        end
+      end
+
+      for year <- 2024..2029, months <- [[2], [1, 3]] do
+        expected =
+          for date <- days_from(first_monday(year, 1), 60),
+              date.month in months,
+              do: Date.to_iso8601(date)
+
+        selection = "LLL1K1IN/P60DN{#{Enum.join(months, ",")}}MN"
+
+        for {way, selected} <- each_way(selection, year) do
+          assert {year, selection, way, selected} == {year, selection, way, expected}
+        end
+      end
     end
 
     test "a windowed selection round-trips through to_iso8601/1" do
