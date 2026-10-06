@@ -3,6 +3,7 @@ defimpl Enumerable, for: Tempo do
 
   alias Tempo.Enumeration
   alias Tempo.Enumeration.Zone
+  alias Tempo.Interval.Steps
 
   # Implicit enumeration of a resolved `%Tempo{}` walks the same
   # sequence as forward-stepping its materialised interval (see
@@ -84,12 +85,33 @@ defimpl Enumerable, for: Tempo do
   def reduce(%Tempo{time: time} = tempo, acc, fun) do
     # A value that holds a selection (`2026Y6ML2KN`, the Tuesdays of June
     # 2026) names the dates the selection picks, and is walked as they are.
-    if List.keymember?(time, :selection, 0) do
-      reduce_spans(Tempo.to_interval(tempo), acc, fun)
-    else
-      reduce_walk({Enumeration.implicit_walk(tempo), own_occurrence(tempo)}, acc, fun)
+    if List.keymember?(time, :selection, 0),
+      do: reduce_spans(Tempo.to_interval(tempo), acc, fun),
+      else: reduce_steps(clock_walk(tempo), tempo, acc, fun)
+  end
+
+  # A value in a named zone that names one span walked by hours, minutes or
+  # seconds is walked as its span is, by the time elapsed
+  # (`Tempo.Interval.Steps.clock_walk/4`): its values are in the order of
+  # time and within it whatever its zone's clock does. Any other value, and
+  # one whose zone changes its clock off the steps, is walked by its units.
+  defp reduce_steps({:ok, steps}, _tempo, acc, fun), do: Steps.reduce_clock_walk(steps, acc, fun)
+
+  defp reduce_steps(:not_supported, tempo, acc, fun),
+    do: reduce_walk({Enumeration.implicit_walk(tempo), own_occurrence(tempo)}, acc, fun)
+
+  defp clock_walk(%Tempo{extended: %{zone_id: zone}, calendar: calendar} = tempo)
+       when is_binary(zone) do
+    case single_interval(tempo) do
+      {:ok, %Tempo.Interval{from: from, to: to, unit: unit}} ->
+        Steps.clock_walk(from, to, unit, calendar)
+
+      :error ->
+        :not_supported
     end
   end
+
+  defp clock_walk(%Tempo{}), do: :not_supported
 
   # A wall time a clock shows twice (the hour a clock goes back) names the
   # first time it shows it, or the one the offset written with it names: the

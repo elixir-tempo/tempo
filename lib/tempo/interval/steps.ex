@@ -413,6 +413,158 @@ defmodule Tempo.Interval.Steps do
   end
 
   ## ----------------------------------------------------------
+  ## A walk by the clock
+  ## ----------------------------------------------------------
+
+  @doc false
+  # The value the steps of a span are counted from: its start filled to the
+  # unit they are counted in, and where the clock of its zone skips that
+  # reading, the one it shows at that moment. A day in Cairo on which the
+  # clocks went from midnight to 01:00 is walked from 01:00, and the first
+  # of its hours was given as 00:00, which the walk passes over and no value
+  # is read from, and 01:00 was held to be no hour of the day. A start
+  # written to the unit is one that was read, and the clock shows it.
+  @spec counted_from(Tempo.t(), atom() | nil, module()) :: Tempo.t()
+  def counted_from(%Tempo{} = from, unit, calendar) do
+    case fill_to_unit(from, unit, calendar) do
+      ^from -> from
+      filled -> Zone.shown_by_the_clock(filled)
+    end
+  end
+
+  @typedoc false
+  @type clock_walk :: %{
+          moment: integer(),
+          ends: integer(),
+          unit: pos_integer(),
+          offset: integer(),
+          changes: [{integer(), integer(), integer()}],
+          shown_twice: [{integer(), integer()}],
+          from: Tempo.t()
+        }
+
+  @doc false
+  # The walk of a span by hours, minutes or seconds in a named zone, as the
+  # moments one unit of elapsed time apart from its start to its end, each
+  # read on the zone's clock.
+  #
+  # A walk steps the wall clock and asks the zone of each reading, which
+  # gives the values in the order of the clock's readings. That is the
+  # order of time until the clock goes back: a walk gave both occurrences
+  # of a reading shown twice together, so the day Troll's clocks go back
+  # from 03:00 to 01:00 listed 01:00, 01:00, 02:00, 02:00; a span that ends
+  # in the first showing of an hour listed its second too; and one that
+  # starts in the second could not reach the readings before its start
+  # that follow it in time. Stepped by the time elapsed, a span's values
+  # are in order and within it whatever the clock does, a reading the
+  # clock skips is never landed on, and one it shows twice is landed on
+  # twice, each with the offset that tells them apart.
+  #
+  # The moments are a unit apart on the clock too only where each change
+  # of the zone's clock within the span is by a whole number of the unit,
+  # on a reading the steps land on (`changes_on_the_steps?/4`). Where one
+  # is not, an hour is as long as the clock shows it and this is
+  # `:not_supported`: the walk of the wall clock answers.
+  #
+  # The zone's changes are kept (`Tempo.TimeZoneDatabase.changes/3`), so a
+  # value is read from them and the zone is asked nothing as the walk goes.
+  @spec clock_walk(Tempo.t(), Tempo.t(), atom() | nil, module()) ::
+          {:ok, clock_walk()} | :not_supported
+  def clock_walk(%Tempo{} = from, %Tempo{} = to, unit, calendar)
+      when unit in [:hour, :minute, :second] do
+    # The start may come filled to the unit already, so it is asked of the
+    # clock whether or not this fills it.
+    from = from |> fill_to_unit(unit, calendar) |> Zone.shown_by_the_clock()
+    to = fill_to_unit(to, unit, calendar)
+
+    if counted_from?(from.time, unit) and date_axis?(to.time, unit) and
+         dst_correct?(from, to, calendar),
+       do: clock_walk_between(from, to, seconds_in(unit)),
+       else: :not_supported
+  end
+
+  def clock_walk(_from, _to, _unit, _calendar), do: :not_supported
+
+  defp seconds_in(:hour), do: @seconds_per_hour
+  defp seconds_in(:minute), do: @seconds_per_minute
+  defp seconds_in(:second), do: 1
+
+  # More than any offset a zone has had: a change within this of the span
+  # can show a reading of the span twice.
+  @a_day_or_so 27 * @seconds_per_hour
+
+  defp clock_walk_between(%Tempo{} = from, %Tempo{} = to, unit) do
+    from_utc = trunc(Compare.to_utc_seconds(from))
+    to_utc = trunc(Compare.to_utc_seconds(to))
+    zone = zone_id(from)
+
+    if changes_on_the_steps?(from, from_utc, to_utc, unit) do
+      near = TimeZoneDatabase.changes(zone, from_utc - @a_day_or_so, to_utc + @a_day_or_so)
+
+      {:ok,
+       %{
+         moment: from_utc,
+         ends: to_utc,
+         unit: unit,
+         offset: wall_seconds(from.time, from.calendar) - from_utc,
+         changes: Enum.filter(near, fn {moment, _before, _later} -> moment > from_utc end),
+         shown_twice:
+           for(
+             {moment, before, later} <- near,
+             later < before,
+             do: {moment + later, moment + before}
+           ),
+         from: from
+       }}
+    else
+      :not_supported
+    end
+  end
+
+  @doc false
+  # `Enumerable.reduce/3` over a walk by the clock.
+  @spec reduce_clock_walk(clock_walk(), Enumerable.acc(), Enumerable.reducer()) ::
+          Enumerable.result()
+  def reduce_clock_walk(_walk, {:halt, acc}, _fun), do: {:halted, acc}
+
+  def reduce_clock_walk(walk, {:suspend, acc}, fun),
+    do: {:suspended, acc, &reduce_clock_walk(walk, &1, fun)}
+
+  def reduce_clock_walk(%{moment: moment, ends: ends}, {:cont, acc}, _fun) when moment >= ends,
+    do: {:done, acc}
+
+  def reduce_clock_walk(%{moment: moment, unit: unit} = walk, {:cont, acc}, fun) do
+    walk = past_its_changes(walk)
+    reduce_clock_walk(%{walk | moment: moment + unit}, fun.(read_on_the_clock(walk), acc), fun)
+  end
+
+  # The offset the clock is at: the last change at or before the moment.
+  defp past_its_changes(%{moment: moment, changes: [{changed, _before, later} | changes]} = walk)
+       when changed <= moment,
+       do: past_its_changes(%{walk | offset: later, changes: changes})
+
+  defp past_its_changes(walk), do: walk
+
+  # A reading the clock shows twice carries the offset that tells its two
+  # occurrences apart, and each value of a span whose start was written
+  # with an offset carries the offset its own moment has.
+  defp read_on_the_clock(%{moment: moment, offset: offset, from: %Tempo{} = from} = walk) do
+    reading = moment + offset
+    time = replace_date_time(from.time, reading, from.calendar)
+
+    %{from | time: time, shift: shift_read(from.shift, offset, shown_twice?(walk, reading))}
+  end
+
+  defp shift_read(written, offset, _twice?) when is_list(written),
+    do: Zone.offset_as_written(offset, written)
+
+  defp shift_read(nil, offset, true), do: Zone.offset_to_shift(offset)
+  defp shift_read(nil, _offset, false), do: nil
+
+  defp shown_twice?(%{shown_twice: readings}, reading),
+    do: Enum.any?(readings, fn {from, to} -> reading >= from and reading < to end)
+
+  ## ----------------------------------------------------------
   ## Helpers
   ## ----------------------------------------------------------
 
@@ -557,7 +709,7 @@ defmodule Tempo.Interval.Steps do
   defp nth_subday_step(%Tempo{time: time, calendar: calendar} = tempo, delta_seconds, calendar) do
     cond do
       delta_seconds == 0 ->
-        tempo
+        first_occurrence(tempo)
 
       zoned_gregorian?(tempo, calendar) ->
         new_utc = trunc(Compare.to_utc_seconds(tempo)) + delta_seconds
@@ -572,12 +724,31 @@ defmodule Tempo.Interval.Steps do
     end
   end
 
+  # The start the steps are counted from is a reading the clock shows twice
+  # where a span starts in a fall-back, and is its first occurrence unless
+  # it was written with an offset. It carries that offset as each step
+  # does, and as the walk gives it: the first hour of the day Havana's
+  # clocks go back from 01:00 to midnight was given with none, where the
+  # walk of the day gave it one.
+  defp first_occurrence(%Tempo{shift: nil} = start) do
+    case Zone.zone_status(start) do
+      {:ambiguous, first, _second} -> %{start | shift: first}
+      _shown_once -> start
+    end
+  end
+
+  defp first_occurrence(%Tempo{} = start), do: start
+
   # When the stepped-to wall time occurs twice (a DST fall-back fold),
   # carry the explicit offset for *this* occurrence so the two folded
-  # steps are distinct values, matching the reduce walk. Unambiguous
-  # moments keep their original shift (a `nil` shift plus the zone id
-  # resolves to a single instant). `offset_seconds` already pins which
-  # side of the fold this step landed on.
+  # steps are distinct values, matching the walk (`read_on_the_clock/1`).
+  # `offset_seconds` already pins which side of the fold this step landed
+  # on. A step from a start written with an offset carries the offset its
+  # own moment has, as written: it kept the start's, which is another's
+  # once the clock has changed.
+  defp disambiguate_fold(%Tempo{shift: written} = result, offset_seconds) when is_list(written),
+    do: %{result | shift: Zone.offset_as_written(offset_seconds, written)}
+
   defp disambiguate_fold(%Tempo{} = result, offset_seconds) do
     case Zone.zone_status(result) do
       {:ambiguous, _first, _second} ->

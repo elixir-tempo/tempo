@@ -32,8 +32,8 @@ defmodule Tempo.ChangeOfTheClockTest do
   defp gregorian_seconds(%DateTime{} = moment),
     do: DateTime.to_gregorian_seconds(moment) |> elem(0)
 
-  describe "the hours of a day on which the clock goes forward" do
-    for {zone, date, change} <- ChangeOfTheClock.gaps() do
+  describe "the hours of a day on which the clock changes" do
+    for {zone, date, change} <- ChangeOfTheClock.gaps() ++ ChangeOfTheClock.folds() do
       @zone zone
       @date date
 
@@ -66,23 +66,6 @@ defmodule Tempo.ChangeOfTheClockTest do
         for hour <- Enum.to_list(day) do
           assert {hour, ChangeOfTheClock.walk_against_enum(hour)} == {hour, []}
         end
-      end
-    end
-  end
-
-  describe "the hours of a day on which the clock goes back" do
-    for {zone, date, change} <- ChangeOfTheClock.folds() do
-      @zone zone
-      @date date
-
-      test "in #{zone} on #{date}, #{change}, are the hours the clock shows" do
-        assert ChangeOfTheClock.hours_listed(@zone, @date) ==
-                 ChangeOfTheClock.hours_shown(@zone, @date)
-      end
-
-      test "in #{zone} on #{date}, #{change}, are the day from its start to its end" do
-        assert ChangeOfTheClock.span(ChangeOfTheClock.day(@zone, @date)) ==
-                 ChangeOfTheClock.day_shown(@zone, @date)
       end
     end
   end
@@ -203,6 +186,91 @@ defmodule Tempo.ChangeOfTheClockTest do
       assert Tempo.relation(one, two) == :meets
       assert Tempo.relation(two, one_again) == :meets
       assert Tempo.exactly?(two, ~o"PT1H")
+    end
+  end
+
+  describe "a span walked across a clock that goes back" do
+    test "gives its values in the order of time" do
+      # Troll's clocks go back from 03:00 to 01:00, so two hours are shown
+      # twice, and the second 01:00 follows the first 02:00.
+      {:ok, night} = Tempo.from_iso8601("2024-10-27T00/2024-10-27T04[Antarctica/Troll]")
+      listed = Enum.to_list(night)
+
+      assert listed == [
+               ~o"2024Y10M27DT0H[Antarctica/Troll]",
+               ~o"2024Y10M27DT1HZ2H[Antarctica/Troll]",
+               ~o"2024Y10M27DT2HZ2H[Antarctica/Troll]",
+               ~o"2024Y10M27DT1HZ[Antarctica/Troll]",
+               ~o"2024Y10M27DT2HZ[Antarctica/Troll]",
+               ~o"2024Y10M27DT3H[Antarctica/Troll]"
+             ]
+
+      moments = Enum.map(listed, &ChangeOfTheClock.moment/1)
+      assert moments == Enum.sort(moments)
+      assert ChangeOfTheClock.walk_against_enum(night) == []
+    end
+
+    test "gives the first showing alone of a span that ends in it" do
+      # 00:58 to the first 01:02 on the night New York's clocks go back is
+      # four minutes, and the walk gave the second 01:00 and 01:01 too.
+      {:ok, span} = Tempo.from_iso8601("2024-11-03T00:58/2024-11-03T01:02[America/New_York]")
+
+      assert Enum.to_list(span) == [
+               ~o"2024Y11M3DT0H58M[America/New_York]",
+               ~o"2024Y11M3DT0H59M[America/New_York]",
+               ~o"2024Y11M3DT1H0MZ-4H[America/New_York]",
+               ~o"2024Y11M3DT1H1MZ-4H[America/New_York]"
+             ]
+
+      assert Enum.count(span) == 4
+    end
+
+    test "goes from the first showing to the second, and starts in the second" do
+      # 01:57 before the clocks go back to 01:02 after is five minutes, the
+      # readings before 01:57 that follow it in time among them.
+      {:ok, across} =
+        Tempo.from_iso8601("2024-11-03T01:57-04:00/2024-11-03T01:02-05:00[America/New_York]")
+
+      assert Enum.to_list(across) == [
+               ~o"2024Y11M3DT1H57MZ-4H0M[America/New_York]",
+               ~o"2024Y11M3DT1H58MZ-4H0M[America/New_York]",
+               ~o"2024Y11M3DT1H59MZ-4H0M[America/New_York]",
+               ~o"2024Y11M3DT1H0MZ-5H0M[America/New_York]",
+               ~o"2024Y11M3DT1H1MZ-5H0M[America/New_York]"
+             ]
+
+      {:ok, second} =
+        Tempo.from_iso8601("2024-11-03T01:58-05:00/2024-11-03T02:01[America/New_York]")
+
+      assert Enum.to_list(second) == [
+               ~o"2024Y11M3DT1H58MZ-5H0M[America/New_York]",
+               ~o"2024Y11M3DT1H59MZ-5H0M[America/New_York]",
+               ~o"2024Y11M3DT2H0MZ-5H0M[America/New_York]"
+             ]
+
+      for span <- [across, second] do
+        assert {span, ChangeOfTheClock.walk_against_enum(span)} == {span, []}
+      end
+    end
+
+    test "gives the minutes an hour is shown a second time after the minutes of the first" do
+      # Lord Howe Island's clocks go back from 02:00 to 01:30: the hour from
+      # 01:00 is its sixty minutes, then the thirty shown again.
+      minutes = Enum.to_list(~o"2026-04-05T01[Australia/Lord_Howe]")
+
+      assert Enum.count(minutes) == 90
+      assert Enum.at(minutes, 59) == ~o"2026Y4M5DT1H59MZ11H[Australia/Lord_Howe]"
+      assert Enum.at(minutes, 60) == ~o"2026Y4M5DT1H30MZ10H30M[Australia/Lord_Howe]"
+      assert Enum.at(minutes, 89) == ~o"2026Y4M5DT1H59MZ10H30M[Australia/Lord_Howe]"
+    end
+
+    test "gives the first hour of a day whose midnight is shown twice with its offset" do
+      # Havana's clocks go back from 01:00 to midnight.
+      day = ~o"2024-11-03[America/Havana]"
+
+      assert Enum.at(day, 0) == ~o"2024Y11M3DT0HZ-4H[America/Havana]"
+      assert Enum.at(day, 1) == ~o"2024Y11M3DT0HZ-5H[America/Havana]"
+      assert Enum.take(day, 2) == [Enum.at(day, 0), Enum.at(day, 1)]
     end
   end
 

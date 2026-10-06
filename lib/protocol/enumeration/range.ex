@@ -74,7 +74,7 @@ defimpl Enumerable, for: Tempo.Interval do
         %Tempo{} = element
       ) do
     unit = iteration_unit(interval, from)
-    from = counted_from(from, unit, calendar)
+    from = Steps.counted_from(from, unit, calendar)
 
     # An end or an element with no year, or one that holds a set or a mask,
     # has no place on the time line to compare by, so the walk answers. So it
@@ -209,7 +209,7 @@ defimpl Enumerable, for: Tempo.Interval do
       # Fill both bounds: the closed-form step counters read unit
       # components from each side, and start-of-unit filling names the
       # same boundary instant under the half-open convention.
-      from = counted_from(from, unit, calendar)
+      from = Steps.counted_from(from, unit, calendar)
       to = Steps.fill_to_unit(to, unit, calendar)
 
       case Steps.count_steps(from, to, unit, calendar) do
@@ -218,20 +218,6 @@ defimpl Enumerable, for: Tempo.Interval do
       end
     else
       :not_supported
-    end
-  end
-
-  # The value the steps are counted from: the start filled to the unit they
-  # are counted in, and where the clock of its zone skips that reading, the
-  # one it shows at that moment. A day in Cairo on which the clocks went
-  # from midnight to 01:00 is walked from 01:00, and the first of its hours
-  # was given as 00:00, which the walk passes over and no value is read
-  # from, and 01:00 was held to be no hour of the day. A start written to
-  # the unit is one that was read, and the clock shows it.
-  defp counted_from(from, unit, calendar) do
-    case Steps.fill_to_unit(from, unit, calendar) do
-      ^from -> from
-      filled -> Zone.shown_by_the_clock(filled)
     end
   end
 
@@ -381,9 +367,25 @@ defimpl Enumerable, for: Tempo.Interval do
               )
 
       true ->
-        do_reduce({:at, start}, walk_end(start, to), acc, fun)
+        walk_from(clock_walk(interval, start, to), start, to, acc, fun)
     end
   end
+
+  # A span in a named zone is walked by the time elapsed where its unit is
+  # of the clock and the zone's changes land on its steps
+  # (`Steps.clock_walk/4`), and by the readings of the wall clock otherwise.
+  defp walk_from({:ok, steps}, _start, _to, acc, fun),
+    do: Steps.reduce_clock_walk(steps, acc, fun)
+
+  defp walk_from(:not_supported, start, to, acc, fun),
+    do: do_reduce({:at, start}, walk_end(start, to), acc, fun)
+
+  defp clock_walk(interval, %Tempo{calendar: calendar} = start, %Tempo{} = to) do
+    unit = iteration_unit(%{interval | to: to}, start)
+    Steps.clock_walk(start, to, unit, calendar)
+  end
+
+  defp clock_walk(_interval, _start, _no_end), do: :not_supported
 
   # Whether an end is one point for a walk from `start` to stop at: each unit
   # one whole number, or unspecified where the start is unspecified too
