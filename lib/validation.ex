@@ -51,6 +51,7 @@ defmodule Tempo.Validation do
     with :ok <- validate_leap_second(units, tempo),
          :ok <- validate_time_shift(tempo.shift),
          :ok <- NotBuilt.month(tempo, calendar) do
+      units = collapse_single_member_sets(units)
       written = written_calendar(units, calendar)
 
       case resolve_as_written(units, written, calendar) do
@@ -357,9 +358,17 @@ defmodule Tempo.Validation do
   # not `days_in_month(2020, [12..12])` — and a value written as a
   # one-member set is otherwise indistinguishable from one written
   # plainly.
+  #
+  # It is collapsed before the value is read, so that it is read as its
+  # member is: a week and the one day of it in a set (`2026Y25W{1}K`) are
+  # the date they name, as `2026Y25W1K` is, and were a week and a day that
+  # the value written back did not read as. And again after, for a set that
+  # reading it leaves one member of (`{-1..-1}M`). A set of one mask is the
+  # mask (`{198X}`), which was a set no span could be read from.
   defp collapse_single_member_sets(units) when is_list(units) do
     Enum.map(units, fn
       {unit, [value]} when is_integer(value) -> {unit, value}
+      {unit, [{:mask, _digits} = mask]} -> {unit, mask}
       {unit, [first..first//_step]} -> {unit, first}
       {unit, first..first//_step} -> {unit, first}
       other -> other

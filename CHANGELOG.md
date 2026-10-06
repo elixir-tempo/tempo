@@ -325,6 +325,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A set of one value in a unit is read as its member is: a week and the one day of it in a set (`2026Y25W{1}K`) and a set of one day of the year (`2026Y{1}O`) are the date they name, where the value written back was read as another. A set of one masked year (`{198X}`) is the mask, where no span could be read from it.
+
 * A fixed offset is the shift `from_iso8601/1` reads one as, wherever it comes from: Localize names the time zone of a date and time written with an offset by the offset itself (`"-05:00"`), which `Tempo.parse/2` returned as a `Tempo.UnknownZoneError` for "2:30 PM EST" and `Tempo.from_elixir/2` held as a zone no database has, taken for UTC. A value in a zone the time zone database does not have is read by the offset written with it, and `Tempo.to_datetime/1` gives the instant of a value whose offset is written as its time zone (`[-05:00]`), where it called the value floating.
 
 * A recurrence with no year, placed on a window that starts where the clock skips its start, has its first occurrence on the reading that long after, as RFC 5545 has it, and each one after at its own time of day: `R3/T02H30M/P1D` within the days from 10 March 2024 in New York is 03:30 that night and 02:30 on the nights after. The first was on 02:30, which the clock skips and nothing reads.

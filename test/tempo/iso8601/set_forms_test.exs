@@ -1,9 +1,10 @@
 defmodule Tempo.Iso8601.SetFormsTest do
   @moduledoc """
-  Sets the parser did not read: a member written with a qualifier, a fraction
-  before the comma or the brace that follows a member, a fraction after a set
-  of seconds, and the fractions of a second as a set, the form
-  `Tempo.extend/2` gives a second and `inspect/1` writes.
+  Sets the parser did not read, or read as another value: a member written
+  with a qualifier, a set of one value in a unit, a fraction before the comma
+  or the brace that follows a member, a fraction after a set of seconds, and
+  the fractions of a second as a set, the form `Tempo.extend/2` gives a second
+  and `inspect/1` writes.
 
   A member is measured against its own text read alone, and the fractions
   against the microseconds counted here from the digits written.
@@ -92,6 +93,45 @@ defmodule Tempo.Iso8601.SetFormsTest do
     test "is read in a recurrence's domain" do
       assert {:ok, recurrence} = Tempo.from_iso8601("R/{2020Y..2030Y,^2026Y?}/P1Y")
       assert reads_back?(recurrence)
+    end
+  end
+
+  describe "a set of one value in a unit" do
+    # A set with one member names what its member names. It was made the
+    # member after the value was read, so a week and the one day of it in a
+    # set stayed a week and a day, where the two alone are the date they
+    # name, and the value written back was read as another. A set of one
+    # masked year stayed a set, which no span was read from.
+    @single [
+      {"2026Y25W{1}K", "2026Y25W1K"},
+      {"2026-W25-{1}", "2026-W25-1"},
+      {"2026W25{1}", "2026W251"},
+      {"2026Y{1}O", "2026Y1O"},
+      {"2026Y{166}O", "2026Y166O"},
+      {"2026Y{6}M", "2026Y6M"},
+      {"2026-{06}-15", "2026-06-15"},
+      {"T{9}H", "T9H"},
+      {"{198X}", "198X"},
+      {"{2026}", "2026"},
+      {"2026Y{12..12}M", "2026Y12M"},
+      {"2026Y6M{-1..-1}D", "2026Y6M30D"}
+    ]
+
+    test "is the value its member is alone" do
+      for {set, member} <- @single do
+        assert {set, read(set)} == {set, read(member)}
+      end
+    end
+
+    test "reads back from its own text" do
+      for {set, _member} <- @single do
+        assert {set, reads_back?(read(set))} == {set, true}
+      end
+    end
+
+    test "has the span its member has" do
+      assert {:ok, decade} = Tempo.to_interval(read("{198X}"))
+      assert {:ok, decade} == Tempo.to_interval(read("198X"))
     end
   end
 
