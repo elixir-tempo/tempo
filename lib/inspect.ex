@@ -358,6 +358,12 @@ defmodule Tempo.Inspect do
       inspect(%{tempo | metadata: %{}}) <> " " <> interval_metadata_tag(metadata) <> ">"
   end
 
+  # A struct given no calendar is read in the default one, and is written so.
+  # It was written as a call with `nil` for its calendar, which is read as
+  # another value's.
+  def inspect(%Tempo{calendar: nil} = tempo),
+    do: inspect(%{tempo | calendar: Calendrical.Gregorian})
+
   def inspect(%Tempo{calendar: Calendrical.Gregorian} = tempo) do
     # `to_iso8601/1` (via `inspect_value/1`) already appends the
     # IXDTF extended trailer; don't add it again here.

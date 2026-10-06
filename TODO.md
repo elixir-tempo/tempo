@@ -42,8 +42,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **`Schedule.task/3`'s `:within` is a pair** — it takes a `{from, to}` tuple, where every other `:within` takes a Tempo value or an interval.
 
-* [ ] **A struct with no calendar is half read** — `%Tempo{time: [year: 2026], calendar: nil}` converts, extends and walks in the default calendar, but `Enum.count/1` raises an `UndefinedFunctionError` (`Tempo.Interval.Steps.fill_to_unit/3`) and it inspects as `Tempo.from_iso8601!("2026Y", nil)`. Found 2026-10-03.
-
 ### Performance
 
 * [ ] **A never-matching selector walks the whole horizon** — `Tempo.select/2` over an open-ended span walks a thousand years of periods before a selector that never matches ends: 30 ms of years, 0.2 s of months, about 10 s of days, minutes of hours. An index selector on a fixed-range unit could end after its first empty period, a daylight-saving gap day aside. A recurrence's rule that selects nothing is as slow where the search has no bound of its own: twelve seconds where its start has no year (`R3/T22H/PT1H/FLT25HN`) and over forty-five in a calendar of weeks (`R2/2026-W25/P1W/FL8KN` in `Calendrical.ISOWeek`), where a Gregorian one answers in under a second.
@@ -105,6 +103,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A struct with no calendar is read whole** — `%Tempo{time: [year: 2026]}` had `nil` for its calendar, which comparison and conversion read as the default and `Enum.count/1`, `Tempo.shift/3`, `Tempo.duration/1`, `Tempo.select/2`, `Tempo.explain/1` and `Tempo.to_string/2` called as a module. The struct's default is `Calendrical.Gregorian`, and a struct given `calendar: nil` is read in it where a value is taken (`Tempo.with_a_calendar/1`: `to_interval/2`, `shift/3`, `extend_resolution/2`, `select/2`, `explain/1`, the `Enumerable` of a value, `inspect/1`). 2026-10-07.
 
 * [x] **A week calendar's week in `to_string/2`** — "week 25 of 2026" and "Woche 25 des Jahres 2026" (decided 2026-10-04), and a span of weeks from its first to its last, where it was the first and last days in the calendar's notation. Unblocked by the lock's move to a Localize that writes a year and a week with CLDR's `yw` (`render_weeks/3` in `lib/tempo/format.ex`). 2026-10-07.
 

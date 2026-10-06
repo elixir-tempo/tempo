@@ -396,6 +396,9 @@ defmodule Tempo.Select do
   # ---- Tempo and Tempo.Set bases: select across the span they
   # convert to ----
 
+  def select(%Tempo{calendar: nil} = tempo, selector),
+    do: select(Tempo.with_a_calendar(tempo), selector)
+
   def select(%Tempo{} = tempo, selector), do: select_converted(tempo, selector)
   def select(%Tempo.Set{} = set, selector), do: select_converted(set, selector)
 

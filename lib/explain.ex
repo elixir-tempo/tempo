@@ -84,6 +84,8 @@ defmodule Tempo.Explain do
   raising.
   """
   @spec explain(term()) :: Explanation.t()
+  def explain(%Tempo{calendar: nil} = value), do: explain(Tempo.with_a_calendar(value))
+
   def explain(value) do
     value = as_resolved(value)
     %Explanation{kind: classify(value), parts: explain_parts(value)}

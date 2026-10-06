@@ -73,24 +73,51 @@ defmodule Tempo.CalendarIndependenceTest do
     end
   end
 
-  describe "a bare %Tempo{} with a nil calendar (the struct default)" do
-    # Regression: a directly-constructed value carries `calendar: nil`
-    # (the defstruct default) rather than the parsed Gregorian default.
-    # Calendar projection must treat `nil` as Gregorian, not pass it to
-    # `Date.new/4`, which raises `nil.valid_date?/3`.
-    test "comparison and Interval.new tolerate a nil calendar" do
-      partial = %Tempo{time: [year: 2026]}
-      assert partial.calendar == nil
+  describe "a %Tempo{} built by hand with no calendar" do
+    # A struct written with no `:calendar` was `nil` there, which comparison
+    # and conversion read as the default calendar and `Enum.count/1`,
+    # `Tempo.shift/3`, `Tempo.select/2`, `Tempo.explain/1` and
+    # `Tempo.to_string/2` called as a module. It is in the default calendar,
+    # and one written with `calendar: nil` is read as it.
+    test "is in the default calendar" do
+      assert %Tempo{time: [year: 2026]}.calendar == Calendrical.Gregorian
+      assert %Tempo{time: [year: 2026]} == ~o"2026"
+    end
+
+    test "is read as the default calendar's where it is given nil for one" do
+      year = %Tempo{time: [year: 2026], calendar: nil}
+      day = %Tempo{time: [year: 2026, month: 6, day: 15], calendar: nil}
+
+      assert Enum.count(year) == 12
+      assert Enum.at(year, 3) == ~o"2026Y4M"
+      assert Enum.member?(year, ~o"2026-03")
+      assert Enum.take(year, 2) == [~o"2026Y1M", ~o"2026Y2M"]
+
+      assert Tempo.to_interval(year) == Tempo.to_interval(~o"2026")
+      assert Tempo.shift(day, day: 1) == ~o"2026Y6M16D"
+      assert Tempo.extend_resolution(year, :day) == ~o"2026Y1M1D"
+      assert Tempo.duration(year) == Tempo.duration(~o"2026")
+      assert Tempo.select(day, ~o"T10") == Tempo.select(~o"2026-06-15", ~o"T10")
+      assert Tempo.explain(year) == Tempo.explain(~o"2026")
+      assert Tempo.to_string(year) == Tempo.to_string(~o"2026")
+      assert inspect(year) == inspect(~o"2026")
+    end
+
+    test "comparison and Interval.new take one given nil" do
+      partial = %Tempo{time: [year: 2026], calendar: nil}
 
       assert {:ok, _interval} = Interval.new(from: partial, to: ~o"2027")
       assert Tempo.relation(partial, ~o"2026") == :equals
-      assert Tempo.within?(%Tempo{time: [year: 2026, month: 6]}, ~o"2026")
+      assert Tempo.within?(%Tempo{time: [year: 2026, month: 6], calendar: nil}, ~o"2026")
     end
 
-    test "a nil-calendar bound is placed correctly in a network" do
+    test "a bound given nil is placed correctly in a network" do
       network =
         Network.new()
-        |> Network.add_period(:a, from: %Tempo{time: [year: 2026]}, to: ~o"2026-06")
+        |> Network.add_period(:a,
+          from: %Tempo{time: [year: 2026], calendar: nil},
+          to: ~o"2026-06"
+        )
         |> Network.add_period(:b, from: ~o"2026-07", to: ~o"2027")
 
       assert Solver.relation(network, :a, :b) == :precedes

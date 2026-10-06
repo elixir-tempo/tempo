@@ -148,7 +148,18 @@ defmodule Tempo do
   alias Tempo.Validation
   alias Tempo.ZonedTempoError
 
-  defstruct [:time, :shift, :calendar, :extended, :qualifications, metadata: %{}]
+  # A value is in a calendar, and one built with none is in the default: a
+  # struct written by hand (`%Tempo{time: [year: 2026]}`) had `nil` there,
+  # which some operations read as the default calendar and others called as
+  # a module.
+  defstruct [
+    :time,
+    :shift,
+    :extended,
+    :qualifications,
+    calendar: Calendrical.Gregorian,
+    metadata: %{}
+  ]
 
   # TODO refine this to be more specific
   @type token :: integer() | list() | tuple()
@@ -2148,6 +2159,17 @@ defmodule Tempo do
   end
 
   @doc false
+  # A value in the default calendar where it was given `nil` for one. A
+  # struct built with no `:calendar` has the default already; one written
+  # with `calendar: nil` is read as it, where some operations did and
+  # others called `nil` as a module.
+  @spec with_a_calendar(t()) :: t()
+  def with_a_calendar(%__MODULE__{calendar: nil} = value),
+    do: %{value | calendar: Calendrical.Gregorian}
+
+  def with_a_calendar(%__MODULE__{} = value), do: value
+
+  @doc false
   # A calendar that numbers weeks within its year rather than months.
   @spec week_based_calendar?(module()) :: boolean()
   def week_based_calendar?(calendar) do
@@ -4039,6 +4061,9 @@ defmodule Tempo do
   """
   @spec extend_resolution(tempo :: t, target_unit :: time_unit()) ::
           t | {:error, error_reason()}
+  def extend_resolution(%Tempo{calendar: nil} = tempo, target_unit),
+    do: extend_resolution(with_a_calendar(tempo), target_unit)
+
   # The first value of a finer unit is one the clock of the value's zone
   # skips where it goes forward at that moment, and the value starts then on
   # the reading the clock shows, which is where it is compared from already.
@@ -6180,6 +6205,9 @@ defmodule Tempo do
           t() | Tempo.Set.t() | Tempo.IntervalSet.t() | {:error, error_reason()}
   def shift(tempo, shift, options \\ [])
 
+  def shift(%Tempo{calendar: nil} = tempo, shift, options),
+    do: shift(with_a_calendar(tempo), shift, options)
+
   def shift(%Tempo{} = tempo, %Tempo.Duration{} = duration, []) do
     Math.add(tempo, duration)
   end
@@ -6661,7 +6689,14 @@ defmodule Tempo do
           keyword()
         ) ::
           {:ok, Tempo.Interval.t() | Tempo.IntervalSet.t()} | {:error, error_reason()}
-  def to_interval(value, opts \\ []) do
+  def to_interval(value, opts \\ [])
+
+  # A struct given `nil` for its calendar is read in the default one
+  # (`with_a_calendar/1`), here and wherever a value is taken.
+  def to_interval(%__MODULE__{calendar: nil} = value, opts),
+    do: to_interval(with_a_calendar(value), opts)
+
+  def to_interval(value, opts) do
     with :ok <- check_bound_option(opts, "Tempo.to_interval/2"),
          opts = window_in_value_frame(value, opts),
          :ok <- ends_expand(value),

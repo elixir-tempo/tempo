@@ -20,7 +20,10 @@ defimpl Enumerable, for: Tempo do
   # walked by its days): the fallback reduces the value itself, so the
   # module it names must be this one, never the interval's.
 
+  # A struct given `nil` for its calendar is walked in the default one.
   @impl Enumerable
+  def count(%Tempo{calendar: nil} = tempo), do: count(Tempo.with_a_calendar(tempo))
+
   def count(%Tempo{} = tempo) do
     with {:ok, interval} <- single_interval(tempo),
          {:ok, _count} = counted <- Enumerable.count(interval) do
@@ -31,6 +34,9 @@ defimpl Enumerable, for: Tempo do
   end
 
   @impl Enumerable
+  def member?(%Tempo{calendar: nil} = tempo, element),
+    do: member?(Tempo.with_a_calendar(tempo), element)
+
   def member?(%Tempo{} = tempo, %Tempo{} = element) do
     with {:ok, interval} <- single_interval(tempo),
          {:ok, _member?} = answered <- Enumerable.member?(interval, element) do
@@ -45,6 +51,8 @@ defimpl Enumerable, for: Tempo do
   end
 
   @impl Enumerable
+  def slice(%Tempo{calendar: nil} = tempo), do: slice(Tempo.with_a_calendar(tempo))
+
   def slice(%Tempo{} = tempo) do
     with {:ok, interval} <- single_interval(tempo),
          {:ok, _size, _slicer} = sliced <- Enumerable.slice(interval) do
@@ -82,6 +90,9 @@ defimpl Enumerable, for: Tempo do
   # `Enumerable.reduce/3` has no error to return, so a value that cannot be
   # walked raises the exception `Tempo.to_interval/2` would return for it.
   @impl Enumerable
+  def reduce(%Tempo{calendar: nil} = tempo, acc, fun),
+    do: reduce(Tempo.with_a_calendar(tempo), acc, fun)
+
   def reduce(%Tempo{time: time} = tempo, acc, fun) do
     # A value that holds a selection (`2026Y6ML2KN`, the Tuesdays of June
     # 2026) names the dates the selection picks, and is walked as they are.

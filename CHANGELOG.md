@@ -335,6 +335,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A `%Tempo{}` built by hand with no `:calendar` is in the default calendar, and one given `calendar: nil` is read as it: `Enum.count/1`, `Enum.at/2`, `Tempo.shift/3`, `Tempo.duration/1`, `Tempo.select/2`, `Tempo.explain/1` and `Tempo.to_string/2` raised an `UndefinedFunctionError` for one, where comparison and conversion read it, and it inspected as `Tempo.from_iso8601!("2026Y", nil)`.
+
 * `Tempo.to_string/2` shows a span of two months with no year by its months (`~o"6M/9M"` is "Jun – Aug", and `~o"11M/2M"` "Nov – Jan"), where it returned Localize's error for a missing year.
 
 * `Tempo.explain/1` words a window of hours or minutes in them: `R/2027-01-01/P1D/FLLT22HN/PT4HN` selects "the 4 hours from 22:00", where it was "the PT4H window from at 22:00".
