@@ -15,9 +15,13 @@ defmodule Tempo.ValueSpansTest do
       assert Tempo.duration(~o"2026-06-15/2026-06-18") == ~o"P3D"
     end
 
+    test "measures a time of day with no year, which is as long on any day" do
+      assert Tempo.duration(~o"T09") == ~o"PT1H"
+      assert Tempo.duration(~o"T09/T17") == ~o"PT8H"
+    end
+
     test "is an error, not a raise, for what has no length to measure" do
-      assert {:error, %Tempo.UnanchoredError{operation: :duration}} = Tempo.duration(~o"T09")
-      assert {:error, %Tempo.UnanchoredError{operation: :duration}} = Tempo.duration(~o"T09/T17")
+      assert {:error, %Tempo.UnanchoredError{operation: :duration}} = Tempo.duration(~o"6M")
       assert {:error, %Tempo.UnanchoredError{operation: :duration}} = Tempo.duration(~o"6M/8M")
 
       assert {:error, %Tempo.ConversionError{reason: :recurring_duration}} =
