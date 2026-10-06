@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A string is refused before it is read where it holds a number of more than 128 digits or selections more than sixteen deep, as one over 8,192 bytes or with sets more than six deep already was. These are the bounds that keep the time to read a string in proportion to its length, and each is far past what a value is written with.
+
 * `Tempo.Schedule.task/3` takes `:within` as a window, a Tempo value or an interval, as every other `:within` is: `within: ~o"2026-06"` is a task done in June. It took a `{from, to}` pair, which is now refused with the window to write in its place.
 
 * A shift coarser than an unspecified unit keeps the unspecified digits only where they stand for the values landed on and for no others: `Tempo.shift(~o"2020-06-XX", month: 1)` is `~o"[2020Y7M1D..2020Y7M30D]"`, where it was `~o"2020-07-XX"`, some day of July with the 31st that no day of June lands on. A month on from some day of January is `~o"2020-02-XX"` still, each of whose days is landed on, and a February of no year a month on is a `Tempo.UnanchoredError`.
@@ -297,6 +299,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Changed
 
+* Sets and the windows of a selection are read faster, each place of a string being read once: `LL3K4IN/P5DN` in 0.4 ms where it took 10.7, `{2026-06-15,2026-06-20,2026-07-01}` in 3.5 ms where it took 9.3, and `{2026,2027}-06-15` in 1.4 ms where it took 4.4.
+
 * A shift on the week axis, and of a time of day with no date, takes the time of one step too: a week date of a calendar of weeks plus 60,000 hours takes 21 µs where it took 17 ms, and `~o"T22H"` plus a hundred thousand hours 27 µs where it took 22 ms. A rule that never selects there says so in under a second, where `R3/T22H/PT1H/FLT25HN` took twelve and a weekly rule in `Calendrical.ISOWeek` fifty-eight.
 
 * A plain date or timestamp (`2026-06-15`, `2026-06`, `2026-06-15T10:30:00Z`, with or without an IXDTF suffix) is read by a scan of its bytes: `Tempo.from_iso8601/1` takes 14 µs for a date where it took 440, and 38 µs for a timestamp in a named zone where it took 250. Every other form is read by the grammar as before, and the scan is held to the grammar's reading of each text of its shapes.
@@ -350,6 +354,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* The time taken to read or to refuse a string is in proportion to its length. `Tempo.from_iso8601("LLLL")`, four selections opened one inside the next, took over a minute to refuse and eight would have taken years; six sets one inside the next took up to six seconds, eight thousand digits three quarters of a second, and a string over the length limit was then read as a locale's words by `Tempo.parse/2`, which took seconds more.
 
 * `Tempo.split/1` gives the date of a value in whichever units it is written: `~o"3KT10H"`, a Wednesday at ten, is `{~o"3K", ~o"T10H"}`, and `~o"166O"`, a day of the year, is a date with no time of day. A weekday of no week, a day of a year not named and a unit that holds a group of a set were given as the time of day, and the value had no date.
 

@@ -1055,23 +1055,50 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     ])
   end
 
+  # A member is read once, and then what may follow it: `..` and the member
+  # a range ends at, `..` alone for a range with no end, or nothing. The
+  # three were alternatives that each read the member again, so a set inside
+  # a set was read three times and one inside that nine: six sets one inside
+  # the next took two seconds to refuse, and each member of every set was
+  # read three times to be read once.
+  #
+  # A text that starts with `..` is a range with no start, or an interval
+  # that starts so (`../2026`), and is read by the alternatives in the order
+  # they had.
   def time_or_range(combinator \\ empty()) do
     combinator
     |> choice([
-      member_value()
-      |> ignore(string(".."))
+      lookahead_not(string(".."))
       |> member_value()
-      |> reduce(:range),
-      replace(string(".."), :undefined)
-      |> member_value()
-      |> reduce(:range),
-      member_value()
-      |> replace(string(".."), :undefined)
-      |> reduce(:range),
-      member_value()
+      |> optional(
+        choice([
+          ignore(string("..")) |> member_value(),
+          replace(string(".."), :undefined)
+        ])
+      )
+      |> reduce(:range_or_member),
+      lookahead(string(".."))
+      |> choice([
+        member_value()
+        |> ignore(string(".."))
+        |> member_value()
+        |> reduce(:range),
+        replace(string(".."), :undefined)
+        |> member_value()
+        |> reduce(:range),
+        member_value()
+        |> replace(string(".."), :undefined)
+        |> reduce(:range),
+        member_value()
+      ])
     ])
     |> label("date, time, interval, duration or range")
   end
+
+  # A member alone is the member, and one with what follows it a range.
+  @doc false
+  def range_or_member([member]), do: member
+  def range_or_member(ends), do: range(ends)
 
   # What a member of a set is: an interval, a duration, or a date or a time
   # with its qualifiers.

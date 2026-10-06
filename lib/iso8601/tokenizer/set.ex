@@ -58,12 +58,30 @@ defmodule Tempo.Iso8601.Tokenizer.Set do
                 |> tag(:one_of),
                 export_combinator: true
 
+  # A set of whole numbers is read once at each place it is tried, as a
+  # selection is. A digit of a number may be a set (`XXX{0,2,4,6,8}Y`), so
+  # the first number of a set may open another, and a member is tried as the
+  # start of a range and then as a number: each set opened inside another
+  # was read twice as many times as the one around it.
   defcombinator :integer_set_all,
-                ignore(string("{"))
-                |> list_of_integer_or_range()
-                |> ignore(string("}"))
-                |> tag(:all_of),
+                read_once(:integer_set_all, "{"),
                 export_combinator: true
+
+  defcombinator :integer_set_all_read_before,
+                read_before(:integer_set_all),
+                export_combinator: true
+
+  defcombinator :integer_set_all_read_now,
+                read_now(
+                  :integer_set_all,
+                  ignore(string("{"))
+                  |> list_of_integer_or_range()
+                  |> ignore(string("}"))
+                  |> tag(:all_of)
+                ),
+                export_combinator: true
+
+  defcombinator :integer_set_all_refused, refused(:integer_set_all), export_combinator: true
 
   # The days of the year of a set written with no designator, each of three
   # digits. A combinator of its own, so that a set of any other width is this
@@ -199,14 +217,29 @@ defmodule Tempo.Iso8601.Tokenizer.Set do
                 |> label("time group"),
                 export_combinator: true
 
+  # A selection is read once at each place it is tried
+  # (`Tempo.Iso8601.Tokenizer.Helpers.read_once/2`). Some thirty-five
+  # alternatives of a date may start with a selection, and each read it again
+  # from the same place, and every selection inside it as many times again:
+  # four opened one inside the next (`LLLL`) took over a minute to refuse.
   defcombinator :selection,
-                ignore(string("L"))
-                |> selection_elements()
-                |> optional(selection_instance())
-                |> ignore(string("N"))
-                |> tag(:selection)
-                |> label("selection"),
+                read_once(:selection, "L") |> label("selection"),
                 export_combinator: true
+
+  defcombinator :selection_read_before, read_before(:selection), export_combinator: true
+
+  defcombinator :selection_read_now,
+                read_now(
+                  :selection,
+                  ignore(string("L"))
+                  |> selection_elements()
+                  |> optional(selection_instance())
+                  |> ignore(string("N"))
+                  |> tag(:selection)
+                ),
+                export_combinator: true
+
+  defcombinator :selection_refused, refused(:selection), export_combinator: true
 
   defcombinator :duration_parser,
                 optional(negative() |> replace({:direction, :negative}))

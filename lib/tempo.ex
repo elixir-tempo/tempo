@@ -882,7 +882,12 @@ defmodule Tempo do
     text is equal to the same value made with a calendar module.
 
   * `{:error, reason}` when the string cannot be parsed or a
-    critical IXDTF suffix is unrecognised.
+    critical IXDTF suffix is unrecognised. A string is refused before
+    it is read where it is past one of four bounds, each far beyond
+    what a value is written with, so that the time taken to read or
+    to refuse a string is in proportion to its length: 8,192 bytes,
+    sets or groups six deep, selections sixteen deep, and a number of
+    128 digits.
 
   ### Examples
 
@@ -1899,8 +1904,13 @@ defmodule Tempo do
 
   # Read a string as the locale's text: Calendrical parses it to a field
   # map (or a pair of them for a range), which `Tempo.new/1` rebuilds.
+  #
+  # A text longer than the tokenizer reads is not read as words either: it
+  # was refused as ISO 8601 for its length and then handed here, where ten
+  # thousand bytes took seconds to refuse.
   defp parse_text(input, options) do
-    with {:ok, value} <- Calendrical.parse(input, Keyword.put(options, :as, :map)),
+    with :ok <- Tokenizer.within_length(input),
+         {:ok, value} <- Calendrical.parse(input, Keyword.put(options, :as, :map)),
          {:ok, parsed} <- parsed_to_tempo(value) do
       enforce_strict(parsed, options)
     end

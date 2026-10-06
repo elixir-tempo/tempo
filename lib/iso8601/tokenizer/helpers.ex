@@ -73,6 +73,39 @@ defmodule Tempo.Iso8601.Tokenizer.Helpers do
       else: {rest, args, context}
   end
 
+  # A combinator read once at each place it is tried: what it read there, or
+  # that it was refused there, is kept while the text is read
+  # (`Tempo.Iso8601.Tokenizer.Memo`). `opening` is what its text starts
+  # with, so that a place that does not open one costs no more than it did.
+  #
+  # It is read through three combinators of its own, `name_read_before`,
+  # `name_read_now` and `name_refused`, each of which
+  # `Tempo.Iso8601.Tokenizer.Set` defines from the three functions below: a
+  # traversal that returns an error is its combinator failing, and the next
+  # of the three is tried.
+  def read_once(name, opening) do
+    lookahead(string(opening))
+    |> choice([
+      parsec({Tempo.Iso8601.Tokenizer.Set, :"#{name}_read_before"}),
+      parsec({Tempo.Iso8601.Tokenizer.Set, :"#{name}_read_now"}),
+      parsec({Tempo.Iso8601.Tokenizer.Set, :"#{name}_refused"})
+    ])
+  end
+
+  def read_before(name),
+    do: post_traverse(empty(), {Tempo.Iso8601.Tokenizer.Memo, :read_before, [name]})
+
+  def read_now(name, combinator) do
+    post_traverse(
+      post_traverse(empty(), {Tempo.Iso8601.Tokenizer.Memo, :start, [name]})
+      |> concat(combinator),
+      {Tempo.Iso8601.Tokenizer.Memo, :keep, [name]}
+    )
+  end
+
+  def refused(name),
+    do: post_traverse(empty(), {Tempo.Iso8601.Tokenizer.Memo, :refused, [name]})
+
   def negative do
     ascii_char([?-])
   end

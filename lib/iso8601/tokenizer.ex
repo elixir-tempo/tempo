@@ -16,6 +16,7 @@ defmodule Tempo.Iso8601.Tokenizer do
   import Tempo.Iso8601.Tokenizer.Grammar
 
   alias Tempo.Iso8601.Tokenizer.Extended
+  alias Tempo.Iso8601.Tokenizer.Memo
   alias Tempo.Iso8601.Tokenizer.Plain
   alias Tempo.ParseError
 
@@ -26,17 +27,45 @@ defmodule Tempo.Iso8601.Tokenizer do
   # parser chew on it.
   @max_input_bytes 8_192
 
-  # Bracket-nesting (`{…}` / `[…]`) is the parser's one exponential
-  # axis: each level multiplies the combinator alternatives tried,
-  # so deep nesting (or an unbalanced run of openers) costs
-  # exponential time. Legitimate ISO 8601-2 sets and groups nest at
-  # most two or three deep, so a small cap rejects the pathological
-  # cases up front while leaving every real value untouched.
+  # What is opened inside what, and how long a number is, are bounded
+  # before the grammar is tried, as the length of the text is. Each bound
+  # is far past what a value is written with, and the grammar's work within
+  # it is small: a set or a selection is read once at each place it is tried
+  # (`Tempo.Iso8601.Tokenizer.Memo`), so a level of nesting costs a
+  # constant, where it multiplied the alternatives tried.
+  #
+  # * Sets and groups (`{…}`, `[…]`) are written two or three deep.
+  #
+  # * Selections (`L…N`) are written three deep for a window (`LLL…N/P5DN…N`,
+  #   ISO 8601-2 §12.10) and two more for each window inside one.
+  #
+  # * A number is a year, a count or a fraction of a second. Each
+  #   alternative that reads a number reads all of its digits, so a long
+  #   run of them cost time in proportion to its length squared: three
+  #   quarters of a second for eight thousand.
   @max_nesting_depth 6
+  @max_selection_depth 16
+  @max_digits 128
 
   # The shapes `tokenize/2` can be asked to require. Durations are
   # deliberately absent — see `tokenize_duration/1`.
   @profiles [:date, :datetime, :time, :interval]
+
+  @doc false
+  # Whether a text is no longer than any reader of Tempo's is given: `:ok`,
+  # or the error of one that is. The reader of a locale's words
+  # (`Tempo.parse/2`) asks it too, so that a text the tokenizer refuses for
+  # its length is not then read another way.
+  @spec within_length(binary()) :: :ok | {:error, ParseError.t()}
+  def within_length(string) when byte_size(string) > @max_input_bytes do
+    {:error,
+     ParseError.exception(
+       input: binary_part(string, 0, 64) <> "…",
+       reason: "Input of #{byte_size(string)} bytes exceeds the #{@max_input_bytes}-byte limit"
+     )}
+  end
+
+  def within_length(_string), do: :ok
 
   @doc """
   Tokenize an ISO 8601 or IXDTF string.
@@ -59,11 +88,7 @@ defmodule Tempo.Iso8601.Tokenizer do
 
   """
   def tokenize(string) when byte_size(string) > @max_input_bytes do
-    {:error,
-     ParseError.exception(
-       input: binary_part(string, 0, 64) <> "…",
-       reason: "Input of #{byte_size(string)} bytes exceeds the #{@max_input_bytes}-byte limit"
-     )}
+    within_length(string)
   end
 
   # A plain date or time of day is read by its bytes
@@ -106,16 +131,8 @@ defmodule Tempo.Iso8601.Tokenizer do
     do: tokenize(string)
 
   def tokenize_by_grammar(string) do
-    if nesting_exceeds_limit?(string) do
-      {:error,
-       ParseError.exception(
-         input: string,
-         reason: "Set/group nesting exceeds the depth limit of #{@max_nesting_depth}"
-       )}
-    else
-      string
-      |> iso8601()
-      |> return(string)
+    with :ok <- within_limits(string) do
+      Memo.reading(fn -> string |> iso8601() |> return(string) end)
     end
   end
 
@@ -140,14 +157,14 @@ defmodule Tempo.Iso8601.Tokenizer do
 
   """
   def tokenize_duration(string) when byte_size(string) > @max_input_bytes do
-    {:error,
-     ParseError.exception(
-       input: binary_part(string, 0, 64) <> "…",
-       reason: "Input of #{byte_size(string)} bytes exceeds the #{@max_input_bytes}-byte limit"
-     )}
+    within_length(string)
   end
 
   def tokenize_duration(string) do
+    with :ok <- within_limits(string), do: tokenize_duration_by_grammar(string)
+  end
+
+  defp tokenize_duration_by_grammar(string) do
     case duration_only(string) do
       {:ok, tokens, "", _context, _line, _column} ->
         {:ok, tokens}
@@ -202,24 +219,14 @@ defmodule Tempo.Iso8601.Tokenizer do
   """
   def tokenize(string, profile)
       when profile in @profiles and byte_size(string) > @max_input_bytes do
-    {:error,
-     ParseError.exception(
-       input: binary_part(string, 0, 64) <> "…",
-       reason: "Input of #{byte_size(string)} bytes exceeds the #{@max_input_bytes}-byte limit"
-     )}
+    within_length(string)
   end
 
   def tokenize(string, profile) when profile in @profiles do
-    if nesting_exceeds_limit?(string) do
-      {:error,
-       ParseError.exception(
-         input: string,
-         reason: "Set/group nesting exceeds the depth limit of #{@max_nesting_depth}"
-       )}
-    else
-      string
-      |> parse_profile(profile)
-      |> return_profile(string, profile)
+    with :ok <- within_limits(string) do
+      Memo.reading(fn ->
+        string |> parse_profile(profile) |> return_profile(string, profile)
+      end)
     end
   end
 
@@ -260,22 +267,54 @@ defmodule Tempo.Iso8601.Tokenizer do
   defp article(:time), do: "a time"
   defp article(:interval), do: "an interval"
 
-  # Walk the string once, tracking `{`/`[` open-bracket depth, and
-  # report whether it ever exceeds the limit (an unbalanced run of
-  # openers keeps climbing and is caught the same way).
-  defp nesting_exceeds_limit?(string) do
-    string
-    |> :binary.bin_to_list()
-    |> Enum.reduce_while(0, fn
-      char, depth when char in [?{, ?[] ->
-        if depth + 1 > @max_nesting_depth, do: {:halt, :exceeded}, else: {:cont, depth + 1}
+  # Walks the text once and says which bound it is past, if any.
+  #
+  # What is open is kept innermost first. A bracket closes what was opened
+  # inside it with it: the `L` of `[Europe/London]` is no selection, and is
+  # gone with its bracket. An `N` closes a selection only where one is the
+  # innermost thing open. A closer with nothing to close changes nothing, so
+  # a run of openers with none closed keeps climbing and is caught.
+  defp within_limits(string) do
+    case over_a_limit(string, [], 0) do
+      nil -> :ok
+      reason -> {:error, ParseError.exception(input: string, reason: reason)}
+    end
+  end
 
-      char, depth when char in [?}, ?]] ->
-        {:cont, max(depth - 1, 0)}
+  defp over_a_limit(<<char, rest::binary>>, open, digits) when char in ?0..?9 or char == ?X do
+    if digits < @max_digits,
+      do: over_a_limit(rest, open, digits + 1),
+      else: "A number exceeds the limit of #{@max_digits} digits"
+  end
 
-      _char, depth ->
-        {:cont, depth}
-    end) == :exceeded
+  defp over_a_limit(<<char, rest::binary>>, open, _digits) when char in [?{, ?[] do
+    if opened(open, :bracket) < @max_nesting_depth,
+      do: over_a_limit(rest, [:bracket | open], 0),
+      else: "Set/group nesting exceeds the depth limit of #{@max_nesting_depth}"
+  end
+
+  defp over_a_limit(<<?L, rest::binary>>, open, _digits) do
+    if opened(open, :selection) < @max_selection_depth,
+      do: over_a_limit(rest, [:selection | open], 0),
+      else: "Selection nesting exceeds the depth limit of #{@max_selection_depth}"
+  end
+
+  defp over_a_limit(<<char, rest::binary>>, open, _digits) when char in [?}, ?]],
+    do: over_a_limit(rest, bracket_closed(open), 0)
+
+  defp over_a_limit(<<?N, rest::binary>>, [:selection | open], _digits),
+    do: over_a_limit(rest, open, 0)
+
+  defp over_a_limit(<<_char, rest::binary>>, open, _digits), do: over_a_limit(rest, open, 0)
+  defp over_a_limit(<<>>, _open, _digits), do: nil
+
+  defp opened(open, kind), do: Enum.count(open, &(&1 == kind))
+
+  defp bracket_closed(open) do
+    case Enum.drop_while(open, &(&1 != :bracket)) do
+      [:bracket | outside] -> outside
+      [] -> open
+    end
   end
 
   defp return(result, string) do
