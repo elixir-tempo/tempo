@@ -359,6 +359,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.RRule.parse/2` refuses a `:from` that is not one value with `{:error, {:invalid_from, value}}`. An interval was taken for a start, and the recurrence built from it was returned by `Tempo.to_interval/2` as it was, with no occurrences and no error.
+
 * The occurrences of a recurrence in a window long after its start are found: `R/1990-01-01/P1D` within June 2026 is its thirty days, and an hourly rule from 2020 has its twenty-four hours of a day this year, where each gave none, the walk having given up before it came to the window. A recurrence that was cut short said nothing, so `FREQ=MINUTELY;BYHOUR=9;BYMINUTE=0;COUNT=30` gave seven occurrences and `R20000/2026-06-01/P1D` ten thousand; each is now refused by name.
 
 * A suffix key written twice in an IXDTF suffix is read the first time, as RFC 9557 §3.3 requires: `[u-ca=chinese][u-ca=japanese]` is the Chinese calendar and `[foo=a][foo=b]` holds `a`, where the last was read. With a critical one among them that names another value (`[!u-ca=chinese][u-ca=japanese]`) the string is a `Tempo.ParseError`.

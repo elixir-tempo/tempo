@@ -70,8 +70,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **Livebooks install 2.0 at the release** — `getting-started`, `tempo_tour`, `scheduling-workbook` and `uncertain-dates-workbook` install `{:ex_tempo, "~> 1.6"}` and the Melbourne deck `~> 1.6.3`, while their code uses the 2.0 names: at the 2.0.0 release each installs `~> 2.0`, as `everyday-holidays` already does.
 
-* [ ] **A rule's start that is no one value** — `Tempo.RRule.parse/2` takes a `:from` that is an interval and builds a recurrence from it, which `Tempo.to_interval/2` hands back as it is, with no occurrences and no error; `:from` is documented as a `%Tempo{}`, an occurrence's length being `:duration` or `:base_to`. Refuse it where it is read. Found 2026-10-07.
-
 * [ ] **`rescue` in the library** — `lib/ical.ex` (`parse/2`, `available/2`, errors from the `ical` parser), `lib/inspect.ex` (Localize's calendar encoding) and `lib/iso8601/parser.ex` rescue exceptions where the rest of Tempo passes tagged tuples.
 
 * [ ] **Coverage has little headroom** — 90.14% against the 90% the lint row requires since 2026-10-07, about twenty lines, so the next lines no test runs fail CI. Most of the lines not run are refusals, and shapes of value no test builds: `Tempo` (216), `Tempo.Explain` (93), `Tempo.Math` (86), `Tempo.Interval` (83), `Tempo.RRule.Selection` (72), `Tempo.Select` (65), `Tempo.Validation` (61). Each of the independent measures written for the 90% found a defect, so the lines are worth more than their count.
@@ -95,6 +93,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A rule's start that is no one value is refused** — `Tempo.RRule.parse/2` took a `:from` that is an interval and built a recurrence from it, which `Tempo.to_interval/2` handed back as it was, with no occurrences and no error. It is `{:error, {:invalid_from, value}}`: a start is a `%Tempo{}`, and an occurrence's length is `:duration` or `:base_to`. 2026-10-07.
 
 * [x] **A recurrence in a window long after its start, and one cut short** — found beside the rule that never selects: a walk began at the recurrence's start however long before its `:within` window that was, took 10,000 periods at most, and returned what it had come to. `R/1990-01-01/P1D` within June 2026 and an hourly rule from 2020 within a day gave no occurrences, a lazy walk of the first from 2026 on gave none after 37 seconds, and a rule cut short before its count gave fewer than it has (`FREQ=MINUTELY;BYHOUR=9;BYMINUTE=0;COUNT=30` seven, `R20000/2026-06-01/P1D` ten thousand). A walk kept to a window begins at the first period that can reach it, found by doubling and halving a count of the calendar's own steps (`first_period_reaching/3`), and a walk that is cut short is a `Tempo.UnboundedRecurrenceError`. Held to Elixir's `Date` and `NaiveDateTime` for plain recurrences of every unit, and to the walk from the start for 180 pairs of a rule and a window (`Tempo.RecurrenceWindowTest`). 2026-10-07.
 

@@ -106,7 +106,7 @@ defmodule Tempo.RRule do
 
   * `{:ok, %Tempo.Interval{}}` on success.
 
-  * `{:error, reason}` on a malformed rule or unknown keyword, and for what RFC 7529's `RSCALE` and `SKIP` say that Tempo does not build: `{:unsupported_rscale, name}` for a calendar other than the Gregorian, `{:unsupported_skip, {skip, part}}` for `BACKWARD` or `FORWARD` beside a day counted from the end of a month that a month can lack (`BYMONTHDAY=-31`), `{:unsupported_skip, value}` for a `SKIP` that is none of the three, and `{:skip_without_rscale, skip}`.
+  * `{:error, reason}` on a malformed rule or unknown keyword, and for what RFC 7529's `RSCALE` and `SKIP` say that Tempo does not build: `{:unsupported_rscale, name}` for a calendar other than the Gregorian, `{:unsupported_skip, {skip, part}}` for `BACKWARD` or `FORWARD` beside a day counted from the end of a month that a month can lack (`BYMONTHDAY=-31`), `{:unsupported_skip, value}` for a `SKIP` that is none of the three, and `{:skip_without_rscale, skip}`. A `:from` that is not one value (an interval, a set) is `{:invalid_from, value}`.
 
   ### Examples
 
@@ -137,10 +137,19 @@ defmodule Tempo.RRule do
 
   def parse(rrule, options) when is_binary(rrule) do
     with {:ok, parts} <- parse_parts(rrule),
-         :ok <- skip_with_rscale(parts) do
+         :ok <- skip_with_rscale(parts),
+         :ok <- one_start(Keyword.get(options, :from)) do
       build_interval(parts, options)
     end
   end
+
+  # A rule's start is one value, or none. An interval was taken for one, and
+  # the recurrence built from it was one nothing expands:
+  # `Tempo.to_interval/2` handed it back as it was, with no occurrences and
+  # no error. How long an occurrence is, is `:duration` or `:base_to`.
+  defp one_start(nil), do: :ok
+  defp one_start(%Tempo{}), do: :ok
+  defp one_start(other), do: {:error, {:invalid_from, other}}
 
   # RFC 7529 §4.1: "The SKIP rule part MUST NOT be present unless the RSCALE
   # rule part is present."

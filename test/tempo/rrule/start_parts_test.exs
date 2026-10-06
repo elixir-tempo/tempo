@@ -219,6 +219,40 @@ defmodule Tempo.RRule.StartPartsTest do
     end
   end
 
+  # A start is one value. An interval was taken for one, and the recurrence
+  # built from it was handed back by `Tempo.to_interval/2` as it was, with
+  # no occurrences and no error.
+  describe "a start that is no one value" do
+    test "is refused where the rule is read" do
+      for from <- [
+            ~o"2026-06-15T10/2026-06-17T12",
+            ~o"{2026-06-15,2026-06-20}",
+            ~o"P1D",
+            :a_start,
+            "2026-06-15"
+          ] do
+        assert {from, RRule.parse("FREQ=DAILY;COUNT=3", from: from)} ==
+                 {from, {:error, {:invalid_from, from}}}
+      end
+    end
+
+    test "is none where the occurrence's length is given beside the start" do
+      {:ok, rule} =
+        RRule.parse("FREQ=DAILY;COUNT=2",
+          from: ~o"2026-06-15T10:00:00",
+          base_to: ~o"2026-06-17T12:00:00"
+        )
+
+      {:ok, occurrences} = Tempo.to_interval(rule)
+
+      assert Enum.map(IntervalSet.members(occurrences), &{Interval.from(&1), Interval.to(&1)}) ==
+               [
+                 {~o"2026-06-15T10:00:00", ~o"2026-06-17T12:00:00"},
+                 {~o"2026-06-16T10:00:00", ~o"2026-06-18T12:00:00"}
+               ]
+    end
+  end
+
   describe "an ISO 8601 recurrence" do
     test "is its start and n cadences on, on the last day of a period that lacks the day" do
       # 31 January, 28 February, 31 March, 30 April and 31 May, as `Date.shift/2`
