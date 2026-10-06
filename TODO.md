@@ -60,8 +60,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **Shift, truncate and round an interval** — `Tempo.shift/3`, `trunc/2` and `round/2` take one date or time value and return an `ArgumentError` for an interval, where moving a meeting a day on is a shift of both its ends. The matrix's Shift and round column for the interval classes is the list.
 
-* [ ] **The length of a span with no year** — `Tempo.duration(~o"T22/T02")` is a `Tempo.UnanchoredError`, where the span is four hours on any day, as `at_least?/2` already measures it (`Tempo.Interval.Cycle.microseconds/1`).
-
 * [ ] **`Tempo.Intervallic` protocol** — let user-defined structs such as `%Booking{check_in, check_out}` take part in Allen comparisons and set operations without being copied into `%Tempo.Interval{}`; default implementations for `Tempo.Interval`, `Tempo` and single-member `Tempo.IntervalSet`.
 
 * [ ] **A composable builder** — an API between `Tempo.new/1` (flat components) and `Tempo.from_iso8601/1` (a string) in complexity, building a value from composable sub-expressions with human names — `selection`, `recur`, windows, domains, exclusions, events — nesting freely, so programs (tempo_holidays among them) construct recurrences structurally instead of interpolating ISO 8601 strings and re-parsing them.
@@ -103,6 +101,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **The length of a span with no year** — `Tempo.duration(~o"T22/T02")` is `PT4H`, where it was a `Tempo.UnanchoredError`: a span on a cycle whose units have one length each (a time of day, a day of the week) is measured by `Tempo.Interval.Cycle.microseconds/1`, as the length predicates measured it, and counted in its ends' unit (`cyclic_duration/1` in `lib/tempo/interval.ex`). A value with no year that names one is measured so (`~o"T10"` is `PT1H`). Months and days are refused still: their length is the year's. The matrix's own measure of a length reads a span's extent, which cuts one that runs through its cycle's end, and four cells of the published table changed. 2026-10-07.
 
 * [x] **A struct with no calendar is read whole** — `%Tempo{time: [year: 2026]}` had `nil` for its calendar, which comparison and conversion read as the default and `Enum.count/1`, `Tempo.shift/3`, `Tempo.duration/1`, `Tempo.select/2`, `Tempo.explain/1` and `Tempo.to_string/2` called as a module. The struct's default is `Calendrical.Gregorian`, and a struct given `calendar: nil` is read in it where a value is taken (`Tempo.with_a_calendar/1`: `to_interval/2`, `shift/3`, `extend_resolution/2`, `select/2`, `explain/1`, the `Enumerable` of a value, `inspect/1`). 2026-10-07.
 

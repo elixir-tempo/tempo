@@ -219,6 +219,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Added
 
+* `Tempo.duration/1` measures a span with no year where it is as long on any day or in any week: `~o"T22/T02"` is `PT4H`, an hour alone `PT1H`, and Monday to Saturday (`~o"1K/6K"`) `P5D`, each of which was a `Tempo.UnanchoredError`. A span of months and days has the length of a year it has not got, and is that error still.
+
 * `Tempo.TimeZoneDatabase.changes/3` — the moments a zone's clock changes between two moments, each with the offset before and after. The `Calendar.TimeZoneDatabase` behaviour lists none, so they are found by asking each day's start, and kept.
 
 * `Tempo.TimeZoneDatabase.days_left_out/1` — the calendar days a zone's clock never showed, where the zone moved across the date line: 30 December 2011 in Samoa, 31 December 1844 in Manila. They are found once for each zone and kept.

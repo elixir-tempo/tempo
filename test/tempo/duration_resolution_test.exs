@@ -173,17 +173,70 @@ defmodule Tempo.DurationResolutionTest do
     end
   end
 
+  describe "a span with no year" do
+    # Ten at night to two in the morning is four hours on whatever day it
+    # is, and Monday to Saturday five days in whatever week. Each was
+    # refused for having no year, where `Tempo.at_least?/2` measured it.
+    test "is measured where it is as long on any day or in any week" do
+      assert Tempo.duration(~o"T22/T02") == ~o"PT4H"
+      assert Tempo.duration(~o"T09/T17") == ~o"PT8H"
+      assert Tempo.duration(~o"T09:30/T17:15") == ~o"PT465M"
+      assert Tempo.duration(~o"T09:30:15/T09:30:45") == ~o"PT30S"
+      assert Tempo.duration(~o"1K/6K") == ~o"P5D"
+      assert Tempo.duration(~o"7K/1K") == ~o"P1D"
+    end
+
+    test "is measured as the same span on a date is" do
+      for {with_no_year, dated} <- [
+            {~o"T22/T02", ~o"2026-06-15T22/2026-06-16T02"},
+            {~o"T09:30/T17:15", ~o"2026-06-15T09:30/2026-06-15T17:15"},
+            {~o"T09/PT2H", ~o"2026-06-15T09/PT2H"}
+          ] do
+        assert {with_no_year, Tempo.duration(with_no_year)} ==
+                 {with_no_year, Tempo.duration(dated)}
+      end
+    end
+
+    test "that ends where it starts is once round its cycle" do
+      assert Tempo.duration(~o"T10/T10") == ~o"PT24H"
+    end
+
+    test "is the length of a value that names one" do
+      assert Tempo.duration(~o"T10") == ~o"PT1H"
+      assert Tempo.duration(~o"T10:30") == ~o"PT1M"
+      assert Tempo.duration(~o"1K") == ~o"P1D"
+    end
+
+    test "is the length the predicates measure" do
+      for {span, length} <- [{~o"T22/T02", ~o"PT4H"}, {~o"1K/6K", ~o"P5D"}] do
+        assert Tempo.exactly?(span, length)
+        assert Tempo.duration(span) == length
+      end
+    end
+
+    test "is the length of a set of them" do
+      {:ok, set} = IntervalSet.new([~o"T09/T11", ~o"T10/T12"])
+
+      assert Tempo.duration(set) == ~o"PT3H"
+    end
+  end
+
   describe "what duration/2 cannot measure is an error, not a raise" do
-    test "an endpoint without a year" do
+    test "an endpoint without a year, where the span's length is its year's" do
       for interval <- [
-            ~o"T09/T17",
             ~o"6M/8M",
-            ~o"T09/PT2H",
+            ~o"11M/2M",
+            ~o"2M27D/3M2D",
             %Interval{from: ~o"2026-06-15", to: ~o"6M20D"}
           ] do
         assert {:error, %Tempo.UnanchoredError{operation: :duration}} =
                  Interval.duration(interval)
       end
+
+      assert {:error, %Tempo.UnanchoredError{operation: :duration, value: value}} =
+               Tempo.duration(~o"6M")
+
+      assert value == ~o"6M"
     end
 
     test "a finite recurrence, endpoints in different calendars, or one that is not a value" do
@@ -220,7 +273,7 @@ defmodule Tempo.DurationResolutionTest do
     end
 
     test "a set whose member has no length gives that member's error" do
-      {:ok, set} = IntervalSet.new([~o"T09/T11", ~o"T10/T12"])
+      {:ok, set} = IntervalSet.new([~o"6M/8M", ~o"7M/9M"])
 
       assert {:error, %Tempo.UnanchoredError{}} = IntervalSet.duration(set)
       assert {:error, %Tempo.UnanchoredError{}} = Tempo.duration(set)

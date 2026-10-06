@@ -10818,7 +10818,9 @@ defmodule Tempo do
     for an interval with an open end.
 
   * `{:error, %Tempo.UnanchoredError{}}` for a value or an interval
-    without a year, which has no place on the time line to measure.
+    without a year whose length is its year's: a month, or a span of
+    months and days. A time of day and a day of the week are as long on
+    any day and in any week, and are measured.
 
   * `{:error, %Tempo.ConversionError{}}` for a recurrence, whose
     length is its occurrences' (convert it with `to_interval_set/2`
@@ -10833,6 +10835,9 @@ defmodule Tempo do
       iex> Tempo.duration(~o"2026-06")
       ~o"P1M"
 
+      iex> Tempo.duration(~o"T22/T02")
+      ~o"PT4H"
+
       iex> bookings = Tempo.IntervalSet.new!([~o"2026-06-15T09/2026-06-15T11", ~o"2026-06-15T10/2026-06-15T12"])
       iex> Tempo.duration(bookings)
       ~o"PT3H"
@@ -10842,11 +10847,12 @@ defmodule Tempo do
           Duration.t() | :infinity | {:error, Exception.t()}
   def duration(%IntervalSet{} = set), do: IntervalSet.duration(set)
 
+  # A value with no year is measured where its span has a length on any
+  # day: an hour, or a day of the week (`Tempo.Interval.Cycle`).
   def duration(%__MODULE__{} = value) do
-    if anchored?(value) do
-      with {:ok, span} <- to_interval(value), do: duration(span)
-    else
-      {:error, UnanchoredError.exception(operation: :duration, value: value)}
+    case to_interval(value) do
+      {:ok, span} -> span |> duration() |> unmeasured(value, anchored?(value))
+      {:error, _reason} = error -> unmeasured(error, value, anchored?(value))
     end
   end
 
@@ -10862,6 +10868,14 @@ defmodule Tempo do
     {:error,
      ArgumentError.exception("Tempo.duration/1 takes a Tempo value, got #{inspect(value)}")}
   end
+
+  # A value with no year that has no length (a month, whose days are its
+  # year's) is refused for having no year, which is what there is to be done
+  # about it.
+  defp unmeasured({:error, _reason}, value, false),
+    do: {:error, UnanchoredError.exception(operation: :duration, value: value)}
+
+  defp unmeasured(measured, _value, _anchored?), do: measured
 
   @doc """
   Return the duration between two endpoints as a `%Tempo.Duration{}`.

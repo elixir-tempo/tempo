@@ -2026,7 +2026,9 @@ defmodule Tempo.Interval do
     recurrence, bounded by a count or an RRULE `UNTIL`, whose length
     is its occurrences' (the
     `Tempo.IntervalSet.duration/1` of its interval set); a
-    `Tempo.UnanchoredError` for an endpoint without a year; an
+    `Tempo.UnanchoredError` for an endpoint without a year, unless both
+    have none and the span is as long in any year (a time of day, a day
+    of the week: ten at night to two is four hours); an
     `ArgumentError` for endpoints in different calendars, an endpoint
     naming several spans, a value that is not an interval, or an
     option this does not take.
@@ -2056,7 +2058,12 @@ defmodule Tempo.Interval do
       iex> Tempo.Interval.duration(~o"20C/2100")
       ~o"P100Y"
 
-      iex> match?({:error, %Tempo.UnanchoredError{}}, Tempo.Interval.duration(~o"T09/T17"))
+  A span with no year is measured where it is as long on any day:
+
+      iex> Tempo.Interval.duration(~o"T22/T02")
+      ~o"PT4H"
+
+      iex> match?({:error, %Tempo.UnanchoredError{}}, Tempo.Interval.duration(~o"6M/8M"))
       true
 
       iex> iv = %Tempo.Interval{from: ~o"2016-12-31T23:59:00Z", to: ~o"2017-01-01T00:01:00Z"}
@@ -2123,7 +2130,27 @@ defmodule Tempo.Interval do
        when from in [nil, :undefined] or to in [nil, :undefined],
        do: :infinity
 
+  # A span with no year is on a cycle, and has a length where the cycle's
+  # units have one each: a time of day, a day of the week. Ten at night to
+  # two in the morning is four hours on whatever day it is, and it was
+  # refused for having no year, where `Tempo.at_least?/2` measured it.
   defp resolved_duration(%__MODULE__{from: %Tempo{}, to: %Tempo{}} = interval, leap_seconds?) do
+    if Cycle.cyclic?(interval),
+      do: cyclic_duration(interval),
+      else: dated_duration(interval, leap_seconds?)
+  end
+
+  defp resolved_duration(%__MODULE__{from: from, to: to}, _leap_seconds?) do
+    endpoint = if is_struct(from, Tempo), do: to, else: from
+
+    {:error,
+     ArgumentError.exception(
+       "An interval's endpoints are Tempo values, and #{inspect(endpoint)} is not one, " <>
+         "so the interval has no length."
+     )}
+  end
+
+  defp dated_duration(%__MODULE__{} = interval, leap_seconds?) do
     with {:ok, %__MODULE__{from: from, to: to} = measured} <-
            measured_interval(interval, :duration) do
       unit = common_unit(endpoint_unit(from), endpoint_unit(to))
@@ -2137,14 +2164,37 @@ defmodule Tempo.Interval do
     end
   end
 
-  defp resolved_duration(%__MODULE__{from: from, to: to}, _leap_seconds?) do
-    endpoint = if is_struct(from, Tempo), do: to, else: from
+  # The length of a span on a cycle, counted in its ends' unit as a dated
+  # one is. A span of months and days has the length of a year it has not
+  # got, and its error says so (`Tempo.Interval.Cycle.microseconds/1`).
+  defp cyclic_duration(%__MODULE__{from: from, to: to} = interval) do
+    case Cycle.microseconds(interval) do
+      {:ok, microseconds} ->
+        unit = common_unit(endpoint_unit(from), endpoint_unit(to))
+        seconds = div(microseconds, 1_000_000)
 
-    {:error,
-     ArgumentError.exception(
-       "An interval's endpoints are Tempo values, and #{inspect(endpoint)} is not one, " <>
-         "so the interval has no length."
-     )}
+        fraction =
+          microsecond_parts(rem(microseconds, 1_000_000), max(precision(from), precision(to)))
+
+        %Duration{time: cyclic_parts(seconds, unit) ++ fraction}
+
+      {:error, _its_length_is_its_years} ->
+        {:error, UnanchoredError.exception(operation: :duration, value: interval)}
+    end
+  end
+
+  @seconds_in_a_day 86_400
+
+  defp cyclic_parts(seconds, unit) when unit in [:hour, :minute, :second],
+    do: clock_parts(seconds, unit)
+
+  defp cyclic_parts(seconds, :microsecond), do: [second: seconds]
+
+  defp cyclic_parts(seconds, _days) do
+    case {div(seconds, @seconds_in_a_day), rem(seconds, @seconds_in_a_day)} do
+      {days, 0} -> [day: days]
+      {days, rest} -> day_parts(days) ++ remainder_parts(rest)
+    end
   end
 
   defp measured_duration(%__MODULE__{from: from, to: to} = measured, unit, leap_seconds?) do

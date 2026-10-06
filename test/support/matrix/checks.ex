@@ -255,17 +255,24 @@ defmodule Tempo.Matrix.Checks do
     end
   end
 
+  # The time a span covers, as its extent has it: one stretch on the time
+  # line, and on a cycle the stretches a span that runs through the cycle's
+  # end is cut into (ten at night to two is the two hours to midnight and
+  # the two after it).
   defp elapsed(%Duration{time: time} = duration, from, to) do
-    with {:ok, line, from_position} <- Extent.position(from),
-         {:ok, ^line, to_position} <- Extent.position(to) do
-      if to_position - from_position == clock_microseconds(time),
-        do: :ok,
-        else:
-          {:fail,
-           "#{inspect(duration)} is not the #{to_position - from_position} microseconds " <>
-             "from #{inspect(from)} to #{inspect(to)}"}
-    else
-      _unmeasured -> :skip
+    case Extent.of(%Interval{from: from, to: to}) do
+      {:ok, %{spans: spans}} ->
+        covered = spans |> Enum.map(fn {from, to} -> to - from end) |> Enum.sum()
+
+        if covered == clock_microseconds(time),
+          do: :ok,
+          else:
+            {:fail,
+             "#{inspect(duration)} is not the #{covered} microseconds " <>
+               "from #{inspect(from)} to #{inspect(to)}"}
+
+      :none ->
+        :skip
     end
   end
 
