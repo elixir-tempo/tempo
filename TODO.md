@@ -40,8 +40,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Errors and API
 
-* [ ] **An impossible date's error names too little** — `Tempo.on(~o"2M29D", ~o"2027")` returns an `InvalidDateError` with only its reason ("29 is not valid. The valid values are 1..28"), naming no year, month or calendar.
-
 * [ ] **An open-start window's error** — `within: ~o"../2027"` returns an `IntervalEndpointsError` about including an open interval in a set: correct, but it should say that a window needs a start.
 
 * [ ] **`Schedule.task/3`'s `:within` is a pair** — it takes a `{from, to}` tuple, where every other `:within` takes a Tempo value or an interval.
@@ -119,6 +117,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **An impossible date's error names what it was read as** — `Tempo.on(~o"2M29D", ~o"2027")`, and every reading of a value its unit does not take, returned an `InvalidDateError` with only "29 is not valid. The valid values are 1..28". `Tempo.Validation.conform/3` is given what the value was read as where it is known (a day of a month, a month, a week, a day of the year or of the week, an hour, a minute, a second), and the error says and carries it: "29 is not valid for a day of 2027-02", with the calendar named where it is not the Gregorian. `test/tempo/invalid_date_error_test.exs`. 2026-10-07.
 
 * [x] **A mask with no unit before it names its value in its error** — `Tempo.to_interval/2` of `~o"XXM"`, `~o"X*M"` or `~o"TX*H"` returns a `Tempo.UnanchoredError` with the value, as `~o"XXD"` did, where `parent_widen/1` in `lib/tempo/interval.ex` returned a `ConversionError` with none; the error for a prefix that holds a set carries the value too. 2026-10-07.
 

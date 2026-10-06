@@ -377,7 +377,7 @@ defmodule Tempo.OneReadingTest do
 
     test "names the value the unit lacks and the values it has" do
       {:error, error} = Tempo.from_iso8601("2026Y6M15DT{22..25}H")
-      assert Exception.message(error) =~ "25 is not valid. The valid values are 0..23"
+      assert Exception.message(error) == "25 is not valid for an hour. The valid values are 0..23"
     end
 
     test "is read where every value is one the unit has" do

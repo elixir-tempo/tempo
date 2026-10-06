@@ -259,7 +259,7 @@ Tempo.on(birthday, ~o"2026")
 {Tempo.on(~o"2M29D", ~o"2027"), Tempo.on(~o"2M29D", ~o"2028")}
 ```
 
-*"29 is not valid. The valid values are 1..28"* — and 2028 is fine. The value was always correct; only its projection onto a particular year can fail, and it fails loudly.
+*"29 is not valid for a day of 2027-02. The valid values are 1..28"* — and 2028 is fine. The value was always correct; only its projection onto a particular year can fail, and it fails loudly.
 
 ## Enumeration, implicitly
 

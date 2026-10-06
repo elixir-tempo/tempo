@@ -28,7 +28,14 @@ defmodule Tempo.InvalidDateError do
     struct!(__MODULE__, bindings)
   end
 
+  # A reason written beside the values the unit takes is the whole of what
+  # there is to say: it names the value, what it was read as, and the values
+  # it could have been (`Tempo.Validation.conform/3`).
   @impl true
+  def message(%__MODULE__{reason: reason, valid_range: range})
+      when is_binary(reason) and not is_nil(range),
+      do: reason
+
   def message(%__MODULE__{unit: unit, value: value, valid_range: range, year: y, month: m})
       when not is_nil(unit) and not is_nil(value) and not is_nil(range) do
     context = date_context(y, m)

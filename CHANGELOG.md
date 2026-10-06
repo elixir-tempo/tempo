@@ -289,6 +289,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Changed
 
+* A `Tempo.InvalidDateError` for a value its unit does not take says what the value was read as and carries it: 29 February 2027 is "29 is not valid for a day of 2027-02. The valid values are 1..28", with the error's `:unit`, `:year`, `:month` and `:calendar` set, where it was "29 is not valid. The valid values are 1..28" and they were `nil`. A calendar other than the Gregorian is named ("… of 5784-02 in Calendrical.Hebrew").
+
 * `Tempo.to_interval/2` of a value that is unspecified digits with no unit before them (`~o"XXM"`, `~o"X*M"`, `~o"TX*H"`) returns a `Tempo.UnanchoredError` that names the value, as `~o"XXD"` did, where it returned a `Tempo.ConversionError` whose `value` was `nil`.
 
 * The error for an interval's end of four or six digits in the basic format says how the end was read and how to write it: `Tempo.from_iso8601("20260615/0720")` returns a `Tempo.IntervalEndpointsError` that names the year 720, ISO 8601-1 §5.5.1 and the unambiguous forms (`2026-06-15/07-20`, `20260615/T0720`), where it said "interval :from endpoint is not earlier than its :to endpoint". The reading is unchanged: four digits alone are a year.

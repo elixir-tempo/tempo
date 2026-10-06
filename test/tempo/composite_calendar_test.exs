@@ -113,7 +113,9 @@ defmodule Tempo.CompositeCalendarTest do
       assert {:error, %Tempo.InvalidDateError{} = error} =
                Tempo.from_iso8601("1752Y9M3D", England)
 
-      assert Exception.message(error) == "3 is not valid. The valid values are 1..2 and 14..30"
+      assert Exception.message(error) ==
+               "3 is not valid for a day of 1752-09 in Calendrical.Reform.England. " <>
+                 "The valid values are 1..2 and 14..30"
     end
 
     test "counted from the end is counted among the days the month has" do

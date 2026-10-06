@@ -171,14 +171,16 @@ In the Hebrew calendar, the month Cheshvan (month 2) has 29 days in a regular ye
 **Tempo — month lengths are validated per calendar:**
 
 ```elixir
-iex> Tempo.from_iso8601("2024-02-30")
-{:error, "30 is not valid for day in 2024-02 (valid range 1..29)"}
+iex> {:error, error} = Tempo.from_iso8601("2024-02-30")
+iex> Exception.message(error)
+"30 is not valid for a day of 2024-02. The valid values are 1..29"
 
 iex> Tempo.from_iso8601("5785-02-30[u-ca=hebrew]")
 {:ok, ~o"5785Y2M30D[u-ca=hebrew]"}
 
-iex> Tempo.from_iso8601("5784-02-30[u-ca=hebrew]")
-{:error, "30 is not valid for day in 5784-02 (valid range 1..29)"}
+iex> {:error, error} = Tempo.from_iso8601("5784-02-30[u-ca=hebrew]")
+iex> Exception.message(error)
+"30 is not valid for a day of 5784-02 in Calendrical.Hebrew. The valid values are 1..29"
 ```
 
 The calendar module supplies the correct `days_in_month/2` for each calendar system. Tempo delegates to it rather than hard-coding 28/29.

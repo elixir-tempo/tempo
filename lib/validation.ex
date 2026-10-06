@@ -494,7 +494,7 @@ defmodule Tempo.Validation do
 
   def resolve([{:day_of_week, day} | rest], calendar) when is_integer(day) do
     with {:ok, days} <- values_in(:day_of_week, [], calendar),
-         {:ok, day} <- conform(day, days) do
+         {:ok, day} <- conform(day, days, unit: :day_of_week, calendar: calendar) do
       case resolve(rest, calendar) do
         {:error, reason} -> {:error, reason}
         resolved -> [{:day_of_week, day} | resolved]
@@ -603,7 +603,7 @@ defmodule Tempo.Validation do
   def resolve([{:year, year}, {:week, week}, {:day_of_week, day} | rest], calendar)
       when is_integer(year) and is_integer(week) and is_integer(day) do
     with {:ok, weeks} <- values_in(:week, [year: year], calendar),
-         {:ok, week} <- conform(week, weeks),
+         {:ok, week} <- conform(week, weeks, unit: :week, year: year, calendar: calendar),
          [day_of_week: day] <- resolve([day_of_week: day], calendar) do
       year_week_day(year, week, day, rest, calendar.calendar_base(), calendar)
     end
@@ -612,7 +612,8 @@ defmodule Tempo.Validation do
   def resolve([{:year, year}, {:day, day_of_year} | rest], calendar)
       when is_integer(year) and is_integer(day_of_year) do
     with {:ok, days} <- values_in(:day_of_year, [year: year], calendar),
-         {:ok, day_of_year} <- conform(day_of_year, days) do
+         {:ok, day_of_year} <-
+           conform(day_of_year, days, unit: :day_of_year, year: year, calendar: calendar) do
       %{year: year, month: month, day: day} =
         Calendrical.date_from_day_of_year(year, day_of_year, calendar)
 
@@ -630,7 +631,8 @@ defmodule Tempo.Validation do
   def resolve([{:year, year}, {:day_of_year, days}], calendar)
       when is_integer(year) and (is_list(days) or is_struct(days, Range)) do
     with {:ok, days_of_year} <- values_in(:day_of_year, [year: year], calendar),
-         {:ok, days} <- conform(days, days_of_year) do
+         {:ok, days} <-
+           conform(days, days_of_year, unit: :day_of_year, year: year, calendar: calendar) do
       [{:year, year}, {:day_of_year, days}]
     end
   end
@@ -699,7 +701,7 @@ defmodule Tempo.Validation do
       )
       when is_integer(year) and is_integer(month) do
     with {:ok, months} <- values_in(:month, [year: year], calendar),
-         {:ok, month} <- conform(month, months),
+         {:ok, month} <- conform(month, months, unit: :month, year: year, calendar: calendar),
          {:ok, days_of_month} <- days_of_month(calendar, year, month) do
       case resolve_day_group(days, last_value(days_of_month), rest, calendar) do
         {:error, reason} -> {:error, reason}
@@ -789,7 +791,8 @@ defmodule Tempo.Validation do
              (is_number(day) or is_struct(day, Range) or is_list(day)) do
     with [{:year, year}, {:month, month}] <- resolve([{:year, year}, {:month, month}], calendar),
          {:ok, days} <- days_of_month(calendar, year, month),
-         {:ok, day} <- conform(day, days) do
+         {:ok, day} <-
+           conform(day, days, unit: :day, year: year, month: month, calendar: calendar) do
       prepend_year_month(year, month, resolve([{:day, day} | rest], calendar))
     end
   end
@@ -808,7 +811,8 @@ defmodule Tempo.Validation do
       when is_integer(year) and
              (is_list(months) or is_integer(months) or is_struct(months, Range)) do
     with {:ok, months_of_year} <- values_in(:month, [year: year], calendar),
-         {:ok, month} <- conform(months, months_of_year) do
+         {:ok, month} <-
+           conform(months, months_of_year, unit: :month, year: year, calendar: calendar) do
       [{:year, year}, {:month, month}]
     end
   end
@@ -828,7 +832,8 @@ defmodule Tempo.Validation do
       when is_integer(year) and
              (is_list(weeks) or is_integer(weeks) or is_struct(weeks, Range)) do
     with {:ok, weeks_of_year} <- values_in(:week, [year: year], calendar),
-         {:ok, weeks} <- conform(weeks, weeks_of_year) do
+         {:ok, weeks} <-
+           conform(weeks, weeks_of_year, unit: :week, year: year, calendar: calendar) do
       [{:year, year}, {:week, weeks}]
     end
   end
@@ -836,7 +841,8 @@ defmodule Tempo.Validation do
   def resolve([{:year, year}, {:day, days}], calendar)
       when is_integer(year) and (is_list(days) or is_integer(days) or is_struct(days, Range)) do
     with {:ok, days_of_year} <- values_in(:day_of_year, [year: year], calendar),
-         {:ok, day} <- conform(days, days_of_year) do
+         {:ok, day} <-
+           conform(days, days_of_year, unit: :day_of_year, year: year, calendar: calendar) do
       [{:year, year}, {:day, day}]
     end
   end
@@ -994,7 +1000,7 @@ defmodule Tempo.Validation do
   end
 
   def resolve([{:hour, hour} | rest], calendar) when is_integer(hour) do
-    with {:ok, hour} <- conform(hour, 0..(@hours_per_day - 1)) do
+    with {:ok, hour} <- conform(hour, 0..(@hours_per_day - 1), unit: :hour) do
       case resolve(rest, calendar) do
         {:error, reason} -> {:error, reason}
         resolved -> [{:hour, hour} | resolved]
@@ -1027,7 +1033,7 @@ defmodule Tempo.Validation do
       when unit in [:hour, :minute, :second, :day_of_week] and
              (is_list(written) or is_struct(written, Range)) do
     with {:ok, valid} <- UnitValues.in_period(unit, [], calendar),
-         {:ok, written} <- conform(written, valid) do
+         {:ok, written} <- conform(written, valid, unit: unit) do
       case resolve(rest, calendar) do
         {:error, reason} -> {:error, reason}
         resolved -> [{unit, written} | resolved]
@@ -1036,7 +1042,7 @@ defmodule Tempo.Validation do
   end
 
   def resolve([{:minute, requested} | rest], calendar) when is_integer(requested) do
-    with {:ok, part} <- conform(requested, 0..(@minutes_per_hour - 1)) do
+    with {:ok, part} <- conform(requested, 0..(@minutes_per_hour - 1), unit: :minute) do
       case resolve(rest, calendar) do
         {:error, reason} -> {:error, reason}
         resolved -> [{:minute, part} | resolved]
@@ -1060,7 +1066,7 @@ defmodule Tempo.Validation do
   # which is 59, not the leap-second 60).
   def resolve([{:second, requested} | rest], calendar)
       when is_integer(requested) and requested < 0 do
-    with {:ok, part} <- conform(requested, 0..(@minutes_per_hour - 1)) do
+    with {:ok, part} <- conform(requested, 0..(@minutes_per_hour - 1), unit: :second) do
       case resolve(rest, calendar) do
         {:error, reason} -> {:error, reason}
         resolved -> [{:second, part} | resolved]
@@ -1072,7 +1078,7 @@ defmodule Tempo.Validation do
   # context (hour = 23, minute = 59, and — if present — the calendar
   # date) is checked by `validate_leap_second/2` before we get here.
   def resolve([{:second, requested} | rest], calendar) when is_integer(requested) do
-    with {:ok, part} <- conform(requested, 0..@minutes_per_hour) do
+    with {:ok, part} <- conform(requested, 0..@minutes_per_hour, unit: :second) do
       case resolve(rest, calendar) do
         {:error, reason} -> {:error, reason}
         resolved -> [{:second, part} | resolved]
@@ -1407,13 +1413,14 @@ defmodule Tempo.Validation do
   defp yearless_month_and_day(month, day, rest, calendar) do
     case {max_day_in_month(calendar, month), counted_in_any_year?(day, month, calendar)} do
       {{:ok, max_day}, true} ->
-        with {:ok, day} <- conform(day, 1..max_day),
+        with {:ok, day} <- conform(day, 1..max_day, unit: :day, month: month, calendar: calendar),
              rest when is_list(rest) <- resolve(rest, calendar) do
           [{:month, month}, {:day, day} | rest]
         end
 
       {{:ok, max_day}, false} ->
-        with {:ok, _possible} <- conform(day, 1..max_day),
+        with {:ok, _possible} <-
+               conform(day, 1..max_day, unit: :day, month: month, calendar: calendar),
              rest when is_list(rest) <- resolve(rest, calendar) do
           [{:month, month}, {:day, day} | rest]
         end
@@ -1800,24 +1807,88 @@ defmodule Tempo.Validation do
   # end counted, a range and a list kept as they are written, and a value the
   # unit does not take an `InvalidDateError`. The reading is
   # `Tempo.UnitValues.resolve/2`; this names its refusal.
-  def conform(written, %Range{} = valid), do: conform_to(written, valid)
+  #
+  # What the value was read as is given where it is known: its unit, the
+  # year and the month it is of, and the calendar. The error carries them
+  # and says them, so 29 February 2027 is refused as "29 is not valid for a
+  # day of 2027-02", where it was "29 is not valid".
+  def conform(written, valid, read_as \\ [])
+
+  def conform(written, %Range{} = valid, read_as), do: conform_to(written, valid, read_as)
 
   # Values a calendar lists apart from one another: the days of a month with
   # days missing in it.
-  def conform(written, [%Range{} | _] = valid), do: conform_to(written, valid)
+  def conform(written, [%Range{} | _] = valid, read_as),
+    do: conform_to(written, valid, read_as)
 
-  def conform(written, not_values), do: not_valid_error(written, not_values, nil)
+  def conform(written, not_values, read_as),
+    do: not_valid_error(written, not_values, nil, read_as)
 
-  defp conform_to(written, valid) do
+  defp conform_to(written, valid, read_as) do
     case UnitValues.resolve(written, valid) do
-      {:ok, resolved} -> {:ok, as_its_numbers(written, resolved)}
-      {:error, {:not_taken, value, counted}} -> normalized_error(value, counted, valid)
-      {:error, {:not_taken, {:mask, digits}}} -> masked_member_error(digits, valid)
-      {:error, {:not_taken, value}} -> not_valid_error(value, valid, valid)
-      {:error, {:backwards, range}} -> backwards_error(range, range, valid)
-      {:error, {:backwards, range, counted}} -> backwards_error(range, counted, valid)
+      {:ok, resolved} ->
+        {:ok, as_its_numbers(written, resolved)}
+
+      {:error, {:not_taken, value, counted}} ->
+        normalized_error(value, counted, valid, read_as)
+
+      {:error, {:not_taken, {:mask, digits}}} ->
+        named(masked_member_error(digits, valid), read_as)
+
+      {:error, {:not_taken, value}} ->
+        not_valid_error(value, valid, valid, read_as)
+
+      {:error, {:backwards, range}} ->
+        named(backwards_error(range, range, valid), read_as)
+
+      {:error, {:backwards, range, counted}} ->
+        named(backwards_error(range, counted, valid), read_as)
     end
   end
+
+  # The unit, the year, the month and the calendar of what was read, on an
+  # error that says its own reason.
+  defp named({:error, %InvalidDateError{} = error}, read_as), do: {:error, struct(error, read_as)}
+
+  # " for a day of 2027-02", and " in Calendrical.Hebrew" for a calendar
+  # other than the Gregorian.
+  defp read_as_text([]), do: ""
+
+  defp read_as_text(read_as) do
+    " for " <>
+      unit_text(read_as[:unit], read_as[:year], read_as[:month]) <>
+      calendar_text(read_as[:calendar])
+  end
+
+  defp unit_text(:day_of_year, year, _month) when is_integer(year),
+    do: "a day of the year #{year}"
+
+  defp unit_text(unit, year, month), do: unit_name(unit) <> period_text(unit, year, month)
+
+  defp unit_name(:day), do: "a day"
+  defp unit_name(:month), do: "a month"
+  defp unit_name(:week), do: "a week"
+  defp unit_name(:day_of_year), do: "a day of the year"
+  defp unit_name(:day_of_week), do: "a day of the week"
+  defp unit_name(:hour), do: "an hour"
+  defp unit_name(:minute), do: "a minute"
+  defp unit_name(:second), do: "a second"
+  defp unit_name(unit), do: "a #{unit}"
+
+  defp period_text(:day, year, month) when is_integer(year) and is_integer(month),
+    do: " of #{year}-#{pad2(month)}"
+
+  defp period_text(:day, nil, month) when is_integer(month), do: " of month #{month}"
+
+  defp period_text(unit, year, _month) when unit in [:month, :week] and is_integer(year),
+    do: " of #{year}"
+
+  defp period_text(_unit, _year, _month), do: ""
+
+  defp calendar_text(calendar) when calendar in [nil, Calendrical.Gregorian, Calendar.ISO],
+    do: ""
+
+  defp calendar_text(calendar), do: " in #{inspect(calendar)}"
 
   defp last_value(%Range{last: last}), do: last
   defp last_value(ranges) when is_list(ranges), do: ranges |> List.last() |> last_value()
@@ -1882,24 +1953,32 @@ defmodule Tempo.Validation do
   defp mask_digit(digit) when is_integer(digit), do: Integer.to_string(digit)
   defp mask_digit(digits) when is_list(digits), do: "{" <> Enum.join(digits, ",") <> "}"
 
-  defp not_valid_error(value, valid, valid_range) do
-    {:error,
-     InvalidDateError.exception(
-       value: value,
-       valid_range: valid_range,
-       reason: "#{inspect(value)} is not valid. The valid values are #{values_text(valid)}"
-     )}
+  defp not_valid_error(value, valid, valid_range, read_as) do
+    named(
+      {:error,
+       InvalidDateError.exception(
+         value: value,
+         valid_range: valid_range,
+         reason:
+           "#{inspect(value)} is not valid#{read_as_text(read_as)}. " <>
+             "The valid values are #{values_text(valid)}"
+       )},
+      read_as
+    )
   end
 
-  defp normalized_error(value, normalized, range) do
-    {:error,
-     InvalidDateError.exception(
-       value: value,
-       valid_range: range,
-       reason:
-         "#{inspect(value)} is not valid. The normalized value of " <>
-           "#{inspect(normalized)} is outside the range #{values_text(range)}"
-     )}
+  defp normalized_error(value, normalized, range, read_as) do
+    named(
+      {:error,
+       InvalidDateError.exception(
+         value: value,
+         valid_range: range,
+         reason:
+           "#{inspect(value)} is not valid#{read_as_text(read_as)}. The normalized value of " <>
+             "#{inspect(normalized)} is outside the range #{values_text(range)}"
+       )},
+      read_as
+    )
   end
 
   ## Leap-second validation
