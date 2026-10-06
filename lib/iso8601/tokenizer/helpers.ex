@@ -280,16 +280,28 @@ defmodule Tempo.Iso8601.Tokenizer.Helpers do
   # of it (§8.2.1), and one before it the first component it is written with
   # (§8.2.3). Each goes into the member's own tokens, where
   # `Tempo.Iso8601.AST.build/2` reads it.
-  def merge_member_qualification([{tag, inner}]) when tag in [:date, :datetime, :time_of_day],
+  #
+  # A member's own suffix (`[Europe/Paris]`) goes there too, as an end of an
+  # interval's does (`merge_endpoint_qualification/1`).
+  def merge_member_qualification(tokens) do
+    case Enum.split_with(tokens, &match?({:extended, _segments}, &1)) do
+      {[], tokens} -> member_with_qualifiers(tokens)
+      {[{:extended, segments}], tokens} -> with_suffix(member_with_qualifiers(tokens), segments)
+    end
+  end
+
+  defp with_suffix({tag, inner}, segments), do: {tag, inner ++ [extended: segments]}
+
+  defp member_with_qualifiers([{tag, inner}]) when tag in [:date, :datetime, :time_of_day],
     do: {tag, inner}
 
-  def merge_member_qualification([{tag, inner}, {:qualification, complete}])
-      when tag in [:date, :datetime, :time_of_day],
-      do: {tag, inner ++ [qualification: complete]}
+  defp member_with_qualifiers([{tag, inner}, {:qualification, complete}])
+       when tag in [:date, :datetime, :time_of_day],
+       do: {tag, inner ++ [qualification: complete]}
 
-  def merge_member_qualification([{:qualification, leading}, {tag, inner} | trailing])
-      when tag in [:date, :datetime, :time_of_day] do
-    {tag, qualified} = merge_member_qualification([{tag, inner} | trailing])
+  defp member_with_qualifiers([{:qualification, leading}, {tag, inner} | trailing])
+       when tag in [:date, :datetime, :time_of_day] do
+    {tag, qualified} = member_with_qualifiers([{tag, inner} | trailing])
     {tag, qualified ++ first_component_qualification(inner, leading)}
   end
 

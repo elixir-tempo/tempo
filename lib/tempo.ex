@@ -1104,6 +1104,19 @@ defmodule Tempo do
   defp maybe_resolve_endpoint_calendars(%Tempo.Set{} = set, :from_ixdtf_or_default),
     do: map_members(set, &maybe_resolve_endpoint_calendars(&1, :from_ixdtf_or_default))
 
+  # A member of a set, and each end of a range in one, is in the calendar its
+  # own suffix names, as an end of an interval is.
+  defp maybe_resolve_endpoint_calendars(%Tempo.Range{} = range, :from_ixdtf_or_default) do
+    %{
+      range
+      | first: resolve_endpoint_calendar(range.first),
+        last: resolve_endpoint_calendar(range.last)
+    }
+  end
+
+  defp maybe_resolve_endpoint_calendars(%__MODULE__{} = member, :from_ixdtf_or_default),
+    do: resolve_endpoint_calendar(member)
+
   defp maybe_resolve_endpoint_calendars(other, _requested_calendar), do: other
 
   defp resolve_endpoint_calendar(%__MODULE__{extended: %{calendar: type}} = endpoint)

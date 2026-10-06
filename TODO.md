@@ -128,6 +128,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Done
 
+* [x] **A member of a set with a suffix of its own** — found by the generator's second harvest of 2026-10-06: a set of values in two zones is written with each member's zone after it, and that text was a parse error, where an end of an interval took a suffix. `:qualified_member` in the tokenizer takes RFC 9557's suffix, its segments are validated for a member and for each end of a range (`validate_token/1` in `lib/iso8601/tokenizer/extended.ex`), and a member is in the calendar its suffix names (`maybe_resolve_endpoint_calendars/2`). 2026-10-06.
+
 * [x] **A range of a year's divisions in a set** — `{2026-21..2026-22}` was a range whose two ends were intervals: nothing walked it and its own text was not read. A range from a season, a quarter, a quadrimester or a semester to another of its kind is each of them between, in the order of their numbers and from one year to the next (`expand_member/2` in `lib/iso8601/group.ex`), and it is held to being a run in time; one that is none, from one kind to another, open at an end or of more than a thousand is an `InvalidDateError`. 2026-10-06.
 
 * [x] **One of several years before the year designator** — found by the generator's harvest of 2026-10-06: `[2025,2026]Y` and `[2025,2026]Y6M` were parse errors, where `2026Y[1,3]M` and `{2025,2026}Y6M` are read (`explicit_year_with_sign/0` took a set of all and no set of one). One of several values in a unit of the extended or the basic format (`2026-[01,03]`) stays unread: a bracket there is the IXDTF suffix or a set of whole values. 2026-10-06.

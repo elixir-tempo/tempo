@@ -222,9 +222,29 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
     end
   end
 
+  # A member of a set that is a date or a time carries its own suffix as an
+  # end of an interval does, and so does each end of a range.
+  defp validate_token({tag, inner} = member)
+       when tag in [:date, :datetime, :time_of_day] and is_list(inner),
+       do: validate_interval_part(member)
+
+  defp validate_token({:range, ends}) when is_list(ends) do
+    with {:ok, ends} <- reduce_while_ok(ends, &validate_range_end/1) do
+      {:ok, {:range, ends}}
+    end
+  end
+
   defp validate_token(other) do
     {:ok, other}
   end
+
+  # An end of a range open at its other end is its units alone, with no tag
+  # (`Tempo.Iso8601.Tokenizer.Grammar.range/1`).
+  defp validate_range_end([{_unit, _value} | _units] = units) do
+    with {:ok, {:date, units}} <- validate_interval_part({:date, units}), do: {:ok, units}
+  end
+
+  defp validate_range_end(tagged_or_open), do: validate_token(tagged_or_open)
 
   # A recurrence's domain is a set, read as one.
   defp validate_interval_part({:domain_set, members}) when is_list(members) do

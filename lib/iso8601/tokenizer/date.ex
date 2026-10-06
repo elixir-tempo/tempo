@@ -37,10 +37,16 @@ defmodule Tempo.Iso8601.Tokenizer.Date do
   # a value written alone takes (`{2026-06-15?,2026-06~}`). A member was read
   # with none, so a set held no qualified value but through a qualifier of
   # one of its components.
+  #
+  # And with the suffix of RFC 9557 a value written alone takes, as an end of
+  # an interval has: a member in a zone of its own
+  # (`{2026-06-15T10:30[Europe/Paris],2026-06-15T10:30[America/New_York]}`),
+  # which is how a set of values in two zones is written and was not read.
   defcombinator :qualified_member,
                 optional(qualification())
                 |> parsec({Tempo.Iso8601.Tokenizer.Date, :datetime_or_date_or_time})
                 |> optional(qualification())
+                |> optional(Extended.extended_suffix())
                 |> reduce(:merge_member_qualification),
                 export_combinator: true
 

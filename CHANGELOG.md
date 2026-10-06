@@ -325,6 +325,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A member of a set, and an end of a range in one, is read with a suffix of its own, as an end of an interval is: `{2026-06-15T10:30[Europe/Paris],2026-06-15T10:30[America/New_York]}`, which is how a set of values in two zones is written, was a parse error. A member's zone, calendar and tags are its own, and the set's suffix is each member's that has none.
+
 * A range from one division of a year to another in a set (`{2026-21..2026-23}`, `{2026-33..2027-34}`: seasons, quarters, quadrimesters and semesters) is each division between them, where it was a range whose ends were intervals, which nothing walked and whose own text was not read. One that is no run in time (the seasons numbered 21 to 24, whose winter begins the December before), from one kind to another, or open at an end is an `InvalidDateError`.
 
 * One of several years is read before the year designator, as one of several of any other unit is (ISO 8601-2 §6.6): `[2025,2026]Y6M` is June of 2025 or of 2026, where it was a parse error.

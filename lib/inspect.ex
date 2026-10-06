@@ -65,11 +65,11 @@ defmodule Tempo.Inspect do
 
   defp hoist_shared_qualification(value), do: {value, []}
 
-  # A suffix inside a set's braces does not parse, so the zone and tags a
-  # set's members share are written once, after the set, where they read back
-  # as each member's — in IXDTF's order, the zone before the calendar and the
-  # tags after it. A recurrence's domain is a set, whose zone is written after
-  # the recurrence. Members in different zones keep their own.
+  # The zone and tags a set's members share are written once, after the set,
+  # where they read back as each member's — in IXDTF's order, the zone before
+  # the calendar and the tags after it. A recurrence's domain is a set, whose
+  # zone is written after the recurrence. Members in different zones keep
+  # their own, each written after its member, as it is read there.
   defp hoist_shared_zone(%Tempo.Set{} = set), do: hoist_zone(set)
 
   defp hoist_shared_zone(%Tempo.Interval{from: %Tempo.Set{} = domain} = interval) do
