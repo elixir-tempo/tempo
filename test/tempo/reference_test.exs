@@ -777,12 +777,20 @@ defmodule Tempo.Reference.Test do
 
       check all(point <- Generators.datetime_to_the_second(), zone <- member_of(zones)) do
         {:ok, naive} = Reference.naive(point)
-        {:ok, placed} = Tempo.in_zone(reading(point), zone)
 
-        # A wall time the zone skips or shows twice is no one moment.
-        case DateTime.from_naive(naive, zone) do
-          {:ok, datetime} -> assert Tempo.to_datetime(placed) == {:ok, datetime}
-          _gap_or_ambiguous -> assert %Tempo{} = placed
+        case {DateTime.from_naive(naive, zone), Tempo.in_zone(reading(point), zone)} do
+          {{:ok, datetime}, {:ok, placed}} ->
+            assert Tempo.to_datetime(placed) == {:ok, datetime}
+
+          # A wall time the zone shows twice is no one moment, and is read.
+          {{:ambiguous, _first, _second}, {:ok, placed}} ->
+            assert %Tempo{} = placed
+
+          # One the zone skips is no reading of its clock, and is refused:
+          # 02:00 on 11 March 2007 in New York, which the generator reaches
+          # once in some thousands of runs.
+          {{:gap, _before, _after}, answer} ->
+            assert {:error, %Tempo.ZoneGapError{}} = answer
         end
       end
     end

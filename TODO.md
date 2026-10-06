@@ -94,6 +94,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Done
 
+* [x] **A property that met a reading the clock skips** — `Tempo.Reference.Test`'s property of `in_zone/2` matched `{:ok, placed}` for every generated reading, and the generator reaches one a zone's clock skips (02:00 on 11 March 2007 in New York) once in some thousands of runs, which `in_zone/2` refuses since 2026-10-06. The property now holds each answer to what `DateTime.from_naive/2` says of the reading. 2026-10-07.
+
 * [x] **A year mask written with leading zeros** — `~o"000X"` spanned ten years and matched none of them, so a walk of it raised: a year's digits were matched one for one against the mask's, and no year's begin with a zero. The zeros are the padding of a year written to four digits, and the mask is matched by the digits after them (`matches_mask?/2` in `lib/mask.ex`). Found beside the Julian calendar's year 0. 2026-10-07.
 
 * [x] **RFC 7529's `SKIP=FORWARD`, and a skip of a day the rule writes** — a rule's skip is held in its selection where it moves a day (`{:skip, :forward | :backward}`, written by `push_skip/2` in `lib/tempo/rrule/rule.ex`), and the resolver moves a day of the month its month lacks to the month's last day or the first of the month after (`expand_candidate_days/3` in `lib/tempo/rrule/selection.ex`); an occurrence an earlier period gave is given once (`moves_days?/1` in `lib/tempo.ex`), and `Tempo.RRule.to_string/1` writes `RSCALE=GREGORIAN` and the `SKIP`. Held by `Date` alone in `Tempo.RRule.RscaleSkipTest`. 2026-10-07.
