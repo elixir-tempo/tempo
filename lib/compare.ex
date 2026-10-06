@@ -1082,7 +1082,8 @@ defmodule Tempo.Compare do
   # 2. A numeric offset on `extended.zone_offset` (minutes) — use
   #    directly.
   # 3. A `shift` keyword list (legacy-style) — convert to seconds.
-  # 4. No info → 0 (treat as UTC).
+  # 4. No info → 0 (treat as UTC). A zone the database does not know is no
+  #    information either, and the value is read by 2 or 3 where it has one.
   # Pre-common-era wall instants precede every IANA rule — local-mean-
   # time era, so treat as
   # UTC exactly like the no-info fallback below.
@@ -1113,9 +1114,10 @@ defmodule Tempo.Compare do
       {:gap, {before, _gap_starts}, _after} ->
         TimeZoneDatabase.total_offset(before)
 
-      # An unknown zone, or no configured database: read as UTC.
+      # A zone the database does not know, or no configured database: read
+      # by the offset written with the value, and as UTC where there is none.
       {:error, _reason} ->
-        0
+        explicit_offset_seconds(extended, shift) || 0
     end
   end
 

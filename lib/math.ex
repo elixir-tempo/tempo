@@ -1093,7 +1093,7 @@ defmodule Tempo.Math do
     from_utc = trunc(Compare.to_utc_seconds(stepped))
     before = wall_reading(stepped) - from_utc
     to_utc = from_utc + clock_seconds(clock)
-    later = offset_at(zone, to_utc)
+    later = offset_at(zone, to_utc, before)
 
     with %Tempo{} = walled <- add_wall(stepped, %Tempo.Duration{time: clock}),
          %Tempo{} = moved <- move_wall(walled, later - before) do
@@ -1147,10 +1147,13 @@ defmodule Tempo.Math do
     end)
   end
 
-  defp offset_at(zone, utc_seconds) do
+  # The offset a zone has at an instant. A zone the database does not know
+  # has no change of its clock to land past, so the value keeps the offset
+  # it is read by.
+  defp offset_at(zone, utc_seconds, otherwise) do
     case TimeZoneDatabase.period_at_utc(zone, utc_seconds) do
       {:ok, period} -> total_offset(period)
-      {:error, _reason} -> 0
+      {:error, _reason} -> otherwise
     end
   end
 

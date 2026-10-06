@@ -1894,10 +1894,10 @@ defmodule Tempo do
   # Map Calendrical's parsed fields onto `Tempo.new/1`'s components and
   # options. `:microsecond` is dropped because Tempo is second-resolution.
   # An IANA zone becomes the `:zone` option, its offsets derivable from
-  # it; a fixed offset, which Calendrical labels `Etc/UTC` beside a
-  # non-zero offset, becomes the `:shift` `from_iso8601/1` gives it. A
-  # week of a week-based year becomes Tempo's `:week` of that year, and
-  # a weekday beside a full date is dropped, the date fixing it
+  # it; a fixed offset, whose time zone Calendrical names by the offset
+  # itself (`fixed_offset_zone?/2`), becomes the `:shift` `from_iso8601/1`
+  # gives it. A week of a week-based year becomes Tempo's `:week` of that
+  # year, and a weekday beside a full date is dropped, the date fixing it
   # (Calendrical drops one that disagrees with the date).
   defp sanitise_parsed_map(map) do
     {offset, map} = pop_offset(map)
@@ -1915,13 +1915,25 @@ defmodule Tempo do
     {utc_offset + std_offset, map}
   end
 
-  defp put_zone_or_shift(%{time_zone: "Etc/UTC"} = map, offset) when offset != 0 do
-    map
-    |> Map.delete(:time_zone)
-    |> Map.put(:shift, iso_shift(offset))
+  defp put_zone_or_shift(%{time_zone: time_zone} = map, offset) do
+    if fixed_offset_zone?(time_zone, offset),
+      do: map |> Map.delete(:time_zone) |> Map.put(:shift, iso_shift(offset)),
+      else: rename_key(map, :time_zone, :zone)
   end
 
-  defp put_zone_or_shift(map, _offset), do: rename_key(map, :time_zone, :zone)
+  defp put_zone_or_shift(map, _offset), do: map
+
+  # Whether a time zone is a fixed offset's and no zone of the time zone
+  # database. From its 1.4 Localize names the time zone of a date and time
+  # written with an offset by the offset itself, `"-05:00"`, as RFC 9557 and
+  # Temporal do; before it the name was `"Etc/UTC"` beside an offset that is
+  # not zero, which a caller may still give. A fixed offset is a `:shift` in
+  # Tempo, as `from_iso8601/1` reads one: read as a zone it is one no
+  # database has, and was taken for UTC.
+  defp fixed_offset_zone?("Etc/UTC", offset), do: offset != 0
+
+  defp fixed_offset_zone?(time_zone, _offset),
+    do: match?({:ok, _seconds}, Localize.TimeZoneDatabase.fixed_offset(time_zone))
 
   # The shift `from_iso8601/1` gives an offset written with minutes:
   # "+05:00" is `[hour: 5, minute: 0]`, "-03:30" `[hour: -3, minute: 30]`.
@@ -2355,6 +2367,11 @@ defmodule Tempo do
   `:extended` map under `:zone_id`. Iteration on the returned
   Tempo carries both pieces of metadata through.
 
+  A `DateTime` at a fixed offset has no zone of the time zone database:
+  its time zone is the offset itself (`"-05:00"`, as Localize reads a
+  date and time written with an offset), and it is the `:shift` alone,
+  the value `from_iso8601/1` reads from the same text.
+
   ### Arguments
 
   * `datetime` is any `t:DateTime.t/0`.
@@ -2373,6 +2390,11 @@ defmodule Tempo do
 
       iex> Tempo.from_datetime(~U[2022-11-20 10:37:00Z]).extended.zone_id
       "Etc/UTC"
+
+      iex> {:ok, at_an_offset} =
+      ...>   DateTime.new(~D[2026-05-23], ~T[14:30:00], "-05:00", Localize.TimeZoneDatabase)
+      iex> Tempo.from_datetime(at_an_offset)
+      ~o"2026Y5M23DT14H30M0SZ-5H"
 
   """
   @spec from_datetime(DateTime.t()) :: t()
@@ -2402,13 +2424,16 @@ defmodule Tempo do
       time: time,
       shift: Zone.offset_to_shift(total_offset),
       calendar: tempo_calendar,
-      extended: %{
-        zone_id: time_zone,
-        zone_offset: nil,
-        zone_critical: false,
-        tags: %{}
-      }
+      extended: zone_of(time_zone, total_offset)
     }
+  end
+
+  # The zone a `DateTime` is in, which is none where its time zone is a
+  # fixed offset's: the shift says all of it.
+  defp zone_of(time_zone, total_offset) do
+    if fixed_offset_zone?(time_zone, total_offset),
+      do: nil,
+      else: %{zone_id: time_zone, zone_offset: nil, zone_critical: false, tags: %{}}
   end
 
   # Elixir's `Time`/`NaiveDateTime`/`DateTime` carry sub-second data in
@@ -4425,9 +4450,10 @@ defmodule Tempo do
   ### Arguments
 
   * `tempo` is a zoned `t:t/0` resolved to at least second resolution.
-    A named IANA zone on `extended.zone_id` (every value built from a
-    `DateTime` via `from_elixir/2` has one) is kept; a UTC offset
-    (`Z` included) gives the instant in `Etc/UTC`. A floating value
+    A named IANA zone on `extended.zone_id` (a value built by
+    `from_elixir/2` from a `DateTime` in a zone has one) is kept; a UTC
+    offset (`Z` included), beside the time or as the value's time zone
+    (`[-05:00]`), gives the instant in `Etc/UTC`. A floating value
     has no instant and returns an error — place it in a zone with
     `in_zone/2` first, or use `to_naive_datetime/1`.
 
@@ -4461,9 +4487,34 @@ defmodule Tempo do
   # Elixir's `DateTime.from_iso8601/1` applies to offset strings.
   # iCalendar `DATE-TIME` values commonly carry offsets rather than
   # named zones, so this is the common third-party path.
-  def to_datetime(%Tempo{shift: shift} = tempo) when is_list(shift) do
+  #
+  # An offset written as the value's time zone (`[-05:00]`, RFC 9557's
+  # zone of a fixed offset) is its offset as one written beside the time
+  # is, and comes first, as it does where values are compared.
+  def to_datetime(%Tempo{extended: %{zone_offset: minutes}} = tempo) when is_integer(minutes),
+    do: instant_at_offset(tempo, minutes * 60)
+
+  def to_datetime(%Tempo{shift: shift} = tempo) when is_list(shift),
+    do: instant_at_offset(tempo, Compare.offset_seconds(shift))
+
+  def to_datetime(%Tempo{} = value) do
+    {:error,
+     ConversionError.exception(
+       value: value,
+       target: DateTime,
+       reason:
+         "a floating value (no zone or offset) does not denote an instant — " <>
+           "place it in a zone with `Tempo.in_zone/2`, or parse it with a zone, offset, or `Z`"
+     )}
+  end
+
+  def to_datetime(value) do
+    {:error, ConversionError.exception(value: value, target: DateTime)}
+  end
+
+  defp instant_at_offset(tempo, offset_seconds) do
     with {:ok, naive} <- to_naive_datetime(tempo) do
-      utc_naive = NaiveDateTime.add(naive, -Compare.offset_seconds(shift), :second)
+      utc_naive = NaiveDateTime.add(naive, -offset_seconds, :second)
 
       # `Etc/UTC` has no transitions, so `:ambiguous`/`:gap` cannot
       # occur — but they are in `from_naive/2`'s contract, so convert
@@ -4481,21 +4532,6 @@ defmodule Tempo do
            )}
       end
     end
-  end
-
-  def to_datetime(%Tempo{} = value) do
-    {:error,
-     ConversionError.exception(
-       value: value,
-       target: DateTime,
-       reason:
-         "a floating value (no zone or offset) does not denote an instant — " <>
-           "place it in a zone with `Tempo.in_zone/2`, or parse it with a zone, offset, or `Z`"
-     )}
-  end
-
-  def to_datetime(value) do
-    {:error, ConversionError.exception(value: value, target: DateTime)}
   end
 
   # Rebuild a `DateTime` from a wall-clock `NaiveDateTime` and a

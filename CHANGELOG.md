@@ -325,6 +325,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A fixed offset is the shift `from_iso8601/1` reads one as, wherever it comes from: Localize names the time zone of a date and time written with an offset by the offset itself (`"-05:00"`), which `Tempo.parse/2` returned as a `Tempo.UnknownZoneError` for "2:30 PM EST" and `Tempo.from_elixir/2` held as a zone no database has, taken for UTC. A value in a zone the time zone database does not have is read by the offset written with it, and `Tempo.to_datetime/1` gives the instant of a value whose offset is written as its time zone (`[-05:00]`), where it called the value floating.
+
 * A recurrence with no year, placed on a window that starts where the clock skips its start, has its first occurrence on the reading that long after, as RFC 5545 has it, and each one after at its own time of day: `R3/T02H30M/P1D` within the days from 10 March 2024 in New York is 03:30 that night and 02:30 on the nights after. The first was on 02:30, which the clock skips and nothing reads.
 
 * Nothing gives a day its zone leaves out. In Samoa, which had no 30 December 2011, the 29th ends where the 31st begins and meets it, a step of days, months or years that lands on the 30th is the 31st (the 29th where it runs back), a recurrence has that occurrence on the 31st, once, and a walk, `Tempo.round/2` and `Tempo.select/2` pass over the day, where each gave a date that is then not read.
