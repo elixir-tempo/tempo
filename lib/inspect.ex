@@ -313,12 +313,12 @@ defmodule Tempo.Inspect do
   @doc """
   The construct in a Tempo value that has no ISO 8601 form, found before
   the value is encoded: an ordinal BYDAY across distinct weekdays
-  (`:byday`), a cron nearest-weekday (`:nearest_weekday`) or a cron
-  day-of-month OR day-of-week union (`:or_day`), anywhere in its
-  selections, or a recurrence's end (RFC 5545 `UNTIL`, `:until`). `nil`
-  when the value has none.
+  (`:byday`), a cron nearest-weekday (`:nearest_weekday`), a cron
+  day-of-month OR day-of-week union (`:or_day`) or a rule's skip (RFC
+  7529 `SKIP`, `:skip`), anywhere in its selections, or a recurrence's
+  end (RFC 5545 `UNTIL`, `:until`). `nil` when the value has none.
   """
-  @spec unencodable(term()) :: :byday | :nearest_weekday | :or_day | :until | nil
+  @spec unencodable(term()) :: :byday | :nearest_weekday | :or_day | :skip | :until | nil
   def unencodable(%Tempo{time: time}), do: unencodable_in(time)
 
   # An end beside a cadence is RFC 5545's `UNTIL`. ISO 8601's own
@@ -334,7 +334,7 @@ defmodule Tempo.Inspect do
   def unencodable(_value), do: nil
 
   defp unencodable_in({construct, _value})
-       when construct in [:byday, :nearest_weekday, :or_day],
+       when construct in [:byday, :nearest_weekday, :or_day, :skip],
        do: construct
 
   defp unencodable_in({_key, value}), do: unencodable_in(value)
@@ -1198,6 +1198,12 @@ defmodule Tempo.Inspect do
   # where every part of an ISO 8601 selection holds at once.
   defp inspect_value({:or_day, _days}) do
     raise Iso8601EncodeError.exception(construct: :or_day)
+  end
+
+  # A rule's skip (RFC 7529 `SKIP`) moves a day a month lacks, where ISO
+  # 8601 has a selection name the days it is.
+  defp inspect_value({:skip, _skip}) do
+    raise Iso8601EncodeError.exception(construct: :skip)
   end
 
   defp inspect_value({:interval, interval}), do: inspect_value(interval)

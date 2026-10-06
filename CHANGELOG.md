@@ -221,6 +221,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Added
 
+* `Tempo.RRule.parse/2` and `Tempo.JSCalendar.parse/2` read RFC 7529's `SKIP=FORWARD` (`"skip": "forward"`), the first day of the month after a month that lacks the rule's day, and move a day the rule writes itself as they move its start's: `RSCALE=GREGORIAN;FREQ=MONTHLY;BYMONTHDAY=31;SKIP=BACKWARD` is each month's last day, where it was `{:error, {:unsupported_skip, …}}`. `Tempo.RRule.to_string/1` writes such a rule with `RSCALE=GREGORIAN` and its `SKIP`, and two days moved to one date are one occurrence.
+
 * `Tempo.duration/1` measures a span with no year where it is as long on any day or in any week: `~o"T22/T02"` is `PT4H`, an hour alone `PT1H`, and Monday to Saturday (`~o"1K/6K"`) `P5D`, each of which was a `Tempo.UnanchoredError`. A span of months and days has the length of a year it has not got, and is that error still.
 
 * `Tempo.TimeZoneDatabase.changes/3` — the moments a zone's clock changes between two moments, each with the offset before and after. The `Calendar.TimeZoneDatabase` behaviour lists none, so they are found by asking each day's start, and kept.
@@ -293,6 +295,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Changed
 
+* A `SKIP` beside `BYYEARDAY=366` is read, and the day passed over in a year of 365 days: RFC 7529 moves a day of the month, and not a day of the year. A `SKIP` beside a day counted from the end that a month can lack (`BYMONTHDAY=-31`) is `{:error, {:unsupported_skip, {skip, [bymonthday: [-31]]}}}`, for `FORWARD` as for `BACKWARD`.
+
 * `Tempo.to_string/2` shows a week of a calendar of weeks as the locale's words for it, "week 25 of 2026" and "Woche 25 des Jahres 2026" (CLDR's `yw`), and a span of weeks from its first to its last, where it showed the first and last days in the calendar's notation ("2026-W25-1 – 2026-W25-7"). A week of a calendar of months is its days still.
 
 * A `:within` window with no start (`~o"../2027"`) is refused as one: "a :within window needs a start". It was refused further on, as an open-ended interval that cannot be a member of a set, and a value that needs no window was converted as if none were given.
@@ -338,6 +342,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* A rule with `SKIP=BACKWARD` and a time of day, from a start that is a date, gives occurrences as long as the time is precise: `RSCALE=GREGORIAN;FREQ=MONTHLY;BYHOUR=9;SKIP=BACKWARD` from 31 January is an hour from nine on each month's last day, where each occurrence was a day long.
 
 * A week or a month selected alone within a §12.10 window keeps the days of the window that are in it, whatever the rule starts from: `R/../P1Y/FL11MLL1K1IN/P7DN45WN` and `Tempo.select(~o"2026Y", ~o"L11MLL1K1IN/P7DN45WN")` are the seven days from 2 November 2026, as the same rule from a date was. They selected nothing, the rule's start having been taken as coarsely as the week.
 

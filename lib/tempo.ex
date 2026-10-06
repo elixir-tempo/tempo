@@ -2057,7 +2057,7 @@ defmodule Tempo do
          nil <- Tempo.Inspect.unnamed_calendar(value) do
       {:ok, value |> Tempo.Inspect.to_iodata() |> IO.iodata_to_binary()}
     else
-      construct when construct in [:byday, :nearest_weekday, :or_day, :until] ->
+      construct when construct in [:byday, :nearest_weekday, :or_day, :skip, :until] ->
         {:error, Iso8601EncodeError.exception(construct: construct, value: value)}
 
       calendar ->
@@ -2546,6 +2546,7 @@ defmodule Tempo do
   defp unit_resolution({:event, _name}), do: {:day, 1}
   defp unit_resolution({:interval, _window}), do: {:day, 1}
   defp unit_resolution({:wkst, _day}), do: {:day_of_week, 1}
+  defp unit_resolution({:skip, _skip}), do: {:day, 1}
   defp unit_resolution({unit, {:group, first..last//_}}), do: {unit, last - first + 1}
 
   # A materialised group is `{unit, {:group, members}, size}` — the
@@ -8186,7 +8187,9 @@ defmodule Tempo do
   # * `selection_fn` is the BY-rule resolver. It takes one
   #   candidate `%Interval{}` and returns a list (0 for LIMIT
   #   rejection, 1 for passthrough, N for EXPAND). Delegates to
-  #   `Tempo.RRule.Selection.apply/3`.
+  #   `Tempo.RRule.Selection.apply/3`. For a rule that moves a day
+  #   (`moves_days?/1`) it is `{:each_start_once, resolver}`, and an
+  #   occurrence an earlier period gave is not given again.
   #
   # * `output_limit` is the downstream cap — `n` for a bounded
   #   recurrence, `@recurrence_safety_cap` otherwise. BY-rule
@@ -8206,7 +8209,7 @@ defmodule Tempo do
          metadata,
          output_limit \\ @recurrence_safety_cap
        )
-       when is_function(start_predicate, 1) and is_function(selection_fn, 1) do
+       when is_function(start_predicate, 1) do
     from
     |> period_occurrences(cadence, occurrence_end, start_predicate, selection_fn, metadata)
     |> from_the_start(floor)
@@ -8295,7 +8298,21 @@ defmodule Tempo do
 
   # Every occurrence the periods from `from` select, walking while a
   # period's start satisfies `start_predicate`.
-  defp period_occurrences(from, cadence, occurrence_end, start_predicate, selection_fn, metadata) do
+  defp period_occurrences(
+         from,
+         cadence,
+         occurrence_end,
+         start_predicate,
+         {:each_start_once, selection_fn},
+         metadata
+       ) do
+    from
+    |> period_occurrences(cadence, occurrence_end, start_predicate, selection_fn, metadata)
+    |> Stream.uniq_by(&start_of/1)
+  end
+
+  defp period_occurrences(from, cadence, occurrence_end, start_predicate, selection_fn, metadata)
+       when is_function(selection_fn, 1) do
     from
     |> recurrence_candidates(cadence, occurrence_end, metadata)
     |> Stream.take_while(&walking?(&1, start_predicate))
@@ -8303,6 +8320,9 @@ defmodule Tempo do
     |> Stream.flat_map(&selected(&1, selection_fn))
     |> until_failure()
   end
+
+  defp start_of(%Tempo.Interval{from: from}), do: from
+  defp start_of(failure), do: failure
 
   # A walk ends with its first failure: a step the cadence could not take, or
   # a selection that has no answer for a candidate (a computed event with no
@@ -8507,7 +8527,7 @@ defmodule Tempo do
     resize? = not explicit_span? and Selection.expands?(rule, freq)
     origin_day = origin_day_of(interval)
 
-    fn candidate ->
+    select = fn candidate ->
       case Selection.apply(candidate, rule, freq,
              origin_day: origin_day,
              keep_span: explicit_span?
@@ -8516,7 +8536,19 @@ defmodule Tempo do
         occurrences -> resize_selected_occurrences(occurrences, resize?)
       end
     end
+
+    if moves_days?(rule), do: {:each_start_once, select}, else: select
   end
+
+  # A rule that moves a day its month lacks (RFC 7529's `SKIP`) can move it
+  # onto a day the period after selects too: the 31st of February moved
+  # forward is 1 March, which a rule for the 1st and the 31st selects in
+  # March as well. The two are one occurrence (RFC 8984 §4.3.3.1: "eliminate
+  # any date-times that have already been produced by previous iterations").
+  defp moves_days?(%Tempo{time: [{:selection, selection} | _units]}),
+    do: List.keymember?(selection, :skip, 0)
+
+  defp moves_days?(_rule), do: false
 
   # The day the recurrence started on — DTSTART's day-of-month —
   # which cadence stepping may have clamped away on individual
@@ -8848,17 +8880,21 @@ defmodule Tempo do
   defp start_unit(%Tempo.Interval{repeat_rule: %Tempo{time: [{:selection, selection} | _units]}})
        when selection != [] do
     # The finest unit is the last selection component (they are written
-    # coarse-to-fine), the week start (`q`) aside: it is context, not a unit.
+    # coarse-to-fine), the week start (`q`) and a skip aside: they are
+    # context, not units.
     # Read it straight from the AST rather than through `resolution/1`, whose
     # declared `time_unit()` return elides the selection-only keys (`:byday`,
     # `:day_of_week`) this must normalise.
-    case selection |> Enum.reject(&match?({:wkst, _day}, &1)) |> List.last() do
+    case selection |> Enum.reject(&context?/1) |> List.last() do
       {finest_unit, _value} -> finest_unit |> calendar_start_unit() |> in_a_window(selection)
       nil -> :day
     end
   end
 
   defp start_unit(%Tempo.Interval{}), do: :day
+
+  # The week start (`q`) and a rule's skip are context, and name no unit.
+  defp context?({part, _value}), do: part in [:wkst, :skip]
 
   # A §12.10 window runs from a day, whatever is selected within it. A week
   # or a month selected there keeps the days of the window that are in it,

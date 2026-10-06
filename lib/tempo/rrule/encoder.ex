@@ -34,7 +34,8 @@ defmodule Tempo.RRule.Encoder do
     :minute,
     :second,
     :instance,
-    :wkst
+    :wkst,
+    :skip
   ]
 
   @weekday_code %{
@@ -125,7 +126,7 @@ defmodule Tempo.RRule.Encoder do
          {:ok, by_parts} <- by_parts(interval.repeat_rule, interval),
          :ok <- NotBuilt.rrule(interval) do
       parts =
-        [bound_part, freq_and_interval_parts, by_parts]
+        [rscale_part(interval.repeat_rule), bound_part, freq_and_interval_parts, by_parts]
         |> List.flatten()
         |> Enum.reject(&is_nil/1)
 
@@ -449,6 +450,17 @@ defmodule Tempo.RRule.Encoder do
     end
   end
 
+  ## RSCALE
+
+  # RFC 7529 §4.1: "The SKIP rule part MUST NOT be present unless the RSCALE
+  # rule part is present." A rule that holds a skip is counted in the
+  # Gregorian calendar, the one an RRULE is written for, and says so.
+  defp rscale_part(%Tempo{time: [{:selection, selection} | _units]}) do
+    if Keyword.has_key?(selection, :skip), do: "RSCALE=GREGORIAN"
+  end
+
+  defp rscale_part(_no_selection), do: nil
+
   ## BY* rules
 
   defp by_parts(nil, _interval), do: {:ok, []}
@@ -708,6 +720,9 @@ defmodule Tempo.RRule.Encoder do
 
   defp encode_by_entry({:wkst, w}) when is_integer(w),
     do: ["WKST=#{Map.fetch!(@weekday_code, w)}"]
+
+  defp encode_by_entry({:skip, :forward}), do: ["SKIP=FORWARD"]
+  defp encode_by_entry({:skip, :backward}), do: ["SKIP=BACKWARD"]
 
   # What a selection token with no RRULE BY-part selects, and why RFC 5545
   # cannot say it.

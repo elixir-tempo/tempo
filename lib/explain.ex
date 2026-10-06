@@ -1729,7 +1729,7 @@ defmodule Tempo.Explain do
   defp windowed_prose(scope, %Tempo.Interval{from: inner, duration: duration}, within, naming) do
     window = window_phrase(duration, selection_noun(scope ++ inner_selection_of(inner), naming))
 
-    case Enum.reject(within, fn {key, _value} -> key in [:origin_day, :wkst] end) do
+    case Enum.reject(within, fn {key, _value} -> key in [:origin_day, :wkst, :skip] end) do
       [] -> window
       selectors -> "#{flat_selection_prose(selectors, naming)} within #{window}"
     end
@@ -1864,6 +1864,13 @@ defmodule Tempo.Explain do
     do: "in traditional month #{m}"
 
   defp selection_clause({:wkst, w}), do: "with weeks starting on #{weekday_name(w)}"
+
+  defp selection_clause({:skip, :forward}),
+    do: "on the first day of the month after where a month lacks the day"
+
+  defp selection_clause({:skip, :backward}),
+    do: "on the last day of a month that lacks the day"
+
   defp selection_clause({:day, d}), do: "on #{ordinals_phrase(d)}"
   defp selection_clause({:week, w}), do: "in #{ordinals_phrase(w)} ISO week"
   defp selection_clause({:calendar_week, w}), do: "in #{ordinals_phrase(w)} calendar week"

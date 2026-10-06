@@ -61,6 +61,13 @@ defmodule Tempo.Iso8601EncodeError do
       "is expressible only as an RFC 5545 RRULE string; use `Tempo.RRule.to_string/1`."
   end
 
+  def message(%__MODULE__{construct: :skip}) do
+    "Cannot encode a rule's skip (RFC 7529 `SKIP=FORWARD` or `SKIP=BACKWARD` " <>
+      "beside a day of the month a month lacks) as ISO 8601 — an ISO 8601 selection " <>
+      "names the days it selects, and has no form for a day moved to another. It is " <>
+      "expressible as an RRULE string; use `Tempo.RRule.to_string/1`."
+  end
+
   def message(%__MODULE__{construct: :recurrence_set}) do
     "Cannot encode a recurrence set as ISO 8601 — ISO 8601 has no form for a set " <>
       "of recurrences. Encode its members one by one (`Tempo.RecurrenceSet.members/1`)."

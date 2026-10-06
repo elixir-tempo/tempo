@@ -4,13 +4,13 @@ defmodule Tempo.RRule.RscaleSkipTest do
   # RFC 7529 adds two parts to an RRULE: `RSCALE`, the calendar the rule
   # counts its months and days in, and `SKIP`, what it does with a date that
   # does not exist, such as the 31st of a month of thirty days. `OMIT`, the
-  # default and RFC 5545's rule, passes over it, and `BACKWARD` takes the
-  # last day of the month. `Tempo.RRule.parse/2` returned
-  # `{:error, {:unknown_rule_part, "SKIP"}}` for each.
+  # default and RFC 5545's rule, passes over it, `BACKWARD` takes the last
+  # day of the month and `FORWARD` the first day of the month after.
   #
-  # The measure is `Date` alone: `Date.shift/2` keeps the last day of a month
-  # without the day it started on, which is `BACKWARD`, and `Date.new/3` says
-  # whether a month has the day, which is `OMIT`.
+  # The measure is `Date` alone: `Date.new/3` says whether a month has the
+  # day, `Date.end_of_month/1` its last day, and the day after that is the
+  # first of the month after. `Date.shift/2` keeps the last day of a month
+  # without the day it started on, which is `BACKWARD` for a start's day.
 
   import Tempo.Sigils
 
@@ -30,6 +30,142 @@ defmodule Tempo.RRule.RscaleSkipTest do
       {:ok, from} = occurrence |> Interval.from() |> Tempo.to_date()
       {:ok, to} = occurrence |> Interval.to() |> Tempo.to_date()
       {from, Date.diff(to, from)}
+    end
+  end
+
+  # Where a day of the month is in a month: the day where the month has it,
+  # and otherwise nowhere, the month's last day or the first of the month
+  # after.
+  defp day_or_moved(%Date{} = month, day, skip) do
+    last = Date.end_of_month(month)
+
+    case {Date.new(month.year, month.month, day), skip} do
+      {{:ok, date}, _skip} -> [date]
+      {{:error, :invalid_date}, :omit} -> []
+      {{:error, :invalid_date}, :backward} -> [last]
+      {{:error, :invalid_date}, :forward} -> [Date.add(last, 1)]
+    end
+  end
+
+  # The days a monthly rule for some days of the month selects in each
+  # month from January 2026, a day two of them are moved to once, and of
+  # those the ones `keep` keeps.
+  defp days_selected(days, skip, keep \\ & &1) do
+    for step <- 0..59,
+        month = Date.shift(~D[2026-01-01], month: step),
+        date <- days |> Enum.flat_map(&day_or_moved(month, &1, skip)) |> Enum.uniq() |> keep.(),
+        uniq: true,
+        do: {date, 1}
+  end
+
+  defp skip_part(skip), do: "SKIP=#{skip |> Atom.to_string() |> String.upcase()}"
+
+  describe "SKIP=FORWARD" do
+    test "takes the first day of the month after a month without the start's day" do
+      for start <- @starts, interval <- [1, 2, 5] do
+        expected =
+          for step <- 0..11,
+              month = Date.shift(Date.beginning_of_month(start), month: step * interval),
+              date <- day_or_moved(month, start.day, :forward),
+              do: {date, 1}
+
+        rule = "RSCALE=GREGORIAN;FREQ=MONTHLY;INTERVAL=#{interval};SKIP=FORWARD;COUNT=12"
+
+        assert {start, interval, occurrences(read(rule, start))} == {start, interval, expected}
+      end
+    end
+
+    test "takes 1 March in a year without a 29 February" do
+      expected =
+        for step <- 0..7,
+            date <- day_or_moved(Date.new!(2024 + step, 2, 1), 29, :forward),
+            do: {date, 1}
+
+      rule = "RSCALE=GREGORIAN;FREQ=YEARLY;SKIP=FORWARD;COUNT=8"
+
+      assert occurrences(read(rule, ~D[2024-02-29])) == expected
+      assert {~D[2025-03-01], 1} in expected
+    end
+
+    test "is written as it is read, and has no ISO 8601 form" do
+      {:ok, rule} = read("RSCALE=GREGORIAN;FREQ=MONTHLY;SKIP=FORWARD;COUNT=3", ~D[2026-01-31])
+
+      assert {:ok, written} = RRule.to_string(rule)
+      assert written == "RSCALE=GREGORIAN;COUNT=3;FREQ=MONTHLY;BYMONTHDAY=31;SKIP=FORWARD"
+      assert read(written, ~D[2026-01-31]) == {:ok, rule}
+
+      assert {:error, %Tempo.Iso8601EncodeError{construct: :skip}} = Tempo.to_iso8601(rule)
+      assert Tempo.explain(rule) =~ "on the first day of the month after"
+    end
+  end
+
+  describe "a day of the month the rule writes" do
+    test "is moved as the start's is, and two days moved to one are one occurrence" do
+      for skip <- [:backward, :forward, :omit],
+          days <- [[31], [30, 31], [15, 31], [1, 31], [29, 30, 31]] do
+        rule =
+          "RSCALE=GREGORIAN;FREQ=MONTHLY;BYMONTHDAY=#{Enum.join(days, ",")};" <>
+            "#{skip_part(skip)};COUNT=30"
+
+        expected = days |> days_selected(skip) |> Enum.take(30)
+
+        assert {rule, occurrences(read(rule, ~D[2026-01-01]))} == {rule, expected}
+      end
+    end
+
+    test "is kept by a weekday beside it where the day it is moved to is that weekday" do
+      rule = "RSCALE=GREGORIAN;FREQ=MONTHLY;BYMONTHDAY=31;BYDAY=SU,MO;SKIP=FORWARD;COUNT=5"
+
+      on_sunday_or_monday = fn dates ->
+        Enum.filter(dates, &(Date.day_of_week(&1) in [7, 1]))
+      end
+
+      expected = [31] |> days_selected(:forward, on_sunday_or_monday) |> Enum.take(5)
+
+      assert occurrences(read(rule, ~D[2026-01-01])) == expected
+      assert hd(expected) == {~D[2026-03-01], 1}
+    end
+
+    test "is counted by a position among the days as they are moved" do
+      for skip <- [:backward, :forward] do
+        rule =
+          "RSCALE=GREGORIAN;FREQ=MONTHLY;BYMONTHDAY=29,30,31;BYSETPOS=-1;" <>
+            "#{skip_part(skip)};COUNT=12"
+
+        last = fn dates -> dates |> Enum.sort(Date) |> Enum.take(-1) end
+        expected = [29, 30, 31] |> days_selected(skip, last) |> Enum.take(12)
+
+        assert {skip, occurrences(read(rule, ~D[2026-01-01]))} == {skip, expected}
+      end
+    end
+
+    test "counted from the end that a month can lack is reported" do
+      for skip <- [:backward, :forward] do
+        rule = "RSCALE=GREGORIAN;FREQ=MONTHLY;BYMONTHDAY=15,-29,-31;#{skip_part(skip)}"
+
+        assert {skip, read(rule, ~D[2026-01-31])} ==
+                 {skip, {:error, {:unsupported_skip, {skip, [bymonthday: [-29, -31]]}}}}
+      end
+    end
+
+    test "that every month has is every month's, and the rule is the one without a skip" do
+      for skip <- [:backward, :forward] do
+        with_skip = "RSCALE=GREGORIAN;FREQ=MONTHLY;BYMONTHDAY=15,-1;#{skip_part(skip)};COUNT=4"
+        without = "FREQ=MONTHLY;BYMONTHDAY=15,-1;COUNT=4"
+
+        assert {skip, read(with_skip, ~D[2026-01-31])} == {skip, read(without, ~D[2026-01-31])}
+      end
+    end
+  end
+
+  describe "a day of the year" do
+    test "is no day of the month, and is passed over in a year without it whatever the skip" do
+      for skip <- [:backward, :forward] do
+        rule = "RSCALE=GREGORIAN;FREQ=YEARLY;BYYEARDAY=366;#{skip_part(skip)};COUNT=2"
+
+        assert {skip, occurrences(read(rule, ~D[2024-01-01]))} ==
+                 {skip, [{~D[2024-12-31], 1}, {~D[2028-12-31], 1}]}
+      end
     end
   end
 
@@ -60,19 +196,16 @@ defmodule Tempo.RRule.RscaleSkipTest do
       assert RRule.to_string(rule) == {:ok, "COUNT=3;FREQ=MONTHLY;BYMONTHDAY=-1"}
     end
 
-    test "beside a day the rule writes that a month or a year can lack is reported" do
-      for {parts, missing} <- [
-            {"FREQ=MONTHLY;BYMONTHDAY=31", [bymonthday: [31]]},
-            {"FREQ=MONTHLY;BYMONTHDAY=15,30,-29", [bymonthday: [30, -29]]},
-            {"FREQ=YEARLY;BYYEARDAY=366", [byyearday: [366]]}
-          ] do
-        assert {parts, read("RSCALE=GREGORIAN;SKIP=BACKWARD;" <> parts, ~D[2026-01-31])} ==
-                 {parts, {:error, {:unsupported_skip, {:backward, missing}}}}
-      end
+    test "beside a time of day keeps each occurrence as long as the time is precise" do
+      {:ok, rule} =
+        read("RSCALE=GREGORIAN;FREQ=MONTHLY;BYHOUR=9;SKIP=BACKWARD;COUNT=3", ~D[2026-01-31])
 
-      # A day every month has is every month's.
-      assert {:ok, _rule} =
-               read("RSCALE=GREGORIAN;SKIP=BACKWARD;FREQ=MONTHLY;BYMONTHDAY=15", ~D[2026-01-31])
+      {:ok, set} = Tempo.to_interval(rule)
+
+      # An hour from nine on the month's last day. It was a day long, the
+      # length a rule with no part is given.
+      assert Enum.map(IntervalSet.members(set), &Tempo.to_iso8601!/1) ==
+               ["2026Y1M31DT9H/T10H", "2026Y2M28DT9H/T10H", "2026Y3M31DT9H/T10H"]
     end
   end
 
@@ -104,9 +237,9 @@ defmodule Tempo.RRule.RscaleSkipTest do
   end
 
   describe "what is not built is reported" do
-    test "SKIP=FORWARD, the first day of the month after" do
-      assert RRule.parse("RSCALE=GREGORIAN;FREQ=MONTHLY;SKIP=FORWARD") ==
-               {:error, {:unsupported_skip, "FORWARD"}}
+    test "a SKIP that is none of the three" do
+      assert RRule.parse("RSCALE=GREGORIAN;FREQ=MONTHLY;SKIP=SIDEWAYS") ==
+               {:error, {:unsupported_skip, "SIDEWAYS"}}
     end
 
     test "a rule counted in another calendar than the Gregorian" do

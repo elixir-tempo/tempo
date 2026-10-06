@@ -27,7 +27,7 @@ defmodule Tempo.RRule.Rule do
   * `:wkst` — week-start day as an integer 1–7 (Monday–Sunday, ISO
     convention). Default `1`. Affects `:byweekno` calculations.
 
-  * `:skip` — what the rule does where a month or a year lacks its start's day, as RFC 7529's `SKIP` and JSCalendar's `skip` name it. `:omit`, the default and RFC 5545's rule, lists no occurrence there: the rule states its start's day (ISO 8601-2 Annex C.3), and a day a month lacks is passed over. `:backward` lists the period's last day, as an ISO 8601 recurrence does.
+  * `:skip` — what a monthly or a yearly rule does with a day of the month that a month lacks, its start's or one it writes (`BYMONTHDAY=31`), as RFC 7529's `SKIP` and JSCalendar's `skip` name it. `:omit`, the default and RFC 5545's rule, lists no occurrence there: the rule states its start's day (ISO 8601-2 Annex C.3), and a day a month lacks is passed over. `:backward` lists the month's last day, as an ISO 8601 recurrence does, and `:forward` the first day of the month after.
 
   * `:bymonth` — list of integers 1–12. Limit.
 
@@ -85,7 +85,7 @@ defmodule Tempo.RRule.Rule do
           count: pos_integer() | nil,
           until: Tempo.t() | nil,
           wkst: weekday(),
-          skip: :omit | :backward,
+          skip: :omit | :backward | :forward,
           bymonth: [integer()] | nil,
           bymonthday: [integer()] | nil,
           byyearday: [integer()] | nil,
@@ -122,7 +122,7 @@ defmodule Tempo.RRule.Rule do
   @doc """
   Returns whether a rule's `:skip` is one Tempo builds for the parts the rule holds.
 
-  `:backward` is built for the day a rule takes from its start: the rule states no day, and the step from its start keeps the last day of a period without it. A day the rule writes itself that a month or a year can lack, a `BYMONTHDAY` past the 28th from either end or a `BYYEARDAY` past the 365th, is passed over where it is missing, which is `:omit`. A reader reports such a rule rather than reading it as another.
+  `:backward` and `:forward` move a day of the month that a month lacks, the rule's start's or one it writes, counted from the start of the month: the 31st of a month of thirty days is its 30th, or the 1st of the month after. A day counted from the end that a month can lack (`BYMONTHDAY=-31`) lies before the month's first day, and neither RFC 7529 nor RFC 8984 says where it is moved to: a reader reports such a rule rather than reading it as another. A day of the year is not a day of the month, and `BYYEARDAY=366` is passed over in a year of 365 days whatever the rule's `:skip`.
 
   ### Arguments
 
@@ -130,31 +130,26 @@ defmodule Tempo.RRule.Rule do
 
   ### Returns
 
-  * `:ok` for a rule whose `:skip` is `:omit`, and for one whose `:skip` is `:backward` and that writes no day a month or a year can lack.
+  * `:ok` for a rule whose `:skip` is `:omit`, and for one whose `:skip` is `:backward` or `:forward` and that writes no day counted from the end of a month that a month can lack.
 
-  * `{:error, {:unsupported_skip, {:backward, part}}}` otherwise, where `part` is the part that holds such a day, as `[bymonthday: [31]]`.
+  * `{:error, {:unsupported_skip, {skip, part}}}` otherwise, where `part` is the part that holds such a day, as `[bymonthday: [-31]]`.
 
   ### Examples
 
-      iex> Tempo.RRule.Rule.skip_built(%Tempo.RRule.Rule{freq: :month, skip: :backward})
+      iex> Tempo.RRule.Rule.skip_built(%Tempo.RRule.Rule{freq: :month, skip: :forward, bymonthday: [15, 31]})
       :ok
 
-      iex> Tempo.RRule.Rule.skip_built(%Tempo.RRule.Rule{freq: :month, skip: :backward, bymonthday: [15, 31]})
-      {:error, {:unsupported_skip, {:backward, [bymonthday: [31]]}}}
+      iex> Tempo.RRule.Rule.skip_built(%Tempo.RRule.Rule{freq: :month, skip: :backward, bymonthday: [-1, -31]})
+      {:error, {:unsupported_skip, {:backward, [bymonthday: [-31]]}}}
 
   """
-  @spec skip_built(t()) :: :ok | {:error, {:unsupported_skip, {:backward, keyword()}}}
-  def skip_built(%__MODULE__{skip: :backward} = rule) do
-    missing =
-      Enum.reject(
-        [
-          bymonthday: Enum.filter(List.wrap(rule.bymonthday), &(abs(&1) > 28)),
-          byyearday: Enum.filter(List.wrap(rule.byyearday), &(abs(&1) > 365))
-        ],
-        fn {_part, days} -> days == [] end
-      )
-
-    if missing == [], do: :ok, else: {:error, {:unsupported_skip, {:backward, missing}}}
+  @spec skip_built(t()) ::
+          :ok | {:error, {:unsupported_skip, {:backward | :forward, keyword()}}}
+  def skip_built(%__MODULE__{skip: skip} = rule) when skip in [:backward, :forward] do
+    case Enum.filter(List.wrap(rule.bymonthday), &(&1 < -28)) do
+      [] -> :ok
+      before_the_first -> {:error, {:unsupported_skip, {skip, [bymonthday: before_the_first]}}}
+    end
   end
 
   def skip_built(%__MODULE__{}), do: :ok
@@ -211,7 +206,7 @@ defmodule Tempo.RRule.Rule do
 
   An ordinal weekday on one weekday (`BYDAY=2FR`) becomes a weekday and a position (`5K2I`), and a position applies last within a selection, so the hours, minutes and seconds the rule names follow the selection instead of joining it: `BYDAY=2FR;BYHOUR=9` is `L5K2INT9H`, as ISO 8601-2 §12.9 writes 09:00 on the second Tuesday. Beside a `BYSETPOS`, which takes the selection's one position, the ordinal stays an RRULE-only `:byday`, as it does where a position would count something else: beside a `BYMONTHDAY`, a `BYYEARDAY` or a `BYWEEKNO`, which narrow what a position counts, and in a yearly rule of several months, where an ordinal counts in each.
 
-  A rule takes from its start what it does not say, and ISO 8601-2 (Annex C.3 and C.4) has a conversion state each part explicitly. With a start that is a calendar date, a WEEKLY rule with no `BYDAY` selects its start's weekday, a MONTHLY rule with no `BYMONTHDAY` and no `BYDAY` its start's day of the month, and a YEARLY rule with no `BYYEARDAY` its start's month and day of the month, or with `BYWEEKNO` its start's weekday. A day so stated is passed over in a month that lacks it, as RFC 5545 §3.3.10 passes over an instance with an invalid date: a MONTHLY rule from 31 January lists the months of 31 days. The month is stated for a start in the Gregorian calendar alone, since the step from year to year keeps a month that a leap month renumbers. A rule whose `:skip` is `:backward` states no day of the month and no month, and keeps the last day of a period that lacks its start's. Without a start a rule states nothing: a `BYWEEKNO` rule keeps every day of its weeks.
+  A rule takes from its start what it does not say, and ISO 8601-2 (Annex C.3 and C.4) has a conversion state each part explicitly. With a start that is a calendar date, a WEEKLY rule with no `BYDAY` selects its start's weekday, a MONTHLY rule with no `BYMONTHDAY` and no `BYDAY` its start's day of the month, and a YEARLY rule with no `BYYEARDAY` its start's month and day of the month, or with `BYWEEKNO` its start's weekday. A day so stated is passed over in a month that lacks it, as RFC 5545 §3.3.10 passes over an instance with an invalid date: a MONTHLY rule from 31 January lists the months of 31 days. The month is stated for a start in the Gregorian calendar alone, since the step from year to year keeps a month that a leap month renumbers. A rule whose `:skip` is `:backward` states no day of the month and no month, and keeps the last day of a period that lacks its start's. One whose `:skip` moves a day it states, `:forward` or a day the rule writes, holds the skip in its selection (`:skip`), which has no ISO 8601 form. Without a start a rule states nothing: a `BYWEEKNO` rule keeps every day of its weeks.
 
   ### Arguments
 
@@ -262,6 +257,7 @@ defmodule Tempo.RRule.Rule do
         |> push_byday(rule.byday, position_of_numbered_weekday(rule))
         |> push_times(rule, not times_after_selection?(rule))
         |> push_by(rule.bysetpos, :instance)
+        |> push_skip(rule)
         |> push_wkst(rule.wkst)
         |> Enum.reverse()
         |> Parser.consolidate_selection()
@@ -488,6 +484,18 @@ defmodule Tempo.RRule.Rule do
 
   defp push_day_of_week(acc, [single]), do: [{:day_of_week, single} | acc]
   defp push_day_of_week(acc, days), do: [{:day_of_week, days} | acc]
+
+  # A rule's `:skip` is written into its selection where it moves a day: in
+  # a monthly or a yearly rule that states a day of the month some month
+  # lacks. Anywhere else it changes nothing, and the rule is the one without
+  # it. `:backward` with no day stated keeps a month's last day by the step
+  # from its start (`keeps_last_day?/1`), and holds no day here to move.
+  defp push_skip(acc, %__MODULE__{skip: skip, freq: freq, bymonthday: days})
+       when skip in [:backward, :forward] and freq in [:month, :year] do
+    if Enum.any?(List.wrap(days), &(&1 > 28)), do: [{:skip, skip} | acc], else: acc
+  end
+
+  defp push_skip(acc, _rule), do: acc
 
   # Only emit `{:wkst, n}` for a non-default week start (WKST=MO is 1); the
   # common case keeps the AST identical and the token signals intent.

@@ -245,6 +245,9 @@ defmodule Tempo.Iso8601.Unit do
   end
 
   defp non_scale_token?({:wkst, _value}), do: true
+  # RFC 7529's `SKIP`, what a rule does with a day a month lacks, is context
+  # too.
+  defp non_scale_token?({:skip, _value}), do: true
   # A §12.10 window (`[selection]/[duration]`) nests a whole selection; it is
   # not a flat scale unit, so it is skipped when checking resolution order.
   defp non_scale_token?({:interval, _value}), do: true

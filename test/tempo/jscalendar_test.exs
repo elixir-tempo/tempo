@@ -191,12 +191,30 @@ defmodule Tempo.JSCalendarTest do
                "2026Y4M30DT9H0M0S/T10H0M0S"
              ]
 
-      # The first day of the month after is not built, and is said so.
-      assert monthly.(~s(,"skip":"forward")) == {:error, {:unsupported_skip, "forward"}}
+      # "forward" is the first day of the month after.
+      assert {:ok, set} = monthly.(~s(,"skip":"forward"))
 
-      # Nor is the last day of the month for a day the rule writes itself.
-      assert monthly.(~s(,"skip":"backward","byMonthDay":[31])) ==
-               {:error, {:unsupported_skip, {:backward, [bymonthday: [31]]}}}
+      assert spans(set) == [
+               "2026Y1M31DT9H0M0S/T10H0M0S",
+               "2026Y3M1DT9H0M0S/T10H0M0S",
+               "2026Y3M31DT9H0M0S/T10H0M0S",
+               "2026Y5M1DT9H0M0S/T10H0M0S"
+             ]
+
+      # A day the rule writes itself is moved as the start's is.
+      assert {:ok, set} = monthly.(~s(,"skip":"backward","byMonthDay":[31]))
+
+      assert spans(set) == [
+               "2026Y1M31DT9H0M0S/T10H0M0S",
+               "2026Y2M28DT9H0M0S/T10H0M0S",
+               "2026Y3M31DT9H0M0S/T10H0M0S",
+               "2026Y4M30DT9H0M0S/T10H0M0S"
+             ]
+
+      # A day counted from the end that a month can lack is before the
+      # month's first day, and where it is moved to is not said.
+      assert monthly.(~s(,"skip":"forward","byMonthDay":[-31])) ==
+               {:error, {:unsupported_skip, {:forward, [bymonthday: [-31]]}}}
     end
 
     test "a rule counted in another calendar than the Gregorian is reported" do

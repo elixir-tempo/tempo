@@ -76,9 +76,9 @@ if Code.ensure_loaded?(JSCalendar) do
     set expresses that — the patches are on the object for a caller
     who knows which locale they want.
 
-    A rule's `skip` is read. `omit`, the default, passes over a month or a year that lacks the start's day, so a rule on the 31st lists the months of 31 days, and `backward` keeps the last day of such a month.
+    A rule's `skip` is read. `omit`, the default, passes over a month or a year that lacks the start's day, so a rule on the 31st lists the months of 31 days; `backward` keeps the last day of such a month, and `forward` the first day of the month after.
 
-    Three things a rule can say are reported, each as `{:error, {reason, value}}`, rather than read as something they are not: a `skip` of `forward`, the first day of the month after (`:unsupported_skip`); an `rscale` other than `gregorian`, a rule counted in another calendar (`:unsupported_rscale`); and a leap month such as `"3L"` (`:unsupported_month`).
+    Three things a rule can say are reported, each as `{:error, {reason, value}}`, rather than read as something they are not: a `skip` beside a day counted from the end of a month that a month can lack, such as `-31` (`:unsupported_skip`); an `rscale` other than `gregorian`, a rule counted in another calendar (`:unsupported_rscale`); and a leap month such as `"3L"` (`:unsupported_month`).
 
     """
 
@@ -458,8 +458,8 @@ if Code.ensure_loaded?(JSCalendar) do
       end
     end
 
-    # A `skip` of `backward` beside a day the rule writes that a month or a
-    # year can lack is not built, and is reported (`Tempo.RRule.Rule.skip_built/1`).
+    # A `skip` beside a day counted from the end of a month that a month can
+    # lack is not built, and is reported (`Tempo.RRule.Rule.skip_built/1`).
     defp skip_built(%Rule{} = rule) do
       with :ok <- Rule.skip_built(rule), do: {:ok, rule}
     end
@@ -475,12 +475,12 @@ if Code.ensure_loaded?(JSCalendar) do
 
     # RFC 8984 §4.3.3: `skip` says what a rule does with a date that does not
     # exist, the 31st of a month of thirty days. "omit", the default, passes
-    # over it and "backward" takes the month's last day. "forward", the first
-    # day of the month after, is not built, and is reported rather than read
-    # as another.
+    # over it, "backward" takes the month's last day and "forward" the first
+    # day of the month after.
     defp skip(nil), do: {:ok, :omit}
     defp skip("omit"), do: {:ok, :omit}
     defp skip("backward"), do: {:ok, :backward}
+    defp skip("forward"), do: {:ok, :forward}
     defp skip(other), do: {:error, {:unsupported_skip, other}}
 
     # RFC 8984 §4.3.3: `rscale` names the calendar a rule counts its months

@@ -660,10 +660,12 @@ defmodule Tempo.RRule.Selection do
        ) do
     inner_selection = scope ++ inner_selection(inner)
 
-    # `:origin_day`/`:keep_span`/`:wkst` are passthrough context, not
+    # `:origin_day`/`:keep_span`/`:wkst`/`:skip` are passthrough context, not
     # selectors, so they do not make a window non-terminal.
     selectors =
-      Enum.reject(within, fn {key, _value} -> key in [:origin_day, :keep_span, :wkst] end)
+      Enum.reject(within, fn {key, _value} ->
+        key in [:origin_day, :keep_span, :wkst, :skip]
+      end)
 
     candidate
     |> apply_selection(inner_selection, freq)
@@ -946,6 +948,7 @@ defmodule Tempo.RRule.Selection do
 
   @application_order [
     :wkst,
+    :skip,
     :month,
     :traditional_month,
     :week,
@@ -1100,9 +1103,11 @@ defmodule Tempo.RRule.Selection do
   # otherwise. RFC forbids it with FREQ=WEEKLY; we don't reject
   # (malformed rules are a parser concern). `-1` is the last
   # day of the enclosing month.
-  defp apply_role(:expand, {:day, days}, candidates, _scope, _selection, _wkst) do
+  defp apply_role(:expand, {:day, days}, candidates, _scope, selection, _wkst) do
+    skip = Keyword.get(selection, :skip)
+
     Enum.flat_map(candidates, fn candidate ->
-      expand_candidate_days(candidate, List.wrap(days))
+      expand_candidate_days(candidate, List.wrap(days), skip)
     end)
   end
 
@@ -1881,11 +1886,65 @@ defmodule Tempo.RRule.Selection do
   # BYMONTHDAY with FREQ=MONTHLY or YEARLY: for each candidate,
   # produce one occurrence per listed day (signed: -1 = last day
   # of enclosing month). Invalid combinations skip.
-  defp expand_candidate_days(%Interval{from: %Tempo{time: time}} = candidate, days) do
+  defp expand_candidate_days(%Interval{from: %Tempo{time: time}} = candidate, days, nil) do
     dates = for day <- counted_values(days, :day, candidate), do: {time[:year], time[:month], day}
 
     swap_dates(candidate, dates)
   end
+
+  # RFC 7529's `SKIP` (and RFC 8984's `skip`): a day of the month that the
+  # month lacks is moved to the month's last day (`BACKWARD`) or to the
+  # first day of the month after (`FORWARD`), where `OMIT` passes over it.
+  # Days moved to one date are one occurrence (RFC 8984 §4.3.3.1: "If any
+  # valid date produced after applying the skip is already a candidate,
+  # eliminate the duplicate"), and the dates are in the order of time.
+  defp expand_candidate_days(
+         %Interval{from: %Tempo{time: time, calendar: calendar}} = candidate,
+         days,
+         skip
+       ) do
+    month = {time[:year], time[:month]}
+
+    case UnitValues.last(:day, [year: time[:year], month: time[:month]], calendar) do
+      {:ok, last} ->
+        dates =
+          days
+          |> Enum.flat_map(&expand_range_element/1)
+          |> Enum.flat_map(&day_or_where_moved(&1, month, last, calendar, skip))
+          |> Enum.uniq()
+          |> Enum.sort()
+
+        swap_dates(candidate, dates)
+
+      {:error, _cannot_count} ->
+        []
+    end
+  end
+
+  # A day the month has, counted from either end, or where a day past its
+  # end is moved to. The day after a month's last is Calendrical's.
+  defp day_or_where_moved(day, {year, month}, last, _calendar, _skip) when day in 1..last//1,
+    do: [{year, month, day}]
+
+  defp day_or_where_moved(day, {year, month}, last, _calendar, _skip)
+       when day < 0 and last + 1 + day >= 1,
+       do: [{year, month, last + 1 + day}]
+
+  defp day_or_where_moved(day, {year, month}, last, _calendar, :backward) when day > last,
+    do: [{year, month, last}]
+
+  defp day_or_where_moved(day, {year, month}, last, calendar, :forward) when day > last do
+    case Date.new(year, month, last, calendar) do
+      {:ok, last_day} ->
+        %Date{year: year, month: month, day: day} = Calendrical.next(last_day, :day)
+        [{year, month, day}]
+
+      {:error, _no_such_date} ->
+        []
+    end
+  end
+
+  defp day_or_where_moved(_day, _month, _last, _calendar, _skip), do: []
 
   ## ------------------------------------------------------------
   ## Nearest-weekday (cron `W`)
