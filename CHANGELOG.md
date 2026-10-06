@@ -339,6 +339,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A rule that names a minute or a second and no hour, from a start that is a date, puts it in the day's first hour where a position or a numbered weekday is beside it: `FREQ=WEEKLY;BYDAY=MO,WE,FR;BYMINUTE=15;BYSETPOS=2` and `R/2026-01-05/P1M/FL5K-1INT15M` give a quarter past midnight (`T0H15M`). They gave a day with a minute and no hour (`2026Y2M4DT15M`), which `Tempo.to_naive_datetime/1` could not read.
+
 * A weekly rule limited to a month asks the month of each day it selects, and a monthly rule limited to a week the week: `FREQ=WEEKLY;BYMONTH=3;BYDAY=TU` from a Saturday lists Tuesday 31 March 2026, which it left out because that week's Saturday is in April, and a position there no longer counts days of another month. A selection in a whole week is asked the same way (`Tempo.select(~o"2026Y14W", ~o"L4M3KN")` is Wednesday 1 April, where it was nothing).
 
 * A `%Tempo{}` built by hand with no `:calendar` is in the default calendar, and one given `calendar: nil` is read as it: `Enum.count/1`, `Enum.at/2`, `Tempo.shift/3`, `Tempo.duration/1`, `Tempo.select/2`, `Tempo.explain/1` and `Tempo.to_string/2` raised an `UndefinedFunctionError` for one, where comparison and conversion read it, and it inspected as `Tempo.from_iso8601!("2026Y", nil)`.

@@ -38,6 +38,10 @@ defmodule Tempo.RRule.MonthlyWeeklyPartsTest do
     [{nil, 1}, {nil, 2}, {nil, 3}, {nil, 4}, {nil, 5}, {nil, 6}, {nil, 7}]
   ]
 
+  # Hours written out of the order of time, and a minute with no hour, which
+  # is in the day's first, or in its start's.
+  @times [[hour: [9]], [hour: [14, 9]], [hour: [9], minute: [0, 30]], [minute: [15]]]
+
   @day_names %{1 => "MO", 2 => "TU", 3 => "WE", 4 => "TH", 5 => "FR", 6 => "SA", 7 => "SU"}
 
   ## The rules measured
@@ -279,6 +283,32 @@ defmodule Tempo.RRule.MonthlyWeeklyPartsTest do
         )
 
       assert disagreements(rules, [@the_31st, @midweek]) == []
+    end
+
+    test "selects each time of day it names on each of those days" do
+      rules =
+        weekly(
+          [nil, 2],
+          [nil, 7],
+          [nil],
+          [nil, [{nil, 1}, {nil, 3}, {nil, 5}]],
+          [nil, [2, -2]],
+          @times
+        )
+
+      assert disagreements(rules, [@the_31st, @midweek]) == []
+    end
+
+    test "puts a minute named with no hour in the first hour of a day" do
+      # The second of Monday's, Wednesday's and Friday's quarter past
+      # midnight is Wednesday's. It was a quarter past no hour, a value with
+      # a minute and no hour to be in.
+      assert "FREQ=WEEKLY;BYDAY=MO,WE,FR;BYMINUTE=15;BYSETPOS=2"
+             |> given(@the_31st)
+             |> Enum.take(2) == [
+               {~N[2026-02-04 00:15:00], ~N[2026-02-04 00:16:00]},
+               {~N[2026-02-11 00:15:00], ~N[2026-02-11 00:16:00]}
+             ]
     end
 
     test "asks a month of the days it makes, not of the day its start steps to" do

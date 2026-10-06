@@ -2442,8 +2442,27 @@ defmodule Tempo.RRule.Selection do
         pair -> pair
       end)
     else
-      insert_unit_in_order(time, unit, value)
+      time |> with_the_clock_units_before(unit) |> insert_unit_in_order(unit, value)
     end
+  end
+
+  # A time of day on a date names each unit down to its finest: a minute
+  # placed on a day that has no hour is in the day's first (`T0H15M`), as it
+  # is where the rule's start is filled down to the minute. A time with no
+  # date is on a cycle, and is left as it is written.
+  defp with_the_clock_units_before(time, unit) when unit in [:minute, :second] do
+    if Keyword.has_key?(time, :day),
+      do: Enum.reduce(clock_units_before(unit), time, &at_its_start/2),
+      else: time
+  end
+
+  defp with_the_clock_units_before(time, _unit), do: time
+
+  defp clock_units_before(:minute), do: [:hour]
+  defp clock_units_before(:second), do: [:hour, :minute]
+
+  defp at_its_start(unit, time) do
+    if Keyword.has_key?(time, unit), do: time, else: insert_unit_in_order(time, unit, 0)
   end
 
   @unit_canonical_order [:year, :month, :week, :day, :hour, :minute, :second]
