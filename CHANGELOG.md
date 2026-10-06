@@ -289,6 +289,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Changed
 
+* A `:within` window with no start (`~o"../2027"`) is refused as one: "a :within window needs a start". It was refused further on, as an open-ended interval that cannot be a member of a set, and a value that needs no window was converted as if none were given.
+
 * A `Tempo.InvalidDateError` for a value its unit does not take says what the value was read as and carries it: 29 February 2027 is "29 is not valid for a day of 2027-02. The valid values are 1..28", with the error's `:unit`, `:year`, `:month` and `:calendar` set, where it was "29 is not valid. The valid values are 1..28" and they were `nil`. A calendar other than the Gregorian is named ("… of 5784-02 in Calendrical.Hebrew").
 
 * `Tempo.to_interval/2` of a value that is unspecified digits with no unit before them (`~o"XXM"`, `~o"X*M"`, `~o"TX*H"`) returns a `Tempo.UnanchoredError` that names the value, as `~o"XXD"` did, where it returned a `Tempo.ConversionError` whose `value` was `nil`.

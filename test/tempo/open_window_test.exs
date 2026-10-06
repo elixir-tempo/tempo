@@ -101,4 +101,31 @@ defmodule Tempo.OpenWindowTest do
       assert {:error, %ArgumentError{}} = ICal.parse("", within: ~o"2026/..")
     end
   end
+
+  describe "a window with no start" do
+    # A window is the time from one moment to another, or from one moment
+    # on. One with no start was taken for a bounded one and refused further
+    # on as a span that cannot be a member of a set.
+    test "is refused by name wherever a window is taken" do
+      for window <- [~o"../2027", ~o"../.."] do
+        for {:error, error} <- [
+              Tempo.to_interval(~o"R/2026-01-01/P1D", within: window),
+              Tempo.to_interval_set(~o"R/2026-01-01/P1D", within: window),
+              Tempo.intersection(~o"T10", ~o"T11", within: window),
+              Tempo.complement(~o"2026-06", within: window),
+              ICal.parse("", within: window)
+            ] do
+          assert %ArgumentError{} = error
+          assert Exception.message(error) =~ "a :within window needs a start"
+          assert Exception.message(error) =~ inspect(window)
+        end
+      end
+    end
+
+    test "is not one that ends a duration before its end" do
+      # A month to February 2027 starts where January does.
+      assert {:ok, days} = Tempo.to_interval(~o"R/2026-01-01/P1D", within: ~o"P1M/2027-02")
+      assert Tempo.exactly?(days, ~o"P31D")
+    end
+  end
 end

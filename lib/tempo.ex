@@ -7018,12 +7018,16 @@ defmodule Tempo do
       :bounded ->
         :ok
 
-      _open ->
+      {:ok, _start} ->
         {:error,
          ArgumentError.exception(
            "#{function} needs a :within window with an end; " <>
              "an open-ended window is for Tempo.to_interval_set/2"
          )}
+
+      # A window with no start, or whose start is no point in time.
+      {:error, _reason} = error ->
+        error
     end
   end
 
@@ -7049,6 +7053,18 @@ defmodule Tempo do
              "#{inspect(from)} names none"
          )}
     end
+  end
+
+  # A window with no start (`~o"../2027"`, `~o"../.."`) names no moment to
+  # begin from. It was taken for a bounded one, and refused further on as a
+  # span that cannot be a member of a set, which says nothing of windows.
+  defp open_window_start(%Tempo.Interval{from: from, duration: nil, recurrence: 1} = within)
+       when from in [nil, :undefined] do
+    {:error,
+     ArgumentError.exception(
+       "a :within window needs a start, and #{inspect(within)} has none: a window is the " <>
+         "time from one moment to another, or from one moment on"
+     )}
   end
 
   defp open_window_start(_within), do: :bounded
