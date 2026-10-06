@@ -351,6 +351,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.split/1` gives the date of a value in whichever units it is written: `~o"3KT10H"`, a Wednesday at ten, is `{~o"3K", ~o"T10H"}`, and `~o"166O"`, a day of the year, is a date with no time of day. A weekday of no week, a day of a year not named and a unit that holds a group of a set were given as the time of day, and the value had no date.
+
 * A value that holds a group of a set is held to the ranges of its units after the group, as any value is: `2026Y{1,2}G3MU15DT25H` is a `Tempo.InvalidDateError` where it was read, and a fraction of a second after one is read (`2026Y{1,2}G3MU15DT10H30M45.25S`). `inspect/1` and `Tempo.to_iso8601/1` raised on that fraction, which was left as the parser wrote it.
 
 * `Tempo.to_string/2` shows a year before 1 with its era, and names the era at both ends of a span that has such an end: `~o"-0044-03-15"` is "Mar 15, 45 BC" and `~o"-0044/0014"` "45 BC – 13 AD". They were "Mar 15, 45" and "45 – 13", the words for dates of this era, since the formats CLDR gives a date of today leave the era out; a `:format` the caller names is used as it is.

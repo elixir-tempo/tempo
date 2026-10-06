@@ -34,6 +34,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **A constraint of `Tempo.select/2` and a selection are two implementations** — a constraint (`~o"15D"`) is merged onto its period's start where its units are finer than the period, and a selection (`~o"L15DN"`) is resolved by `Tempo.RRule.Selection`, as a constraint's coarser units are since 2026-10-05. The two give the same spans in every cell of the probe that the parser reads both ways (496 of 516; the other 20 are `13M` and `2M30D`, which a value does not read), where it was 406. What they select still differs in `:unit` (a merged day is walked by hours, a resolved one has none), and the merge is a second implementation of what the resolver does for the units it keeps. To decide: whether the merge goes, and the resolver serves both.
 
+* [ ] **What a value that holds a selection splits into** — to decide. `Tempo.split(~o"2026Y6ML1KN")`, the Mondays of June, is `{~o"2026Y6M", ~o"L1KN"}`: the selection is given as the time of day, which it is not, though `Tempo.at/2` places the two back as the value. The other answer is the value itself with no time of day. Kept as it was when `split/1` was made to read every date, 2026-10-07.
+
 * [ ] **A span from each value of a set** — an interval written with a duration from a start that holds a set (`2026Y6M{1,15}D/P1D`), and such a span given to `Tempo.select/2` (`Tempo.select(day, ~o"T{9,14}H/PT1H")`, an hour from 09:00 and from 14:00), is a `Tempo.IntervalEndpointsError`, where a recurrence from the same start (`R2/2026Y6M{1,15}D/P1D`) is the occurrences from each value and `Tempo.shift/3` reaches each. The span from each value is not built, and `Tempo.shift/3` with `:skipping` refuses a value that holds a set. Found 2026-10-06.
 
 ### Performance
@@ -87,6 +89,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **`split/1` of a date in units that were not listed** — found beside the coverage tests: the shapes of a date were listed one by one, and a weekday of no week (`3K`), a day of a year not named (`166O`) and a unit that holds a group of a set (`2026Y{1,2}G3MU15D`) were given as the time of day. The date is every unit before the first of the clock, and `Tempo.SplitTest` holds each shape to the text before its `T` and the text from it, in two calendars and with a zone. 2026-10-07.
 
 * [x] **What follows a group of a set is resolved when read** — found beside the coverage tests: no clause of the resolver read the three-element entry a group of a set is (`{1,2}G3MU`), so nothing after one was resolved. An hour 25 was read and refused only by `to_interval/2`, and a fraction of a second was left as the parser's token, on which `inspect/1` and `to_iso8601/1` raised. The units after the one counted in the group are resolved as any value's are, a unit counted from 1 is none at 0, and the set generator holds the forms read and the forms refused. 2026-10-07.
 
