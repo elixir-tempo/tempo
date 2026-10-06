@@ -106,11 +106,23 @@ defmodule Tempo.ScheduleTest do
     test ":within bounds both ends" do
       {:ok, plan} =
         Schedule.new()
-        |> Schedule.task(:a, duration: ~o"P2D", within: {~o"2026-06-01", ~o"2026-06-10"})
+        |> Schedule.task(:a, duration: ~o"P2D", within: ~o"2026-06-01/2026-06-10")
         |> Schedule.solve()
 
       assert Interval.from(plan[:a].early) == ~o"2026-06-01"
       assert Interval.to(plan[:a].late) == ~o"2026-06-10"
+    end
+
+    test ":within takes a value as its window, as every :within does" do
+      # A task done in June starts no earlier than the month does and
+      # finishes no later than it ends.
+      {:ok, plan} =
+        Schedule.new()
+        |> Schedule.task(:a, duration: ~o"P2D", within: ~o"2026-06")
+        |> Schedule.solve()
+
+      assert Interval.from(plan[:a].early) == ~o"2026-06-01"
+      assert Interval.to(plan[:a].late) == ~o"2026-07-01"
     end
 
     test "an anchored task is critical (pinned); a downstream task with no deadline is undetermined" do
@@ -172,9 +184,18 @@ defmodule Tempo.ScheduleTest do
                Schedule.new() |> Schedule.task(:a, :duration) |> Schedule.solve()
     end
 
-    test "a :within that is not a pair of dates" do
-      assert {:error, %ArgumentError{} = error} = solve_with(within: ~o"2026-06")
-      assert Exception.message(error) =~ "takes :within as a {from, to} pair of dates"
+    test "a :within that is no window" do
+      assert {:error, %ArgumentError{} = error} = solve_with(within: ~o"2026-06/..")
+      assert Exception.message(error) =~ "takes :within as a window with a start and an end"
+
+      assert {:error, %ArgumentError{}} = solve_with(within: "June")
+    end
+
+    test "a :within written as the pair 1.x took names the window" do
+      assert {:error, %ArgumentError{} = error} =
+               solve_with(within: {~o"2026-06-01", ~o"2026-06-10"})
+
+      assert Exception.message(error) =~ "where 1.x took a {from, to} pair"
     end
 
     test "a date or a duration it cannot read" do

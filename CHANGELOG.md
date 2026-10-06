@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* `Tempo.Schedule.task/3` takes `:within` as a window, a Tempo value or an interval, as every other `:within` is: `within: ~o"2026-06"` is a task done in June. It took a `{from, to}` pair, which is now refused with the window to write in its place.
+
 * A shift coarser than an unspecified unit keeps the unspecified digits only where they stand for the values landed on and for no others: `Tempo.shift(~o"2020-06-XX", month: 1)` is `~o"[2020Y7M1D..2020Y7M30D]"`, where it was `~o"2020-07-XX"`, some day of July with the 31st that no day of June lands on. A month on from some day of January is `~o"2020-02-XX"` still, each of whose days is landed on, and a February of no year a month on is a `Tempo.UnanchoredError`.
 
 * A value whose every reading the clock skips in its zone is a `Tempo.ZoneGapError`, at an hour and a date as at a minute: the hour a spring-forward skips (`2026-03-29T02[Europe/Paris]`) and a day a zone left out (`2011-12-30[Pacific/Apia]`) were read, and ordered by their fields. `Tempo.new/1`, `Tempo.in_zone/2`, `Tempo.at/2` and `Tempo.on/2` return the error too, for a minute as well, where they held a value `from_iso8601/2` refuses.

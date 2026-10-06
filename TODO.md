@@ -38,10 +38,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **A span from each value of a set** — an interval written with a duration from a start that holds a set (`2026Y6M{1,15}D/P1D`), and such a span given to `Tempo.select/2` (`Tempo.select(day, ~o"T{9,14}H/PT1H")`, an hour from 09:00 and from 14:00), is a `Tempo.IntervalEndpointsError`, where a recurrence from the same start (`R2/2026Y6M{1,15}D/P1D`) is the occurrences from each value and `Tempo.shift/3` reaches each. The span from each value is not built, and `Tempo.shift/3` with `:skipping` refuses a value that holds a set. Found 2026-10-06.
 
-### Errors and API
-
-* [ ] **`Schedule.task/3`'s `:within` is a pair** — it takes a `{from, to}` tuple, where every other `:within` takes a Tempo value or an interval.
-
 ### Performance
 
 * [ ] **A never-matching selector walks the whole horizon** — `Tempo.select/2` over an open-ended span walks a thousand years of periods before a selector that never matches ends: 30 ms of years, 0.2 s of months, about 10 s of days, minutes of hours. An index selector on a fixed-range unit could end after its first empty period, a daylight-saving gap day aside. A recurrence's rule that selects nothing is as slow where the search has no bound of its own: twelve seconds where its start has no year (`R3/T22H/PT1H/FLT25HN`) and over forty-five in a calendar of weeks (`R2/2026-W25/P1W/FL8KN` in `Calendrical.ISOWeek`), where a Gregorian one answers in under a second.
@@ -99,6 +95,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **`Schedule.task/3`'s `:within` is a window** — a Tempo value or an interval, as every other `:within` is, its ends written to the day they fall on (`window_ends/1` in `lib/tempo/schedule.ex`); the `{from, to}` pair of 1.x is refused by name, as `:earliest` is. 2026-10-07.
 
 * [x] **`ClockTest` timing** — its two `assert_receive`s wait a second for a peer process's message, where the default tenth of one was short on a busy machine and failed once. 2026-10-07.
 

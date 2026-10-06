@@ -106,8 +106,10 @@ defmodule Tempo.Schedule do
 
   * `:deadline` requires the task to finish on or before a date.
 
-  * `:within` is a `{from, to}` pair of dates: the task must start on or
-    after `from` and finish on or before `to`.
+  * `:within` is the window the task lies in, a Tempo value or an
+    interval as every `:within` is: the task starts no earlier than the
+    window does and finishes no later than it ends, so `within: ~o"2026-06"`
+    is a task done in June.
 
   ### Returns
 
@@ -301,11 +303,50 @@ defmodule Tempo.Schedule do
       {:error,
        invalid("does not take #{inspect(key)}; its options are #{inspect(@task_options)}")}
 
+  # A window is a value or an interval with both its ends, as it is
+  # wherever `:within` is taken. It was a `{from, to}` pair here alone.
   defp within_option(nil), do: :ok
-  defp within_option({_from, _to}), do: :ok
 
-  defp within_option(within),
-    do: {:error, invalid("takes :within as a {from, to} pair of dates, not #{inspect(within)}")}
+  defp within_option({_from, _to}) do
+    {:error,
+     invalid(
+       "takes :within as a window, a Tempo value or an interval, where 1.x took a " <>
+         "{from, to} pair: write the pair as the interval from the one to the other"
+     )}
+  end
+
+  defp within_option(within) do
+    case window_ends(within) do
+      {:ok, _ends} ->
+        :ok
+
+      :error ->
+        {:error,
+         invalid(
+           "takes :within as a window with a start and an end, a Tempo value or an " <>
+             "interval, not #{inspect(within)}"
+         )}
+    end
+  end
+
+  defp window_ends(%Tempo.Interval{} = window), do: ends_of(Tempo.to_interval(window))
+  defp window_ends(%Tempo{} = window), do: ends_of(Tempo.to_interval(window))
+  defp window_ends(_other), do: :error
+
+  # A bound is a point: a month given as one is read as any day of it, so
+  # the window's ends are written to the day they fall on, where they are
+  # coarser than one. June's end is the start of 1 July.
+  defp ends_of({:ok, %Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to}}),
+    do: {:ok, {to_the_day(from), to_the_day(to)}}
+
+  defp ends_of(_no_one_span), do: :error
+
+  defp to_the_day(%Tempo{} = point) do
+    case Tempo.extend_resolution(point, :day) do
+      %Tempo{} = day -> day
+      {:error, _finer_than_a_day} -> point
+    end
+  end
 
   defp invalid(phrase), do: ArgumentError.exception("Tempo.Schedule.task/3 #{phrase}.")
 
@@ -327,25 +368,25 @@ defmodule Tempo.Schedule do
       Keyword.has_key?(options, :not_before) ->
         Keyword.put(opts, :from, {:not_before, Keyword.fetch!(options, :not_before)})
 
-      match?({_, _}, Keyword.get(options, :within)) ->
-        {earliest, _latest} = Keyword.fetch!(options, :within)
-        Keyword.put(opts, :from, {:not_before, earliest})
-
       true ->
-        opts
+        within(opts, :from, :not_before, options)
     end
   end
 
   defp put_to(opts, options) do
-    cond do
-      Keyword.has_key?(options, :deadline) ->
-        Keyword.put(opts, :to, {:not_after, Keyword.fetch!(options, :deadline)})
+    if Keyword.has_key?(options, :deadline),
+      do: Keyword.put(opts, :to, {:not_after, Keyword.fetch!(options, :deadline)}),
+      else: within(opts, :to, :not_after, options)
+  end
 
-      match?({_, _}, Keyword.get(options, :within)) ->
-        {_earliest, latest} = Keyword.fetch!(options, :within)
-        Keyword.put(opts, :to, {:not_after, latest})
+  # The window's start bounds the task's start and its end the task's end,
+  # where no other option has bounded them.
+  defp within(opts, bound, kind, options) do
+    case window_ends(Keyword.get(options, :within)) do
+      {:ok, {from, to}} ->
+        Keyword.put(opts, bound, {kind, if(bound == :from, do: from, else: to)})
 
-      true ->
+      :error ->
         opts
     end
   end
