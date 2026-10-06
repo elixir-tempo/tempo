@@ -632,6 +632,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   def explicit_year_with_sign do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all}),
+      parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_one}),
       maybe_negative_number(min: 1)
     ])
     |> unwrap_and_tag(:year)

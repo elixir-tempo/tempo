@@ -128,6 +128,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Done
 
+* [x] **One of several years before the year designator** — found by the generator's harvest of 2026-10-06: `[2025,2026]Y` and `[2025,2026]Y6M` were parse errors, where `2026Y[1,3]M` and `{2025,2026}Y6M` are read (`explicit_year_with_sign/0` took a set of all and no set of one). One of several values in a unit of the extended or the basic format (`2026-[01,03]`) stays unread: a bracket there is the IXDTF suffix or a set of whole values. 2026-10-06.
+
 * [x] **A set of days of the year after its year in the extended and the basic format** — found by the generator's harvest of 2026-10-06: a set written after a year with no designator was the year's months whatever its members' width, so `2026-{001}` was January, where `2026-001` is 1 January, and `2026-{001,166}` an `InvalidDateError` naming the months. A set whose members are three digits each is the days of the year (`:day_of_year_set_all` in the tokenizer, before the month alternatives of `implicit_date/0` and `extended_date/0`); any other width is the months still (`2026-{6,7}-15`). 2026-10-06.
 
 * [x] **A set of one value in a unit is its member before the value is read** — found by the generator's harvest of 2026-10-06: `2026Y25W{1}K` and `2026Y{1}O` were collapsed to the one value after the value was read, so they stayed a week and a day, or a year and a day of it, where the member alone is the date it names, and the value written back was read as another; `{198X}` stayed a set of one mask, which no span was read from. `collapse_single_member_sets/1` in `lib/validation.ex` runs before the value is resolved and again after, and takes a mask. 2026-10-06.

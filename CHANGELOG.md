@@ -325,6 +325,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* One of several years is read before the year designator, as one of several of any other unit is (ISO 8601-2 §6.6): `[2025,2026]Y6M` is June of 2025 or of 2026, where it was a parse error.
+
 * A set of three-digit numbers after a year in the extended or the basic format is the days of the year its members are alone (`2026-{001,166}`, `2026{001..003}`). It was read as the year's months whatever its members' width, so `2026-{001}` was January and `2026-{001,166}` an error.
 
 * A set of one value in a unit is read as its member is: a week and the one day of it in a set (`2026Y25W{1}K`) and a set of one day of the year (`2026Y{1}O`) are the date they name, where the value written back was read as another. A set of one masked year (`{198X}`) is the mask, where no span could be read from it.

@@ -2,7 +2,8 @@ defmodule Tempo.Iso8601.SetFormsTest do
   @moduledoc """
   Sets the parser did not read, or read as another value: a member written
   with a qualifier, a set of one value in a unit, a set of days of the year
-  after its year in the extended and the basic format, a fraction before the comma
+  after its year in the extended and the basic format, one of several years
+  before the year designator, a fraction before the comma
   or the brace that follows a member, a fraction after a set of seconds, and
   the fractions of a second as a set, the form `Tempo.extend/2` gives a second
   and `inspect/1` writes.
@@ -193,6 +194,40 @@ defmodule Tempo.Iso8601.SetFormsTest do
       for {set, _days} <- @days_of_the_year do
         assert {set, reads_back?(read(set))} == {set, true}
       end
+    end
+  end
+
+  describe "one of several years before the year designator" do
+    # ISO 8601-2 §6.6: a set of whole numbers, all of them or one of them,
+    # is written where a whole number is. One of several months was read
+    # (`2026Y[1,3]M`) and one of several years was a parse error.
+    @one_of_years [
+      {"[2025,2026]Y", ["2025Y", "2026Y"]},
+      {"[2025,2026]Y6M", ["2025Y6M", "2026Y6M"]},
+      {"[2025,2026]Y6M15D", ["2025Y6M15D", "2026Y6M15D"]},
+      {"[2025..2027]Y", ["2025Y", "2026Y", "2027Y"]},
+      {"[2025,2026]Y25W", ["2025Y25W", "2026Y25W"]},
+      {"[2025,2026]Y6M15DT10H", ["2025Y6M15DT10H", "2026Y6M15DT10H"]},
+      {"[2025,2026]Y[1,3]M", ["2025Y1M", "2025Y3M", "2026Y1M", "2026Y3M"]},
+      {"[2025]Y6M", ["2025Y6M"]}
+    ]
+
+    test "is one of the values its members are alone" do
+      for {set, members} <- @one_of_years do
+        assert {set, read(set)} ==
+                 {set, %Tempo.Set{type: :one, set: Enum.map(members, &read/1)}}
+      end
+    end
+
+    test "reads back from its own text" do
+      for {set, _members} <- @one_of_years do
+        assert {set, reads_back?(read(set))} == {set, true}
+      end
+    end
+
+    test "leaves a set of whole values as it was" do
+      assert read("[2025,2026]") == read("[2025Y,2026Y]")
+      assert %Tempo{} = read("{2025,2026}Y6M")
     end
   end
 
