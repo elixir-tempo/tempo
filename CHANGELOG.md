@@ -325,6 +325,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A range from one division of a year to another in a set (`{2026-21..2026-23}`, `{2026-33..2027-34}`: seasons, quarters, quadrimesters and semesters) is each division between them, where it was a range whose ends were intervals, which nothing walked and whose own text was not read. One that is no run in time (the seasons numbered 21 to 24, whose winter begins the December before), from one kind to another, or open at an end is an `InvalidDateError`.
+
 * One of several years is read before the year designator, as one of several of any other unit is (ISO 8601-2 §6.6): `[2025,2026]Y6M` is June of 2025 or of 2026, where it was a parse error.
 
 * A set of three-digit numbers after a year in the extended or the basic format is the days of the year its members are alone (`2026-{001,166}`, `2026{001..003}`). It was read as the year's months whatever its members' width, so `2026-{001}` was January and `2026-{001,166}` an error.

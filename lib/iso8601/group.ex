@@ -205,16 +205,176 @@ defmodule Tempo.Iso8601.Group do
   defp prepend(first, time), do: [first | time]
 
   # A set's members, and the members it excludes, each expand as a value does.
+  # A range from one division of a year to another is the divisions it names,
+  # each a member (`expand_member/2`).
   defp expand_members(members, calendar) do
     members
     |> Enum.reduce_while({:ok, []}, fn member, {:ok, expanded} ->
-      case expand_groups(member, calendar) do
-        {:ok, member} -> {:cont, {:ok, [member | expanded]}}
+      case expand_member(member, calendar) do
+        {:ok, members} -> {:cont, {:ok, Enum.reverse(members, expanded)}}
         {:error, _reason} = error -> {:halt, error}
       end
     end)
     |> reversed()
   end
+
+  ## A range of a year's divisions
+
+  # A season, a quarter, a quadrimester and a semester (ISO 8601-2 Table 2,
+  # the numbers 21 to 41 written where a month is) are each a span of dates,
+  # so one expands to an interval. A range from one to another is all of them
+  # between (§6.3 c): `{2026-21..2026-23}` is the spring, the summer and the
+  # autumn of 2026, each a member. It was a range whose ends were intervals,
+  # which nothing walks and whose own text was not read.
+  #
+  # The divisions of one kind are counted in the order of their numbers, and
+  # the first of the next year follows the last of a year. A range from a
+  # division to anything else, or with one end left open, names no such
+  # run and is an error.
+  #
+  # They are a run in time as well, each beginning where the one before it
+  # ends, or the range is an error: the winter of a year (24) is read as
+  # beginning in the December before it, ahead of that year's spring, so the
+  # seasons numbered from 21 to 24 are no run, and nor are those from the
+  # autumn of one year to the spring of the next, or the southern seasons of
+  # one year (29 to 32), whose autumn and winter come before its spring.
+  @divisions [21..24, 25..28, 29..32, 33..36, 37..39, 40..41]
+
+  # The most divisions a range names: a range of seasons across every year
+  # of the calendar is not expanded.
+  @most_divisions 1_000
+
+  defp expand_member(%Tempo.Range{first: first, last: last} = range, calendar) do
+    case {division(first), division(last)} do
+      {nil, nil} ->
+        expand_one(range, calendar)
+
+      {{_kind, _from} = from, {_any_kind, _to} = to} ->
+        expand_divisions(from, to, range, calendar)
+
+      _one_end_alone ->
+        {:error, division_range_error(first, last)}
+    end
+  end
+
+  defp expand_member(member, calendar), do: expand_one(member, calendar)
+
+  defp expand_one(member, calendar) do
+    with {:ok, member} <- expand_groups(member, calendar), do: {:ok, [member]}
+  end
+
+  # The kind of division a value is, as the numbers its kind takes, and the
+  # year and number it is: `nil` for a value that is none.
+  defp division(%Tempo{time: [{:year, year}, {:month, number}]})
+       when is_integer(year) and is_integer(number) do
+    case Enum.find(@divisions, &(number in &1)) do
+      nil -> nil
+      kind -> {kind, {year, number}}
+    end
+  end
+
+  defp division(_value), do: nil
+
+  defp expand_divisions({kind, from}, {kind, to}, range, calendar) when from <= to do
+    with {:ok, divisions} <- divisions_between(from, to, kind),
+         {:ok, expanded} <- expand_each_division(divisions, range, calendar) do
+      if run_in_time?(expanded),
+        do: {:ok, expanded},
+        else: {:error, division_run_error(from, to)}
+    else
+      :too_many -> {:error, division_count_error(from, to)}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp expand_divisions({_kind, from}, {_other_kind, to}, _range, _calendar),
+    do: {:error, division_order_error(from, to)}
+
+  defp divisions_between(from, to, kind) do
+    divisions =
+      from
+      |> Stream.iterate(&next_division(&1, kind))
+      |> Stream.take_while(&(&1 <= to))
+      |> Enum.take(@most_divisions + 1)
+
+    if Enum.count(divisions) > @most_divisions, do: :too_many, else: {:ok, divisions}
+  end
+
+  defp next_division({year, number}, first..last//_) do
+    if number == last, do: {year + 1, first}, else: {year, number + 1}
+  end
+
+  # Each division as the value it is: the range's first and its last as they
+  # are written, with what qualifies them, and those between as the first is
+  # with nothing qualifying them.
+  defp expand_each_division(divisions, %Tempo.Range{first: first, last: last}, calendar) do
+    divisions
+    |> Enum.reduce_while({:ok, []}, fn {year, number}, {:ok, expanded} ->
+      written = division_as_written([year: year, month: number], first, last)
+
+      case expand_groups(written, calendar) do
+        {:ok, division} -> {:cont, {:ok, [division | expanded]}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+    |> reversed()
+  end
+
+  defp division_as_written(time, %Tempo{time: time} = first, _last), do: first
+  defp division_as_written(time, _first, %Tempo{time: time} = last), do: last
+  defp division_as_written(time, first, _last), do: %{first | time: time, qualifications: nil}
+
+  # Whether each division begins where the one before it ends.
+  defp run_in_time?(divisions) do
+    spans = Enum.map(divisions, &Tempo.to_interval/1)
+
+    spans
+    |> Enum.zip(Enum.drop(spans, 1))
+    |> Enum.all?(&runs_on?/1)
+  end
+
+  defp runs_on?({{:ok, %Tempo.Interval{to: ends}}, {:ok, %Tempo.Interval{from: begins}}}),
+    do: Compare.compare_endpoints(ends, begins) == :same
+
+  defp runs_on?(_no_one_span), do: false
+
+  defp division_run_error({from_year, from}, {to_year, to}) do
+    InvalidDateError.exception(
+      reason:
+        "The divisions of a year from #{from_year}-#{from} to #{to_year}-#{to} do not run on " <>
+          "from one another in time, each beginning where the one before it ends: the seasons " <>
+          "of a year are not all in the order of their numbers (its winter, 24, begins in the " <>
+          "December before it). Write each of them as a member of the set."
+    )
+  end
+
+  defp division_range_error(first, last) do
+    InvalidDateError.exception(
+      reason:
+        "A range from #{shown(first)} to #{shown(last)} is from a division of a year (a " <>
+          "season, a quarter, a quadrimester or a semester) at one end alone. A range of them " <>
+          "runs from one to another of its kind, and names each of them between."
+    )
+  end
+
+  defp division_order_error({from_year, from}, {to_year, to}) do
+    InvalidDateError.exception(
+      reason:
+        "A range from #{from_year}-#{from} to #{to_year}-#{to} is no range of a year's " <>
+          "divisions: it runs from one kind to another, or from a later one to an earlier."
+    )
+  end
+
+  defp division_count_error({from_year, from}, {to_year, to}) do
+    InvalidDateError.exception(
+      reason:
+        "A range from #{from_year}-#{from} to #{to_year}-#{to} names more than " <>
+          "#{@most_divisions} divisions of a year, the most a range is expanded to."
+    )
+  end
+
+  defp shown(:undefined), do: "an open end"
+  defp shown(value), do: inspect(value)
 
   defp reversed({:ok, members}), do: {:ok, Enum.reverse(members)}
   defp reversed({:error, _reason} = error), do: error

@@ -3,7 +3,7 @@ defmodule Tempo.Iso8601.SetFormsTest do
   Sets the parser did not read, or read as another value: a member written
   with a qualifier, a set of one value in a unit, a set of days of the year
   after its year in the extended and the basic format, one of several years
-  before the year designator, a fraction before the comma
+  before the year designator, a range of a year's divisions, a fraction before the comma
   or the brace that follows a member, a fraction after a set of seconds, and
   the fractions of a second as a set, the form `Tempo.extend/2` gives a second
   and `inspect/1` writes.
@@ -228,6 +228,80 @@ defmodule Tempo.Iso8601.SetFormsTest do
     test "leaves a set of whole values as it was" do
       assert read("[2025,2026]") == read("[2025Y,2026Y]")
       assert %Tempo{} = read("{2025,2026}Y6M")
+    end
+  end
+
+  describe "a range of a year's divisions in a set" do
+    # A season, a quarter, a quadrimester and a semester (ISO 8601-2 Table 2)
+    # are each a span of dates, and a range from one to another is every one
+    # of them between (§6.3 c). It was read as a range whose ends were
+    # intervals: nothing walked it, and its own text was not read back.
+    @divisions [
+      {"{2026-21..2026-23}", ["2026-21", "2026-22", "2026-23"]},
+      {"[2026-21..2026-22]", ["2026-21", "2026-22"]},
+      {"{2026-33..2026-36}", ["2026-33", "2026-34", "2026-35", "2026-36"]},
+      {"{2026-35..2027-34}", ["2026-35", "2026-36", "2027-33", "2027-34"]},
+      {"{2026-37..2026-39}", ["2026-37", "2026-38", "2026-39"]},
+      {"{2026-40..2027-41}", ["2026-40", "2026-41", "2027-40", "2027-41"]},
+      {"{2026-25..2027-26}", ["2026-25", "2026-26", "2026-27", "2026-28", "2027-25", "2027-26"]},
+      {"{2026-21,2026-22..2026-23}", ["2026-21", "2026-22", "2026-23"]},
+      {"{2026-21..2026-21}", ["2026-21"]},
+      {"{2026Y21M..2026Y23M}", ["2026-21", "2026-22", "2026-23"]}
+    ]
+
+    test "is each division between them, as it is read alone" do
+      for {set, members} <- @divisions do
+        assert %Tempo.Set{set: read_members} = read(set)
+        assert {set, read_members} == {set, Enum.map(members, &read/1)}
+      end
+    end
+
+    test "is a run in time, each division beginning where the one before it ends" do
+      for {set, _members} <- @divisions do
+        %Tempo.Set{set: members} = read(set)
+        spans = Enum.flat_map(members, &spans/1)
+
+        for {{_from, ends}, {begins, _to}} <- Enum.zip(spans, Enum.drop(spans, 1)) do
+          assert {set, ends} == {set, begins}
+        end
+      end
+    end
+
+    test "reads back from its own text" do
+      for {set, _members} <- @divisions do
+        assert {set, reads_back?(read(set))} == {set, true}
+      end
+    end
+
+    test "is refused where its divisions are no run in time" do
+      # The winter of a year begins in the December before it, and a
+      # southern autumn and winter come before that year's spring.
+      for text <- [
+            "{2026-21..2026-24}",
+            "{2025-23..2026-22}",
+            "{2026-24..2027-21}",
+            "{2026-29..2026-32}"
+          ] do
+        assert {^text, {:error, %Tempo.InvalidDateError{reason: reason}}} =
+                 {text, Tempo.from_iso8601(text)}
+
+        assert reason =~ "do not run on from one another"
+      end
+    end
+
+    test "is refused from one kind to another, open at an end, and beyond a thousand" do
+      for text <- ["{2026-21..2026-33}", "{..2026-22}", "{2026-21..}", "{0001-21..9999-24}"] do
+        assert {^text, {:error, %Tempo.InvalidDateError{}}} = {text, Tempo.from_iso8601(text)}
+      end
+    end
+
+    test "leaves a range of months, and the divisions written one by one" do
+      assert %Tempo.Set{set: [%Tempo.Range{}]} = read("{2026-06..2026-08}")
+
+      assert read("{2026-21,2026-24}") == %Tempo.Set{
+               type: :all,
+               set: [read("2026-21"), read("2026-24")]
+             }
     end
   end
 
