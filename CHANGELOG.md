@@ -339,6 +339,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A weekly rule limited to a month asks the month of each day it selects, and a monthly rule limited to a week the week: `FREQ=WEEKLY;BYMONTH=3;BYDAY=TU` from a Saturday lists Tuesday 31 March 2026, which it left out because that week's Saturday is in April, and a position there no longer counts days of another month. A selection in a whole week is asked the same way (`Tempo.select(~o"2026Y14W", ~o"L4M3KN")` is Wednesday 1 April, where it was nothing).
+
 * A `%Tempo{}` built by hand with no `:calendar` is in the default calendar, and one given `calendar: nil` is read as it: `Enum.count/1`, `Enum.at/2`, `Tempo.shift/3`, `Tempo.duration/1`, `Tempo.select/2`, `Tempo.explain/1` and `Tempo.to_string/2` raised an `UndefinedFunctionError` for one, where comparison and conversion read it, and it inspected as `Tempo.from_iso8601!("2026Y", nil)`.
 
 * `Tempo.to_string/2` shows a span of two months with no year by its months (`~o"6M/9M"` is "Jun – Aug", and `~o"11M/2M"` "Nov – Jan"), where it returned Localize's error for a missing year.

@@ -96,6 +96,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Done
 
+* [x] **A weekly rule's month, and a monthly rule's week, are asked of the days selected** — a month that limits a weekly rule was asked of the day its start steps to before the week's days were made, so `FREQ=WEEKLY;BYMONTH=3;BYDAY=TU` from a Saturday left out the Tuesdays of weeks whose Saturday is in another month, and a position counted days outside the month; a limit by another period now follows the last part that makes days (`limits_after_the_days_made/3` in `lib/tempo/rrule/selection.ex`). Found by the measure of `Tempo.RRule.MonthlyWeeklyPartsTest`. 2026-10-07.
+
 * [x] **`Schedule.task/3`'s `:within` is a window** — a Tempo value or an interval, as every other `:within` is, its ends written to the day they fall on (`window_ends/1` in `lib/tempo/schedule.ex`); the `{from, to}` pair of 1.x is refused by name, as `:earliest` is. 2026-10-07.
 
 * [x] **`ClockTest` timing** — its two `assert_receive`s wait a second for a peer process's message, where the default tenth of one was short on a busy machine and failed once. 2026-10-07.

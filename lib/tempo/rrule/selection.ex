@@ -565,9 +565,41 @@ defmodule Tempo.RRule.Selection do
   defp resolve_parts(candidate, selection, freq, wkst) do
     selection
     |> Enum.sort_by(&application_order_key/1)
+    |> limits_after_the_days_made(freq, selection)
     |> Enum.reduce_while({[candidate], freq}, &resolve_part(&1, &2, selection, wkst))
     |> selected()
   end
+
+  # A weekly or a monthly candidate stands for its week or its month, and a
+  # part that makes days in it can make them in another month, or another
+  # week, than the candidate's own day is in: the Tuesday of a week whose
+  # Saturday is in April can be in March. An occurrence satisfies every part
+  # of its rule (RFC 5545 §3.3.10), so a month that limits a weekly rule, and
+  # a week that limits a monthly one, is asked of the days made and not of
+  # the candidate they are made from: it applies after the last part that
+  # makes days. With no such part the candidate is the occurrence, and the
+  # order is as it was.
+  defp limits_after_the_days_made(parts, scope, selection) when scope in [:week, :month] do
+    {limits, others} = Enum.split_with(parts, &limits_by_another_period?(&1, scope))
+
+    {later, made} =
+      others |> Enum.reverse() |> Enum.split_while(&(not makes_days?(&1, scope, selection)))
+
+    if limits == [] or made == [],
+      do: parts,
+      else: Enum.reverse(made) ++ limits ++ Enum.reverse(later)
+  end
+
+  defp limits_after_the_days_made(parts, _scope, _selection), do: parts
+
+  defp limits_by_another_period?({unit, _value}, :week), do: unit in [:month, :traditional_month]
+  defp limits_by_another_period?({unit, _value}, :month), do: unit in [:week, :calendar_week]
+
+  # A time of day is made on the day it is given, and makes no day.
+  defp makes_days?({unit, _value}, _scope, _selection) when unit in [:hour, :minute, :second],
+    do: false
+
+  defp makes_days?(part, scope, selection), do: role(part, scope, selection) != :limit
 
   defp resolve_part(entry, {candidates, scope}, selection, wkst) do
     case apply_entry(entry, candidates, scope, selection, wkst) do

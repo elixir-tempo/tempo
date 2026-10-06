@@ -169,6 +169,23 @@ defmodule Tempo.RRule.PeriodPartsTest do
       end
     end
 
+    test "beside a weekday keeps the days of the week that are both" do
+      # The week of Monday 29 June 2026 starts in June, and its Wednesday
+      # and its Sunday are in July: the month is asked of the days.
+      for year <- [2025, 2026], week <- weeks_of(year), months <- [[6], [1, 12]] do
+        expected =
+          for date <- days_of_week(year, week),
+              date.month in months and Date.day_of_week(date) in [3, 7],
+              do: {date, 1}
+
+        text = "{#{Enum.join(months, ",")}}M{3,7}K"
+
+        for {way, answer} <- each_way("#{year}Y#{week}W", "P1W", text) do
+          assert {year, week, text, way, spans(answer)} == {year, week, text, way, expected}
+        end
+      end
+    end
+
     test "keeps the week of that number" do
       for year <- [2025, 2026],
           week <- weeks_of(year),
