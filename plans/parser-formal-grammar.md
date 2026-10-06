@@ -1,8 +1,10 @@
 # A formal grammar for the parser
 
-**Status:** deferred, 2026-10-04
+**Status:** in progress, 2026-10-06
 
-Deferred by the user on 2026-10-04, who is wary of the speed a generalised ABNF parser would lose. What is chosen below keeps the tokenizer as it is and uses the grammar's recogniser as an oracle in test support, so the parser's speed is not at stake in it; generating the tokenizer from the grammar is the option that would cost speed, and it is set aside under Options considered. That is for the user to weigh when the plan is taken up again.
+Deferred by the user on 2026-10-04, who is wary of the speed a generalised ABNF parser would lose, and taken up in part on 2026-10-06: a generator pilot scoped to sets and ranges, as test support, with the tokenizer untouched. What it built and found is under "The pilot on sets and ranges" below. The grammar files, the recogniser and the standard's examples are not started, and are still the user's to weigh.
+
+What is chosen below keeps the tokenizer as it is and uses the grammar's recogniser as an oracle in test support, so the parser's speed is not at stake in it; generating the tokenizer from the grammar is the option that would cost speed, and it is set aside under Options considered.
 
 Tempo's parser is checked today by examples someone thought to write. This plan gives it a written grammar, transcribed from ISO 8601 clause by clause, and tests that hold the parser to that grammar in both directions, so a parse defect is found by a generator in CI rather than by accident. It starts with a pilot on ISO 8601-1 clause 5, and decides the rest on what the pilot finds.
 
@@ -159,6 +161,18 @@ The pilot delivers the grammar for clause 5, the examples table for Part 1, the 
 
 It has to show the method works before Part 2 is started. The interval end read as a century (`2026-06-15/20`, open in `TODO.md`) is in clause 5.5, so the pilot should find it unaided, and the fraction read as a century (`09.5`, fixed on 2026-10-03) should fail if its fix is reverted. If the pilot finds neither, the method is wrong and the plan stops for review.
 
+## The pilot on sets and ranges
+
+Taken up on 2026-10-06 in place of clause 5, where the defects were: the parser's sets, ranges and basic format had given about two new defects for each one fixed by hand. It is a generator and not a grammar. `Tempo.GeneratedSets` (`test/support/generated_sets.ex`) builds each text from the texts of its members, so what it should read as is known without reading it, and `Tempo.Iso8601.GeneratedSetsTest` holds each to three properties: reading it, `inspect/1` and `Tempo.to_iso8601/1` never raise; a member of a set is its own text read alone; and what is written reads back as the same value.
+
+* **The texts** — 1,931, from 67 families of members in the explicit, the extended and the basic format (dates, week dates, days of the year, centuries, decades, seasons, times, dates and times, with zones, shifts, qualifiers, unspecified digits, significant digits, groups and selections), each as a set of all and of one, with ranges between two members and open at an end; and 38 templates of a set in one unit of a value, with steps, counts from the end, two sets in one value, a zone, a qualifier and a fraction. The run takes 2.3 seconds in the default suite.
+
+* **Found and fixed** — a set of one value in a unit read as another value than its member (`2026Y25W{1}K`); a set of days of the year read as months, so that `2026-{001}` was January; one of several years before the year designator (`[2025,2026]Y6M`) and a member with a zone of its own, neither read; a range of seasons whose ends were intervals, which nothing walked; a zone that is not known written in a form no suffix reads; and a set of one year with significant digits that no span was read from. Each has its line under Done in `TODO.md`, dated 2026-10-06.
+
+* **The forms not read** — each is generated and held to being refused, or left out with its reason in the module: an interval at an end of a range; a range of a year's divisions that is no run in time, or open at an end; a set of whole values as a member of a set; a value with unspecified digits in a set of a unit below the year; one of several values in a unit of the extended or the basic format, where a bracket is the suffix of RFC 9557; a time shift after a set; and the basic format's sets in a week date and a time alone, which are an open item.
+
+* **What it says of the method** — two runs found seven classes that 259 example tests had not, at a cost of two seconds a run, and the same generator fails at the commit before each fix. The members' texts are the oracle, which a grammar would be for forms with no member to read alone. It does not say whether a text Tempo reads is in the standard (the Sound property), which needs the recogniser.
+
 ## After the pilot
 
 Part 2 follows by clause, the clauses where defects have been found first: selection (12), sets (6), explicit forms (7), qualification (8), then unspecified digits (9), extended intervals (10), explicit duration (11), repeat rules (13), grouped units (5) and the component extensions (4). Annex A, the EDTF profile, is a start symbol of its own over the same rules, checked against `test/support/edtf_corpus.ex`. RFC 9557 and Tempo's extensions come last, and the soundness test is only complete once they are in, since until then an extension reads as a text in no grammar.
@@ -184,6 +198,8 @@ Part 2 follows by clause, the clauses where defects have been found first: selec
 * **Upkeep** — every change to what Tempo reads needs a change to a grammar file. That is the purpose: the grammar is the review record of the change.
 
 ## Tasks
+
+* [x] **The pilot on sets and ranges** — a generator of 1,931 texts and three properties in the default suite, and the seven classes it found fixed. 2026-10-06.
 
 * [ ] **The grammar for Part 1 clause 5** — `grammar/iso8601-1.abnf`, each rule with its clause and standing, and the list of choices the standard leaves to agreement with what Tempo chose.
 
