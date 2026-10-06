@@ -10,6 +10,7 @@ defmodule Tempo.OneReadingTest do
 
   import Tempo.Sigils
 
+  alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalSet
 
@@ -172,6 +173,10 @@ defmodule Tempo.OneReadingTest do
 
   # The hour a clock shows twice was yielded twice for each value of a time
   # in it, in turn, so `Enum.count/1` and `Enum.to_list/1` disagreed.
+  defp offsets_walked(value) do
+    value |> Enum.to_list() |> Enum.map(&Compare.offset_seconds(&1.shift)) |> Enum.uniq()
+  end
+
   describe "the walk of a wall time a clock shows twice" do
     test "is the occurrence the value names" do
       first = Tempo.from_iso8601!("2026-10-25T02:30[Europe/Paris]")
@@ -179,8 +184,16 @@ defmodule Tempo.OneReadingTest do
 
       assert Enum.count(first) == 60
       assert Enum.count(Enum.to_list(first)) == 60
-      assert first |> Enum.to_list() |> Enum.map(& &1.shift) |> Enum.uniq() == [[hour: 2]]
-      assert second |> Enum.to_list() |> Enum.map(& &1.shift) |> Enum.uniq() == [[hour: 1]]
+      assert offsets_walked(first) == [2 * 3600]
+      assert offsets_walked(second) == [3600]
+
+      # A value written with an offset is walked in the shape it wrote it,
+      # so its first second is the value's own start.
+      assert second |> Enum.to_list() |> Enum.map(& &1.shift) |> Enum.uniq() ==
+               [[hour: 1, minute: 0]]
+
+      assert hd(Enum.to_list(second)) ==
+               Tempo.from_iso8601!("2026-10-25T02:30:00+01:00[Europe/Paris]")
     end
 
     test "is both occurrences for a value that holds the hour" do
