@@ -3945,6 +3945,18 @@ defmodule Tempo do
   defp without_unspecified_year(%__MODULE__{} = value), do: value
 
   # How coarse a value's leading unit is; a value with none is the finest.
+  #
+  # A selection with no period before it (`L5KN`, the Fridays) is as coarse
+  # as the finest unit it names, so a value finer than that is placed after
+  # it, on each date it selects (`L5KNT17H30M`), and a coarser one before it
+  # as its period (`6ML5KN`). It was held the finest of all, and a time of
+  # day was written before it, which no reader takes.
+  defp leading_key(%__MODULE__{time: [{:selection, selection} | _rest]}) do
+    selection
+    |> Enum.flat_map(&selected_key/1)
+    |> Enum.min(fn -> Unit.sort_key(:day) end)
+  end
+
   defp leading_key(%__MODULE__{time: [{unit, _value} | _rest]}) do
     case Unit.fetch_sort_key(unit) do
       {:ok, key} -> key
@@ -3953,6 +3965,25 @@ defmodule Tempo do
   end
 
   defp leading_key(%__MODULE__{}), do: -1
+
+  # How coarse a part of a selection is: its unit's own place, a day's for a
+  # part that names days in another way (a numbered weekday, an event, a
+  # window), and none for what is no unit (a position, the week's start).
+  @day_parts [:byday, :event, :interval, :nearest_weekday, :or_day]
+
+  defp selected_key({part, _value}) when part in [:instance, :wkst, :skip], do: []
+  defp selected_key({part, _value}) when part in @day_parts, do: [Unit.sort_key(:day)]
+  defp selected_key({:traditional_month, _value}), do: [Unit.sort_key(:month)]
+  defp selected_key({:calendar_week, _value}), do: [Unit.sort_key(:week)]
+
+  defp selected_key({unit, _value}) do
+    case Unit.fetch_sort_key(unit) do
+      {:ok, key} -> [key]
+      :error -> []
+    end
+  end
+
+  defp selected_key(_another_entry), do: []
 
   @doc """
   Bang variant of `at/2` — returns the placed value or raises.

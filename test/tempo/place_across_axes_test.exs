@@ -19,6 +19,7 @@ defmodule Tempo.PlaceAcrossAxesTest do
   import Tempo.Sigils
 
   alias Tempo.Interval
+  alias Tempo.IntervalSet
   alias Tempo.InvalidDateError
 
   ## The measure
@@ -136,6 +137,45 @@ defmodule Tempo.PlaceAcrossAxesTest do
         assert {:error, %ArgumentError{} = error} = Tempo.at(value, other)
         assert Exception.message(error) =~ "with a year"
       end
+    end
+  end
+
+  describe "a value placed with a selection that has no period" do
+    # A selection with nothing before it (`L5KN`, the Fridays) was held the
+    # finest of all, so a time of day was written before it
+    # (`T17H30ML5KN`), which no reader takes.
+    test "is after it where it is finer than what the selection names, and before it where coarser" do
+      for {selection, value, text} <- [
+            {~o"L5KN", ~o"T17H30M", "L5KNT17H30M"},
+            {~o"L1K1IN", ~o"T9H", "L1K1INT9H"},
+            {~o"L(easter)eN", ~o"T9H", "L(easter)eNT9H"},
+            {~o"L6MN", ~o"15D", "L6MN15D"},
+            {~o"L5KN", ~o"6M", "6ML5KN"},
+            {~o"L15DN", ~o"6M", "6ML15DN"},
+            {~o"LT10HN", ~o"15D", "15DLT10HN"}
+          ] do
+        read = Tempo.from_iso8601!(text)
+
+        assert {text, Tempo.at(selection, value)} == {text, {:ok, read}}
+        assert {text, Tempo.at(value, selection)} == {text, {:ok, read}}
+        assert {text, read_back?(read)} == {text, true}
+      end
+    end
+
+    test "is the time on each date the selection names, once it has a period" do
+      {:ok, fridays_at_half_past_five} = Tempo.at(~o"L5KN", ~o"T17H30M")
+      {:ok, in_june} = Tempo.on(fridays_at_half_past_five, ~o"2026-06")
+      {:ok, occurrences} = Tempo.to_interval(in_june)
+
+      fridays =
+        Enum.filter(Date.range(~D[2026-06-01], ~D[2026-06-30]), &(Date.day_of_week(&1) == 5))
+
+      assert Enum.map(IntervalSet.members(occurrences), &Interval.from/1) ==
+               for(date <- fridays, do: Tempo.from_iso8601!("#{Date.to_iso8601(date)}T17:30"))
+    end
+
+    test "is in order as it was with a year or a month before the selection" do
+      assert Tempo.at(~o"2018YL1K1IN", ~o"T9H") == {:ok, Tempo.from_iso8601!("2018YL1K1INT9H")}
     end
   end
 

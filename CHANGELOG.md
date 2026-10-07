@@ -389,6 +389,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.at/2` places a time of day after a selection that has no period, on each date it selects: `Tempo.at(~o"L5KN", ~o"T17H30M")` is `~o"L5KNT17H30M"`, the Fridays at half past five, where it was `~o"T17H30ML5KN"`, which no reader takes.
+
 * A part of a selection written with unspecified digits stands for each value its digits match: `2026Y6ML1XDN` is the ten days from 10 to 19 June and `2026YL1XMN` October to December, where each selected nothing. `Tempo.explain/1` words such a part as it is written and `Tempo.RRule.to_string/1` returns a `Tempo.ConversionError` for one, where both raised.
 
 * `Tempo.at/2` and `Tempo.on/2` place a value on one written by other units of a date as `Tempo.select/2` selects it: the 15th on week 25 of 2026 is 15 June and a week on a month is the week of the month, where each was a value that names nothing and no reader takes (`2026Y25W15D`, `2026Y6M3K`, `2026Y6M2W`). A value that names no date there, or more than one (a Wednesday on a month), is an error, as two such values with no year are.
