@@ -13969,10 +13969,67 @@ defmodule Tempo do
         ) :: non_neg_integer() | {:error, error_reason()}
   def count_workdays(value, territory \\ nil) do
     with {:ok, selector} <- workday_selector(territory),
-         {:ok, %IntervalSet{} = selected} <- select(value, selector) do
+         {:ok, %IntervalSet{} = selected} <- value |> whole_days() |> select(selector) do
       count_selected(selected)
     end
   end
+
+  # Workdays are counted by whole days: a span written to a time of day by
+  # the days from the one it starts on up to, not including, the one it ends
+  # on, as a span of days is, so an hour of a workday holds none. A weekday
+  # selects the hours of such a span that are on it (`Tempo.select/2`), and
+  # they are no count of days.
+  defp whole_days(%__MODULE__{} = value) do
+    if time_of_day?(value), do: no_days(), else: value
+  end
+
+  # An interval written with a duration, and a recurrence, are the span or
+  # spans they convert to. One that has no end is left for the selection to
+  # refuse.
+  defp whole_days(%Interval{} = written) do
+    case to_interval(written) do
+      {:ok, %Interval{from: %__MODULE__{}, to: %__MODULE__{}} = span} -> whole_days_of_span(span)
+      {:ok, %IntervalSet{} = spans} -> whole_days(spans)
+      _no_end_or_no_span -> written
+    end
+  end
+
+  defp whole_days(%IntervalSet{} = set) do
+    if IntervalSet.bounded?(set),
+      do: set |> IntervalSet.members() |> Enum.flat_map(&days_of_member/1) |> IntervalSet.new!(),
+      else: set
+  end
+
+  defp whole_days(other), do: other
+
+  defp whole_days_of_span(%Interval{from: from, to: to} = span) do
+    if time_of_day?(from) or time_of_day?(to),
+      do: days_started(trunc(from, :day), trunc(to, :day)),
+      else: span
+  end
+
+  defp days_of_member(%Interval{} = member) do
+    case whole_days_of_span(member) do
+      %Interval{} = days -> [days]
+      %IntervalSet{} = none -> IntervalSet.members(none)
+    end
+  end
+
+  # The days from the one a span starts on up to the one it ends on, which
+  # are none where the two are one day.
+  defp days_started(%__MODULE__{} = first, %__MODULE__{} = ends_on) do
+    case Interval.new(from: first, to: ends_on) do
+      {:ok, %Interval{} = days} -> days
+      {:error, _no_whole_day} -> no_days()
+    end
+  end
+
+  defp days_started(_first, _ends_on), do: no_days()
+
+  defp no_days, do: IntervalSet.new!([])
+
+  defp time_of_day?(%__MODULE__{time: time}) when is_list(time),
+    do: Enum.any?(time, &time_of_day_unit?/1)
 
   defp workday_selector(%Tempo.Workdays{} = workdays), do: {:ok, workdays}
 
@@ -13990,6 +14047,9 @@ defmodule Tempo do
       {:error, UnboundedSetError.exception(operation: "Tempo.count_workdays/2", set: selected)}
     end
   end
+
+  defp time_of_day_unit?({unit, _value}), do: unit in [:hour, :minute, :second, :microsecond]
+  defp time_of_day_unit?(_group_or_selection), do: false
 
   defp workdays_from(%Tempo{} = tempo, count, territory, function) when is_integer(count) do
     with {:ok, days_off} <- days_off(territory),

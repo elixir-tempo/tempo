@@ -247,15 +247,17 @@ defmodule Tempo.SelectOneImplementationTest do
   end
 
   describe "what the resolver has no reading for" do
-    test "is a day selected by its weekday alone, which is left the span it was" do
+    # It was left the span it was, with no unit, until 2026-10-08
+    # (`Tempo.SelectedByWeekdayTest`).
+    test "is not a day selected by its weekday alone, which is the day's own value" do
       for selector <- [~o"1K", ~o"L1KN"] do
         mondays = members(Tempo.select(~o"2026-06", selector))
 
-        assert Enum.map(mondays, & &1.unit) == [nil, nil, nil, nil, nil]
+        assert Enum.map(mondays, & &1.unit) == [:hour, :hour, :hour, :hour, :hour]
       end
 
       {:ok, workdays} = Tempo.select(~o"2026-08-10/2026-08-15", Tempo.workdays(:AU))
-      assert {IntervalSet.count(workdays), Enum.count(workdays)} == {5, 5}
+      assert {IntervalSet.count(workdays), Enum.count(workdays)} == {5, 5 * 24}
     end
 
     test "is still placed on its period: a part it cannot count, after a weekday too" do

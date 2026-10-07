@@ -58,9 +58,9 @@ defmodule Tempo.Select do
   what `~o"L15DN"` does, and one implementation resolves both. A day
   either selects is the day's own value, as `Tempo.to_interval/1` gives
   it, so it is walked by its hours; a month is walked by its days and an
-  hour by its minutes. A day selected by its weekday alone (`~o"1K"`,
-  `Tempo.workdays/1`) is the span of the day, and is walked as the one
-  day.
+  hour by its minutes. A day selected by its weekday (`~o"1K"`,
+  `Tempo.workdays/1`) is that value too, and a weekday selected from an
+  hour keeps the hour where its day is that weekday.
 
   Base can be a `t:Tempo.t/0`, `t:Tempo.Interval.t/0`, or
   `t:Tempo.IntervalSet.t/0`. IntervalSet bases flat-map the
@@ -673,7 +673,7 @@ defmodule Tempo.Select do
   defp select_closed(_span, []), do: IntervalSet.new([], coalesce: false)
 
   defp select_closed(span, selector) do
-    case weekday_selector(selector) do
+    case weekdays_of_whole_days(span, selector) do
       {:ok, weekdays} ->
         span |> weekdays_in(weekdays) |> Enum.to_list() |> IntervalSet.new(coalesce: false)
 
@@ -682,16 +682,44 @@ defmodule Tempo.Select do
     end
   end
 
+  # A day-of-week selector keeps the days of a span of whole days, each the
+  # day's own value. A span written to a time of day is selected period by
+  # period, as by any other selector, so a weekday selected from an hour
+  # keeps the hour where its day is that weekday (decided 2026-10-08): it
+  # selected nothing there, an hour holding no whole day, and from a span of
+  # hours that ran into the next day it selected the whole of a day the
+  # span starts part way through.
+  defp weekdays_of_whole_days(%Interval{from: from, to: to}, selector) do
+    if time_of_day?(from) or time_of_day?(to),
+      do: :no,
+      else: weekday_selector(selector)
+  end
+
+  defp time_of_day?(%Tempo{time: time}) when is_list(time),
+    do: Enum.any?(time, &(is_tuple(&1) and elem(&1, 0) in [:hour, :minute, :second]))
+
+  defp time_of_day?(_open_or_no_end), do: false
+
   # An open-ended span's selection, as a lazy set: a day-of-week
   # selector's days from the span's first day on, or any other selector
   # applied to each period as the walk reaches it.
   defp select_open_end(_span, []), do: IntervalSet.new([], coalesce: false)
 
   defp select_open_end(span, selector) do
-    case weekday_selector(selector) do
+    case weekdays_of_whole_days(span, selector) do
       {:ok, weekdays} -> lazy_weekdays(span, weekdays)
-      :no -> span |> periods() |> select_lazily(selector, &select_in_period/2)
+      :no -> lazily_by_period(span, selector)
     end
+  end
+
+  # A weekday is selected among days, and a span that starts on no day (a
+  # time of day with no date, `T10H/..`) has none: it selects nothing, as a
+  # span of days that starts on none does (`lazy_weekdays/2`).
+  defp lazily_by_period(%Interval{from: %Tempo{calendar: calendar} = from} = span, selector) do
+    if weekday_selector(selector) != :no and
+         not match?({:ok, _day}, tempo_to_date(from, calendar)),
+       do: IntervalSet.new([], coalesce: false),
+       else: span |> periods() |> select_lazily(selector, &select_in_period/2)
   end
 
   # While one day of the week matches, the matching days never run out,
@@ -1139,26 +1167,10 @@ defmodule Tempo.Select do
   # `Tempo.to_interval/1` has the value walked: a day by its hours (decided
   # 2026-10-07). A day selected by a constraint or by a selection is then
   # the same value, where one placed on its period was walked by hours and
-  # one the resolver gave was walked as the one day.
-  #
-  # A day selected by its weekday alone is left the span it is, as the days
-  # a weekday selector gives are (`weekdays_in/2`): the two forms of that
-  # are one value too, and whether it is walked by its hours is asked of the
-  # user.
-  defp selected_in(value, selection) do
-    if by_weekday_alone?(selection),
-      do: Tempo.to_interval(value),
-      else: Tempo.selected_in(value)
-  end
-
-  # A selection whose finest part is a weekday of no week: its Mondays, the
-  # first of them, those of June.
-  defp by_weekday_alone?(selection) do
-    units = for {unit, _value} <- selection, unit not in [:instance, :wkst], do: unit
-
-    List.last(units) in [:day_of_week, :byday] and :week not in units and
-      :calendar_week not in units
-  end
+  # one the resolver gave was walked as the one day. A day selected by its
+  # weekday alone is such a value too (decided 2026-10-08), as the days a
+  # weekday selector gives are (`day_interval/5`).
+  defp selected_in(value, _selection), do: Tempo.selected_in(value)
 
   # A rule that only keeps or drops its period is asked of the period itself,
   # the candidate the resolver answers for: no recurrence is walked, so a
@@ -1365,13 +1377,17 @@ defmodule Tempo.Select do
     end
   end
 
+  # A day a weekday selects is the day's own value, walked by its hours as
+  # `Tempo.to_interval/1` has a day walked (decided 2026-10-08), as a day
+  # selected by its number is. It was the span of the day with no unit, and
+  # was walked as the one day.
   defp day_interval(calendar, y, m, d, source_from) do
     from_tempo = build_day_tempo(source_from, y, m, d, calendar)
 
     next = day_after(y, m, d, calendar)
     to_tempo = build_day_tempo(source_from, next.year, next.month, next.day, calendar)
 
-    %Interval{from: from_tempo, to: to_tempo}
+    %Interval{from: from_tempo, to: to_tempo, unit: :hour}
   end
 
   defp day_after(y, m, d, calendar) do

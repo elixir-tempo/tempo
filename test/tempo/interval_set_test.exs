@@ -658,11 +658,18 @@ defmodule Tempo.IntervalSet.Test do
       assert Enum.count(set) == 25_200
     end
 
-    test "the two agree at day resolution, which is why the trap hides" do
+    test "the two agree for spans of days as they are written, which is why the trap hides" do
+      {:ok, set} = Tempo.IntervalSet.new([~o"2026-08-10/2026-08-11", ~o"2026-08-12/2026-08-13"])
+
+      assert Tempo.IntervalSet.count(set) == 2
+      assert Enum.count(set) == 2
+    end
+
+    test "and differ for the days a selection gives, each the day's own value" do
       {:ok, set} = Tempo.select(~o"2026-08-10/2026-08-15", Tempo.workdays(:AU))
 
       assert Tempo.IntervalSet.count(set) == 5
-      assert Enum.count(set) == 5
+      assert Enum.count(set) == 5 * 24
     end
 
     test "agrees with count/1" do
