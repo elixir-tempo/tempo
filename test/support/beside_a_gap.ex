@@ -19,6 +19,7 @@ defmodule Tempo.BesideAGap do
 
   alias Tempo.Interval
   alias Tempo.IntervalSet
+  alias Tempo.RRule
 
   # The gaps, and the values written beside each. The values are of every
   # shape a gap is met in: the day and the month that hold it, the hours on
@@ -115,13 +116,31 @@ defmodule Tempo.BesideAGap do
       {"select T02:30", &Tempo.select(&1, Tempo.from_iso8601!("T02:30"))},
       {"select T{01,02,03}", &Tempo.select(&1, Tempo.from_iso8601!("T{01,02,03}"))},
       {"select T02/T04", &Tempo.select(&1, Tempo.from_iso8601!("T02/T04"))},
+      {"select T01/T02:30", &Tempo.select(&1, Tempo.from_iso8601!("T01/T02:30"))},
+      {"select T23/T02:30", &Tempo.select(&1, Tempo.from_iso8601!("T23/T02:30"))},
+      {"select T22/T06", &Tempo.select(&1, Tempo.from_iso8601!("T22/T06"))},
+      {"select T02/PT2H", &Tempo.select(&1, Tempo.from_iso8601!("T02/PT2H"))},
+      {"select T02:15/PT30M", &Tempo.select(&1, Tempo.from_iso8601!("T02:15/PT30M"))},
+      {"select T00/PT30M", &Tempo.select(&1, Tempo.from_iso8601!("T00/PT30M"))},
       {"select [2]", &Tempo.select(&1, [2])},
       {"select 30D", &Tempo.select(&1, Tempo.from_iso8601!("30D"))},
+      {"select 29D/31D", &Tempo.select(&1, Tempo.from_iso8601!("29D/31D"))},
       {"select workdays", &Tempo.select(&1, Tempo.workdays(:US))},
       {"select weekends", &Tempo.select(&1, Tempo.weekends(:US))},
       {"at T02", &Tempo.at(&1, Tempo.from_iso8601!("T02"))},
-      {"at T02:30", &Tempo.at(&1, Tempo.from_iso8601!("T02:30"))}
+      {"at T02:30", &Tempo.at(&1, Tempo.from_iso8601!("T02:30"))},
+      {"rule BYHOUR=2", &rule(&1, "FREQ=DAILY;BYHOUR=2;COUNT=4")},
+      {"rule BYHOUR=0", &rule(&1, "FREQ=DAILY;BYHOUR=0;COUNT=4")},
+      {"rule BYHOUR=2;BYMINUTE=15,45", &rule(&1, "FREQ=DAILY;BYHOUR=2;BYMINUTE=15,45;COUNT=6")},
+      {"rule BYMONTHDAY=30", &rule(&1, "FREQ=MONTHLY;BYMONTHDAY=30;COUNT=4")},
+      {"rule BYDAY=FR", &rule(&1, "FREQ=WEEKLY;BYDAY=FR;COUNT=4")}
     ]
+  end
+
+  # The occurrences of a rule that starts on the value.
+  defp rule(value, parts) do
+    with {:ok, recurrence} <- RRule.parse(parts, from: value),
+         do: Tempo.to_interval(recurrence)
   end
 
   defp spans do

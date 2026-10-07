@@ -258,7 +258,6 @@ defmodule Tempo.Select do
   alias Tempo.Math
   alias Tempo.NotBuilt
   alias Tempo.RRule.Selection
-  alias Tempo.TimeZoneDatabase
   alias Tempo.UnboundedSetError
   alias Tempo.UnitValues
   alias Tempo.Validation
@@ -323,6 +322,14 @@ defmodule Tempo.Select do
   each school day of a term tagged `%{term: 3}` is tagged `%{term: 3}`
   too, and a set's own metadata stays with the set.
 
+  In a named zone, what is selected is what the zone's clock shows of
+  it. A time of day the clock skips on some day is not selected on
+  that day, nor is a day the zone left out: `~o"T02"` selects nothing
+  on the night New York's clocks go from 02:00 to 03:00. A window is
+  the part of it the clock shows, so `~o"T02/T04"` is 03:00 to 04:00
+  on that night, and one written with a duration (`~o"T02/PT2H"`) runs
+  that long from 03:00.
+
   Example with a quarter base:
 
       Tempo.select(~o"2026Y3Q", Tempo.workdays(:US))
@@ -360,6 +367,14 @@ defmodule Tempo.Select do
       iex> {:ok, weekends} = Tempo.Select.select(~o"2026-06-15/..", Tempo.weekends(:US))
       iex> weekends |> Tempo.IntervalSet.walk() |> Enum.take(2) |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [20, 21]
+
+      iex> clocks_go_forward = ~o"2024-03-10[America/New_York]"
+      iex> {:ok, skipped} = Tempo.Select.select(clocks_go_forward, ~o"T02")
+      iex> Tempo.IntervalSet.count(skipped)
+      0
+      iex> {:ok, quiet_hours} = Tempo.Select.select(clocks_go_forward, ~o"T02/T04")
+      iex> Tempo.IntervalSet.members(quiet_hours)
+      [~o"2024Y3M10DT3H/T4H[America/New_York]"]
 
   """
   @spec select(base(), selector() | {:error, term()}) ::
@@ -407,7 +422,7 @@ defmodule Tempo.Select do
   def select(%Interval{metadata: metadata} = interval, selector) do
     interval
     |> select_span(selector)
-    |> on_days_the_zone_has(interval)
+    |> as_the_clock_shows(interval)
     |> with_base_metadata(metadata)
   end
 
@@ -444,42 +459,43 @@ defmodule Tempo.Select do
     end
   end
 
-  # A day its zone leaves out is no day to select: Samoa had no 30 December
-  # 2011, which the 30th of a month and the Fridays of that December would
-  # pick. What starts on such a day, the day or a time of day on it, is not
-  # selected, and a day that ends where one begins ends on the next day the
-  # zone has, as the day's own span does. The days a zone leaves out are kept
-  # (`Tempo.TimeZoneDatabase.days_left_out/1`) and nearly every zone has
-  # none, so this asks nothing of the zone database.
-  defp on_days_the_zone_has(
+  # What is selected is what the clock of the base's zone shows of it. A
+  # reading the clock skips is no time to select (decided 2026-10-07): 02:00
+  # on the night New York's clocks go from 02:00 to 03:00, and Samoa's
+  # 30 December 2011, which the 30th of a month and the Fridays of that
+  # December would pick. A member that starts on one, an hour, a minute or a
+  # day the clock skips the whole of, is not selected, and one that ends on
+  # one ends on the reading the clock comes out of the gap on: the day
+  # before a day left out ends on the next day the zone has, as the day's
+  # own span does. A window is another matter, and is the part of it the
+  # clock shows (`shown_span/2`).
+  #
+  # A member nowhere near a change of the zone's clock is as it was
+  # selected, and asks nothing of the zone database
+  # (`Tempo.Enumeration.Zone.shown?/1`).
+  defp as_the_clock_shows(
          {:ok, %IntervalSet{} = selected},
          %Interval{from: %Tempo{extended: %{zone_id: zone}}}
        )
-       when is_binary(zone) do
-    if TimeZoneDatabase.days_left_out(zone) == [],
-      do: {:ok, selected},
-      else: through_members(selected, &on_a_day_the_zone_has/1)
+       when is_binary(zone) and zone != "",
+       do: through_members(selected, &as_the_clock_shows/1)
+
+  defp as_the_clock_shows(selected, _base), do: selected
+
+  defp as_the_clock_shows(%Interval{from: %Tempo{} = from} = selected) do
+    if Zone.shown?(from), do: [ending_as_the_clock_shows(selected)], else: []
   end
 
-  defp on_days_the_zone_has(selected, _base), do: selected
+  defp as_the_clock_shows(selected), do: [selected]
 
-  defp on_a_day_the_zone_has(%Interval{from: %Tempo{} = from, to: to} = selected) do
-    if Zone.on_a_day_left_out?(from),
-      do: [],
-      else: [%{selected | to: on_the_next_day_the_zone_has(to)}]
+  defp ending_as_the_clock_shows(%Interval{to: %Tempo{} = to} = selected) do
+    case Zone.shown_by_the_clock(to) do
+      ^to -> selected
+      shown -> %{selected | to: shown}
+    end
   end
 
-  defp on_a_day_the_zone_has(selected), do: [selected]
-
-  # An end is the start of its day, so a date its zone leaves out is where
-  # the day after begins. A time of day on one is left as it is selected.
-  defp on_the_next_day_the_zone_has(%Tempo{time: [year: _, month: _, day: _]} = date) do
-    if Zone.on_a_day_left_out?(date),
-      do: Math.add(date, %Duration{time: [day: 1]}),
-      else: date
-  end
-
-  defp on_the_next_day_the_zone_has(other), do: other
+  defp ending_as_the_clock_shows(selected), do: selected
 
   # A set's members, each as the members `fun` gives for it, in a set that
   # is walked as the set is: at once where it is bounded, and member by
@@ -488,10 +504,13 @@ defmodule Tempo.Select do
     metadata = IntervalSet.metadata(set)
 
     if IntervalSet.bounded?(set) do
-      set
-      |> IntervalSet.members()
-      |> Enum.flat_map(fun)
-      |> IntervalSet.new(coalesce: false, metadata: metadata)
+      members = IntervalSet.members(set)
+
+      # A set none of whose members `fun` changes is the set it was.
+      case Enum.flat_map(members, fun) do
+        ^members -> {:ok, set}
+        changed -> IntervalSet.new(changed, coalesce: false, metadata: metadata)
+      end
     else
       {:ok,
        set
@@ -1569,18 +1588,42 @@ defmodule Tempo.Select do
   defp project_span(%Interval{} = base, %Tempo{} = c_from, %Tempo{} = c_to) do
     with %Tempo{} = span_from <- merged_constraint_tempo(base, c_from.time),
          %Tempo{} = span_to <- merged_constraint_tempo(base, c_to.time) do
-      build_span(span_from, roll_past_midnight(span_from, span_to))
+      shown_span(span_from, roll_past_midnight(span_from, span_to))
     end
   end
 
+  # A window written with a duration runs that long from the reading it
+  # starts on, which for a start the clock skips is the reading the clock
+  # comes out of the gap on, as a window's start is (`shown_span/2`):
+  # `T02/PT2H` on the night New York's clocks go from 02:00 to 03:00 is
+  # 03:00 to 05:00.
   defp project_span_duration(%Interval{} = base, %Tempo{} = c_from, %Duration{} = duration) do
     with %Tempo{} = span_from <- merged_constraint_tempo(base, c_from.time),
-         %Tempo{} = span_to <- Math.add(span_from, duration) do
-      build_span(span_from, span_to)
+         %Tempo{} = shown_from <- Zone.shown_by_the_clock(span_from),
+         %Tempo{} = span_to <- Math.add(shown_from, duration) do
+      build_span(shown_from, span_to)
     else
       {:error, %ConversionError{}} = error -> error
       _other -> nil
     end
+  end
+
+  # A window is the part of it the clock of its zone shows. An end inside a
+  # gap is on the reading the clock comes out of the gap on, so `T02/T04`
+  # on the night New York's clocks go from 02:00 to 03:00 is 03:00 to 04:00
+  # and `T01/T02:30` is 01:00 to 03:00, the hour the clock shows of each. A
+  # window the clock skips the whole of (`T02/T03`) is nothing.
+  defp shown_span(%Tempo{} = span_from, %Tempo{} = span_to) do
+    case {Zone.shown_by_the_clock(span_from), Zone.shown_by_the_clock(span_to)} do
+      {^span_from, ^span_to} -> build_span(span_from, span_to)
+      {shown_from, shown_to} -> span_with_some_time(shown_from, shown_to)
+    end
+  end
+
+  defp shown_span(_span_from, {:error, _reason} = error), do: error
+
+  defp span_with_some_time(%Tempo{} = from, %Tempo{} = to) do
+    if Compare.compare_endpoints(from, to) == :earlier, do: build_span(from, to), else: nil
   end
 
   # Both endpoints merge onto the same base member, so a window whose
@@ -1588,10 +1631,23 @@ defmodule Tempo.Select do
   # belongs to the following day. `:same` rolls too: "21:00 to 21:00"
   # reads as a full day, and a zero-extent interval is not a value.
   defp roll_past_midnight(%Tempo{} = span_from, %Tempo{} = span_to) do
-    if Compare.compare_endpoints(span_to, span_from) == :later do
-      span_to
-    else
-      Math.add(span_to, Duration.build(day: 1))
+    if Compare.compare_endpoints(span_to, span_from) == :later,
+      do: span_to,
+      else: a_day_on(span_to)
+  end
+
+  # The same reading of the clock on the day after, as it is written. A step
+  # of a day lands on it, or that long after it where the clock skips the
+  # reading (`Tempo.Math.add/2`), which is where an occurrence a recurrence
+  # steps to is. A window ends on the reading the clock comes out of the gap
+  # on (`shown_span/2`), so the reading is given as written, in the zone and
+  # at the offset the step landed in.
+  defp a_day_on(%Tempo{} = reading) do
+    day = Duration.build(day: 1)
+
+    with %Tempo{} = stepped <- Math.add(reading, day),
+         %Tempo{time: written} <- Math.add(%{reading | extended: nil, shift: nil}, day) do
+      %{stepped | time: written}
     end
   end
 

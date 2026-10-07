@@ -367,6 +367,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A time of day the clock skips is not selected on the day it is skipped, nor an occurrence of a rule that picks it (`BYHOUR=2`), which is not counted: `Tempo.select(~o"2024-03-10[America/New_York]", ~o"T02")` is the empty set, where each gave a span that starts on a reading no value is read from. A window is the part of it the clock shows, `~o"T02/T04"` being 03:00 to 04:00 that night and `~o"T02/PT2H"` 03:00 to 05:00, and one that ends inside a gap ends when the gap does.
+
 * `Tempo.RRule.parse/2` refuses a `:from` that is not one value with `{:error, {:invalid_from, value}}`. An interval was taken for a start, and the recurrence built from it was returned by `Tempo.to_interval/2` as it was, with no occurrences and no error.
 
 * The occurrences of a recurrence in a window long after its start are found: `R/1990-01-01/P1D` within June 2026 is its thirty days, and an hourly rule from 2020 has its twenty-four hours of a day this year, where each gave none, the walk having given up before it came to the window. A recurrence that was cut short said nothing, so `FREQ=MINUTELY;BYHOUR=9;BYMINUTE=0;COUNT=30` gave seven occurrences and `R20000/2026-06-01/P1D` ten thousand; each is now refused by name.

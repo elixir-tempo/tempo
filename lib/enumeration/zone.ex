@@ -1,6 +1,7 @@
 defmodule Tempo.Enumeration.Zone do
   @moduledoc false
 
+  alias Calendrical.Gregorian
   alias Tempo.Compare
   alias Tempo.TimeZoneDatabase
   alias Tempo.Validation
@@ -87,7 +88,7 @@ defmodule Tempo.Enumeration.Zone do
         calendar: calendar
       })
       when is_binary(zone) and is_integer(year) and is_integer(month) and is_integer(day) and
-             calendar in [Calendrical.Gregorian, Calendar.ISO] do
+             calendar in [Gregorian, Calendar.ISO] do
     case TimeZoneDatabase.days_left_out(zone) do
       [] -> false
       days -> {year, month, day} in days
@@ -108,7 +109,79 @@ defmodule Tempo.Enumeration.Zone do
   day whose first hour is skipped, the hour of a half-hour change) is shown.
   """
   @spec shown?(Tempo.t()) :: boolean()
-  def shown?(%Tempo{} = value), do: Validation.validate_zone_existence(value) == :ok
+  def shown?(%Tempo{time: time} = value) do
+    if List.keymember?(time, :hour, 0),
+      do: away_from_every_change?(value) or Validation.validate_zone_existence(value) == :ok,
+      else: not on_a_day_left_out?(value)
+  end
+
+  # More than any offset a zone has had, and any change of one.
+  @a_day_or_so 27 * 3_600
+
+  @seconds_in_a_day 86_400
+
+  # A value with no time of day is skipped whole only where it is a day its
+  # zone leaves out, and the days a zone leaves out are kept. One with a
+  # time of day is skipped only beside a change of the clock, so a value
+  # with none within a day or so of it is shown: the changes of a zone are
+  # kept too (`Tempo.TimeZoneDatabase.change_within?/3`). Either way nothing
+  # is asked of the zone database for nearly every value, which matters
+  # where each member of a selection is asked.
+  #
+  # The reading is worked out here for a Gregorian date and time, which
+  # nearly every value asked is, and by `Tempo.Compare.to_wall_seconds/1`
+  # for a value of another calendar. A value that is no one reading (a set,
+  # a mask or a group in a unit) is asked in full.
+  defp away_from_every_change?(%Tempo{extended: %{zone_id: zone}} = value) when is_binary(zone) do
+    case reading(value) do
+      {:ok, reading} -> not TimeZoneDatabase.change_within?(zone, reading, @a_day_or_so)
+      :no_one_reading -> false
+    end
+  end
+
+  defp away_from_every_change?(%Tempo{}), do: true
+
+  defp reading(%Tempo{
+         time: [{:year, year}, {:month, month}, {:day, day} | clock],
+         calendar: calendar
+       })
+       when is_integer(year) and year >= 1 and is_integer(month) and is_integer(day) and
+              calendar in [Gregorian, Calendar.ISO] do
+    with {:ok, seconds} <- seconds_into_the_day(clock),
+         do: {:ok, Gregorian.date_to_iso_days(year, month, day) * @seconds_in_a_day + seconds}
+  end
+
+  defp reading(%Tempo{time: [{:year, year} | _rest] = time} = value)
+       when is_integer(year) and year >= 1 do
+    if Enum.all?(time, &one_whole_unit?/1),
+      do: {:ok, Compare.to_wall_seconds(value)},
+      else: :no_one_reading
+  end
+
+  defp reading(%Tempo{}), do: :no_one_reading
+
+  defp seconds_into_the_day([{:hour, hour}]) when is_integer(hour), do: {:ok, hour * 3_600}
+
+  defp seconds_into_the_day([{:hour, hour}, {:minute, minute}])
+       when is_integer(hour) and is_integer(minute),
+       do: {:ok, hour * 3_600 + minute * 60}
+
+  defp seconds_into_the_day([{:hour, hour}, {:minute, minute}, {:second, second} | fraction])
+       when is_integer(hour) and is_integer(minute) and is_integer(second) do
+    if Enum.all?(fraction, &one_whole_unit?/1),
+      do: {:ok, hour * 3_600 + minute * 60 + second},
+      else: :no_one_reading
+  end
+
+  defp seconds_into_the_day(_other_units), do: :no_one_reading
+
+  @clock_and_date [:year, :month, :day, :hour, :minute, :second]
+
+  defp one_whole_unit?({unit, value}) when unit in @clock_and_date and is_integer(value),
+    do: true
+
+  defp one_whole_unit?({:microsecond, {_value, _precision}}), do: true
+  defp one_whole_unit?(_a_set_a_mask_a_group_or_another_unit), do: false
 
   @doc """
   A value as its zone's clock shows it: the value, or where the clock skips
@@ -231,7 +304,7 @@ defmodule Tempo.Enumeration.Zone do
       )
       when is_binary(zone) and is_integer(year) and year >= 1 and is_integer(month) and
              is_integer(day) and hour in 0..23 and
-             calendar in [Calendrical.Gregorian, Calendar.ISO] do
+             calendar in [Gregorian, Calendar.ISO] do
     starts = :calendar.datetime_to_gregorian_seconds({{year, month, day}, {hour, 0, 0}})
 
     with {:ok, ending} <-

@@ -151,7 +151,7 @@ defmodule Tempo.RRule.Selection do
       candidate
       |> apply_selection(selection ++ context, freq)
       |> with_units(units, Keyword.get(context, :keep_span, false))
-      |> on_days_the_zone_has()
+      |> on_readings_the_clock_shows()
     end)
   end
 
@@ -164,20 +164,24 @@ defmodule Tempo.RRule.Selection do
   # error once every shape is accounted for.
   def apply(%Interval{} = candidate, _, _freq, _options), do: [candidate]
 
-  # A day its zone leaves out is no day to select: Samoa had no 30 December
-  # 2011, which the 30th of each month and the Fridays of that December
-  # would pick. A time of day on such a day is on no day either: a rule for
-  # Fridays at ten selects nothing in that week, where the reading moved a
-  # day on would be a Saturday's.
-  defp on_days_the_zone_has(occurrences) when is_list(occurrences),
-    do: Enum.reject(occurrences, &starts_on_a_day_left_out?/1)
+  # A reading the clock skips is no time to select (decided 2026-10-07): the
+  # hour a rule picks with `BYHOUR=2` on the night New York's clocks go from
+  # 02:00 to 03:00, and Samoa's 30 December 2011, which the 30th of each
+  # month and the Fridays of that December would pick. A time of day on a
+  # day left out is on no day either: a rule for Fridays at ten selects
+  # nothing in that week, where the reading moved a day on would be a
+  # Saturday's. RFC 5545 §3.3.10 has an instance on a local time that does
+  # not exist ignored, and not counted. An occurrence a recurrence steps to
+  # is another matter, and is the reading that long after (§3.3.5).
+  defp on_readings_the_clock_shows(occurrences) when is_list(occurrences),
+    do: Enum.reject(occurrences, &starts_on_a_reading_skipped?/1)
 
-  defp on_days_the_zone_has({:error, _reason} = error), do: error
+  defp on_readings_the_clock_shows({:error, _reason} = error), do: error
 
-  defp starts_on_a_day_left_out?(%Interval{from: %Tempo{} = from}),
-    do: Zone.on_a_day_left_out?(from)
+  defp starts_on_a_reading_skipped?(%Interval{from: %Tempo{} = from}),
+    do: not Zone.shown?(from)
 
-  defp starts_on_a_day_left_out?(_occurrence), do: false
+  defp starts_on_a_reading_skipped?(_occurrence), do: false
 
   @doc """
   Returns whether a `repeat_rule` expands each candidate into points rather than only limiting the candidates it keeps.

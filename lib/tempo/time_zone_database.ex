@@ -319,6 +319,53 @@ defmodule Tempo.TimeZoneDatabase do
         do: change
   end
 
+  @doc """
+  Whether a zone's clock changes within `margin` seconds of a moment.
+
+  It is `changes/3` asked of the moments each side of one, for a caller
+  that asks it of every value it handles: a reading the clock skips or
+  shows twice is beside a change, so a value with none near it needs
+  nothing asked of the database.
+
+  ### Arguments
+
+  * `zone` is an IANA zone name.
+
+  * `moment` is a moment in gregorian seconds. A reading of the zone's
+    wall clock serves where `margin` is more than any offset the zone has
+    had.
+
+  * `margin` is a number of seconds.
+
+  ### Returns
+
+  * `true` where the zone's offset from UTC changes at a moment no more
+    than `margin` seconds from `moment`, and `false` where it does not,
+    for an unknown zone, and with no database configured.
+
+  ### Examples
+
+      iex> midsummer = :calendar.datetime_to_gregorian_seconds({{2026, 6, 21}, {12, 0, 0}})
+      iex> Tempo.TimeZoneDatabase.change_within?("Etc/UTC", midsummer, 86_400)
+      false
+
+  """
+  @spec change_within?(String.t(), integer(), non_neg_integer()) :: boolean()
+  def change_within?(zone, moment, margin)
+      when is_binary(zone) and is_integer(moment) and is_integer(margin) do
+    first = block_of(moment - margin)
+    last = block_of(moment + margin)
+
+    change_in_block_within?(zone, first, moment, margin) or
+      (last != first and change_in_block_within?(zone, last, moment, margin))
+  end
+
+  defp change_in_block_within?(zone, block, moment, margin) do
+    Enum.any?(changes_in(zone, block), fn {change, _before, _later} ->
+      abs(change - moment) <= margin
+    end)
+  end
+
   # A block of days whose starts are asked together, about a year long.
   @days_in_a_block 366
   @seconds_in_a_block @days_in_a_block * @seconds_per_day
