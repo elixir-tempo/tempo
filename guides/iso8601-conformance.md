@@ -90,7 +90,8 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 | **Unspecified digits** (`X`) | `156X`, `1XXX`, `2022-XX`, `1985-XX-XX`, `-1XXX-XX`, `-XXXX-12-XX` |
 | **EDTF Level 1 qualification** (`?`, `~`, `%`) | `2022?`, `2022~`, `2022%` |
 | **ISO 8601-2 §8 component qualification** (implicit form) | `2004-06~-11` (group), `2004-?06-11` (individual), `?2022-06-15` (leading individual). See "Component qualification" below. |
-| **Per-endpoint qualification in intervals** | `1984?/2004~`, `2019-12/2020%`, `2004-06-11%/2004-06~` |
+| **Per-endpoint qualification in intervals** | `1984?/2004~`, `2019-12/2020%`, `2004-06~/2004-06-11%` |
+| **An interval's ends in order** | An end that starts before its start does is refused, as EDTF's corpus has it: `2026/2025`, `2012-24/2012-21` (the winter of 2012 starts in its December), and an end coarser than its start that holds it, `2004-06-11/2004-06` (a day of June to June). An end that starts where its start does is read: `1111-01-01/1111`, `0000/0000`. |
 | **Leading prefix qualifier** | `?2022-06-15`, `%2001`, `?-2004-06` |
 | **Open-ended intervals** | `1985/..`, `../1985`, `../..`, `1985/`, `/1985`, `/`, `/..`, `../` |
 | **Set of dates — all of** | `{1960,1961,1962}`, `{1960..1970}` |
@@ -125,11 +126,7 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 
 ### Not supported
 
-| Feature | Example | Reason |
-|---|---|---|
-| An end that is coarser than its start and holds it | `2004-06-11/2004-06` (a day of June to June) | An interval whose end is before its start is refused (`2026/2025`, `2012-24/2012-21`), the two ends being ordered by where the end's own span ends. A coarser end that holds the start passes that check and is read, as an interval that ends where the end's value starts and so holds nothing; EDTF's corpus lists it as invalid. |
-
-All other EDTF Level 2 features — including wide-range exponent years (`Y17E8`, `Y-170000002`) and long-year significant-digit annotations (`Y171010000S3`) — are supported.
+* Nothing known to be missing from EDTF Level 2: wide-range exponent years (`Y17E8`, `Y-170000002`) and long-year significant-digit annotations (`Y171010000S3`) are read.
 
 ### Day of the year (ISO 8601-2 §4.3.4)
 

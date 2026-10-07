@@ -288,7 +288,8 @@ defmodule Tempo.Parser.Interval.Test do
     end
 
     test "EDTF reduced-precision and masked intervals stay valid" do
-      # The end is a coarser/masked span, not an inversion.
+      # The end starts where the start does, or is a masked span: it is no
+      # inversion.
       assert {:ok, _} = Tempo.from_iso8601("1111-01-01/1111")
       assert {:ok, _} = Tempo.from_iso8601("0000/0000")
       assert {:ok, _} = Tempo.from_iso8601("1919-XX-02/1919-XX-01")
@@ -469,7 +470,7 @@ defmodule Tempo.Parser.Interval.Test do
       {:error, error} = Tempo.from_iso8601("20260615/20260601")
 
       assert Exception.message(error) ==
-               "interval :from endpoint is not earlier than its :to endpoint"
+               "interval :to endpoint starts before its :from endpoint"
     end
   end
 

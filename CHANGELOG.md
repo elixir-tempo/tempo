@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* An interval whose end starts before its start does is refused with a `Tempo.IntervalEndpointsError`, the two ordered by where each starts: `2004-06-11/2004-06` (a day of June to June) and `2026-06-15T10:30/2026-06-15` were read, as intervals that end before they start and hold nothing, where EDTF's corpus lists the first as invalid. An end that starts where its start does is still read (`1111-01-01/1111`), as is one that names several values or has no year.
+
 * `Tempo.new/1` refuses a `:shift` and a `:zone` that disagree, with a `Tempo.ZoneOffsetMismatchError` that names the two: `Tempo.new(year: 2022, month: 11, day: 20, hour: 10, shift: [hour: 5], zone: "Europe/Paris")` was `~o"2022Y11M20DT10HZ5H[Europe/Paris]"`, a value at an offset its zone is not at. The shift is asked of the zone where the value starts, either offset of an hour its clocks go back through agrees, and a value with no year is built as it was.
 
 * A day `Tempo.select/2` selects by a selection (`~o"L15DN"`) is the value the day is, as one selected by a constraint (`~o"15D"`) was: `Tempo.to_interval(~o"2026-06-15")`, walked by its hours, so `Enum.count/1` of it is 24 where it was 1. A month so selected is walked by its days and an hour by its minutes, and a day selected by its weekday alone is the span it was.

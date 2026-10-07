@@ -7,7 +7,6 @@ defmodule Tempo.Validation do
   alias Tempo.ConversionError
   alias Tempo.Enumeration.SkippedReadings
   alias Tempo.Enumeration.Zone
-  alias Tempo.Interval
   alias Tempo.IntervalEndpointsError
   alias Tempo.InvalidDateError
   alias Tempo.InvalidTimeError
@@ -495,36 +494,36 @@ defmodule Tempo.Validation do
 
   defp endpoint_calendar(_endpoint, default), do: default
 
-  # ISO 8601 expects an interval's end to follow its start, so reject
-  # a genuinely inverted interval such as `2026/2025`. The check is
-  # deliberately narrow — it only fires when both endpoints are
-  # anchored (a year is present) and fully concrete (no mask, group,
-  # range, or set). This leaves two legitimate shapes untouched:
+  # ISO 8601 expects an interval's end to follow its start, so an end
+  # that starts before its start does is refused: `2026/2025`, and an end
+  # coarser than its start that holds it, as EDTF's corpus has both
+  # (`2004-06-11/2004-06`, a day of June to June, which starts on the
+  # 1st). The check is deliberately narrow — it only fires when both
+  # endpoints are anchored (a year is present) and fully concrete (no
+  # mask, group, range, or set). This leaves two legitimate shapes
+  # untouched:
   #
   #   * Unanchored time-of-day intervals, where `from > to` is the
   #     representation of a midnight-crossing span (`T22/T02`).
   #
-  #   * EDTF reduced-precision and masked intervals
-  #     (`1111-01-01/1111`, `0000/0000`, `1919-XX-02/1919-XX-01`),
-  #     whose end is a coarser or unknown span, not a real inversion.
+  #   * EDTF masked intervals (`1919-XX-02/1919-XX-01`), whose end is an
+  #     unknown span, not a real inversion.
   #
-  # Inversion is judged against `to`'s *exclusive upper bound* (the
-  # end of its own span), not its start. That is what keeps
-  # `1111-01-01/1111` valid (the year 1111 ends in 1112, after the
-  # start) while still rejecting `2026/2025` (the year 2025 ends
-  # exactly where 2026 begins).
+  # The ends are ordered by where each starts (decided 2026-10-08), so an
+  # end that starts where its start does is read whatever it is written to
+  # (`1111-01-01/1111`, `0000/0000`). They were ordered by where the end's
+  # own span ends, which read every coarser end that holds the start, as an
+  # interval that ends before it starts and holds nothing.
   defp validate_endpoint_order(%Tempo{} = from, %Tempo{} = to) do
-    with true <- orderable?(from) and orderable?(to),
-         {:ok, {_lower, to_upper}, _unit} <- Interval.next_unit_boundary(to),
-         order when order != :earlier <- Compare.compare_endpoints(from, to_upper) do
+    if orderable?(from) and orderable?(to) and Compare.compare_endpoints(to, from) == :earlier do
       {:error,
        IntervalEndpointsError.exception(
          interval: %Tempo.Interval{from: from, to: to},
          operation: :validate,
-         reason: "interval :from endpoint is not earlier than its :to endpoint"
+         reason: "interval :to endpoint starts before its :from endpoint"
        )}
     else
-      _ -> :ok
+      :ok
     end
   end
 

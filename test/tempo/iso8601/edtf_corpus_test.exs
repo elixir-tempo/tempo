@@ -117,22 +117,16 @@ defmodule Tempo.Iso8601.EdtfCorpus.Test do
 
   describe "invalid intervals" do
     # The edtf-validate "invalid" intervals that Tempo reads, each for one
-    # of three reasons. EDTF has no time of day at an end of an interval,
-    # which ISO 8601 has. It has no year written with a `Y` there, which
-    # Tempo reads as it does anywhere. And an end that is coarser than the
-    # start and holds it (`0000-01-03/0000-01`, a day of January to
-    # January) is held to end where the end's own span does when the two
-    # ends are ordered, though the interval's span ends where that value
-    # starts (`TODO.md`, "An end coarser than its start").
+    # of two reasons. EDTF has no time of day at an end of an interval,
+    # which ISO 8601 has. And it has no year written with a `Y` there, which
+    # Tempo reads as it does anywhere.
     #
-    # An interval whose end is before its start is refused, as the corpus
-    # has it: `0800/-0999`, and `2012-24/2012-21`, the winter of 2012 being
-    # the one that starts in its December.
+    # An interval whose end starts before its start does is refused, as the
+    # corpus has it: `0800/-0999`, `2012-24/2012-21`, the winter of 2012
+    # being the one that starts in its December, and an end that is coarser
+    # than its start and holds it (`0000-01-03/0000-01`, a day of January
+    # to January, and three like it).
     @invalid_intervals_tempo_reads MapSet.new([
-                                     "0000-01-03/0000-01",
-                                     "0000-02/0000",
-                                     "2004-06-11%/2004-%06",
-                                     "2004-06-11%/2004-06~",
                                      "Y-61000/-2000",
                                      "2005-07-25T10:10:10Z/2006-01-01T10:10:10Z",
                                      "2005-07-25T10:10:10Z/2006-01",
