@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* An hour a rule selects where the clock of its zone skips its start is the part the clock shows, as `Tempo.select/2` gives it: `Tempo.to_interval(~o"2026Y10M4DLT2HN[Australia/Lord_Howe]")` is `T2H/T3H`, the half hour from 02:30, where it was `T2H/T3H30M`, an hour from 02:30 and half an hour into the hour after it. It holds for a value's selection, a recurrence's rule and an RRULE (`FREQ=DAILY;BYHOUR=2`).
+
 * A span of clock times is shown to its end as it is written: `Tempo.to_string(~o"2026-06-15T09/2026-06-15T17")` is "Jun 15, 2026, 9 AM – 5 PM" where it was "9 AM – 4 PM", the last hour the span holds, and 9:30 to 10:45 is "9:30 – 10:45 AM". A span of days, months or years is shown to the last it holds, as it was, and a span one hour, minute or second long is the value it is.
 
 * A recurrence of one occurrence that has a rule keeps to its `:within` window: `FREQ=DAILY;BYDAY=SU;COUNT=1` from 2019 within `~o"2026"` is the empty set, where it was the Sunday of 2019 whatever the window, and `COUNT=2` was nothing. With no rule it is the interval it is, as an interval is.

@@ -10169,10 +10169,30 @@ defmodule Tempo do
 
   defp resize_to_resolution(%Tempo.Interval{from: %Tempo{} = from} = occurrence) do
     {unit, _value} = resolution(from)
-    %{occurrence | to: Math.add(from, %Tempo.Duration{time: [{unit, 1}]})}
+    stepped = Math.add(from, %Tempo.Duration{time: [{unit, 1}]})
+    %{occurrence | to: where_the_point_ends(from, unit, stepped)}
   end
 
   defp resize_to_resolution(occurrence), do: occurrence
+
+  # A point ends a unit of its resolution on. Where the clock of its zone
+  # skips its start a step is counted from the reading the clock comes out
+  # on, which is past where the point itself ends: the hour 02:00 on the
+  # morning Lord Howe's clocks go from 02:00 to 02:30 is the half of it the
+  # clock shows and ends at 03:00 (decided 2026-10-08), as the value
+  # `T2H` there does and as `Tempo.select/2` gives it. It ran to 03:30, an
+  # hour from 02:30 and half an hour into the hour selected after it.
+  defp where_the_point_ends(%Tempo{extended: %{zone_id: zone}} = from, unit, %Tempo{} = stepped)
+       when is_binary(zone) and unit in [:hour, :minute] do
+    with {:ok, {_lower, %Tempo{} = own_end}, _unit} <- Interval.next_unit_boundary(from),
+         :earlier <- Compare.compare_endpoints(own_end, stepped) do
+      own_end
+    else
+      _a_unit_on -> stepped
+    end
+  end
+
+  defp where_the_point_ends(_from, _unit, stepped), do: stepped
 
   defp explicit_occurrence_span?(metadata) do
     match?(%{occurrence_base_to: %Tempo{}}, metadata) or
