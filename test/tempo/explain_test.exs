@@ -712,7 +712,16 @@ defmodule Tempo.Explain.Test do
     end
 
     test "a sub-second duration renders its fraction" do
-      assert Tempo.explain(~o"PT1.5S") =~ "0.5 seconds"
+      # One and a half seconds, which was worded "1 second, 0.5 seconds".
+      assert Tempo.explain(~o"PT1.5S") =~ "A duration of 1.5 seconds."
+      assert Tempo.explain(~o"PT0.5S") =~ "A duration of 0.5 seconds."
+      assert Tempo.explain(~o"PT1M30.25S") =~ "A duration of 1 minute, 30.25 seconds."
+    end
+
+    test "a duration of one unit back is one, as one forward is" do
+      assert Tempo.explain(~o"-P1D") =~ "A duration of -1 day."
+      assert Tempo.explain(~o"P1D") =~ "A duration of 1 day."
+      assert Tempo.explain(~o"-P2D") =~ "A duration of -2 days."
     end
   end
 

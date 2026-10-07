@@ -1606,9 +1606,17 @@ defmodule Tempo.Explain do
   end
 
   defp month_date(year, month, day) when is_integer(day),
-    do: "#{year}-#{two_digit(month)}-#{two_digit(day)}"
+    do: "#{year_text(year)}-#{two_digit(month)}-#{two_digit(day)}"
 
-  defp month_date(year, month, _no_plain_day), do: "#{year}-#{two_digit(month)}-01"
+  defp month_date(year, month, _no_plain_day), do: "#{year_text(year)}-#{two_digit(month)}-01"
+
+  # A year as ISO 8601 writes it, to four digits, and with a minus before
+  # the year 0: the year 44 BCE is `-0043` there, and was written `-43`.
+  defp year_text(year) when is_integer(year) and year < 0,
+    do: "-" <> String.pad_leading(Integer.to_string(-year), 4, "0")
+
+  defp year_text(year) when is_integer(year),
+    do: String.pad_leading(Integer.to_string(year), 4, "0")
 
   # A week's first day, or the day of it a week date names. A calendar of
   # weeks writes its own week date; a month-based calendar's week is the day
@@ -1620,7 +1628,7 @@ defmodule Tempo.Explain do
          {:ok, %Date{} = date} <- Validation.date_from_iso_week(year, week, day, calendar) do
       month_date(date.year, date.month, date.day)
     else
-      _a_calendar_of_weeks_or_no_such_week -> "#{year}-W#{two_digit(week)}-#{day}"
+      _a_calendar_of_weeks_or_no_such_week -> "#{year_text(year)}-W#{two_digit(week)}-#{day}"
     end
   end
 
@@ -1628,14 +1636,14 @@ defmodule Tempo.Explain do
   # first week.
   defp year_start(year, calendar) do
     if Tempo.week_based_calendar?(calendar),
-      do: "#{year}-W01-1",
+      do: "#{year_text(year)}-W01-1",
       else: first_day_of_year(year, calendar)
   end
 
   defp first_day_of_year(year, calendar) do
     case UnitValues.start_date([year: year], calendar) do
       {:ok, {year, month, day}} -> month_date(year, month, day)
-      :error -> "#{year}-01-01"
+      :error -> "#{year_text(year)}-01-01"
     end
   end
 
@@ -1694,12 +1702,27 @@ defmodule Tempo.Explain do
   end
 
   defp duration_prose(time) do
-    Enum.map_join(time, ", ", &duration_component/1)
+    time |> seconds_with_their_fraction() |> Enum.map_join(", ", &duration_component/1)
   end
 
-  # A sub-second component is stored as `{value, precision}` — `PT1.5S`
-  # is `[second: 1, microsecond: {500_000, 1}]` — so it cannot be
-  # interpolated directly. Render it at its own precision: 500000 µs at
+  # A fraction of a second is held beside its seconds, with the number of
+  # digits it was written to: `PT1.5S` is `[second: 1, microsecond:
+  # {500_000, 1}]`, which is one and a half seconds and was worded "1
+  # second, 0.5 seconds".
+  defp seconds_with_their_fraction([{:second, seconds}, {:microsecond, {micro, digits}} | rest])
+       when is_integer(seconds) and seconds >= 0 and is_integer(micro) and micro >= 0,
+       do: [{:second, {seconds, micro, digits}} | rest]
+
+  defp seconds_with_their_fraction([component | rest]),
+    do: [component | seconds_with_their_fraction(rest)]
+
+  defp seconds_with_their_fraction([]), do: []
+
+  defp duration_component({:second, {seconds, micro, digits}}),
+    do: "#{seconds}#{fraction_text({micro, max(digits, 1)})} seconds"
+
+  # A fraction alone is stored as `{value, precision}`, so it cannot be
+  # interpolated directly. It is written at its own precision: 500000 µs at
   # precision 1 is "0.5 seconds".
   defp duration_component({:microsecond, {value, precision}}) do
     seconds = value / 1_000_000
@@ -1708,7 +1731,7 @@ defmodule Tempo.Explain do
 
   defp duration_component({unit, n}), do: "#{n} #{pluralise(unit, n)}"
 
-  defp pluralise(unit, 1), do: Atom.to_string(unit)
+  defp pluralise(unit, one) when one in [1, -1], do: Atom.to_string(unit)
   defp pluralise(unit, _), do: Atom.to_string(unit) <> "s"
 
   @months ~w(January February March April May June July August September October November December)

@@ -127,6 +127,32 @@ defmodule Tempo.ExplainWordsTest do
     end
   end
 
+  describe "a year at an end of a span" do
+    test "is written to four digits, and with a minus before the year 0" do
+      # ISO 8601 writes a year to four digits: the year 800 is `0800`, and
+      # was written `800`.
+      for {text, from, to} <- [
+            {"0800-06-15", "0800-06-15", "0800-06-16"},
+            {"0044", "0044-01-01", "0045-01-01"},
+            {"0000-01-01", "0000-01-01", "0000-01-02"},
+            {"-0044Y3M15D", "-0044-03-15", "-0044-03-16"},
+            {"2026-06-15", "2026-06-15", "2026-06-16"}
+          ] do
+        assert {text, explain(text) =~ "Span: [#{from}, #{to})."} == {text, true}
+      end
+
+      # Elixir's own `Date` writes them so.
+      assert Date.to_iso8601(~D[0800-06-15]) == "0800-06-15"
+      assert Date.to_iso8601(Date.new!(-44, 3, 15)) == "-0044-03-15"
+
+      interval = explain("0800-06/0900-06")
+      assert interval =~ "From: 0800-06-01."
+      assert interval =~ "To:   0900-06-01 (exclusive"
+
+      assert explain("0800Y25W3K[u-ca=iso-week]") =~ "Span: [0800-W25-3, 0800-W25-4)."
+    end
+  end
+
   describe "qualifiers of single components" do
     test "are worded, each with the components that carry it in the order they are written" do
       assert explain("2026-06~-15") =~
