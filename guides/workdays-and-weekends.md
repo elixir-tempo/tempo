@@ -1,6 +1,6 @@
 # Working with workdays and weekends
 
-Business-day queries are the most common reason developers reach for a date library beyond the standard library. "How many workdays until the deadline?" "What's five business days from today?" "When does this invoice age out?" Tempo answers these directly with territory-aware, calendar-correct functions — `add_workdays/3`, `next_workday/2`, `previous_workday/2`, `nearest_workday/2`, `count_workdays/2`, and the `workday?/2` and `weekend?/2` predicates.
+Business-day queries are the most common reason developers reach for a date library beyond the standard library. "How many workdays until the deadline?" "What's five business days from today?" "When does this invoice age out?" Tempo answers these directly with territory-aware, calendar-correct functions — `add_workdays/3`, `next_workday/2`, `previous_workday/2`, `nearest_workday/2`, `roll_to_workday/3`, `count_workdays/2`, and the `workday?/2` and `weekend?/2` predicates.
 
 This guide starts with those functions, then shows the `Tempo.select/2` selectors they build on — `Tempo.workdays/1` and `Tempo.weekends/1`, useful when you need to weave workday-awareness into a larger set-operation query — and finishes with how to extend them with a real holiday calendar.
 
@@ -31,6 +31,9 @@ Tempo.previous_workday(~o"2026-06-15", :US)    #=> ~o"2026Y6M12D"
 
 # A weekend day moves to the nearest workday: this Saturday back to Friday.
 Tempo.nearest_workday(~o"2026-07-04", :US)     #=> ~o"2026Y7M3D"
+
+# A day off rolls to the workday after it: this Saturday on to Monday.
+Tempo.roll_to_workday(~o"2026-05-30", :US)     #=> ~o"2026Y6M1D"
 
 # Is this a workday, or a weekend, in this territory?
 Tempo.workday?(~o"2026-06-13", :US)            #=> false  (Saturday)
@@ -114,6 +117,27 @@ Tempo.IntervalSet.first(workdays)
 ```
 
 Read aloud: *"Starting tomorrow, the US workdays; take the first."*
+
+### A date that must fall on a business day
+
+A payment that falls due on a day off is made on a workday, and which one is the contract's business day convention. `Tempo.roll_to_workday/3` leaves a workday where it is and rolls a day off by the convention `:roll` names:
+
+```elixir
+due = ~o"2026-05-30"  # a Saturday
+
+Tempo.roll_to_workday(due, :US)
+#=> ~o"2026Y6M1D"
+
+Tempo.roll_to_workday(due, :US, roll: :preceding)
+#=> ~o"2026Y5M29D"
+
+Tempo.roll_to_workday(due, :US, roll: :modified_following)
+#=> ~o"2026Y5M29D"
+```
+
+> *"A payment due on a Saturday is made on the Monday **following**. By the **preceding** convention it is made on the Friday. By **modified following** it is made on the Monday unless that is in the next month, and Monday is 1 June, so it is made on the Friday."*
+
+The four conventions are `:following` (the default), `:preceding`, and `:modified_following` and `:modified_preceding`, which turn back where the workday they roll to is in another month, so a payment due at a month's end stays in its month. A workday is not moved, which `next_workday/2` always does, and the side is the convention's to say, where `nearest_workday/2` takes the closer one. Given the business days of [Holidays](#holidays) in place of the territory, a holiday is rolled over as a weekend day is.
 
 ### Business days between two dates
 

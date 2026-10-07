@@ -237,6 +237,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Added
 
+* `Tempo.roll_to_workday/3` rolls a day off to a workday by a business day convention, `roll: :following` (the default), `:preceding`, `:modified_following` or `:modified_preceding`, a modified roll turning back where the workday it rolls to is in another month: Saturday 30 May 2026 is Monday 1 June following and Friday 29 May modified following. It and `Tempo.workdays/2` take their options in the territory's place, for the territory the resolution chain gives.
+
 * `Tempo.shift/3`, `Tempo.trunc/2` and `Tempo.round/2` take an interval: a shift moves both ends and keeps the length (two days at the end of January are two days a month on, `2026-02-28/2026-03-02`), `trunc/2` gives the whole units the interval touches, and `round/2` takes each end to the unit nearer it. `~o"2026-06-15T10:30/2026-06-15T12:45"` truncated to the hour is `T10/T13` and rounded to it `T11/T13`.
 
 * Sets of durations are read (ISO 8601-2 §6.5): `{P1D,P2D}`, `[P1M2S,P1M3S]`, and a range from one duration to another that differs in its last unit, `{P1M2S..P1M5S}`, which is the four durations it names. Such a set names lengths of time and no time, so `Tempo.to_interval/2` and the set operations return a `Tempo.ConversionError` for it, as they do for one duration.

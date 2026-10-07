@@ -140,9 +140,9 @@ defmodule Tempo.BesideAGap do
   defp two(number), do: number |> Integer.to_string() |> String.pad_leading(2, "0")
 
   # The operations that give a Hebrew date or a day of a week what they give
-  # its Gregorian twin: every one that does not count in months or years, or
-  # pick a day by its number in a month, which are other months and other
-  # numbers there, or none.
+  # its Gregorian twin: every one that does not count in months or years,
+  # pick a day by its number in a month or keep a day in its month, which
+  # are other months and other numbers there, or none.
   defp of_any_calendar?(name),
     do: not (name =~ ~r/year|month|30D|29D\/31D|P1M|BYMONTHDAY/)
 
@@ -202,7 +202,9 @@ defmodule Tempo.BesideAGap do
       {"add_workdays -1", &Tempo.add_workdays(&1, -1, :US)},
       {"next_workday", &Tempo.next_workday(&1, :US)},
       {"previous_workday", &Tempo.previous_workday(&1, :US)},
-      {"nearest_workday", &Tempo.nearest_workday(&1, :US)}
+      {"nearest_workday", &Tempo.nearest_workday(&1, :US)},
+      {"roll_to_workday", &Tempo.roll_to_workday(&1, :US, roll: :preceding)},
+      {"roll_to_workday in its month", &Tempo.roll_to_workday(&1, :US, roll: :modified_following)}
     ]
   end
 

@@ -7,8 +7,8 @@ defmodule Tempo.Workdays do
   wherever a territory does. `Tempo.select/2` selects its days, and the
   workday functions — `Tempo.add_workdays/3`, `Tempo.next_workday/2`,
   `Tempo.previous_workday/2`, `Tempo.nearest_workday/2`,
-  `Tempo.count_workdays/2` and `Tempo.workday?/2` — step over its holidays
-  as well as its weekend.
+  `Tempo.roll_to_workday/3`, `Tempo.count_workdays/2` and
+  `Tempo.workday?/2` — step over its holidays as well as its weekend.
 
   ```elixir
   school_days = Tempo.workdays(:AU, except: nsw_public_holidays)

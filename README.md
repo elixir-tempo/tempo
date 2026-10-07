@@ -168,7 +168,7 @@ Full specification including modifier-binding, container patterns, and calendar-
 
 * **Constraint reasoning, not just representation.** `Tempo.Network` models a web of partially-known intervals — reigns, strata, project tasks — and computes the tightest dates each one can take (the ChronoLog scheme), with a plain-English trace for every bound. `Tempo.Schedule` applies the same solver to project scheduling: declare tasks, durations, and dependencies, and get each task's earliest/latest run plus the critical path.
 
-* **Business days and territory-aware calendars.** `Tempo.weekend?/2`, `Tempo.workday?/2`, `Tempo.add_workdays/3`, and `Tempo.count_workdays/2` answer "how many workdays until the deadline?" with CLDR-correct weekends per territory (the US weekends Saturday/Sunday, Saudi Arabia Friday/Saturday) and correct on any calendar.
+* **Business days and territory-aware calendars.** `Tempo.weekend?/2`, `Tempo.workday?/2`, `Tempo.add_workdays/3`, and `Tempo.count_workdays/2` answer "how many workdays until the deadline?" with CLDR-correct weekends per territory (the US weekends Saturday/Sunday, Saudi Arabia Friday/Saturday) and correct on any calendar, and `Tempo.roll_to_workday/3` moves a date that falls on a day off by a contract's business day convention.
 
 * **iCalendar import with metadata that travels.** `Tempo.ICal.parse/2` parses RFC 5545 `.ics` data and every event's metadata (summary, location, attendees, status, …) rides along through every downstream operation. Intersect your schedule with work hours, get back *which meetings* are in work hours.
 

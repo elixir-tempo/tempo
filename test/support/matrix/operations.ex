@@ -180,6 +180,8 @@ defmodule Tempo.Matrix.Operations do
       {"weekend?/2", :select, :deliberate, &Tempo.weekend?(&1, :US)},
       {"count_workdays/2", :select, :never, &Tempo.count_workdays(&1, :US)},
       {"nearest_workday/2", :select, :never, &Tempo.nearest_workday(&1, :US)},
+      {"roll_to_workday/3", :select, :never,
+       &Tempo.roll_to_workday(&1, :US, roll: :modified_following)},
       {"next_workday/2", :select, :never, &Tempo.next_workday(&1, :US)},
       {"previous_workday/2", :select, :never, &Tempo.previous_workday(&1, :US)},
       {"add_workdays/3", :select, :never, &Tempo.add_workdays(&1, 2, :US)}

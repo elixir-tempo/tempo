@@ -12692,7 +12692,8 @@ defmodule Tempo do
   * `territory` is an atom, string, locale, or `%Localize.LanguageTag{}`
     resolved through `Tempo.Territory.resolve/1`. The default, `nil`,
     walks the territory-resolution chain (app config, then ambient
-    locale).
+    locale). The options may be given in its place, for the territory
+    that chain gives.
 
   * `options` is a keyword list of options.
 
@@ -12710,8 +12711,8 @@ defmodule Tempo do
 
   * With `:except`, a `t:Tempo.Workdays.t/0`, which `Tempo.select/2`
     and the workday functions (`add_workdays/3`, `next_workday/2`,
-    `previous_workday/2`, `nearest_workday/2`, `count_workdays/2`,
-    `workday?/2`) take in place of a territory.
+    `previous_workday/2`, `nearest_workday/2`, `roll_to_workday/3`,
+    `count_workdays/2`, `workday?/2`) take in place of a territory.
 
   * `{:error, reason}` when the territory cannot be resolved or an
     option is not one this takes. `Tempo.select/2` returns such an
@@ -12735,9 +12736,13 @@ defmodule Tempo do
       21
 
   """
-  @spec workdays(Tempo.Territory.input(), keyword()) ::
+  @spec workdays(Tempo.Territory.input() | keyword(), keyword()) ::
           t() | Tempo.Workdays.t() | {:error, error_reason()}
-  def workdays(territory \\ nil, options \\ []) do
+  def workdays(territory \\ nil, options \\ [])
+
+  def workdays(options, []) when is_list(options), do: workdays(nil, options)
+
+  def workdays(territory, options) do
     with {:ok, resolved} <- Territory.resolve(territory),
          {:ok, except} <- workdays_except(options) do
       workdays_of(resolved, except)
@@ -13113,6 +13118,144 @@ defmodule Tempo do
   end
 
   def nearest_workday(value, _territory), do: {:error, not_a_day(value, :nearest_workday)}
+
+  @doc """
+  Roll `tempo` to a workday of the territory: `tempo` itself when it is a workday, otherwise the workday the `:roll` convention names.
+
+  These are the business day conventions of financial contracts. Following takes the first workday after a day off, and preceding the first before it. The modified forms stay in the month: modified following takes the first workday after unless that one is in the next month, when it takes the first before, and modified preceding is its mirror. The time of day, calendar and zone are kept. Given the workdays `workdays/2` builds with `:except`, a holiday is a day off too.
+
+  `nearest_workday/2` is another rule, the closer of the two sides, and `next_workday/2` always moves.
+
+  ### Arguments
+
+  * `tempo` is a `t:t/0` that denotes a day: a date or a datetime.
+
+  * `territory` is resolved through `Tempo.Territory.resolve/1` and sets which days are the weekend, or is a `t:Tempo.Workdays.t/0` from `workdays/2`. The options may be given in its place, for the territory the resolution chain gives.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:roll` is the convention a day off is rolled by: `:following`, `:preceding`, `:modified_following` or `:modified_preceding`. The default is `:following`.
+
+  ### Returns
+
+  * `tempo` when it is a workday, otherwise the workday it rolls to.
+
+  * `{:error, reason}` as for `add_workdays/3`, for an option this does not take, and for a modified roll of a day in a calendar of weeks, which has no month to stay in (a `Tempo.ResolutionError`).
+
+  ### Examples
+
+  Saturday 30 May 2026 rolls forward to Monday 1 June, which is in another month, so the modified roll turns back to Friday 29 May:
+
+      iex> Tempo.roll_to_workday(~o"2026-05-30", :US)
+      ~o"2026Y6M1D"
+
+      iex> Tempo.roll_to_workday(~o"2026-05-30", :US, roll: :modified_following)
+      ~o"2026Y5M29D"
+
+      iex> Tempo.roll_to_workday(~o"2026-05-30", :US, roll: :preceding)
+      ~o"2026Y5M29D"
+
+  Sunday 1 November 2026 rolls back into October, so the modified roll goes forward to the Monday:
+
+      iex> Tempo.roll_to_workday(~o"2026-11-01", :US, roll: :modified_preceding)
+      ~o"2026Y11M2D"
+
+  With Friday 3 July 2026 a holiday, Saturday 4 July rolls back to the Thursday:
+
+      iex> business_days = Tempo.workdays(:US, except: ~o"2026-07-03")
+      iex> Tempo.roll_to_workday(~o"2026-07-04", business_days, roll: :preceding)
+      ~o"2026Y7M2D"
+
+  """
+  @spec roll_to_workday(
+          t(),
+          Tempo.Territory.input() | Tempo.Workdays.t() | keyword(),
+          keyword()
+        ) :: t() | {:error, error_reason()}
+  def roll_to_workday(tempo, territory \\ nil, options \\ [])
+
+  def roll_to_workday(tempo, options, []) when is_list(options),
+    do: roll_to_workday(tempo, nil, options)
+
+  def roll_to_workday(%Tempo{} = tempo, territory, options) do
+    with {:ok, roll} <- roll_convention(options),
+         :ok <- one_value(tempo),
+         {:ok, days_off} <- days_off(territory),
+         {:ok, off?} <- day_off?(tempo, days_off, :roll_to_workday),
+         :ok <- a_month_to_stay_in(tempo, roll) do
+      if off?, do: rolled(tempo, roll, days_off), else: tempo
+    end
+  end
+
+  def roll_to_workday(value, _territory, _options),
+    do: {:error, not_a_day(value, :roll_to_workday)}
+
+  @rolls [:following, :preceding, :modified_following, :modified_preceding]
+
+  defp roll_convention(options) do
+    with true <- Keyword.keyword?(options),
+         [] <- Keyword.keys(options) -- [:roll],
+         roll when roll in @rolls <- Keyword.get(options, :roll, :following) do
+      {:ok, roll}
+    else
+      _invalid ->
+        {:error,
+         ArgumentError.exception(
+           "Tempo.roll_to_workday/3 takes one option, :roll, one of " <>
+             "#{Enum.map_join(@rolls, ", ", &inspect/1)}, not #{inspect(options)}."
+         )}
+    end
+  end
+
+  # The workday a day off rolls to: the first after it or the first before
+  # it, and by a modified convention the first the other way where the one
+  # it rolls to is in another month.
+  defp rolled(tempo, :following, days_off), do: first_workday(tempo, 1, days_off)
+  defp rolled(tempo, :preceding, days_off), do: first_workday(tempo, -1, days_off)
+  defp rolled(tempo, :modified_following, days_off), do: rolled_in_its_month(tempo, 1, days_off)
+  defp rolled(tempo, :modified_preceding, days_off), do: rolled_in_its_month(tempo, -1, days_off)
+
+  defp rolled_in_its_month(tempo, step, days_off) do
+    with %Tempo{} = workday <- first_workday(tempo, step, days_off),
+         {:ok, month} <- month_of(tempo),
+         {:ok, month_rolled_to} <- month_of(workday) do
+      if month_rolled_to == month, do: workday, else: first_workday(tempo, -step, days_off)
+    end
+  end
+
+  defp first_workday(tempo, step, days_off),
+    do: workday_after(tempo, step, days_off, :roll_to_workday, 1)
+
+  # A modified convention keeps a day in its month, so it takes only a day
+  # that has one, whether or not that day is a workday.
+  defp a_month_to_stay_in(tempo, roll) when roll in [:modified_following, :modified_preceding] do
+    with {:ok, _month} <- month_of(tempo), do: :ok
+  end
+
+  defp a_month_to_stay_in(_tempo, _roll), do: :ok
+
+  # The month a day is of: the one its calendar counts it in, as `trunc/2`
+  # gives it. A calendar of weeks has no months.
+  defp month_of(day) do
+    case trunc(day, :month) do
+      %Tempo{time: month} ->
+        {:ok, month}
+
+      {:error, _no_month} ->
+        {:error,
+         ResolutionError.exception(
+           operation: :roll_to_workday,
+           current: day |> resolution() |> elem(0),
+           target: :month,
+           calendar: calendar_of(day),
+           reason:
+             "A modified roll keeps a day in its month, and #{inspect(day)} is in a calendar " <>
+               "of weeks, which has none. Roll it with `roll: :following` or `roll: :preceding`."
+         )}
+    end
+  end
 
   @doc """
   Count the workdays of a span: its days outside the territory's

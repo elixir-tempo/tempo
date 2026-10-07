@@ -1,6 +1,6 @@
 # The Brazilian ANBIMA business-day calendar
 
-**Status:** planning, 2026-10-03
+**Status:** planning, 2026-10-07
 
 ANBIMA's national holiday list is the calendar Brazilian financial markets count business days (*dias úteis*) on. This document records the research into whether Tempo and `tempo_holidays` can provide it, what was verified, and the work that remains. It was prompted by [bizdays](https://forum.elixirforum.com/t/bizdays-business-day-calculations-with-the-brazilian-anbima-calendar/76934), a hex package that provides the calendar for 2001–2099.
 
@@ -74,8 +74,8 @@ Read from the forum post and the bizdays README, not from its source.
 | `add` | `Tempo.add_workdays/3` | Yes, but for an offset of 0 |
 | `range` | `Tempo.select/2` with the workdays | Yes by the documentation, not run |
 | `holidays(cal, year)` | `Tempo.to_interval_set/2` within the year | Yes, with Election Day |
-| `following`, `preceding` | None | No |
-| `modified_following`, `modified_preceding` | None | No |
+| `following`, `preceding` | `Tempo.roll_to_workday/3` | Yes, since 2026-10-07 |
+| `modified_following`, `modified_preceding` | `Tempo.roll_to_workday/3` | Yes, since 2026-10-07 |
 | A custom calendar's holidays | `:except` takes any set | Yes |
 | A custom calendar's weekend days | The territory's weekend | By decision, no |
 
@@ -85,12 +85,12 @@ The smaller differences: bizdays' `add` with an offset of 0 returns the followin
 
 * **Election Day in the selection** — in `tempo_holidays`. No type selection gives ANBIMA's list exactly, because the two `Election Day` members are `:public`. All 98 occurrences in 2001–2099 are Sundays, so no business-day answer changes, but a listing of the holidays shows two rows ANBIMA does not have in even years. `holidays/2` has no way to leave a holiday out by its `:id` or `:name`.
 
-* **Business-day adjustments** — in Tempo. There is no "this day when it is a workday, otherwise the next one" (following), its mirror (preceding), or the modified forms that turn back when the adjusted day leaves the month. These are the standard date-roll conventions of financial contracts. `Tempo.nearest_workday/2` is a different rule (the nearer side wins), and `Tempo.next_workday/2` always moves.
+* **Business-day adjustments** — in Tempo, and built on 2026-10-07 as `Tempo.roll_to_workday/3`: "this day when it is a workday, otherwise the next one" (following), its mirror (preceding), and the modified forms that turn back when the adjusted day leaves the month, chosen with `:roll`. These are the standard date-roll conventions of financial contracts. `Tempo.nearest_workday/2` is a different rule (the nearer side wins), and `Tempo.next_workday/2` always moves.
 
 * **A custom weekend** — not a gap. `Tempo.workdays/2` reads the weekend from the territory's CLDR data, where bizdays takes a list of weekday numbers. The territory's weekend is the more correct source and nothing is to be implemented (user, 2026-10-03).
 
 ## Tasks
 
-* [ ] **Workday adjustments: following, preceding and their modified forms** — tracked in Tempo's `TODO.md`.
+* [x] **Workday adjustments: following, preceding and their modified forms** — `Tempo.roll_to_workday/3` with `:roll`. 2026-10-07.
 
 * [ ] **Brazil's ANBIMA holidays without Election Day** — tracked in the `tempo_holidays` `TODO.md`.
