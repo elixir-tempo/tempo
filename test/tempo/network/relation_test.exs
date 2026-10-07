@@ -3,6 +3,7 @@ defmodule Tempo.Network.RelationTest do
 
   import Tempo.Sigils
 
+  alias Tempo.Allen
   alias Tempo.Interval.Relations
   alias Tempo.Network.Relation
 
@@ -248,49 +249,74 @@ defmodule Tempo.Network.RelationTest do
     end
   end
 
+  # A relation's constraints are not strict, so it holds of more pairs of
+  # periods than the Allen relation of its name: `to_allen/1` gave that one
+  # alone, and left `:equals` out of `:strictly_contemporary` and the two
+  # that touch out of `:contemporary`. What a relation admits is worked out
+  # here from its words and from Allen's relation of each pair, by their
+  # boundaries alone.
   describe "Allen bridge" do
-    test "to_allen / from_allen round-trip the one-to-one relations" do
-      for type <- [
-            :before,
-            :after,
-            :immediately_precedes,
-            :immediately_follows,
-            :overlaps,
-            :overlapped_by,
-            :includes,
-            :included_in,
-            :equals,
-            :starts,
-            :started_by,
-            :finishes,
-            :finished_by
-          ] do
-        assert Relation.from_allen(Relation.to_allen(type)) == type
+    test "to_allen/1 is the Allen relations of the pairs a relation holds of" do
+      periods = for from <- 0..4, to <- 0..4, from < to, do: {from, to}
+
+      for {type, in_words?} <- @in_words do
+        admitted =
+          for {a1, a2} <- periods,
+              {b1, b2} <- periods,
+              in_words?.(a1, a2, b1, b2),
+              uniq: true,
+              do: allen(a1, a2, b1, b2)
+
+        assert {type, type |> Relation.to_allen() |> List.wrap() |> Enum.sort()} ==
+                 {type, Enum.sort(admitted)}
       end
     end
 
-    test "from_allen preserves direction for every Allen relation" do
-      # `:overlapped_by` used to map to `:overlaps`, silently reversing
-      # the operands — a trap for anything feeding derived relations back
-      # into a network.
+    test "to_allen/1 lists what a relation admits in Allen's order" do
+      for {type, _in_words?} <- @in_words, several = Relation.to_allen(type), is_list(several) do
+        assert {type, several} == {type, Enum.filter(Relations.full(), &(&1 in several))}
+      end
+    end
+
+    test "a relation that admits one Allen relation is the one named for it" do
+      for type <- [:before, :after, :immediately_precedes, :immediately_follows, :equals] do
+        assert {type, Relation.from_allen(Relation.to_allen(type))} == {type, type}
+      end
+    end
+
+    # `:overlapped_by` used to map to `:overlaps`, silently reversing the
+    # operands: a trap for anything feeding derived relations back into a
+    # network.
+    test "from_allen names a relation that admits the Allen relation, and not its converse" do
       for allen <- Relations.full() do
-        type = Relation.from_allen(allen)
+        admitted = allen |> Relation.from_allen() |> Relation.to_allen() |> List.wrap()
+        converse = Allen.inverse(allen)
 
-        assert Relation.to_allen(type) == allen,
-               "from_allen(#{inspect(allen)}) gave #{inspect(type)}, " <>
-                 "which reads back as #{inspect(Relation.to_allen(type))}"
+        assert {allen, allen in admitted} == {allen, true}
+        assert {allen, converse == allen or converse not in admitted} == {allen, true}
       end
     end
 
-    test "loose relations map to a disjunction of Allen relations" do
-      assert :equals in Relation.to_allen(:synchronous_start)
-      assert :starts in Relation.to_allen(:synchronous_start)
-      assert Relation.to_allen({:delay, :start, :start, :exactly, ~o"P1Y"}) == nil
-    end
-
-    test "metric and boundary relations have no single Allen image" do
+    test "a metric relation, a boundary comparison and what is no relation have none" do
       assert Relation.to_allen({:delay, :start, :start, :exactly, ~o"P1Y"}) == nil
       assert Relation.to_allen({:boundary, :end, :at_or_before, :start}) == nil
+      assert Relation.to_allen(:no_relation) == nil
+      assert Relation.to_allen("includes") == nil
     end
   end
+
+  # Allen's relation between two periods, by their boundaries alone.
+  defp allen(_a1, a2, b1, _b2) when a2 < b1, do: :precedes
+  defp allen(_a1, a2, b1, _b2) when a2 == b1, do: :meets
+  defp allen(a1, _a2, _b1, b2) when b2 < a1, do: :preceded_by
+  defp allen(a1, _a2, _b1, b2) when b2 == a1, do: :met_by
+  defp allen(a1, a2, b1, b2) when a1 == b1 and a2 == b2, do: :equals
+  defp allen(a1, a2, b1, b2) when a1 == b1 and a2 < b2, do: :starts
+  defp allen(a1, _a2, b1, _b2) when a1 == b1, do: :started_by
+  defp allen(a1, a2, b1, b2) when a2 == b2 and a1 > b1, do: :finishes
+  defp allen(_a1, a2, _b1, b2) when a2 == b2, do: :finished_by
+  defp allen(a1, a2, b1, b2) when a1 > b1 and a2 < b2, do: :during
+  defp allen(a1, a2, b1, b2) when a1 < b1 and a2 > b2, do: :contains
+  defp allen(a1, _a2, b1, _b2) when a1 < b1, do: :overlaps
+  defp allen(_a1, _a2, _b1, _b2), do: :overlapped_by
 end

@@ -350,82 +350,116 @@ defmodule Tempo.Network.Relation do
   defp boundary_atomic(ba, :at_or_after, bb), do: [le(bb, ba, 0)]
   defp boundary_atomic(ba, :after, bb), do: [lt(bb, ba)]
 
-  @doc """
-  The Allen interval relation(s) a chronological relation corresponds
-  to, for querying a solved network with `Tempo.Interval` predicates.
+  # The Allen relations each relation admits, in Allen's order: those of the
+  # pairs of periods its constraints hold of. The constraints are not strict
+  # (Levy et al. write `≤`), so a relation named for an Allen relation holds
+  # of the neighbours that share a boundary too: `:includes` of periods that
+  # are equal, or that start or end together. Each list was the relation of
+  # the name alone, and `:strictly_contemporary` left out `:equals` and
+  # `:contemporary` the two that touch, against the words above.
+  @allen %{
+    before: [:precedes],
+    after: [:preceded_by],
+    immediately_precedes: [:meets],
+    immediately_follows: [:met_by],
+    equals: [:equals],
+    overlaps: [:meets, :overlaps, :finished_by, :starts, :equals],
+    overlapped_by: [:equals, :started_by, :finishes, :overlapped_by, :met_by],
+    includes: [:finished_by, :contains, :equals, :started_by],
+    included_in: [:starts, :equals, :during, :finishes],
+    starts: [:starts, :equals],
+    started_by: [:equals, :started_by],
+    finishes: [:equals, :finishes],
+    finished_by: [:finished_by, :equals],
+    synchronous_start: [:starts, :equals, :started_by],
+    synchronous_end: [:finished_by, :equals, :finishes],
+    starts_during: [:starts, :equals, :started_by, :during, :finishes, :overlapped_by, :met_by],
+    includes_start: [:meets, :overlaps, :finished_by, :contains, :starts, :equals, :started_by],
+    ends_during: [:meets, :overlaps, :finished_by, :starts, :equals, :during, :finishes],
+    includes_end: [
+      :finished_by,
+      :contains,
+      :equals,
+      :started_by,
+      :finishes,
+      :overlapped_by,
+      :met_by
+    ],
+    strictly_contemporary: [
+      :overlaps,
+      :finished_by,
+      :contains,
+      :starts,
+      :equals,
+      :started_by,
+      :during,
+      :finishes,
+      :overlapped_by
+    ],
+    contemporary: [
+      :meets,
+      :overlaps,
+      :finished_by,
+      :contains,
+      :starts,
+      :equals,
+      :started_by,
+      :during,
+      :finishes,
+      :overlapped_by,
+      :met_by
+    ]
+  }
 
-  Returns a single Allen atom for a one-to-one correspondence, a list
-  when the relation is the disjunction of several Allen relations (e.g.
-  `:contemporary`), or `nil` for a metric relation Allen cannot express.
+  @doc """
+  The Allen relations a chronological relation admits, for querying a
+  solved network with `Tempo.Interval` predicates.
+
+  A relation's constraints are not strict, so one named for an Allen
+  relation also holds of periods that share a boundary: `:includes`
+  holds where one period contains the other, and where the two are
+  equal or start or end together.
+
+  ### Arguments
+
+  * `type` is a relation type.
+
+  ### Returns
+
+  * An Allen relation, for a relation that admits one.
+
+  * A list of them, in Allen's order, for a relation that admits several.
+
+  * `nil` for a metric relation, a boundary comparison, and anything that
+    is no relation type: Allen's relations say nothing of a delay.
 
   ### Examples
 
       iex> Tempo.Network.Relation.to_allen(:before)
       :precedes
 
+      iex> Tempo.Network.Relation.to_allen(:includes)
+      [:finished_by, :contains, :equals, :started_by]
+
       iex> Tempo.Network.Relation.to_allen(:synchronous_start)
-      [:starts, :started_by, :equals]
+      [:starts, :equals, :started_by]
 
   """
   @spec to_allen(relation_type()) :: atom() | [atom()] | nil
-  def to_allen(:before), do: :precedes
-  def to_allen(:after), do: :preceded_by
-  def to_allen(:immediately_precedes), do: :meets
-  def to_allen(:immediately_follows), do: :met_by
-  def to_allen(:overlaps), do: :overlaps
-  def to_allen(:overlapped_by), do: :overlapped_by
-  def to_allen(:includes), do: :contains
-  def to_allen(:included_in), do: :during
-  def to_allen(:equals), do: :equals
-  def to_allen(:starts), do: :starts
-  def to_allen(:started_by), do: :started_by
-  def to_allen(:finishes), do: :finishes
-  def to_allen(:finished_by), do: :finished_by
-  def to_allen(:synchronous_start), do: [:starts, :started_by, :equals]
-  def to_allen(:synchronous_end), do: [:finishes, :finished_by, :equals]
-
-  # Period synchronisms are looser than any single Allen relation.
-  def to_allen(:starts_during), do: nil
-  def to_allen(:includes_start), do: nil
-  def to_allen(:ends_during), do: nil
-  def to_allen(:includes_end), do: nil
-
-  def to_allen(:strictly_contemporary),
-    do: [
-      :overlaps,
-      :overlapped_by,
-      :starts,
-      :started_by,
-      :during,
-      :contains,
-      :finishes,
-      :finished_by
-    ]
-
-  def to_allen(:contemporary),
-    do: [
-      :overlaps,
-      :overlapped_by,
-      :starts,
-      :started_by,
-      :during,
-      :contains,
-      :finishes,
-      :finished_by,
-      :equals
-    ]
-
-  def to_allen({:delay, _, _, _, _}), do: nil
-
-  # A single boundary inequality is looser than any one Allen relation.
-  def to_allen({:boundary, _, _, _}), do: nil
+  def to_allen(type) do
+    case Map.get(@allen, type) do
+      [one] -> one
+      several_or_none -> several_or_none
+    end
+  end
 
   @doc """
   The chronological relation type naming a given Allen relation.
 
-  The inverse of `to_allen/1`, direction-preserving for every relation
-  that has a chronological type: `from_allen(to_allen(type)) == type` for
-  all thirteen one-to-one cases.
+  The relation whose constraints are the Allen relation's, not strict,
+  and so the one to state an Allen relation with: `to_allen/1` of it
+  holds the Allen relation, with the neighbours the constraints also
+  admit, and never its converse.
 
   ### Examples
 

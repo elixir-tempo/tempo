@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* `Tempo.Network.Relation.to_allen/1` lists every Allen relation a relation admits: `:includes` is `[:finished_by, :contains, :equals, :started_by]`, where it was `:contains`, a relation's constraints being not strict. `:strictly_contemporary` gains `:equals`, `:contemporary` gains `:meets` and `:met_by`, and `:starts_during`, `:includes_start`, `:ends_during` and `:includes_end` have their lists where they were `nil`.
+
 * A recurrence that does not come to its end in the 10,000 periods a walk takes, or has more than 10,000 occurrences before it, is a `Tempo.UnboundedRecurrenceError`. The occurrences found by then were returned as if they were all of them.
 
 * A string is refused before it is read where it holds a number of more than 128 digits or selections more than sixteen deep, as one over 8,192 bytes or with sets more than six deep already was. These are the bounds that keep the time to read a string in proportion to its length, and each is far past what a value is written with.
