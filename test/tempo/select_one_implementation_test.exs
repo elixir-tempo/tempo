@@ -260,14 +260,16 @@ defmodule Tempo.SelectOneImplementationTest do
       assert {IntervalSet.count(workdays), Enum.count(workdays)} == {5, 5 * 24}
     end
 
-    test "is still placed on its period: a part it cannot count, after a weekday too" do
-      # Each Monday of June 2026 from 10:00 to 20:00, the hours a masked
-      # hour may be.
+    test "is still placed on its period: a part it cannot count" do
+      # A mask is counted since 2026-10-08, and is each value its digits
+      # match (`Tempo.MaskedConstraintTest`): each of the ten hours from
+      # 10:00 on each Monday of June 2026, where it was the one span of them.
       assert spans(Tempo.select(~o"2026-06", ~o"1KT1XH")) ==
                for(
                  day <- [1, 8, 15, 22, 29],
-                 from = NaiveDateTime.new!(2026, 6, day, 10, 0, 0),
-                 do: {seconds(from), seconds(NaiveDateTime.add(from, 10 * 3600))}
+                 hour <- 10..19,
+                 from = NaiveDateTime.new!(2026, 6, day, hour, 0, 0),
+                 do: {seconds(from), seconds(NaiveDateTime.add(from, 3600))}
                )
 
       # A fraction of a second, and the second group of three months.
@@ -279,11 +281,7 @@ defmodule Tempo.SelectOneImplementationTest do
                [{seconds(~D[2026-04-01]), seconds(~D[2026-07-01])}]
     end
 
-    test "is still placed on its period: a mask, a span between two ends and a day of a week of a month" do
-      # A day whose last digit is not given is the ten days it may be.
-      assert spans(Tempo.select(~o"2026-06", ~o"1XD")) ==
-               [{seconds(~D[2026-06-10]), seconds(~D[2026-06-20])}]
-
+    test "is still placed on its period: a span between two ends and a day of a week of a month" do
       assert spans(Tempo.select(~o"2026-06-15", ~o"T09/T17")) ==
                [{seconds(~N[2026-06-15 09:00:00]), seconds(~N[2026-06-15 17:00:00])}]
 

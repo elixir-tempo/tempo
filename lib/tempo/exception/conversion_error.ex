@@ -57,8 +57,9 @@ defmodule Tempo.ConversionError do
     RRULE that steps or selects by a month, a year, a week of the year or
     a day of one, for a recurrence of another calendar than the Gregorian;
     `:week_of_month` is a week of a month in a calendar whose year
-    does not begin with its first month, and one selected from a month as
-    other than a whole number (a mask); and `:rule_to_an_end` is a rule
+    does not begin with its first month, and a day or a time under a week
+    selected from a month where the week is a mask (`~o"XW3K"`); and
+    `:rule_to_an_end` is a rule
     on a recurrence written with a duration and an end
     (`~o"R3/P1D/2019-01-08/FL7KN"`), whose occurrences run back from it,
     in every calendar.
@@ -241,10 +242,12 @@ defmodule Tempo.ConversionError do
     do:
       "since RFC 5545 counts them in the Gregorian calendar and RFC 7529's RSCALE is not written"
 
-  # A week of a month is refused in every calendar where it is a mask, so
-  # what is said of the calendar is said of the two cases.
+  # A day or a time under a masked week of a month is refused in every
+  # calendar, so what is said of the calendar is said of the two cases.
   defp not_built_calendar(:week_of_month),
-    do: "in a year that does not begin with its first month and where it is no whole number"
+    do:
+      "in a year that does not begin with its first month, and with a day or a time under " <>
+        "a week that is a mask"
 
   defp not_built_calendar(:rule_to_an_end), do: "as for every calendar"
 

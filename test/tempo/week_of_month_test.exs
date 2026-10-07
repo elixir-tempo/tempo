@@ -353,9 +353,21 @@ defmodule Tempo.WeekOfMonthTest do
       assert spans(Tempo.select(~o"2026-06-15", ~o"3W")) == []
     end
 
-    test "is refused by name where it is no whole number, and in a year that begins within a month" do
+    test "is each week its digits match where it is a mask" do
+      # It was refused as not built until 2026-10-08: a mask in a constraint
+      # is each value its digits match, as it is in a selection.
+      weeks = for week <- 1..weeks_in(2026, 6), do: seconds(week(2026, 6, week))
+
+      for mask <- [~o"XW", ~o"LXWN", ~o"XXW"] do
+        assert {mask, spans(Tempo.select(~o"2026-06", mask))} == {mask, weeks}
+      end
+
+      assert spans(Tempo.select(~o"2026-06", ~o"0XW")) == weeks
+    end
+
+    test "is refused by name with a day under a week that is a mask, and in a year that begins within a month" do
       assert {:error, %ConversionError{reason: :not_built, target: :week_of_month}} =
-               Tempo.select(~o"2026-06", ~o"XW")
+               Tempo.select(~o"2026-06", ~o"XW3K")
 
       assert {:error,
               %ConversionError{reason: :not_built, target: :week_of_month, calendar: March25}} =

@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A mask in a constraint given to `Tempo.select/2` is each value its digits match, as it is in a selection: `Tempo.select(~o"2026-06", ~o"1XD")` is the ten days from 10 June, each the day's own value, where it was the one span from the 10th to the 20th. A masked constraint as coarse as its period keeps what its digits match (15 June was dropped by `~o"1XD"`), and a week selected from a month as a mask (`~o"XW"`) is each week of the month, where it was refused as `:not_built`.
+
 * A weekday selected from a time of day keeps the hours or minutes that are on it, as the selection `~o"L1KN"` did: `Tempo.select(~o"2026-06-15T10", Tempo.workdays(:US))` is that hour of a Monday, where it and `~o"1K"` selected nothing, and from a span of hours that runs into the next day it is the hours of the weekday, where it was the whole of a day the span starts part way through. `Tempo.count_workdays/2` counts whole days, as it did.
 
 * An interval written with two ends, one of which holds a set, is the span from each of its values to the other end, or to each from it: `2026Y6M{1,15}D/2026Y6M20D` runs from the 1st to the 20th and from the 15th to the 20th, and the selector `~o"T{9,14}H/T16H"` selects nine to four and two to four, where each was a `Tempo.IntervalEndpointsError`. The spans overlap and are kept apart unless `coalesce: true` is asked; a set at each end is refused still.

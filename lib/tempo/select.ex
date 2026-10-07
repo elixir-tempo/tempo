@@ -1105,8 +1105,9 @@ defmodule Tempo.Select do
   # resolver serves both (decided 2026-10-07): one implementation, which the
   # two forms were held to give the same spans of before. What the resolver
   # has no reading for is still placed on its period: a part it cannot count
-  # (a mask, a fraction of a second, a group), and a week of a month with a
-  # day or a time of it, which it resolves by the week of the year.
+  # (an unspecified unit, a fraction of a second, a group), and a week of a
+  # month with a day or a time of it, which it resolves by the week of the
+  # year.
   defp resolved_as_a_rule?(time, %Tempo{} = from) do
     {unit, _precision} = Tempo.resolution(from)
 
@@ -1126,6 +1127,11 @@ defmodule Tempo.Select do
   # (`on_each_period/3`).
   defp select_placed(period, constraint), do: select_projections(period, [constraint])
 
+  # A mask is each value its digits match, as it is in a selection (decided
+  # 2026-10-08): `~o"1XD"` from June is its ten days from the 10th. Placed
+  # on its period it was the one span the value `2026Y6M1XD` is, and a day
+  # it was asked to keep was dropped.
+  defp counted_unit?({unit, {:mask, mask}}) when is_list(mask), do: is_map_key(@coarseness, unit)
   defp counted_unit?({unit, value}), do: is_map_key(@coarseness, unit) and counted?(value)
   defp counted_unit?(_other), do: false
 
