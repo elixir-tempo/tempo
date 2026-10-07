@@ -474,7 +474,8 @@ defmodule Tempo.RRule.Encoder do
          |> Enum.reject(&(&1 in @rrule_tokens))
          |> Enum.uniq() do
       [] ->
-        with {:ok, selection} <- weekdays_named(selection, calendar, interval),
+        with :ok <- numbers_alone(selection ++ units, interval),
+             {:ok, selection} <- weekdays_named(selection, calendar, interval),
              {week_start, selection} = week_start(selection, interval),
              selection = recombine_ordinal_byday(selection, numbered_byday?(selection, interval)),
              :ok <- allowed_at_frequency(selection ++ units, interval) do
@@ -513,6 +514,20 @@ defmodule Tempo.RRule.Encoder do
        value: interval,
        target: :rrule
      )}
+  end
+
+  # RFC 5545 writes a part as the numbers it names. One written with
+  # unspecified digits (`1XD`) stands for each value its digits match, which
+  # the RFC has no way to say.
+  defp numbers_alone(parts, interval) do
+    if Enum.any?(parts, &match?({_unit, {:mask, _mask}}, &1)),
+      do:
+        {:error,
+         not_allowed(
+           "a part written with unspecified digits (X), which stands for each number they match",
+           interval
+         )},
+      else: :ok
   end
 
   # WKST says the day a rule's weeks begin, which is Monday where none is

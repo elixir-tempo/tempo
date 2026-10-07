@@ -1845,7 +1845,11 @@ defmodule Tempo.Explain do
 
   defp positions_of(position), do: [position]
 
-  # The hours, minutes and seconds of a selection are one time of day.
+  # The hours, minutes and seconds of a selection are one time of day. One
+  # written with unspecified digits is worded as it is written, on its own.
+  defp fuse_time_of_day([{_unit, {:mask, _mask}} = entry | rest]),
+    do: [entry | fuse_time_of_day(rest)]
+
   defp fuse_time_of_day([{unit, _value} = first | rest]) when unit in [:hour, :minute, :second] do
     {finer, rest} = Enum.split_while(rest, &unit_in?(&1, [:minute, :second]))
     [{:time_of_day, [first | finer]} | fuse_time_of_day(rest)]
@@ -1853,6 +1857,11 @@ defmodule Tempo.Explain do
 
   defp fuse_time_of_day([entry | rest]), do: [entry | fuse_time_of_day(rest)]
   defp fuse_time_of_day([]), do: []
+
+  # A part written with unspecified digits stands for each value of its unit
+  # the digits match, which depend on the period, and is worded as written.
+  defp selection_clause({unit, {:mask, mask}}, _naming),
+    do: "#{masked_unit_phrase(unit)} written #{mask_text(mask)}"
 
   # A month is named in the selection's calendar, and a weekday and a time
   # of day are counted in it; no other clause needs it.
@@ -2092,6 +2101,26 @@ defmodule Tempo.Explain do
   defp written_phrase(other), do: inspect(other)
 
   # Ordinal-list phrase — a contiguous run collapses to a range:
+  defp masked_unit_phrase(:month), do: "in a month"
+  defp masked_unit_phrase(:week), do: "in an ISO week"
+  defp masked_unit_phrase(:calendar_week), do: "in a calendar week"
+  defp masked_unit_phrase(:day), do: "on a day"
+  defp masked_unit_phrase(:day_of_year), do: "on a day of the year"
+  defp masked_unit_phrase(:day_of_week), do: "on a day of the week"
+  defp masked_unit_phrase(:hour), do: "at an hour"
+  defp masked_unit_phrase(unit) when unit in [:minute, :second], do: "at a #{unit}"
+  defp masked_unit_phrase(unit), do: "in a #{unit}"
+
+  # A mask as it is written: its digits, an `X` for each left out, and a set
+  # of digits in braces.
+  defp mask_text(mask), do: Enum.map_join(mask, &mask_digit/1)
+
+  defp mask_digit(:X), do: "X"
+  defp mask_digit(:negative), do: "-"
+  defp mask_digit(digit) when is_integer(digit), do: Integer.to_string(digit)
+  defp mask_digit(digits) when is_list(digits), do: "{" <> Enum.join(digits, ",") <> "}"
+  defp mask_digit(other), do: inspect(other)
+
   # `[2..8]` → "the 2nd–8th"; `[1, 15]` → "the 1st and 15th". Those counted
   # from the end follow those counted from the start ("the 1st, 15th, and
   # last"), and a range that reaches the end is worded by its ends ("the

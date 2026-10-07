@@ -281,6 +281,17 @@ defmodule Tempo.Mask do
     end
   end
 
+  @doc false
+  # The values among `values` that a mask of a unit's digits stands for:
+  # those whose digits, with zeros before them to the mask's width, match
+  # it. `1X` among a month's days is the 10th to the 19th, and `3X` among
+  # February's is none. A mask counted from the end stands for none here.
+  @spec matching(Enumerable.t(), list()) :: [integer()]
+  def matching(values, mask) when is_list(mask) do
+    width = length(mask)
+    Enum.filter(values, &padded_matches_mask?(&1, mask, width))
+  end
+
   # Pad candidate to the mask's width with leading zeros, then
   # compare digit-by-digit: `:X` matches any digit, a digit set
   # (`{0,2,4,6,8}`) any of its digits; any other element must match

@@ -835,6 +835,22 @@ defmodule Tempo.UnitValues do
     if taken?(value, values), do: [value], else: []
   end
 
+  # A mask stands for the values of the unit whose digits it matches, as it
+  # does in a value (`Tempo.Mask.valid_values/4`): `1X` of a month's days is
+  # the 10th to the 19th. It was passed over, so a part of a selection
+  # written with one selected nothing. One counted from the end (`-X`) is
+  # the values that many from the last: the last nine.
+  defp values_named({:mask, [:negative | mask]}, values) when is_list(mask) do
+    counted = numbers(values)
+
+    1..Enum.count(counted)//1
+    |> Mask.matching(mask)
+    |> Enum.map(&Enum.at(counted, -&1))
+  end
+
+  defp values_named({:mask, mask}, values) when is_list(mask),
+    do: values |> numbers() |> Mask.matching(mask)
+
   defp values_named(_not_a_number, _values), do: []
 
   @doc """
