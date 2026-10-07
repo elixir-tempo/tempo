@@ -19,6 +19,7 @@ defmodule Tempo.WeekOfMonthTest do
 
   import Tempo.Sigils
 
+  alias Calendrical.Gregorian
   alias Calendrical.Hebrew
   alias Calendrical.Julian.March25
   alias Calendrical.Persian
@@ -586,7 +587,7 @@ defmodule Tempo.WeekOfMonthTest do
     test "is its days in whatever order a rule built by hand holds its parts" do
       # A rule is read with its parts from the coarsest, and one built with
       # the week last starts from a month, with no day to move.
-      rule = %Tempo{time: [selection: [day_of_week: 3, week: 2]], calendar: Calendrical.Gregorian}
+      rule = %Tempo{time: [selection: [day_of_week: 3, week: 2]], calendar: Gregorian}
 
       recurrence =
         Interval.new!(from: ~o"2026-06", duration: ~o"P1M", recurrence: 2, repeat_rule: rule)
@@ -607,7 +608,7 @@ defmodule Tempo.WeekOfMonthTest do
       # 8 June is in the calendar's week 24 of 2026 and of 2027, and the rule
       # keeps the months whose 8th is.
       for year <- [2026, 2027] do
-        assert Calendrical.Gregorian.week_of_year(year, 6, 8) == {year, 24}
+        assert Gregorian.week_of_year(year, 6, 8) == {year, 24}
       end
 
       {:ok, kept} = Tempo.to_interval(Tempo.from_iso8601!("R2/2026-06-08/P1M/FL24wN"))
@@ -654,7 +655,7 @@ defmodule Tempo.WeekOfMonthTest do
   describe "the weeks of a month, as the one place they are worked out gives them" do
     test "are the weeks the measure has, each from its first date to its last" do
       for {year, month} <- @months do
-        {:ok, weeks} = UnitValues.weeks_of_month(year, month, Calendrical.Gregorian)
+        {:ok, weeks} = UnitValues.weeks_of_month(year, month, Gregorian)
 
         expected =
           for week <- 1..weeks_in(year, month) do
@@ -673,11 +674,11 @@ defmodule Tempo.WeekOfMonthTest do
     end
 
     test "are none for a month the calendar does not have, and in a calendar of weeks" do
-      assert UnitValues.weeks_of_month(2026, 13, Calendrical.Gregorian) == {:error, :no_period}
+      assert UnitValues.weeks_of_month(2026, 13, Gregorian) == {:error, :no_period}
       assert UnitValues.weeks_of_month(2026, 6, Calendrical.ISOWeek) == {:error, :no_period}
       assert UnitValues.weeks_of_month(1750, 6, March25) == {:error, :no_period}
-      assert UnitValues.week_of_month(2026, 6, 0, Calendrical.Gregorian) == {:error, :no_period}
-      assert UnitValues.week_of_month(2026, 6, "2", Calendrical.Gregorian) == {:error, :no_period}
+      assert UnitValues.week_of_month(2026, 6, 0, Gregorian) == {:error, :no_period}
+      assert UnitValues.week_of_month(2026, 6, "2", Gregorian) == {:error, :no_period}
     end
   end
 end
