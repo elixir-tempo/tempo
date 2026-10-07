@@ -9980,7 +9980,8 @@ defmodule Tempo do
   # no selection, the day floor keeps a plain cadence (`R/../P1D`) walking
   # days.
   defp start_unit(
-         %Tempo.Interval{repeat_rule: %Tempo{time: [{:selection, selection} | _units]}} = interval
+         %Tempo.Interval{repeat_rule: %Tempo{time: [{:selection, selection} | _units]} = rule} =
+           interval
        )
        when selection != [] do
     # The finest unit is the last selection component (they are written
@@ -9991,7 +9992,10 @@ defmodule Tempo do
     # `:day_of_week`) this must normalise.
     case selection |> Enum.reject(&context?/1) |> List.last() do
       {finest_unit, _value} ->
-        finest_unit |> calendar_start_unit(stepped_by(interval)) |> in_a_window(selection)
+        finest_unit
+        |> calendar_start_unit(stepped_by(interval))
+        |> week_in_a_calendar_of_weeks(finest_unit, rule)
+        |> in_a_window(selection)
 
       nil ->
         :day
@@ -10005,6 +10009,18 @@ defmodule Tempo do
     do: unit
 
   defp stepped_by(_no_cadence), do: nil
+
+  # A calendar of weeks holds a week where a calendar of months holds a
+  # month, and the resolver reads its weeks as its months, so a week
+  # selected in one starts from a week, as a month selected starts from a
+  # month. Started from the year, as a week of a calendar of months is, the
+  # week had no unit to be put in and the year was selected whole.
+  defp week_in_a_calendar_of_weeks(start_unit, finest_unit, %Tempo{} = rule)
+       when finest_unit in [:week, :calendar_week] do
+    if week_based_calendar?(calendar_of(rule)), do: :week, else: start_unit
+  end
+
+  defp week_in_a_calendar_of_weeks(start_unit, _finest_unit, _rule), do: start_unit
 
   # The week start (`q`) and a rule's skip are context, and name no unit.
   defp context?({part, _value}), do: part in [:wkst, :skip]
@@ -11270,7 +11286,7 @@ defmodule Tempo do
     with {:ok, window} <- within_window(opts),
          {:ok, years} <- selection_years(tempo, Keyword.get(context, :year), window),
          members = selection_members(tempo, years, finer_context),
-         {:ok, occurrences} <- members_selection(members, rule, cadence) do
+         {:ok, occurrences} <- members_selection(members, rule, cadence, points_as(opts)) do
       occurrences
       |> IntervalSet.new()
       |> keep_occurrences_in_window(window)
@@ -11288,9 +11304,9 @@ defmodule Tempo do
 
   # The dates the selection picks in every period, or the error of the first
   # period it has no answer for.
-  defp members_selection(members, rule, cadence) do
+  defp members_selection(members, rule, cadence, points_as) do
     Enum.reduce_while(members, {:ok, []}, fn member, {:ok, occurrences} ->
-      case member_selection(member, rule, cadence) do
+      case member_selection(member, rule, cadence, points_as) do
         {:error, _reason} = error -> {:halt, error}
         selected -> {:cont, {:ok, occurrences ++ selected}}
       end
@@ -11300,7 +11316,7 @@ defmodule Tempo do
   # The dates the selection picks in one period of the context: the period,
   # filled down to the grain the selection names, as the one candidate the
   # selection resolves in.
-  defp member_selection(%Tempo{} = member, rule, cadence) do
+  defp member_selection(%Tempo{} = member, rule, cadence, points_as) do
     {start, recurrence} =
       fill_selection_start(member, %Tempo.Interval{from: member, repeat_rule: rule})
 
@@ -11311,9 +11327,47 @@ defmodule Tempo do
     # recurrence's does: week 25, selected in week 25, is the week.
     case Selection.apply(candidate, rule, freq, origin_day: origin_day_of(recurrence)) do
       {:error, _reason} = error -> error
-      occurrences -> resize_selected_occurrences(occurrences, Selection.expands?(rule, freq))
+      occurrences -> sized(occurrences, Selection.expands?(rule, freq), points_as)
     end
   end
+
+  # How a point a selection makes is given: as the span a unit of its
+  # resolution long, as an occurrence of a recurrence is, or as the value
+  # it is, which `Tempo.select/2` asks for (`selected_in/1`).
+  defp points_as(opts), do: Keyword.get(opts, :points_as, :spans)
+
+  defp sized(occurrences, true, :values), do: Enum.map(occurrences, &point_as_its_value/1)
+
+  defp sized(occurrences, expands?, _points_as),
+    do: resize_selected_occurrences(occurrences, expands?)
+
+  # A point as the value it is: the span from its start to that value's own
+  # end, with the unit `to_interval/1` has the value walked by. It is where
+  # the resolver's own resizing ends it, a unit of its resolution on, but
+  # where the clock of its zone skips the start: there a step is counted
+  # from the reading the clock comes out on, and the value still ends where
+  # it does. The hour 02:00 on the night Lord Howe's clocks go from 02:00 to
+  # 02:30 ends at 03:00, the half of it the clock shows.
+  defp point_as_its_value(%Tempo.Interval{metadata: %{windowed: true} = metadata} = occurrence),
+    do: %{occurrence | metadata: Map.delete(metadata, :windowed)}
+
+  defp point_as_its_value(%Tempo.Interval{from: %Tempo{} = from} = occurrence) do
+    case Interval.next_unit_boundary(from) do
+      {:ok, {lower, upper}, unit} -> %{occurrence | from: lower, to: upper, unit: unit}
+      {:error, _reason} -> resize_to_resolution(occurrence)
+    end
+  end
+
+  defp point_as_its_value(occurrence), do: occurrence
+
+  @doc false
+  # What a value selects with the selection written after its units
+  # (`2026Y6ML15DN`), as `to_interval/1` converts it, with each point the
+  # selection makes given as the value it is: a day with its own span and
+  # walked by its hours. `Tempo.select/2` selects by it, so that a day it
+  # selects by a constraint and by a selection is the same value.
+  @spec selected_in(t()) :: {:ok, Tempo.IntervalSet.t() | Tempo.Interval.t()} | {:error, term()}
+  def selected_in(%Tempo{} = value), do: to_interval(value, points_as: :values)
 
   # The years a context names — a year, a list of years and ranges, a mask
   # (`202XY`, `XXX{0,2,4,6,8}Y`) standing for the years it matches — narrowed

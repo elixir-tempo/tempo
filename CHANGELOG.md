@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A day `Tempo.select/2` selects by a selection (`~o"L15DN"`) is the value the day is, as one selected by a constraint (`~o"15D"`) was: `Tempo.to_interval(~o"2026-06-15")`, walked by its hours, so `Enum.count/1` of it is 24 where it was 1. A month so selected is walked by its days and an hour by its minutes, and a day selected by its weekday alone is the span it was.
+
 * A set in a unit that names a reading its zone's clock skips is a `Tempo.ZoneGapError`, as the reading alone is: `2026Y3M{28,29}DT2H30M[Europe/Paris]`, `2011-12-{29,30}[Pacific/Apia]` and a range across one (`2026Y3M29DT{1..3}H[Europe/Paris]`) were read, with the skipped member no value of the set. `Tempo.extend/2` writes a value in a zone by the values its clock shows, so `~o"2026-03-29[Europe/Paris]"` is `2026Y3M29DT{0..1,3..23}H` where it was written with the hour the clock skips, and `Tempo.extend_resolution/2` refuses a set one of whose values starts on such a reading.
 
 * A time shift and a zone on one value are read as RFC 9557 §3.4 has them. `2022-07-08T00:14:07Z[Europe/Paris]` is 00:14:07 UTC as Paris's clock shows it (`~o"2022Y7M8DT2H14M7SZ2H[Europe/Paris]"`), where it was 00:14:07 on that clock, and a numeric offset that disagrees with an elective zone gives the moment, shown on the zone's clock, where the zone gave it; a critical zone that disagrees, written as an offset too (`[!+08:45]`), is a `Tempo.ZoneOffsetMismatchError`, and `strict: true` covers each end of an interval and each member of a set.
@@ -325,6 +327,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Changed
 
+* `Tempo.select/2` resolves a constraint as the selection of the same parts, by one implementation, and resolves a rule in its period directly. A selection (`~o"L15DN"`) is selected two to eight times faster and a constraint within an eighth of what it took, but for a day of the year selected from a month or a week, which takes three times as long.
+
 * Every form outside the plain dates and timestamps is read in about half the time, a date or a time being read once at each place: `2026-W25-3` in 230 µs where it took 500, `20260615` in 290 where it took 530, and a time of day alone in 160 where it took 290.
 
 * A week date of the Gregorian calendar is validated four times faster, its date asked of `Calendrical.ISOWeek`, the calendar that is ISO 8601's weeks: 13.5 µs for a year, a week and a day where it took 51.
@@ -384,6 +388,10 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* A week selected in a year of a calendar of weeks is the week: `2026YL25WN` and `R/2026Y/P1Y/FL25WN` in `Calendrical.ISOWeek` were the whole year, the last cells the operation matrix listed as failing.
+
+* A time of day `Tempo.select/2` selects by a selection, where the clock skips part of it, is the part the clock shows, as a constraint's is: `~o"LT2HN"` from 4 October 2026 on Lord Howe, whose clocks go from 02:00 to 02:30, is 02:30 to 03:00, where it ran to 03:30.
 
 * The workday functions take a day and a time of day in a calendar of weeks, which keeps its week and day beside a time: `Tempo.add_workdays(Tempo.from_iso8601!("2024-W10-7T01[u-ca=iso-week]"), 1, :US)` is `~o"2024Y11W1KT1H"W`, and so with `next_workday/2`, `previous_workday/2`, `nearest_workday/2` and `roll_to_workday/3`, where each was a `Tempo.ResolutionError` that said the value denoted no day. `Tempo.workday?/2` and `Tempo.weekend?/2` answer it, where they raised.
 

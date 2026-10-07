@@ -66,6 +66,7 @@ defmodule Tempo.RRule.Selection do
   alias Tempo.Interval
   alias Tempo.Mask
   alias Tempo.Math
+  alias Tempo.NotBuilt
   alias Tempo.UnitValues
   alias Tempo.Validation
 
@@ -1509,7 +1510,12 @@ defmodule Tempo.RRule.Selection do
   # one that starts on a date has it, is kept or dropped by its week of the
   # year, as every other period's is.
   defp apply_role(:limit, {:week, weeks}, candidates, :month, _selection, wkst) do
-    Enum.flat_map(candidates, &week_in_month(&1, List.wrap(weeks), wkst))
+    Enum.reduce_while(candidates, [], fn candidate, selected ->
+      case week_in_month(candidate, List.wrap(weeks), wkst) do
+        {:error, _not_built} = error -> {:halt, error}
+        of_the_candidate -> {:cont, selected ++ of_the_candidate}
+      end
+    end)
   end
 
   defp apply_role(:limit, {:week, weeks}, candidates, _scope, _selection, wkst) do
@@ -2566,12 +2572,21 @@ defmodule Tempo.RRule.Selection do
         |> Enum.map(&week_of_month_span(Enum.at(in_month, &1 - 1), candidate))
 
       {:error, :no_period} ->
-        []
+        no_weeks_of_month(candidate, year, calendar)
     end
   end
 
   defp week_in_month(candidate, weeks, wkst),
     do: if(in_week_no_list?(candidate, weeks, wkst), do: [candidate], else: [])
+
+  # A month the calendar numbers no weeks in selects none. In a year that
+  # does not begin with its first month the calendar counts its months
+  # otherwise than its dates name them, and the weeks of one are not built.
+  defp no_weeks_of_month(%Interval{from: from}, year, calendar) do
+    if UnitValues.year_begins_with_first_month?(year, calendar),
+      do: [],
+      else: {:error, NotBuilt.error(from, :week_of_month, calendar)}
+  end
 
   # A week of a month as one occurrence, from its first date to the day
   # after its last, marked to keep that span as a calendar week is.

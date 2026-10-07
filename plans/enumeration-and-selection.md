@@ -1,6 +1,6 @@
 # Enumeration and selection in every calendar
 
-**Status:** in progress, 2026-10-05
+**Status:** in progress, 2026-10-07
 
 Enumeration and selection are core capabilities of Tempo, and the requirement (user, 2026-10-04) is confidence that they work correctly for all calendar types, at all resolutions, on all full and partial date and time combinations. This document says what that space is, what in it is verified, what is wrong, what is missing and what has not been measured yet, and sets the order of the work. It continues [plans/validated-core.md](validated-core.md), whose matrix it extends.
 
@@ -156,7 +156,7 @@ They become one module with two questions, each asked of Calendrical and of noth
 
 * **The values a written value names among them** — a number, a count from the end, a range resolved end by end, a set: in order and once each, with what the period lacks either an error (reading a value) or passed over (a selection), as the caller asks.
 
-Validation, the walk, `select/2`, the selection and `explain/1` call it and hold no arithmetic of their own. `select/2` held one count of its own, the weeks of a month (`weeks_in_month/3`), until 2026-10-05, when a week selected from within a month became a named refusal (the week-of-month item of `TODO.md`); and it still merges a constraint onto its base and reads the result as a value, so a constraint that is no selection is resolved by the reading of a value and not by the selection's resolver. Whether the two become one is open: with the day with no month read as a day of the year in both (2026-10-05), the two give the same spans in 444 of 516 cells measured, and the 72 left are listed in `TODO.md` with the reading each needs. It is verified in one place: its own property test against `Tempo.Matrix.Selections`' counting, in every calendar of the census.
+Validation, the walk, `select/2`, the selection and `explain/1` call it and hold no arithmetic of their own. `select/2` held one count of its own, the weeks of a month (`weeks_in_month/3`), until 2026-10-05, when a week selected from within a month became a named refusal (the week-of-month item of `TODO.md`); and it merged a constraint onto its base and read the result as a value, so a constraint that was no selection was resolved by the reading of a value and not by the selection's resolver. The two are one since 2026-10-07 (decided by the user that day): a constraint whose parts the resolver counts is resolved as the selection of the same parts, a week of a month among them (`Tempo.UnitValues.weeks_of_month/3`), and a point either form selects is the value it is. The merge is left for what the resolver has no reading for, a mask, a fraction of a second or a group in a constraint, the ends of a span and a day of a week of a month, which is an item of `TODO.md`; the two forms give the same members in 1,296 of the 1,347 cells of thirty bases and fifty-three parts both write. It is verified in one place: its own property test against `Tempo.Matrix.Selections`' counting, in every calendar of the census.
 
 ## Tasks
 

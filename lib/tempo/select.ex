@@ -54,6 +54,14 @@ defmodule Tempo.Select do
   | Interval duration form | `Tempo.select(days, ~o"T09/PT7H36M")` | Span from the projected start plus the duration |
   | Function | `Tempo.select(y, &fn/1)` | The function returns any of the above; evaluated against each period of the base |
 
+  A constraint is the selection of the same parts: `~o"15D"` selects
+  what `~o"L15DN"` does, and one implementation resolves both. A day
+  either selects is the day's own value, as `Tempo.to_interval/1` gives
+  it, so it is walked by its hours; a month is walked by its days and an
+  hour by its minutes. A day selected by its weekday alone (`~o"1K"`,
+  `Tempo.workdays/1`) is the span of the day, and is walked as the one
+  day.
+
   Base can be a `t:Tempo.t/0`, `t:Tempo.Interval.t/0`, or
   `t:Tempo.IntervalSet.t/0`. IntervalSet bases flat-map the
   selector across each member and collect the results; a lazy
@@ -1034,42 +1042,9 @@ defmodule Tempo.Select do
   defp select_period(_period, {:error, _reason} = error), do: error
   defp select_period(_period, selector), do: {:error, unrecognised_selector(selector)}
 
-  # A constraint's units that are as coarse as the period or coarser are a
-  # filter (decided 2026-10-05): they keep the period where it starts in what
-  # they name, as a selection of the same units does and a weekday selector
-  # does a day, and are resolved as one. `~o"6M"` keeps each day that is in
-  # June, where it was merged onto the day into the month of June. Units
-  # finer than the period are merged onto it and name spans within it.
-  #
-  # A constraint that holds both is filtered by the first and merged with the
-  # second. A week is the one period that runs across a month or a year, so a
-  # month and a day of it selected from a week are merged whole, onto each
-  # month the week touches (`on_each_period/3`).
-  defp select_constraint(
-         %Interval{from: %Tempo{} = from} = period,
-         %Tempo{time: time} = constraint
-       ) do
-    {unit, _precision} = Tempo.resolution(from)
-
-    case filter_and_finer(time, unit) do
-      {[], _all_finer} -> select_projections(period, [constraint])
-      {coarse, []} -> select_by_rule(period, %{constraint | time: [selection: coarse]})
-      {_coarse, _finer} when unit == :week -> select_projections(period, [constraint])
-      {coarse, finer} -> select_filtered(period, constraint, coarse, finer)
-    end
-  end
-
-  defp select_filtered(period, constraint, coarse, finer) do
-    with {:ok, %IntervalSet{} = kept} <-
-           select_by_rule(period, %{constraint | time: [selection: coarse]}) do
-      if IntervalSet.count(kept) == 0,
-        do: {:ok, kept},
-        else: select_projections(period, [%{constraint | time: finer}])
-    end
-  end
-
-  # A unit's place from the coarsest, for telling a constraint's units from
-  # its period's.
+  # The units a rule counts, each with its place from the coarsest: a
+  # period or a part of another unit (a fraction of a second, a group's) is
+  # none of the resolver's.
   @coarseness %{
     year: 0,
     month: 1,
@@ -1082,19 +1057,46 @@ defmodule Tempo.Select do
     second: 6
   }
 
-  # A constraint's units as those no finer than `unit` and those finer. One
-  # that holds what a filter cannot count (a mask, a fraction, a group) is
-  # all merged.
-  defp filter_and_finer(time, unit) do
-    with {:ok, period_place} <- Map.fetch(@coarseness, unit),
-         true <- Enum.all?(time, &counted_unit?/1) do
-      Enum.split_with(time, fn {constraint_unit, _value} ->
-        Map.fetch!(@coarseness, constraint_unit) <= period_place
-      end)
-    else
-      _all_merged -> {[], time}
-    end
+  # A constraint is the selection of the same parts, and is resolved as one
+  # where the resolver counts them (`resolved_as_a_rule?/2`). Its units that
+  # are as coarse as the period or coarser are then a filter (decided
+  # 2026-10-05): they keep the period where it starts in what they name, so
+  # `~o"6M"` keeps each day that is in June. Units finer than the period
+  # name spans within it.
+  defp select_constraint(
+         %Interval{from: %Tempo{} = from} = period,
+         %Tempo{time: time} = constraint
+       ) do
+    if resolved_as_a_rule?(time, from),
+      do: select_by_rule(period, %{constraint | time: [selection: time]}),
+      else: select_placed(period, constraint)
   end
+
+  # A constraint whose units are whole numbers, or sets and ranges of them,
+  # is the selection of the same parts (`~o"15D"` is `~o"L15DN"`), and the
+  # resolver serves both (decided 2026-10-07): one implementation, which the
+  # two forms were held to give the same spans of before. What the resolver
+  # has no reading for is still placed on its period: a part it cannot count
+  # (a mask, a fraction of a second, a group), and a week of a month with a
+  # day or a time of it, which it resolves by the week of the year.
+  defp resolved_as_a_rule?(time, %Tempo{} = from) do
+    {unit, _precision} = Tempo.resolution(from)
+
+    is_map_key(@coarseness, unit) and Enum.all?(time, &counted_unit?/1) and
+      not within_a_week_of_a_month?(time, from)
+  end
+
+  defp within_a_week_of_a_month?([_week, _finer | _rest] = time, %Tempo{time: [year: _, month: _]}),
+       do: List.keymember?(time, :week, 0)
+
+  defp within_a_week_of_a_month?(_time, _from), do: false
+
+  # A constraint placed on its period: its units are merged onto the
+  # period's start, and what they name there is the value read. A week is
+  # the one period that runs across a month or a year, so a month and a day
+  # of it selected from a week are merged onto each month the week touches
+  # (`on_each_period/3`).
+  defp select_placed(period, constraint), do: select_projections(period, [constraint])
 
   defp counted_unit?({unit, value}), do: is_map_key(@coarseness, unit) and counted?(value)
   defp counted_unit?(_other), do: false
@@ -1116,13 +1118,46 @@ defmodule Tempo.Select do
     end
   end
 
-  # What a rule that makes points within its period selects there: the
-  # occurrences, in the period, of the recurrence it is the rule of.
-  defp occurrences_in(period, rule, freq) do
-    cadence = %Duration{time: [{freq, 1}]}
-    recurrence = %Interval{recurrence: :infinity, duration: cadence, repeat_rule: rule}
+  # What a rule that makes points within its period selects there: what the
+  # period's own value selects with the rule written after it, so June
+  # selected by `L15DN` is `2026Y6ML15DN`. The rule is resolved in the one
+  # period, where a recurrence of it, walked within the period, took four
+  # times as long to give the same.
+  defp occurrences_in(
+         %Interval{from: %Tempo{time: time} = from},
+         %Tempo{time: [selection: selection]},
+         _freq
+       ) do
+    case selected_in(%{from | time: time ++ [selection: selection]}, selection) do
+      {:ok, %IntervalSet{}} = selected -> selected
+      {:ok, %Interval{} = selected} -> IntervalSet.new([selected], coalesce: false)
+      {:error, _reason} = error -> error
+    end
+  end
 
-    Tempo.to_interval_set(recurrence, within: span_selected_in(period, rule))
+  # A point a rule selects is the value it is, and is walked as
+  # `Tempo.to_interval/1` has the value walked: a day by its hours (decided
+  # 2026-10-07). A day selected by a constraint or by a selection is then
+  # the same value, where one placed on its period was walked by hours and
+  # one the resolver gave was walked as the one day.
+  #
+  # A day selected by its weekday alone is left the span it is, as the days
+  # a weekday selector gives are (`weekdays_in/2`): the two forms of that
+  # are one value too, and whether it is walked by its hours is asked of the
+  # user.
+  defp selected_in(value, selection) do
+    if by_weekday_alone?(selection),
+      do: Tempo.to_interval(value),
+      else: Tempo.selected_in(value)
+  end
+
+  # A selection whose finest part is a weekday of no week: its Mondays, the
+  # first of them, those of June.
+  defp by_weekday_alone?(selection) do
+    units = for {unit, _value} <- selection, unit not in [:instance, :wkst], do: unit
+
+    List.last(units) in [:day_of_week, :byday] and :week not in units and
+      :calendar_week not in units
   end
 
   # A rule that only keeps or drops its period is asked of the period itself,
