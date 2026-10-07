@@ -99,7 +99,7 @@ defmodule Tempo.RRule.OtherCalendarTest do
 
       test "reads so when the rule was read with a week start from #{start} of #{inspect(calendar)}" do
         for week_start <- @read do
-          text = "COUNT=6;FREQ=WEEKLY;INTERVAL=2;BYDAY=SU,MO" <> week_start
+          text = "FREQ=WEEKLY;INTERVAL=2;COUNT=6;BYDAY=SU,MO" <> week_start
           {:ok, recurrence} = RRule.parse(text, from: read(unquote(start), unquote(calendar)))
           {:ok, written} = RRule.to_string(recurrence)
 

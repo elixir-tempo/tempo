@@ -91,7 +91,7 @@ defmodule Tempo.RRule.RscaleSkipTest do
       {:ok, rule} = read("RSCALE=GREGORIAN;FREQ=MONTHLY;SKIP=FORWARD;COUNT=3", ~D[2026-01-31])
 
       assert {:ok, written} = RRule.to_string(rule)
-      assert written == "RSCALE=GREGORIAN;COUNT=3;FREQ=MONTHLY;BYMONTHDAY=31;SKIP=FORWARD"
+      assert written == "RSCALE=GREGORIAN;FREQ=MONTHLY;COUNT=3;BYMONTHDAY=31;SKIP=FORWARD"
       assert read(written, ~D[2026-01-31]) == {:ok, rule}
 
       assert {:error, %Tempo.Iso8601EncodeError{construct: :skip}} = Tempo.to_iso8601(rule)
@@ -193,7 +193,7 @@ defmodule Tempo.RRule.RscaleSkipTest do
         read("RSCALE=GREGORIAN;FREQ=MONTHLY;SKIP=BACKWARD;COUNT=3", ~D[2026-01-31])
 
       assert %{rule | metadata: %{}} == ~o"R3/2026-01-31/P1M"
-      assert RRule.to_string(rule) == {:ok, "COUNT=3;FREQ=MONTHLY;BYMONTHDAY=-1"}
+      assert RRule.to_string(rule) == {:ok, "FREQ=MONTHLY;COUNT=3;BYMONTHDAY=-1"}
     end
 
     test "beside a time of day keeps each occurrence as long as the time is precise" do

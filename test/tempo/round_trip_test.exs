@@ -3,6 +3,7 @@ defmodule Tempo.RoundTripTest do
 
   alias Calendrical.FiscalYear
   alias Tempo.Cron
+  alias Tempo.IntervalSet
   alias Tempo.RecurrenceSet
   alias Tempo.RRule
 
@@ -74,6 +75,9 @@ defmodule Tempo.RoundTripTest do
     @cases [
       "FREQ=DAILY",
       "FREQ=DAILY;COUNT=10",
+      "FREQ=DAILY;COUNT=1",
+      "FREQ=DAILY;COUNT=0",
+      "FREQ=WEEKLY;BYDAY=MO;COUNT=1",
       "FREQ=DAILY;INTERVAL=2",
       "FREQ=WEEKLY;UNTIL=20221231",
       "FREQ=MONTHLY;BYMONTHDAY=15",
@@ -103,19 +107,111 @@ defmodule Tempo.RoundTripTest do
       end
     end
 
-    test "canonical RRULE ordering matches ISO 8601 semantic order" do
-      # COUNT/UNTIL appears first (analog to R<count>/<to>), then
-      # FREQ+INTERVAL (analog to duration), then BY* (analog to
-      # /F<rule>).
-      assert {:ok, "COUNT=10;FREQ=DAILY"} =
+    test "the frequency is written first, then the interval, the count or the end, and the parts that select" do
+      # RFC 5545 §3.3.10: "the FREQ rule part MUST be the first rule part
+      # specified in a RECUR value". A count or an end was written before it.
+      assert {:ok, "FREQ=DAILY;COUNT=10"} =
                RRule.parse!("FREQ=DAILY;COUNT=10") |> RRule.to_string()
 
-      assert {:ok, "UNTIL=20221231;FREQ=WEEKLY"} =
+      assert {:ok, "FREQ=WEEKLY;UNTIL=20221231"} =
                RRule.parse!("FREQ=WEEKLY;UNTIL=20221231") |> RRule.to_string()
 
-      assert {:ok, "UNTIL=20221231;FREQ=WEEKLY;BYDAY=MO,WE,FR"} =
+      assert {:ok, "FREQ=WEEKLY;UNTIL=20221231;BYDAY=MO,WE,FR"} =
                RRule.parse!("FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20221231")
                |> RRule.to_string()
+    end
+  end
+
+  describe "an RRULE written and read again" do
+    # Rules of RFC 5545's examples and beside them, from 15 June 2026 at
+    # 09:00 UTC.
+    @rules [
+      "FREQ=DAILY;COUNT=10",
+      "FREQ=DAILY;COUNT=1",
+      "FREQ=WEEKLY;BYDAY=MO;COUNT=1",
+      "FREQ=DAILY;UNTIL=20260701T000000Z",
+      "FREQ=DAILY;INTERVAL=10;COUNT=5",
+      "FREQ=WEEKLY;INTERVAL=2;WKST=SU",
+      "FREQ=WEEKLY;UNTIL=20261007T000000Z;WKST=SU;BYDAY=TU,TH",
+      "FREQ=WEEKLY;INTERVAL=2;COUNT=8;WKST=SU;BYDAY=TU,TH",
+      "FREQ=MONTHLY;COUNT=10;BYDAY=1FR",
+      "FREQ=MONTHLY;INTERVAL=2;COUNT=10;BYDAY=1SU,-1SU",
+      "FREQ=MONTHLY;COUNT=6;BYDAY=-2MO",
+      "FREQ=MONTHLY;BYMONTHDAY=-3",
+      "FREQ=MONTHLY;COUNT=10;BYMONTHDAY=1,-1",
+      "FREQ=YEARLY;COUNT=10;BYMONTH=6,7",
+      "FREQ=YEARLY;INTERVAL=3;COUNT=10;BYYEARDAY=1,100,200",
+      "FREQ=YEARLY;BYDAY=20MO",
+      "FREQ=YEARLY;BYWEEKNO=20;BYDAY=MO",
+      "FREQ=MONTHLY;BYDAY=FR;BYMONTHDAY=13",
+      "FREQ=YEARLY;INTERVAL=4;BYMONTH=11;BYDAY=TU;BYMONTHDAY=2,3,4,5,6,7,8",
+      "FREQ=MONTHLY;COUNT=3;BYDAY=TU,WE,TH;BYSETPOS=3",
+      "FREQ=HOURLY;INTERVAL=3;UNTIL=20260615T170000Z",
+      "FREQ=MINUTELY;INTERVAL=90;COUNT=4",
+      "FREQ=DAILY;BYHOUR=9,10,11;BYMINUTE=0,20,40",
+      "FREQ=WEEKLY;INTERVAL=2;COUNT=4;BYDAY=TU,SU;WKST=SU",
+      "FREQ=SECONDLY;INTERVAL=30;COUNT=5",
+      "FREQ=YEARLY;BYWEEKNO=1,53;COUNT=4",
+      "FREQ=MONTHLY;RSCALE=GREGORIAN;SKIP=FORWARD;BYMONTHDAY=31;COUNT=4"
+    ]
+
+    # The first occurrences of a rule: in a month where it steps by days or
+    # less, which has more than a walk gives in five years, and else in five
+    # years.
+    defp first_occurrences(rule, text) do
+      window =
+        if text =~ ~r/FREQ=(SECONDLY|MINUTELY|HOURLY|DAILY)/,
+          do: Tempo.from_iso8601!("2026-06-15/2026-07-15"),
+          else: Tempo.from_iso8601!("2026/2031")
+
+      case Tempo.to_interval(rule, within: window) do
+        {:ok, %IntervalSet{} = set} -> Enum.take(IntervalSet.members(set), 12)
+        {:ok, %Tempo.Interval{} = one} -> [one]
+      end
+    end
+
+    test "has the occurrences it had" do
+      from = Tempo.from_iso8601!("2026-06-15T09:00:00Z")
+
+      for text <- @rules do
+        {:ok, rule} = RRule.parse(text, from: from)
+        {:ok, written} = RRule.to_string(rule)
+        {:ok, read_again} = RRule.parse(written, from: from)
+
+        assert {text, written, first_occurrences(read_again, text)} ==
+                 {text, written, first_occurrences(rule, text)}
+      end
+    end
+
+    test "is written with its frequency first, after the calendar it is counted in where it names one" do
+      for text <- @rules do
+        {:ok, written} =
+          text |> RRule.parse!(from: Tempo.from_iso8601!("2026-06-15")) |> RRule.to_string()
+
+        assert {text,
+                written
+                |> String.split(";")
+                |> Enum.reject(&String.starts_with?(&1, "RSCALE="))
+                |> hd()} ==
+                 {text, text |> String.split(";") |> hd()}
+      end
+    end
+
+    test "keeps a count of one, which with no count is a rule with no end" do
+      once = RRule.parse!("FREQ=DAILY;COUNT=1", from: Tempo.from_iso8601!("2026-06-15"))
+
+      assert RRule.to_string(once) == {:ok, "FREQ=DAILY;COUNT=1"}
+
+      assert RRule.to_string(Tempo.from_iso8601!("R1/2026-06-15/P1D")) ==
+               {:ok, "FREQ=DAILY;COUNT=1"}
+
+      assert RRule.to_string(Tempo.from_iso8601!("R0/2026-06-15/P1D")) ==
+               {:ok, "FREQ=DAILY;COUNT=0"}
+
+      assert RRule.to_string(Tempo.from_iso8601!("R/2026-06-15/P1D")) == {:ok, "FREQ=DAILY"}
+
+      {:ok, %Tempo.Interval{recurrence: 1}} = RRule.parse("FREQ=DAILY;COUNT=1")
+      {:ok, %Tempo.Interval{recurrence: :infinity}} = RRule.parse("FREQ=DAILY")
     end
   end
 
@@ -125,21 +221,21 @@ defmodule Tempo.RoundTripTest do
       assert {:ok, "FREQ=DAILY"} = RRule.to_string(ast)
     end
 
-    test "R10/2022-01-01/P1M → COUNT=10;FREQ=MONTHLY" do
+    test "R10/2022-01-01/P1M → FREQ=MONTHLY;COUNT=10" do
       {:ok, ast} = Tempo.from_iso8601("R10/2022-01-01/P1M")
-      assert {:ok, "COUNT=10;FREQ=MONTHLY"} = RRule.to_string(ast)
+      assert {:ok, "FREQ=MONTHLY;COUNT=10"} = RRule.to_string(ast)
     end
 
-    test "R5/2022-01-01/P2W → COUNT=5;FREQ=WEEKLY;INTERVAL=2" do
+    test "R5/2022-01-01/P2W → FREQ=WEEKLY;INTERVAL=2;COUNT=5" do
       {:ok, ast} = Tempo.from_iso8601("R5/2022-01-01/P2W")
-      assert {:ok, "COUNT=5;FREQ=WEEKLY;INTERVAL=2"} = RRule.to_string(ast)
+      assert {:ok, "FREQ=WEEKLY;INTERVAL=2;COUNT=5"} = RRule.to_string(ast)
     end
 
     test "a start and an end step by the first occurrence's length" do
-      assert {:ok, "COUNT=5;FREQ=DAILY;INTERVAL=5"} =
+      assert {:ok, "FREQ=DAILY;INTERVAL=5;COUNT=5"} =
                "R5/2026-06-15/2026-06-20" |> Tempo.from_iso8601!() |> RRule.to_string()
 
-      assert {:ok, "COUNT=3;FREQ=MONTHLY;INTERVAL=2"} =
+      assert {:ok, "FREQ=MONTHLY;INTERVAL=2;COUNT=3"} =
                "R3/2026-01/2026-03" |> Tempo.from_iso8601!() |> RRule.to_string()
 
       assert {:ok, "FREQ=DAILY;INTERVAL=5"} =
@@ -147,7 +243,7 @@ defmodule Tempo.RoundTripTest do
     end
 
     test "a duration and an end are a count, not an UNTIL" do
-      assert {:ok, "COUNT=5;FREQ=DAILY"} =
+      assert {:ok, "FREQ=DAILY;COUNT=5"} =
                "R5/P1D/2026-06-20" |> Tempo.from_iso8601!() |> RRule.to_string()
 
       assert {:error, %Tempo.ConversionError{target: :rrule}} =
@@ -279,7 +375,7 @@ defmodule Tempo.RoundTripTest do
 
     test "RRule.to_string!/1 returns the string on success" do
       {:ok, interval} = Tempo.from_iso8601("R5/2022-01-01/P1D")
-      assert "COUNT=5;FREQ=DAILY" = RRule.to_string!(interval)
+      assert "FREQ=DAILY;COUNT=5" = RRule.to_string!(interval)
     end
   end
 
@@ -330,7 +426,7 @@ defmodule Tempo.RoundTripTest do
         assert inspect(rule) == "#Tempo.Interval<not ISO 8601 expressible>"
       end
 
-      assert {:ok, "UNTIL=20261231;FREQ=DAILY;BYHOUR=9"} =
+      assert {:ok, "FREQ=DAILY;UNTIL=20261231;BYHOUR=9"} =
                RRule.to_string(RRule.parse!("FREQ=DAILY;UNTIL=20261231;BYHOUR=9", from: start))
     end
 

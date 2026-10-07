@@ -99,18 +99,12 @@ defmodule Tempo.RRule.Encoder do
   end
 
   def encode(%Tempo.Interval{duration: %Tempo.Duration{time: time}} = interval) do
-    # Rule-part ordering mirrors ISO 8601's textual order of the
-    # equivalent concepts:
-    #
-    #   R<count> / from / ( to | P<dur> ) / F<rule>
-    #
-    # maps to:
-    #
-    #   COUNT | UNTIL ; FREQ ; INTERVAL ; BY*
-    #
-    # RFC 5545 does not require a specific ordering, so this is
-    # valid — and keeps the mental model of an RRULE interval
-    # aligned with an ISO 8601 recurring interval.
+    # The frequency is written first, as RFC 5545 §3.3.10 requires of a
+    # rule that is written ("the FREQ rule part MUST be the first rule part
+    # specified in a RECUR value", for readers older than it), and the rest
+    # in the order of its examples: the interval, the count or the end, and
+    # the parts that select. A count or an end was written before the
+    # frequency. An `RSCALE` leads the rule, as RFC 7529 writes it.
 
     # What RRULE has no form for in any calendar is refused first, each by
     # its own name. What is left would be written, and is refused where it
@@ -126,7 +120,7 @@ defmodule Tempo.RRule.Encoder do
          {:ok, by_parts} <- by_parts(interval.repeat_rule, interval),
          :ok <- NotBuilt.rrule(interval) do
       parts =
-        [rscale_part(interval.repeat_rule), bound_part, freq_and_interval_parts, by_parts]
+        [rscale_part(interval.repeat_rule), freq_and_interval_parts, bound_part, by_parts]
         |> List.flatten()
         |> Enum.reject(&is_nil/1)
 
@@ -384,10 +378,12 @@ defmodule Tempo.RRule.Encoder do
 
   ## COUNT vs UNTIL vs neither
 
-  defp bound_part(%Tempo.Interval{recurrence: 1, to: nil}), do: {:ok, nil}
   defp bound_part(%Tempo.Interval{recurrence: :infinity, to: nil}), do: {:ok, nil}
 
-  defp bound_part(%Tempo.Interval{recurrence: n, to: nil}) when is_integer(n) and n > 1 do
+  # A recurrence's count is the number of its occurrences, and is written
+  # whatever it is. One occurrence was written with no count, which is a
+  # rule with no end.
+  defp bound_part(%Tempo.Interval{recurrence: n, to: nil}) when is_integer(n) and n >= 0 do
     {:ok, "COUNT=#{n}"}
   end
 

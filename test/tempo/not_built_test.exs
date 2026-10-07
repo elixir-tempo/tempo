@@ -546,14 +546,14 @@ defmodule Tempo.NotBuiltTest do
 
     test "is written where it steps by weeks, days or less and selects by weekday and time" do
       assert RRule.to_string(read("R2/5786Y6M1D/P1W/FL3KN", Hebrew)) ==
-               {:ok, "COUNT=2;FREQ=WEEKLY;BYDAY=WE"}
+               {:ok, "FREQ=WEEKLY;COUNT=2;BYDAY=WE"}
 
       assert RRule.to_string(read("R2/5786Y6M1D/P1D/FLT{9,17}HN", Hebrew)) ==
-               {:ok, "COUNT=2;FREQ=DAILY;BYHOUR=9,17"}
+               {:ok, "FREQ=DAILY;COUNT=2;BYHOUR=9,17"}
 
       # The third day of an NRF week, which starts on a Sunday, is a Tuesday.
       assert RRule.to_string(read("R2/2026Y25W/P1W/FL3KN", NRF)) ==
-               {:ok, "COUNT=2;FREQ=WEEKLY;BYDAY=TU;WKST=SU"}
+               {:ok, "FREQ=WEEKLY;COUNT=2;BYDAY=TU;WKST=SU"}
     end
 
     test "writes its end as the Gregorian date it is" do
@@ -566,7 +566,7 @@ defmodule Tempo.NotBuiltTest do
         to: read("5786Y6M10D", Hebrew)
       }
 
-      assert RRule.to_string(daily) == {:ok, "UNTIL=#{Date.to_iso8601(until, :basic)};FREQ=DAILY"}
+      assert RRule.to_string(daily) == {:ok, "FREQ=DAILY;UNTIL=#{Date.to_iso8601(until, :basic)}"}
     end
 
     test "is written as it was in the Gregorian calendar" do
@@ -574,7 +574,7 @@ defmodule Tempo.NotBuiltTest do
                {:ok, "FREQ=YEARLY;BYMONTH=7;BYMONTHDAY=15"}
 
       assert RRule.to_string(~o"R2/2026-06-01/P1M/FL3KN") ==
-               {:ok, "COUNT=2;FREQ=MONTHLY;BYDAY=WE"}
+               {:ok, "FREQ=MONTHLY;COUNT=2;BYDAY=WE"}
     end
   end
 

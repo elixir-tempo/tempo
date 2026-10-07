@@ -52,7 +52,7 @@
 
 * `Tempo.RRule.to_string/1` writes a rule only as RFC 5545 §3.3.10 allows its frequency: a numbered weekday outside a monthly rule and a yearly rule with no `BYWEEKNO` is the weekday and its position (`R/2026-06-01/P1W/FL3K2IN` is `FREQ=WEEKLY;BYDAY=WE;BYSETPOS=2`, where it was `BYDAY=2WE`). `BYMONTHDAY` in a weekly rule, `BYYEARDAY` in a daily, weekly or monthly one, `BYWEEKNO` in any but a yearly one and a `BYSETPOS` with no other part return a `Tempo.ConversionError` naming the part and the frequency, where each was written.
 
-* `Tempo.RRule.to_string/1` writes a recurrence that keeps the last day of a month without its start's day as the rule that lists those days for a reader of RFC 5545, who passes over such a month: `~o"R5/2026-01-31/P1M"` is `COUNT=5;FREQ=MONTHLY;BYMONTHDAY=-1` and one from the 30th `BYMONTHDAY=28,29,30;BYSETPOS=-1`, where each was `FREQ=MONTHLY`, read without February. A recurrence no one rule says, one that holds a position or several times of day already or names months of different lengths in a year, returns a `Tempo.ConversionError`.
+* `Tempo.RRule.to_string/1` writes a recurrence that keeps the last day of a month without its start's day as the rule that lists those days for a reader of RFC 5545, who passes over such a month: `~o"R5/2026-01-31/P1M"` is `FREQ=MONTHLY;COUNT=5;BYMONTHDAY=-1` and one from the 30th `BYMONTHDAY=28,29,30;BYSETPOS=-1`, where each was `FREQ=MONTHLY`, read without February. A recurrence no one rule says, one that holds a position or several times of day already or names months of different lengths in a year, returns a `Tempo.ConversionError`.
 
 * A rule read from an RRULE, iCalendar or JSCalendar with a start states what RFC 5545 takes from it, as ISO 8601-2 Annex C has a converted rule do: `Tempo.RRule.parse("FREQ=MONTHLY", from: ~o"2026-01-31")` is `~o"R/2026-01-31/P1M/FL31DN"`, a weekly rule states its weekday and a yearly rule its month and day. A day a month or a year lacks is then passed over, as RFC 5545 §3.3.10 has it (31 January, 31 March and 31 May, where 28 February and 30 April were listed), and an occurrence is as long as its start is precise, a day for a date, where it was a cadence long; an ISO 8601 recurrence is unchanged, and JSCalendar's `skip` is read (`backward` keeps the last day, `forward` is an error).
 
@@ -388,6 +388,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* `Tempo.RRule.to_string/1` writes the count of a rule of one occurrence (`FREQ=DAILY;COUNT=1`), where it wrote `FREQ=DAILY`, a rule with no end. It writes the frequency first, as RFC 5545 §3.3.10 requires of a rule that is written (`FREQ=DAILY;COUNT=10`, where it was `COUNT=10;FREQ=DAILY`).
 
 * A recurrence that steps by nothing or counts below none is refused: `INTERVAL=0` is `{:error, {:invalid_interval, "0"}}` from `Tempo.RRule.parse/2` (it gave its start three times), `R3/2026-06-01/P0D` is a `Tempo.ConversionError`, and `Tempo.Interval.new/1` takes `:recurrence` as 0 or more. A JSCalendar rule with a count of 0 has no occurrences, where it was read as having no count, and a day of the week that is no day (`"TU"`) is `{:error, {:unsupported_day, "TU"}}`, where it recurred on Mondays.
 

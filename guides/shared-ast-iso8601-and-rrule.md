@@ -144,7 +144,7 @@ Because ISO 8601 can describe more than RRULE, and RRULE needs specific features
 
 * A `%Tempo{}` that is not a `%Tempo.Interval{}` (no recurrence to describe).
 
-* An interval that does not recur, with no `:duration` (no FREQ available). A recurrence written with a start and an end steps by its first occurrence's length (`R5/2026-06-15/2026-06-20` is `COUNT=5;FREQ=DAILY;INTERVAL=5`).
+* An interval that does not recur, with no `:duration` (no FREQ available). A recurrence written with a start and an end steps by its first occurrence's length (`R5/2026-06-15/2026-06-20` is `FREQ=DAILY;INTERVAL=5;COUNT=5`).
 
 * A recurrence written with a duration and an end and no count (`R/P1D/2026-06-20`), which runs back without a first occurrence; with a count it is `COUNT` and the cadence.
 

@@ -89,27 +89,27 @@ defmodule Tempo.RRule.LastDayTest do
     end
 
     test "says the last day of the month, or the last of the days up to its start's" do
-      assert RRule.to_string(~o"R5/2026-01-31/P1M") == {:ok, "COUNT=5;FREQ=MONTHLY;BYMONTHDAY=-1"}
+      assert RRule.to_string(~o"R5/2026-01-31/P1M") == {:ok, "FREQ=MONTHLY;COUNT=5;BYMONTHDAY=-1"}
 
       assert RRule.to_string(~o"R4/2026-01-30/P1M") ==
-               {:ok, "COUNT=4;FREQ=MONTHLY;BYMONTHDAY=28,29,30;BYSETPOS=-1"}
+               {:ok, "FREQ=MONTHLY;COUNT=4;BYMONTHDAY=28,29,30;BYSETPOS=-1"}
 
       assert RRule.to_string(~o"R4/2026-01-29/P2M") ==
-               {:ok, "COUNT=4;FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=28,29;BYSETPOS=-1"}
+               {:ok, "FREQ=MONTHLY;INTERVAL=2;COUNT=4;BYMONTHDAY=28,29;BYSETPOS=-1"}
 
       # The start's time of day is one time, which a position does not count.
       assert RRule.to_string(~o"R4/2026-01-30T09:30/P1M") ==
-               {:ok, "COUNT=4;FREQ=MONTHLY;BYMONTHDAY=28,29,30;BYSETPOS=-1"}
+               {:ok, "FREQ=MONTHLY;COUNT=4;BYMONTHDAY=28,29,30;BYSETPOS=-1"}
 
       assert RRule.to_string(~o"R/2026-01-31/P1M/FLT{9,17}HN") ==
                {:ok, "FREQ=MONTHLY;BYMONTHDAY=-1;BYHOUR=9,17"}
     end
 
     test "is written as it was where every month it reaches has its start's day" do
-      assert RRule.to_string(~o"R5/2026-01-28/P1M") == {:ok, "COUNT=5;FREQ=MONTHLY"}
+      assert RRule.to_string(~o"R5/2026-01-28/P1M") == {:ok, "FREQ=MONTHLY;COUNT=5"}
 
       assert RRule.to_string(~o"R5/2026-01-30/P1M/FL{4,6}MN") ==
-               {:ok, "COUNT=5;FREQ=MONTHLY;BYMONTH=4,6"}
+               {:ok, "FREQ=MONTHLY;COUNT=5;BYMONTH=4,6"}
     end
   end
 
@@ -148,12 +148,12 @@ defmodule Tempo.RRule.LastDayTest do
 
     test "says the last day of its start's month from 29 February" do
       assert RRule.to_string(~o"R3/2024-02-29/P1Y") ==
-               {:ok, "COUNT=3;FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=-1"}
+               {:ok, "FREQ=YEARLY;COUNT=3;BYMONTH=2;BYMONTHDAY=-1"}
 
       assert RRule.to_string(~o"R/2026-01-31/P1Y/FL{2,4}MN") ==
                {:ok, "FREQ=YEARLY;BYMONTH=2,4;BYMONTHDAY=-1"}
 
-      assert RRule.to_string(~o"R3/2026-03-31/P1Y") == {:ok, "COUNT=3;FREQ=YEARLY"}
+      assert RRule.to_string(~o"R3/2026-03-31/P1Y") == {:ok, "FREQ=YEARLY;COUNT=3"}
     end
   end
 
@@ -179,19 +179,19 @@ defmodule Tempo.RRule.LastDayTest do
   describe "a recurrence written as it was" do
     test "names its day, steps by weeks or less, or has no start" do
       assert RRule.to_string(~o"R6/2026-01-31/P1M/FL15DN") ==
-               {:ok, "COUNT=6;FREQ=MONTHLY;BYMONTHDAY=15"}
+               {:ok, "FREQ=MONTHLY;COUNT=6;BYMONTHDAY=15"}
 
       assert RRule.to_string(~o"R6/2026-01-31/P1M/FL5KN") ==
-               {:ok, "COUNT=6;FREQ=MONTHLY;BYDAY=FR"}
+               {:ok, "FREQ=MONTHLY;COUNT=6;BYDAY=FR"}
 
-      assert RRule.to_string(~o"R6/2026-01-31/P1W") == {:ok, "COUNT=6;FREQ=WEEKLY"}
-      assert RRule.to_string(~o"R6/2026-01-31/P1D") == {:ok, "COUNT=6;FREQ=DAILY"}
+      assert RRule.to_string(~o"R6/2026-01-31/P1W") == {:ok, "FREQ=WEEKLY;COUNT=6"}
+      assert RRule.to_string(~o"R6/2026-01-31/P1D") == {:ok, "FREQ=DAILY;COUNT=6"}
       assert RRule.to_string(~o"R/../P1M") == {:ok, "FREQ=MONTHLY"}
     end
 
     test "is a rule read from an RRULE, which states its day" do
       rule = RRule.parse!("FREQ=MONTHLY;COUNT=3", from: ~o"2026-01-31")
-      assert RRule.to_string(rule) == {:ok, "COUNT=3;FREQ=MONTHLY;BYMONTHDAY=31"}
+      assert RRule.to_string(rule) == {:ok, "FREQ=MONTHLY;COUNT=3;BYMONTHDAY=31"}
     end
   end
 end

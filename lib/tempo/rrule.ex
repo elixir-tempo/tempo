@@ -175,7 +175,7 @@ defmodule Tempo.RRule do
 
   The output has no leading `RRULE:` prefix and no `DTSTART`: an RRULE is a recurrence pattern, not a full iCalendar record, so a caller writing the full record adds `DTSTART` from the interval's start.
 
-  A recurrence that steps by months or years and names no day keeps the last day of a month that lacks its start's, where a reader of RFC 5545 passes over that month, so the rule written for one says the days outright: `~o"R5/2026-01-31/P1M"` is `COUNT=5;FREQ=MONTHLY;BYMONTHDAY=-1`, the last day of each month, and one from the 30th is the last of the days up to it, `BYMONTHDAY=28,29,30;BYSETPOS=-1`. A rule read from an RRULE states its start's day and is written with it.
+  A recurrence that steps by months or years and names no day keeps the last day of a month that lacks its start's, where a reader of RFC 5545 passes over that month, so the rule written for one says the days outright: `~o"R5/2026-01-31/P1M"` is `FREQ=MONTHLY;COUNT=5;BYMONTHDAY=-1`, the last day of each month, and one from the 30th is the last of the days up to it, `BYMONTHDAY=28,29,30;BYSETPOS=-1`. A rule read from an RRULE states its start's day and is written with it.
 
   A rule is written only as RFC 5545 allows its frequency. A numbered weekday is a numbered `BYDAY` in a monthly rule and in a yearly rule (`BYDAY=2WE`), and the weekday and its position (`BYDAY=WE;BYSETPOS=2`) wherever a numbered `BYDAY` is not allowed or would count something else: at any other frequency, beside a `BYWEEKNO`, a `BYMONTHDAY` or a `BYYEARDAY`, and in a yearly rule of several months, where a number counts in each month and a position across them. A part the RFC forbids at the rule's frequency is an error that names both. A rule with times of day is for a `DTSTART` with a time: RFC 5545 has a reader ignore `BYHOUR`, `BYMINUTE` and `BYSECOND` beside a start that is a date.
 
@@ -201,7 +201,7 @@ defmodule Tempo.RRule do
 
       iex> {:ok, interval} = Tempo.RRule.parse("FREQ=DAILY;COUNT=10")
       iex> Tempo.RRule.to_string(interval)
-      {:ok, "COUNT=10;FREQ=DAILY"}
+      {:ok, "FREQ=DAILY;COUNT=10"}
 
       iex> {:ok, interval} = Tempo.RRule.parse("FREQ=YEARLY;BYMONTH=11;BYDAY=4TH")
       iex> Tempo.RRule.to_string(interval)
@@ -212,7 +212,7 @@ defmodule Tempo.RRule do
       {:ok, "FREQ=WEEKLY;BYDAY=TU;WKST=SU"}
 
       iex> Tempo.RRule.to_string(~o"R5/2026-01-31/P1M")
-      {:ok, "COUNT=5;FREQ=MONTHLY;BYMONTHDAY=-1"}
+      {:ok, "FREQ=MONTHLY;COUNT=5;BYMONTHDAY=-1"}
 
       iex> {:error, %Tempo.ConversionError{}} = Tempo.RRule.to_string(~o"2022-06-15")
 
@@ -237,7 +237,7 @@ defmodule Tempo.RRule do
   ### Examples
 
       iex> Tempo.RRule.to_string!(~o"R12/2026-01-05/P1D")
-      "COUNT=12;FREQ=DAILY"
+      "FREQ=DAILY;COUNT=12"
 
   """
   @spec to_string!(Tempo.Interval.t()) :: String.t() | no_return()
