@@ -389,6 +389,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.at/2` and `Tempo.on/2` place a value on one written by other units of a date as `Tempo.select/2` selects it: the 15th on week 25 of 2026 is 15 June and a week on a month is the week of the month, where each was a value that names nothing and no reader takes (`2026Y25W15D`, `2026Y6M3K`, `2026Y6M2W`). A value that names no date there, or more than one (a Wednesday on a month), is an error, as two such values with no year are.
+
 * A week selected in a year of a calendar of weeks is the week: `2026YL25WN` and `R/2026Y/P1Y/FL25WN` in `Calendrical.ISOWeek` were the whole year, the last cells the operation matrix listed as failing.
 
 * A time of day `Tempo.select/2` selects by a selection, where the clock skips part of it, is the part the clock shows, as a constraint's is: `~o"LT2HN"` from 4 October 2026 on Lord Howe, whose clocks go from 02:00 to 02:30, is 02:30 to 03:00, where it ran to 03:30.

@@ -3656,6 +3656,16 @@ defmodule Tempo do
   of weeks, such as `Calendrical.ISOWeek`, takes a week and a day of
   the week of that calendar.
 
+  A date is written by its month and day, by its week and a day of it,
+  or by its day of the year. Where the two values are written by two of
+  those, what is placed is what `Tempo.select/2` selects by the one
+  from the other: `~o"15D" |> Tempo.on(~o"2026-W25")` is 15 June, the
+  15th in that week, and `~o"2W" |> Tempo.on(~o"2026-06")` is the
+  second week of June, the span of its days. A value that names no date
+  there (the 3rd on that week) or more than one (a Wednesday on a
+  month) is an error, and so are two such values with no year, which
+  name one date only in a year.
+
   An interval is placed endpoint by endpoint, so nine to five on 15
   June, or 2–15 April in 2027, is one call; an open end, or one its
   duration gives, stays as it is.
@@ -3669,7 +3679,8 @@ defmodule Tempo do
   ### Returns
 
   * `{:ok, tempo}` with the one value placed on the other, or
-    `{:ok, interval}` with an interval's endpoints placed.
+    `{:ok, interval}` with an interval's endpoints placed, or with a
+    week placed on a month.
 
   * `{:error, reason}` when both values have a year, when the two hold
     date units of different calendars, when the result is not a date in
@@ -3694,6 +3705,9 @@ defmodule Tempo do
       iex> Tempo.at(~o"2026-06", ~o"T17")
       {:ok, ~o"2026Y6M1DT17H"}
 
+      iex> Tempo.on(~o"15D", ~o"2026-W25")
+      {:ok, ~o"2026Y6M15D"}
+
   """
   @dialyzer {:nowarn_function, at: 2}
 
@@ -3701,7 +3715,7 @@ defmodule Tempo do
           {:ok, t() | Interval.t()} | {:error, error_reason()}
   def at(%__MODULE__{} = value, %__MODULE__{} = other) do
     with {:ok, placed} <- place_on(value, other),
-         :ok <- Validation.validate_zone_existence(placed) do
+         :ok <- shown_by_its_zone(placed) do
       {:ok, at_its_offset(placed)}
     end
   end
@@ -3787,8 +3801,20 @@ defmodule Tempo do
     end
   end
 
-  defp place_endpoint(%__MODULE__{} = endpoint, other), do: at(endpoint, other)
+  # An end that is placed as a span, a week of a month, is where it starts.
+  defp place_endpoint(%__MODULE__{} = endpoint, other) do
+    case at(endpoint, other) do
+      {:ok, %Interval{from: %__MODULE__{} = start}} -> {:ok, start}
+      placed_or_an_error -> placed_or_an_error
+    end
+  end
+
   defp place_endpoint(open_or_derived, _other), do: {:ok, open_or_derived}
+
+  # A value placed is held to the clock of its zone, as a value that is read
+  # is; a span, a week of a month, is the dates it names.
+  defp shown_by_its_zone(%__MODULE__{} = placed), do: Validation.validate_zone_existence(placed)
+  defp shown_by_its_zone(%Interval{}), do: :ok
 
   defp in_order(%__MODULE__{} = from, %__MODULE__{} = to) do
     with {:ok, _interval} <- Interval.new(from, to), do: :ok
@@ -3809,17 +3835,107 @@ defmodule Tempo do
      )}
   end
 
-  defp place(value, other, false = _year, true = _other_year), do: placed(graft(other, value))
-  defp place(value, other, true = _year, false = _other_year), do: placed(graft(value, other))
+  defp place(value, other, false = _year, true = _other_year), do: grafted(other, value)
+  defp place(value, other, true = _year, false = _other_year), do: grafted(value, other)
 
   defp place(value, other, false = _year, false = _other_year) do
     if leading_key(value) >= leading_key(other),
-      do: placed(graft(value, other)),
-      else: placed(graft(other, value))
+      do: grafted(value, other),
+      else: grafted(other, value)
   end
 
   defp placed(%__MODULE__{} = tempo), do: {:ok, tempo}
   defp placed(error), do: error
+
+  # A value's units placed under another's. A date is written by its month
+  # and day, by its week and day of it, or by its day of the year, and the
+  # units of two of those under one another are no value: a day of a month
+  # under a week (`2026Y25W15D`), a weekday under a month (`2026Y6M3K`), a
+  # week under a month, which names a week of the month. Such a value was
+  # given, and nothing reads it. What it names is what `Tempo.select/2`
+  # selects by the one from the other, which is the one reading of a unit
+  # in a period: the 15th placed on week 25 of 2026 is 15 June.
+  defp grafted(%__MODULE__{} = high, %__MODULE__{} = low) do
+    if of_two_axes?(high, low),
+      do: selected_on(high, low, anchored?(high)),
+      else: placed(graft(high, low))
+  end
+
+  defp of_two_axes?(%__MODULE__{time: high_time}, %__MODULE__{time: [_ | _] = low_time}) do
+    if List.keymember?(high_time, :selection, 0) or List.keymember?(low_time, :selection, 0),
+      do: false,
+      else: mixed_axes?(units_grafted(high_time, low_time))
+  end
+
+  defp of_two_axes?(_high, _low), do: false
+
+  # The units a graft holds: those of the one value coarser than the first
+  # of the other, and the other's (`graft_units/2`).
+  defp units_grafted(high_time, [{unit, _value} | _] = low_time) do
+    cutoff = Unit.sort_key(unit)
+    kept = for {kept, _value} <- high_time, Unit.sort_key(kept) > cutoff, do: kept
+
+    kept ++ Enum.map(low_time, &elem(&1, 0))
+  end
+
+  # A week beside a month, a day of one or a day of the year, and a day of
+  # the week with no week beside a year or a date.
+  defp mixed_axes?(units) do
+    week? = :week in units
+    by_month_or_day? = Enum.any?([:month, :day, :day_of_year], &(&1 in units))
+
+    (week? and by_month_or_day?) or
+      (:day_of_week in units and not week? and (by_month_or_day? or :year in units))
+  end
+
+  # The one value a unit names in a value with a year: what `select/2`
+  # selects there, where that is one span. None is a date the value does not
+  # have, and several are for `select/2` to give.
+  defp selected_on(high, low, true = _anchored?) do
+    case select(high, low) do
+      {:ok, %IntervalSet{} = selected} -> the_one_selected(selected, high, low)
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp selected_on(high, low, false = _anchored?) do
+    {:error,
+     ArgumentError.exception(
+       "#{inspect(low)} cannot be placed on #{inspect(high)}: the two are written by " <>
+         "different units of a date (a month and its day, a week and its day, a day of the " <>
+         "year), which name one date only in a year. Place them on a value with a year."
+     )}
+  end
+
+  defp the_one_selected(selected, high, low) do
+    case IntervalSet.bounded?(selected) && IntervalSet.members(selected) do
+      [%Tempo.Interval{} = one] ->
+        {:ok, value_selected(one)}
+
+      [] ->
+        {:error,
+         InvalidDateError.exception(reason: "#{inspect(low)} names no date on #{inspect(high)}.")}
+
+      _several_or_unending ->
+        {:error,
+         ArgumentError.exception(
+           "#{inspect(low)} names more than one date on #{inspect(high)}, and at/2 and " <>
+             "on/2 place one. `Tempo.select/2` selects each of them."
+         )}
+    end
+  end
+
+  # A selected span that is one value's own is that value; any other, a
+  # week of a month, is the span.
+  defp value_selected(%Tempo.Interval{from: %__MODULE__{} = from, to: to} = selected) do
+    case Interval.next_unit_boundary(from) do
+      {:ok, {_lower, upper}, _unit} ->
+        if Compare.compare_endpoints(upper, to) == :same, do: from, else: selected
+
+      {:error, _reason} ->
+        selected
+    end
+  end
 
   # An unspecified year (`X*Y6M`) is no year, so it is where the year of the
   # value it is placed on goes.
