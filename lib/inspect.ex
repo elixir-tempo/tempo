@@ -483,10 +483,11 @@ defmodule Tempo.Inspect do
   defp zone_offset_trailer(%{zone_id: zone_id}) when is_binary(zone_id) and zone_id != "",
     do: []
 
-  defp zone_offset_trailer(%{zone_offset: minutes}) when is_integer(minutes) do
+  defp zone_offset_trailer(%{zone_offset: minutes} = extended) when is_integer(minutes) do
+    critical = if Map.get(extended, :zone_critical, false), do: "!", else: ""
     sign = if minutes < 0, do: "-", else: "+"
     absolute = abs(minutes)
-    ["[", sign, pad_two(div(absolute, 60)), ":", pad_two(rem(absolute, 60)), "]"]
+    ["[", critical, sign, pad_two(div(absolute, 60)), ":", pad_two(rem(absolute, 60)), "]"]
   end
 
   defp zone_offset_trailer(_), do: []

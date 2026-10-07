@@ -4,6 +4,10 @@
 
 ### Breaking changes
 
+* A time shift and a zone on one value are read as RFC 9557 §3.4 has them. `2022-07-08T00:14:07Z[Europe/Paris]` is 00:14:07 UTC as Paris's clock shows it (`~o"2022Y7M8DT2H14M7SZ2H[Europe/Paris]"`), where it was 00:14:07 on that clock, and a numeric offset that disagrees with an elective zone gives the moment, shown on the zone's clock, where the zone gave it; a critical zone that disagrees, written as an offset too (`[!+08:45]`), is a `Tempo.ZoneOffsetMismatchError`, and `strict: true` covers each end of an interval and each member of a set.
+
+* A shift of nothing is held in two ways: `Z`, and a zero written with a minus (`-00:00`), is `shift: [hour: 0]`, and a zero written as a shift (`+00`, `+00:00`, `Z0H`) is `shift: [hour: 0, minute: 0]`, where `+00` and `Z0H` were the first and `-00:00` the second. They are one time with no zone beside them, as ISO 8601-1 §4.3.13 has `Z` and `+00:00`.
+
 * A winter written as the season `24` is the one that starts in its year, as the astronomical winter `28` is: `~o"2026Y24M"` is `2026Y12M/2027Y3M`, where it was `2025Y12M/2026Y3M`. A year's four seasons run in the order of their numbers, so `{2026-21..2026-24}` is the four of them and `2026-24/2026-21` is refused as an interval whose end is before its start.
 
 * `Tempo.split/1` of a value that holds a selection of days gives the value and no time of day: `Tempo.split(~o"2026Y6ML1KN")` is `{~o"2026Y6ML1KN", nil}`, where it was `{~o"2026Y6M", ~o"L1KN"}`. A selection of times (`2018Y9MTLT8H20M3IN`) is still the time-of-day part.

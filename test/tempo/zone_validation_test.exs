@@ -4,6 +4,8 @@ defmodule Tempo.ZoneValidationTest do
   alias Tempo.Compare
   alias Tempo.Interval
 
+  @unix_epoch :calendar.datetime_to_gregorian_seconds({{1970, 1, 1}, {0, 0, 0}})
+
   doctest Tempo.ZoneOffsetMismatchError
 
   # Parse-time validation of zoned wall times: during a DST
@@ -213,14 +215,21 @@ defmodule Tempo.ZoneValidationTest do
                Compare.to_utc_seconds(pre_fb) == 3600
     end
 
-    test "an offset that matches no period falls back to the first" do
-      # +00:00 is neither EDT (-04) nor EST (-05); Tempo falls
-      # back to the first period (EDT).
-      ambiguous = Tempo.from_iso8601!("2024-11-03T01:30:00+00:00[America/New_York]")
-      default = Tempo.from_iso8601!("2024-11-03T01:30:00[America/New_York]")
+    test "an offset that is neither of the two gives the moment, shown on the zone's clock" do
+      # +00:00 is neither EDT (-04) nor EST (-05), so it disagrees with the
+      # zone, and the offset gives the moment (RFC 9557 §3.4, decided
+      # 2026-10-07): 01:30 UTC, which New York's clock shows as 21:30 the
+      # evening before. It was read as the first 01:30 on that clock.
+      read = Tempo.from_iso8601!("2024-11-03T01:30:00+00:00[America/New_York]")
 
-      assert Compare.to_utc_seconds(ambiguous) ==
-               Compare.to_utc_seconds(default)
+      shown =
+        ~D[2024-11-03]
+        |> DateTime.new!(~T[01:30:00], "Etc/UTC")
+        |> DateTime.shift_zone!("America/New_York")
+
+      assert Compare.to_utc_seconds(read) - @unix_epoch == DateTime.to_unix(shown)
+      assert {Tempo.day(read), Tempo.hour(read), Tempo.minute(read)} == {2, 21, 30}
+      assert Compare.offset_seconds(read.shift) == shown.utc_offset + shown.std_offset
     end
   end
 
@@ -606,14 +615,27 @@ defmodule Tempo.ZoneValidationTest do
     end
   end
 
-  describe "IXDTF offset/zone consistency (strict mode, RFC 9557 §4.2)" do
+  describe "IXDTF offset/zone consistency (strict mode, RFC 9557 §3.4)" do
     test "validate_zone_offset accepts an offset that matches the zone" do
       {:ok, t} = Tempo.from_iso8601("2022-11-20T10:37:00+01:00[Europe/Paris]")
       assert Tempo.validate_zone_offset(t) == :ok
     end
 
     test "validate_zone_offset flags an offset that disagrees with the zone" do
-      {:ok, t} = Tempo.from_iso8601("2022-11-20T10:37:00+05:00[Europe/Paris]")
+      # A value read from text is at its zone's offset once it is read, so
+      # one that holds a disagreement is made of its parts.
+      {:ok, t} =
+        Tempo.new(
+          year: 2022,
+          month: 11,
+          day: 20,
+          hour: 10,
+          minute: 37,
+          second: 0,
+          shift: [hour: 5],
+          zone: "Europe/Paris"
+        )
+
       assert {:error, %Tempo.ZoneOffsetMismatchError{} = error} = Tempo.validate_zone_offset(t)
       assert error.zone_id == "Europe/Paris"
       assert error.stated_offset == 5 * 3600

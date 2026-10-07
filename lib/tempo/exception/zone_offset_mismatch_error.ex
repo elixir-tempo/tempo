@@ -1,14 +1,17 @@
 defmodule Tempo.ZoneOffsetMismatchError do
   @moduledoc """
-  Exception raised (or returned) when an IXDTF value's explicit numeric
-  offset disagrees with its IANA time zone at the value's wall instant.
+  Exception raised (or returned) when a value's numeric offset disagrees
+  with the zone beside it at the value's reading.
 
-  An IXDTF string may carry both a numeric offset and a zone identifier,
-  for example `2022-11-20T10:37:00+05:00[Europe/Paris]`. Paris is
-  `+01:00` in November, so the stated `+05:00` is inconsistent. RFC 9557
-  §4.2 identifies this as a condition a consumer MAY treat as an error;
-  Tempo surfaces it through `Tempo.validate_zone_offset/1` and the
-  `strict: true` parse option rather than silently letting the zone win.
+  An IXDTF string may carry both a numeric offset and a zone, for
+  example `2022-11-20T10:37:00+05:00[Europe/Paris]`. Paris is `+01:00`
+  in November, so the stated `+05:00` is inconsistent. RFC 9557 §3.4 has
+  a reader act on that where the zone is critical (`[!Europe/Paris]`,
+  `[!+08:45]`) and lets it where the zone is elective. Tempo returns
+  this error for a critical zone and, with `strict: true`, for an
+  elective one; otherwise the offset gives the moment, and the value is
+  that moment as the zone's clock shows it. `Tempo.validate_zone_offset/1`
+  returns it for a value that holds a disagreement.
 
   """
 
@@ -36,8 +39,12 @@ defmodule Tempo.ZoneOffsetMismatchError do
     actual = Enum.map_join(zone_offsets, " or ", &format_offset/1)
 
     "Stated offset #{format_offset(stated)} disagrees with #{inspect(zone_id)} " <>
-      "(#{actual}) at #{wall_time}."
+      "(#{actual})#{at_the_reading(wall_time)}."
   end
+
+  # A value with no year is at no one reading to name.
+  defp at_the_reading(nil), do: ""
+  defp at_the_reading(wall_time), do: " at #{wall_time}"
 
   @doc """
   Format an offset in seconds as a signed `±HH:MM` string.

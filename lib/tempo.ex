@@ -832,14 +832,19 @@ defmodule Tempo do
   by zero or more tagged suffixes (`[u-ca=hebrew]`, `[_key=value]`).
   Any bracket may be prefixed with `!` to mark it critical —
   unrecognised critical suffixes cause the parse to fail; elective
-  suffixes are retained verbatim under `extended.tags`. A critical
-  flag on a time zone additionally enforces RFC 9557 §4.2 offset
-  consistency: a numeric offset that disagrees with the critical
-  zone is rejected with a `Tempo.ZoneOffsetMismatchError`. An
-  elective zone that disagrees with the offset is accepted, and the
-  value is read in the zone, the offset telling apart the two
-  readings of a repeated hour; pass `strict: true` to reject an
-  elective disagreement too.
+  suffixes are retained verbatim under `extended.tags`.
+
+  A time shift and a zone on one value may disagree (RFC 9557 §3.4).
+  `Z` states the time in UTC and says nothing of local time, so it
+  agrees with any zone: `2022-07-08T00:14:07Z[Europe/Paris]` is
+  00:14:07 UTC as Paris's clock shows it, 02:14:07. A numeric offset
+  says what local time is. One that disagrees with a critical zone
+  (`[!Europe/Paris]`, `[!+08:45]`) is a
+  `Tempo.ZoneOffsetMismatchError`. One that disagrees with an elective
+  zone gives the moment, and the value is that moment as the zone's
+  clock shows it; pass `strict: true` to refuse an elective
+  disagreement too. An offset the zone is at is kept, and tells apart
+  the two readings of a repeated hour.
 
   A value names a time in its zone. One whose every reading the
   clock there skips is a `Tempo.ZoneGapError`: 02:30 on the night
@@ -870,8 +875,9 @@ defmodule Tempo do
   * `:calendar` is the calendar module, as above.
 
   * `:strict` when `true` rejects a value whose numeric offset
-    disagrees with an elective IXDTF zone (RFC 9557 §4.2). Defaults
-    to `false`.
+    disagrees with an elective IXDTF zone (RFC 9557 §3.4), whether
+    the value stands alone, is an end of an interval or is a member
+    of a set. Defaults to `false`.
 
   ### Returns
 
@@ -930,14 +936,11 @@ defmodule Tempo do
     # Options form, and the default. `:calendar` selects the calendar
     # (default: the IXDTF `[u-ca=NAME]` suffix, else Gregorian);
     # `strict: true` rejects an IXDTF value whose numeric offset disagrees
-    # with its zone (RFC 9557 §4.2), via `Tempo.Compare.validate_zone_offset/1`.
-    # Strict only applies to a `%Tempo{}` result; intervals and durations
-    # pass straight through.
+    # with its zone (RFC 9557 §3.4), where the value is read
+    # (`on_the_clock_of_its_zone/2`): a value alone, each end of an
+    # interval and each member of a set.
     calendar = Keyword.get(options, :calendar, :from_ixdtf_or_default)
-
-    with {:ok, %Tempo{} = tempo} <- do_from_iso8601(string, calendar) do
-      enforce_strict(tempo, options)
-    end
+    do_from_iso8601(string, calendar, strict?(options))
   end
 
   def from_iso8601(string, calendar) when is_binary(string) do
@@ -945,12 +948,14 @@ defmodule Tempo do
     # not override the user's choice. This keeps the existing
     # `Tempo.from_iso8601(string, Calendrical.Hebrew)` idiom
     # working unchanged.
-    do_from_iso8601(string, calendar)
+    do_from_iso8601(string, calendar, false)
   end
 
-  defp do_from_iso8601(string, requested_calendar) do
+  defp strict?(options), do: Keyword.get(options, :strict, false) == true
+
+  defp do_from_iso8601(string, requested_calendar, strict?) do
     with {:ok, {tokens, extended}} <- Tokenizer.tokenize(string) do
-      tokens |> from_tokens(extended, requested_calendar) |> named_as_written(string)
+      tokens |> from_tokens(extended, requested_calendar, strict?) |> named_as_written(string)
     end
   end
 
@@ -1025,7 +1030,7 @@ defmodule Tempo do
   # in which tokenizer entry point produced the tokens — the calendar,
   # group, validation and IXDTF stages are identical whatever shape the
   # value turned out to be.
-  defp from_tokens(tokens, extended, requested_calendar) do
+  defp from_tokens(tokens, extended, requested_calendar, strict?) do
     with {:ok, effective_calendar} <- resolve_calendar(requested_calendar, extended),
          {:ok, parsed} <- Parser.parse(tokens, effective_calendar),
          # Endpoint calendars first: a group is expanded in its value's own
@@ -1042,9 +1047,12 @@ defmodule Tempo do
          {:ok, validated} <- Validation.validate(expanded, effective_calendar),
          attached = attach_extended(validated, extended),
          propagated = propagate_endpoint_frame(attached),
-         :ok <- Validation.validate_zone_existence(propagated),
-         :ok <- enforce_critical_zone_offset(propagated) do
-      {:ok, without_calendar_names(propagated)}
+         # Before the zone is asked whether it shows the reading: a time in
+         # UTC beside a zone is no reading of the zone's clock until it is
+         # shown on it.
+         {:ok, placed} <- on_the_clock_of_its_zone(propagated, strict?),
+         :ok <- Validation.validate_zone_existence(placed) do
+      {:ok, without_calendar_names(placed)}
     end
   end
 
@@ -1384,7 +1392,7 @@ defmodule Tempo do
     partial dates inherit from, when the input is text.
 
   * `:strict` when `true` rejects a value whose numeric offset
-    disagrees with its IXDTF zone (RFC 9557 §4.2). Defaults to `false`.
+    disagrees with its IXDTF zone (RFC 9557 §3.4). Defaults to `false`.
 
   ### Returns
 
@@ -1682,9 +1690,7 @@ defmodule Tempo do
     calendar = Keyword.get(options, :calendar, :from_ixdtf_or_default)
 
     with {:ok, {tokens, extended}} <- Tokenizer.tokenize(string, profile),
-         {:ok, value} <- from_tokens(tokens, extended, calendar) do
-      enforce_strict(value, options)
-    end
+         do: from_tokens(tokens, extended, calendar, strict?(options))
   end
 
   # A typed parser reads its ISO 8601 profile first. A string the
@@ -1759,32 +1765,166 @@ defmodule Tempo do
 
   defp enforce_strict(other, _options), do: {:ok, other}
 
-  # RFC 9557 §4.2: marking a zone critical (`[!Europe/Paris]`) makes
-  # offset/zone consistency mandatory — a disagreeing offset is rejected
-  # unconditionally, independent of the `strict:` option (which is the
-  # stricter, opt-in superset that also rejects *elective* disagreement).
-  # An elective (non-critical) zone that disagrees with the offset is
-  # accepted, and the value is read in the zone
-  # (`Tempo.Compare.validate_zone_offset/1`), so nothing is enforced.
-  defp enforce_critical_zone_offset(%__MODULE__{} = tempo) do
-    if zone_critical?(tempo), do: Compare.validate_zone_offset(tempo), else: :ok
-  end
+  ## ---------------------------------------------------------
+  ## A time shift and a zone on one value (RFC 9557 §3.4)
+  ## ---------------------------------------------------------
 
-  defp enforce_critical_zone_offset(%Interval{from: from, to: to}) do
-    with :ok <- enforce_critical_zone_offset(from) do
-      enforce_critical_zone_offset(to)
+  # A value read with a time shift and a zone beside it says two things of
+  # its offset from UTC, and they may disagree.
+  #
+  # `Z` says nothing of local time: RFC 9557 §2.2 has it mean that "the time
+  # in UTC is known, but the offset to local time is unknown", as `-00:00`
+  # meant in RFC 3339. So `2022-07-08T00:14:07Z[Europe/Paris]` never
+  # disagrees with its zone, critical or not, and is 00:14:07 UTC as
+  # Paris's clock shows it, 02:14:07 two hours ahead. It was read as
+  # 00:14:07 on that clock, two hours earlier, and refused where the zone
+  # was critical.
+  #
+  # A shift that is written as one says what local time is, and where the
+  # zone is at another offset on that reading the two disagree. A critical
+  # zone makes a reader act on that (`[!Europe/London]`, and `[!+08:45]`,
+  # whose flag was dropped), as `strict: true` does for an elective one, and
+  # the value is a `Tempo.ZoneOffsetMismatchError`. Otherwise the shift
+  # gives the moment (decided 2026-10-07): the value is that moment as the
+  # zone's clock shows it, so `…T00:14:07+01:00[Europe/Paris]` is 23:14:07
+  # UTC and is held as 01:14:07 in Paris. It was read as 00:14:07 on
+  # Paris's clock, an hour earlier.
+  #
+  # Held so, a value in a zone is always at its zone's offset, `Z` and
+  # `+00:00` beside an elective zone are the one value ISO 8601-1 §4.3.13
+  # has them be, and the zone's rules go on applying to whatever is made
+  # from the value. A value coarser than a second is shown on the zone's
+  # clock as `shift_zone/2` shows one: the value there where the two clocks
+  # differ by whole units of it, and otherwise the span it is.
+  #
+  # A value with no year names no moment to show, and is left as written.
+  defp on_the_clock_of_its_zone(
+         %__MODULE__{shift: [_ | _], extended: %{} = extended} = value,
+         strict?
+       ) do
+    case zone_beside(extended) do
+      nil -> {:ok, value}
+      zone -> on_the_clock_of(value, zone, strict?)
     end
   end
 
-  # A set's interval members, and those it excludes, are held to it as an
-  # interval on its own is.
-  defp enforce_critical_zone_offset(%Tempo.Set{set: members, except: except}) do
-    Enum.find_value(members ++ except, :ok, fn member ->
-      with :ok <- enforce_critical_zone_offset(member), do: nil
-    end)
+  defp on_the_clock_of_its_zone(%Interval{from: from, to: to} = interval, strict?) do
+    with {:ok, from} <- endpoint_on_the_clock(from, strict?),
+         {:ok, to} <- endpoint_on_the_clock(to, strict?) do
+      {:ok, %{interval | from: from, to: to}}
+    end
   end
 
-  defp enforce_critical_zone_offset(_other), do: :ok
+  defp on_the_clock_of_its_zone(%Tempo.Set{set: members, except: except} = set, strict?) do
+    with {:ok, members} <- each_on_the_clock(members, strict?),
+         {:ok, except} <- each_on_the_clock(except, strict?) do
+      {:ok, %{set | set: members, except: except}}
+    end
+  end
+
+  defp on_the_clock_of_its_zone(%Tempo.Range{first: first, last: last} = range, strict?) do
+    with {:ok, first} <- endpoint_on_the_clock(first, strict?),
+         {:ok, last} <- endpoint_on_the_clock(last, strict?) do
+      {:ok, %{range | first: first, last: last}}
+    end
+  end
+
+  defp on_the_clock_of_its_zone(other, _strict?), do: {:ok, other}
+
+  # An end is where its value starts, so one that is a span on the zone's
+  # clock is the start of it.
+  defp endpoint_on_the_clock(endpoint, strict?) do
+    case on_the_clock_of_its_zone(endpoint, strict?) do
+      {:ok, %Interval{from: start}} when is_struct(endpoint, __MODULE__) -> {:ok, start}
+      resolved -> resolved
+    end
+  end
+
+  defp each_on_the_clock(members, strict?) when is_list(members) do
+    members
+    |> Enum.reduce_while({:ok, []}, fn member, {:ok, placed} ->
+      case on_the_clock_of_its_zone(member, strict?) do
+        {:ok, value} -> {:cont, {:ok, [value | placed]}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+    |> reversed_members()
+  end
+
+  defp each_on_the_clock(members, _strict?), do: {:ok, members}
+
+  defp reversed_members({:ok, placed}), do: {:ok, Enum.reverse(placed)}
+  defp reversed_members({:error, _reason} = error), do: error
+
+  # The zone a suffix names: a zone of the database, or an offset.
+  defp zone_beside(%{zone_id: zone}) when is_binary(zone) and zone != "", do: zone
+  defp zone_beside(%{zone_offset: minutes}) when is_integer(minutes), do: {:offset, minutes}
+  defp zone_beside(_no_zone), do: nil
+
+  defp on_the_clock_of(%__MODULE__{shift: shift, time: time} = value, zone, strict?) do
+    cond do
+      not anchored?(value) ->
+        {:ok, value}
+
+      not Compare.point?(time) ->
+        several_moments_beside_a_zone(value, strict?)
+
+      Compare.no_local_offset?(shift) ->
+        shown_on(value, zone)
+
+      Compare.validate_zone_offset(value) == :ok ->
+        {:ok, value}
+
+      zone_critical?(value) or strict? ->
+        refused_beside_its_zone(value)
+
+      true ->
+        shown_on(value, zone)
+    end
+  end
+
+  # The reading is refused as one its zone's clock skips where it is one,
+  # which says more than that no offset of the zone's is the one stated.
+  defp refused_beside_its_zone(value) do
+    with :ok <- Validation.validate_zone_existence(value),
+         do: Compare.validate_zone_offset(value)
+  end
+
+  # A value that names several moments (a set or unspecified digits in a
+  # unit) agrees with its zone where each of them does. One that does not,
+  # or that is written in UTC, has a reading on the zone's clock for each
+  # moment and no one value there, which is not built.
+  defp several_moments_beside_a_zone(%__MODULE__{shift: shift} = value, strict?) do
+    cond do
+      Compare.no_local_offset?(shift) -> {:error, several_moments_error(value)}
+      Compare.validate_zone_offset(value) == :ok -> {:ok, value}
+      zone_critical?(value) or strict? -> Compare.validate_zone_offset(value)
+      true -> {:error, several_moments_error(value)}
+    end
+  end
+
+  # The moment a value is at its own shift, on the clock of the zone beside
+  # it, with the shift written in the shape it was and the zone as critical
+  # as it was.
+  defp shown_on(%__MODULE__{shift: written, extended: extended} = value, zone) do
+    at_its_shift = %{value | extended: %{extended | zone_id: nil, zone_offset: nil}}
+
+    with {:ok, shown} <- do_shift_zone(at_its_shift, zone) do
+      {:ok, written_as(shown, written, Map.get(extended, :zone_critical, false))}
+    end
+  end
+
+  defp written_as(%Interval{from: from, to: to} = span, written, critical?) do
+    %{span | from: written_as(from, written, critical?), to: written_as(to, written, critical?)}
+  end
+
+  defp written_as(%__MODULE__{shift: shift, extended: extended} = shown, written, critical?) do
+    %{
+      shown
+      | shift: shift && Zone.offset_as_written(Compare.offset_seconds(shift), written),
+        extended: %{extended | zone_critical: critical?}
+    }
+  end
 
   defp zone_critical?(%__MODULE__{extended: extended}) when is_map(extended),
     do: Map.get(extended, :zone_critical, false)
@@ -1827,7 +1967,7 @@ defmodule Tempo do
     partial dates inherit from, when the input is text.
 
   * `:strict` when `true` rejects a value whose numeric offset
-    disagrees with its IXDTF zone (RFC 9557 §4.2). Defaults to `false`.
+    disagrees with its IXDTF zone (RFC 9557 §3.4). Defaults to `false`.
 
   In text, a UTC offset such as `"+05:00"` becomes the value's shift,
   as `from_iso8601/1` reads it, and a week of the year
@@ -2878,12 +3018,14 @@ defmodule Tempo do
   Check that an IXDTF value's explicit numeric offset agrees with its
   IANA time zone at the value's wall instant.
 
-  A value such as `2022-11-20T10:37:00+05:00[Europe/Paris]` carries both
-  a numeric offset and a zone; Paris is `+01:00` in November, so the
-  stated `+05:00` is inconsistent. By default the zone wins and the
-  offset is consulted only for DST disambiguation; this surfaces the
-  disagreement instead (RFC 9557 §4.2). The same check backs the
-  `strict: true` option of `from_iso8601/2`.
+  A value may hold both a numeric offset and a zone, and the two may
+  disagree: Paris is an hour ahead of UTC in November, so 10:37 there
+  with an offset of five hours is inconsistent (RFC 9557 §3.4). A
+  value read from text never is, since `from_iso8601/2` settles a
+  disagreement where it reads one, so this is for a value made in
+  another way, as by `new/1` with a `:shift` and a `:zone`. A zone
+  written as an offset (`[+08:45]`) is checked as a named one is. The
+  same check backs the `strict: true` option of `from_iso8601/2`.
 
   ### Arguments
 
@@ -2986,6 +3128,7 @@ defmodule Tempo do
   # on the day New York's clocks go forward is cut to a day that begins at
   # −05:00, and was given the day at the offset of the hour.
   defp at_its_offset(%__MODULE__{} = value), do: Zone.at_its_offset(value)
+  defp at_its_offset({:ok, %__MODULE__{} = value}), do: {:ok, Zone.at_its_offset(value)}
   defp at_its_offset(other), do: other
 
   # A group of a set (`{1,2}G3MU`) is kept as a three-element entry that names
@@ -3762,7 +3905,7 @@ defmodule Tempo do
         do: extend_group(tempo),
         else: extend_by_finer_unit(tempo)
 
-    NotBuilt.result(extended)
+    extended |> at_its_offset() |> NotBuilt.result()
   end
 
   def extend(%Tempo{time: time}, unit) when is_list(time) do
@@ -5520,6 +5663,9 @@ defmodule Tempo do
 
   defp zone_offset_at("Etc/UTC", _utc_seconds), do: {:ok, 0}
 
+  # A zone written as an offset (`[+08:45]`) is at that offset always.
+  defp zone_offset_at({:offset, minutes}, _utc_seconds), do: {:ok, minutes * 60}
+
   defp zone_offset_at(zone, utc_seconds) do
     case TimeZoneDatabase.period_at_utc(zone, utc_seconds) do
       {:ok, period} -> {:ok, TimeZoneDatabase.total_offset(period)}
@@ -5563,6 +5709,13 @@ defmodule Tempo do
   # The value's annotations with `zone` in place of its own zone or offset
   # annotation: RFC 9557 gives a value one, and its offset is its shift. A
   # critical flag belonged to the zone it replaces.
+  defp in_zone_extended(extended, {:offset, minutes}) do
+    Map.merge(
+      extended || %{tags: %{}},
+      %{zone_id: nil, zone_offset: minutes, zone_critical: false}
+    )
+  end
+
   defp in_zone_extended(extended, zone) do
     Map.merge(
       extended || %{tags: %{}},

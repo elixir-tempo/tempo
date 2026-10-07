@@ -542,24 +542,41 @@ defmodule Tempo.Enumeration.Zone do
   ### Returns
 
   * The value, with its `:shift` the offset of its zone at its reading. A
-    value with no written offset or no named zone, one that is no date or
-    date and time of whole numbers, and one in a zone the database does not
-    know are returned as they are.
+    value with no written offset or no named zone, and one in a zone the
+    database does not know, are returned as they are. A value that names
+    several readings keeps an offset its zone is at on each of them, and
+    is otherwise returned with none.
 
   """
   @spec at_its_offset(Tempo.t()) :: Tempo.t()
   def at_its_offset(%Tempo{shift: [_ | _] = written, extended: %{zone_id: zone}} = value)
       when is_binary(zone) and zone != "" do
-    with {:ok, reading} <- value |> in_gregorian() |> first_reading(),
-         [_ | _] = offsets <- offsets_at(zone, reading),
-         false <- Compare.offset_seconds(written) in offsets do
-      %{value | shift: offset_as_written(hd(offsets), written)}
-    else
-      _as_it_is_written -> value
+    case value |> in_gregorian() |> first_reading() do
+      {:ok, reading} -> at_the_offset_of(value, written, offsets_at(zone, reading))
+      :no_one_reading -> at_one_offset_or_none(value)
     end
   end
 
   def at_its_offset(%Tempo{} = value), do: value
+
+  defp at_the_offset_of(value, _written, []), do: value
+
+  defp at_the_offset_of(value, written, [first | _rest] = offsets) do
+    if Compare.offset_seconds(written) in offsets,
+      do: value,
+      else: %{value | shift: offset_as_written(first, written)}
+  end
+
+  # A value that names several readings (a set or unspecified digits in a
+  # unit) has one written offset for all of them, which is right only where
+  # the zone is at it on each. Where it is not, the value is written with
+  # its zone and no offset, which gives each reading its own: the hours of
+  # the day New York's clocks go forward are at two.
+  defp at_one_offset_or_none(%Tempo{} = value) do
+    if Compare.validate_zone_offset(value) == :ok,
+      do: value,
+      else: %{value | shift: nil}
+  end
 
   # The first reading of a Gregorian date, or date and time, in gregorian
   # seconds: midnight for a date, the hour for an hour.

@@ -488,9 +488,11 @@ defmodule Tempo.Select.Test do
       # now reserves signed shifts for `Z`-prefixed forms (or the
       # 2-digit implicit form `-05`, `-0500`, `-05:30` — which are
       # unambiguous).
+      # `Z` alone says nothing of local time; a zero written with its units
+      # says that local time is UTC's, and is held with its minutes.
       valid_shifts = [
         {"Z", [hour: 0]},
-        {"Z0H", [hour: 0]},
+        {"Z0H", [hour: 0, minute: 0]},
         {"Z+1H", [hour: 1]},
         {"2026T12+05:30", [hour: 5, minute: 30]},
         {"2026T12-05", [hour: -5]},

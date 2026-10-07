@@ -1242,12 +1242,25 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # so `-00:30` stays negative as `[hour: 0, minute: -30]`. It is written
   # with a hyphen or with the minus sign itself (`−`, U+2212), which was
   # read and kept as a unit of the shift.
+  #
+  # A shift of nothing is held in one of two ways, which a zone beside it
+  # tells apart (RFC 9557 §3.4). `Z` alone states the time in UTC and says
+  # nothing of a local time, and so does a zero written with a minus
+  # (`-00:00`), which RFC 3339 §4.3 had for that before RFC 9557 §2.2 gave
+  # the meaning to `Z`: each is `[hour: 0]`. A zero written as a shift, with
+  # a plus or with its units (`+00`, `+00:00`, `Z0H`), says that local time
+  # is UTC's, and is held with its minutes, `[hour: 0, minute: 0]`. With no
+  # zone beside them the two are one time, as ISO 8601-1 §4.3.13 has `Z`
+  # and `+00:00`. A zero with its hour alone was `[hour: 0]` whichever way
+  # it was written, and `-00:00` was the shift `+00:00` is.
   def resolve_shift([{:sign, minus} | components]) when minus in [?-, ?−] do
-    negate_leading(components)
+    if Enum.all?(components, &match?({_unit, 0}, &1)),
+      do: [hour: 0],
+      else: negate_leading(components)
   end
 
   def resolve_shift([{:sign, ?+} | rest]) do
-    rest
+    with_its_minutes(rest)
   end
 
   def resolve_shift([?Z]) do
@@ -1259,8 +1272,11 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   end
 
   def resolve_shift(other) do
-    other
+    with_its_minutes(other)
   end
+
+  defp with_its_minutes(hour: 0), do: [hour: 0, minute: 0]
+  defp with_its_minutes(units), do: units
 
   defp negate_leading([{component, 0} | [_ | _] = rest]),
     do: [{component, 0} | negate_leading(rest)]

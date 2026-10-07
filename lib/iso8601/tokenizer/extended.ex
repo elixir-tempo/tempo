@@ -388,10 +388,12 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
     apply_zone(zone, critical, acc)
   end
 
-  # First segment: numeric offset is the time zone.
-  defp apply_payload({:offset, offset}, _critical, acc, 0) do
+  # First segment: numeric offset is the time zone. Its critical flag is
+  # kept as a zone name's is: RFC 9557 §3.4 has a reader act on an offset
+  # that disagrees with a critical zone, whichever way the zone is written.
+  defp apply_payload({:offset, offset}, critical, acc, 0) do
     case Validation.validate_ixdtf_offset_minutes(offset) do
-      :ok -> {:ok, %{acc | zone_offset: offset}}
+      :ok -> {:ok, %{acc | zone_offset: offset, zone_critical: critical}}
       {:error, _} = err -> err
     end
   end
@@ -422,7 +424,7 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
 
   defp apply_zone(zone, critical, acc) do
     if valid_zone?(zone) do
-      # Retain the critical flag: RFC 9557 §4.2 makes offset/zone
+      # Retain the critical flag: RFC 9557 §3.4 makes offset/zone
       # consistency mandatory for a critical zone, so the flag must
       # survive tokenizing to drive that check downstream.
       {:ok, %{acc | zone_id: zone, zone_critical: critical}}

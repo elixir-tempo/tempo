@@ -896,11 +896,15 @@ defmodule Tempo.Compare do
   Check that an IXDTF value's explicit numeric offset agrees with its
   IANA time zone at the value's wall instant.
 
-  When a value carries both a numeric offset and a zone identifier (e.g.
-  `2022-11-20T10:37:00+05:00[Europe/Paris]`), the offset is normally
-  consulted only to disambiguate a DST fall-back — the zone otherwise
-  wins. This check (RFC 9557 §4.2) flags the case where the stated
-  offset matches no offset the zone actually uses at that instant.
+  A value that holds both a numeric offset and a zone is placed by its
+  zone, the offset telling apart the two showings of a reading the
+  clock goes back through. This check (RFC 9557 §3.4) flags a stated
+  offset that is none the zone is at on the value's reading: the
+  reader settles such a disagreement where it reads one
+  (`Tempo.from_iso8601/2`), so a value that holds one was made another
+  way. A value the clock shows part of is at the offset the zone has
+  when it comes out of the gap, and a zone written as an offset
+  (`[+08:45]`) is at that offset.
 
   ### Arguments
 
@@ -921,6 +925,18 @@ defmodule Tempo.Compare do
   """
   @spec validate_zone_offset(Tempo.t()) ::
           :ok | {:error, Tempo.ZoneOffsetMismatchError.t()}
+
+  # A zone written as an offset (`[+08:45]`) is the offset it is, and a
+  # time shift beside it agrees with it only where it is that offset.
+  def validate_zone_offset(
+        %Tempo{extended: %{zone_offset: minutes}, shift: [_ | _] = shift} = tempo
+      )
+      when is_integer(minutes) do
+    if shift_to_seconds(shift) == minutes * 60,
+      do: :ok,
+      else: {:error, offset_zone_mismatch(tempo, shift_to_seconds(shift), minutes * 60)}
+  end
+
   def validate_zone_offset(%Tempo{extended: extended, shift: shift} = tempo) do
     zone_id = extended && Map.get(extended, :zone_id)
     stated = explicit_offset_seconds(extended, shift)
@@ -932,6 +948,35 @@ defmodule Tempo.Compare do
       true -> tempo |> span_starts() |> check_zone_offsets(zone_id, stated)
     end
   end
+
+  defp offset_zone_mismatch(%Tempo{} = tempo, stated, zone_offset) do
+    ZoneOffsetMismatchError.exception(
+      zone_id: ZoneOffsetMismatchError.format_offset(zone_offset),
+      stated_offset: stated,
+      zone_offsets: [zone_offset],
+      wall_time: wall_time_written(tempo)
+    )
+  end
+
+  # The reading a value is written with, where it has a year to be read by.
+  defp wall_time_written(%Tempo{time: [{:year, year} | _rest] = time, calendar: calendar})
+       when is_integer(year) and year >= 1 do
+    if whole_units?(time),
+      do: time |> wall_seconds(year, effective_calendar(calendar)) |> wall_seconds_to_iso(),
+      else: nil
+  end
+
+  defp wall_time_written(%Tempo{}), do: nil
+
+  @doc false
+  # Whether a time shift states the time in UTC and says nothing of a local
+  # time: `Z` alone, and a zero written with a minus (`-00:00`), each held
+  # as `[hour: 0]` (`Tempo.Iso8601.Tokenizer.Grammar.resolve_shift/1`). RFC
+  # 9557 §2.2 has `Z` mean that "the time in UTC is known, but the offset to
+  # local time is unknown", where `+00:00` says that local time is UTC's.
+  @spec no_local_offset?(keyword() | nil) :: boolean()
+  def no_local_offset?(hour: 0), do: true
+  def no_local_offset?(_shift), do: false
 
   # The moments a zoned value's offset is checked at: the value when it is one
   # point, and otherwise the start of each span it names (`2026-{01,07}-15`
@@ -971,7 +1016,9 @@ defmodule Tempo.Compare do
     case crisp_point(start) do
       {:ok, %Tempo{time: [{:year, year} | _rest] = time, calendar: calendar}}
       when is_integer(year) ->
-        time |> wall_seconds(year, effective_calendar(calendar)) |> check_wall(zone_id, stated)
+        time
+        |> wall_seconds(year, effective_calendar(calendar))
+        |> check_wall(zone_id, stated, wall_seconds_spanned(time))
 
       _no_wall_instant ->
         :ok
@@ -980,13 +1027,20 @@ defmodule Tempo.Compare do
 
   # Pre-common-era: the IANA data has no rules to confirm or refute
   # the stated offset, so accept it rather than consult the database.
-  defp check_wall(wall, _zone_id, _stated) when wall < @gregorian_seconds_year_1, do: :ok
-  defp check_wall(wall, zone_id, stated), do: do_check_zone_offset(wall, zone_id, stated)
+  defp check_wall(wall, _zone_id, _stated, _spanned) when wall < @gregorian_seconds_year_1,
+    do: :ok
 
-  defp do_check_zone_offset(wall, zone_id, stated) do
-    # A gap reading names no instant in the zone, so no offset can
-    # agree with it — the empty candidate list falls through to the
-    # mismatch error, preserving the pre-behaviour semantics.
+  defp check_wall(wall, zone_id, stated, spanned),
+    do: do_check_zone_offset(wall, zone_id, stated, spanned)
+
+  defp do_check_zone_offset(wall, zone_id, stated, spanned) do
+    # A reading the clock skips names no moment in the zone, so no offset
+    # agrees with it: the empty list of candidates falls through to the
+    # mismatch error. A value the clock shows part of starts when the clock
+    # comes out of the gap, and is at the offset the zone has then: the
+    # hour from 02:00 on Lord Howe Island on the morning its clocks go to
+    # 02:30 is half an hour at eleven hours ahead of UTC, and was held to
+    # agree with no offset, though every reading of it is at that one.
     offsets =
       case TimeZoneDatabase.period_at_wall(zone_id, wall) do
         {:ok, period} ->
@@ -995,7 +1049,12 @@ defmodule Tempo.Compare do
         {:ambiguous, first, second} ->
           [first, second] |> Enum.map(&TimeZoneDatabase.total_offset/1)
 
-        _gap_or_error ->
+        {:gap, _before, {later, gap_ends}} ->
+          if comes_out_within?(gap_ends, wall, spanned),
+            do: [TimeZoneDatabase.total_offset(later)],
+            else: []
+
+        _not_known ->
           []
       end
 

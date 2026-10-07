@@ -345,10 +345,10 @@ defmodule Tempo.Iso8601.Extended.Test do
     end
   end
 
-  ## RFC 9557 §4.2 — a critical `!` zone makes offset consistency mandatory.
+  ## RFC 9557 §3.4 — a critical `!` zone makes offset consistency mandatory.
   ## New York is -05:00 in January, so `+05:00` disagrees with the zone.
 
-  describe "critical zone offset consistency (RFC 9557 §4.2)" do
+  describe "critical zone offset consistency (RFC 9557 §3.4)" do
     test "critical zone retains its flag on the extended map" do
       assert {:ok, tempo} = Tempo.from_iso8601("2022-01-01T00:00:00-05:00[!America/New_York]")
       assert tempo.extended.zone_critical == true
@@ -373,12 +373,25 @@ defmodule Tempo.Iso8601.Extended.Test do
       assert {:ok, _tempo} = Tempo.from_iso8601("2022-01-01T00:00:00[!America/New_York]")
     end
 
-    test "elective zone with a disagreeing offset is accepted, and read in the zone" do
+    test "elective zone with a disagreeing offset is read at its offset, on the zone's clock" do
+      # Midnight at five hours ahead of UTC is 19:00 UTC the evening before,
+      # which New York's clock shows as 14:00. It was read as midnight on
+      # that clock, ten hours later (decided 2026-10-07).
       assert {:ok, tempo} =
                Tempo.from_iso8601("2022-01-01T00:00:00+05:00[America/New_York]")
 
-      assert Tempo.relation(tempo, Tempo.from_iso8601!("2022-01-01T00:00:00[America/New_York]")) ==
+      shown =
+        ~D[2022-01-01]
+        |> DateTime.new!(~T[00:00:00], "Etc/UTC")
+        |> DateTime.add(-5, :hour)
+        |> DateTime.shift_zone!("America/New_York")
+
+      assert {shown.day, shown.hour} == {31, 14}
+
+      assert Tempo.relation(tempo, Tempo.from_iso8601!("2021-12-31T14:00:00[America/New_York]")) ==
                :equals
+
+      assert Tempo.to_iso8601!(tempo) == "2021Y12M31DT14H0M0SZ-5H0M[America/New_York]"
     end
 
     test "strict: true is a superset — it rejects an elective disagreement too" do

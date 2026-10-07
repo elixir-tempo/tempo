@@ -201,7 +201,7 @@ event = ~o"2030-03-01T08:00:00[Europe/Paris]"
 
 # Today, the IANA data says this is UTC+1 (standard time in March).
 Tempo.shift_zone(event, "Etc/UTC")
-#=> {:ok, ~o"2030Y3M1DT7H0M0SZ[Etc/UTC][+00:00]"}
+#=> {:ok, ~o"2030Y3M1DT7H0M0SZ[Etc/UTC]"}
 
 # If IANA 2028a ships saying France abolished DST in 2027,
 # the next shift_zone returns a different UTC time
@@ -213,6 +213,8 @@ Tempo.shift_zone(event, "Etc/UTC")
 ### When to freeze
 
 There are cases where you **want** the UTC instant frozen — a CI build that must run "at exactly 03:00 UTC on 15 March 2030" regardless of how zones shift. Store those as UTC (`~o"2030-03-15T03:00:00Z"`). The `Z` suffix is the explicit promise: "this is a UTC instant, don't recompute."
+
+An offset written beside the zone freezes the instant too. `2030-03-01T08:00:00+01:00[Europe/Paris]` states both, and should Paris be at another offset by then the two disagree: the offset gives the moment, and the value is that moment as Paris's clock then shows it (RFC 9557 §3.4), unless the string is read with `strict: true`, which makes the disagreement an error. An event that is meant to stay at 8am on Paris's clock is stored with its zone and no offset.
 
 ### Principle
 
