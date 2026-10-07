@@ -165,7 +165,7 @@ defmodule Tempo.Interval do
     `:from`, the `:to` endpoint is derived lazily by
     `Tempo.to_interval/1`.
 
-  * `:recurrence` is a `pos_integer()` or `:infinity`.
+  * `:recurrence` is the number of occurrences, a `non_neg_integer()`, or `:infinity`. The default is `1`, one span.
 
   * `:repeat_rule` is a `t:Tempo.RRule.Rule.t/0` or `t:Tempo.t/0`.
 
@@ -214,8 +214,8 @@ defmodule Tempo.Interval do
          :ok <- validate_endpoint_types(from, to),
          {from, to} = propagate_zone({from, to}),
          :ok <- validate_from_to_order(from, to),
-         {:ok, unit} <- validate_unit(Keyword.get(options, :unit), from) do
-      recurrence = Keyword.get(options, :recurrence, 1)
+         {:ok, unit} <- validate_unit(Keyword.get(options, :unit), from),
+         {:ok, recurrence} <- validate_recurrence(Keyword.get(options, :recurrence, 1)) do
       duration = Keyword.get(options, :duration)
       repeat_rule = Keyword.get(options, :repeat_rule)
       metadata = Keyword.get(options, :metadata, %{})
@@ -231,6 +231,20 @@ defmodule Tempo.Interval do
          metadata: metadata
        }}
     end
+  end
+
+  # A recurrence is counted in occurrences: none or more, or no number for
+  # one without end.
+  defp validate_recurrence(:infinity), do: {:ok, :infinity}
+
+  defp validate_recurrence(count) when is_integer(count) and count >= 0, do: {:ok, count}
+
+  defp validate_recurrence(other) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.Interval.new/1 takes :recurrence as a number of occurrences, 0 or more, " <>
+         "or :infinity; got #{inspect(other)}"
+     )}
   end
 
   # `through:` closes the interval at the end of a value's span, so the

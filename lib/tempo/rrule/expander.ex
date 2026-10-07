@@ -142,6 +142,8 @@ defmodule Tempo.RRule.Expander do
 
   * `{:ok, %Tempo.Interval{}}`.
 
+  * `{:error, {:invalid_interval, interval}}` when the rule steps by other than a whole number of its frequency, one or more, and `{:error, {:invalid_count, count}}` when its count is other than a number of occurrences, none or more.
+
   ### Examples
 
       iex> rule = %Tempo.RRule.Rule{freq: :week, interval: 1, count: 5}
@@ -150,12 +152,30 @@ defmodule Tempo.RRule.Expander do
       {5, [week: 1]}
 
   """
-  @spec to_ast(Rule.t(), Tempo.t(), keyword()) :: {:ok, Interval.t()}
+  @spec to_ast(Rule.t(), Tempo.t(), keyword()) ::
+          {:ok, Interval.t()} | {:error, {:invalid_interval | :invalid_count, term()}}
   def to_ast(%Rule{} = rule, dtstart, options \\ [])
       when is_nil(dtstart) or is_struct(dtstart, Tempo) do
-    cadence = %Tempo.Duration{time: [{rule.freq, rule.interval}]}
+    with {:ok, interval} <- steps_by(rule.interval),
+         {:ok, recurrence} <- counted(rule.count) do
+      {:ok, recurring(rule, dtstart, interval, recurrence, options)}
+    end
+  end
 
-    recurrence = if is_integer(rule.count) and rule.count > 0, do: rule.count, else: :infinity
+  # A rule steps by a whole number of its frequency, one or more (RFC 5545
+  # §3.3.10, RFC 8984 §4.3.3), and where it has a count that is a number of
+  # occurrences, none or more. One that steps by nothing gave its start
+  # again for each of its count, and a count of none was read as no count.
+  defp steps_by(nil), do: {:ok, 1}
+  defp steps_by(interval) when is_integer(interval) and interval > 0, do: {:ok, interval}
+  defp steps_by(other), do: {:error, {:invalid_interval, other}}
+
+  defp counted(nil), do: {:ok, :infinity}
+  defp counted(count) when is_integer(count) and count >= 0, do: {:ok, count}
+  defp counted(other), do: {:error, {:invalid_count, other}}
+
+  defp recurring(%Rule{} = rule, dtstart, interval, recurrence, options) do
+    cadence = %Tempo.Duration{time: [{rule.freq, interval}]}
 
     base_metadata = Keyword.get(options, :metadata, %{})
 
@@ -168,15 +188,14 @@ defmodule Tempo.RRule.Expander do
       )
       |> put_if_given(:occurrence_base_to, Keyword.get(options, :base_to), &match?(%Tempo{}, &1))
 
-    {:ok,
-     %Interval{
-       from: dtstart,
-       to: rule.until,
-       duration: cadence,
-       recurrence: recurrence,
-       repeat_rule: repeat_rule(rule, dtstart),
-       metadata: metadata
-     }}
+    %Interval{
+      from: dtstart,
+      to: rule.until,
+      duration: cadence,
+      recurrence: recurrence,
+      repeat_rule: repeat_rule(rule, dtstart),
+      metadata: metadata
+    }
   end
 
   # The BY-rule filters become the `%Tempo{}` selection carried in the recurring

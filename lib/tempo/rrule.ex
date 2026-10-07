@@ -106,7 +106,7 @@ defmodule Tempo.RRule do
 
   * `{:ok, %Tempo.Interval{}}` on success.
 
-  * `{:error, reason}` on a malformed rule or unknown keyword, and for what RFC 7529's `RSCALE` and `SKIP` say that Tempo does not build: `{:unsupported_rscale, name}` for a calendar other than the Gregorian, `{:unsupported_skip, {skip, part}}` for `BACKWARD` or `FORWARD` beside a day counted from the end of a month that a month can lack (`BYMONTHDAY=-31`), `{:unsupported_skip, value}` for a `SKIP` that is none of the three, and `{:skip_without_rscale, skip}`. A `:from` that is not one value (an interval, a set) is `{:invalid_from, value}`.
+  * `{:error, reason}` on a malformed rule or unknown keyword, and for what RFC 7529's `RSCALE` and `SKIP` say that Tempo does not build: `{:unsupported_rscale, name}` for a calendar other than the Gregorian, `{:unsupported_skip, {skip, part}}` for `BACKWARD` or `FORWARD` beside a day counted from the end of a month that a month can lack (`BYMONTHDAY=-31`), `{:unsupported_skip, value}` for a `SKIP` that is none of the three, and `{:skip_without_rscale, skip}`. A `:from` that is not one value (an interval, a set) is `{:invalid_from, value}`, an `INTERVAL` that is not one or more is `{:invalid_interval, value}` and a `COUNT` below none is `{:invalid_count, value}`.
 
   ### Examples
 
@@ -280,8 +280,24 @@ defmodule Tempo.RRule do
     end
   end
 
-  defp parse_kv("INTERVAL", value), do: with_int(value, :interval)
-  defp parse_kv("COUNT", value), do: with_int(value, :count)
+  # RFC 5545 §3.3.10: "The INTERVAL rule part contains a positive integer",
+  # and a count is of occurrences, none or more. A rule that steps by
+  # nothing gave its start again for each of its count, one that steps back
+  # was walked to its cap, and a count below none was handed back as it was.
+  defp parse_kv("INTERVAL", value) do
+    case with_int(value, :interval) do
+      {:ok, {:interval, interval}} when interval < 1 -> {:error, {:invalid_interval, value}}
+      read_or_not_a_number -> read_or_not_a_number
+    end
+  end
+
+  defp parse_kv("COUNT", value) do
+    case with_int(value, :count) do
+      {:ok, {:count, count}} when count < 0 -> {:error, {:invalid_count, value}}
+      read_or_not_a_number -> read_or_not_a_number
+    end
+  end
+
   defp parse_kv("UNTIL", value), do: parse_until(value)
 
   defp parse_kv("BYMONTH", value), do: with_int_list(value, :bymonth)

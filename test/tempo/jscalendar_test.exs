@@ -447,4 +447,81 @@ defmodule Tempo.JSCalendarTest do
       assert IntervalSet.count(free) == 2
     end
   end
+
+  # A rule whose step is no step, whose count is none, or whose day of the
+  # week is no day (`test/tempo/recurrence_step_and_count_test.exs`). An
+  # interval of 0 gave the start again for each of its count, a count of 0
+  # was read as no count, and a day that is no day (`"TU"`, or one left
+  # out) was read as Monday. The measure for a day of the week is Elixir's
+  # own `Date.day_of_week/1`.
+  defp rule_event(rule) do
+    event(
+      ~s("start":"2026-06-01T09:00:00","duration":"PT1H",) <>
+        ~s("recurrenceRules":[{"@type":"RecurrenceRule",#{rule}}])
+    )
+  end
+
+  defp starts({:ok, %IntervalSet{} = set}),
+    do: Enum.map(IntervalSet.members(set), &Tempo.Interval.from/1)
+
+  defp dates({:ok, %IntervalSet{} = set}) do
+    for member <- IntervalSet.members(set) do
+      {:ok, date} = member |> Tempo.Interval.from() |> Tempo.trunc(:day) |> Tempo.to_date()
+      date
+    end
+  end
+
+  describe "a JSCalendar rule" do
+    test "that steps by nothing is refused, and one with a count of none has no occurrences" do
+      assert Tempo.JSCalendar.parse(rule_event(~s("frequency":"monthly","count":3,"interval":0))) ==
+               {:error, {:invalid_interval, 0}}
+
+      assert starts(Tempo.JSCalendar.parse(rule_event(~s("frequency":"daily","count":0)))) == []
+    end
+
+    test "names each day of the week by its two letters" do
+      # 1 June 2026 is a Monday, so the first of each day after it is in
+      # that week.
+      for {code, weekday} <- Enum.with_index(~w(mo tu we th fr sa su), 1) do
+        rule = ~s("frequency":"weekly","count":2,"byDay":[{"@type":"NDay","day":"#{code}"}])
+        on = dates(Tempo.JSCalendar.parse(rule_event(rule)))
+
+        assert {code, Enum.map(on, &Date.day_of_week/1)} == {code, [weekday, weekday]}
+
+        assert {code, on} ==
+                 {code,
+                  [Date.add(~D[2026-06-01], weekday - 1), Date.add(~D[2026-06-08], weekday - 1)]}
+      end
+    end
+
+    test "with a day of the week that is no day is refused" do
+      for day <- [
+            ~s("day":"xx"),
+            ~s("day":"TU"),
+            ~s("day":"monday"),
+            ~s("day":""),
+            ~s("nthOfPeriod":1)
+          ] do
+        rule = ~s("frequency":"weekly","count":3,"byDay":[{"@type":"NDay",#{day}}])
+
+        assert {^day, {:error, {:unsupported_day, _written}}} =
+                 {day, Tempo.JSCalendar.parse(rule_event(rule))}
+      end
+
+      assert Tempo.JSCalendar.parse(
+               rule_event(~s("frequency":"weekly","count":3,"firstDayOfWeek":"xx"))
+             ) ==
+               {:error, {:unsupported_day, "xx"}}
+
+      # A rule's weeks start on Monday where it does not say, and on the day
+      # it names where it does.
+      assert {:ok, %IntervalSet{}} =
+               Tempo.JSCalendar.parse(
+                 rule_event(~s("frequency":"weekly","count":3,"firstDayOfWeek":"su"))
+               )
+
+      assert {:ok, %IntervalSet{}} =
+               Tempo.JSCalendar.parse(rule_event(~s("frequency":"weekly","count":3)))
+    end
+  end
 end

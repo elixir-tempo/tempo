@@ -7374,6 +7374,7 @@ defmodule Tempo do
          {:ok, value} <- placed_on_window(value, Keyword.get(opts, :within)),
          :one_start <- recurrence_from_each_value(value, opts),
          :ok <- rule_has_a_date(value),
+         :ok <- counted_in_steps(value),
          :ok <- walkable(value) do
       case open_window_start(Keyword.get(opts, :within)) do
         {:ok, window_from} -> occurrences_from(value, window_from, opts)
@@ -7381,6 +7382,45 @@ defmodule Tempo do
         :bounded -> value |> materialise(opts) |> spans_between_points(value)
       end
     end
+  end
+
+  # A recurrence is counted in occurrences, none or more, and each is a step
+  # of its cadence on from the one before. A count below none and a cadence
+  # of no length are no recurrence, and are said so: an interval built with
+  # a count of -3 was handed back as it was given, and `R3/2026-06-01/P0D`
+  # gave its start three times, each an interval of no length.
+  defp counted_in_steps(%Interval{recurrence: recurrence} = interval)
+       when is_integer(recurrence) and recurrence < 0 do
+    {:error,
+     ConversionError.exception(
+       value: interval,
+       reason:
+         "A recurrence has a number of occurrences, none or more, and #{inspect(interval)} " <>
+           "has #{recurrence}."
+     )}
+  end
+
+  defp counted_in_steps(
+         %Interval{recurrence: recurrence, duration: %Tempo.Duration{time: time}} = interval
+       )
+       when recurrence not in [0, 1] do
+    if Enum.all?(time, &no_amount?/1),
+      do: {:error, steps_by_nothing_error(interval)},
+      else: :ok
+  end
+
+  defp counted_in_steps(_value), do: :ok
+
+  defp no_amount?({_unit, {amount, _precision}}), do: amount == 0
+  defp no_amount?({_unit, amount}), do: amount == 0
+
+  defp steps_by_nothing_error(%Interval{duration: cadence} = interval) do
+    ConversionError.exception(
+      value: interval,
+      reason:
+        "A recurrence steps by its cadence from one occurrence to the next, and " <>
+          "#{inspect(cadence)} is no length of time."
+    )
   end
 
   # A recurrence's rule that selects a day of a month, a weekday, a week or a

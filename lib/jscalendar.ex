@@ -78,7 +78,7 @@ if Code.ensure_loaded?(JSCalendar) do
 
     A rule's `skip` is read. `omit`, the default, passes over a month or a year that lacks the start's day, so a rule on the 31st lists the months of 31 days; `backward` keeps the last day of such a month, and `forward` the first day of the month after.
 
-    Three things a rule can say are reported, each as `{:error, {reason, value}}`, rather than read as something they are not: a `skip` beside a day counted from the end of a month that a month can lack, such as `-31` (`:unsupported_skip`); an `rscale` other than `gregorian`, a rule counted in another calendar (`:unsupported_rscale`); and a leap month such as `"3L"` (`:unsupported_month`).
+    Three things a rule can say are reported, each as `{:error, {reason, value}}`, rather than read as something they are not: a `skip` beside a day counted from the end of a month that a month can lack, such as `-31` (`:unsupported_skip`); an `rscale` other than `gregorian`, a rule counted in another calendar (`:unsupported_rscale`); a leap month such as `"3L"` (`:unsupported_month`); and a day of the week that is none of `mo` to `su` (`:unsupported_day`). An `interval` of `0` is `{:error, {:invalid_interval, 0}}`, and a `count` of `0` is a rule with no occurrences.
 
     """
 
@@ -437,19 +437,21 @@ if Code.ensure_loaded?(JSCalendar) do
       with {:ok, freq} <- frequency(rule.frequency),
            {:ok, months} <- months(rule.by_month),
            {:ok, skip} <- skip(rule.skip),
-           :ok <- gregorian(rule.rscale) do
+           :ok <- gregorian(rule.rscale),
+           {:ok, week_start} <- week_start(rule.first_day_of_week),
+           {:ok, days} <- byday(rule.by_day) do
         skip_built(%Rule{
           freq: freq,
           interval: rule.interval || 1,
           count: rule.count,
           until: rule.until && Tempo.from_elixir(rule.until),
-          wkst: weekday(rule.first_day_of_week) || 1,
+          wkst: week_start,
           skip: skip,
           bymonth: months,
           bymonthday: rule.by_month_day,
           byyearday: rule.by_year_day,
           byweekno: rule.by_week_no,
-          byday: byday(rule.by_day),
+          byday: days,
           byhour: rule.by_hour,
           byminute: rule.by_minute,
           bysecond: rule.by_second,
@@ -490,21 +492,31 @@ if Code.ensure_loaded?(JSCalendar) do
     defp gregorian(rscale) when rscale in ["gregorian", "gregory"], do: :ok
     defp gregorian(other), do: {:error, {:unsupported_rscale, other}}
 
-    defp weekday("mo"), do: 1
-    defp weekday("tu"), do: 2
-    defp weekday("we"), do: 3
-    defp weekday("th"), do: 4
-    defp weekday("fr"), do: 5
-    defp weekday("sa"), do: 6
-    defp weekday("su"), do: 7
-    defp weekday(_other), do: nil
+    # RFC 8984 §4.3.3 names a day of the week by its first two letters, in
+    # lower case. A name it does not have was read as Monday, so a rule for
+    # "TU", or for a day left out, recurred on Mondays.
+    @weekdays %{"mo" => 1, "tu" => 2, "we" => 3, "th" => 4, "fr" => 5, "sa" => 6, "su" => 7}
 
-    defp byday(nil), do: nil
-    defp byday([]), do: nil
+    defp weekday(day) do
+      case Map.fetch(@weekdays, day) do
+        {:ok, weekday} -> {:ok, weekday}
+        :error -> {:error, {:unsupported_day, day}}
+      end
+    end
+
+    # A rule's weeks start on Monday where it does not say.
+    defp week_start(nil), do: {:ok, 1}
+    defp week_start(day), do: weekday(day)
+
+    defp byday(nil), do: {:ok, nil}
+    defp byday([]), do: {:ok, nil}
 
     defp byday(days) when is_list(days) do
-      Enum.map(days, fn %NDay{} = day ->
-        {day.nth_of_period, weekday(day.day) || 1}
+      Enum.reduce_while(days, {:ok, []}, fn %NDay{} = day, {:ok, named} ->
+        case weekday(day.day) do
+          {:ok, weekday} -> {:cont, {:ok, named ++ [{day.nth_of_period, weekday}]}}
+          {:error, _unsupported} = error -> {:halt, error}
+        end
       end)
     end
 
