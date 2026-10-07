@@ -570,6 +570,59 @@ defmodule Tempo.WeekOfMonthTest do
       assert days(Tempo.to_interval(Tempo.from_iso8601!("R3/2026Y6M/P1M/FL7W1KN"))) == []
     end
 
+    test "is each month's from a set or a range of years, and from a set of months" do
+      wednesday = fn year, month -> seconds({Date.add(elem(week(year, month, 2), 0), 2), 1}) end
+
+      assert days(Tempo.to_interval(Tempo.from_iso8601!("R/{2026Y,2028Y}/P1M/FL2W3KN"))) ==
+               for(year <- [2026, 2028], month <- 1..12, do: wednesday.(year, month))
+
+      assert days(Tempo.to_interval(Tempo.from_iso8601!("R/{2026Y..2027Y}/P1M/FL2W3KN"))) ==
+               for(year <- 2026..2027, month <- 1..12, do: wednesday.(year, month))
+
+      assert spans(Tempo.to_interval(Tempo.from_iso8601!("R/{2026Y6M,2026Y9M}/P1M/FL2WN"))) ==
+               for(month <- [6, 9], do: seconds(week(2026, month, 2)))
+    end
+
+    test "is its days in whatever order a rule built by hand holds its parts" do
+      # A rule is read with its parts from the coarsest, and one built with
+      # the week last starts from a month, with no day to move.
+      rule = %Tempo{time: [selection: [day_of_week: 3, week: 2]], calendar: Calendrical.Gregorian}
+
+      recurrence =
+        Interval.new!(from: ~o"2026-06", duration: ~o"P1M", recurrence: 2, repeat_rule: rule)
+
+      assert days(Tempo.to_interval(recurrence)) ==
+               for(month <- 6..7, do: seconds({Date.add(elem(week(2026, month, 2), 0), 2), 1}))
+    end
+
+    test "as the calendar's own week is refused in a rule of months, and limits one from a date" do
+      for {text, options} <- [
+            {"R2/2026Y6M/P1M/FL2wN", []},
+            {"R/../P1M/FL2wN", [within: ~o"2026"]}
+          ] do
+        assert {^text, {:error, %ConversionError{reason: :not_built, target: :week_of_month}}} =
+                 {text, Tempo.to_interval(Tempo.from_iso8601!(text), options)}
+      end
+
+      # 8 June is in the calendar's week 24 of 2026 and of 2027, and the rule
+      # keeps the months whose 8th is.
+      for year <- [2026, 2027] do
+        assert Calendrical.Gregorian.week_of_year(year, 6, 8) == {year, 24}
+      end
+
+      {:ok, kept} = Tempo.to_interval(Tempo.from_iso8601!("R2/2026-06-08/P1M/FL24wN"))
+
+      assert Enum.map(IntervalSet.members(kept), &Interval.from/1) ==
+               [~o"2026-06-08", ~o"2027-06-08"]
+    end
+
+    test "is refused in a rule of a calendar whose year begins within a month" do
+      for text <- ["R2/1750Y6M/P1M/FL2WN", "R2/1750Y6M/P1M/FL2W3KN"] do
+        assert {^text, {:error, %ConversionError{reason: :not_built, calendar: March25}}} =
+                 {text, Tempo.to_interval(Tempo.from_iso8601!(text, March25))}
+      end
+    end
+
     test "is the day its calendar numbers in the week, where the calendar cuts a month's weeks short" do
       # The days of the second week of Adar 5787, as Calendrical numbers
       # them, and the one of them that is a Wednesday.
