@@ -3108,8 +3108,20 @@ defmodule Tempo do
   value to it, as it extends and rounds one to it. A week of a calendar
   of months is extended to the date of its first day.
 
+  ## Truncating an interval
+
+  An interval truncated is the whole units it touches: its start is
+  taken down to the start of its unit, and its end up to the end of the
+  unit it is in, or left where it stands on the start of one. One
+  written with a duration is counted to its ends first, an open end
+  stays open, and a recurrence is no one interval.
+
+      iex> Tempo.trunc(~o"2026-06-15T10:30/2026-06-15T12:45", :hour)
+      ~o"2026Y6M15DT10H/T13H"
+
   """
-  @spec trunc(tempo :: t, truncate_to :: time_unit()) :: t | {:error, error_reason()}
+  @spec trunc(tempo :: t | Tempo.Interval.t(), truncate_to :: time_unit()) ::
+          t | Tempo.Interval.t() | {:error, error_reason()}
   def trunc(tempo, truncate_to \\ :day)
 
   def trunc(%__MODULE__{} = tempo, truncate_to) do
@@ -3123,7 +3135,67 @@ defmodule Tempo do
     end
   end
 
+  # An interval truncated is the whole units it touches (decided 2026-10-07):
+  # its start is taken down to the start of the unit it is in, and its end
+  # up to the end of the unit it is in, or left where it stands on the start
+  # of one. Half past ten to a quarter to one, truncated to the hour, is ten
+  # to one.
+  def trunc(%Interval{} = interval, truncate_to) do
+    with {:ok, %Interval{from: from, to: to} = span} <- with_its_ends(interval, "trunc/2"),
+         {:ok, from} <- end_moved(from, &trunc(&1, truncate_to)),
+         {:ok, to} <- end_moved(to, &taken_up(&1, truncate_to)) do
+      %{span | from: from, to: to}
+    end
+  end
+
   def trunc(value, _truncate_to), do: {:error, not_one_value("trunc/2", value)}
+
+  # An end taken up to the start of the next unit, or left on the start of
+  # the unit it is on. One written to a coarser unit is on the start of one
+  # already, and `trunc/2` gives it back.
+  defp taken_up(%__MODULE__{} = to, unit) do
+    with %__MODULE__{} = down <- trunc(to, unit) do
+      if Compare.compare_endpoints(down, to) == :same,
+        do: down,
+        else: shift(down, [{unit, 1}])
+    end
+  end
+
+  # An interval as its two ends: one written with a duration is counted to
+  # them, and an end that is open stays open. A recurrence is not one
+  # interval, and nor is one whose start or end holds a set.
+  defp with_its_ends(%Interval{recurrence: 1, duration: nil} = interval, _function),
+    do: {:ok, interval}
+
+  defp with_its_ends(%Interval{recurrence: 1} = interval, function) do
+    case to_interval(interval) do
+      {:ok, %Interval{} = span} -> {:ok, span}
+      {:ok, _several_spans} -> {:error, not_one_interval(function, interval)}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp with_its_ends(%Interval{} = recurrence, function),
+    do: {:error, not_one_interval(function, recurrence)}
+
+  defp not_one_interval(function, value) do
+    ArgumentError.exception(
+      "Tempo.#{function} takes one date or time value or one interval, and " <>
+        "#{inspect(value)} is not one: it is a recurrence, or it names several spans."
+    )
+  end
+
+  # An end of an interval moved by what moves a value, an open end staying
+  # open. What gives several values for one end gives no one end.
+  defp end_moved(%__MODULE__{} = endpoint, move) do
+    case move.(endpoint) do
+      %__MODULE__{} = moved -> {:ok, moved}
+      {:error, _reason} = error -> error
+      _several -> {:error, ConversionError.exception(value: endpoint, reason: :grouped_component)}
+    end
+  end
+
+  defp end_moved(open_or_absent, _move), do: {:ok, open_or_absent}
 
   # A value written with an offset, cut or rounded to a coarser unit or
   # placed at another time, is at the offset its zone is at on the reading
@@ -3336,8 +3408,17 @@ defmodule Tempo do
       iex> Tempo.round ~o"T23:45", :hour
       ~o"T0H"
 
+  An interval rounded has each end taken to the start of the unit
+  nearer it, and an end written to a coarser unit left as it is. An
+  interval shorter than the unit may be left with its two ends on one
+  start, holding nothing.
+
+      iex> Tempo.round(~o"2026-06-15T10:30/2026-06-15T12:45", :hour)
+      ~o"2026Y6M15DT11H/T13H"
+
   """
-  @spec round(tempo :: t, round_to :: time_unit()) :: t | {:error, error_reason()}
+  @spec round(tempo :: t | Tempo.Interval.t(), round_to :: time_unit()) ::
+          t | Tempo.Interval.t() | {:error, error_reason()}
   def round(tempo, round_to \\ :day)
 
   def round(%__MODULE__{} = tempo, round_to) do
@@ -3351,7 +3432,28 @@ defmodule Tempo do
     end
   end
 
+  # An interval rounded has each end taken to the start of the unit nearer
+  # it (decided 2026-10-07): half past ten to a quarter to one, rounded to
+  # the hour, is eleven to one. An end written to a coarser unit is on the
+  # start of one already.
+  def round(%Interval{} = interval, round_to) do
+    with {:ok, unit} <- validate_unit(round_to),
+         {:ok, %Interval{from: from, to: to} = span} <- with_its_ends(interval, "round/2"),
+         {:ok, from} <- end_moved(from, &rounded_end(&1, unit)),
+         {:ok, to} <- end_moved(to, &rounded_end(&1, unit)) do
+      %{span | from: from, to: to}
+    end
+  end
+
   def round(value, _round_to), do: {:error, not_one_value("round/2", value)}
+
+  defp rounded_end(%__MODULE__{} = endpoint, unit) do
+    {written_to, _span} = resolution(endpoint)
+
+    if Unit.compare(unit, written_to) == :lt,
+      do: endpoint,
+      else: round(endpoint, unit)
+  end
 
   # A value's qualifications name the units it holds, so one that has dropped
   # a unit has dropped its qualifier.
@@ -6297,9 +6399,17 @@ defmodule Tempo do
   §3.3.5), and an hour that lands on a repeated reading carries its
   offset, so it names its own side of the fold.
 
+  An interval is shifted by moving both its ends, and keeps its length.
+  Each end is shifted as a value is. A month or a year on, two dates may
+  land on a shorter month and fewer days apart than they were (29 and 31
+  January are both 28 February), so the end is moved on by the days that
+  makes up, and the interval is as many days long as it was. One written
+  with a duration keeps its duration, an open end stays open, and a
+  recurrence is shifted by its start.
+
   ### Arguments
 
-  * `tempo` is any `t:t/0`.
+  * `tempo` is any `t:t/0` or `t:Tempo.Interval.t/0`.
 
   * `shift` is either a `t:Tempo.Duration.t/0`, or a keyword list of
     `{unit, amount}` pairs such as `[month: 1, day: -5]` or
@@ -6452,9 +6562,22 @@ defmodule Tempo do
       iex> Tempo.shift(~o"2026-06-15T10:30", ~o"PT0S", skipping: meeting)
       ~o"2026Y6M15DT11H0M"
 
+  A booking a day on is at the same times the day after, and two days at
+  the end of January are two days a month on:
+
+      iex> Tempo.shift(~o"2026-06-15T10:30/2026-06-15T12:45", day: 1)
+      ~o"2026Y6M16DT10H30M/T12H45M"
+
+      iex> Tempo.shift(~o"2026-01-29/2026-01-31", month: 1)
+      ~o"2026Y2M28D/3M2D"
+
   """
-  @spec shift(t(), Tempo.Duration.t() | keyword(), keyword()) ::
-          t() | Tempo.Set.t() | Tempo.IntervalSet.t() | {:error, error_reason()}
+  @spec shift(t() | Tempo.Interval.t(), Tempo.Duration.t() | keyword() | String.t(), keyword()) ::
+          t()
+          | Tempo.Interval.t()
+          | Tempo.Set.t()
+          | Tempo.IntervalSet.t()
+          | {:error, error_reason()}
   def shift(tempo, shift, options \\ [])
 
   def shift(%Tempo{calendar: nil} = tempo, shift, options),
@@ -6505,12 +6628,132 @@ defmodule Tempo do
     end
   end
 
+  # An interval shifted has both its ends moved, and keeps its length
+  # (decided 2026-10-07): half past ten to a quarter to one, a day on, is
+  # the same times the day after. Each end is shifted as a value is. A month
+  # or a year on, the two may land on a shorter month and fewer days apart
+  # than they were (29 and 31 January, a month on, are both 28 February), so
+  # the end is then moved on by the days that makes up, and the interval is
+  # as many days long as it was. One written with a duration keeps the
+  # duration, and an open end stays open.
+  def shift(%Interval{} = interval, shift, options) when is_list(options) do
+    if skipping?(shift, options),
+      do: {:error, skipping_an_interval(interval)},
+      else: shift_interval(interval, shift, options, months_and_years_apart(shift))
+  end
+
   def shift(tempo, shift, _options) do
     {:error,
      ArgumentError.exception(
-       "Tempo.shift/3 shifts a Tempo value by a duration or by keyword units, not " <>
-         "#{inspect(tempo)} by #{inspect(shift)}."
+       "Tempo.shift/3 shifts a Tempo value or an interval by a duration or by keyword " <>
+         "units, not #{inspect(tempo)} by #{inspect(shift)}."
      )}
+  end
+
+  defp skipping?(shift, options) do
+    Keyword.has_key?(options, :skipping) or
+      (is_list(shift) and Keyword.keyword?(shift) and Keyword.has_key?(shift, :skipping))
+  end
+
+  defp skipping_an_interval(interval) do
+    ArgumentError.exception(
+      "Tempo.shift/3 with :skipping walks free time from one moment, and " <>
+        "#{inspect(interval)} has two ends: shift its start, and count its length from there."
+    )
+  end
+
+  # The months and years a shift counts, apart from what else it counts: a
+  # date can land on a shorter month than it left only by them, so they are
+  # counted first, as a value's shift counts them, and the days made up.
+  defp months_and_years_apart(%Duration{time: time}), do: months_and_years_apart(time)
+
+  defp months_and_years_apart(units) when is_list(units) do
+    if Keyword.keyword?(units) and Enum.all?(units, fn {_unit, amount} -> is_number(amount) end),
+      do: Enum.split_with(units, fn {unit, _amount} -> unit in [:year, :month] end),
+      else: :as_given
+  end
+
+  defp months_and_years_apart(text) when is_binary(text) do
+    case from_iso8601(text) do
+      {:ok, %Duration{} = duration} -> months_and_years_apart(duration)
+      _no_duration -> :as_given
+    end
+  end
+
+  defp months_and_years_apart(_other), do: :as_given
+
+  # A shift of no months or years, and one that is no duration, which each
+  # end refuses in its own words.
+  defp shift_interval(interval, shift, options, apart)
+       when apart == :as_given or elem(apart, 0) == [],
+       do: shift_ends(interval, &shift(&1, shift, options), :as_they_land)
+
+  defp shift_interval(interval, _shift, _options, {months_and_years, []}),
+    do: shift_ends(interval, &shift(&1, Duration.build(months_and_years)), :as_many_days_on)
+
+  defp shift_interval(interval, _shift, _options, {months_and_years, rest}) do
+    with %Interval{} = by_the_calendar <-
+           shift_ends(interval, &shift(&1, Duration.build(months_and_years)), :as_many_days_on) do
+      shift_ends(by_the_calendar, &shift(&1, Duration.build(rest)), :as_they_land)
+    end
+  end
+
+  defp shift_ends(%Interval{from: from, to: to} = interval, shift_end, :as_they_land) do
+    with {:ok, shifted_from} <- end_moved(from, shift_end),
+         {:ok, shifted_to} <- end_moved(to, shift_end) do
+      %{interval | from: shifted_from, to: shifted_to}
+    end
+  end
+
+  defp shift_ends(%Interval{from: from, to: to} = interval, shift_end, :as_many_days_on) do
+    with {:ok, shifted_from} <- end_moved(from, shift_end),
+         {:ok, shifted_to} <- end_moved(to, shift_end),
+         {:ok, shifted_to} <- as_many_days_on(shifted_to, shifted_from, interval) do
+      %{interval | from: shifted_from, to: shifted_to}
+    end
+  end
+
+  # The end of an interval of two dates, as many days from its start as it
+  # was before the two were shifted.
+  defp as_many_days_on(
+         %__MODULE__{} = shifted_to,
+         %__MODULE__{} = shifted_from,
+         %Interval{
+           from: %__MODULE__{} = from,
+           to: %__MODULE__{} = to,
+           recurrence: 1,
+           duration: nil
+         }
+       ) do
+    case {days_between(from, to), days_between(shifted_from, shifted_to)} do
+      {days, days} ->
+        {:ok, shifted_to}
+
+      {days, landed} when is_integer(days) and is_integer(landed) ->
+        end_moved(shifted_to, &shift(&1, day: days - landed))
+
+      _no_two_dates ->
+        {:ok, shifted_to}
+    end
+  end
+
+  defp as_many_days_on(shifted_to, _shifted_from, _interval), do: {:ok, shifted_to}
+
+  defp days_between(%__MODULE__{} = from, %__MODULE__{} = to) do
+    with {:ok, %Date{} = first} <- date_of(from),
+         {:ok, %Date{} = last} <- date_of(to) do
+      Date.diff(last, first)
+    else
+      _no_date -> nil
+    end
+  end
+
+  # The date an end is on, where it is written to the day or finer.
+  defp date_of(%__MODULE__{time: time} = endpoint) do
+    if Keyword.has_key?(time, :day) or Keyword.has_key?(time, :day_of_week) or
+         Keyword.has_key?(time, :day_of_year),
+       do: endpoint |> trunc(:day) |> to_date(),
+       else: :error
   end
 
   # The units a value is shifted by are a duration's: a number of each, and a

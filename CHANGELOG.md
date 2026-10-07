@@ -237,6 +237,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Added
 
+* `Tempo.shift/3`, `Tempo.trunc/2` and `Tempo.round/2` take an interval: a shift moves both ends and keeps the length (two days at the end of January are two days a month on, `2026-02-28/2026-03-02`), `trunc/2` gives the whole units the interval touches, and `round/2` takes each end to the unit nearer it. `~o"2026-06-15T10:30/2026-06-15T12:45"` truncated to the hour is `T10/T13` and rounded to it `T11/T13`.
+
 * Sets of durations are read (ISO 8601-2 §6.5): `{P1D,P2D}`, `[P1M2S,P1M3S]`, and a range from one duration to another that differs in its last unit, `{P1M2S..P1M5S}`, which is the four durations it names. Such a set names lengths of time and no time, so `Tempo.to_interval/2` and the set operations return a `Tempo.ConversionError` for it, as they do for one duration.
 
 * One of several values in a unit is read in the extended format, as it is in the explicit one: `2026-[01,03]` is `~o"[2026Y1M,2026Y3M]"`, and so are a day, a week, an hour, a minute or a second after its separator and one of several years before one (`[2026,2027]-01`). A time shift after a set is the shift of each member that has none, so `{2026-01-01T10:00,2026-03-01T10:00}Z` is the two values at `Z`; each was a `Tempo.ParseError`.

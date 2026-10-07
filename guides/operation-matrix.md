@@ -78,23 +78,23 @@ The three tables are three levels of guarantee.
 | Month day `6M15D` | 4 of 11 | all | 2 of 9 | all | all | all | 2 of 8 | 4 of 5 | 13 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.UnanchoredError` |
 | Weekday `3K` | 4 of 11 | all | 8 of 9 | all | all | 10 of 11 | 2 of 8 | 3 of 5 | 13 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.ResolutionError`, `Tempo.UnanchoredError` |
 | Last of its cycle `T23H` | 4 of 11 | all | 8 of 9 | all | all | 9 of 11 | 2 of 8 | 4 of 5 | 13 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.ResolutionError`, `Tempo.UnanchoredError` |
-| Interval `2026-06-01/2026-07-01` | 4 of 11 | all | 8 of 9 | all | all | 2 of 11 | 2 of 8 | all | 5 of 18 | `ArgumentError`, `Tempo.ConversionError` |
-| Interval, start and duration `2026-06-01/P1M` | 4 of 11 | all | 8 of 9 | all | all | 2 of 11 | 2 of 8 | all | 5 of 18 | `ArgumentError`, `Tempo.ConversionError` |
-| Interval, duration and end `P1M/2026-07-01` | 4 of 11 | all | 8 of 9 | all | all | 2 of 11 | 2 of 8 | all | 5 of 18 | `ArgumentError`, `Tempo.ConversionError` |
-| Interval, open end `2026-06-01/..` | 3 of 11 | 2 of 4 | 8 of 9 | 1 of 21 | none | 2 of 11 | 1 of 8 | 4 of 5 | 9 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.IntervalEndpointsError`, `Tempo.UnboundedSetError` |
-| Interval, open start `../2026-06-01` | 3 of 11 | none | 8 of 9 | 1 of 21 | none | 2 of 11 | none | 3 of 5 | 2 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.IntervalEndpointsError` |
-| Interval, open both ends `../..` | 3 of 11 | none | 8 of 9 | 1 of 21 | none | 2 of 11 | none | 3 of 5 | 2 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.IntervalEndpointsError` |
-| Interval, no year `T22H/T2H` | 3 of 11 | all | 8 of 9 | 6 of 21 | all | 2 of 11 | 2 of 8 | 4 of 5 | 7 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.IntervalEndpointsError`, `Tempo.UnanchoredError` |
-| Interval, no year, open end `T10H/..` | 2 of 11 | 2 of 4 | 8 of 9 | 1 of 21 | none | 2 of 11 | 2 of 8 | 3 of 5 | 9 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.IntervalEndpointsError`, `Tempo.UnanchoredError` |
-| Interval, two resolutions `2026/2026-03` | 3 of 11 | all | 8 of 9 | all | all | 2 of 11 | 2 of 8 | all | 4 of 18 | `ArgumentError`, `Tempo.ConversionError` |
-| Interval, week to date `2026-W25/2026-07-01` | 3 of 11 | all | 8 of 9 | all | all | 2 of 11 | 2 of 8 | all | 8 of 18 | `ArgumentError`, `Tempo.ConversionError` |
-| Interval, zoned `2026-06-15T09:00[Europe/Paris]/2026-06-15T17:00[Europe/Paris]` | 3 of 11 | all | 8 of 9 | all | all | none | 2 of 8 | all | 7 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.IntervalEndpointsError` |
-| Interval, two zones `2026-06-15T10:00+02:00/2026-06-15T12:00Z` | 3 of 11 | all | 8 of 9 | all | all | 2 of 11 | 2 of 8 | all | 7 of 18 | `ArgumentError`, `Tempo.ConversionError` |
+| Interval `2026-06-01/2026-07-01` | 4 of 11 | all | 8 of 9 | all | all | 7 of 11 | 2 of 8 | all | 5 of 18 | `ArgumentError`, `Tempo.ConversionError` |
+| Interval, start and duration `2026-06-01/P1M` | 4 of 11 | all | 8 of 9 | all | all | 7 of 11 | 2 of 8 | all | 5 of 18 | `ArgumentError`, `Tempo.ConversionError` |
+| Interval, duration and end `P1M/2026-07-01` | 4 of 11 | all | 8 of 9 | all | all | 7 of 11 | 2 of 8 | all | 5 of 18 | `ArgumentError`, `Tempo.ConversionError` |
+| Interval, open end `2026-06-01/..` | 3 of 11 | 2 of 4 | 8 of 9 | 1 of 21 | none | 7 of 11 | 1 of 8 | 4 of 5 | 9 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.IntervalEndpointsError`, `Tempo.UnboundedSetError` |
+| Interval, open start `../2026-06-01` | 3 of 11 | none | 8 of 9 | 1 of 21 | none | 7 of 11 | none | 3 of 5 | 2 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.IntervalEndpointsError` |
+| Interval, open both ends `../..` | 3 of 11 | none | 8 of 9 | 1 of 21 | none | 7 of 11 | none | 3 of 5 | 2 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.IntervalEndpointsError` |
+| Interval, no year `T22H/T2H` | 3 of 11 | all | 8 of 9 | 6 of 21 | all | 5 of 11 | 2 of 8 | 4 of 5 | 7 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.IntervalEndpointsError`, `Tempo.ResolutionError`, `Tempo.UnanchoredError` |
+| Interval, no year, open end `T10H/..` | 2 of 11 | 2 of 4 | 8 of 9 | 1 of 21 | none | 5 of 11 | 2 of 8 | 3 of 5 | 9 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.IntervalEndpointsError`, `Tempo.ResolutionError`, `Tempo.UnanchoredError` |
+| Interval, two resolutions `2026/2026-03` | 3 of 11 | all | 8 of 9 | all | all | 7 of 11 | 2 of 8 | all | 4 of 18 | `ArgumentError`, `Tempo.ConversionError` |
+| Interval, week to date `2026-W25/2026-07-01` | 3 of 11 | all | 8 of 9 | all | all | 7 of 11 | 2 of 8 | all | 8 of 18 | `ArgumentError`, `Tempo.ConversionError` |
+| Interval, zoned `2026-06-15T09:00[Europe/Paris]/2026-06-15T17:00[Europe/Paris]` | 3 of 11 | all | 8 of 9 | all | all | 5 of 11 | 2 of 8 | all | 7 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.IntervalEndpointsError` |
+| Interval, two zones `2026-06-15T10:00+02:00/2026-06-15T12:00Z` | 3 of 11 | all | 8 of 9 | all | all | 7 of 11 | 2 of 8 | all | 7 of 18 | `ArgumentError`, `Tempo.ConversionError` |
 | Duration `P1D` | 1 of 11 | none | none | 1 of 21 | none | none | none | 4 of 5 | none | `ArgumentError`, `Protocol.UndefinedError`, `Tempo.ConversionError` |
 | Set of durations `{P1D,P2D}` | none | all | none | none | none | none | none | 3 of 5 | none | `ArgumentError`, `Tempo.ConversionError` |
-| Recurrence, counted `R3/2026-06-01/P1D` | 4 of 11 | all | 2 of 9 | 6 of 21 | all | 2 of 11 | 2 of 8 | all | 2 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
-| Recurrence, unending `R/2026-01-01/P1Y` | 2 of 11 | none | 3 of 9 | 1 of 21 | none | 2 of 11 | none | 4 of 5 | 2 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.UnboundedRecurrenceError` |
-| Recurrence, selecting `R3/2026-01-01/P1Y/FL7M4DN` | 4 of 11 | all | 2 of 9 | 6 of 21 | all | 2 of 11 | 2 of 8 | all | 2 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
+| Recurrence, counted `R3/2026-06-01/P1D` | 4 of 11 | all | 2 of 9 | 6 of 21 | all | 3 of 11 | 2 of 8 | all | 2 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
+| Recurrence, unending `R/2026-01-01/P1Y` | 2 of 11 | none | 3 of 9 | 1 of 21 | none | 3 of 11 | none | 4 of 5 | 2 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.UnboundedRecurrenceError` |
+| Recurrence, selecting `R3/2026-01-01/P1Y/FL7M4DN` | 4 of 11 | all | 2 of 9 | 6 of 21 | all | 3 of 11 | 2 of 8 | all | 2 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
 | Set in a unit `2026Y{6,7}M` | 4 of 11 | all | 8 of 9 | 6 of 21 | all | 9 of 11 | 2 of 8 | 4 of 5 | 14 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.IntervalEndpointsError`, `Tempo.ResolutionError`, `Tempo.RoundingError` |
 | Range in a unit `2026Y{1..3}M` | 4 of 11 | all | 8 of 9 | 6 of 21 | all | 9 of 11 | 2 of 8 | 4 of 5 | 14 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.IntervalEndpointsError`, `Tempo.ResolutionError`, `Tempo.RoundingError` |
 | Set of values `{2026-06-15,2026-07-01}` | 3 of 11 | all | 8 of 9 | 5 of 21 | all | none | 2 of 8 | 4 of 5 | none | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
@@ -118,12 +118,12 @@ The three tables are three levels of guarantee.
 | Group `2026Y1G3MU` | 4 of 11 | all | all | all | all | 9 of 11 | 2 of 8 | all | 14 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.ResolutionError`, `Tempo.RoundingError` |
 | Count from the end `2026Y6M-1D` | 7 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
 | Selection `2026Y4ML1K1IN` | 4 of 11 | all | all | all | all | 7 of 11 | 2 of 8 | all | all | `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.ResolutionError`, `Tempo.RoundingError` |
-| Season `2026-21` | 3 of 11 | all | 8 of 9 | all | all | 2 of 11 | 2 of 8 | all | 5 of 18 | `ArgumentError`, `Tempo.ConversionError` |
+| Season `2026-21` | 3 of 11 | all | 8 of 9 | all | all | 7 of 11 | 2 of 8 | all | 5 of 18 | `ArgumentError`, `Tempo.ConversionError` |
 | Zone transition `2026-10-25T02:30[Europe/Paris]` | 4 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.ZonedTempoError` |
 | Mask from the end `2026Y-XM` | 4 of 11 | all | all | all | all | 9 of 11 | 2 of 8 | all | 14 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.ResolutionError`, `Tempo.RoundingError` |
 | Mask of fewer digits `2026YXM` | 4 of 11 | all | all | all | all | 9 of 11 | 2 of 8 | all | 14 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.ResolutionError`, `Tempo.RoundingError` |
 | Time on a year or month `2026YT17H` | 4 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
-| Recurrence from a masked day `R3/2026Y6MXXD/P1M` | 3 of 11 | all | 2 of 9 | 6 of 21 | all | 2 of 11 | 2 of 8 | all | 2 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
+| Recurrence from a masked day `R3/2026Y6MXXD/P1M` | 3 of 11 | all | 2 of 9 | 6 of 21 | all | 3 of 11 | 2 of 8 | all | 2 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
 | Set with a day a month lacks `{1,2}M31D` | 4 of 11 | all | 2 of 9 | all | all | 9 of 11 | 2 of 8 | 4 of 5 | 13 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.RoundingError`, `Tempo.UnanchoredError` |
 | Group of a set `2026Y{1,2}G3MU` | 4 of 11 | all | 8 of 9 | 6 of 21 | all | 3 of 11 | 2 of 8 | 4 of 5 | 14 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.IntervalEndpointsError`, `Tempo.ResolutionError`, `Tempo.RoundingError` |
 
@@ -132,7 +132,7 @@ The three tables are three levels of guarantee.
 | Class | Convert | Walk | Measure | Compare | Combine | Shift and round | Select | Format | Read parts | Errors |
 |---|---|---|---|---|---|---|---|---|---|---|
 | Unspecified year `X*Y` | 1 of 11 | none | none | 1 of 21 | none | 9 of 11 | none | 3 of 5 | 13 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.RoundingError`, `Tempo.UnanchoredError` |
-| Interval from a masked day `2026Y6MXXD/P1M` | 3 of 11 | none | 8 of 9 | all | all | 2 of 11 | 2 of 8 | all | 5 of 18 | `ArgumentError`, `Tempo.ConversionError` |
+| Interval from a masked day `2026Y6MXXD/P1M` | 3 of 11 | none | 8 of 9 | all | all | 7 of 11 | 2 of 8 | all | 5 of 18 | `ArgumentError`, `Tempo.ConversionError` |
 | Masked day, no year `2MXXD` | 4 of 11 | none | 2 of 9 | all | all | 8 of 11 | 2 of 8 | 4 of 5 | 13 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.RoundingError`, `Tempo.UnanchoredError` |
 
 <!-- matrix: end -->
