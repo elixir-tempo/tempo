@@ -22,7 +22,9 @@ defmodule Tempo.Format do
 
   ### Closed vs half-open at the display boundary
 
-  The underlying interval is always half-open `[from, to)`. For display we compute the **closed** last member — `to - 1 iteration_unit` — so users see `"Jan\u2009\u2013\u2009Dec 2026"`, not `"Jan\u2009\u2013\u2009Jan 2026/2027"`. The closure happens purely at the display layer; the internal representation is unchanged.
+  The underlying interval is always half-open `[from, to)`. For display we compute the **closed** last member of a span of days, months or years — `to - 1 iteration_unit` — so users see `"Jan\u2009\u2013\u2009Dec 2026"`, not `"Jan\u2009\u2013\u2009Jan 2026/2027"`. The closure happens purely at the display layer; the internal representation is unchanged.
+
+  A span of clock times is shown to its end as it is written, as a time is said: `~o"2026-06-15T09/2026-06-15T17"` is `"Jun 15, 2026, 9\u202FAM\u2009\u2013\u20095\u202FPM"`, nine to five, and `~o"2026-06-15T09:30/2026-06-15T10:45"` is `"9:30\u2009\u2013\u200910:45\u202FAM"`. An hour, a minute or a second, and the interval it converts to, is the one value it is (`"10\u202FAM"`).
 
   ### Values that name several spans
 
@@ -218,7 +220,7 @@ defmodule Tempo.Format do
   defp render_span(%Tempo.Interval{} = interval, options) do
     with {:ok, from, to} <- interval_endpoints_for_format(interval) do
       {from, to} = collapse_midnight_endpoints(from, to)
-      render_closed(from, closed_last_for_interval(from, to), options)
+      render_closed(from, last_shown(from, to), options)
     end
   end
 
@@ -227,11 +229,13 @@ defmodule Tempo.Format do
   # is walked by. Shown in that unit it was its first and last minutes
   # ("10:00 – 10:59 AM"), and each member of a set of hours was too. So a
   # span that runs from a time of day to the next of its own unit is shown
-  # as that value. A day's span is one already, its ends being midnights.
+  # as that value, whether it was converted from one or written with its
+  # two ends (`T10/T11` is the hour of ten, as `T10` is; `T10:00/T11:00` is
+  # sixty minutes, and is shown to its end). A day's span is one already,
+  # its ends being midnights.
   @one_value_units [:hour, :minute, :second]
 
-  defp the_one_value(%Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to, unit: unit})
-       when not is_nil(unit) do
+  defp the_one_value(%Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to}) do
     with {resolution, _span} when resolution in @one_value_units <- Tempo.resolution(from),
          %Tempo{} = next <- Math.add(from, Tempo.Duration.build([{resolution, 1}])),
          :same <- Compare.compare_endpoints(next, to) do
@@ -931,6 +935,20 @@ defmodule Tempo.Format do
   ## Interval formatting helpers (shared by %Tempo{} expansion
   ## and %Tempo.Interval{})
   ## ---------------------------------------------------------
+
+  # What a span is shown to. A span of days, months or years is shown to
+  # the last it holds ("Jun 15 – 17, 2026" for one that ends as the 18th
+  # begins), the end of a half-open span being no day of it. A span of clock
+  # times is shown to its end as it is written (decided 2026-10-08), as a
+  # time is said: nine to five is "9 AM – 5 PM". It was shown to the last
+  # hour it holds, "9 AM – 4 PM", and to its last minute where it was
+  # written to the minute, "9:30 – 10:44 AM".
+  defp last_shown(%Tempo{} = from, %Tempo{} = to) do
+    case Tempo.resolution(from) do
+      {unit, _span} when unit in @time_units -> to
+      _a_unit_of_the_date -> closed_last_for_interval(from, to)
+    end
+  end
 
   # For a raw Interval, the closed last is `to - 1 iteration_unit`
   # where the iteration unit is the resolution of `from` (explicit

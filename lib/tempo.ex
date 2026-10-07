@@ -7023,6 +7023,11 @@ defmodule Tempo do
       iex> Tempo.to_string(~o"6M/9M")
       {:ok, "Jun\u2009\u2013\u2009Aug"}
 
+  A span of clock times is shown to its end as it is written, nine to five:
+
+      iex> Tempo.to_string(~o"2026-06-15T09/2026-06-15T17")
+      {:ok, "Jun 15, 2026, 9\u202FAM\u2009\u2013\u20095\u202FPM"}
+
   A year before 1 is shown with its era where no `:format` is given, and a span with such an end names the era at both. ISO 8601's year -44 is 45 BC, and the Julian calendar's is 44 BC:
 
       iex> Tempo.to_string(~o"-0044-03-15")

@@ -305,12 +305,15 @@ defmodule Tempo.ValidatedCoreTest do
   describe "the text an interval is shown as" do
     # The last value an interval holds was taken as one of its start's units
     # before its end, so a year to a month ran backwards ("2026 – 2025").
-    test "names the last value of the finer of its ends' units" do
+    test "names the last value of the finer of its ends' units, and a time of day as written" do
       assert Tempo.to_string!(~o"2026/2026-03") == "Jan – Feb 2026"
       assert Tempo.to_string!(~o"1985/1986-06") == "Jan 1985 – May 1986"
 
-      assert Tempo.to_string!(~o"2026-06-01/2026-06-03T12") ==
-               "Jun 1, 2026, 12 AM – Jun 3, 2026, 11 AM"
+      # A span of clock times is shown to its end as it is written.
+      assert Tempo.to_string(~o"2026-06-01/2026-06-03T12") ==
+               Tempo.to_string(~o"2026-06-01T00/2026-06-03T12")
+
+      assert Tempo.to_string!(~o"2026-06-01/2026-06-03T12") =~ ~r/Jun 3, 2026, 12.PM\z/u
 
       assert Tempo.to_string!(~o"2026-06-15/PT36H") ==
                Tempo.to_string!(~o"2026-06-15T00/2026-06-16T12")

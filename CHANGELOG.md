@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A span of clock times is shown to its end as it is written: `Tempo.to_string(~o"2026-06-15T09/2026-06-15T17")` is "Jun 15, 2026, 9 AM – 5 PM" where it was "9 AM – 4 PM", the last hour the span holds, and 9:30 to 10:45 is "9:30 – 10:45 AM". A span of days, months or years is shown to the last it holds, as it was, and a span one hour, minute or second long is the value it is.
+
 * A recurrence of one occurrence that has a rule keeps to its `:within` window: `FREQ=DAILY;BYDAY=SU;COUNT=1` from 2019 within `~o"2026"` is the empty set, where it was the Sunday of 2019 whatever the window, and `COUNT=2` was nothing. With no rule it is the interval it is, as an interval is.
 
 * A value that names more than 10,000 values is refused at once by `Tempo.to_interval/2`, with a `Tempo.ConversionError` whose reason is `:too_many_values`, as a recurrence of more than 10,000 occurrences is refused: `~o"2026Y{1..12}M{1..28}DT{0..23}H{0..59}M"` took ten seconds to give its 483,840 minutes, and `{0001-01-01..9999-12-31}` did not end. It holds for sets, masks (`1XXX-XX-15`), ranges, selections, `Tempo.shift/3` and `Tempo.select/2`, and a mask of more than 10,000 years is not walked; `Enum` takes a value's values one at a time still.
@@ -398,6 +400,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* `Tempo.to_string/2` shows a span of clock times that starts at a fraction of a second, where it raised a `FunctionClauseError`, and one that holds no time at all (`2026-06-15T10/2026-06-15T10`) is the value it starts at, where it was shown backwards, "10 – 9 AM".
 
 * A rule on a recurrence written to its end (`R3/P1D/2019-01-08/FL7KN`) is refused, with a `Tempo.ConversionError` whose reason is `:not_built` and whose target is `:rule_to_an_end`: the rule was passed over, so it was the three days before 8 January where its rule selects Sundays. With no rule the recurrence is the periods back from its end, as it was.
 

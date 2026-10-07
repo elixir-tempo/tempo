@@ -73,15 +73,19 @@ defmodule Tempo.FormatOneValueTest do
   end
 
   describe "a span of several hours" do
-    test "is shown from its first to its last, as it was" do
-      assert shown(~o"2026-06-15T09/2026-06-15T17") ==
-               "Jun 15, 2026, 9 AM – 4 PM"
+    test "is shown from its start to its end, and not as any one of them" do
+      # It was shown to its last hour, "9 AM – 4 PM", and by its minutes to
+      # its last, "9:00 AM – 4:59 PM" (`test/tempo/format_clock_span_test.exs`).
+      several = shown(~o"2026-06-15T09/2026-06-15T17")
+
+      assert several =~ ~r/\AJun 15, 2026, 9.AM.{3}5.PM\z/u
+      refute several == shown(~o"2026-06-15T09")
 
       # One written to be walked by its minutes is shown by them.
       by_minutes =
         Interval.new!(from: ~o"2026-06-15T09", to: ~o"2026-06-15T17", unit: :minute)
 
-      assert shown(by_minutes) == "Jun 15, 2026, 9:00 AM – 4:59 PM"
+      assert shown(by_minutes) =~ ~r/\AJun 15, 2026, 9:00.AM.{3}5:00.PM\z/u
     end
   end
 end

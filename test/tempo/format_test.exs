@@ -206,7 +206,7 @@ defmodule Tempo.FormatTest do
                {:ok, "Mar 15#{@en_dash_sep}19, 45 BC"}
 
       assert Tempo.to_string(~o"-0044-03-15T10:30/-0044-03-15T12:00", locale: :en) ==
-               {:ok, "Mar 15, 45 BC, 10:30#{@en_dash_sep}11:59#{@nbsp}AM"}
+               {:ok, "Mar 15, 45 BC, 10:30#{@nbsp}AM#{@en_dash_sep}12:00#{@nbsp}PM"}
     end
 
     test "is counted as its calendar counts it" do
