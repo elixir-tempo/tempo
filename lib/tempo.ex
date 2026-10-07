@@ -9134,10 +9134,12 @@ defmodule Tempo do
   # one the walk stops at, whatever the coarser units are.
   #
   # The clock of a zone changes, so an hour of its day is not the same place
-  # in every week. A rule in a zone is asked only where it steps by days
-  # from a date, in a zone that leaves no day out: a date that lands on a
-  # day left out is moved a day on, to another day of the week, and a time
-  # of day a zone's clock skips can be moved past midnight.
+  # in every week, and a rule in a zone is asked only where it steps by
+  # days, whose dates the calendar keeps (`moved_by_its_zone/2`). A stop
+  # there can still be moved a day on, where its date is one the zone leaves
+  # out or its time of day one the clock skips until past midnight, so a
+  # day of the week is one the walk comes to where it stops on it or on the
+  # day before.
   @places_in_a_week [:second, :minute, :hour, :day_of_week]
   @places_finer_than %{second: 0, minute: 1, hour: 2, day: 3}
 
@@ -9152,19 +9154,42 @@ defmodule Tempo do
     calendar = Compare.effective_calendar(calendar)
     parts = Enum.drop(@places_in_a_week, Map.fetch!(@places_finer_than, unit))
     places = Enum.map(parts, &place_named(&1, selection, from, calendar))
+    moved = moved_by_its_zone(from, unit)
 
-    steps_evenly?(from, unit) and Enum.all?(places, &is_tuple/1) and
-      not stops_at_one?(places, amount)
+    moved != :not_known and Enum.all?(places, &is_tuple/1) and
+      not stops_at_one?(named_where_stopped(places, moved), amount)
   end
 
   defp steps_past_its_parts?(_interval, _cadence), do: false
 
-  defp steps_evenly?(%Tempo{extended: %{zone_id: zone}, time: time}, unit) when is_binary(zone) do
-    unit == :day and not Keyword.has_key?(time, :hour) and
-      Tempo.TimeZoneDatabase.days_left_out(zone) == []
+  # Whether a zone can move a stop of the walk off the place it steps to. A
+  # value in no zone is never moved. In a zone a rule of days from a date is
+  # never moved either, where the zone leaves no day out. Any other rule of
+  # days there can be moved a day on: a date that lands on a day left out
+  # is, as Samoa's 30 December 2011, and so is a time of day the clock skips
+  # until midnight or past it, as 23:45 on 4 May 2018 in Pyongyang and 23:30
+  # on the Saturday before the last Sunday of each March in Nuuk. It is
+  # never moved further, a zone skipping a day at most, nor back. What a
+  # zone does to a walk of hours or less is not known without its changes.
+  defp moved_by_its_zone(%Tempo{extended: %{zone_id: zone}, time: time}, :day)
+       when is_binary(zone) do
+    if not Keyword.has_key?(time, :hour) and Tempo.TimeZoneDatabase.days_left_out(zone) == [],
+      do: :never,
+      else: :a_day_on
   end
 
-  defp steps_evenly?(%Tempo{}, _unit), do: true
+  defp moved_by_its_zone(%Tempo{extended: %{zone_id: zone}}, _finer_than_a_day)
+       when is_binary(zone),
+       do: :not_known
+
+  defp moved_by_its_zone(%Tempo{}, _unit), do: :never
+
+  # The places the parts name, as places the walk stops at: a day of the
+  # week a stop can be moved onto is named where the day before it is.
+  defp named_where_stopped(places, :never), do: places
+
+  defp named_where_stopped([{days, began, named}], :a_day_on),
+    do: [{days, began, Enum.uniq(named ++ Enum.map(named, &Integer.mod(&1 - 1, days)))}]
 
   # One unit of a place in the week: how many values it takes, the one the
   # walk starts from and those the rule's part names, each counted from the

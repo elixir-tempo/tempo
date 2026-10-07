@@ -355,6 +355,43 @@ defmodule Tempo.RRule.StepPastPartsTest do
              ]
     end
 
+    test "is told so where it steps by days from a time of day, but for the day after its own" do
+      # A stop is on the day the walk steps to or, where the clock skips its
+      # time until past midnight, the day after: so every seventh day from a
+      # Tuesday at 10:00 has no Monday and no Thursday, whatever its zone.
+      for zone <- ["Europe/Paris", "America/Nuuk", "Asia/Pyongyang", "Pacific/Apia"],
+          day <- [1, 4, 5, 6, 7] do
+        rule = "R3/2026-06-16T10[#{zone}]/P7D/FL#{day}KN"
+        assert {rule, starts(rule)} == {rule, []}
+      end
+
+      assert starts("R2/2026-06-16T10[Europe/Paris]/P7D/FL2KN") == [
+               ~o"2026-06-16T10[Europe/Paris]",
+               ~o"2026-06-23T10[Europe/Paris]"
+             ]
+    end
+
+    test "has the day after its own where the clock moves its time past midnight" do
+      # Nuuk's clocks go from 23:00 to midnight on the Saturday before the
+      # last Sunday of March, each year, so every seventh day from a Saturday
+      # at 23:30 has a Sunday then.
+      for saturday <- [~D[2026-03-28], ~D[2027-03-27]] do
+        assert Date.day_of_week(saturday) == 6
+
+        assert {:gap, _before, %DateTime{hour: 0, minute: 0} = sunday} =
+                 DateTime.new(saturday, ~T[23:30:00], "America/Nuuk", Tz.TimeZoneDatabase)
+
+        assert DateTime.to_date(sunday) == Date.add(saturday, 1)
+      end
+
+      assert rem(Date.diff(~D[2027-03-27], ~D[2026-03-21]), 7) == 0
+
+      assert starts("R2/2026-03-21T23:30[America/Nuuk]/P7D/FL7KN") == [
+               ~o"2026-03-29T00:30[America/Nuuk]",
+               ~o"2027-03-28T00:30[America/Nuuk]"
+             ]
+    end
+
     test "has the occurrences its clock brings it to, where it steps by hours" do
       # Paris's clocks go back on 25 October 2026, and every twenty-fourth
       # hour from 10:00 is 09:00 from then on.
@@ -385,6 +422,9 @@ defmodule Tempo.RRule.StepPastPartsTest do
                Tempo.to_interval(Tempo.from_iso8601!("R1/#{start}[Pacific/Apia]/P7D/FL6KN"))
 
       assert Interval.from(occurrence) == ~o"2011-12-31[Pacific/Apia]"
+
+      # It has no Monday, whether or not a date is moved.
+      assert starts("R3/#{start}[Pacific/Apia]/P7D/FL1KN") == []
     end
 
     test "is walked where it steps from a time of day, which a clock can move past midnight" do
