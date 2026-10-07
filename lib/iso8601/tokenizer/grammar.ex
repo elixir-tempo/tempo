@@ -9,11 +9,67 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     optional(qualification())
     |> choice([
       interval_or_time_or_duration(),
+      set_of_values(),
+      # What is none of them is refused with the reason its last reading
+      # gave, which is a date's or a time's: `2026Y1M40D` has no such day.
       parsec({Tempo.Iso8601.Tokenizer.Set, :set})
     ])
     |> optional(qualification())
     |> optional(extended_suffix())
     |> label("ISO8601 interval, duration, date, time or datetime")
+  end
+
+  # A set of whole values, with a time shift after it or none. The shift is
+  # each member's that has none, as one after a set in a unit is each
+  # value's (decided 2026-10-07): `{2026-01-01T10:00,2026-03-01T10:00}Z` is
+  # the two values, each at `Z`. It was not read.
+  #
+  defp set_of_values do
+    choice([
+      parsec({Tempo.Iso8601.Tokenizer.Set, :set_all}),
+      parsec({Tempo.Iso8601.Tokenizer.Set, :set_one})
+    ])
+    |> optional(time_shift_after_a_set())
+  end
+
+  # After a set a shift is `Z`, alone or with a shift written after it, or a
+  # sign with hours and minutes and the colon between them. A sign and two
+  # digits alone are a month or a day after what would be a set of years
+  # (`[01,03]-15`), which is no value and is not read as a shift of fifteen
+  # hours.
+  defp time_shift_after_a_set do
+    choice([
+      parsec({Tempo.Iso8601.Tokenizer.Time, :explicit_time_shift_p}),
+      lookahead(
+        choice([
+          zulu(),
+          sign() |> concat(digit()) |> concat(digit()) |> concat(colon())
+        ])
+      )
+      |> parsec({Tempo.Iso8601.Tokenizer.Time, :extended_time_shift_p})
+    ])
+  end
+
+  # In the extended format a unit is written after a separator, where a `[`
+  # begins neither a suffix nor a set of whole values. It is a set of one of
+  # several values of the unit there, as it is before a designator in the
+  # explicit form (decided 2026-10-07): `2026-[01,03]` is `2026Y[1,3]M`, one
+  # of January and March. It was not read.
+  defp one_of(tag),
+    do: parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_one}) |> unwrap_and_tag(tag)
+
+  defp or_one_of(unit, tag), do: choice([unit, one_of(tag)])
+
+  # The year of a date in the extended format: one year, or one of several
+  # where the separator follows them (`[2026,2027]-01`, as `[2026,2027]Y1M`
+  # is). With nothing after them they are a set of whole values.
+  defp extended_year do
+    choice([
+      parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_year_p}),
+      parsec({Tempo.Iso8601.Tokenizer.Set, :year_set_one})
+      |> unwrap_and_tag(:year)
+      |> lookahead(dash())
+    ])
   end
 
   # A profile tokenizer admits exactly one of the shapes the standard
@@ -94,9 +150,9 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
       # A year and a set of days of the year, each of three digits
       # (`2026-{001,166}`), which a set of months would otherwise take:
       # `2026-{001}` was read as January.
-      parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_year_p})
+      extended_year()
       |> ignore(dash())
-      |> concat(days_of_year_set()),
+      |> choice([days_of_year_set(), one_of_days_of_year()]),
 
       # Year-Month-Day, with ISO 8601-2 §8 component-level
       # qualification at each hyphen boundary. A qualifier to the
@@ -104,24 +160,24 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
       # to the left, an *individual* qualifier (that one only). The
       # trailing qualifier after the day is left for the outer
       # `qualification/0` so it reads as *complete* (§8.2.1).
-      parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_year_p})
+      extended_year()
       |> optional(right_qualifier(:year))
       |> ignore(dash())
       |> optional(left_qualifier(:month))
-      |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_month_p}))
+      |> concat(or_one_of(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_month_p}), :month))
       |> optional(right_qualifier(:month))
       |> ignore(dash())
       |> optional(left_qualifier(:day))
-      |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_day_of_month_p})),
+      |> concat(or_one_of(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_day_of_month_p}), :day)),
 
       # Year-Month, with qualifiers. The trailing qualifier after the
       # month is the rightmost component, so it too is left for the
       # outer complete qualifier.
-      parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_year_p})
+      extended_year()
       |> optional(right_qualifier(:year))
       |> ignore(dash())
       |> optional(left_qualifier(:month))
-      |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_month_p}))
+      |> concat(or_one_of(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_month_p}), :month))
       |> lookahead_not(digit()),
 
       # Month-Day (no year) with qualifiers.
@@ -130,7 +186,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
       |> optional(right_qualifier(:month))
       |> ignore(dash())
       |> optional(left_qualifier(:day))
-      |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_day_of_month_p})),
+      |> concat(or_one_of(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_day_of_month_p}), :day)),
       extended_ordinal_date()
     ])
     |> label("extended date")
@@ -210,13 +266,18 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     |> unwrap_and_tag(:day_of_year)
   end
 
+  defp one_of_days_of_year do
+    parsec({Tempo.Iso8601.Tokenizer.Set, :day_of_year_set_one})
+    |> unwrap_and_tag(:day_of_year)
+  end
+
   def implicit_ordinal_date do
     parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_year_p})
     |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_day_of_year_p}))
   end
 
   def extended_ordinal_date do
-    parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_year_p})
+    extended_year()
     |> ignore(dash())
     |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_day_of_year_p}))
   end
@@ -245,19 +306,29 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
 
   def extended_week_date do
     choice([
-      parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_year_p})
+      extended_year()
       |> ignore(dash())
-      |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_week_p}))
+      |> concat(week_or_one_of())
       |> ignore(dash())
-      |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_day_of_week_p})),
-      parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_year_p})
+      |> concat(day_of_week_or_one_of()),
+      extended_year()
       |> ignore(dash())
-      |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_week_p})),
-      parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_week_p})
+      |> concat(week_or_one_of()),
+      week_or_one_of()
       |> ignore(dash())
-      |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_day_of_week_p}))
+      |> concat(day_of_week_or_one_of())
     ])
   end
+
+  defp week_or_one_of do
+    choice([
+      parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_week_p}),
+      ignore(string("W")) |> concat(one_of(:week))
+    ])
+  end
+
+  defp day_of_week_or_one_of,
+    do: or_one_of(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_day_of_week_p}), :day_of_week)
 
   def explicit_week_date do
     choice([
@@ -300,31 +371,38 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     ])
   end
 
+  # An hour written after a `T` may be one of several, as a minute and a
+  # second after a colon may: with no `T` a `[` begins a set of whole values.
   def extended_time_of_day do
+    hour = parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_hour_p})
+
     choice([
-      ignore(string("T")) |> extended_clock(empty()),
-      extended_clock(lookahead_not(string("{")))
+      ignore(string("T")) |> extended_clock(empty(), or_one_of(hour, :hour)),
+      extended_clock(lookahead_not(string("{")), hour)
     ])
     |> optional(time_fraction())
   end
 
-  defp extended_clock(combinator \\ empty(), before_an_hour_alone) do
+  defp extended_clock(combinator \\ empty(), before_an_hour_alone, hour) do
+    minute = or_one_of(parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_minute_p}), :minute)
+    second = or_one_of(parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_second_p}), :second)
+
     combinator
     |> choice([
-      parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_hour_p})
+      hour
       |> ignore(colon())
-      |> concat(parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_minute_p}))
+      |> concat(minute)
       |> ignore(colon())
-      |> concat(parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_second_p})),
-      parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_hour_p})
+      |> concat(second),
+      hour
       |> ignore(colon())
-      |> concat(parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_minute_p})),
+      |> concat(minute),
       # An hour alone is the hour and the start of a minute of the basic
       # format where a digit follows, and where an unspecified digit or a
       # set does (`T10XX`, `T10{30,45}`), which were read as far as the
       # hour.
       before_an_hour_alone
-      |> parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_hour_p})
+      |> concat(hour)
       |> lookahead_not(more_of_a_number())
     ])
   end

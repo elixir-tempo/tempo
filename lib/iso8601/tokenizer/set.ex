@@ -93,6 +93,15 @@ defmodule Tempo.Iso8601.Tokenizer.Set do
                 |> tag(:all_of),
                 export_combinator: true
 
+  # One of several days of the year, each of three digits, after the
+  # separator of the extended format (`2026-[001,100]`).
+  defcombinator :day_of_year_set_one,
+                ignore(string("["))
+                |> list_of_day_of_year_or_range()
+                |> ignore(string("]"))
+                |> tag(:one_of),
+                export_combinator: true
+
   # The years of a set written with no designator. A combinator of its own,
   # so that a range whose ends are not years is this combinator failing, and
   # the set is then read member by member.
@@ -102,6 +111,30 @@ defmodule Tempo.Iso8601.Tokenizer.Set do
                 |> ignore(string("}"))
                 |> tag(:all_of),
                 export_combinator: true
+
+  # One of several years, written with no designator before the separator of
+  # the extended format (`[2026,2027]-01`). Each form of a date begins with
+  # its year, so a set of whole years (`[1984,1986,1988]`) is tried as this
+  # at each of them, and is read once.
+  defcombinator :year_set_one,
+                read_once(:year_set_one, "["),
+                export_combinator: true
+
+  defcombinator :year_set_one_read_before,
+                read_before(:year_set_one),
+                export_combinator: true
+
+  defcombinator :year_set_one_read_now,
+                read_now(
+                  :year_set_one,
+                  ignore(string("["))
+                  |> list_of_year_or_range()
+                  |> ignore(string("]"))
+                  |> tag(:one_of)
+                ),
+                export_combinator: true
+
+  defcombinator :year_set_one_refused, refused(:year_set_one), export_combinator: true
 
   defcombinator :integer_set_one,
                 ignore(string("["))

@@ -237,6 +237,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Added
 
+* One of several values in a unit is read in the extended format, as it is in the explicit one: `2026-[01,03]` is `~o"[2026Y1M,2026Y3M]"`, and so are a day, a week, an hour, a minute or a second after its separator and one of several years before one (`[2026,2027]-01`). A time shift after a set is the shift of each member that has none, so `{2026-01-01T10:00,2026-03-01T10:00}Z` is the two values at `Z`; each was a `Tempo.ParseError`.
+
 * An interval written with a duration from a value that holds a set is the span from each value, as a recurrence from it is the occurrences from each: `Tempo.to_interval(~o"2026Y6M{1,15}D/P1D")` is a day from the 1st and a day from the 15th, and `Tempo.select(day, ~o"T{9,14}H/PT1H")` the hour from 09:00 and the hour from 14:00, where each was a `Tempo.IntervalEndpointsError`. `Tempo.shift/3` with `:skipping` shifts each value of a set, where it refused one.
 
 * A glossary guide (`guides/glossary.md`): every word Tempo's API and documentation use, with the one meaning each has and where it is met, grouped by subject.

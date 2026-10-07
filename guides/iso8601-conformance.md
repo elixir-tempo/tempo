@@ -97,6 +97,8 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 | **Set of dates — one of** | `[1984,1986,1988]`, `[1667..1672]` |
 | **Range in set** | `[1900..2000]`, `{-1640-06..-1200-01}` |
 | **A qualified member of a set** | `{2026-06-15?,2026-06~}`, `{2020?..2030}`. Each member is qualified as it would be alone (§8). |
+| **One of several values in a unit** | `2026Y[1,3]M`, and in the extended format after a separator: `2026-[01,03]`, `2026-01-15T[09,14]:30`, `[2026,2027]-01`. Each is the one-of set of the values written whole, `[2026-01,2026-03]`. |
+| **A time shift after a set** | `{2026-01-01T10:00,2026-03-01T10:00}Z`, `…}+02:00`. It is the shift of each member that has none, as a suffix after a set is each member's; a sign and two digits alone (`…}-05`) are not read as one. |
 | **Groups** | `5G10DU` (5th group of 10 days), `2018Y4G60DU6D` (2018, day 6 of the 4th group of 60 days), `1933Y1G80DU` (the first 80 days of 1933), `2026Y2G13WU` (weeks 14–26), `T16H1GT15MU` (16:00–16:15) |
 | **A value within a group** | `2018Y9M2DT3GT8HU0H30M` (30 minutes into the third eight hours: 16:30), `2018Y2G3MU2M` (May) |
 | **Selections** | `L1MN`, `L2MI3N` (1st month, 3rd instance of the 2nd month). A value holding one converts to the dates it picks in each period of its context (§12.11): `2018Y3ML1K1IN` is 5 March 2018, and `XXX{0,2,4,6,8}Y11MLLL1K1IN/P9DN2K1IN` (US Election Day) resolves one year at a time. |

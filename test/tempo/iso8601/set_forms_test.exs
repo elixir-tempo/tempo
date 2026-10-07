@@ -676,4 +676,124 @@ defmodule Tempo.Iso8601.SetFormsTest do
       assert days.time == [week: 25, day_of_week: [1, 3]]
     end
   end
+
+  # One of several values in a unit of the extended format (decided
+  # 2026-10-07). A unit there is written after a separator, where a `[`
+  # begins neither a suffix nor a set of whole values, and one of several
+  # years is told by the separator after it. Each was a parse error, where
+  # the explicit form (`2026Y[1,3]M`) was read.
+  describe "one of several values in a unit of the extended format" do
+    # The text, the explicit form of it, and each value it is one of,
+    # written whole.
+    @one_of [
+      {"2026-[01,03]", "2026Y[1,3]M", ["2026-01", "2026-03"]},
+      {"2026-[01..03]", "2026Y[1..3]M", ["2026-01", "2026-02", "2026-03"]},
+      {"2026-[01,03]-15", "2026Y[1,3]M15D", ["2026-01-15", "2026-03-15"]},
+      {"2026-01-[01,15]", "2026Y1M[1,15]D", ["2026-01-01", "2026-01-15"]},
+      {"2026-[01,03]-[01,15]", "2026Y[1,3]M[1,15]D",
+       ["2026-01-01", "2026-01-15", "2026-03-01", "2026-03-15"]},
+      {"2026-01-15T[09,14]", "2026Y1M15DT[9,14]H", ["2026-01-15T09", "2026-01-15T14"]},
+      {"2026-01-15T[09,14]:30", "2026Y1M15DT[9,14]H30M",
+       ["2026-01-15T09:30", "2026-01-15T14:30"]},
+      {"2026-01-15T09:[00,30]", "2026Y1M15DT9H[0,30]M", ["2026-01-15T09:00", "2026-01-15T09:30"]},
+      {"2026-01-15T09:30:[00,30]", "2026Y1M15DT9H30M[0,30]S",
+       ["2026-01-15T09:30:00", "2026-01-15T09:30:30"]},
+      {"2026-W[01,03]", "2026Y[1,3]W", ["2026-W01", "2026-W03"]},
+      {"2026-W10-[1,5]", "2026Y10W[1,5]K", ["2026-W10-1", "2026-W10-5"]},
+      {"2026-[001,100]", "2026Y[1,100]O", ["2026-001", "2026-100"]},
+      {"[2026,2027]-01", "[2026,2027]Y1M", ["2026-01", "2027-01"]},
+      {"[2026,2027]-01-15", "[2026,2027]Y1M15D", ["2026-01-15", "2027-01-15"]},
+      {"[2026,2027]-W10", "[2026,2027]Y10W", ["2026-W10", "2027-W10"]},
+      {"[2026,2027]-100", "[2026,2027]Y100O", ["2026-100", "2027-100"]},
+      {"[2026,2027]-[01,03]", "[2026,2027]Y[1,3]M", ["2026-01", "2026-03", "2027-01", "2027-03"]}
+    ]
+
+    test "is one of the values it names, each as it is read alone" do
+      for {text, _explicit, members} <- @one_of do
+        assert {:ok, %Tempo.Set{type: :one, set: values}} = Tempo.from_iso8601(text)
+        assert {text, values} == {text, Enum.map(members, &Tempo.from_iso8601!/1)}
+      end
+    end
+
+    test "is what the explicit form of it is" do
+      for {text, explicit, _members} <- @one_of do
+        assert {text, Tempo.from_iso8601(text)} == {text, Tempo.from_iso8601(explicit)}
+      end
+    end
+
+    test "reads back from its own text" do
+      for {text, _explicit, _members} <- @one_of do
+        {:ok, value} = Tempo.from_iso8601(text)
+        assert {text, Tempo.from_iso8601(Tempo.to_iso8601!(value))} == {text, {:ok, value}}
+      end
+    end
+
+    test "takes a time shift and a suffix as the value it is one of does" do
+      assert Tempo.from_iso8601("2026-01-15T[09,14]:30Z") ==
+               Tempo.from_iso8601("[2026-01-15T09:30Z,2026-01-15T14:30Z]")
+
+      assert Tempo.from_iso8601("2026-01-15T[09,14]:30[Europe/Paris]") ==
+               Tempo.from_iso8601("[2026-01-15T09:30,2026-01-15T14:30][Europe/Paris]")
+    end
+
+    test "leaves a suffix, a set of whole values and the basic format as they were" do
+      assert {:ok, %Tempo{extended: %{zone_id: "Europe/Paris"}}} =
+               Tempo.from_iso8601("2026-01-15T10:30[Europe/Paris]")
+
+      assert {:ok, %Tempo{calendar: Calendrical.Hebrew}} =
+               Tempo.from_iso8601("5786-01[u-ca=hebrew]")
+
+      assert Tempo.from_iso8601("[2026,2027]") == Tempo.from_iso8601("[2026Y,2027Y]")
+
+      # With no separator a `[` after a value begins a suffix, and before a
+      # value a set of whole values.
+      for text <- ["2026[01,03]", "[01,03]-15", "[09,14]:30"] do
+        assert {^text, {:error, %ParseError{}}} = {text, Tempo.from_iso8601(text)}
+      end
+    end
+  end
+
+  # A time shift after a set (decided 2026-10-07) is the shift of each member
+  # that has none, as a set's suffix is each member's that has none. It was
+  # a parse error.
+  describe "a time shift after a set" do
+    @shifted [
+      {"{2026-01-01T10:00,2026-03-01T10:00}Z", "{2026-01-01T10:00Z,2026-03-01T10:00Z}"},
+      {"[2026-01-01T10:00,2026-03-01T10:00]Z", "[2026-01-01T10:00Z,2026-03-01T10:00Z]"},
+      {"{2026-01-01T10:00,2026-03-01T10:00}+02:00",
+       "{2026-01-01T10:00+02:00,2026-03-01T10:00+02:00}"},
+      {"{2026-01-01T10:00,2026-03-01T10:00}-05:00",
+       "{2026-01-01T10:00-05:00,2026-03-01T10:00-05:00}"},
+      # A shift of the explicit form, which a value of that form takes.
+      {"{2026-01-01T10:00,2026-03-01T10:00}Z2H", "{2026Y1M1DT10H0MZ2H,2026Y3M1DT10H0MZ2H}"},
+      {"{2026-01-01,2026-03-01}Z", "{2026-01-01Z,2026-03-01Z}"},
+      # Each end of a range, and a member with a shift of its own keeps it.
+      {"{2026-01-01T10:00..2026-01-01T10:02}Z", "{2026-01-01T10:00Z..2026-01-01T10:02Z}"},
+      {"{2026-01-01T10:00+01:00,2026-03-01T10:00}Z",
+       "{2026-01-01T10:00+01:00,2026-03-01T10:00Z}"},
+      # Before the set's suffix, as a value's is before its own.
+      {"{2026-01-01T10:00,2026-07-01T10:00}Z[Europe/Paris]",
+       "{2026-01-01T10:00Z[Europe/Paris],2026-07-01T10:00Z[Europe/Paris]}"}
+    ]
+
+    test "is the shift of each member that has none" do
+      for {text, each_written} <- @shifted do
+        assert {:ok, %Tempo.Set{} = set} = Tempo.from_iso8601(text)
+        assert {text, {:ok, set}} == {text, Tempo.from_iso8601(each_written)}
+      end
+    end
+
+    test "reads back from its own text" do
+      for {text, _each_written} <- @shifted do
+        {:ok, set} = Tempo.from_iso8601(text)
+        assert {text, Tempo.from_iso8601(Tempo.to_iso8601!(set))} == {text, {:ok, set}}
+      end
+    end
+
+    test "is not a sign and two digits alone, which would be a month or a day" do
+      for text <- ["{2026-01-01,2026-03-01}-05", "[01,03]-15", "{2026-01-01,2026-03-01}+05"] do
+        assert {^text, {:error, %ParseError{}}} = {text, Tempo.from_iso8601(text)}
+      end
+    end
+  end
 end

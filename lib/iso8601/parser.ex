@@ -355,6 +355,12 @@ defmodule Tempo.Iso8601.Parser do
     |> Duration.build()
   end
 
+  # A time shift written after a set is the shift of each member that has
+  # none, as a set's suffix is each member's that has none, and as a shift
+  # after a set in a unit is each value's (decided 2026-10-07).
+  def parse([{type, members}, {:time_shift, shift}]) when type in [:all_of, :one_of],
+    do: parse([{type, Enum.map(members, &at_the_shift(&1, shift))}])
+
   def parse(all_of: tokens) do
     tokens
     |> parse_set
@@ -365,6 +371,29 @@ defmodule Tempo.Iso8601.Parser do
     tokens
     |> parse_set
     |> Tempo.Set.new(:one)
+  end
+
+  defp at_the_shift({tag, units}, shift)
+       when tag in [:date, :datetime, :time_of_day] and is_list(units) do
+    if Keyword.has_key?(units, :time_shift),
+      do: {tag, units},
+      else: {tag, shifted_before_its_suffix(units, shift)}
+  end
+
+  defp at_the_shift({tag, parts}, shift)
+       when tag in [:range, :interval, :except] and is_list(parts),
+       do: {tag, Enum.map(parts, &at_the_shift(&1, shift))}
+
+  # An end of a range open at its other end is its units alone.
+  defp at_the_shift([{unit, _value} | _units] = units, shift) when is_atom(unit),
+    do: shifted_before_its_suffix(units, shift)
+
+  defp at_the_shift(other, _shift), do: other
+
+  # A value's shift is written before its suffix, and is read there.
+  defp shifted_before_its_suffix(units, shift) do
+    {suffix, units} = Enum.split_with(units, &match?({:extended, _suffix}, &1))
+    units ++ [time_shift: shift] ++ suffix
   end
 
   defp has_one_of_component?(tokens) when is_list(tokens) do
