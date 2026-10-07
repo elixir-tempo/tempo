@@ -143,6 +143,19 @@ defmodule Tempo.WeekBesideItsMonthTest do
       assert spans(Tempo.select(~o"2026-06-10T10", ~o"24W")) == []
     end
 
+    test "is the week of its month for a day written by its week or by its day of the year" do
+      # A Gregorian day is held as its month and day however it is written
+      # (decided 2026-10-08): 10 June 2026 is `2026-W24-3` and `2026-161`.
+      assert Date.day_of_year(~D[2026-06-10]) == 161
+
+      for written <- [~o"2026-W24-3", ~o"2026-161"] do
+        assert {written, spans(Tempo.select(written, ~o"2W"))} ==
+                 {written, days([~D[2026-06-10]])}
+
+        assert {written, spans(Tempo.select(written, ~o"24W"))} == {written, []}
+      end
+    end
+
     test "drops a day whose week is the first of the month after" do
       # 29 and 30 June 2026 are in the week that holds 1 July.
       assert week_of_its_month(~D[2026-06-29]) == nil
