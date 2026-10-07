@@ -1199,17 +1199,14 @@ defmodule Tempo.Select do
 
   defp week_of_month_rule?(_rule, _unit), do: false
 
-  # What a selection of a week from a month is not yet built for is refused
-  # by name (`Tempo.NotBuilt.week_in_month/3`): a week of the calendar's own
-  # numbering (`w`).
-  defp week_of_month_built(
-         %Tempo{time: [selection: selection]},
-         :month,
-         %Tempo{calendar: calendar} = from
-       ) do
-    case NotBuilt.week_in_month(selection, from, Compare.effective_calendar(calendar)) do
-      :ok -> :ok
-      {:error, _not_built} -> NotBuilt.week_of_month(selection, from)
+  # A week of the calendar's own numbering (`w`) is a week of its year, and
+  # is not selected from a month: the refusal names what was asked
+  # (`Tempo.RRule.Selection.calendar_week_in_its_year/2`).
+  defp week_of_month_built(%Tempo{time: [selection: selection]}, :month, %Tempo{} = from) do
+    with {:error, %ConversionError{} = refusal} <-
+           Selection.calendar_week_in_its_year(selection, from) do
+      asked = "the selection of #{inspect(selection)} from #{inspect(from)}"
+      {:error, %{refusal | value: asked}}
     end
   end
 

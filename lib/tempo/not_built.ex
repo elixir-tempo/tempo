@@ -23,9 +23,10 @@ defmodule Tempo.NotBuilt do
   # selects by a month, a year, a week of the year or a day of one, which
   # RFC 5545 counts in the Gregorian calendar. The sixth is what is left of a
   # week of a month, which the calendar numbers and is otherwise answered: one
-  # in a year that does not begin with its first month, one selected from a
-  # month that is no whole number, and one a rule names in a month as a week
-  # of the calendar's own.
+  # in a year that does not begin with its first month, and one selected from
+  # a month that is no whole number. A week of the calendar's own numbering
+  # (`w`) under a month is no such area: it is refused for good
+  # (`Tempo.RRule.Selection.calendar_week_in_its_year/2`).
 
   alias Tempo.{Compare, ConversionError, Duration, Interval, UnitValues}
 
@@ -230,8 +231,7 @@ defmodule Tempo.NotBuilt do
   # A week selected from a month that is not built. A week after a month is
   # a week of the month, which `Tempo.select/2` gives as the span of its
   # dates where it is one whole number selected from a month, or each of a
-  # set of them. What is refused here is one that is neither (a mask), and
-  # one a selection names as a week of the calendar's own (`w`).
+  # set of them. What is refused here is one that is neither (a mask).
   # `selector` is what was to be merged onto `from`. A week selected from a
   # day or a time of day is as coarse as its period or coarser, and is a
   # filter by the week of the year.
@@ -240,43 +240,6 @@ defmodule Tempo.NotBuilt do
     asked = "the selection of #{inspect(selector)} from #{inspect(from)}"
     {:error, error(asked, :week_of_month, Compare.effective_calendar(calendar))}
   end
-
-  @doc false
-  # A selection that names a week and is resolved in a month: in a value
-  # whose selection follows a month (`2026Y6ML2WN`), and as the rule of a
-  # recurrence that steps by months from a month, a year or no start. A week
-  # under a month is a week of the month (`W`, decided 2026-10-07), which
-  # the resolver gives as the span of the dates the calendar numbers in it,
-  # or as those dates to the parts beside it that pick within it
-  # (`Tempo.RRule.Selection.read_in_its_period/1`). What is still refused is
-  # a week of the calendar's own numbering (`w`), which is a week of its
-  # year: what the resolver gave for it was the whole month where its first
-  # day was in the week of that number.
-  @spec week_in_month(list(), Tempo.t() | Interval.t(), module()) ::
-          :ok | {:error, ConversionError.t()}
-  def week_in_month(selection, value, calendar) when is_list(selection) do
-    if :calendar_week in selected_units(selection) and resolved_in_a_month?(value),
-      do: {:error, error(value, :week_of_month, calendar)},
-      else: :ok
-  end
-
-  defp resolved_in_a_month?(%Tempo{time: time}) when is_list(time) do
-    context = Enum.take_while(time, &(not match?({:selection, _selection}, &1)))
-    match?({:month, _month}, List.last(context))
-  end
-
-  defp resolved_in_a_month?(%Interval{
-         duration: %Duration{time: [{:month, _amount} | _finer]},
-         from: from
-       }),
-       do: no_finer_than_a_month?(from)
-
-  defp resolved_in_a_month?(_another), do: false
-
-  defp no_finer_than_a_month?(%Tempo{time: time}) when is_list(time),
-    do: not finer_than_a_month?(time)
-
-  defp no_finer_than_a_month?(no_start), do: no_start in [nil, :undefined]
 
   @doc false
   # A step from a value that holds several months (a set, a range, a mask or

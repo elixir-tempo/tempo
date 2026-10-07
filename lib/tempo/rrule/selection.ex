@@ -60,6 +60,7 @@ defmodule Tempo.RRule.Selection do
 
   alias Calendrical.Kday
   alias Tempo.Compare
+  alias Tempo.ConversionError
   alias Tempo.Enumeration.Zone
   alias Tempo.Event
   alias Tempo.EventError
@@ -456,6 +457,49 @@ defmodule Tempo.RRule.Selection do
 
   defp week_of_the_month({:week, weeks}), do: {:week_of_month, weeks}
   defp week_of_the_month(part), do: part
+
+  @doc false
+  # A week of the calendar's own numbering (`w`) is a week of its year, and
+  # a selection resolved in a month has no week of a year to give: in a
+  # value whose selection follows a month (`2026Y6ML2wN`), and as the rule
+  # of a recurrence that steps by months from a month, a year, a set of them
+  # or no start. It is refused, and for good (decided 2026-10-08): a week of
+  # a month is written `W`. It was refused as not yet built, since what the
+  # resolver gave for it was the whole month where its first day was in the
+  # week of that number. `selection` is the rule's parts and `value` what
+  # they are resolved in, which the error names.
+  @spec calendar_week_in_its_year(keyword(), Tempo.t() | Interval.t()) ::
+          :ok | {:error, ConversionError.t()}
+  def calendar_week_in_its_year(selection, value) when is_list(selection) do
+    if names_a_calendar_week?(selection) and resolved_in_a_month?(value),
+      do: {:error, ConversionError.exception(value: value, reason: :calendar_week_in_month)},
+      else: :ok
+  end
+
+  defp names_a_calendar_week?(selection), do: Enum.any?(selection, &calendar_week_part?/1)
+
+  defp calendar_week_part?({:selection, nested}) when is_list(nested),
+    do: names_a_calendar_week?(nested)
+
+  defp calendar_week_part?({:calendar_week, _weeks}), do: true
+  defp calendar_week_part?(_part), do: false
+
+  # Whether a selection is resolved in a month, as `read_in_its_period/1`
+  # has it: the rule of a recurrence that steps by months and whose start
+  # gives it no day, and the selection of a value after its month.
+  defp resolved_in_a_month?(%Interval{
+         duration: %Tempo.Duration{time: [{:month, _count} | _finer]},
+         from: from,
+         repeat_rule: %Tempo{} = rule
+       }),
+       do: gives_no_day?(from, rule)
+
+  defp resolved_in_a_month?(%Tempo{time: time, calendar: calendar}) when is_list(time) do
+    context = Enum.take_while(time, &(not match?({:selection, _selection}, &1)))
+    not week_calendar?(calendar) and a_month?(context)
+  end
+
+  defp resolved_in_a_month?(_another), do: false
 
   defp gives_no_day?(%Tempo{time: time, calendar: calendar}, _rule) when is_list(time),
     do: not week_calendar?(calendar) and Enum.all?(time, &month_unit?/1)

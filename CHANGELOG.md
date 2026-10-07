@@ -333,6 +333,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Changed
 
+* A week of the calendar's own numbering (`w`) selected in a month is refused for good, with a `Tempo.ConversionError` whose reason is `:calendar_week_in_month`: `2026Y6ML2wN` and `Tempo.select(~o"2026-06", ~o"L2wN")` were refused as `:not_built`, in words that said the calendar's year does not begin with its first month, and a rule of months from a set of months selected nothing. Such a week is a week of its year (`2026YL2wN`), and a week of a month is written `W`.
+
 * `Tempo.select/2` resolves a constraint as the selection of the same parts, by one implementation, and resolves a rule in its period directly. A selection (`~o"L15DN"`) is selected two to eight times faster and a constraint within an eighth of what it took, but for a day of the year selected from a month or a week, which takes three times as long.
 
 * Every form outside the plain dates and timestamps is read in about half the time, a date or a time being read once at each place: `2026-W25-3` in 230 µs where it took 500, `20260615` in 290 where it took 530, and a time of day alone in 160 where it took 290.

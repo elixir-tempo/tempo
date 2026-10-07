@@ -7800,7 +7800,7 @@ defmodule Tempo do
       calendar = Compare.effective_calendar(calendar_of(rule))
 
       with :ok <- NotBuilt.selection(time, interval, calendar),
-           do: NotBuilt.week_in_month(time, interval, calendar)
+           do: Selection.calendar_week_in_its_year(time, interval)
     end
   end
 

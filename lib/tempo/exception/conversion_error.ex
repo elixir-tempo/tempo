@@ -57,10 +57,15 @@ defmodule Tempo.ConversionError do
     RRULE that steps or selects by a month, a year, a week of the year or
     a day of one, for a recurrence of another calendar than the Gregorian;
     and `:week_of_month` is a week of a month in a calendar whose year
-    does not begin with its first month, one selected from a month as
-    other than a whole number (a mask), and one selected by a rule
-    resolved in a month as a week of the calendar's own numbering (`w`).
+    does not begin with its first month, and one selected from a month as
+    other than a whole number (a mask).
     The [operation matrix](operation-matrix.html) lists each.
+
+  * `:calendar_week_in_month` — a week of the calendar's own numbering
+    (`w`) selected in a month, as `~o"2026Y6ML2wN"` is. Such a week is a
+    week of the calendar's year and is selected in a year
+    (`~o"2026YL2wN"`); a week of a month is written `W`
+    (`~o"2026Y6ML2WN"`).
 
   """
 
@@ -180,6 +185,12 @@ defmodule Tempo.ConversionError do
       "from the group's start."
   end
 
+  def message(%__MODULE__{reason: :calendar_week_in_month} = error) do
+    "#{not_built_subject(error)} — a week of the calendar's own numbering (`w`) is a week of " <>
+      "its year, and a month has none to select. It is selected in a year (`2026YL2wN`), and " <>
+      "a week of a month is written `W` (`2026Y6ML2WN`)."
+  end
+
   def message(%__MODULE__{reason: :not_built, target: target, calendar: calendar} = error) do
     "#{not_built_subject(error)} — #{not_built(target)} is not built for #{inspect(calendar)}, " <>
       "#{not_built_calendar(target)}, and is refused where it would be answered wrongly."
@@ -223,6 +234,11 @@ defmodule Tempo.ConversionError do
   defp not_built_calendar(:rrule),
     do:
       "since RFC 5545 counts them in the Gregorian calendar and RFC 7529's RSCALE is not written"
+
+  # A week of a month is refused in every calendar where it is a mask, so
+  # what is said of the calendar is said of the two cases.
+  defp not_built_calendar(:week_of_month),
+    do: "in a year that does not begin with its first month and where it is no whole number"
 
   defp not_built_calendar(_target), do: "whose year does not begin with its first month"
 

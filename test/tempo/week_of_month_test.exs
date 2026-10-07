@@ -449,14 +449,38 @@ defmodule Tempo.WeekOfMonthTest do
                [~o"2026-06-15", ~o"2032-06-15"]
     end
 
-    test "is refused by name as the calendar's own week, which is a week of its year" do
-      assert {:error, %ConversionError{reason: :not_built, target: :week_of_month}} =
-               Tempo.to_interval(Tempo.from_iso8601!("2026Y6ML2wN"))
+    test "is refused for good as the calendar's own week, which is a week of its year" do
+      # It was refused as not yet built (decided 2026-10-08).
+      for text <- ["2026Y6ML2wN", "2026Y6ML2w3KN", "2026Y6ML{2,3}wN"] do
+        value = Tempo.from_iso8601!(text)
 
-      assert {:error, %ConversionError{reason: :not_built, target: :week_of_month} = error} =
+        assert {text, Tempo.to_interval(value)} ==
+                 {text,
+                  {:error,
+                   ConversionError.exception(value: value, reason: :calendar_week_in_month)}}
+      end
+
+      assert {:error, %ConversionError{reason: :calendar_week_in_month, target: nil} = error} =
                Tempo.select(~o"2026-06", ~o"L2wN")
 
-      assert Exception.message(error) =~ "from ~o\"2026Y6M\""
+      message = Exception.message(error)
+      assert message =~ "from ~o\"2026Y6M\""
+      assert message =~ "is a week of its year"
+      assert message =~ "a week of a month is written `W`"
+      refute message =~ "not built"
+
+      # In its year it is the week it names: the second of the calendar's
+      # own weeks of 2026, from Monday 5 January.
+      assert Gregorian.week_of_year(2026, 1, 5) == {2026, 2}
+      assert Date.day_of_week(~D[2026-01-05]) == 1
+
+      for selected <- [
+            Tempo.to_interval(Tempo.from_iso8601!("2026YL2wN")),
+            Tempo.select(~o"2026", ~o"L2wN")
+          ] do
+        assert {:ok, %IntervalSet{} = week} = selected
+        assert IntervalSet.members(week) == [Tempo.from_iso8601!("2026-01-05/2026-01-12")]
+      end
     end
   end
 
@@ -597,11 +621,15 @@ defmodule Tempo.WeekOfMonthTest do
     end
 
     test "as the calendar's own week is refused in a rule of months, and limits one from a date" do
+      # A rule from a set of months selected nothing, where one from a month
+      # was refused.
       for {text, options} <- [
             {"R2/2026Y6M/P1M/FL2wN", []},
+            {"R2/2026Y/P1M/FL2wN", []},
+            {"R2/{2026Y6M,2027Y6M}/P1M/FL2wN", []},
             {"R/../P1M/FL2wN", [within: ~o"2026"]}
           ] do
-        assert {^text, {:error, %ConversionError{reason: :not_built, target: :week_of_month}}} =
+        assert {^text, {:error, %ConversionError{reason: :calendar_week_in_month}}} =
                  {text, Tempo.to_interval(Tempo.from_iso8601!(text), options)}
       end
 
