@@ -291,7 +291,51 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
   }
 
   defp build_extended(segments) do
-    build_extended(segments, @empty_extended, 0, %{})
+    with :ok <- zone_written_first(segments) do
+      build_extended(segments, @empty_extended, 0, %{})
+    end
+  end
+
+  # A time zone is the first suffix of a value or it has none (RFC 9557
+  # §4.1: `suffix = [time-zone] *suffix-tag`). One written after a tag was
+  # dropped, and the value read as one in no zone:
+  # `[u-ca=hebrew][Europe/Paris]`. After a time zone another is one too
+  # many, which is dropped where it is elective and an error where it is
+  # critical (`apply_payload/4`), the value having the zone it was given
+  # first.
+  defp zone_written_first([first | later]) do
+    if zone_segment?(first),
+      do: :ok,
+      else: Enum.find_value(later, :ok, &zone_after_a_tag/1)
+  end
+
+  defp zone_written_first([]), do: :ok
+
+  defp zone_after_a_tag(segment) do
+    if zone_segment?(segment) do
+      {:error,
+       ParseError.exception(
+         reason:
+           "A time zone is the first suffix of a value (RFC 9557 §4.1), and " <>
+             "#{written_zone(segment)} is written after another"
+       )}
+    end
+  end
+
+  defp zone_segment?(segment) do
+    case split_critical(segment) do
+      {_critical, {:zone, "u-" <> _extension}} -> false
+      {_critical, {:zone, _zone}} -> true
+      {_critical, {:offset, _minutes}} -> true
+      {_critical, {:tag, _fields}} -> false
+    end
+  end
+
+  defp written_zone(segment) do
+    case split_critical(segment) do
+      {_critical, {:zone, zone}} -> "[#{zone}]"
+      {_critical, {:offset, _minutes}} -> "an offset"
+    end
   end
 
   # The first segment is the time-zone position: either a bare

@@ -245,6 +245,34 @@ defmodule Tempo.Iso8601.Extended.Test do
       assert extended.zone_id == "Europe/Paris"
     end
 
+    # RFC 9557 §4.1 has a time zone first or not at all (`suffix =
+    # [time-zone] *suffix-tag`). One written after a tag was dropped, and
+    # the value read as one in no zone.
+    test "a time zone written after another suffix is refused, where it was dropped" do
+      for text <- [
+            "2022-11-20T10:30:00[u-ca=hebrew][Europe/Paris]",
+            "2022-11-20T10:30:00[u-ca-hebrew][Europe/Paris]",
+            "2022-11-20T10:30:00[u-ca=gregory][+08:45]",
+            "2022-11-20T10:30:00[foo=bar][Europe/Paris]",
+            "2022-11-20T10:30:00[foo=bar][!Europe/Paris]",
+            "2022-11-20T10:30:00[foo=bar][u-ca=gregory][Europe/Paris]",
+            "2022-11-20T10:30:00[u-ca=gregory][Europe/Paris]/2022-11-21T10:30:00",
+            "{2022-11-20T10:30:00[u-ca=gregory][Europe/Paris],2022-11-21T10:30:00}"
+          ] do
+        assert {text, {:error, %Tempo.ParseError{} = error}} = {text, Tempo.from_iso8601(text)}
+        assert {text, Exception.message(error) =~ "the first suffix of a value"} == {text, true}
+      end
+
+      # Written first, it is the value's zone, whatever follows it.
+      for text <- [
+            "2022-11-20T10:30:00[Europe/Paris][u-ca=gregory]",
+            "2022-11-20T10:30:00[Europe/Paris][foo=bar][u-ca=gregory]"
+          ] do
+        assert {text, {:ok, %Tempo{extended: %{zone_id: "Europe/Paris"}}}} =
+                 {text, Tempo.from_iso8601(text)}
+      end
+    end
+
     # A time zone given as an offset after the first position is no second
     # zone either: ignored, or an error where it is critical.
     test "an offset after a zone is ignored when elective, and rejected when critical" do

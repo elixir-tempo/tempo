@@ -371,6 +371,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A time zone written after another suffix is a `Tempo.ParseError`, as RFC 9557 §4.1 has a time zone first or not at all: `2022-11-20T10:30[u-ca=hebrew][Europe/Paris]` was read with its zone dropped, as a value in no zone. A second time zone after a first is still dropped where it is elective, the value having the zone it was given first.
+
 * A rule whose occurrences are far apart for its frequency has them: `FREQ=MINUTELY;BYHOUR=9;BYMINUTE=0;COUNT=30` is thirty mornings and `FREQ=DAILY;BYMONTH=2;BYMONTHDAY=29;BYDAY=MO;COUNT=3` the three Mondays to 2112, where each was a `Tempo.UnboundedRecurrenceError`, the walk having asked every minute and every day; it now goes on from the next value a part names. A rule with no occurrence at all (`FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=31`, an April from 31 January, every fourth year's 29 February from 2026) has none, where its walk was cut short.
 
 * A value made from one written with an offset in a named zone is at the offset its zone is at on its own reading: `Tempo.shift(~o"2024-03-09T12:00-05:00[America/New_York]", day: 1)` was at `-04:00` already, and so now are a date stepped across a change of the clock, each end of a span, a selected member, a rule's occurrence, and what `Tempo.trunc/2`, `Tempo.round/2`, `Tempo.split/1` and `Tempo.at/2` give. Each kept the offset of the value it was made from, which names another moment to a reader that goes by the offset.
