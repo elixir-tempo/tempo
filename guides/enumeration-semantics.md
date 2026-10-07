@@ -63,7 +63,7 @@ Any component may carry a range, a range with step, a set of values, or a cartes
 
 Each component is read after the values before it, so a count from the end (`-1`, the last) is the last of each: `{2026,2027}Y-1D` is 31 December of each year, and `2026Y{1..-1}M{1..-1}D` every day of 2026. A value its context cannot hold is passed over, as RFC 5545 passes over a date that does not exist: `{2023,2024}Y2M29D` is 29 February 2024 alone. The walk is lazy, so `Enum.take/2` of a large set reads only the values it takes.
 
-An interval written with a duration from a value that holds a set is the span from each value, as a recurrence from it is the occurrences from each: `2026Y6M{1,15}D/P1D` is a day from the 1st and a day from the 15th, and `P1D/2026Y6M{1,15}D` the day to each. Written with two ends it is no one span, and a `Tempo.IntervalEndpointsError`.
+An interval written with a duration from a value that holds a set is the span from each value, as a recurrence from it is the occurrences from each: `2026Y6M{1,15}D/P1D` is a day from the 1st and a day from the 15th, and `P1D/2026Y6M{1,15}D` the day to each. Written with two ends, one of which holds a set, it is the span from each value to the other end: `2026Y6M{1,15}D/2026Y6M20D` runs from the 1st to the 20th and from the 15th to the 20th, two spans that overlap and are kept apart unless `coalesce: true` is asked. A set at each end names no one span for any value, and is a `Tempo.IntervalEndpointsError`.
 
 ### 2.3. Recurring intervals
 

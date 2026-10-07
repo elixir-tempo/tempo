@@ -1535,8 +1535,8 @@ defmodule Tempo.Select do
       :point ->
         project_onto_base(base, c_from)
 
-      {:from_each, starts} ->
-        span_from_each(starts, base, constraint)
+      {:each, which, values} ->
+        span_from_each(values, which, base, constraint)
 
       {:error, _several_values} = error ->
         error
@@ -1545,11 +1545,11 @@ defmodule Tempo.Select do
 
   defp project_onto_base(_base, constraint), do: {:error, unrecognised_selector(constraint)}
 
-  # The span from each value of a start that holds a set, each projected as
-  # the span from that one value is.
-  defp span_from_each(starts, base, constraint) do
-    Enum.reduce_while(starts, [], fn start, spans ->
-      case project_onto_base(base, %{constraint | from: start}) do
+  # The span from each value of a start that holds a set, or to each value
+  # of an end that does, each projected as the span of that one value is.
+  defp span_from_each(values, which, base, constraint) do
+    Enum.reduce_while(values, [], fn value, spans ->
+      case project_onto_base(base, Map.put(constraint, which, value)) do
         {:error, _reason} = error -> {:halt, error}
         projected -> {:cont, spans ++ List.wrap(projected)}
       end
@@ -1674,35 +1674,44 @@ defmodule Tempo.Select do
 
   # How a selector that is a span ends: at its own end, by a duration from
   # its start, or as the point its start is. A span runs from one point to
-  # another, so an end that holds a set, which names several, gives no one
-  # span. Written with a duration from a start that holds a set it is the
+  # another, so an end that holds a set names a span for each of its
+  # values. Written with a duration from a start that holds a set it is the
   # span from each of the start's values (decided 2026-10-07): `T{9,14}H/PT1H`
-  # is the hour from 09:00 and the hour from 14:00. Written with two ends it
-  # is refused: the ends were merged as they stood into a span that held the
-  # sets.
+  # is the hour from 09:00 and the hour from 14:00. Written with two ends,
+  # one of which holds a set, it is the span from each value to the other
+  # end, or to each from it (decided 2026-10-08): `T{9,14}H/T16H` is nine to
+  # four and two to four. It was refused, the ends having been merged as
+  # they stood into a span that held the sets. A set at each end names no
+  # one span for any value, and is refused still.
   defp span_endpoint(%Interval{recurrence: recurrence}) when recurrence != 1, do: :point
 
   defp span_endpoint(%Interval{from: %Tempo{} = from, to: nil, duration: %Duration{}} = selector) do
     case Enumeration.expand(from) do
-      {:ok, starts} -> {:from_each, starts}
+      {:ok, starts} -> {:each, :from, starts}
       {:error, _exception} = error -> error
       :not_expandable -> span_end(selector)
     end
   end
 
   defp span_endpoint(%Interval{from: from, to: to} = selector) do
-    case Enum.find([{"start", from}, {"end", to}], &names_several?/1) do
-      nil -> span_end(selector)
-      {end_name, value} -> {:error, several_values_error(selector, end_name, value)}
+    case {names_several?(from), names_several?(to)} do
+      {false, false} -> span_end(selector)
+      {true, false} -> each_value(:from, from)
+      {false, true} -> each_value(:to, to)
+      {true, true} -> {:error, several_values_error(selector, "start", from)}
     end
+  end
+
+  defp each_value(which, %Tempo{} = endpoint) do
+    with {:ok, values} <- Enumeration.expand(endpoint), do: {:each, which, values}
   end
 
   defp span_end(%Interval{to: %Tempo{} = to}), do: {:to, to}
   defp span_end(%Interval{to: nil, duration: %Duration{} = duration}), do: {:duration, duration}
   defp span_end(%Interval{}), do: :point
 
-  defp names_several?({_end_name, %Tempo{} = value}), do: Enumeration.names_each_value?(value)
-  defp names_several?({_end_name, _no_value}), do: false
+  defp names_several?(%Tempo{} = value), do: Enumeration.names_each_value?(value)
+  defp names_several?(_no_value), do: false
 
   defp several_values_error(selector, end_name, value) do
     IntervalEndpointsError.exception(

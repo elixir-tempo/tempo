@@ -236,8 +236,10 @@ defmodule Tempo.IntervalRegressionTest do
       assert %Tempo.Duration{} = Tempo.duration(~o"2018±2Y/2060")
     end
 
+    # An end that holds a set is the span from each of its values, where
+    # the other end holds none (`Tempo.SpanFromEachValueTest`).
     test "an end that names several spans is no one point" do
-      for interval <- [~o"2026Y6M{1,15}D/2026Y7M", ~o"2026Y6ML2KN/2026Y7M"] do
+      for interval <- [~o"2026Y6M{1,15}D/2026Y7M{1,15}D", ~o"2026Y6ML2KN/2026Y7M"] do
         assert {:error, %Tempo.IntervalEndpointsError{} = error} = Tempo.to_interval(interval)
         assert Exception.message(error) =~ "names several spans"
         assert {:error, %Tempo.IntervalEndpointsError{}} = Tempo.relation(interval, ~o"2050")

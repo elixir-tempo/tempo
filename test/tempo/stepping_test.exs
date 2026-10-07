@@ -303,9 +303,14 @@ defmodule Tempo.SteppingTest do
     end
 
     test "is raised by an enumeration, which has no error to return" do
-      days = Tempo.from_iso8601!("2026Y6M{1,15}D/2026Y7M1D")
+      # A set at each end names no one span to walk; a set at one is the
+      # span from each of its values.
+      days = Tempo.from_iso8601!("2026Y6M{1,15}D/2026Y7M{1,15}D")
 
       assert_raise ConversionError, ~r/holds several values/, fn -> Enum.take(days, 3) end
+
+      assert Enum.take(Tempo.from_iso8601!("2026Y6M{1,15}D/2026Y7M1D"), 2) ==
+               [~o"2026-06-01", ~o"2026-06-02"]
     end
   end
 

@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* An interval written with two ends, one of which holds a set, is the span from each of its values to the other end, or to each from it: `2026Y6M{1,15}D/2026Y6M20D` runs from the 1st to the 20th and from the 15th to the 20th, and the selector `~o"T{9,14}H/T16H"` selects nine to four and two to four, where each was a `Tempo.IntervalEndpointsError`. The spans overlap and are kept apart unless `coalesce: true` is asked; a set at each end is refused still.
+
 * An hour a rule selects where the clock of its zone skips its start is the part the clock shows, as `Tempo.select/2` gives it: `Tempo.to_interval(~o"2026Y10M4DLT2HN[Australia/Lord_Howe]")` is `T2H/T3H`, the half hour from 02:30, where it was `T2H/T3H30M`, an hour from 02:30 and half an hour into the hour after it. It holds for a value's selection, a recurrence's rule and an RRULE (`FREQ=DAILY;BYHOUR=2`).
 
 * A span of clock times is shown to its end as it is written: `Tempo.to_string(~o"2026-06-15T09/2026-06-15T17")` is "Jun 15, 2026, 9 AM – 5 PM" where it was "9 AM – 4 PM", the last hour the span holds, and 9:30 to 10:45 is "9:30 – 10:45 AM". A span of days, months or years is shown to the last it holds, as it was, and a span one hour, minute or second long is the value it is.
@@ -402,6 +404,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* `Tempo.explain/1` shows an end that holds a set as it is written, and says of an interval with one that it is a span from each value: the end of `2026Y6M1D/2026Y6M{20,25}D` was shown as 1 June, the first day of its month.
 
 * `Tempo.to_string/2` shows a span of clock times that starts at a fraction of a second, where it raised a `FunctionClauseError`, and one that holds no time at all (`2026-06-15T10/2026-06-15T10`) is the value it starts at, where it was shown backwards, "10 – 9 AM".
 

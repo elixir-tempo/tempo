@@ -266,9 +266,15 @@ defimpl Enumerable, for: Tempo.Interval do
   defp occurrences?(%Tempo.Interval{repeat_rule: %Tempo{}}), do: true
 
   defp occurrences?(%Tempo.Interval{from: from, to: to, duration: duration}) do
-    selects?(from) or selects?(to) or
-      (not is_nil(duration) and (names_each_value?(from) or names_each_value?(to)))
+    selects?(from) or selects?(to) or spans_from_each_value?(from, to, duration)
   end
+
+  # Written with a duration from or to an end that holds a set, or with two
+  # ends one of which does.
+  defp spans_from_each_value?(from, to, nil), do: names_each_value?(from) != names_each_value?(to)
+
+  defp spans_from_each_value?(from, to, _duration),
+    do: names_each_value?(from) or names_each_value?(to)
 
   defp selects?(%Tempo{time: time}), do: List.keymember?(time, :selection, 0)
   defp selects?(_no_endpoint), do: false

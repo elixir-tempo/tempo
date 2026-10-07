@@ -527,7 +527,7 @@ defmodule Tempo.EnumerationWalk.Test do
 
   describe "an interval whose end is no one point" do
     test "to stop at" do
-      for interval <- [~o"2026Y/{2026,2027}Y", ~o"2026Y6M15D/2026Y6MXXD", ~o"1M/-1M"] do
+      for interval <- [~o"2026Y6M15D/2026Y6MXXD", ~o"1M/-1M"] do
         assert_raise Tempo.IntervalEndpointsError, ~r/no one point to stop at/, fn ->
           Enum.take(interval, 1)
         end
@@ -537,8 +537,21 @@ defmodule Tempo.EnumerationWalk.Test do
     end
 
     test "to step from" do
-      assert_raise Tempo.ConversionError, fn -> Enum.to_list(~o"{2026,2027}Y/2030Y") end
+      assert_raise Tempo.ConversionError, fn -> Enum.to_list(~o"{2026,2027}Y/{2029,2030}Y") end
       assert_raise Tempo.ConversionError, fn -> Enum.to_list(~o"202XY/2040Y") end
+    end
+
+    # An end that holds a set is each of its values (decided 2026-10-08):
+    # the spans from each, or to each, walked one after another.
+    test "but a set, which is walked as the span from each of its values" do
+      assert Enum.to_list(~o"{2026,2027}Y/2030Y") ==
+               [~o"2026Y", ~o"2027Y", ~o"2028Y", ~o"2029Y", ~o"2027Y", ~o"2028Y", ~o"2029Y"]
+
+      assert Enum.to_list(~o"2026Y/{2027,2028}Y") == [~o"2026Y", ~o"2026Y", ~o"2027Y"]
+      assert Enum.count(~o"2026Y/{2027,2028}Y") == 3
+
+      # A value that is the end it runs to makes no span.
+      assert_raise Tempo.IntervalEndpointsError, fn -> Enum.take(~o"2026Y/{2026,2027}Y", 1) end
     end
 
     test "nor ends with no line to share, one with a year and one with none" do

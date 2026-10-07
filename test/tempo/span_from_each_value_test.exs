@@ -9,8 +9,13 @@ defmodule Tempo.SpanFromEachValueTest do
   2026-10-07), as are a span to an end that holds a set, a selector written
   so, and a shift that skips busy time.
 
+  An interval written with two ends, one of which holds a set, was refused
+  still. It is the span from each value to the other end, or to each from
+  it (decided 2026-10-08): `2026Y6M{1,15}D/2026Y6M20D` runs from the 1st to
+  the 20th and from the 15th to the 20th.
+
   The measure is Elixir's own `Date` and `NaiveDateTime`: each value of the
-  set, and the duration counted from it.
+  set, and the duration counted from it or the other end as it is written.
   """
   use ExUnit.Case, async: true
 
@@ -111,11 +116,116 @@ defmodule Tempo.SpanFromEachValueTest do
       assert Enum.count(~o"2026Y6M{1,15}D/PT3H") == 6
     end
 
-    test "is still refused with two ends, and from a start that is no set" do
-      for text <- ["2026Y6M{1,15}D/2026Y6M20D", "2026-06-X5/P1D"] do
-        assert {^text, {:error, %Tempo.IntervalEndpointsError{}}} =
-                 {text, Tempo.to_interval(Tempo.from_iso8601!(text))}
+    test "is still refused from a start that is no set" do
+      assert {:error, %Tempo.IntervalEndpointsError{}} =
+               Tempo.to_interval(Tempo.from_iso8601!("2026-06-X5/P1D"))
+    end
+  end
+
+  describe "an interval written with two ends, one of which holds a set" do
+    test "is the span from each value of its start to its end" do
+      for days <- @days, last <- [~D[2026-07-01], ~D[2026-07-15]] do
+        text = "2026Y6M#{set(days)}D/#{last}"
+
+        expected = for day <- days, do: {seconds(Date.new!(2026, 6, day)), seconds(last)}
+
+        assert {text, spans(Tempo.from_iso8601!(text))} == {text, expected}
       end
+    end
+
+    test "is the span from its start to each value of its end" do
+      for days <- @days do
+        text = "2026-05-20/2026Y6M#{set(days)}D"
+
+        expected =
+          for day <- days, do: {seconds(~D[2026-05-20]), seconds(Date.new!(2026, 6, day))}
+
+        assert {text, spans(Tempo.from_iso8601!(text))} == {text, expected}
+      end
+    end
+
+    test "is so of months, of years and of times of day, with a year and with none" do
+      assert spans(~o"2026Y{6,7}M/2026Y9M") ==
+               for(
+                 month <- [6, 7],
+                 do: {seconds(Date.new!(2026, month, 1)), seconds(~D[2026-09-01])}
+               )
+
+      assert spans(~o"{2026,2027}Y/2030Y") ==
+               for(
+                 year <- [2026, 2027],
+                 do: {seconds(Date.new!(year, 1, 1)), seconds(~D[2030-01-01])}
+               )
+
+      assert spans(~o"2026Y6M15DT{9,14}H/2026Y6M15DT16H") ==
+               for(
+                 hour <- [9, 14],
+                 do:
+                   {seconds(NaiveDateTime.new!(2026, 6, 15, hour, 0, 0)),
+                    seconds(~N[2026-06-15 16:00:00])}
+               )
+
+      {:ok, on_the_clock} = Tempo.to_interval(~o"T{9,14}H/T16H")
+
+      assert IntervalSet.members(on_the_clock) ==
+               [Tempo.from_iso8601!("T9H/T16H"), Tempo.from_iso8601!("T14H/T16H")]
+    end
+
+    test "is in the zone its ends are written in" do
+      {:ok, zoned} =
+        Tempo.to_interval(Tempo.from_iso8601!("2026Y6M{1,15}D/2026Y6M20D[Europe/Paris]"))
+
+      assert IntervalSet.members(zoned) == [
+               Tempo.from_iso8601!("2026-06-01/2026-06-20[Europe/Paris]"),
+               Tempo.from_iso8601!("2026-06-15/2026-06-20[Europe/Paris]")
+             ]
+    end
+
+    test "keeps its spans apart, which overlap, and is one where they are asked to be merged" do
+      value = ~o"2026Y6M{1,15}D/2026Y6M20D"
+
+      {:ok, apart} = Tempo.to_interval(value)
+      assert IntervalSet.count(apart) == 2
+
+      {:ok, merged} = Tempo.to_interval(value, coalesce: true)
+
+      assert Enum.map(IntervalSet.members(merged), &bounds/1) == [
+               {seconds(~D[2026-06-01]), seconds(~D[2026-06-20])}
+             ]
+    end
+
+    test "is refused where a value is at or after the end it runs to, as that interval is alone" do
+      assert {:error, %Tempo.IntervalEndpointsError{} = later} =
+               Tempo.to_interval(~o"2026Y6M{1,25}D/2026Y6M20D")
+
+      assert inspect(later.interval) == ~s|~o"2026Y6M25D/20D"|
+
+      assert {:error, %Tempo.IntervalEndpointsError{}} =
+               Tempo.to_interval(~o"2026Y6M{1,20}D/2026Y6M20D")
+    end
+
+    test "is refused with a set at each end, and with an end left open" do
+      for text <- ["2026Y6M{1,15}D/2026Y6M{20,25}D", "2026Y6M{1,15}D/..", "../2026Y6M{1,15}D"] do
+        assert {^text, {:error, %Tempo.IntervalEndpointsError{} = error}} =
+                 {text, Tempo.to_interval(Tempo.from_iso8601!(text))}
+
+        assert Exception.message(error) =~ "names several spans"
+      end
+    end
+
+    test "is walked, shown and worded as its spans are" do
+      value = ~o"2026Y6M{28,29}D/2026Y7M1D"
+
+      assert Enum.to_list(value) ==
+               [~o"2026-06-28", ~o"2026-06-29", ~o"2026-06-30", ~o"2026-06-29", ~o"2026-06-30"]
+
+      assert Tempo.to_string(~o"2026Y6M{1,15}D/2026Y6M20D") ==
+               {:ok, "Jun 1\u2009\u2013\u200919, 2026 and Jun 15\u2009\u2013\u200919, 2026"}
+
+      words = to_string(Tempo.explain(~o"2026Y6M1D/2026Y6M{20,25}D"))
+      assert words =~ "A span from its start to each value of its end."
+      assert words =~ ~s|To:   ~o"2026Y6M{20,25}D"|
+      refute words =~ "To:   2026-06-01"
     end
   end
 
@@ -151,9 +261,41 @@ defmodule Tempo.SpanFromEachValueTest do
                Enum.sort(Enum.map(alone, &bounds/1))
     end
 
-    test "is still refused with two ends" do
-      assert {:error, %Tempo.IntervalEndpointsError{operation: :select}} =
-               Tempo.select(~o"2026-06-15", ~o"T{9,14}H/T16H")
+    test "selects the span from each value with two ends, one of which holds a set" do
+      four = seconds(~N[2026-06-15 16:00:00])
+
+      {:ok, %IntervalSet{} = from_each} = Tempo.select(~o"2026-06-15", ~o"T{9,14}H/T16H")
+
+      assert Enum.map(IntervalSet.members(from_each), &bounds/1) ==
+               for(
+                 hour <- [9, 14],
+                 do: {seconds(NaiveDateTime.new!(2026, 6, 15, hour, 0, 0)), four}
+               )
+
+      {:ok, %IntervalSet{} = to_each} = Tempo.select(~o"2026-06-15", ~o"T9H/T{12,16}H")
+
+      assert Enum.map(IntervalSet.members(to_each), &bounds/1) ==
+               for(
+                 hour <- [12, 16],
+                 do:
+                   {seconds(~N[2026-06-15 09:00:00]),
+                    seconds(NaiveDateTime.new!(2026, 6, 15, hour, 0, 0))}
+               )
+
+      {:ok, %IntervalSet{} = days} = Tempo.select(~o"2026-06", ~o"{1,15}D/20D")
+
+      assert Enum.map(IntervalSet.members(days), &bounds/1) ==
+               for(
+                 day <- [1, 15],
+                 do: {seconds(Date.new!(2026, 6, day)), seconds(~D[2026-06-20])}
+               )
+    end
+
+    test "is refused with a set at each end" do
+      assert {:error, %Tempo.IntervalEndpointsError{operation: :select} = error} =
+               Tempo.select(~o"2026-06-15", ~o"T{9,14}H/T{16,17}H")
+
+      assert Exception.message(error) =~ "names several values"
     end
   end
 

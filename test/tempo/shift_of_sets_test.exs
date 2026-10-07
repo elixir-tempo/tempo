@@ -512,9 +512,9 @@ defmodule Tempo.ShiftOfSetsTest do
       end
     end
 
-    test "has no one start with two ends" do
+    test "has no one start with two ends that each hold a set" do
       assert {:error, %IntervalEndpointsError{} = error} =
-               Tempo.to_interval(Tempo.from_iso8601!("2026Y6M{1,15}D/2026Y6M20D"))
+               Tempo.to_interval(Tempo.from_iso8601!("2026Y6M{1,15}D/2026Y6M{20,25}D"))
 
       assert Exception.message(error) =~ "names several spans"
     end

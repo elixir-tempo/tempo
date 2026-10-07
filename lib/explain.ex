@@ -66,6 +66,7 @@ defmodule Tempo.Explain do
 
   """
 
+  alias Tempo.Enumeration
   alias Tempo.Event
   alias Tempo.Explanation
   alias Tempo.IntervalSet
@@ -1188,9 +1189,10 @@ defmodule Tempo.Explain do
 
   defp interval_parts(%Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to} = interval) do
     [
-      {:headline, "A closed interval."},
+      {:headline, closed_headline(from, to)},
       {:span, "From: #{render_endpoint(from)}."},
       {:span, "To:   #{render_endpoint(to)} (exclusive — half-open `[from, to)`)."},
+      each_value_hint(from, to),
       metadata_part(interval.metadata)
     ]
     |> Enum.reject(&is_nil/1)
@@ -1199,6 +1201,24 @@ defmodule Tempo.Explain do
   defp interval_parts(%Tempo.Interval{}) do
     [{:headline, "A Tempo.Interval with an unusual shape."}]
   end
+
+  # An interval of two ends, one of which holds a set, is the span from each
+  # of its values to the other end, or to each from it. It was worded as one
+  # interval, from the first day of the month its set of days is in.
+  defp closed_headline(from, to) do
+    case {names_each_value?(from), names_each_value?(to)} do
+      {true, false} -> "A span from each value of its start to its end."
+      {false, true} -> "A span from its start to each value of its end."
+      _one_span_or_a_set_at_each_end -> "A closed interval."
+    end
+  end
+
+  defp each_value_hint(from, to) do
+    if names_each_value?(from) != names_each_value?(to),
+      do: {:hint, "List the spans with `Tempo.to_interval/1`."}
+  end
+
+  defp names_each_value?(%Tempo{} = endpoint), do: Enumeration.names_each_value?(endpoint)
 
   defp metadata_part(m) when m == %{} or is_nil(m), do: nil
 
@@ -1557,7 +1577,19 @@ defmodule Tempo.Explain do
   # padding missing trailing units with their minimum so the
   # output reads as a concrete moment rather than a span. A calendar
   # of weeks writes `YYYY-Www-D` for its date.
+  #
+  # An end that holds a set names several values and no one moment, and is
+  # shown as it is written: `2026Y6M{20,25}D` was shown as the first day of
+  # its month.
   defp render_endpoint(%Tempo{time: time} = tempo) do
+    if names_each_value?(tempo),
+      do: inspect(tempo),
+      else: render_moment(tempo, time)
+  end
+
+  defp render_endpoint(other), do: inspect(other)
+
+  defp render_moment(tempo, time) do
     case {render_date_part(tempo), render_time_part(time)} do
       # A mask (`198X`), a margin of error (`2018±2Y`) or a grouped
       # component has no plain calendar spelling, so show the value's own
@@ -1569,8 +1601,6 @@ defmodule Tempo.Explain do
       {date, time} -> "#{date}T#{time}#{render_shift(tempo)}"
     end
   end
-
-  defp render_endpoint(other), do: inspect(other)
 
   defp render_date_part(%Tempo{time: time} = tempo) do
     case find_unit(time, :year) do

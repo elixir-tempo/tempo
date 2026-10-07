@@ -617,15 +617,13 @@ defmodule Tempo.Select.Test do
     end
 
     # A span runs from one point to another. Its ends were merged as they
-    # stood, into one span from `2026Y6M{1,15}D` to `2026Y7M{1,15}D`. Written
-    # with a duration from a start that holds a set it is the span from each
-    # value (decided 2026-10-07, `Tempo.SpanFromEachValueTest`).
-    test "a selector that is a span between two ends, one of which holds a set, names no one span" do
+    # stood, into one span from `2026Y6M{1,15}D` to `2026Y7M{1,15}D`. With a
+    # set at one end it is the span from each value (decided 2026-10-08,
+    # `Tempo.SpanFromEachValueTest`); with one at each it names no one span.
+    test "a selector that is a span between two ends, each of which holds a set, names no one span" do
       for {period, text} <- [
             {~o"2026", "6M{1,15}D/6M{2,16}D"},
-            {~o"2026", "6M1D/6M{2,16}D"},
-            {~o"2026-06-15", "T{9,14}H/T16H"},
-            {~o"2026-06-15", "T9H/T{16,17}H"}
+            {~o"2026-06-15", "T{9,14}H/T{16,17}H"}
           ] do
         assert {:error, %Tempo.IntervalEndpointsError{operation: :select} = error} =
                  Tempo.select(period, Tempo.from_iso8601!(text)),

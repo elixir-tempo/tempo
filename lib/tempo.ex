@@ -7339,11 +7339,15 @@ defmodule Tempo do
     duration would be counted from a start or an end that names several
     spans and holds no set — the day after `~o"2026-06-X5"`, the 5th,
     the 15th or the 25th — or when an interval of two ends has a set at
-    one of them (`2026Y6M{1,15}D/2026Y6M20D`). An interval written with
-    a duration from a value that holds a set is the span from each value
-    it names: `2026Y6M{1,15}D/P1D` is a day from the 1st and a day from
-    the 15th, as the recurrence `R2/2026Y6M{1,15}D/P1D` is two from
-    each.
+    each of them (`2026Y6M{1,15}D/2026Y6M{20,25}D`). An interval written
+    with a duration from a value that holds a set is the span from each
+    value it names: `2026Y6M{1,15}D/P1D` is a day from the 1st and a day
+    from the 15th, as the recurrence `R2/2026Y6M{1,15}D/P1D` is two from
+    each. One written with two ends, one of which holds a set, is the
+    span from each of its values to the other end, or to each from it:
+    `2026Y6M{1,15}D/2026Y6M20D` runs from the 1st to the 20th and from
+    the 15th to the 20th, and a value at or after the end it runs to is
+    the error that interval is alone.
 
   * `{:error, %Tempo.ConversionError{reason: :grouped_component}}`
     when a recurrence would be stepped from a start that names no one
@@ -7661,7 +7665,62 @@ defmodule Tempo do
     from_each(to, &%{interval | to: &1}, interval, opts)
   end
 
+  # An interval written with two ends, one of which holds a set, is the span
+  # from each of its values to the other end, or from the other end to each
+  # (decided 2026-10-08), as one written with a duration is the span from
+  # each: `2026Y6M{1,15}D/2026Y6M20D` runs from the 1st to the 20th and from
+  # the 15th to the 20th. It was refused as an interval with no one start.
+  # A set at each end names no one span for any of its values, and is
+  # refused still.
+  defp recurrence_from_each_value(
+         %Interval{
+           recurrence: 1,
+           from: %__MODULE__{} = from,
+           to: %__MODULE__{} = to,
+           duration: nil
+         } =
+           interval,
+         opts
+       ) do
+    case {Enumeration.names_each_value?(from), Enumeration.names_each_value?(to)} do
+      {true, false} -> between_each(from, &[from: &1, to: to], interval, opts)
+      {false, true} -> between_each(to, &[from: from, to: &1], interval, opts)
+      _one_span_or_a_set_at_each_end -> :one_start
+    end
+  end
+
   defp recurrence_from_each_value(_value, _opts), do: :one_start
+
+  # The span between each value of an end that holds a set and the other
+  # end. Each is the interval its two ends make, held to the order an
+  # interval's ends are in, so a value at or after the end it runs to is
+  # the error it is alone. They are kept apart, overlapping as they do,
+  # unless `:coalesce` is asked.
+  defp between_each(%__MODULE__{} = endpoint, ends, %Interval{metadata: metadata}, opts) do
+    with {:ok, values} <- Enumeration.expand(endpoint),
+         {:ok, spans} <- spans_between(values, ends, metadata) do
+      IntervalSet.new(spans, coalesce: coalesce_opt(opts))
+    end
+  end
+
+  defp spans_between(values, ends, metadata) do
+    values
+    |> Enum.reduce_while({:ok, []}, fn value, {:ok, spans} ->
+      case span_between(ends.(value), metadata) do
+        {:ok, span} -> {:cont, {:ok, [span | spans]}}
+        {:error, _exception} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, spans} -> {:ok, Enum.reverse(spans)}
+      {:error, _exception} = error -> error
+    end
+  end
+
+  defp span_between(ends, metadata) do
+    with {:ok, span} <- Interval.new(ends ++ [metadata: metadata]),
+         do: Interval.endpoints_as_points(span)
+  end
 
   # The most spans a value is converted to at once, as a recurrence gives at
   # most `@recurrence_safety_cap` occurrences. It is the most values of one
