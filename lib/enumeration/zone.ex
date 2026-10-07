@@ -119,14 +119,16 @@ defmodule Tempo.Enumeration.Zone do
          do: {:ok, [year: year, month: month, day: day]}
   end
 
+  @doc false
   # A Gregorian date and time, as `in_gregorian/1` gives one, in the units
   # and the calendar of the value it was made from: a day of a week for a
   # value written as one, in that calendar's weeks, or ISO 8601's for a
   # Gregorian value.
-  defp in_calendar_of(
-         %Tempo{time: [{:year, year}, {:month, month}, {:day, day} | clock]} = gregorian,
-         %Tempo{time: [{:year, _year}, {:week, _week}, {:day_of_week, _day} | _clock]} = written
-       ) do
+  @spec in_calendar_of(Tempo.t(), Tempo.t()) :: {:ok, Tempo.t()} | :error
+  def in_calendar_of(
+        %Tempo{time: [{:year, year}, {:month, month}, {:day, day} | clock]} = gregorian,
+        %Tempo{time: [{:year, _year}, {:week, _week}, {:day_of_week, _day} | _clock]} = written
+      ) do
     with {:ok, weeks} <- calendar_of_weeks(Compare.effective_calendar(written.calendar)),
          {:ok, %Date{} = date} <- Date.new(year, month, day, Gregorian),
          {:ok, %Date{year: year, month: week, day: day}} <- Date.convert(date, weeks) do
@@ -141,14 +143,14 @@ defmodule Tempo.Enumeration.Zone do
     end
   end
 
-  defp in_calendar_of(%Tempo{} = gregorian, %Tempo{calendar: calendar})
-       when calendar in [Gregorian, Calendar.ISO, nil],
-       do: {:ok, gregorian}
+  def in_calendar_of(%Tempo{} = gregorian, %Tempo{calendar: calendar})
+      when calendar in [Gregorian, Calendar.ISO, nil],
+      do: {:ok, gregorian}
 
-  defp in_calendar_of(
-         %Tempo{time: [{:year, year}, {:month, month}, {:day, day} | clock]} = gregorian,
-         %Tempo{calendar: calendar}
-       ) do
+  def in_calendar_of(
+        %Tempo{time: [{:year, year}, {:month, month}, {:day, day} | clock]} = gregorian,
+        %Tempo{calendar: calendar}
+      ) do
     with {:ok, %Date{} = date} <- Date.new(year, month, day, Gregorian),
          {:ok, %Date{year: year, month: month, day: day}} <- Date.convert(date, calendar) do
       {:ok,
@@ -158,7 +160,7 @@ defmodule Tempo.Enumeration.Zone do
     end
   end
 
-  defp in_calendar_of(%Tempo{}, %Tempo{}), do: :error
+  def in_calendar_of(%Tempo{}, %Tempo{}), do: :error
 
   # The calendar a day of a week is a date of: the calendar itself where it
   # is one of weeks, and ISO 8601's weeks for the Gregorian calendar.
@@ -232,7 +234,9 @@ defmodule Tempo.Enumeration.Zone do
   One written is refused when it is read, so this is asked of a value an
   operation has made: a member of a set in a unit, a value a mask stands
   for, the first value of a finer unit. A value the clock skips part of (a
-  day whose first hour is skipped, the hour of a half-hour change) is shown.
+  day whose first hour is skipped, the hour of a half-hour change) is shown,
+  and one that holds a set in a unit is shown where each value the set
+  names is.
   """
   @spec shown?(Tempo.t()) :: boolean()
   def shown?(%Tempo{time: time} = value) do
@@ -296,8 +300,11 @@ defmodule Tempo.Enumeration.Zone do
   clock changed (RFC 5545 §3.3.5, `Tempo.Math.add/2`).
   """
   @spec shown_by_the_clock(Tempo.t()) :: Tempo.t()
-  def shown_by_the_clock(%Tempo{extended: %{zone_id: zone}} = value) when is_binary(zone) do
-    if shown?(value), do: value, else: on_the_reading_shown(value, zone)
+  def shown_by_the_clock(%Tempo{extended: %{zone_id: zone}, time: time} = value)
+      when is_binary(zone) do
+    if shown?(value) or not Steps.whole_units?(time),
+      do: value,
+      else: on_the_reading_shown(value, zone)
   end
 
   def shown_by_the_clock(%Tempo{} = value), do: value
@@ -311,8 +318,9 @@ defmodule Tempo.Enumeration.Zone do
     end
   end
 
-  # `shown?/1` is false only for a date, or a date and a time of day, each
-  # unit one whole number.
+  # A date, or a date and a time of day, each unit one whole number. A value
+  # that holds a set in a unit names a reading for each value of the set,
+  # and has no one reading to be moved to (`shown_by_the_clock/1`).
   defp gregorian_reading_shown(
          %Tempo{time: [year: year, month: month, day: day] ++ clock} = value,
          zone

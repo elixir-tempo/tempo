@@ -65,23 +65,35 @@ defmodule Tempo.BesideAGapTest do
 
   defp bounds(%Interval{} = span), do: {moment(Interval.from(span)), moment(Interval.to(span))}
 
+  # A set in a unit names each value it holds, and one that names a reading
+  # the clock skips is refused as that value alone is (decided 2026-10-07,
+  # `Tempo.SetBesideAGapTest`). It was read with the skipped member no value
+  # of it.
   describe "a set in a unit that names a reading the clock skips" do
-    test "names the hours the clock shows, the one before the gap ending after it" do
+    test "is refused, and the hours the clock shows are read, the one before the gap ending after it" do
       zone = "America/New_York"
       assert {:gap, _before, _after} = DateTime.from_naive(~N[2024-03-10 02:00:00], zone)
 
-      assert spans(~o"2024-03-10T{01,02,03}[America/New_York]") == [
+      assert {:error, %Tempo.ZoneGapError{wall_time: "2024-03-10T02"}} =
+               Tempo.from_iso8601("2024-03-10T{01,02,03}[America/New_York]")
+
+      assert spans(~o"2024-03-10T{01,03}[America/New_York]") == [
                {moment(~N[2024-03-10 01:00:00], zone), moment(~N[2024-03-10 03:00:00], zone)},
                {moment(~N[2024-03-10 03:00:00], zone), moment(~N[2024-03-10 04:00:00], zone)}
              ]
     end
 
-    test "names the days the zone has" do
+    test "is refused for a day the zone leaves out, and the days it has are read" do
       zone = "Pacific/Apia"
       assert {:gap, _before, _after} = DateTime.from_naive(~N[2011-12-30 12:00:00], zone)
 
-      assert spans(~o"2011-12-{29,30}[Pacific/Apia]") == [
-               {moment(~N[2011-12-29 00:00:00], zone), moment(~N[2011-12-31 00:00:00], zone)}
+      assert {:error, %Tempo.ZoneGapError{wall_time: "2011-12-30"}} =
+               Tempo.from_iso8601("2011-12-{29,30}[Pacific/Apia]")
+
+      # The 29th ends where the 31st starts.
+      assert spans(~o"2011-12-{29,31}[Pacific/Apia]") == [
+               {moment(~N[2011-12-29 00:00:00], zone), moment(~N[2011-12-31 00:00:00], zone)},
+               {moment(~N[2011-12-31 00:00:00], zone), moment(~N[2012-01-01 00:00:00], zone)}
              ]
     end
 

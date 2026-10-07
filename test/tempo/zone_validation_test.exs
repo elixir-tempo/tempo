@@ -457,8 +457,13 @@ defmodule Tempo.ZoneValidationTest do
       end
     end
 
-    test "is left out of the walk of a set of hours that names it" do
-      {:ok, hours} = Tempo.from_iso8601("2024-03-10T{01,02,03}[America/New_York]")
+    # A set of hours that names it is refused as the hour alone is (decided
+    # 2026-10-07): it was read, and walked as the hours the clock shows.
+    test "is refused in a set of hours that names it" do
+      assert {:error, %Tempo.ZoneGapError{wall_time: "2024-03-10T02"}} =
+               Tempo.from_iso8601("2024-03-10T{01,02,03}[America/New_York]")
+
+      {:ok, hours} = Tempo.from_iso8601("2024-03-10T{01,03}[America/New_York]")
 
       assert Enum.map(hours, &Tempo.hour/1) == [1, 3]
     end

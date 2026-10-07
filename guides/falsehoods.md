@@ -64,11 +64,12 @@ Libraries that parse `"02:30 America/New_York"` on a spring-forward date and sil
 **Tempo — invalid wall times are rejected at parse time:**
 
 ```elixir
-iex> Tempo.from_iso8601("2024-03-10T02:30:00[America/New_York]")
-{:error, "Wall time 2024-03-10T02:30:00 does not exist in \"America/New_York\" (DST gap: clocks spring forward from 02:00 to 03:00). Supply a valid wall time or use a UTC offset to name the instant unambiguously."}
+iex> {:error, error} = Tempo.from_iso8601("2024-03-10T02:30:00[America/New_York]")
+iex> Exception.message(error)
+"Wall time 2024-03-10T02:30:00 does not exist in \"America/New_York\" (it falls inside a daylight-saving or zone-transition gap)."
 ```
 
-The error surfaces at the boundary — parse time — not hours later in a downstream calculation.
+The error surfaces at the boundary — parse time — not hours later in a downstream calculation. A set that names such a time is refused with it: `2024Y3M{9,10}DT2H30M[America/New_York]` names 02:30 on the 10th, and is the same error.
 
 ---
 

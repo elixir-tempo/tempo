@@ -23,17 +23,20 @@ defmodule Tempo.BesideAGap do
 
   # The gaps, and the values written beside each. The values are of every
   # shape a gap is met in: the day and the month that hold it, the hours on
-  # each side of it, a set, a range and unspecified digits that name the
-  # skipped reading among others, a week date and a day of the year.
+  # each side of it, a set and a range that name the readings beside the
+  # skipped one, unspecified digits that stand for it among others, a week
+  # date and a day of the year. A set that names the skipped reading is
+  # refused when it is read, as the reading alone is
+  # (`Tempo.SetBesideAGapTest`).
   @beside [
     # New York, 10 March 2024: 02:00 to 03:00.
     {"America/New_York",
      ~w(2024-03-10 2024-03-09 2024-03 2024-03-10T01 2024-03-10T03 2024-03-10T01:30
         2024-03-09T02 2024-03-09T02:30 2024-03-11T02:30 2024-03-10T01:59:59
-        2024-03-10T{01,02,03} 2024-03-10T{01..03} 2024-03-10T0X 2024-03-10TXX
-        2024-03-{09,10}T02 2024-03-XXT02)},
+        2024-03-10T{01,03} 2024-03-10T{00..01} 2024-03-10T0X 2024-03-10TXX
+        2024-03-{09,11}T02 2024-03-XXT02)},
     # Paris, 29 March 2026: 02:00 to 03:00.
-    {"Europe/Paris", ~w(2026-03-29 2026-03-29T01 2026-03-28T02:30 2026-03-29T{01,02,03})},
+    {"Europe/Paris", ~w(2026-03-29 2026-03-29T01 2026-03-28T02:30 2026-03-29T{01,03})},
     # Lord Howe Island, 4 October 2026: 02:00 to 02:30, half of an hour.
     {"Australia/Lord_Howe",
      ~w(2026-10-04 2026-10-04T01 2026-10-04T02 2026-10-04T02:30 2026-10-03T02:15
@@ -42,8 +45,8 @@ defmodule Tempo.BesideAGap do
     {"Africa/Cairo", ~w(2023-04-28 2023-04-27 2023-04-27T23 2023-04 2023-04-{27,28})},
     # Samoa had no 30 December 2011.
     {"Pacific/Apia",
-     ~w(2011-12-29 2011-12-31 2011-12 2011 2011-12-29T10 2011-12-{29,30} 2011-12-{29..31}
-        2011-12-3X 2011-12-XX 2011-{11,12}-30 2011-W52 2011-363)}
+     ~w(2011-12-29 2011-12-31 2011-12 2011 2011-12-29T10 2011-12-{29,31} 2011-12-{28..29}
+        2011-12-3X 2011-12-XX 2011-{11,12}-29 2011-W52 2011-363)}
   ]
 
   # Values beside a change of the clock that are written with the offset

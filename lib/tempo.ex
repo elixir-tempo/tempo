@@ -849,7 +849,10 @@ defmodule Tempo do
   A value names a time in its zone. One whose every reading the
   clock there skips is a `Tempo.ZoneGapError`: 02:30 on the night
   clocks go forward, the hour from 02:00 that night, or a day the
-  zone left out, as Samoa left out 30 December 2011.
+  zone left out, as Samoa left out 30 December 2011. A value that
+  holds a set in a unit names each value the set does, and is the
+  same error where one of them is such a reading:
+  `2026Y3M{28,29}DT2H30M[Europe/Paris]` names 02:30 on the 29th.
 
   `parse/2` reads everything this function reads, and a locale's own
   words besides.
@@ -3866,6 +3869,8 @@ defmodule Tempo do
 
   A value that ends in a group is written as the values the group names, in the group's own unit: the second group of three months of 2026 is its April to June. A group stops where its container does (the third ten days of a February are its 21st to its 28th or 29th), so one under several years or months is written only where it names the same values in each.
 
+  A value in a named zone is written by the values its clock shows. The day the clocks of Paris go forward has no 02:00, and is its hours but that one. Under several days or hours the clock may skip a value of one and not of another, and such a value is not written.
+
   ### Arguments
 
   * `tempo` is a `t:t/0`.
@@ -3876,7 +3881,7 @@ defmodule Tempo do
 
   * `{:ok, tempo}` with the finer enumeration added.
 
-  * `{:error, exception}` — a `Tempo.ResolutionError` for a value with no finer unit to be written in (a fraction of a second at microsecond precision), a `Tempo.ConversionError` for a group that names other values in each of the years or months it is under, an `ArgumentError` for a value that is not a `t:t/0` or a `unit` that is not `nil`, and the validation error when the result fails validation.
+  * `{:error, exception}` — a `Tempo.ResolutionError` for a value with no finer unit to be written in (a fraction of a second at microsecond precision), a `Tempo.ConversionError` for a group that names other values in each of the years or months it is under and for a value in a zone whose clock skips a value under one of the days or hours it names and not under another, an `ArgumentError` for a value that is not a `t:t/0` or a `unit` that is not `nil`, and the validation error when the result fails validation.
 
   ### Examples
 
@@ -3892,6 +3897,9 @@ defmodule Tempo do
       iex> Tempo.extend(~o"2026Y2G3MU")
       {:ok, ~o"2026Y{4..6}M"}
 
+      iex> Tempo.extend(~o"2026-03-29[Europe/Paris]")
+      {:ok, ~o"2026Y3M29DT{0..1,3..23}H[Europe/Paris]"}
+
       iex> {:error, %Tempo.ResolutionError{}} = Tempo.extend(~o"2026-06-15T10:30:45.123456")
 
   """
@@ -3905,7 +3913,7 @@ defmodule Tempo do
         do: extend_group(tempo),
         else: extend_by_finer_unit(tempo)
 
-    extended |> at_its_offset() |> NotBuilt.result()
+    extended |> as_the_clock_shows_it(tempo) |> at_its_offset() |> NotBuilt.result()
   end
 
   def extend(%Tempo{time: time}, unit) when is_list(time) do
@@ -3923,6 +3931,60 @@ defmodule Tempo do
          "#{inspect(value)} is not one."
      )}
   end
+
+  # A value in a named zone is written by the values its clock shows. The
+  # day Paris's clocks go forward has no 02:00, and is written by its hours
+  # but that one (`T{0..1,3..23}H`): it was written with all twenty-four,
+  # and so named an hour the clock skips, which is no value and is refused
+  # when it is read (decided 2026-10-07).
+  #
+  # Under a value that names several days or hours the clock may show other
+  # values in each, and one set names the values of one: the hours of 28
+  # and 29 March there are no one list.
+  defp as_the_clock_shows_it({:ok, %__MODULE__{} = written} = extended, %__MODULE__{} = tempo) do
+    case Validation.validate_zone_existence(written) do
+      :ok -> extended
+      {:error, _names_a_skipped_reading} -> without_what_the_clock_skips(written, tempo)
+    end
+  end
+
+  defp as_the_clock_shows_it(not_written, _tempo), do: not_written
+
+  defp without_what_the_clock_skips(
+         %__MODULE__{time: written} = extended,
+         %__MODULE__{time: time}
+       ) do
+    case written_under_one_value(written, time) do
+      {:ok, unit, values} ->
+        shown = Enum.filter(values, &Zone.shown?(%{extended | time: time ++ [{unit, &1}]}))
+        {:ok, %{extended | time: time ++ [{unit, Parser.consolidate_ranges(shown)}]}}
+
+      :error ->
+        {:error,
+         ConversionError.exception(
+           value: extended,
+           reason:
+             "Cannot write #{inspect(%{extended | time: time})} by its next finer unit: the " <>
+               "clock of its zone skips some of the values, and not the same ones under each " <>
+               "value it names."
+         )}
+    end
+  end
+
+  # The unit a value was written by and each value of it, where what was
+  # written by it is one value and the unit holds a set of whole numbers.
+  defp written_under_one_value(written, time) do
+    with true <- Compare.point?(time),
+         {^time, [{unit, [_ | _] = values}]} <- Enum.split(written, length(time)),
+         true <- Enum.all?(values, &(is_integer(&1) or is_struct(&1, Range))) do
+      {:ok, unit, Enum.flat_map(values, &each_value_named/1)}
+    else
+      _several_or_another_shape -> :error
+    end
+  end
+
+  defp each_value_named(value) when is_integer(value), do: [value]
+  defp each_value_named(%Range{} = values), do: Enum.to_list(values)
 
   # A month is written by its days. In a year that begins with its first
   # month they are counted from one; in one that does not, the calendar
@@ -4201,9 +4263,11 @@ defmodule Tempo do
   * The padded `t:t/0`, or
 
   * `{:error, reason}` when `target_unit` is coarser than the
-    current resolution (use `trunc/2` for that direction) or when
+    current resolution (use `trunc/2` for that direction), when
     no path exists from the current unit to `target_unit` under
-    the tempo's calendar.
+    the tempo's calendar, or when the value holds a set and the clock
+    of its zone skips the first reading of one of the values the set
+    names (a `Tempo.ZoneGapError`).
 
   ### Examples
 
@@ -4237,9 +4301,18 @@ defmodule Tempo do
   # the reading the clock shows, which is where it is compared from already.
   # It was given the skipped reading, which no value is read from, and so
   # were the spans an operation on sets fills its ends to.
+  #
+  # A value that holds a set starts on a reading for each value the set
+  # names, and where the clock skips the first reading of one of them (the
+  # first hour of 28 April under `2023-04-{27,28}` in Cairo) they are not
+  # the one reading a value written with the set would name: it is refused
+  # as that value is when it is read.
   def extend_resolution(%Tempo{} = tempo, target_unit) do
     with %Tempo{} = extended <- extend_resolution_as_written(tempo, target_unit),
-         do: extended |> as_calendar_date() |> Zone.shown_by_the_clock() |> NotBuilt.result()
+         %Tempo{} = shown <- extended |> as_calendar_date() |> Zone.shown_by_the_clock(),
+         :ok <- Validation.validate_zone_existence(shown) do
+      NotBuilt.result(shown)
+    end
   end
 
   def extend_resolution(value, _target_unit),
@@ -5348,7 +5421,7 @@ defmodule Tempo do
     time zone database, or when the clock in `zone` skips the whole of
     `tempo` (a `Tempo.ZoneGapError`): 02:30 on the night clocks go
     forward, the hour from 02:00 that night, or a day the zone left
-    out.
+    out, and a set in a unit that names one of them.
 
   ### Examples
 

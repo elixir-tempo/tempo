@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A set in a unit that names a reading its zone's clock skips is a `Tempo.ZoneGapError`, as the reading alone is: `2026Y3M{28,29}DT2H30M[Europe/Paris]`, `2011-12-{29,30}[Pacific/Apia]` and a range across one (`2026Y3M29DT{1..3}H[Europe/Paris]`) were read, with the skipped member no value of the set. `Tempo.extend/2` writes a value in a zone by the values its clock shows, so `~o"2026-03-29[Europe/Paris]"` is `2026Y3M29DT{0..1,3..23}H` where it was written with the hour the clock skips, and `Tempo.extend_resolution/2` refuses a set one of whose values starts on such a reading.
+
 * A time shift and a zone on one value are read as RFC 9557 §3.4 has them. `2022-07-08T00:14:07Z[Europe/Paris]` is 00:14:07 UTC as Paris's clock shows it (`~o"2022Y7M8DT2H14M7SZ2H[Europe/Paris]"`), where it was 00:14:07 on that clock, and a numeric offset that disagrees with an elective zone gives the moment, shown on the zone's clock, where the zone gave it; a critical zone that disagrees, written as an offset too (`[!+08:45]`), is a `Tempo.ZoneOffsetMismatchError`, and `strict: true` covers each end of an interval and each member of a set.
 
 * A shift of nothing is held in two ways: `Z`, and a zero written with a minus (`-00:00`), is `shift: [hour: 0]`, and a zero written as a shift (`+00`, `+00:00`, `Z0H`) is `shift: [hour: 0, minute: 0]`, where `+00` and `Z0H` were the first and `-00:00` the second. They are one time with no zone beside them, as ISO 8601-1 §4.3.13 has `Z` and `+00:00`.

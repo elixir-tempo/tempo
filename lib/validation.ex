@@ -5,6 +5,7 @@ defmodule Tempo.Validation do
   alias Localize.Utils.Math
   alias Tempo.Compare
   alias Tempo.ConversionError
+  alias Tempo.Enumeration.SkippedReadings
   alias Tempo.Enumeration.Zone
   alias Tempo.Interval
   alias Tempo.IntervalEndpointsError
@@ -2321,6 +2322,14 @@ defmodule Tempo.Validation do
     out of the gap, the first moment it shows a reading of the value
     (`Tempo.Compare.to_utc_seconds/1`).
 
+  * Or the value holds a set of whole numbers in a unit, and names
+    each value the set does. It is refused where the clock skips the
+    whole of one of them, as that value is alone (decided 2026-10-07):
+    `2026Y3M{28,29}DT2H30M` in Paris names 02:30 on the 29th. A value
+    that holds unspecified digits, a group or a count from the end in
+    a unit is asked nothing, nor is one that names more than four
+    hundred years.
+
   * The value carries an IANA zone id on `extended.zone_id`.
 
   Returns `:ok` when the wall time is valid, or `{:error, ...}`
@@ -2348,14 +2357,47 @@ defmodule Tempo.Validation do
     end)
   end
 
-  def validate_zone_existence(%Tempo{} = tempo) do
+  # Each end of a range in a set is written, and is a value as an end of an
+  # interval is.
+  def validate_zone_existence(%Tempo.Range{first: first, last: last}) do
+    with :ok <- validate_zone_existence(first) do
+      validate_zone_existence(last)
+    end
+  end
+
+  def validate_zone_existence(%Tempo{time: time} = tempo) do
     case zone_id(tempo) do
       nil -> :ok
-      zone -> tempo |> Zone.in_gregorian() |> check_wall_time_in_zone(zone)
+      zone -> check_in_zone(tempo, zone, Enum.any?(time, &a_set?/1))
     end
   end
 
   def validate_zone_existence(_other), do: :ok
+
+  defp a_set?({_unit, [_ | _]}), do: true
+  defp a_set?(_one_value), do: false
+
+  # A value that holds a set in a unit names each value the set does, and is
+  # refused where one of them is a reading the clock skips the whole of, as
+  # that value written alone is (decided 2026-10-07): it was read, with the
+  # skipped member no value of it.
+  defp check_in_zone(tempo, zone, true = _holds_a_set?) do
+    case SkippedReadings.first_named(tempo, zone) do
+      nil -> :ok
+      {reading, written_to} -> {:error, skipped_error(written_reading(reading, written_to), zone)}
+    end
+  end
+
+  defp check_in_zone(tempo, zone, false),
+    do: tempo |> Zone.in_gregorian() |> check_wall_time_in_zone(zone)
+
+  defp written_reading({date, _time}, :day), do: written_date(date)
+
+  defp written_reading({date, {hour, _minute, _second}}, :hour),
+    do: "#{written_date(date)}T#{pad2(hour)}"
+
+  defp written_reading({date, {hour, minute, second}}, _minute_or_second),
+    do: "#{written_date(date)}T#{pad2(hour)}:#{pad2(minute)}:#{pad2(second)}"
 
   defp zone_id(%Tempo{extended: %{zone_id: zone}}) when is_binary(zone) and zone != "",
     do: zone
@@ -2439,8 +2481,9 @@ defmodule Tempo.Validation do
   # The first and the last reading of the wall clock that a value spans,
   # and the value as it is written: one reading for a value written to the
   # minute or the second, the hour's for one written to the hour, the day's
-  # for a date. A coarser value, and one that holds a set, a mask or a group
-  # in a unit, is no one span that a gap could hold.
+  # for a date. A coarser value, and one that holds a mask or a group in a
+  # unit, is no one span that a gap could hold; one that holds a set is
+  # asked apart (`check_in_zone/3`).
   defp wall_readings(time) do
     if Enum.all?(time, &one_reading?/1),
       do: dated_readings(time),

@@ -1150,9 +1150,9 @@ iex> Tempo.Interval.duration(iv, leap_seconds: true)
 ### A daylight-saving gap — the hour that never was
 
 ```elixir
-iex> Tempo.from_iso8601("2024-03-10T02:30:00[America/New_York]")
-{:error,
- "Wall time 2024-03-10T02:30:00 does not exist in \"America/New_York\" — it falls inside a daylight-saving or zone-transition gap."}
+iex> {:error, error} = Tempo.from_iso8601("2024-03-10T02:30:00[America/New_York]")
+iex> Exception.message(error)
+"Wall time 2024-03-10T02:30:00 does not exist in \"America/New_York\" (it falls inside a daylight-saving or zone-transition gap)."
 ```
 
 > At 02:00 local time on the second Sunday of March, US clocks **jump to 03:00** — the hour 02:00–03:00 never exists. Tempo consults the time zone database at parse time and rejects wall times inside the gap, so downstream operations never encounter a phantom instant. Fall-back ambiguity (the repeated hour in November) is accepted by default — callers can disambiguate with an explicit offset.

@@ -377,7 +377,9 @@ Forward-stepping through an interval uses `calendar.months_in_year/1`, `calendar
 
 A zoned value is walked on the wall clock of its zone, and each value the walk yields is a wall time the zone shows.
 
-* **The hour a clock skips** when it goes forward is not yielded: `2026-03-29[Europe/Paris]` is 23 hours.
+* **The hour a clock skips** when it goes forward is not yielded: `2026-03-29[Europe/Paris]` is 23 hours, and `Tempo.extend/2` writes the day by them, `2026Y3M29DT{0..1,3..23}H`.
+
+* **A set that names a reading the clock skips** is refused when it is read, as the reading alone is: `2026Y3M{28,29}DT2H30M[Europe/Paris]` names 02:30 on the 29th, and `2026Y3M29DT{1..3}H[Europe/Paris]` the hour from 02:00, and each is a `Tempo.ZoneGapError`. Unspecified digits stand for the values the clock has, so `2026Y3M2XDT2H30M[Europe/Paris]` is some day from the 20th to the 28th.
 
 * **The hour a clock shows twice** when it goes back is yielded twice, each with the offset that tells it from the other (`T2HZ2H`, then `T2HZ1H`): `2026-10-25[Europe/Paris]` is 25 hours.
 
