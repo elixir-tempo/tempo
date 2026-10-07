@@ -105,7 +105,7 @@ defmodule Tempo.Iso8601.Group do
   # Meteorological seasons 21-24 (hemisphere-unspecified — we default to
   # Northern hemisphere meteorological boundaries as a conventional
   # interpretation): whole months, spring from March to the start of
-  # June, and winter from the December before.
+  # June, and winter from December to the start of the next year's March.
 
   def expand_groups([{:year, year}, {:month, month} | rest], calendar)
       when is_integer(year) and month in 21..24 do
@@ -260,11 +260,11 @@ defmodule Tempo.Iso8601.Group do
   # run and is an error.
   #
   # They are a run in time as well, each beginning where the one before it
-  # ends, or the range is an error: the winter of a year (24) is read as
-  # beginning in the December before it, ahead of that year's spring, so the
-  # seasons numbered from 21 to 24 are no run, and nor are those from the
-  # autumn of one year to the spring of the next, or the southern seasons of
-  # one year (29 to 32), whose autumn and winter come before its spring.
+  # ends, or the range is an error: the southern seasons of one year (29 to
+  # 32) are no run, its autumn and winter coming before its spring. The
+  # seasons numbered 21 to 24 are one, a winter being of the year it starts
+  # in (decided 2026-10-07; it was read as beginning in the December before
+  # its year, ahead of that year's spring).
   @divisions [21..24, 25..28, 29..32, 33..36, 37..39, 40..41]
 
   # The most divisions a range names: a range of seasons across every year
@@ -370,8 +370,9 @@ defmodule Tempo.Iso8601.Group do
       reason:
         "The divisions of a year from #{from_year}-#{from} to #{to_year}-#{to} do not run on " <>
           "from one another in time, each beginning where the one before it ends: the seasons " <>
-          "of a year are not all in the order of their numbers (its winter, 24, begins in the " <>
-          "December before it). Write each of them as a member of the set."
+          "of a year are not all in the order of their numbers (a southern autumn and winter, " <>
+          "31 and 32, come before that year's spring, 29). Write each of them as a member of " <>
+          "the set."
     )
   end
 
@@ -664,14 +665,17 @@ defmodule Tempo.Iso8601.Group do
   # A Gregorian season's first day and the day after its last, as the
   # Gregorian `year` labels it: the equinox and solstice dates of an
   # astronomical season (the half-open `[first, last)` convention), the
-  # first days of the months of a meteorological one. A winter runs into
-  # the next year, the meteorological one (24) from the year before.
+  # first days of the months of a meteorological one. A winter is of the
+  # year it starts in and runs into the next (decided 2026-10-07): the
+  # meteorological one (24) was of the year it ends in, so a year's four
+  # seasons were not in the order of their numbers, and `2012-24/2012-21`,
+  # which EDTF's own corpus lists as no interval, was read as one.
   defp gregorian_season(code, year) when code in 21..23 do
     {start_month, end_month} = meteorological_months(code)
     meteorological_bounds(year, start_month, year, end_month)
   end
 
-  defp gregorian_season(24, year), do: meteorological_bounds(year - 1, 12, year, 3)
+  defp gregorian_season(24, year), do: meteorological_bounds(year, 12, year + 1, 3)
 
   defp gregorian_season(code, year) when code in [25, 31],
     do: astronomical_bounds(year, :march, year, :june)
@@ -814,8 +818,8 @@ defmodule Tempo.Iso8601.Group do
   end
 
   # A year with unspecified digits (`20XX-21`) keeps them in both bounds of
-  # a spring, summer or autumn. A winter starts in the year before and an
-  # astronomical season on the day its year's equinox or solstice falls,
+  # a spring, summer or autumn. A winter ends in the year after and an
+  # astronomical season starts on the day its year's equinox or solstice falls,
   # so those, a day of any season, and a season in another calendar need
   # the year itself.
   defp unspecified_year_season(_year, code, [{:day, day} | _rest], _calendar) do
@@ -885,10 +889,10 @@ defmodule Tempo.Iso8601.Group do
 
   # The seasons of one kind start in successive Gregorian years, so the
   # first to start on or after the year's first day starts within it if
-  # any does. A winter (24) is labelled with the year it ends in, so the
-  # labels run to the year after the last.
+  # any does. A season starts in the Gregorian year that labels it, a
+  # winter too, so the labels are the Gregorian years the year touches.
   defp season_starting_within(code, first, last, year, calendar) do
-    first.year..(last.year + 1)//1
+    first.year..last.year//1
     |> Enum.reduce_while(:none, fn label, :none ->
       code |> gregorian_season(label) |> starting_within(first, last)
     end)

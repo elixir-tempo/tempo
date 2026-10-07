@@ -24,24 +24,21 @@ defmodule Tempo.Iso8601.EdtfCorpus.Test do
   # documented home.
   @known_failures %{}
 
-  # Strings that our parser currently accepts but EDTF marks invalid
-  # because of cross-component rules (time-zone offset > 14 hours,
-  # offset minutes > 59, mixed date+datetime in an interval, etc.).
-  # These need semantic validation beyond the tokenizer.
+  # The dates and datetimes EDTF marks invalid and Tempo reads, each as
+  # ISO 8601 has it or by a leniency of Tempo's own: a year 0 written with
+  # a sign, a year of four digits after a `Y`, an interval whose end leaves
+  # out the year it shares with its start (ISO 8601-1 §5.5.1), a time shift
+  # of more hours than EDTF allows or written after a `Z`, and an interval
+  # with a time of day, which EDTF lists among its invalid dates. The list
+  # is held to be exact, so a text that comes to be refused leaves it.
   @semantically_invalid_but_parses MapSet.new([
                                      "-0000",
                                      "Y2006",
                                      "2000/12-12",
                                      "2012-10-10T10:50:10Z15",
-                                     "2012-10-10T10:40:10Z00:62",
-                                     "2004-01-01T10:10:40Z25:00",
-                                     "2004-01-01T10:10:40Z00:60",
-                                     "2004-01-01T10:10:10-05:60",
                                      "-1985-04-12T23:20:30+24",
                                      "-1985-04-12T23:20:30Z12:00",
-                                     "2005-07-25T10:10:10Z/2006-01-01T10:10:10Z",
-                                     "2005-07-25T10:10:10Z/2006-01",
-                                     "2005-07-25/2006-01-01T10:10:10Z"
+                                     "2005-07-25T10:10:10Z/2006-01-01T10:10:10Z"
                                    ])
 
   ## Valid EDTF strings — expected to parse successfully.
@@ -119,34 +116,45 @@ defmodule Tempo.Iso8601.EdtfCorpus.Test do
   end
 
   describe "invalid intervals" do
-    # A subset of the edtf-validate "invalid" intervals are
-    # semantically invalid (reversed endpoints, mixed date+datetime,
-    # etc.) rather than syntactically invalid. Cross-endpoint
-    # validation is future work.
-    @interval_semantic_invalid MapSet.new([
-                                 "0800/-0999",
-                                 "-1000/-2000",
-                                 "1000/-2000",
-                                 "0001/0000",
-                                 "0000-01-03/0000-01",
-                                 "0000/-0001",
-                                 "0000-02/0000",
-                                 "2012-24/2012-21",
-                                 "2012-23/2012-22",
-                                 "2004-06-11%/2004-%06",
-                                 "2004-06-11%/2004-06~",
-                                 "Y-61000/-2000",
-                                 "2005-07-25T10:10:10Z/2006-01-01T10:10:10Z",
-                                 "2005-07-25T10:10:10Z/2006-01",
-                                 "2005-07-25/2006-01-01T10:10:10Z"
-                               ])
+    # The edtf-validate "invalid" intervals that Tempo reads, each for one
+    # of three reasons. EDTF has no time of day at an end of an interval,
+    # which ISO 8601 has. It has no year written with a `Y` there, which
+    # Tempo reads as it does anywhere. And an end that is coarser than the
+    # start and holds it (`0000-01-03/0000-01`, a day of January to
+    # January) is held to end where the end's own span does when the two
+    # ends are ordered, though the interval's span ends where that value
+    # starts (`TODO.md`, "An end coarser than its start").
+    #
+    # An interval whose end is before its start is refused, as the corpus
+    # has it: `0800/-0999`, and `2012-24/2012-21`, the winter of 2012 being
+    # the one that starts in its December.
+    @invalid_intervals_tempo_reads MapSet.new([
+                                     "0000-01-03/0000-01",
+                                     "0000-02/0000",
+                                     "2004-06-11%/2004-%06",
+                                     "2004-06-11%/2004-06~",
+                                     "Y-61000/-2000",
+                                     "2005-07-25T10:10:10Z/2006-01-01T10:10:10Z",
+                                     "2005-07-25T10:10:10Z/2006-01",
+                                     "2005-07-25/2006-01-01T10:10:10Z"
+                                   ])
 
     for str <- Corpus.invalid_intervals() do
-      unless MapSet.member?(@interval_semantic_invalid, str) do
+      unless MapSet.member?(@invalid_intervals_tempo_reads, str) do
         test "rejects #{inspect(str)}" do
           assert {:error, _} = Tempo.from_iso8601(unquote(str))
         end
       end
+    end
+
+    test "reads no more of them than the ones listed, and each of those" do
+      read =
+        for str <- Corpus.invalid_intervals(),
+            match?({:ok, _}, Tempo.from_iso8601(str)),
+            into: MapSet.new(),
+            do: str
+
+      assert read == @invalid_intervals_tempo_reads
     end
   end
 
@@ -157,6 +165,16 @@ defmodule Tempo.Iso8601.EdtfCorpus.Test do
           assert {:error, _} = Tempo.from_iso8601(unquote(str))
         end
       end
+    end
+
+    test "and invalid dates are read no more than the ones listed, and each of those" do
+      read =
+        for str <- Corpus.invalid_dates() ++ Corpus.invalid_datetimes(),
+            match?({:ok, _}, Tempo.from_iso8601(str)),
+            into: MapSet.new(),
+            do: str
+
+      assert read == @semantically_invalid_but_parses
     end
   end
 

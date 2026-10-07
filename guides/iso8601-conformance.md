@@ -100,7 +100,7 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 | **Groups** | `5G10DU` (5th group of 10 days), `2018Y4G60DU6D` (2018, day 6 of the 4th group of 60 days), `1933Y1G80DU` (the first 80 days of 1933), `2026Y2G13WU` (weeks 14–26), `T16H1GT15MU` (16:00–16:15) |
 | **A value within a group** | `2018Y9M2DT3GT8HU0H30M` (30 minutes into the third eight hours: 16:30), `2018Y2G3MU2M` (May) |
 | **Selections** | `L1MN`, `L2MI3N` (1st month, 3rd instance of the 2nd month). A value holding one converts to the dates it picks in each period of its context (§12.11): `2018Y3ML1K1IN` is 5 March 2018, and `XXX{0,2,4,6,8}Y11MLLL1K1IN/P9DN2K1IN` (US Election Day) resolves one year at a time. |
-| **Meteorological seasons** (codes 21–24) | `2022-21` (spring), `2022-22` (summer), `2022-23` (autumn), `2022-24` (winter) |
+| **Meteorological seasons** (codes 21–24) | `2022-21` (spring), `2022-22` (summer), `2022-23` (autumn), `2022-24` (winter: December 2022 to the end of February 2023) |
 | **Astronomical seasons** (codes 25–32) | `2022-25` (N spring), `2022-26` (N summer), `2022-27` (N autumn), `2022-28` (N winter), `2022-29..32` (Southern hemisphere). Boundaries computed via the `Astro` library using March/September equinoxes and June/December solstices (accurate to ≈2 minutes for years 1000–3000 CE). |
 | **Quarters** (codes 33–36) | `2022-33` (Q1), `2022-36` (Q4). The calendar's own quarters, from Calendrical: a Hebrew leap year's Q2 holds Adar I and II, and a week-based calendar's are groups of weeks. |
 | **Quadrimesters** (codes 37–39) | `2022-37`, `2022-38`, `2022-39` |
@@ -124,7 +124,7 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 
 | Feature | Example | Reason |
 |---|---|---|
-| Cross-endpoint semantic validation of intervals | `2012-24/2012-21` (winter before spring) | Parses at the syntax level; a semantic ordering check across the two endpoints is not currently enforced, so a small number of syntactically-valid but semantically-inverted intervals are accepted. |
+| An end that is coarser than its start and holds it | `2004-06-11/2004-06` (a day of June to June) | An interval whose end is before its start is refused (`2026/2025`, `2012-24/2012-21`), the two ends being ordered by where the end's own span ends. A coarser end that holds the start passes that check and is read, as an interval that ends where the end's value starts and so holds nothing; EDTF's corpus lists it as invalid. |
 | A set of durations (§6.5) | `{P1M2S..P1M5S}`, `[P1M2S,P1M3S]` | A duration is refused as a member of a set and as an end of a range: a set holds dates, times, ranges of them and intervals. Units written with no designator (`{1M2S..1M5S}`, §6.4 example 3) are read as times of day. |
 
 All other EDTF Level 2 features — including wide-range exponent years (`Y17E8`, `Y-170000002`) and long-year significant-digit annotations (`Y171010000S3`) — are supported.
@@ -478,7 +478,7 @@ A few ISO 8601 constructs are genuinely ambiguous; Tempo resolves them as follow
 
 | Construct | Standard says | Tempo does |
 |---|---|---|
-| Seasons `21-24` | Hemisphere unspecified | Treated as **Northern meteorological** (`21` = spring = March-May). |
+| Seasons `21-24` | Hemisphere unspecified | Treated as **Northern meteorological** (`21` = spring = March-May). Each is of the year it **starts in**, so the four of a year run in the order of their numbers: `2026-24` is December 2026 to the end of February 2027, as the astronomical winter `2026-28` starts at the December solstice of 2026. |
 | A season in a non-Gregorian year (`5787-25[u-ca=hebrew]`) | Seasons are defined on the Gregorian year | The Gregorian season of that kind that **starts within the year**, the first if two do, with endpoints in the value's calendar. A year that holds none, as a 354-day Islamic year can, is an error. |
 | `Z` without offset | "UTC is known, local offset unknown" (per RFC 5322 / IXDTF) | Stored as `shift: [hour: 0]`. No distinction from `+00:00`. |
 | `-00:00` | ISO 8601:2000 forbade; ISO 8601:2019 permits | Permitted; equivalent to `Z`. |

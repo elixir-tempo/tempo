@@ -230,6 +230,7 @@ The parser expands season codes into intervals before enumeration sees them.
 |---|---|---|
 | Astronomical (25–32) | `2022-25` | March equinox to June solstice (computed via `Astro`) |
 | Meteorological (21–24) | `2022-21` | March 1 to May 31 (calendar approximation) |
+| Meteorological winter | `2022-24` | December 1 2022 to the end of February 2023, the winter that starts in its year |
 
 ## 3. Not enumerable by design
 

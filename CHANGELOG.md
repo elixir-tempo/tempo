@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A winter written as the season `24` is the one that starts in its year, as the astronomical winter `28` is: `~o"2026Y24M"` is `2026Y12M/2027Y3M`, where it was `2025Y12M/2026Y3M`. A year's four seasons run in the order of their numbers, so `{2026-21..2026-24}` is the four of them and `2026-24/2026-21` is refused as an interval whose end is before its start.
+
 * `Tempo.split/1` of a value that holds a selection of days gives the value and no time of day: `Tempo.split(~o"2026Y6ML1KN")` is `{~o"2026Y6ML1KN", nil}`, where it was `{~o"2026Y6M", ~o"L1KN"}`. A selection of times (`2018Y9MTLT8H20M3IN`) is still the time-of-day part.
 
 * `Tempo.Network.Relation.to_allen/1` lists every Allen relation a relation admits: `:includes` is `[:finished_by, :contains, :equals, :started_by]`, where it was `:contains`, a relation's constraints being not strict. `:strictly_contemporary` gains `:equals`, `:contemporary` gains `:meets` and `:met_by`, and `:starts_during`, `:includes_start`, `:ends_during` and `:includes_end` have their lists where they were `nil`.
@@ -423,7 +425,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * A member of a set, and an end of a range in one, is read with a suffix of its own, as an end of an interval is: `{2026-06-15T10:30[Europe/Paris],2026-06-15T10:30[America/New_York]}`, which is how a set of values in two zones is written, was a parse error. A member's zone, calendar and tags are its own, and the set's suffix is each member's that has none.
 
-* A range from one division of a year to another in a set (`{2026-21..2026-23}`, `{2026-33..2027-34}`: seasons, quarters, quadrimesters and semesters) is each division between them, where it was a range whose ends were intervals, which nothing walked and whose own text was not read. One that is no run in time (the seasons numbered 21 to 24, whose winter begins the December before), from one kind to another, or open at an end is an `InvalidDateError`.
+* A range from one division of a year to another in a set (`{2026-21..2026-23}`, `{2026-33..2027-34}`: seasons, quarters, quadrimesters and semesters) is each division between them, where it was a range whose ends were intervals, which nothing walked and whose own text was not read. One that is no run in time (the southern seasons of one year, 29 to 32, whose autumn and winter come before its spring), from one kind to another, or open at an end is an `InvalidDateError`.
 
 * One of several years is read before the year designator, as one of several of any other unit is (ISO 8601-2 §6.6): `[2025,2026]Y6M` is June of 2025 or of 2026, where it was a parse error.
 

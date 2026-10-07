@@ -53,6 +53,7 @@ defmodule Tempo.GeneratedSets do
     decade: ["198", "199", "202"],
     decade_explicit: ["198J", "199J", "202J"],
     season: ["2026-21", "2026-22", "2026-24"],
+    southern_season: ["2026-29", "2026-30", "2026-32"],
     quarter: ["2026-33", "2026-34", "2026-36"],
     time_hour: ["T10", "T11", "T15"],
     time_minute: ["T10:30", "T10:45", "T11:00"],
@@ -174,7 +175,8 @@ defmodule Tempo.GeneratedSets do
       else: {:refused, Tempo.ParseError}
   end
 
-  defp as_they_are_read(entries, family) when family in [:season, :quarter] do
+  defp as_they_are_read(entries, family)
+       when family in [:season, :southern_season, :quarter] do
     entries
     |> Enum.map(&divisions/1)
     |> Enum.reduce_while({:read, []}, fn
@@ -199,11 +201,13 @@ defmodule Tempo.GeneratedSets do
 
   defp division("2026-" <> code), do: String.to_integer(code)
 
-  # The seasons of a year numbered 21 to 23 run on from one another, and the
-  # winter numbered 24 begins the December before them. Quarters are a run.
-  defp run_in_time?(_first..last//_) when last in 21..23, do: true
-  defp run_in_time?(_first..last//_) when last == 24, do: false
-  defp run_in_time?(_quarters), do: true
+  # The seasons of a year numbered 21 to 24 run on from one another, a
+  # winter being of the year it starts in, and its quarters do. Its southern
+  # seasons (29 to 32) do not: the summer numbered 30 runs into the year
+  # after, and the autumn numbered 31 is the one that ended six months
+  # before that summer began.
+  defp run_in_time?(first..last//_) when first in 29..30 and last in 31..32, do: false
+  defp run_in_time?(_seasons_or_quarters), do: true
 
   # A set of whole values with a zone after it, which each member takes.
   defp zoned_sets do

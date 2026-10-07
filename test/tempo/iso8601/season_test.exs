@@ -72,6 +72,8 @@ defmodule Tempo.Iso8601.SeasonTest do
     test "is where its span starts, as a month is" do
       for {interval, written_out} <- [
             {"2026-21/2026-23", "2026-03/2026-09"},
+            {"2026-21/2026-24", "2026-03/2026-12"},
+            {"2026-24/2027-21", "2026-12/2027-03"},
             {"2026-21/2026-09", "2026-03/2026-09"},
             {"2026-03/2026-23", "2026-03/2026-09"},
             {"2026-21/P1M", "2026-03/P1M"},
@@ -91,8 +93,13 @@ defmodule Tempo.Iso8601.SeasonTest do
     end
 
     test "is refused where the end's season starts before the start's" do
-      # The winter of a year starts in the December before it.
-      assert {:error, %Tempo.IntervalEndpointsError{}} = Tempo.from_iso8601("2026-21/2026-24")
+      # A winter starts in the December of its year, after that year's
+      # spring, summer and autumn: EDTF's corpus lists `2012-24/2012-21`
+      # and `2012-23/2012-22` as no intervals.
+      for interval <- ["2026-24/2026-21", "2026-24/2026-23", "2026-23/2026-22", "2012-24/2012-21"] do
+        assert {^interval, {:error, %Tempo.IntervalEndpointsError{}}} =
+                 {interval, Tempo.from_iso8601(interval)}
+      end
     end
   end
 end

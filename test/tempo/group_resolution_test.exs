@@ -47,7 +47,8 @@ defmodule Tempo.GroupResolution.Test do
     assert ~o"2026-25-10" == ~o"2026-03-29"
     assert ~o"2026-28-15" == ~o"2027-01-04"
     assert ~o"2026-21-10" == ~o"2026-03-10"
-    assert ~o"2026-24-10" == ~o"2025-12-10"
+    assert ~o"2026-24-10" == ~o"2026-12-10"
+    assert ~o"2026-24-31" == ~o"2026-12-31"
     assert ~o"2026-25-10T10" == ~o"2026-03-29T10"
   end
 
@@ -67,20 +68,53 @@ defmodule Tempo.GroupResolution.Test do
     assert ~o"2022Y21M" == ~o"2022Y3M/6M"
     assert ~o"2022Y22M" == ~o"2022Y6M/9M"
     assert ~o"2022Y23M" == ~o"2022Y9M/12M"
-    assert ~o"2022Y24M" == ~o"2021Y12M/2022Y3M"
+    assert ~o"2022Y24M" == ~o"2022Y12M/2023Y3M"
   end
 
   test "a meteorological season holds all three of its months" do
     assert Tempo.contains?(~o"2022-21", ~o"2022-05-31")
     refute Tempo.contains?(~o"2022-21", ~o"2022-06-01")
-    assert Tempo.contains?(~o"2022-24", ~o"2022-02-28")
+    assert Tempo.contains?(~o"2022-24", ~o"2022-12-01")
+    assert Tempo.contains?(~o"2022-24", ~o"2023-02-28")
+    refute Tempo.contains?(~o"2022-24", ~o"2023-03-01")
   end
+
+  test "a winter is of the year it starts in, the last of its year's four seasons" do
+    # The winter numbered 24 was of the year it ends in, so the four seasons
+    # of a year were not in the order of their numbers. The measure is the
+    # months written out: December of the year to the end of the February
+    # after it, the months the winter numbered 28 starts and ends in.
+    for year <- [1, 1582, 1999, 2000, 2026, 9998] do
+      winter = Tempo.from_iso8601!("#{four_digits(year)}-24")
+      months = Tempo.from_iso8601!("#{four_digits(year)}-12/#{four_digits(year + 1)}-03")
+
+      assert {year, winter} == {year, months}
+
+      assert {year, Tempo.contains?(winter, Tempo.from_date(Date.new!(year, 12, 31)))} ==
+               {year, true}
+
+      assert {year, Tempo.contains?(winter, Tempo.from_date(Date.new!(year, 2, 28)))} ==
+               {year, false}
+    end
+
+    # Each season of a year begins where the one before it ends, and the
+    # spring of the next year where the winter ends.
+    seasons =
+      for year <- 2025..2027, season <- 21..24, do: Tempo.from_iso8601!("#{year}-#{season}")
+
+    for {earlier, later} <- Enum.zip(seasons, Enum.drop(seasons, 1)) do
+      assert {earlier, later, Tempo.relation(earlier, later)} == {earlier, later, :meets}
+    end
+  end
+
+  defp four_digits(year), do: String.pad_leading(Integer.to_string(year), 4, "0")
 
   describe "a season in another calendar" do
     test "is the Gregorian season that starts within its year" do
       # Hebrew 5787 runs from September 2026 to October 2027.
       assert Tempo.relation(~o"5787-25[u-ca=hebrew]", ~o"2027-25") == :equals
-      assert Tempo.relation(~o"5787-24[u-ca=hebrew]", ~o"2027-24") == :equals
+      # Its winter starts in December 2026, the winter of 2026.
+      assert Tempo.relation(~o"5787-24[u-ca=hebrew]", ~o"2026-24") == :equals
       assert Tempo.relation(~o"2026-25[u-ca=julian]", ~o"2026-25") == :equals
       assert Tempo.relation(~o"2569-21[u-ca=buddhist]", ~o"2026-21") == :equals
     end
