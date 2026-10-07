@@ -13,14 +13,26 @@ defmodule Tempo.Split do
   # was not listed was given as the time of day: `3K`, a Wednesday, had no
   # date, and the months of `2026Y{1,2}G3MU` were its time of day.
   #
-  # A selection ends the date as a unit of the clock does, which is what it
-  # did: the Mondays of `2026Y6ML1KN` are what `Tempo.at/2` places on June.
+  # A selection is of the date where it names a unit of one, a day, a
+  # weekday, a month or a window from one: the Mondays of `2026Y6ML1KN` are
+  # days of June, and the value has no time of day (decided 2026-10-07; the
+  # selection was given as the time of day). One that names units of the
+  # clock alone (`2018Y9MTLT8H20M3IN`, the third 08:20) is the time of day.
 
-  @after_the_date [:hour, :minute, :second, :microsecond, :selection]
+  @clock_units [:hour, :minute, :second, :microsecond]
+
+  # A position among what a selection picks is of no unit of its own.
+  @positions [:instance]
 
   @spec split(list()) :: {date :: list(), time_of_day :: list()}
   def split(time) when is_list(time), do: Enum.split_while(time, &of_the_date?/1)
 
-  defp of_the_date?(entry) when is_tuple(entry), do: elem(entry, 0) not in @after_the_date
+  defp of_the_date?({:selection, parts}) when is_list(parts), do: not of_the_clock?(parts)
+  defp of_the_date?(entry) when is_tuple(entry), do: elem(entry, 0) not in @clock_units
   defp of_the_date?(_entry), do: false
+
+  defp of_the_clock?(parts) do
+    units = for part <- parts, is_tuple(part), elem(part, 0) not in @positions, do: elem(part, 0)
+    units != [] and Enum.all?(units, &(&1 in @clock_units))
+  end
 end

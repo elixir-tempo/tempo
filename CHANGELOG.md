@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* `Tempo.split/1` of a value that holds a selection of days gives the value and no time of day: `Tempo.split(~o"2026Y6ML1KN")` is `{~o"2026Y6ML1KN", nil}`, where it was `{~o"2026Y6M", ~o"L1KN"}`. A selection of times (`2018Y9MTLT8H20M3IN`) is still the time-of-day part.
+
 * `Tempo.Network.Relation.to_allen/1` lists every Allen relation a relation admits: `:includes` is `[:finished_by, :contains, :equals, :started_by]`, where it was `:contains`, a relation's constraints being not strict. `:strictly_contemporary` gains `:equals`, `:contemporary` gains `:meets` and `:met_by`, and `:starts_during`, `:includes_start`, `:ends_during` and `:includes_end` have their lists where they were `nil`.
 
 * A recurrence that does not come to its end in the 10,000 periods a walk takes, or has more than 10,000 occurrences before it, is a `Tempo.UnboundedRecurrenceError`. The occurrences found by then were returned as if they were all of them.

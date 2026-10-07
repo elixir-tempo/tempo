@@ -91,4 +91,58 @@ defmodule Tempo.SplitTest do
       end
     end
   end
+
+  # A selection that names a unit of a date is of the date: the Mondays of
+  # June are days of June, and the value has no time of day. It was given as
+  # the time of day (decided 2026-10-07). One that names units of the clock
+  # alone is the time of day, and a time written after a selection is too.
+  describe "split/1 of a value that holds a selection" do
+    test "gives a selection of days with the date, and no time of day" do
+      for text <- [
+            "2026Y6ML1KN",
+            "L1KN",
+            "2026YL6M15DN",
+            "2026YL1K1IN",
+            "2024Y11MLLL1K1IN/P9DN2K1IN",
+            "2027YLLL(easter)eN/P-3DN5K1IN"
+          ] do
+        value = read(text, Calendrical.Gregorian)
+
+        assert {text, Tempo.split(value)} == {text, {value, nil}}
+      end
+    end
+
+    test "gives the time written after a selection of days as the time of day" do
+      for {date, time} <- [
+            {"2018YL1K1IN", "T10H0M0S"},
+            {"2026Y6ML1KN", "T9H"},
+            {"L5KN", "T17H30M"}
+          ] do
+        value = read(date <> time, Calendrical.Gregorian)
+        parts = {read(date, Calendrical.Gregorian), read(time, Calendrical.Gregorian)}
+
+        assert {date, time, Tempo.split(value)} == {date, time, parts}
+      end
+    end
+
+    # A selection with no period before it is not placed back in order by
+    # `at/2` (`TODO.md`), so the two that have one are held to it.
+    test "gives parts that at/2 places as the value, where the selection is within a period" do
+      for text <- ["2018YL1K1INT10H0M0S", "2026Y6ML1KNT9H"] do
+        value = read(text, Calendrical.Gregorian)
+        {date, time} = Tempo.split(value)
+
+        assert {text, Tempo.at(date, time)} == {text, {:ok, value}}
+      end
+    end
+
+    test "gives a selection of times as the time of day" do
+      third_twenty_past_eight = read("2018Y9MTLT8H20M3IN", Calendrical.Gregorian)
+      {date, time} = Tempo.split(third_twenty_past_eight)
+
+      assert date == read("2018Y9M", Calendrical.Gregorian)
+      assert time == read("TLT8H20M3IN", Calendrical.Gregorian)
+      assert Tempo.at(date, time) == {:ok, third_twenty_past_eight}
+    end
+  end
 end
