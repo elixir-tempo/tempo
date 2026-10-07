@@ -18,7 +18,7 @@ defmodule Tempo.Iso8601.Parser do
   # it is refused, or `nil`.
   defp refused(tokens) do
     case backwards_range(tokens) do
-      nil -> short_window(tokens) || no_member(tokens)
+      nil -> short_window(tokens) || shifted_durations(tokens) || no_member(tokens)
       range -> backwards_reason(range)
     end
   end
@@ -28,16 +28,19 @@ defmodule Tempo.Iso8601.Parser do
   # out. Each was built from its units as a date is.
   #
   # A duration: ISO 8601-2 §6.5 has sets of durations (`{P1M2S..P1M5S}`),
-  # which are not built, so `{P1Y,P2Y}` was the years 1 and 2. A duration
-  # that counts an interval a set holds (`{2026-06-15/P1D}`) is the
-  # interval's.
+  # each member a duration or a range from one to another, and a set holds
+  # dates and times or durations and not both: `{P1Y,2026}` was the years 1
+  # and 2026. A duration that counts an interval a set holds
+  # (`{2026-06-15/P1D}`) is the interval's.
   #
   # An interval at an end of a range (`{2020/2021..2023/2024}`): a range
   # runs from one date or time to another, and its end was built from both
   # of the interval's ends as one value, which `inspect/1` raised on.
   defp no_member({tag, members})
        when tag in [:all_of, :one_of, :domain_set] and is_list(members) do
-    Enum.find_value(members, &no_member_reason/1) || no_member(members)
+    if tag != :domain_set and durations?(members),
+      do: Enum.find_value(members, &no_range_of_durations_reason/1),
+      else: Enum.find_value(members, &no_member_reason/1) || no_member(members)
   end
 
   defp no_member(tokens) when is_list(tokens), do: Enum.find_value(tokens, &no_member/1)
@@ -60,9 +63,55 @@ defmodule Tempo.Iso8601.Parser do
   defp no_end_reason(_end), do: nil
 
   defp duration_in_set_reason do
-    "A duration is not read as a member of a set: a member is a date, a time, a range of " <>
-      "either or an interval. A set of durations (ISO 8601-2 §6.5) is not built"
+    "A duration is a member of a set of durations alone, each a duration or a range from " <>
+      "one to another (ISO 8601-2 §6.5): a set holds dates and times or durations, and not both"
   end
+
+  # A set of durations: each member a duration, or a range from one to
+  # another.
+  defp durations?([_ | _] = members), do: Enum.all?(members, &duration_or_range_of_them?/1)
+  defp durations?(_no_members), do: false
+
+  defp duration_or_range_of_them?({:duration, _units}), do: true
+  defp duration_or_range_of_them?({:range, [{:duration, _}, {:duration, _}]}), do: true
+  defp duration_or_range_of_them?(_member), do: false
+
+  defp no_range_of_durations_reason({:range, [{:duration, first}, {:duration, last}]}) do
+    case durations_between(first, last) do
+      {:ok, _durations} -> nil
+      {:error, reason} -> reason
+    end
+  end
+
+  defp no_range_of_durations_reason(_duration), do: nil
+
+  # A range of durations is each duration from its first to its last, which
+  # differ in their last unit alone: `{P1M2S..P1M5S}` is `P1M2S`, `P1M3S`,
+  # `P1M4S` and `P1M5S` (ISO 8601-2 §6.5, example 1). It names a thousand at
+  # most, as a range of fractions does.
+  @most_durations_in_a_range 1_000
+
+  defp durations_between(first, last) do
+    case {Enum.split(first, -1), Enum.split(last, -1)} do
+      {{units, [{unit, from}]}, {units, [{unit, to}]}}
+      when is_integer(from) and is_integer(to) and to >= from and
+             to - from < @most_durations_in_a_range ->
+        {:ok, for(amount <- from..to, do: units ++ [{unit, amount}])}
+
+      _no_such_range ->
+        {:error,
+         "A range of durations runs from one to another that differs from it in its last " <>
+           "unit alone, by a whole number and by fewer than #{@most_durations_in_a_range}"}
+    end
+  end
+
+  # A duration is written with no time shift, and so is a set of them.
+  defp shifted_durations([{tag, members}, {:time_shift, _shift} | _rest])
+       when tag in [:all_of, :one_of] and is_list(members) do
+    if durations?(members), do: "A duration takes no time shift, and nor does a set of them"
+  end
+
+  defp shifted_durations(_tokens), do: nil
 
   defp interval_in_range_reason do
     "An interval is not an end of a range in a set: a range runs from one date or time " <>
@@ -363,14 +412,31 @@ defmodule Tempo.Iso8601.Parser do
 
   def parse(all_of: tokens) do
     tokens
-    |> parse_set
+    |> each_duration_of_a_range()
+    |> parse_set()
     |> Tempo.Set.new(:all)
   end
 
   def parse(one_of: tokens) do
     tokens
-    |> parse_set
+    |> each_duration_of_a_range()
+    |> parse_set()
     |> Tempo.Set.new(:one)
+  end
+
+  # A range of durations is expanded where it is read into the durations it
+  # names (ISO 8601-2 §6.5), so a set of them holds durations alone.
+  defp each_duration_of_a_range(members) do
+    Enum.flat_map(members, fn
+      {:range, [{:duration, first}, {:duration, last}]} = range ->
+        case durations_between(first, last) do
+          {:ok, each} -> Enum.map(each, &{:duration, &1})
+          {:error, _reason} -> [range]
+        end
+
+      member ->
+        [member]
+    end)
   end
 
   defp at_the_shift({tag, units}, shift)
@@ -472,6 +538,9 @@ defmodule Tempo.Iso8601.Parser do
   defp parse_set_member({unit, %Range{first: first, last: last}}) do
     {:range, [parse_date([{unit, first}]), parse_date([{unit, last}])]}
   end
+
+  # A member of a set of durations is the duration it is alone.
+  defp parse_set_member({:duration, tokens}), do: parse(duration: tokens)
 
   # An interval member keeps its tag so `Tempo.Set.new/3` builds it with
   # `build_interval/1` rather than as a plain `Tempo`.

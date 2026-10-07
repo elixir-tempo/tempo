@@ -275,6 +275,7 @@ defmodule Tempo.Matrix.Table do
     recurrence_count: "Recurrence, counted",
     recurrence_unending: "Recurrence, unending",
     recurrence_selection: "Recurrence, selecting",
+    duration_set: "Set of durations",
     component_set: "Set in a unit",
     component_range: "Range in a unit",
     value_set_all: "Set of values",

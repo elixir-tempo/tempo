@@ -237,6 +237,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Added
 
+* Sets of durations are read (ISO 8601-2 §6.5): `{P1D,P2D}`, `[P1M2S,P1M3S]`, and a range from one duration to another that differs in its last unit, `{P1M2S..P1M5S}`, which is the four durations it names. Such a set names lengths of time and no time, so `Tempo.to_interval/2` and the set operations return a `Tempo.ConversionError` for it, as they do for one duration.
+
 * One of several values in a unit is read in the extended format, as it is in the explicit one: `2026-[01,03]` is `~o"[2026Y1M,2026Y3M]"`, and so are a day, a week, an hour, a minute or a second after its separator and one of several years before one (`[2026,2027]-01`). A time shift after a set is the shift of each member that has none, so `{2026-01-01T10:00,2026-03-01T10:00}Z` is the two values at `Z`; each was a `Tempo.ParseError`.
 
 * An interval written with a duration from a value that holds a set is the span from each value, as a recurrence from it is the occurrences from each: `Tempo.to_interval(~o"2026Y6M{1,15}D/P1D")` is a day from the 1st and a day from the 15th, and `Tempo.select(day, ~o"T{9,14}H/PT1H")` the hour from 09:00 and the hour from 14:00, where each was a `Tempo.IntervalEndpointsError`. `Tempo.shift/3` with `:skipping` shifts each value of a set, where it refused one.
@@ -479,7 +481,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * An offset that is not a whole number of minutes keeps its seconds in the shift it is written as: a time in New York's local mean time is `Z-4H56M2S[America/New_York]` from `Tempo.shift_zone/2` and `Tempo.from_elixir/1`, where the two seconds were dropped.
 
-* A duration written in a set (`{P1Y,P2Y}`, `{PT1M2S..PT1M5S}`) is refused, where its units were read as a date's and `{P1Y,P2Y}` was the years 1 and 2: a set of durations (ISO 8601-2 §6.5) is not built. An interval at an end of a range (`{2020/2021..2023/2024}`), on which `inspect/1` raised, is refused too.
+* A duration written in a set is a duration, where its units were read as a date's and `{P1Y,P2Y}` was the years 1 and 2; beside a date or a time (`{P1D,2026-06-15}`) it is refused, a set holding one kind or the other. An interval at an end of a range (`{2020/2021..2023/2024}`), on which `inspect/1` raised, is refused too.
 
 * The fractions of a second written as a set are read: `T10H30M45.{0..9}S`, the form `Tempo.extend/2` gives a second and `inspect/1` writes, and a fraction after a set of seconds (`T10H30M{45,50}.5S`), on which `inspect/1` raised. The fractions are written one by one or from a first to a last with as many digits each, and a range names at most a thousand.
 

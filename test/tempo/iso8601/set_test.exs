@@ -171,45 +171,108 @@ defmodule Tempo.Parser.Set.Test do
   # A member was built from its units as a date is, whatever it was: a
   # duration's `[year: 1]` was the year 1, so `{P1Y,P2Y}` equalled `{1Y,2Y}`
   # and `{P1M2S,P1M3S}` was `{1M1DT2S,1M1DT3S}`. ISO 8601-2 §6.5 has sets of
-  # durations, which are not built, so one is refused until it is.
+  # durations, each member a duration or a range from one to another, and
+  # one is built (decided 2026-10-07): it was refused until it was. A set
+  # holds durations or dates and times, and not both.
   describe "a duration written in a set" do
-    @reason "A duration is not read as a member of a set"
+    @reason "A duration is a member of a set of durations alone"
 
-    test "is refused as a member, whatever is beside it" do
+    test "is a member of a set of durations, as it is read alone" do
+      for {text, members} <- [
+            {"{P1Y,P2Y}", ["P1Y", "P2Y"]},
+            {"[P1M2S,P1M3S]", ["P1M2S", "P1M3S"]},
+            {"{P1D}", ["P1D"]},
+            {"{PT1.5S,PT2S}", ["PT1.5S", "PT2S"]},
+            {"{-P1D,P2D}", ["-P1D", "P2D"]},
+            {"{P0001-02-03,P2D}", ["P0001-02-03", "P2D"]}
+          ] do
+        assert {:ok, %Tempo.Set{set: durations}} = Tempo.from_iso8601(text)
+        assert {text, durations} == {text, Enum.map(members, &Tempo.from_iso8601!/1)}
+        assert {text, Enum.all?(durations, &is_struct(&1, Tempo.Duration))} == {text, true}
+      end
+    end
+
+    test "is all of the durations or one of them, as the braces say" do
+      assert %Tempo.Set{type: :all} = Tempo.from_iso8601!("{P1D,P2D}")
+      assert %Tempo.Set{type: :one} = Tempo.from_iso8601!("[P1D,P2D]")
+    end
+
+    # ISO 8601-2 §6.5, example 1: `{P1M2S..P1M5S}` is expanded into
+    # `{P1M2S, P1M3S, P1M4S, P1M5S}`.
+    test "is each duration of a range from one to another that differs in its last unit" do
+      for {text, listed} <- [
+            {"{P1M2S..P1M5S}", "{P1M2S,P1M3S,P1M4S,P1M5S}"},
+            {"{P1D..P5D}", "{P1D,P2D,P3D,P4D,P5D}"},
+            {"[PT1H30M..PT1H32M]", "[PT1H30M,PT1H31M,PT1H32M]"},
+            {"{P1W..P3W,P1M}", "{P1W,P2W,P3W,P1M}"},
+            {"{P3D..P3D}", "{P3D}"}
+          ] do
+        assert {text, Tempo.from_iso8601(text)} == {text, Tempo.from_iso8601(listed)}
+      end
+
+      assert Enum.count(Tempo.from_iso8601!("{P1M2S..P1M5S}")) == 4
+    end
+
+    test "reads back from its own text" do
+      for text <- ["{P1Y,P2Y}", "[P1M2S,P1M3S]", "{P1M2S..P1M5S}", "{-P1D,PT1.5S}"] do
+        set = Tempo.from_iso8601!(text)
+        assert {text, Tempo.from_iso8601(Tempo.to_iso8601!(set))} == {text, {:ok, set}}
+      end
+    end
+
+    test "is no span, as a duration alone is none" do
+      for text <- ["{P1D,P2D}", "[P1D,P2D]", "{P1M2S..P1M5S}"] do
+        set = Tempo.from_iso8601!(text)
+
+        assert {^text, {:error, %Tempo.ConversionError{reason: :bare_duration}}} =
+                 {text, Tempo.to_interval(set)}
+
+        assert {^text, {:error, %Tempo.ConversionError{reason: :bare_duration}}} =
+                 {text, Tempo.union(set, ~o"2026-06")}
+      end
+    end
+
+    test "is refused beside a date or a time, and as a member the set leaves out" do
       for text <- [
-            "{P1Y,P2Y}",
-            "[P1M2S,P1M3S]",
-            "{P1D}",
-            "{P1D}?",
             "{P1D,2026-06-15}",
             "{2026-06-15,P1D}",
-            "{PT1.5S,PT2S}",
-            "{-P1D,P2D}",
-            "{P0001-02-03,P2D}",
-            "{P1D,P2D}[u-ca=hebrew]"
-          ] do
-        assert {^text, {:error, %Tempo.ParseError{} = error}} = {text, Tempo.from_iso8601(text)}
-        assert Exception.message(error) =~ @reason
-      end
-    end
-
-    test "is refused as an end of a range" do
-      for text <- ["{PT1M2S..PT1M5S}", "{P1D..P5D}", "{2026..P1D}", "[P1D..]", "[..P1D]"] do
-        assert {^text, {:error, %Tempo.ParseError{} = error}} = {text, Tempo.from_iso8601(text)}
-        assert Exception.message(error) =~ @reason
-      end
-    end
-
-    test "is refused as a member the set leaves out, and in a recurrence's domain" do
-      for text <- [
             "{^P1D,2026}",
             "{2026,^P1D}",
+            "{P1D,^P2D}",
             "R/{P1D,2026}/P1Y",
             "R/{2020Y..2030Y,^P1D}/P1Y"
           ] do
         assert {^text, {:error, %Tempo.ParseError{} = error}} = {text, Tempo.from_iso8601(text)}
         assert Exception.message(error) =~ @reason
       end
+    end
+
+    test "is refused as an end of a range that is no range of durations" do
+      for text <- ["{2026..P1D}", "[P1D..]", "[..P1D]"] do
+        assert {^text, {:error, %Tempo.ParseError{} = error}} = {text, Tempo.from_iso8601(text)}
+        assert Exception.message(error) =~ @reason
+      end
+
+      # From one duration to another of other units, of a fraction, or more
+      # than a thousand on.
+      for text <- ["{P1D..P1M}", "{PT1.5S..PT3.5S}", "{P1D..P2000D}", "{P1Y1D..P2Y5D}"] do
+        assert {^text, {:error, %Tempo.ParseError{} = error}} = {text, Tempo.from_iso8601(text)}
+        assert Exception.message(error) =~ "A range of durations runs from one to another"
+      end
+
+      assert {:error, %Tempo.ParseError{} = backwards} = Tempo.from_iso8601("{P5D..P1D}")
+      assert Exception.message(backwards) =~ "written backwards"
+    end
+
+    test "takes no time shift, where a suffix and a qualifier are passed over as they are alone" do
+      assert {:error, %Tempo.ParseError{} = error} = Tempo.from_iso8601("{P1D,P2D}Z")
+      assert Exception.message(error) =~ "A duration takes no time shift"
+
+      for text <- ["{P1D,P2D}?", "{P1D,P2D}[u-ca=hebrew]"] do
+        assert {text, Tempo.from_iso8601(text)} == {text, Tempo.from_iso8601("{P1D,P2D}")}
+      end
+
+      assert Tempo.from_iso8601("P1D?") == Tempo.from_iso8601("P1D")
     end
 
     test "is the duration of an interval the set holds" do

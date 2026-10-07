@@ -23,6 +23,14 @@ defmodule Tempo.Set do
   the leap years and `{2000..2020}c` the common (non-leap) years of
   the range. `filter` is `nil` for an ordinary set.
 
+  A set may hold durations in place of dates and times (ISO 8601-2
+  §6.5): `{P1D,P2D}` is one day and two, `[PT30M,PT1H]` one of half an
+  hour and an hour, and a range from one duration to another that
+  differs from it in its last unit alone is each duration between them,
+  so `{P1M2S..P1M5S}` holds four. Such a set names lengths of time and
+  no time, so it has no span and no place on the time line, as one
+  duration has none.
+
   A set has no calendar of its own. Each member, each end of a range
   and each member it excludes is a value in the calendar the set is
   written for — the one given to `Tempo.from_iso8601/2`, or named by a
@@ -37,8 +45,8 @@ defmodule Tempo.Set do
 
   @type filter :: :even | :odd | :leap | :common | nil
 
-  @typedoc "A set's member: a value, a range of values or an interval."
-  @type member :: Tempo.t() | Tempo.Range.t() | Tempo.Interval.t()
+  @typedoc "A set's member: a value, a range of values or an interval, or in a set of durations a duration."
+  @type member :: Tempo.t() | Tempo.Range.t() | Tempo.Interval.t() | Tempo.Duration.t()
 
   @type t :: %__MODULE__{
           type: :all | :one,
@@ -54,8 +62,12 @@ defmodule Tempo.Set do
   @doc false
   def new(tokens, type, calendar \\ Calendrical.Gregorian) do
     {excepts, plains} = Enum.split_with(tokens, &match?({:except, _}, &1))
-    set = Enum.map(plains, &AST.build(&1, calendar))
+    set = Enum.map(plains, &member(&1, calendar))
     except = Enum.map(excepts, fn {:except, member} -> AST.build(member, calendar) end)
     %__MODULE__{type: type, set: set, except: except}
   end
+
+  # A member of a set of durations is built where it is read.
+  defp member(%Tempo.Duration{} = duration, _calendar), do: duration
+  defp member(tokens, calendar), do: AST.build(tokens, calendar)
 end

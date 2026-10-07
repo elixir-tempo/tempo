@@ -525,6 +525,11 @@ defmodule Tempo.Operations do
      )}
   end
 
+  # A set of durations names lengths of time and no time, as one duration
+  # does.
+  defp validate_operand(%Tempo.Set{set: [%Tempo.Duration{} | _durations]} = value),
+    do: {:error, ConversionError.exception(value: value, reason: :bare_duration)}
+
   defp validate_operand(%Tempo.Set{type: :one} = value) do
     {:error,
      ConversionError.exception(

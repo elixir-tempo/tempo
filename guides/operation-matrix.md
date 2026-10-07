@@ -91,6 +91,7 @@ The three tables are three levels of guarantee.
 | Interval, zoned `2026-06-15T09:00[Europe/Paris]/2026-06-15T17:00[Europe/Paris]` | 3 of 11 | all | 8 of 9 | all | all | none | 2 of 8 | all | 7 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.IntervalEndpointsError` |
 | Interval, two zones `2026-06-15T10:00+02:00/2026-06-15T12:00Z` | 3 of 11 | all | 8 of 9 | all | all | 2 of 11 | 2 of 8 | all | 7 of 18 | `ArgumentError`, `Tempo.ConversionError` |
 | Duration `P1D` | 1 of 11 | none | none | 1 of 21 | none | none | none | 4 of 5 | none | `ArgumentError`, `Protocol.UndefinedError`, `Tempo.ConversionError` |
+| Set of durations `{P1D,P2D}` | none | all | none | none | none | none | none | 3 of 5 | none | `ArgumentError`, `Tempo.ConversionError` |
 | Recurrence, counted `R3/2026-06-01/P1D` | 4 of 11 | all | 2 of 9 | 6 of 21 | all | 2 of 11 | 2 of 8 | all | 2 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
 | Recurrence, unending `R/2026-01-01/P1Y` | 2 of 11 | none | 3 of 9 | 1 of 21 | none | 2 of 11 | none | 4 of 5 | 2 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.UnboundedRecurrenceError` |
 | Recurrence, selecting `R3/2026-01-01/P1Y/FL7M4DN` | 4 of 11 | all | 2 of 9 | 6 of 21 | all | 2 of 11 | 2 of 8 | all | 2 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError` |

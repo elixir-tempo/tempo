@@ -8039,6 +8039,12 @@ defmodule Tempo do
   # Exclusion members (`^x`, carried in `:except`) are subtracted
   # from the plain members — `{2020..2030, ^2026}` is the range
   # 2020–2030 with 2026 removed.
+  #
+  # A set of durations names lengths of time and no time, so it has no span,
+  # as one duration has none.
+  defp materialise(%Tempo.Set{set: [%Duration{} | _durations]} = set, _opts),
+    do: {:error, ConversionError.exception(value: set, reason: :bare_duration)}
+
   defp materialise(%Tempo.Set{type: :all, set: members, except: [_ | _] = except}, opts) do
     with {:ok, included} <- members_to_interval_set(members),
          {:ok, excluded} <- members_to_interval_set(except) do

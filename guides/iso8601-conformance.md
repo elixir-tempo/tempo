@@ -97,6 +97,7 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 | **Set of dates — one of** | `[1984,1986,1988]`, `[1667..1672]` |
 | **Range in set** | `[1900..2000]`, `{-1640-06..-1200-01}` |
 | **A qualified member of a set** | `{2026-06-15?,2026-06~}`, `{2020?..2030}`. Each member is qualified as it would be alone (§8). |
+| **Set of durations** (§6.5) | `{P1D,P2D}`, `[P1M2S,P1M3S]`, and a range from one duration to another that differs in its last unit, `{P1M2S..P1M5S}`, which is the four durations it names. A set holds durations or dates and times, and not both; units written with no designator (`{1M2S..1M5S}`, §6.4 example 3) are times of day. |
 | **One of several values in a unit** | `2026Y[1,3]M`, and in the extended format after a separator: `2026-[01,03]`, `2026-01-15T[09,14]:30`, `[2026,2027]-01`. Each is the one-of set of the values written whole, `[2026-01,2026-03]`. |
 | **A time shift after a set** | `{2026-01-01T10:00,2026-03-01T10:00}Z`, `…}+02:00`. It is the shift of each member that has none, as a suffix after a set is each member's; a sign and two digits alone (`…}-05`) are not read as one. |
 | **Groups** | `5G10DU` (5th group of 10 days), `2018Y4G60DU6D` (2018, day 6 of the 4th group of 60 days), `1933Y1G80DU` (the first 80 days of 1933), `2026Y2G13WU` (weeks 14–26), `T16H1GT15MU` (16:00–16:15) |
@@ -127,7 +128,6 @@ All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, 
 | Feature | Example | Reason |
 |---|---|---|
 | An end that is coarser than its start and holds it | `2004-06-11/2004-06` (a day of June to June) | An interval whose end is before its start is refused (`2026/2025`, `2012-24/2012-21`), the two ends being ordered by where the end's own span ends. A coarser end that holds the start passes that check and is read, as an interval that ends where the end's value starts and so holds nothing; EDTF's corpus lists it as invalid. |
-| A set of durations (§6.5) | `{P1M2S..P1M5S}`, `[P1M2S,P1M3S]` | A duration is refused as a member of a set and as an end of a range: a set holds dates, times, ranges of them and intervals. Units written with no designator (`{1M2S..1M5S}`, §6.4 example 3) are read as times of day. |
 
 All other EDTF Level 2 features — including wide-range exponent years (`Y17E8`, `Y-170000002`) and long-year significant-digit annotations (`Y171010000S3`) — are supported.
 

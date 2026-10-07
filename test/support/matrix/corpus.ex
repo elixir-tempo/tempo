@@ -79,6 +79,9 @@ defmodule Tempo.Matrix.Corpus do
       "2026-06-15T10:00[Europe/Paris]/2026-06-15T12:00[Europe/London]"
     ],
     duration: ["P1D", "P1M", "P1Y2M3D", "PT1H30M", "P1W", "PT0.5S", "-P1D", "P1Y2M3DT4H5M6S"],
+    # Durations, all of them or one of them (ISO 8601-2 §6.5): lengths of
+    # time, and no time.
+    duration_set: ["{P1D,P2D}", "[PT30M,PT1H]", "{P1M2S..P1M5S}"],
     recurrence_count: [
       "R3/2026-06-01/P1D",
       "R5/2026-01-01/P1M",

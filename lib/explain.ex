@@ -1192,6 +1192,18 @@ defmodule Tempo.Explain do
   ## Tempo.Set
   ## ------------------------------------------------------------
 
+  # A set of durations (ISO 8601-2 §6.5) names lengths of time, and no time.
+  defp set_parts(%Tempo.Set{type: type, set: [%Tempo.Duration{} | _durations] = members}) do
+    held =
+      if type == :all, do: "each of these lengths of time", else: "one of these lengths of time"
+
+    [
+      {:headline, "A set of durations: #{held}, and no time on the time line."},
+      {:member, "#{length(members)} duration(s): #{members_phrase(members)}."},
+      {:hint, "A duration has no span of its own; count one from a date with `Tempo.shift/2`."}
+    ]
+  end
+
   defp set_parts(%Tempo.Set{type: :all, set: members, except: except, filter: filter}) do
     [
       {:headline, "An all-of set: every member happened."},
