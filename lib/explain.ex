@@ -312,6 +312,7 @@ defmodule Tempo.Explain do
       {:span, scalar_span(tempo)},
       {:margin, margin_text(tempo)},
       {:qualification, qualification_text(tempo)},
+      {:shift, time_shift_text(tempo)},
       {:extended, extended_text(tempo)},
       {:calendar, calendar_text(tempo)},
       {:enumeration, enumeration_text(tempo)},
@@ -335,7 +336,17 @@ defmodule Tempo.Explain do
   # The units a headline reads. A value is plain when each it holds is an
   # integer; one holding a set or a group names several values, or a span of
   # them, and is written unit by unit.
-  @headline_units [:year, :month, :day, :week, :day_of_week, :day_of_year, :hour, :minute]
+  @headline_units [
+    :year,
+    :month,
+    :day,
+    :week,
+    :day_of_week,
+    :day_of_year,
+    :hour,
+    :minute,
+    :second
+  ]
   @headline_date_units [:year, :month, :day, :week, :day_of_week, :day_of_year]
 
   defp scalar_headline(%Tempo{time: time} = tempo) do
@@ -402,8 +413,36 @@ defmodule Tempo.Explain do
 
   defp counted_as_named?(_no_one_year, _calendar), do: true
 
-  defp clock_phrase(time),
-    do: "#{two_digit(find_unit(time, :hour))}:#{two_digit(find_unit(time, :minute) || 0)}"
+  # A clock time as it is written: the hour and the minute, the second where
+  # the value is written to one, and the fraction of it where it has one. A
+  # second was left out, so 10:30:15 was "10:30" and its span from 10:30 to
+  # 10:30.
+  defp clock_phrase(time) do
+    hour = find_unit(time, :hour) || 0
+    minute = find_unit(time, :minute) || 0
+
+    "#{two_digit(hour)}:#{two_digit(minute)}#{seconds_text(time)}"
+  end
+
+  defp seconds_text(time) do
+    case find_unit(time, :second) do
+      second when is_integer(second) ->
+        ":#{two_digit(second)}#{fraction_text(find_unit(time, :microsecond))}"
+
+      _no_one_second ->
+        ""
+    end
+  end
+
+  # A fraction of a second is held in microseconds, with the number of
+  # digits it was written to.
+  defp fraction_text({microseconds, digits})
+       when is_integer(microseconds) and is_integer(digits) and digits > 0 do
+    written = microseconds |> Integer.to_string() |> String.pad_leading(6, "0")
+    "." <> String.slice(written, 0, digits)
+  end
+
+  defp fraction_text(_no_fraction), do: ""
 
   # The name of a value's month, in its calendar and, when it has one, its year.
   defp named_month(%Tempo{time: time} = tempo),
@@ -548,11 +587,8 @@ defmodule Tempo.Explain do
 
   defp all_present?(time, keys), do: Enum.all?(keys, &is_integer(find_unit(time, &1)))
 
-  defp time_of_day_headline(time) do
-    h = Keyword.get(time, :hour, 0)
-    m = Keyword.get(time, :minute, 0)
-    "The time-of-day #{two_digit(h)}:#{two_digit(m)} (unanchored — recurs every day)."
-  end
+  defp time_of_day_headline(time),
+    do: "The time-of-day #{clock_phrase(time)} (unanchored — recurs every day)."
 
   # A value holding a set or a group names several values, or a span of them,
   # so its headline writes each unit out: "The 1st and 15th of June 2026",
@@ -738,12 +774,24 @@ defmodule Tempo.Explain do
   defp values_of(set), do: set |> Enum.flat_map(&expand_int/1) |> Enum.sort() |> Enum.dedup()
 
   # Each hour with each minute, as a clock time: "10:00" and "14:00", or
-  # "10:00" and "10:30".
+  # "10:00" and "10:30", and with each second where the value is written to
+  # one: "10:30:15" and "10:30:45".
   defp clock_times(time) do
     for hour <- values_of(find_unit(time, :hour) || 0),
         minute <- values_of(find_unit(time, :minute) || 0),
-        do: "#{two_digit(hour)}:#{two_digit(minute)}"
+        second <- seconds_written(find_unit(time, :second)),
+        do: "#{two_digit(hour)}:#{two_digit(minute)}#{second}"
   end
+
+  defp seconds_written(second) when is_integer(second), do: [":" <> two_digit(second)]
+
+  defp seconds_written([_ | _] = seconds) do
+    if values?(:second, seconds),
+      do: for(second <- values_of(seconds), do: ":" <> two_digit(second)),
+      else: [""]
+  end
+
+  defp seconds_written(_none_or_no_plain_seconds), do: [""]
 
   defp at_times(time) do
     if find_unit(time, :hour), do: " at " <> and_join(clock_times(time)), else: ""
@@ -865,13 +913,41 @@ defmodule Tempo.Explain do
   defp qualification_text(%Tempo{qualifications: qualifications} = tempo) do
     case Qualification.whole(tempo) do
       nil ->
-        "Per-component qualifications: #{inspect(qualifications)}."
+        "Per-component qualifications: #{components_qualified(qualifications)}."
 
       whole ->
         "Expression-level qualification: #{qualification_word(whole)} " <>
           "(EDTF #{qualification_symbol(whole)})."
     end
   end
+
+  # Each qualifier with the components that carry it, the components in the
+  # order a value is written in: "the year and the month approximate (EDTF
+  # ~); the day uncertain (EDTF ?)".
+  @written_order [:year, :month, :week, :day_of_year, :day, :day_of_week, :hour, :minute, :second]
+
+  defp components_qualified(qualifications) do
+    qualifications
+    |> Enum.sort_by(fn {unit, _qualifier} -> Enum.find_index(@written_order, &(&1 == unit)) end)
+    |> Enum.chunk_by(fn {_unit, qualifier} -> qualifier end)
+    |> Enum.map_join("; ", fn [{_unit, qualifier} | _rest] = components ->
+      units = Enum.map(components, fn {unit, _qualifier} -> "the #{unit_words(unit)}" end)
+
+      "#{and_join(units)} #{qualification_word(qualifier)} (EDTF #{qualification_symbol(qualifier)})"
+    end)
+  end
+
+  defp unit_words(unit), do: unit |> Atom.to_string() |> String.replace("_", " ")
+
+  # A time shift is how far the value's clock is from UTC (ISO 8601-1
+  # §3.1.1.25), and with it the value names a moment. It was not said.
+  defp time_shift_text(%Tempo{shift: [hour: 0]}),
+    do: "Time shift: none, the time is in UTC (`Z`)."
+
+  defp time_shift_text(%Tempo{shift: [_ | _] = shift}),
+    do: "Time shift: #{shift_text(shift)} from UTC."
+
+  defp time_shift_text(_no_shift), do: nil
 
   defp extended_text(%Tempo{extended: nil}), do: nil
 
@@ -1261,9 +1337,18 @@ defmodule Tempo.Explain do
     "#{members_phrase(members)}#{set_qualifiers(except, filter)}"
   end
 
-  # A plain-member domain is its own window; an exclusions-only one needs a `:within` window.
-  defp domain_hint(%Tempo.Set{set: []}),
+  # A plain-member domain is its own window; one that is only a filter or
+  # only exclusions needs a `:within` window.
+  defp domain_hint(%Tempo.Set{set: [], except: [], filter: filter}) when not is_nil(filter),
+    do: "A filter only — supply a `:within` window; the periods of it the filter keeps are kept."
+
+  defp domain_hint(%Tempo.Set{set: [], filter: nil}),
     do: "Exclusions only — supply a `:within` window; the excluded periods are removed from it."
+
+  defp domain_hint(%Tempo.Set{set: []}) do
+    "A filter and exclusions only — supply a `:within` window; the periods of it the filter " <>
+      "keeps are kept, less those excluded."
+  end
 
   defp domain_hint(%Tempo.Set{}),
     do:
@@ -1480,8 +1565,8 @@ defmodule Tempo.Explain do
       # labelled struct view for anything it cannot encode.
       {nil, nil} -> inspect(tempo)
       {date, nil} -> date
-      {nil, time} -> "T#{time}"
-      {date, time} -> "#{date}T#{time}"
+      {nil, time} -> "T#{time}#{render_shift(tempo)}"
+      {date, time} -> "#{date}T#{time}#{render_shift(tempo)}"
     end
   end
 
@@ -1590,11 +1675,22 @@ defmodule Tempo.Explain do
     mi = Keyword.get(time, :minute)
 
     cond do
-      is_integer(h) and is_integer(mi) -> "#{two_digit(h)}:#{two_digit(mi)}"
+      is_integer(h) and is_integer(mi) -> "#{two_digit(h)}:#{two_digit(mi)}#{seconds_text(time)}"
       is_integer(h) -> "#{two_digit(h)}:00"
-      is_integer(mi) -> "00:#{two_digit(mi)}"
+      is_integer(mi) -> "00:#{two_digit(mi)}#{seconds_text(time)}"
       true -> nil
     end
+  end
+
+  # An endpoint written with a time shift is at that shift from UTC, which
+  # is part of the moment it names: `Z`, or the hours and minutes.
+  defp render_shift(%Tempo{shift: [hour: 0]}), do: "Z"
+  defp render_shift(%Tempo{shift: [_ | _] = shift}), do: shift_text(shift)
+  defp render_shift(_no_shift), do: ""
+
+  defp shift_text(shift) do
+    sign = if Enum.any?(shift, fn {_unit, amount} -> amount < 0 end), do: "-", else: "+"
+    sign <> Enum.map_join(shift, ":", fn {_unit, amount} -> two_digit(abs(amount)) end)
   end
 
   defp duration_prose(time) do
