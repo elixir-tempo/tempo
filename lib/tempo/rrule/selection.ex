@@ -1467,9 +1467,7 @@ defmodule Tempo.RRule.Selection do
 
   defp apply_role(:within, {:day_of_year, days}, candidates, scope, _selection, wkst) do
     Enum.flat_map(candidates, fn candidate ->
-      candidate
-      |> days_of_period(scope, wkst)
-      |> Enum.filter(&in_year_day_list?(&1, List.wrap(days)))
+      candidate |> days_of_period(scope, wkst) |> on_days_of_year(List.wrap(days))
     end)
   end
 
@@ -1837,6 +1835,27 @@ defmodule Tempo.RRule.Selection do
 
   defp in_year_day_list?(%Interval{} = candidate, target_days),
     do: day_of_year_of(candidate) in counted_values(target_days, :day_of_year, candidate)
+
+  # The days of a period that are days of the year a part names. What a
+  # part names depends on the year a day is in (the last day of one is its
+  # 365th or its 366th), and is found once for each year of the period, a
+  # week holding the days of two at most. Found for each day, a range of
+  # days of the year was looked for among the year's days thirty times over.
+  defp on_days_of_year(period_days, target_days) do
+    {on_them, _named_by_year} =
+      Enum.flat_map_reduce(period_days, %{}, fn day, named_by_year ->
+        named_by_year =
+          Map.put_new_lazy(named_by_year, year_of(day), fn ->
+            MapSet.new(counted_values(target_days, :day_of_year, day))
+          end)
+
+        if day_of_year_of(day) in Map.fetch!(named_by_year, year_of(day)),
+          do: {[day], named_by_year},
+          else: {[], named_by_year}
+      end)
+
+    on_them
+  end
 
   defp day_of_year_of(%Interval{from: %Tempo{time: time, calendar: calendar}}) do
     with year when is_integer(year) <- Keyword.get(time, :year),
