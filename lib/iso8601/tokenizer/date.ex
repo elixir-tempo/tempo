@@ -116,7 +116,27 @@ defmodule Tempo.Iso8601.Tokenizer.Date do
   # explicit date stays, so an explicit date failing validation still fails
   # exactly as it did. Exported for the grammar and the set parser; this module
   # is hidden, so NimbleParsec's generated clauses stay out of the docs.
+  #
+  # What it reads at a place is kept (`Tempo.Iso8601.Tokenizer.Helpers`): a
+  # value is tried as the start of an interval and then as itself, and a
+  # member of a set as both again, so each was read from two to four times.
+  # Where it is refused it is read again, and is refused in its own words.
   defcombinator :datetime_or_date_or_time,
+                kept_where_read(Tempo.Iso8601.Tokenizer.Date, :datetime_or_date_or_time),
+                export_combinator: true
+
+  defcombinator :datetime_or_date_or_time_read_before,
+                read_before(:datetime_or_date_or_time),
+                export_combinator: true
+
+  defcombinator :datetime_or_date_or_time_read_now,
+                read_now(
+                  :datetime_or_date_or_time,
+                  parsec({Tempo.Iso8601.Tokenizer.Date, :datetime_or_date_or_time_as_written})
+                ),
+                export_combinator: true
+
+  defcombinator :datetime_or_date_or_time_as_written,
                 choice([
                   parsec({Tempo.Iso8601.Tokenizer.Date, :explicit_date_p})
                   |> choice([

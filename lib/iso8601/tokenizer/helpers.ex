@@ -83,12 +83,26 @@ defmodule Tempo.Iso8601.Tokenizer.Helpers do
   # `Tempo.Iso8601.Tokenizer.Set` defines from the three functions below: a
   # traversal that returns an error is its combinator failing, and the next
   # of the three is tried.
-  def read_once(name, opening) do
-    lookahead(string(opening))
+  def read_once(name, opening),
+    do: lookahead(string(opening)) |> read_once_of(name, Tempo.Iso8601.Tokenizer.Set)
+
+  # A combinator whose reading is kept where it reads, and which is read
+  # again where it is refused, so that it is refused in its own words: an
+  # invalid day says so, where a place noted as refused says only that. Its
+  # two combinators, `name_read_before` and `name_read_now`, are `module`'s.
+  def kept_where_read(module, name) do
+    choice([
+      parsec({module, :"#{name}_read_before"}),
+      parsec({module, :"#{name}_read_now"})
+    ])
+  end
+
+  defp read_once_of(combinator, name, module) do
+    combinator
     |> choice([
-      parsec({Tempo.Iso8601.Tokenizer.Set, :"#{name}_read_before"}),
-      parsec({Tempo.Iso8601.Tokenizer.Set, :"#{name}_read_now"}),
-      parsec({Tempo.Iso8601.Tokenizer.Set, :"#{name}_refused"})
+      parsec({module, :"#{name}_read_before"}),
+      parsec({module, :"#{name}_read_now"}),
+      parsec({module, :"#{name}_refused"})
     ])
   end
 

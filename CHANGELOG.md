@@ -301,6 +301,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Changed
 
+* Every form outside the plain dates and timestamps is read in about half the time, a date or a time being read once at each place: `2026-W25-3` in 230 µs where it took 500, `20260615` in 290 where it took 530, and a time of day alone in 160 where it took 290.
+
 * A week date of the Gregorian calendar is validated four times faster, its date asked of `Calendrical.ISOWeek`, the calendar that is ISO 8601's weeks: 13.5 µs for a year, a week and a day where it took 51.
 
 * Sets and the windows of a selection are read faster, each place of a string being read once: `LL3K4IN/P5DN` in 0.4 ms where it took 10.7, `{2026-06-15,2026-06-20,2026-07-01}` in 3.5 ms where it took 9.3, and `{2026,2027}-06-15` in 1.4 ms where it took 4.4.
