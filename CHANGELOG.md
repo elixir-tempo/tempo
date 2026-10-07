@@ -389,6 +389,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A day written after a division of a year is read past its thirty-first: `2026Y34M45D`, the forty-fifth day of the second quarter, is 15 May, as `2026Y2G3MU45D` is, where it was a `Tempo.ParseError`. A day past the division's last is a `Tempo.InvalidDateError`.
+
 * `Tempo.at/2` places a time of day after a selection that has no period, on each date it selects: `Tempo.at(~o"L5KN", ~o"T17H30M")` is `~o"L5KNT17H30M"`, the Fridays at half past five, where it was `~o"T17H30ML5KN"`, which no reader takes.
 
 * A part of a selection written with unspecified digits stands for each value its digits match: `2026Y6ML1XDN` is the ten days from 10 to 19 June and `2026YL1XMN` October to December, where each selected nothing. `Tempo.explain/1` words such a part as it is written and `Tempo.RRule.to_string/1` returns a `Tempo.ConversionError` for one, where both raised.

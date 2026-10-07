@@ -36,8 +36,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **A week alone selected from a day written with its month** — a decision to take: `Tempo.select(~o"2026-06-10", ~o"2W")` is a filter by the ISO week of the year and selects nothing, the 10th being in week 24, where the same week selected from June is its second, 8 to 14 June, which holds the 10th. Of the year, as it is today and as a week selected from a year is, or of the month the day is written in.
 
-* [ ] **A day of a season or a quarter past its thirty-first, written after its number** — `2026Y34M45D` is refused as no day, where `2026Y2G3MU45D` is 15 May, the forty-fifth day of the second quarter, and a day to the thirty-first is read after the number (`2026-24-31`, 31 December). ISO 8601-2 writes a division of a year with no day after it, so the form is Tempo's own, and the grammar holds its day to a month's. Found 2026-10-07.
-
 * [ ] **Traditional months that are sets or masks** — `2026Y{1,2}m` parses as a mask (`traditional_month: {:mask, [[1..2]]}`) and a masked one (`1Xm`) is a `ConversionError` from `Enum` and `to_interval/2`: nothing lists the traditional months a year has, which is Calendrical's to answer. Found 2026-10-03.
 
 ### Performance
@@ -97,6 +95,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A day of a season or a quarter past its thirty-first, written after its number** — `2026Y34M45D` was refused as no day, the reader holding a day after any month to thirty-one (`check_valid_date/5` in `lib/iso8601/tokenizer/helpers.ex`), where a day after a division of a year is a day of the division, as a day after a group is. It is read to the division's last day, which the expansion holds it to: the forty-fifth day of the second quarter is 15 May, and the ninety-second is an `InvalidDateError`. Held to Elixir's `Date` for each day of the thirteen divisions of 2026. 2026-10-07.
 
 * [x] **A value placed with a selection that has no period** — `Tempo.at(~o"L5KN", ~o"T17H30M")`, the Fridays at half past five, was `~o"T17H30ML5KN"`, the time before the selection, which no reader takes: a selection with nothing before it was held the finest of all values. It is as coarse as the finest unit it names (`leading_key/1` in `lib/tempo.ex`), so a finer value is placed after it, on each date it selects (`L5KNT17H30M`, `L1K1INT9H`, `L6MN15D`), and a coarser one before it as its period (`6ML5KN`). Each result is the text written in that order, read. 2026-10-07.
 

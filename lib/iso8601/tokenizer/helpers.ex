@@ -386,26 +386,30 @@ defmodule Tempo.Iso8601.Tokenizer.Helpers do
     {:error, "invalid month"}
   end
 
-  # No supported calendars have more than 31 days in a month
+  # No supported calendars have more than 31 days in a month. A day after a
+  # division of a year (a season, a quarter, a quadrimester or a semester,
+  # the months 21 to 41) is a day of that division, which has more: the
+  # forty-fifth day of the second quarter is 15 May, as `2G3MU45D` is, and
+  # the division's own length holds it where it is expanded.
   def check_valid_date(
         _rest,
-        [[{:year, _year}, {:month, _month}, {:day, day} | _remaining]],
+        [[{:year, _year}, {:month, month}, {:day, day} | _remaining]],
         _context,
         _line,
         _offset
       )
-      when is_number(day) and day > 31 do
+      when is_number(day) and day > 31 and not (is_number(month) and month in 21..41) do
     {:error, "invalid day"}
   end
 
   def check_valid_date(
         _rest,
-        [[{:month, _month}, {:day, day} | _remaining]],
+        [[{:month, month}, {:day, day} | _remaining]],
         _context,
         _line,
         _offset
       )
-      when is_number(day) and day > 31 do
+      when is_number(day) and day > 31 and not (is_number(month) and month in 21..41) do
     {:error, "invalid day"}
   end
 
