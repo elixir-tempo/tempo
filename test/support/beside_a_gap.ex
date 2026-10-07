@@ -55,6 +55,85 @@ defmodule Tempo.BesideAGap do
   end
 
   @doc """
+  The values beside a gap written in another calendar, each as
+  `{text, twin, calendar}`: the Gregorian text, the text of the same day and
+  time in the other calendar, and that calendar's name.
+
+  A zone's clock is the same clock whichever calendar a date is written in,
+  so an operation gives a value and its twin the same moments. A Buddhist
+  year is the Gregorian one 543 on with the same months and days, so every
+  value but a week date and a day of the year has a Buddhist twin. A date,
+  and a date with a time of day, has a Hebrew one, whose month and day are
+  others, and one in the calendar of ISO 8601's weeks, where it is a day of
+  a week.
+  """
+  @spec twins() :: [{String.t(), String.t(), String.t()}]
+  def twins do
+    for {zone, values} <- @beside,
+        value <- values,
+        {calendar, twin} <- twins_of(value),
+        do: {zoned(value, zone), zoned(twin, zone) <> "[u-ca=" <> calendar <> "]", calendar}
+  end
+
+  defp zoned(value, zone), do: value <> "[" <> zone <> "]"
+
+  defp twins_of(value), do: buddhist_twin(value) ++ hebrew_twin(value) ++ week_twin(value)
+
+  @buddhist_years_on 543
+
+  defp buddhist_twin(<<year::binary-size(4), rest::binary>> = value) do
+    if value =~ ~r/^\d{4}(-W|-\d{3}$)/,
+      do: [],
+      else: [
+        {"buddhist", Integer.to_string(String.to_integer(year) + @buddhist_years_on) <> rest}
+      ]
+  end
+
+  defp hebrew_twin(value) do
+    case Regex.run(~r/^(\d{4})-(\d{2})-(\d{2})(T[\d:]+)?$/, value) do
+      [_all, year, month, day | time] ->
+        {:ok, date} = Date.new(integer(year), integer(month), integer(day))
+        {:ok, hebrew} = Date.convert(date, Calendrical.Hebrew)
+
+        [{"hebrew", "#{hebrew.year}-#{two(hebrew.month)}-#{two(hebrew.day)}#{time}"}]
+
+      nil ->
+        []
+    end
+  end
+
+  # The day of the week of ISO 8601 that a date is, as Erlang gives it.
+  defp week_twin(value) do
+    case Regex.run(~r/^(\d{4})-(\d{2})-(\d{2})(T[\d:]+)?$/, value) do
+      [_all, year, month, day | time] ->
+        date = {integer(year), integer(month), integer(day)}
+        {week_year, week} = :calendar.iso_week_number(date)
+
+        [{"iso-week", "#{week_year}-W#{two(week)}-#{:calendar.day_of_the_week(date)}#{time}"}]
+
+      nil ->
+        []
+    end
+  end
+
+  defp integer(digits), do: String.to_integer(digits)
+  defp two(number), do: number |> Integer.to_string() |> String.pad_leading(2, "0")
+
+  # The operations that give a Hebrew date or a day of a week what they give
+  # its Gregorian twin: every one that does not count in months or years, or
+  # pick a day by its number in a month, which are other months and other
+  # numbers there, or none.
+  defp of_any_calendar?(name),
+    do: not (name =~ ~r/year|month|30D|29D\/31D|P1M|BYMONTHDAY/)
+
+  # What a calendar of weeks is not yet given, each an open item of
+  # `TODO.md` that is nothing of the zone's: a workday counted from a date
+  # and time is refused there, and a time of day selected from the last day
+  # of a week is nothing, which each day beside a change of the clock here
+  # is, clocks being changed on a Sunday.
+  defp built_for_weeks?(name), do: not (name =~ ~r/workday|^select T/)
+
+  @doc """
   The operations each value is given to, by name.
   """
   @spec operations() :: [{String.t(), (Tempo.t() -> term())}]
@@ -123,8 +202,8 @@ defmodule Tempo.BesideAGap do
       {"select T02:15/PT30M", &Tempo.select(&1, Tempo.from_iso8601!("T02:15/PT30M"))},
       {"select T00/PT30M", &Tempo.select(&1, Tempo.from_iso8601!("T00/PT30M"))},
       {"select [2]", &Tempo.select(&1, [2])},
-      {"select 30D", &Tempo.select(&1, Tempo.from_iso8601!("30D"))},
-      {"select 29D/31D", &Tempo.select(&1, Tempo.from_iso8601!("29D/31D"))},
+      {"select 30D", &Tempo.select(&1, in_its_calendar("30D", &1))},
+      {"select 29D/31D", &Tempo.select(&1, in_its_calendar("29D/31D", &1))},
       {"select workdays", &Tempo.select(&1, Tempo.workdays(:US))},
       {"select weekends", &Tempo.select(&1, Tempo.weekends(:US))},
       {"at T02", &Tempo.at(&1, Tempo.from_iso8601!("T02"))},
@@ -136,6 +215,11 @@ defmodule Tempo.BesideAGap do
       {"rule BYDAY=FR", &rule(&1, "FREQ=WEEKLY;BYDAY=FR;COUNT=4")}
     ]
   end
+
+  # A selector that names a day by its number is written in the calendar of
+  # what it selects from, as a day is numbered by its calendar.
+  defp in_its_calendar(selector, %Tempo{calendar: calendar}),
+    do: Tempo.from_iso8601!(selector, calendar)
 
   # The occurrences of a rule that starts on the value.
   defp rule(value, parts) do
@@ -249,12 +333,21 @@ defmodule Tempo.BesideAGap do
   value, and the findings.
 
   A finding is `{property, operation, text, detail}`, the property `:raises`
-  for an operation that raised and `:not_read` for a value it gave that the
-  reader does not take, or reads as another.
+  for an operation that raised, `:not_read` for a value it gave that the
+  reader does not take, or reads as another, and `:not_as_its_twin` for a
+  value of another calendar that is given other dates and times than the
+  Gregorian value of the same day is.
   """
   @spec harvest() :: %{cells: non_neg_integer(), gave: map(), findings: [tuple()]}
   def harvest do
-    cells = for text <- texts(), operation <- operations(), do: {text, operation}
+    cells =
+      for(text <- texts(), operation <- operations(), do: {text, operation}) ++
+        for {text, twin, calendar} <- twins(),
+            {name, _operation} = operation <- operations(),
+            calendar == "buddhist" or of_any_calendar?(name),
+            calendar != "iso-week" or built_for_weeks?(name),
+            do: {twin, operation, {text, calendar}}
+
     {:ok, supervisor} = Task.Supervisor.start_link()
 
     results =
@@ -278,20 +371,71 @@ defmodule Tempo.BesideAGap do
 
   defp cell({text, {name, operation}}) do
     values = text |> Tempo.from_iso8601!() |> operation.() |> values_in()
-
-    {name, values,
-     for(value <- values, found = not_read(value), found != nil, do: {value, found})}
+    {name, values, not_read_among(values), []}
   end
 
-  defp reported({{:ok, {name, values, not_read}}, {text, _operation}}) do
+  # A twin is given what its Gregorian value is, date for date.
+  defp cell({twin, {name, operation}, {text, calendar}}) do
+    values = twin |> Tempo.from_iso8601!() |> operation.() |> values_in()
+    given = text |> Tempo.from_iso8601!() |> operation.() |> values_in()
+
+    differs =
+      case {Enum.map(given, &dated/1), Enum.map(values, &gregorian(&1, calendar))} do
+        {same, same} -> []
+        {gregorian, twin} -> [{inspect(gregorian, limit: 24), inspect(twin, limit: 24)}]
+      end
+
+    {name, values, not_read_among(values), differs}
+  end
+
+  defp not_read_among(values),
+    do: for(value <- values, found = not_read(value), found != nil, do: {value, found})
+
+  defp dated(%Tempo{time: time, shift: shift}), do: {time, shift}
+
+  # A value of another calendar as the Gregorian units and offset it names,
+  # worked out here: a Buddhist year is 543 on, and a Hebrew date is asked
+  # of Elixir's `Date`.
+  defp gregorian(%Tempo{time: [{:year, year} | rest], shift: shift}, "buddhist")
+       when is_integer(year),
+       do: {[{:year, year - @buddhist_years_on} | rest], shift}
+
+  defp gregorian(
+         %Tempo{time: [{:year, year}, {:month, month}, {:day, day} | clock], shift: shift},
+         "hebrew"
+       )
+       when is_integer(year) and is_integer(month) and is_integer(day) do
+    {:ok, date} = Date.new(year, month, day, Calendrical.Hebrew)
+    {:ok, date} = Date.convert(date, Calendar.ISO)
+    {[year: date.year, month: date.month, day: date.day] ++ clock, shift}
+  end
+
+  defp gregorian(
+         %Tempo{time: [{:year, year}, {:week, week}, {:day_of_week, day} | clock], shift: shift},
+         "iso-week"
+       )
+       when is_integer(year) and is_integer(week) and is_integer(day) do
+    {:ok, date} = Date.new(year, week, day, Calendrical.ISOWeek)
+    {:ok, date} = Date.convert(date, Calendar.ISO)
+    {[year: date.year, month: date.month, day: date.day] ++ clock, shift}
+  end
+
+  defp gregorian(%Tempo{} = value, _calendar), do: dated(value)
+
+  defp reported({{:ok, {name, values, not_read, differs}}, cell}) do
+    text = elem(cell, 0)
+
     findings =
-      for {value, found} <- not_read, do: {:not_read, name, text, {inspect(value), found}}
+      for({value, found} <- not_read, do: {:not_read, name, text, {inspect(value), found}}) ++
+        for detail <- differs, do: {:not_as_its_twin, name, text, detail}
 
     {name, if(values == [], do: :gave_none, else: :gave), findings}
   end
 
-  defp reported({{:exit, reason}, {text, {name, _operation}}}),
-    do: {name, :gave_none, [{:raises, name, text, raised(reason)}]}
+  defp reported({{:exit, reason}, cell}) do
+    {name, _operation} = elem(cell, 1)
+    {name, :gave_none, [{:raises, name, elem(cell, 0), raised(reason)}]}
+  end
 
   # The exception and where it was raised, for a report a reader can act on.
   defp raised({%{__exception__: true} = exception, [_ | _] = stack}),

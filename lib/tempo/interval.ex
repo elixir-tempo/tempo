@@ -1118,11 +1118,13 @@ defmodule Tempo.Interval do
        do: bounds_by_the_clock(tempo, time, unit)
 
   # Nearly every zone leaves no day out, and a day in one ends on the day
-  # after it as a day in no zone does.
-  defp span_bounds(%Tempo{extended: %{zone_id: zone}} = tempo, time, :day, calendar)
-       when is_binary(zone) do
+  # after it as a day in no zone does. A day of a week is a day too: the
+  # Thursday of the last week of 2011 in Samoa ends where its Saturday
+  # begins, and was given an end on the Friday the zone left out.
+  defp span_bounds(%Tempo{extended: %{zone_id: zone}} = tempo, time, unit, calendar)
+       when is_binary(zone) and unit in [:day, :day_of_week] do
     if TimeZoneDatabase.days_left_out(zone) == [],
-      do: bounds_by_the_calendar(tempo, time, :day, calendar),
+      do: bounds_by_the_calendar(tempo, time, unit, calendar),
       else: bounds_by_the_clock(tempo, time, :day)
   end
 

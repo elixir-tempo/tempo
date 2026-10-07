@@ -5,6 +5,7 @@ defmodule Tempo.Validation do
   alias Localize.Utils.Math
   alias Tempo.Compare
   alias Tempo.ConversionError
+  alias Tempo.Enumeration.Zone
   alias Tempo.Interval
   alias Tempo.IntervalEndpointsError
   alias Tempo.InvalidDateError
@@ -2350,7 +2351,7 @@ defmodule Tempo.Validation do
   def validate_zone_existence(%Tempo{} = tempo) do
     case zone_id(tempo) do
       nil -> :ok
-      zone -> check_wall_time_in_zone(tempo, zone)
+      zone -> tempo |> Zone.in_gregorian() |> check_wall_time_in_zone(zone)
     end
   end
 
@@ -2371,7 +2372,14 @@ defmodule Tempo.Validation do
   # half-hour change (Lord Howe Island), and the day or the month whose
   # first hour is skipped where clocks go forward at midnight. It starts
   # when the clock comes out of the gap (`Tempo.Compare.to_utc_seconds/1`).
-  defp check_wall_time_in_zone(%Tempo{time: time}, zone) do
+  #
+  # A zone's clock is read by Gregorian dates, so the value comes with its
+  # date as the Gregorian one of the same day
+  # (`Tempo.Enumeration.Zone.in_gregorian/1`): 02:30 on 11 Nisan 5786 is
+  # 02:30 on 29 March 2026, which Paris's clock skips. One still in another
+  # calendar has no such date, and is asked nothing.
+  defp check_wall_time_in_zone(%Tempo{time: time, calendar: calendar}, zone)
+       when calendar in [nil, Calendrical.Gregorian, Calendar.ISO] do
     case wall_readings(time) do
       # Pre-common-era wall times cannot fall into a zone-transition
       # gap — standardised time (and every IANA rule) begins many
@@ -2392,6 +2400,8 @@ defmodule Tempo.Validation do
         :ok
     end
   end
+
+  defp check_wall_time_in_zone(%Tempo{}, _zone), do: :ok
 
   # The gap a reading of the wall clock falls in, or `nil`: a reading the
   # clock shows, once or twice (a fall-back's repeated hour is accepted, and

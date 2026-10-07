@@ -665,8 +665,7 @@ defmodule Tempo.Interval.Steps do
   end
 
   # Elapsed seconds between two endpoints, DST-aware when both share
-  # the same named time zone on Gregorian (where the zone database applies).
-  # For UTC, fixed-offset, unzoned, or non-Gregorian-calendar values,
+  # the same named time zone. For UTC, fixed-offset and unzoned values
   # the offset cancels in the wall-clock difference and the simpler
   # `wall_seconds` arithmetic is correct.
   #
@@ -707,15 +706,15 @@ defmodule Tempo.Interval.Steps do
   end
 
   # Advance `from` by `delta_seconds` *elapsed* seconds. When `from`
-  # is zoned on a Gregorian named zone, the resulting wall-clock time
-  # is recomputed by adding the post-shift zone offset (handling DST
-  # gaps and folds correctly). Otherwise wall-clock arithmetic.
+  # is in a named zone, the resulting wall-clock time is recomputed by
+  # adding the post-shift zone offset (handling DST gaps and folds
+  # correctly). Otherwise wall-clock arithmetic.
   defp nth_subday_step(%Tempo{time: time, calendar: calendar} = tempo, delta_seconds, calendar) do
     cond do
       delta_seconds == 0 ->
         first_occurrence(tempo)
 
-      zoned_gregorian?(tempo, calendar) ->
+      in_a_named_zone?(tempo) ->
         new_utc = trunc(Compare.to_utc_seconds(tempo)) + delta_seconds
         new_offset = zone_offset_at_utc(tempo.extended.zone_id, new_utc)
         new_wall = new_utc + new_offset
@@ -781,17 +780,17 @@ defmodule Tempo.Interval.Steps do
     end
   end
 
-  # DST correction needed when both endpoints carry the same named
-  # IANA zone and the calendar is Gregorian (the universe where
-  # the zone database applies).
-  defp dst_correct?(%Tempo{} = from, %Tempo{} = to, Calendrical.Gregorian) do
+  # The steps go by the zone's clock when both ends carry the same named
+  # zone, in whichever calendar their dates are: the clock is the zone's,
+  # and a moment and a reading of it are counted in seconds from one day,
+  # which each calendar is asked for. They went by the clock in the
+  # Gregorian calendar alone, so a Hebrew or a Buddhist day on which the
+  # clock goes forward was counted as 24 hours.
+  defp dst_correct?(%Tempo{} = from, %Tempo{} = to, _calendar) do
     zone_id(from) != nil and zone_id(from) == zone_id(to)
   end
 
-  defp dst_correct?(_from, _to, _calendar), do: false
-
-  defp zoned_gregorian?(%Tempo{} = tempo, Calendrical.Gregorian), do: zone_id(tempo) != nil
-  defp zoned_gregorian?(_tempo, _calendar), do: false
+  defp in_a_named_zone?(%Tempo{} = tempo), do: zone_id(tempo) != nil
 
   defp zone_id(%Tempo{extended: %{zone_id: zone}}) when is_binary(zone) and zone != "", do: zone
   defp zone_id(_), do: nil

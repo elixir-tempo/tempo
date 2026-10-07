@@ -11,10 +11,13 @@ defmodule Tempo.BesideAGapTest do
   first hour `Enum.at/2` gave of a day was it.
 
   `Tempo.BesideAGap` gives values beside five gaps (New York, Paris, Lord
-  Howe Island, Cairo and Samoa) to every operation that makes values, some
-  three and a half thousand cells, and holds each value given to being
-  written and read as itself. The worked examples here hold the answers
-  themselves, each against Elixir's own `DateTime`.
+  Howe Island, Cairo and Samoa) to every operation that makes values, and
+  the same values written in the Buddhist and the Hebrew calendar and the
+  calendar of ISO 8601's weeks, some ten thousand cells. It holds each
+  value given to being written and read as itself, and each value of
+  another calendar to being given what its Gregorian twin is. The worked
+  examples here hold the answers themselves, each against Elixir's own
+  `DateTime`.
 
   A time of day the clock skips, selected on a day that has the gap, was
   given as the skipped reading until it was decided (2026-10-07): it is not
@@ -504,13 +507,124 @@ defmodule Tempo.BesideAGapTest do
     end
   end
 
+  describe "a value of another calendar" do
+    # A zone's clock is one clock whichever calendar a date is written in.
+    # The zone was asked by a value's units as though they were Gregorian,
+    # so a Buddhist or a Hebrew time the clock skips was read and walked,
+    # and a day of a week was asked nothing.
+
+    test "is refused where the clock skips it, and read an hour on" do
+      assert {:gap, _before, _after} = DateTime.new(~D[2026-03-29], ~T[02:30:00], "Europe/Paris")
+
+      for {calendar, date} <- written_in_each_calendar(~D[2026-03-29]) do
+        skipped = date <> "T02:30[Europe/Paris][u-ca=" <> calendar <> "]"
+        shown = date <> "T03:30[Europe/Paris][u-ca=" <> calendar <> "]"
+
+        assert {^skipped, {:error, %Tempo.ZoneGapError{zone_id: "Europe/Paris"}}} =
+                 {skipped, Tempo.from_iso8601(skipped)}
+
+        assert {^shown, {:ok, %Tempo{}}} = {shown, Tempo.from_iso8601(shown)}
+      end
+    end
+
+    test "is refused on a day its zone left out" do
+      assert {:gap, _before, _after} = DateTime.new(~D[2011-12-30], ~T[12:00:00], "Pacific/Apia")
+
+      for {calendar, date} <- written_in_each_calendar(~D[2011-12-30]) do
+        left_out = date <> "[Pacific/Apia][u-ca=" <> calendar <> "]"
+
+        assert {^left_out, {:error, %Tempo.ZoneGapError{}}} =
+                 {left_out, Tempo.from_iso8601(left_out)}
+      end
+
+      for {calendar, date} <- written_in_each_calendar(~D[2011-12-29]) do
+        day = Tempo.from_iso8601!(date <> "[Pacific/Apia][u-ca=" <> calendar <> "]")
+        {:ok, next} = day |> Tempo.shift(day: 1) |> Tempo.to_date()
+
+        assert {calendar, Date.convert(next, Calendar.ISO)} == {calendar, {:ok, ~D[2011-12-31]}}
+      end
+    end
+
+    test "has the hours its day has, by the count and by the walk" do
+      zone = "Europe/Paris"
+
+      # The day the clocks go forward, the day they go back, and a day
+      # with no change.
+      for day <- [~D[2026-03-29], ~D[2026-10-25], ~D[2026-06-15]],
+          {calendar, date} <- written_in_each_calendar(day) do
+        hours =
+          DateTime.diff(
+            DateTime.new!(Date.add(day, 1), ~T[00:00:00], zone),
+            DateTime.new!(day, ~T[00:00:00], zone),
+            :hour
+          )
+
+        value = Tempo.from_iso8601!(date <> "[Europe/Paris][u-ca=" <> calendar <> "]")
+
+        assert {day, calendar, Enum.count(value), Enum.count(Enum.to_list(value))} ==
+                 {day, calendar, hours, hours}
+      end
+
+      assert Enum.count(Tempo.from_iso8601!("2569-03-29[Europe/Paris][u-ca=buddhist]")) == 23
+      assert Enum.count(Tempo.from_iso8601!("2569-10-25[Europe/Paris][u-ca=buddhist]")) == 25
+    end
+
+    test "is walked whole on a day whose numbers are those of a change in another year" do
+      zone = "Europe/Paris"
+
+      # The day of March in the Gregorian year 2569 on which Paris's clock
+      # skips 02:30, by the rules the zone has now.
+      [day] =
+        for day <- 22..31,
+            match?({:gap, _, _}, DateTime.new(Date.new!(2569, 3, day), ~T[02:30:00], zone)),
+            do: day
+
+      # In the Buddhist year 2569 that day is a day of March 2026 with no
+      # change, and was walked an hour short.
+      assert {:ok, _shown} = DateTime.new(Date.new!(2026, 3, day), ~T[02:30:00], zone)
+
+      value = Tempo.from_iso8601!("2569-03-#{day}[Europe/Paris][u-ca=buddhist]")
+
+      assert {Enum.count(value), Enum.count(Enum.to_list(value))} == {24, 24}
+
+      assert {:ok, %Tempo{}} =
+               Tempo.from_iso8601("2569-03-#{day}T02:30[Europe/Paris][u-ca=buddhist]")
+    end
+
+    test "is given what its Gregorian twin is, by every operation", %{harvest: harvest} do
+      calendars = BesideAGap.twins() |> Enum.map(&elem(&1, 2)) |> Enum.uniq() |> Enum.sort()
+
+      assert calendars == ["buddhist", "hebrew", "iso-week"]
+      assert found(harvest, :not_as_its_twin) == []
+    end
+  end
+
+  # A Gregorian date as it is written in each other calendar, each worked
+  # out apart from Tempo: a Buddhist year is 543 on, a Hebrew date is asked
+  # of Elixir's `Date`, and a day of a week of Erlang.
+  defp written_in_each_calendar(%Date{year: year, month: month, day: day} = date) do
+    {:ok, hebrew} = Date.convert(date, Calendrical.Hebrew)
+    {week_year, week} = :calendar.iso_week_number({year, month, day})
+
+    [
+      {"buddhist", "#{year + 543}-#{two(month)}-#{two(day)}"},
+      {"hebrew", "#{hebrew.year}-#{two(hebrew.month)}-#{two(hebrew.day)}"},
+      {"iso-week", "#{week_year}-W#{two(week)}-#{Date.day_of_week(date)}"}
+    ]
+  end
+
+  defp two(number), do: number |> Integer.to_string() |> String.pad_leading(2, "0")
+
   describe "every operation, given a value beside a gap" do
     test "the cells are of every operation and gap", %{harvest: harvest} do
       # A harvest that runs nothing holds to every property.
       operations = Enum.map(BesideAGap.operations(), &elem(&1, 0))
 
-      assert harvest.cells == Enum.count(BesideAGap.texts()) * Enum.count(operations)
-      assert harvest.cells > 3_500
+      # Each value is given to each operation, and so is each of its twins
+      # in another calendar, but for the operations that count in that
+      # calendar's own months.
+      assert harvest.cells > Enum.count(BesideAGap.texts()) * Enum.count(operations)
+      assert harvest.cells > 10_000
       assert Enum.uniq(operations) == operations
 
       for operation <- operations do

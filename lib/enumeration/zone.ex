@@ -38,16 +38,133 @@ defmodule Tempo.Enumeration.Zone do
     if on_a_day_left_out?(date), do: :gap, else: :ok
   end
 
-  def zone_status(%Tempo{extended: %{zone_id: zone}} = tempo) when is_binary(zone) do
+  def zone_status(%Tempo{extended: %{zone_id: zone}} = tempo) when is_binary(zone),
+    do: tempo |> in_gregorian() |> status_in(zone)
+
+  def zone_status(_tempo), do: :ok
+
+  # A zone's clock is asked by the Gregorian date of a value. One whose date
+  # could not be given as one (`in_gregorian/1`) is asked nothing.
+  defp status_in(%Tempo{calendar: calendar} = tempo, zone)
+       when calendar in [Gregorian, Calendar.ISO, nil] do
     with %NaiveDateTime{} = naive <- naive_from_tempo(tempo),
-         db when is_atom(db) <- Calendar.get_time_zone_database() do
+         db when is_atom(db) <- TimeZoneDatabase.database() do
       naive |> DateTime.from_naive(zone, db) |> status(tempo, naive)
     else
       _ -> :ok
     end
   end
 
-  def zone_status(_tempo), do: :ok
+  defp status_in(%Tempo{}, _zone), do: :ok
+
+  @doc """
+  A value with its date as the Gregorian date of the same day, which the
+  clock of every zone is read by.
+
+  The zone database is asked by Gregorian dates, so a value of another
+  calendar is asked as the day it is: 11 Nisan 5786 is 29 March 2026, the
+  day Paris's clocks go from 02:00 to 03:00, and so is the Sunday of week
+  13 of 2026 in a calendar of weeks. A value's units were read as Gregorian
+  ones in whichever calendar they were, so a Hebrew or a Buddhist time the
+  clock skips was read and walked, a day of theirs whose numbers are those
+  of a change of the clock in some far year was walked an hour short, and
+  a day of a week was asked nothing.
+
+  A value that is no date, or date and time, of whole numbers is returned
+  as it is, as is one whose calendar has no such date: it keeps its
+  calendar, and is asked nothing of a zone.
+  """
+  @spec in_gregorian(Tempo.t()) :: Tempo.t()
+  def in_gregorian(
+        %Tempo{
+          time: [{:year, year}, {:week, week}, {:day_of_week, day} | clock],
+          calendar: calendar
+        } = value
+      )
+      when is_integer(year) and is_integer(week) and is_integer(day) do
+    calendar = Compare.effective_calendar(calendar)
+
+    with {:ok, %Date{} = date} <- Validation.date_from_iso_week(year, week, day, calendar),
+         {:ok, date} <- gregorian_units(date) do
+      %{value | time: date ++ clock, calendar: Gregorian}
+    else
+      _no_such_day -> value
+    end
+  end
+
+  def in_gregorian(%Tempo{calendar: calendar} = value)
+      when calendar in [Gregorian, Calendar.ISO, nil],
+      do: value
+
+  def in_gregorian(
+        %Tempo{
+          time: [{:year, year}, {:month, month}, {:day, day} | clock],
+          calendar: calendar
+        } = value
+      )
+      when is_integer(year) and is_integer(month) and is_integer(day) do
+    with {:ok, %Date{} = date} <- Date.new(year, month, day, calendar),
+         {:ok, date} <- gregorian_units(date) do
+      %{value | time: date ++ clock, calendar: Gregorian}
+    else
+      _no_such_date -> value
+    end
+  end
+
+  def in_gregorian(%Tempo{} = value), do: value
+
+  defp gregorian_units(%Date{} = date) do
+    with {:ok, %Date{year: year, month: month, day: day}} <- Date.convert(date, Gregorian),
+         do: {:ok, [year: year, month: month, day: day]}
+  end
+
+  # A Gregorian date and time, as `in_gregorian/1` gives one, in the units
+  # and the calendar of the value it was made from: a day of a week for a
+  # value written as one, in that calendar's weeks, or ISO 8601's for a
+  # Gregorian value.
+  defp in_calendar_of(
+         %Tempo{time: [{:year, year}, {:month, month}, {:day, day} | clock]} = gregorian,
+         %Tempo{time: [{:year, _year}, {:week, _week}, {:day_of_week, _day} | _clock]} = written
+       ) do
+    with {:ok, weeks} <- calendar_of_weeks(Compare.effective_calendar(written.calendar)),
+         {:ok, %Date{} = date} <- Date.new(year, month, day, Gregorian),
+         {:ok, %Date{year: year, month: week, day: day}} <- Date.convert(date, weeks) do
+      {:ok,
+       %{
+         gregorian
+         | time: [year: year, week: week, day_of_week: day] ++ clock,
+           calendar: written.calendar
+       }}
+    else
+      _no_such_week -> :error
+    end
+  end
+
+  defp in_calendar_of(%Tempo{} = gregorian, %Tempo{calendar: calendar})
+       when calendar in [Gregorian, Calendar.ISO, nil],
+       do: {:ok, gregorian}
+
+  defp in_calendar_of(
+         %Tempo{time: [{:year, year}, {:month, month}, {:day, day} | clock]} = gregorian,
+         %Tempo{calendar: calendar}
+       ) do
+    with {:ok, %Date{} = date} <- Date.new(year, month, day, Gregorian),
+         {:ok, %Date{year: year, month: month, day: day}} <- Date.convert(date, calendar) do
+      {:ok,
+       %{gregorian | time: [year: year, month: month, day: day] ++ clock, calendar: calendar}}
+    else
+      _no_such_date -> :error
+    end
+  end
+
+  defp in_calendar_of(%Tempo{}, %Tempo{}), do: :error
+
+  # The calendar a day of a week is a date of: the calendar itself where it
+  # is one of weeks, and ISO 8601's weeks for the Gregorian calendar.
+  defp calendar_of_weeks(Gregorian), do: {:ok, Calendrical.ISOWeek}
+
+  defp calendar_of_weeks(calendar),
+    do: if(Tempo.week_based_calendar?(calendar), do: {:ok, calendar}, else: :error)
 
   defp status({:gap, _before, shown}, tempo, naive),
     do: if(shown_in_part?(tempo, naive, shown), do: :ok, else: :gap)
@@ -78,24 +195,32 @@ defmodule Tempo.Enumeration.Zone do
 
   The days a zone leaves out are kept
   (`Tempo.TimeZoneDatabase.days_left_out/1`), so this asks nothing of the
-  zone database. The units of a value are read as Gregorian ones, so a
-  value of another calendar is on no such day.
+  zone database. They are Gregorian dates, and a value of another calendar
+  is asked as the Gregorian date of its day (`in_gregorian/1`), in a zone
+  that leaves one out.
   """
   @spec on_a_day_left_out?(Tempo.t()) :: boolean()
-  def on_a_day_left_out?(%Tempo{
-        extended: %{zone_id: zone},
-        time: [{:year, year}, {:month, month}, {:day, day} | _clock],
-        calendar: calendar
-      })
-      when is_binary(zone) and is_integer(year) and is_integer(month) and is_integer(day) and
-             calendar in [Gregorian, Calendar.ISO] do
+  def on_a_day_left_out?(%Tempo{extended: %{zone_id: zone}} = value) when is_binary(zone) do
     case TimeZoneDatabase.days_left_out(zone) do
       [] -> false
-      days -> {year, month, day} in days
+      days -> value |> in_gregorian() |> on_one_of?(days)
     end
   end
 
   def on_a_day_left_out?(_value), do: false
+
+  defp on_one_of?(
+         %Tempo{
+           time: [{:year, year}, {:month, month}, {:day, day} | _clock],
+           calendar: calendar
+         },
+         days
+       )
+       when is_integer(year) and is_integer(month) and is_integer(day) and
+              calendar in [Gregorian, Calendar.ISO, nil],
+       do: {year, month, day} in days
+
+  defp on_one_of?(%Tempo{}, _days), do: false
 
   @doc """
   Whether a value is one its zone's clock shows: any value but one the clock
@@ -128,12 +253,11 @@ defmodule Tempo.Enumeration.Zone do
   # is asked of the zone database for nearly every value, which matters
   # where each member of a selection is asked.
   #
-  # The reading is worked out here for a Gregorian date and time, which
-  # nearly every value asked is, and by `Tempo.Compare.to_wall_seconds/1`
-  # for a value of another calendar. A value that is no one reading (a set,
-  # a mask or a group in a unit) is asked in full.
+  # The reading is that of the value's Gregorian date (`in_gregorian/1`). A
+  # value that is no one reading (a set, a mask or a group in a unit) is
+  # asked in full.
   defp away_from_every_change?(%Tempo{extended: %{zone_id: zone}} = value) when is_binary(zone) do
-    case reading(value) do
+    case value |> in_gregorian() |> reading() do
       {:ok, reading} -> not TimeZoneDatabase.change_within?(zone, reading, @a_day_or_so)
       :no_one_reading -> false
     end
@@ -146,16 +270,9 @@ defmodule Tempo.Enumeration.Zone do
          calendar: calendar
        })
        when is_integer(year) and year >= 1 and is_integer(month) and is_integer(day) and
-              calendar in [Gregorian, Calendar.ISO] do
+              calendar in [Gregorian, Calendar.ISO, nil] do
     with {:ok, seconds} <- seconds_into_the_day(clock),
          do: {:ok, Gregorian.date_to_iso_days(year, month, day) * @seconds_in_a_day + seconds}
-  end
-
-  defp reading(%Tempo{time: [{:year, year} | _rest] = time} = value)
-       when is_integer(year) and year >= 1 do
-    if Enum.all?(time, &one_whole_unit?/1),
-      do: {:ok, Compare.to_wall_seconds(value)},
-      else: :no_one_reading
   end
 
   defp reading(%Tempo{}), do: :no_one_reading
@@ -168,20 +285,12 @@ defmodule Tempo.Enumeration.Zone do
 
   defp seconds_into_the_day([{:hour, hour}, {:minute, minute}, {:second, second} | fraction])
        when is_integer(hour) and is_integer(minute) and is_integer(second) do
-    if Enum.all?(fraction, &one_whole_unit?/1),
+    if Enum.all?(fraction, &match?({:microsecond, {_value, _precision}}, &1)),
       do: {:ok, hour * 3_600 + minute * 60 + second},
       else: :no_one_reading
   end
 
   defp seconds_into_the_day(_other_units), do: :no_one_reading
-
-  @clock_and_date [:year, :month, :day, :hour, :minute, :second]
-
-  defp one_whole_unit?({unit, value}) when unit in @clock_and_date and is_integer(value),
-    do: true
-
-  defp one_whole_unit?({:microsecond, {_value, _precision}}), do: true
-  defp one_whole_unit?(_a_set_a_mask_a_group_or_another_unit), do: false
 
   @doc """
   A value as its zone's clock shows it: the value, or where the clock skips
@@ -203,9 +312,18 @@ defmodule Tempo.Enumeration.Zone do
 
   def shown_by_the_clock(%Tempo{} = value), do: value
 
+  # The reading is found by the value's Gregorian date, and given in the
+  # value's calendar.
+  defp on_the_reading_shown(%Tempo{} = value, zone) do
+    case value |> in_gregorian() |> gregorian_reading_shown(zone) |> in_calendar_of(value) do
+      {:ok, shown} -> shown
+      :error -> value
+    end
+  end
+
   # `shown?/1` is false only for a date, or a date and a time of day, each
   # unit one whole number.
-  defp on_the_reading_shown(
+  defp gregorian_reading_shown(
          %Tempo{time: [year: year, month: month, day: day] ++ clock} = value,
          zone
        ) do
@@ -289,22 +407,27 @@ defmodule Tempo.Enumeration.Zone do
     to the minute or the second where the clock comes out of a gap
     between hours.
 
-  * `:error` for a value that is no Gregorian date and hour, or in a zone
-    the database does not know: the caller counts an elapsed hour.
+  * `:error` for a value that is no date and hour, or in a zone the
+    database does not know: the caller counts an elapsed hour.
 
   """
   @spec end_of_hour(Tempo.t()) :: {:ok, Tempo.t()} | :error
-  def end_of_hour(
-        %Tempo{
-          time: [year: year, month: month, day: day, hour: hour],
-          extended: %{zone_id: zone},
-          shift: shift,
-          calendar: calendar
-        } = value
-      )
-      when is_binary(zone) and is_integer(year) and year >= 1 and is_integer(month) and
-             is_integer(day) and hour in 0..23 and
-             calendar in [Gregorian, Calendar.ISO] do
+  def end_of_hour(%Tempo{} = value) do
+    with {:ok, ending} <- value |> in_gregorian() |> end_of_gregorian_hour(),
+         do: in_calendar_of(ending, value)
+  end
+
+  defp end_of_gregorian_hour(
+         %Tempo{
+           time: [year: year, month: month, day: day, hour: hour],
+           extended: %{zone_id: zone},
+           shift: shift,
+           calendar: calendar
+         } = value
+       )
+       when is_binary(zone) and is_integer(year) and year >= 1 and is_integer(month) and
+              is_integer(day) and hour in 0..23 and
+              calendar in [Gregorian, Calendar.ISO] do
     starts = :calendar.datetime_to_gregorian_seconds({{year, month, day}, {hour, 0, 0}})
 
     with {:ok, ending} <-
@@ -313,7 +436,7 @@ defmodule Tempo.Enumeration.Zone do
     end
   end
 
-  def end_of_hour(%Tempo{}), do: :error
+  defp end_of_gregorian_hour(%Tempo{}), do: :error
 
   # Where the hour that starts on the reading `starts` ends, as
   # `{reading, offset, shown twice?}`.
