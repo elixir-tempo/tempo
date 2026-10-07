@@ -369,7 +369,11 @@ defmodule Tempo do
     `[hour: n, minute: m]`, with a `:second` too if the offset has
     one. Each is a whole number, and an offset behind UTC carries its
     sign on its first unit that is not zero: `[hour: -5, minute: 30]`
-    is five and a half hours behind.
+    is five and a half hours behind. Given beside a `:zone` it is the
+    offset the zone is at on that date and time, either of the two
+    where the zone's clocks go back through it, and the pair is
+    refused where it is not. A value with no year names no date to
+    ask the zone of, and is built as it is given.
 
   * `:qualification` marks the whole value with an EDTF qualifier,
     which qualifies each of its components. One of `:uncertain`,
@@ -396,7 +400,9 @@ defmodule Tempo do
     non-integer values or mix axes; when the calendar is not a
     calendar module (a `Tempo.InvalidCalendarError`) or the zone is
     not one the time zone database has (a `Tempo.UnknownZoneError`);
-    and when the shift is not whole hours, minutes and seconds.
+    and when the shift is not whole hours, minutes and seconds, or is
+    not the offset the zone is at on that date and time (a
+    `Tempo.ZoneOffsetMismatchError`).
 
   ### Examples
 
@@ -421,6 +427,12 @@ defmodule Tempo do
 
       iex> Tempo.new(year: 2026, month: 6, day: 15, zone: "Europe/Paris")
       {:ok, ~o"2026-06-15[Europe/Paris]"}
+
+      iex> Tempo.new(year: 2026, month: 6, day: 15, hour: 9, shift: [hour: 2], zone: "Europe/Paris")
+      {:ok, ~o"2026Y6M15DT9HZ2H[Europe/Paris]"}
+
+      iex> {:error, %Tempo.ZoneOffsetMismatchError{}} =
+      ...>   Tempo.new(year: 2026, month: 6, day: 15, hour: 9, shift: [hour: 5], zone: "Europe/Paris")
 
       iex> Tempo.new(hour: 10, minute: 30, second: 45, microsecond: {500_000, 1})
       {:ok, ~o"T10:30:45.5"}
@@ -811,9 +823,13 @@ defmodule Tempo do
   # value built and a value read are one value: a week and a day of it are
   # the calendar date they name (`2026-W25-3` is 17 June), and a month and a
   # day given for a calendar of weeks are the Gregorian day, converted.
+  # A shift and a zone given together say twice how far the value's clock is
+  # from UTC, and where they disagree no one value is meant: it is refused
+  # (decided 2026-10-08), where it was held at an offset its zone is not at.
   defp validate_against_calendar(%__MODULE__{calendar: calendar} = tempo) do
     with {:ok, validated} <- Validation.validate(tempo, calendar),
-         :ok <- Validation.validate_zone_existence(validated) do
+         :ok <- Validation.validate_zone_existence(validated),
+         :ok <- validate_zone_offset(validated) do
       {:ok, validated}
     end
   end
@@ -3025,10 +3041,11 @@ defmodule Tempo do
   disagree: Paris is an hour ahead of UTC in November, so 10:37 there
   with an offset of five hours is inconsistent (RFC 9557 §3.4). A
   value read from text never is, since `from_iso8601/2` settles a
-  disagreement where it reads one, so this is for a value made in
-  another way, as by `new/1` with a `:shift` and a `:zone`. A zone
-  written as an offset (`[+08:45]`) is checked as a named one is. The
-  same check backs the `strict: true` option of `from_iso8601/2`.
+  disagreement where it reads one, and `new/1` refuses a `:shift` and a
+  `:zone` that disagree, so this is for a value made in another way, as
+  a struct built by hand. A zone written as an offset (`[+08:45]`) is
+  checked as a named one is. The same check backs the `strict: true`
+  option of `from_iso8601/2`.
 
   ### Arguments
 

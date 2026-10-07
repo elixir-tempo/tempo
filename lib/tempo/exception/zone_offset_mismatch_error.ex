@@ -10,8 +10,10 @@ defmodule Tempo.ZoneOffsetMismatchError do
   `[!+08:45]`) and lets it where the zone is elective. Tempo returns
   this error for a critical zone and, with `strict: true`, for an
   elective one; otherwise the offset gives the moment, and the value is
-  that moment as the zone's clock shows it. `Tempo.validate_zone_offset/1`
-  returns it for a value that holds a disagreement.
+  that moment as the zone's clock shows it. `Tempo.new/1` returns it for
+  a `:shift` and a `:zone` that disagree, where no text says which of
+  the two is meant, and `Tempo.validate_zone_offset/1` for a value that
+  holds a disagreement.
 
   """
 

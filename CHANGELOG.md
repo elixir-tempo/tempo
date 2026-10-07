@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* `Tempo.new/1` refuses a `:shift` and a `:zone` that disagree, with a `Tempo.ZoneOffsetMismatchError` that names the two: `Tempo.new(year: 2022, month: 11, day: 20, hour: 10, shift: [hour: 5], zone: "Europe/Paris")` was `~o"2022Y11M20DT10HZ5H[Europe/Paris]"`, a value at an offset its zone is not at. The shift is asked of the zone where the value starts, either offset of an hour its clocks go back through agrees, and a value with no year is built as it was.
+
 * A day `Tempo.select/2` selects by a selection (`~o"L15DN"`) is the value the day is, as one selected by a constraint (`~o"15D"`) was: `Tempo.to_interval(~o"2026-06-15")`, walked by its hours, so `Enum.count/1` of it is 24 where it was 1. A month so selected is walked by its days and an hour by its minutes, and a day selected by its weekday alone is the span it was.
 
 * A set in a unit that names a reading its zone's clock skips is a `Tempo.ZoneGapError`, as the reading alone is: `2026Y3M{28,29}DT2H30M[Europe/Paris]`, `2011-12-{29,30}[Pacific/Apia]` and a range across one (`2026Y3M29DT{1..3}H[Europe/Paris]`) were read, with the skipped member no value of the set. `Tempo.extend/2` writes a value in a zone by the values its clock shows, so `~o"2026-03-29[Europe/Paris]"` is `2026Y3M29DT{0..1,3..23}H` where it was written with the hour the clock skips, and `Tempo.extend_resolution/2` refuses a set one of whose values starts on such a reading.

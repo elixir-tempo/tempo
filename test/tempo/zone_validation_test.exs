@@ -627,19 +627,11 @@ defmodule Tempo.ZoneValidationTest do
     end
 
     test "validate_zone_offset flags an offset that disagrees with the zone" do
-      # A value read from text is at its zone's offset once it is read, so
-      # one that holds a disagreement is made of its parts.
-      {:ok, t} =
-        Tempo.new(
-          year: 2022,
-          month: 11,
-          day: 20,
-          hour: 10,
-          minute: 37,
-          second: 0,
-          shift: [hour: 5],
-          zone: "Europe/Paris"
-        )
+      # A value read from text is at its zone's offset once it is read, and
+      # `Tempo.new/1` refuses a shift its zone is not at, so one that holds
+      # a disagreement is a struct changed by hand.
+      {:ok, agreeing} = Tempo.from_iso8601("2022-11-20T10:37:00+01:00[Europe/Paris]")
+      t = %{agreeing | shift: [hour: 5]}
 
       assert {:error, %Tempo.ZoneOffsetMismatchError{} = error} = Tempo.validate_zone_offset(t)
       assert error.zone_id == "Europe/Paris"
