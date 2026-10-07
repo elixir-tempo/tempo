@@ -237,6 +237,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Added
 
+* An interval written with a duration from a value that holds a set is the span from each value, as a recurrence from it is the occurrences from each: `Tempo.to_interval(~o"2026Y6M{1,15}D/P1D")` is a day from the 1st and a day from the 15th, and `Tempo.select(day, ~o"T{9,14}H/PT1H")` the hour from 09:00 and the hour from 14:00, where each was a `Tempo.IntervalEndpointsError`. `Tempo.shift/3` with `:skipping` shifts each value of a set, where it refused one.
+
 * A glossary guide (`guides/glossary.md`): every word Tempo's API and documentation use, with the one meaning each has and where it is met, grouped by subject.
 
 * `Tempo.RRule.parse/2` and `Tempo.JSCalendar.parse/2` read RFC 7529's `SKIP=FORWARD` (`"skip": "forward"`), the first day of the month after a month that lacks the rule's day, and move a day the rule writes itself as they move its start's: `RSCALE=GREGORIAN;FREQ=MONTHLY;BYMONTHDAY=31;SKIP=BACKWARD` is each month's last day, where it was `{:error, {:unsupported_skip, …}}`. `Tempo.RRule.to_string/1` writes such a rule with `RSCALE=GREGORIAN` and its `SKIP`, and two days moved to one date are one occurrence.

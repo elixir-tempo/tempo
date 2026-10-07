@@ -219,12 +219,32 @@ defmodule Tempo.ShiftSkippingTest do
   # A value that is not one moment reached the seconds it is walked by, and
   # raised a `FunctionClauseError` in Calendrical.
   describe "a value that is not one moment" do
+    # A set in a unit is each of its values, and each is walked from, as each
+    # is stepped by a shift that skips nothing (decided 2026-10-07,
+    # `Tempo.SpanFromEachValueTest`). It was refused with the others.
+    test "is each of its values where it holds a set" do
+      busy = ~o"2026-06-01T00/2026-06-01T02"
+
+      for {set, values} <- [
+            {~o"2026Y6M{1,15}D", [~o"2026-06-01", ~o"2026-06-15"]},
+            {~o"2026Y6M{1..3}D", [~o"2026-06-01", ~o"2026-06-02", ~o"2026-06-03"]}
+          ] do
+        {:ok, together} = Tempo.to_interval_set(Tempo.shift(set, ~o"PT1H", skipping: busy))
+
+        alone =
+          for value <- values do
+            {:ok, landed} = Tempo.to_interval(Tempo.shift(value, ~o"PT1H", skipping: busy))
+            landed
+          end
+
+        assert IntervalSet.members(together) == alone
+      end
+    end
+
     test "is the error a shift without :skipping gives it" do
       busy = ~o"2026-06-01T00/2026-06-01T02"
 
       for value <- [
-            ~o"2026Y6M{1,15}D",
-            ~o"2026Y6M{1..3}D",
             ~o"2026Y6M1XD",
             ~o"2026Y6MX*D",
             ~o"2026Y2G3MU",

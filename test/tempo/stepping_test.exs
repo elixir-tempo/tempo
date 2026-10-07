@@ -262,7 +262,10 @@ defmodule Tempo.SteppingTest do
       for {text, error} <- [
             {"2M28D/P1D", UnanchoredError},
             {"P1D/3M1D", UnanchoredError},
-            {"2026Y6M{1,15}D/P1D", IntervalEndpointsError}
+            # The 5th, the 15th and the 25th are no one start. A start that
+            # holds a set is the span from each value
+            # (`Tempo.SpanFromEachValueTest`).
+            {"2026Y6MX5D/P1D", IntervalEndpointsError}
           ] do
         assert {:error, %^error{}} = Tempo.to_interval(Tempo.from_iso8601!(text)), text
       end

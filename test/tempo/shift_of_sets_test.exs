@@ -485,22 +485,38 @@ defmodule Tempo.ShiftOfSetsTest do
     end
   end
 
+  # An interval written with a duration from a value that holds a set is
+  # the span from each value (decided 2026-10-07): it had no one start, and
+  # was refused. `Tempo.SpanFromEachValueTest` holds the spans to `Date`.
   describe "an interval counted from a value that holds a set" do
-    test "has no one start or end, whatever a step from it lands on" do
-      for text <- [
-            "2026Y6M{1,15}D/P1D",
-            "2026Y6M{15,30}D/P1D",
-            "2026Y6M{1,15}D/P1M",
-            "P1D/2026Y6M{1,15}D",
-            "{2026,2027}Y/P1Y",
-            "2026Y25W{1,3}K/P1D"
+    test "is the span from each value, each ending where a step from it lands" do
+      for {set, duration} <- [
+            {"2026Y6M{1,15}D", "P1D"},
+            {"2026Y6M{15,30}D", "P1D"},
+            {"2026Y6M{1,15}D", "P1M"},
+            {"{2026,2027}Y", "P1Y"},
+            {"2026Y25W{1,3}K", "P1D"}
           ] do
-        assert {:error, %IntervalEndpointsError{} = error} =
-                 Tempo.to_interval(Tempo.from_iso8601!(text)),
-               text
+        text = set <> "/" <> duration
+        {:ok, values} = Tempo.to_interval(Tempo.from_iso8601!(set))
+        starts = Enum.map(IntervalSet.members(values), &Interval.from/1)
+        stepped = Enum.map(starts, &Tempo.shift(&1, Tempo.from_iso8601!(duration)))
 
-        assert Exception.message(error) =~ "names several spans"
+        assert {:ok, spans} = Tempo.to_interval(Tempo.from_iso8601!(text))
+
+        assert {text, Enum.map(IntervalSet.members(spans), &Interval.to/1)} ==
+                 {text, stepped}
+
+        assert {text, Enum.map(IntervalSet.members(spans), &Interval.from/1)} ==
+                 {text, starts}
       end
+    end
+
+    test "has no one start with two ends" do
+      assert {:error, %IntervalEndpointsError{} = error} =
+               Tempo.to_interval(Tempo.from_iso8601!("2026Y6M{1,15}D/2026Y6M20D"))
+
+      assert Exception.message(error) =~ "names several spans"
     end
   end
 end

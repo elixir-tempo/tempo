@@ -115,9 +115,11 @@ defmodule Tempo.Select do
   writes it. Use the duration form (`~o"T21/PT8H"`) to say the same
   thing explicitly.
 
-  A window runs from one point to another, so one whose start or end
-  holds a set (`6M{1,15}D/P1D`) names no one span and returns a
-  `Tempo.IntervalEndpointsError`. Give a window for each value, in a
+  A window written with a duration from a start that holds a set is
+  the window from each of its values: `~o"T{9,14}H/PT1H"` is the hour
+  from 09:00 and the hour from 14:00. Written with two ends, one of
+  which holds a set (`T{9,14}H/T16H`), it names no one span and returns
+  a `Tempo.IntervalEndpointsError`: give a window for each value, in a
   list.
 
   ## Negative components — "last N from the end"
@@ -1449,12 +1451,26 @@ defmodule Tempo.Select do
       :point ->
         project_onto_base(base, c_from)
 
+      {:from_each, starts} ->
+        span_from_each(starts, base, constraint)
+
       {:error, _several_values} = error ->
         error
     end
   end
 
   defp project_onto_base(_base, constraint), do: {:error, unrecognised_selector(constraint)}
+
+  # The span from each value of a start that holds a set, each projected as
+  # the span from that one value is.
+  defp span_from_each(starts, base, constraint) do
+    Enum.reduce_while(starts, [], fn start, spans ->
+      case project_onto_base(base, %{constraint | from: start}) do
+        {:error, _reason} = error -> {:halt, error}
+        projected -> {:cont, spans ++ List.wrap(projected)}
+      end
+    end)
+  end
 
   # A day with no month, selected from a year, is a day of the year, as a
   # value's is (`2026Y45D`) and a selection's (`Tempo.RRule.Selection`): the
@@ -1570,9 +1586,20 @@ defmodule Tempo.Select do
   # How a selector that is a span ends: at its own end, by a duration from
   # its start, or as the point its start is. A span runs from one point to
   # another, so an end that holds a set, which names several, gives no one
-  # span: the span from each of them is not built, and the ends were merged
-  # as they stood into a span that held the sets.
+  # span. Written with a duration from a start that holds a set it is the
+  # span from each of the start's values (decided 2026-10-07): `T{9,14}H/PT1H`
+  # is the hour from 09:00 and the hour from 14:00. Written with two ends it
+  # is refused: the ends were merged as they stood into a span that held the
+  # sets.
   defp span_endpoint(%Interval{recurrence: recurrence}) when recurrence != 1, do: :point
+
+  defp span_endpoint(%Interval{from: %Tempo{} = from, to: nil, duration: %Duration{}} = selector) do
+    case Enumeration.expand(from) do
+      {:ok, starts} -> {:from_each, starts}
+      {:error, _exception} = error -> error
+      :not_expandable -> span_end(selector)
+    end
+  end
 
   defp span_endpoint(%Interval{from: from, to: to} = selector) do
     case Enum.find([{"start", from}, {"end", to}], &names_several?/1) do

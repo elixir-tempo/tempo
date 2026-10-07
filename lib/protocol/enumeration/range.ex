@@ -251,12 +251,21 @@ defimpl Enumerable, for: Tempo.Interval do
 
   # A recurring interval, or one with an end that holds a selection
   # (`2026Y6ML2KN/P1D`, a day from each Tuesday of June), names several spans
-  # and enumerates as they do.
+  # and enumerates as they do. So does one written with a duration from or
+  # to an end that holds a set (`2026Y6M{1,15}D/P1D`), which is the span from
+  # each of its values.
   defp occurrences?(%Tempo.Interval{recurrence: recurrence}) when recurrence != 1, do: true
-  defp occurrences?(%Tempo.Interval{from: from, to: to}), do: selects?(from) or selects?(to)
+
+  defp occurrences?(%Tempo.Interval{from: from, to: to, duration: duration}) do
+    selects?(from) or selects?(to) or
+      (not is_nil(duration) and (names_each_value?(from) or names_each_value?(to)))
+  end
 
   defp selects?(%Tempo{time: time}), do: List.keymember?(time, :selection, 0)
   defp selects?(_no_endpoint), do: false
+
+  defp names_each_value?(%Tempo{} = endpoint), do: Tempo.Enumeration.names_each_value?(endpoint)
+  defp names_each_value?(_no_endpoint), do: false
 
   # `to_interval/1` expands a bounded recurrence to an IntervalSet,
   # however it is written (a start and a duration, a start and an end,

@@ -538,8 +538,16 @@ defmodule Tempo.Parser.Interval.Test do
                Tempo.from_iso8601!("2026-06-16T10")
              ]
 
-      # A span from a start that names several is no one span.
-      for form <- ["2026Y6M{1,15}DT10H/2026Y7M1D", "2026Y6M15DT{9,17}H/PT1H", "T{9,14}H/T16H"] do
+      # A span written with a duration from a start that holds a set is the
+      # span from each value, and one written with two ends is no one span.
+      {:ok, hours} = Tempo.to_interval(Tempo.from_iso8601!("2026Y6M15DT{9,17}H/PT1H"))
+
+      assert Enum.map(IntervalSet.members(hours), &{Interval.from(&1), Interval.to(&1)}) == [
+               {Tempo.from_iso8601!("2026-06-15T09"), Tempo.from_iso8601!("2026-06-15T10")},
+               {Tempo.from_iso8601!("2026-06-15T17"), Tempo.from_iso8601!("2026-06-15T18")}
+             ]
+
+      for form <- ["2026Y6M{1,15}DT10H/2026Y7M1D", "T{9,14}H/T16H"] do
         assert {:error, %Tempo.IntervalEndpointsError{}} =
                  Tempo.to_interval(Tempo.from_iso8601!(form)),
                form

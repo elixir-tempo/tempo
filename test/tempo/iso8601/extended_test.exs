@@ -259,7 +259,7 @@ defmodule Tempo.Iso8601.Extended.Test do
             "2022-11-20T10:30:00[u-ca=gregory][Europe/Paris]/2022-11-21T10:30:00",
             "{2022-11-20T10:30:00[u-ca=gregory][Europe/Paris],2022-11-21T10:30:00}"
           ] do
-        assert {text, {:error, %Tempo.ParseError{} = error}} = {text, Tempo.from_iso8601(text)}
+        assert {^text, {:error, %Tempo.ParseError{} = error}} = {text, Tempo.from_iso8601(text)}
         assert {text, Exception.message(error) =~ "the first suffix of a value"} == {text, true}
       end
 
@@ -268,7 +268,7 @@ defmodule Tempo.Iso8601.Extended.Test do
             "2022-11-20T10:30:00[Europe/Paris][u-ca=gregory]",
             "2022-11-20T10:30:00[Europe/Paris][foo=bar][u-ca=gregory]"
           ] do
-        assert {text, {:ok, %Tempo{extended: %{zone_id: "Europe/Paris"}}}} =
+        assert {^text, {:ok, %Tempo{extended: %{zone_id: "Europe/Paris"}}}} =
                  {text, Tempo.from_iso8601(text)}
       end
     end

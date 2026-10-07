@@ -6345,7 +6345,8 @@ defmodule Tempo do
     each value it names shifted: a `t:t/0` that holds them where one
     value can, and a `t:Tempo.IntervalSet.t/0` of their spans where none
     can — a day on from the 15th and the 30th of June is 16 June and
-    1 July.
+    1 July. With `:skipping` each value is walked from, and gathered
+    the same way.
 
   * For a value that holds unspecified digits (`~o"2026-06-XX"`, some
     day of June), each value they stand for shifted: the value with its
@@ -6905,10 +6906,13 @@ defmodule Tempo do
 
   * `{:error, %Tempo.IntervalEndpointsError{}}` when an interval's
     duration would be counted from a start or an end that names several
-    spans — the day after `~o"2026Y6M{1,15}D"` in `2026Y6M{1,15}D/P1D`.
-    The value on its own converts to a span for each value it names, and
-    a recurrence from it (`R2/2026Y6M{1,15}D/P1D`) to the occurrences
-    from each.
+    spans and holds no set — the day after `~o"2026-06-X5"`, the 5th,
+    the 15th or the 25th — or when an interval of two ends has a set at
+    one of them (`2026Y6M{1,15}D/2026Y6M20D`). An interval written with
+    a duration from a value that holds a set is the span from each value
+    it names: `2026Y6M{1,15}D/P1D` is a day from the 1st and a day from
+    the 15th, as the recurrence `R2/2026Y6M{1,15}D/P1D` is two from
+    each.
 
   * `{:error, %Tempo.ConversionError{reason: :grouped_component}}`
     when a recurrence would be stepped from a start that names no one
@@ -7151,30 +7155,57 @@ defmodule Tempo do
   # recurrence from each of the start's values, as a set in a value is each of
   # its members: six occurrences here. A start that holds anything else (a
   # mask, a group) is walked, or refused, as one start.
+  #
+  # An interval written with a duration is the one occurrence of such a
+  # recurrence, and is the span from each value too (decided 2026-10-07):
+  # `2026Y6M{1,15}D/P1D` is a day from the 1st and a day from the 15th, and
+  # `P1D/2026Y6M{1,15}D` the day to each. It was refused as an interval with
+  # no one start, where `R2/2026Y6M{1,15}D/P1D` gave the two days from each.
   defp recurrence_from_each_value(
          %Interval{recurrence: recurrence, from: %__MODULE__{} = from} = interval,
          opts
        )
        when recurrence != 1 do
-    case Enumeration.expand(from) do
-      {:ok, starts} -> occurrences_from_each(starts, interval, opts, [])
+    from_each(from, &%{interval | from: &1}, interval, opts)
+  end
+
+  defp recurrence_from_each_value(
+         %Interval{from: %__MODULE__{} = from, to: to, duration: %Duration{}} = interval,
+         opts
+       )
+       when to in [nil, :undefined] do
+    from_each(from, &%{interval | from: &1}, interval, opts)
+  end
+
+  defp recurrence_from_each_value(
+         %Interval{from: from, to: %__MODULE__{} = to, duration: %Duration{}} = interval,
+         opts
+       )
+       when from in [nil, :undefined] do
+    from_each(to, &%{interval | to: &1}, interval, opts)
+  end
+
+  defp recurrence_from_each_value(_value, _opts), do: :one_start
+
+  # The interval with each value of an end that holds a set in its place.
+  defp from_each(%__MODULE__{} = endpoint, with_value, interval, opts) do
+    case Enumeration.expand(endpoint) do
+      {:ok, values} -> occurrences_from_each(Enum.map(values, with_value), interval, opts, [])
       {:error, _exception} = error -> error
       :not_expandable -> :one_start
     end
   end
 
-  defp recurrence_from_each_value(_value, _opts), do: :one_start
-
   defp occurrences_from_each([], _interval, opts, occurrences),
     do: IntervalSet.new(occurrences, coalesce: coalesce_opt(opts))
 
-  defp occurrences_from_each([start | starts], interval, opts, occurrences) do
-    case to_interval(%{interval | from: start}, opts) do
+  defp occurrences_from_each([from_one | from_others], interval, opts, occurrences) do
+    case to_interval(from_one, opts) do
       {:ok, %Interval{} = occurrence} ->
-        occurrences_from_each(starts, interval, opts, [occurrence | occurrences])
+        occurrences_from_each(from_others, interval, opts, [occurrence | occurrences])
 
       {:ok, %IntervalSet{} = set} ->
-        gathered_from_each(set, starts, interval, opts, occurrences)
+        gathered_from_each(set, from_others, interval, opts, occurrences)
 
       {:error, _exception} = error ->
         error
@@ -7770,9 +7801,11 @@ defmodule Tempo do
   # a closed `[from, from + duration)` interval. Preserves the
   # source interval's metadata — callers like `Tempo.ICal` need
   # event-level metadata (summary, location, …) to ride along
-  # onto every materialised occurrence. A start that names several spans
-  # (`2026Y6M{1,15}D/P1D`) is no one point to count the duration from,
-  # whatever a step from each of its values lands on.
+  # onto every materialised occurrence. A start that holds a set
+  # (`2026Y6M{1,15}D/P1D`) is the span from each of its values
+  # (`recurrence_from_each_value/2`), and never comes here; one that names
+  # several spans another way, a mask whose values do not run together, is
+  # no one point to count the duration from.
   defp materialise(
          %Tempo.Interval{
            from: %Tempo{time: time} = from,

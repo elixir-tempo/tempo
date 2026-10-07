@@ -2090,10 +2090,13 @@ defmodule Tempo.Math do
 
   # Each value stepped, as the walk yields it. The first that cannot be
   # stepped is the answer for them all.
-  defp shift_each(values, %Tempo{} = tempo, duration, annotations) do
+  defp shift_each(values, %Tempo{} = tempo, duration, annotations),
+    do: each_stepped(values, tempo, annotations, &stepped_value(&1, duration))
+
+  defp each_stepped(values, %Tempo{} = tempo, annotations, step) do
     values
     |> Enum.reduce_while({:ok, []}, fn value, {:ok, landed} ->
-      case stepped_value(value, duration) do
+      case step.(value) do
         %Tempo{} = stepped -> {:cont, {:ok, [stepped | landed]}}
         {:error, _reason} = error -> {:halt, error}
         _several_values -> {:halt, {:error, :grouped_component}}
@@ -3106,7 +3109,31 @@ defmodule Tempo.Math do
   # (forward: the span's end; backward: its start). The duration must
   # be exact (week/day/hour/minute/second) — a month or year of "free
   # time" has no fixed length to consume.
-  def shift_skipping(%Tempo{} = origin, %Tempo.Duration{} = duration, busy) do
+  #
+  # A value that holds a set or a range is the values it names, and each is
+  # walked from, as each is stepped by a shift that skips nothing
+  # (`shift_each_or_crisp/2`): it was refused as a value with no one moment.
+  def shift_skipping(%Tempo{time: time} = origin, %Tempo.Duration{} = duration, busy) do
+    {crisp_time, annotations} = strip_component_annotations(time)
+
+    case Enumeration.expand(%{origin | time: crisp_time}) do
+      {:ok, values} -> each_shifted_skipping(values, origin, annotations, duration, busy)
+      {:error, _exception} = error -> error
+      :not_expandable -> shift_one_skipping(origin, duration, busy)
+    end
+  end
+
+  defp each_shifted_skipping(values, origin, annotations, duration, busy) do
+    case each_stepped(values, origin, annotations, &shift_one_skipping(&1, duration, busy)) do
+      {:error, :grouped_component} ->
+        {:error, ConversionError.exception(value: origin, reason: :grouped_component)}
+
+      landed ->
+        unwrap_shift(landed)
+    end
+  end
+
+  defp shift_one_skipping(%Tempo{} = origin, %Tempo.Duration{} = duration, busy) do
     with :ok <- validate_anchored_origin(origin),
          :ok <- validate_one_moment(origin),
          :ok <- validate_exact_skipping(duration),

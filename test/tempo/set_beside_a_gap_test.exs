@@ -118,7 +118,7 @@ defmodule Tempo.SetBesideAGapTest do
             # An hour the clock skips, by its minutes.
             {"2026Y3M29DT2H{0,30}M[Europe/Paris]", "2026-03-29T02:00:00"}
           ] do
-        assert {text, {:error, %Tempo.ZoneGapError{wall_time: named}}} =
+        assert {^text, {:error, %Tempo.ZoneGapError{wall_time: named}}} =
                  {text, Tempo.from_iso8601(text)}
 
         assert {text, named} == {text, reading}
@@ -140,10 +140,10 @@ defmodule Tempo.SetBesideAGapTest do
             {"5786-07-{10,11}T02:30[Europe/Paris][u-ca=hebrew]",
              "5786-07-{9,10}T02:30[Europe/Paris][u-ca=hebrew]"}
           ] do
-        assert {named, {:error, %Tempo.ZoneGapError{wall_time: "2026-03-29T02:30:00"}}} =
+        assert {^named, {:error, %Tempo.ZoneGapError{wall_time: "2026-03-29T02:30:00"}}} =
                  {named, Tempo.from_iso8601(named)}
 
-        assert {names_none, {:ok, %Tempo{}}} = {names_none, Tempo.from_iso8601(names_none)}
+        assert {^names_none, {:ok, %Tempo{}}} = {names_none, Tempo.from_iso8601(names_none)}
       end
     end
 
@@ -177,7 +177,7 @@ defmodule Tempo.SetBesideAGapTest do
             "{2026-03-29T02:30..2026-03-30T02:30}[Europe/Paris]",
             "{2011-12-28..2011-12-30}[Pacific/Apia]"
           ] do
-        assert {text, {:error, %Tempo.ZoneGapError{}}} = {text, Tempo.from_iso8601(text)}
+        assert {^text, {:error, %Tempo.ZoneGapError{}}} = {text, Tempo.from_iso8601(text)}
       end
     end
 
