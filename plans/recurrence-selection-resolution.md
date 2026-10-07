@@ -41,11 +41,19 @@ hard-coded ISO walk.
 
 RRULE `BYWEEKNO` numbers its weeks as RFC 5545 §3.3.10 does, from `WKST` with week 1 the week that holds the year's fourth day, and the walk is Calendrical's in any calendar: `Tempo.Validation.week_starts/3` takes the fourth day of the year from `Calendrical.date_from_day_of_year/3`, the week start on or before it from `Calendrical.Kday`, and each week after from `Calendrical.next/2`. The hard-coded ISO walk (`week_dates_in_year/3`) is gone. A calendar's own weeks are the `w` selection (`:calendar_week`), which asks the calendar's `week_of_year/3`.
 
-Week **of month** ("the 2nd week of June") needs no new designator: the
-natural spelling is `2026Y6M2W` — a `W` component read positionally, week-of-
-year after a bare year, week-of-month after a month. The tokenizer rejects
-`W` after a month today (`Error detected at "2W"`), so the work is a parser
-extension plus materialisation via `Calendrical.week_of_month/3`.
+## Week of month — done
+
+Week **of month** ("the 2nd week of June") needed no new designator: the spelling is `2026Y6M2W`, a `W` read positionally, a week of the year after a bare year and a week of the month after a month (decided 2026-10-07: the week Calendrical numbers, whole).
+
+* **The weeks** — `Tempo.UnitValues.weeks_of_month/3` is the one place they are found. Calendrical says which week of which month a date is in (`week_of_month/3`) and has no inverse, so the days a week can end on are asked: the month's first day and the days before it for the start of week 1, then six days on and the day after for each week, and a day at a time where the calendar cuts a week short. A calendar of weeks has no months, and one whose year does not begin with its first month counts its months otherwise than its dates name them, and is refused by name.
+
+* **The value** — `Tempo.Iso8601.Group.expand_groups/2` reads `[year, month, week | rest]` as a calendar week of a year (`w`) is read: alone as the interval of the week's dates, with a day of the week as the date, and with a time of day under the week alone on its first date. It is written back as the dates it names. A set, a mask or a range in the week, the month or the year is a `ParseError` that points to `Tempo.select/2`.
+
+* **The constraint** — `Tempo.select/2` gives a week selected from a month the same reading (`merged_onto/3` in `lib/tempo/select.ex`), each week a set or a range names in the month as a constraint of its own (`each_week_of_month/2`), and keeps a selected week by starting among the month's weeks and not in the month (`span_selected_in/2`), so the week that starts on 29 June is July's first and is selected once from a span of months.
+
+* **The selection** — a week part at the scope of a month, with a candidate that is a month, is the week's span (`week_in_month/3` in `lib/tempo/rrule/selection.ex`), marked to keep that span as a calendar week's is. A rule that steps by months starts from its month (`calendar_start_unit/2` in `lib/tempo.ex`). A candidate that is a day is still kept or dropped by its week of the year.
+
+Not built, and refused by name: a week of a month beside a part that picks within it (`2026Y6ML2W3KN`), whose start is filled to a day; a week of the calendar's own numbering under a month (`w`); a mask of weeks. A month beside a week in a yearly selection (`2026YL6M2WN`) is still ISO week 2 of the year. Each is an item of `TODO.md`.
 
 ## Tasks
 
@@ -53,6 +61,8 @@ extension plus materialisation via `Calendrical.week_of_month/3`.
 
 * [x] Native week-of-year selection (`FL10WN`) yields a week span, resolved by the calendar; RRULE `BYWEEKNO` unchanged.
 
-* [ ] Parse `W` after a month (`2026Y6M2W`) as week-of-month, and materialise it via `Calendrical.week_of_month/3`. Waits on a decision: Calendrical counts whole weeks, week 1 the one that holds the month's first day, so 29 and 30 June 2026 are in week 1 of July (`TODO.md`, "Week-of-month selections").
+* [x] Parse `W` after a month (`2026Y6M2W`) as week-of-month, and materialise it via `Calendrical.week_of_month/3`: Calendrical counts whole weeks, week 1 the one that holds the month's first day, so 29 and 30 June 2026 are in week 1 of July. 2026-10-07.
+
+* [ ] A week of a month beside a part that picks within it, in a selection (`TODO.md`).
 
 * [x] Replace the hard-coded ISO `week_dates_in_year/3` on the RRULE `BYWEEKNO` path with Calendrical's calendar-aware week functions (`Tempo.Validation.week_starts/3`).

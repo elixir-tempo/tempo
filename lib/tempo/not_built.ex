@@ -21,8 +21,11 @@ defmodule Tempo.NotBuilt do
   # `Calendrical.Reform.England` before 1751): no one span of the year. The
   # fifth is in every calendar but the Gregorian: an RRULE that steps or
   # selects by a month, a year, a week of the year or a day of one, which
-  # RFC 5545 counts in the Gregorian calendar. The sixth is in every calendar
-  # of months: a week selected from within a month, the week of the month.
+  # RFC 5545 counts in the Gregorian calendar. The sixth is what is left of a
+  # week of a month, which the calendar numbers and is otherwise answered: one
+  # in a year that does not begin with its first month, one selected from a
+  # month that is no whole number, and one a rule names in a month beside a
+  # part that picks within the week, or as a week of the calendar's own.
 
   alias Tempo.{Compare, ConversionError, Duration, Interval, UnitValues}
 
@@ -224,12 +227,14 @@ defmodule Tempo.NotBuilt do
   def selector(_selector, _base), do: :ok
 
   @doc false
-  # A week selected from a month. A week after a month is the week of the
-  # month, which no value is read as and no operation takes: it was merged
-  # into a value of a year, a month and a week whose walk, whose set
-  # operations and whose text were each wrong. `selector` is what was to be
-  # merged onto `from`. A week selected from a day or a time of day is as
-  # coarse as its period or coarser, and is a filter by the week of the year.
+  # A week selected from a month that is not built. A week after a month is
+  # a week of the month, which `Tempo.select/2` gives as the span of its
+  # dates where it is one whole number selected from a month, or each of a
+  # set of them. What is refused here is one that is neither (a mask), and
+  # one a selection names beside a part that picks within the week.
+  # `selector` is what was to be merged onto `from`. A week selected from a
+  # day or a time of day is as coarse as its period or coarser, and is a
+  # filter by the week of the year.
   @spec week_of_month(list(), Tempo.t()) :: {:error, ConversionError.t()}
   def week_of_month(selector, %Tempo{calendar: calendar} = from) when is_list(selector) do
     asked = "the selection of #{inspect(selector)} from #{inspect(from)}"
@@ -240,19 +245,34 @@ defmodule Tempo.NotBuilt do
   # A selection that names a week and is resolved in a month: in a value
   # whose selection follows a month (`2026Y6ML2WN`), and as the rule of a
   # recurrence that steps by months from a month, a year or no start. A week
-  # under a month is the week of the month, as `week_of_month/2` has it for
-  # a selector, and what the resolver gave was the whole month where its
-  # first day was in the ISO week of that number. A rule whose start is a
-  # date has a day for its candidate, which a week of the year keeps or
-  # drops, and is answered.
+  # under a month is a week of the month, which the resolver gives as the
+  # span of the dates the calendar numbers in it (`W`, decided 2026-10-07).
+  # Two things are still refused. A week of the calendar's own numbering
+  # (`w`) is a week of its year: what the resolver gave for it was the whole
+  # month where its first day was in the week of that number. And a week
+  # beside a part that picks within it (a weekday, a day, a time of day) has
+  # a day of the month for its candidate, which the resolver keeps or drops
+  # by its week of the year: `Tempo.select/2` takes the same as a
+  # constraint (`~o"2W3K"`), and answers it. A rule whose start is a date
+  # has a day for its candidate, which a week of the year keeps or drops,
+  # and is answered.
   @spec week_in_month(list(), Tempo.t() | Interval.t(), module()) ::
           :ok | {:error, ConversionError.t()}
   def week_in_month(selection, value, calendar) when is_list(selection) do
     units = selected_units(selection)
 
-    if (:week in units or :calendar_week in units) and resolved_in_a_month?(value),
+    if not_built_in_a_month?(units) and resolved_in_a_month?(value),
       do: {:error, error(value, :week_of_month, calendar)},
       else: :ok
+  end
+
+  # The parts that go with a week of a month: those that name the periods
+  # it is in, and the day its weeks start on, which is no unit.
+  @beside_a_week_of_month [:year, :month, :week, :wkst]
+
+  defp not_built_in_a_month?(units) do
+    :calendar_week in units or
+      (:week in units and Enum.any?(units, &(&1 not in @beside_a_week_of_month)))
   end
 
   defp resolved_in_a_month?(%Tempo{time: time}) when is_list(time) do

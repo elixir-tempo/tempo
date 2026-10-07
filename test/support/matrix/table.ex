@@ -291,6 +291,7 @@ defmodule Tempo.Matrix.Table do
     margin: "Margin of error",
     count_from_end: "Count from the end",
     value_selection: "Selection",
+    week_of_month: "Week of a month",
     mask_from_end: "Mask from the end",
     mask_narrow: "Mask of fewer digits",
     date_gap: "Time on a year or month",

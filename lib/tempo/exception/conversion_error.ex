@@ -50,9 +50,12 @@ defmodule Tempo.ConversionError do
     year of `Calendrical.Reform.England` before 1751); `:rrule` is an
     RRULE that steps or selects by a month, a year, a week of the year or
     a day of one, for a recurrence of another calendar than the Gregorian;
-    and `:week_of_month` is a week selected from a month, by
-    `Tempo.select/2` or by a selection resolved in one, in any calendar
-    of months.
+    and `:week_of_month` is a week of a month in a calendar whose year
+    does not begin with its first month, one selected from a month as
+    other than a whole number (a mask), and one selected by a rule
+    resolved in a month beside a part that picks within the week (a
+    weekday, a day, a time of day) or as a week of the calendar's own
+    numbering (`w`).
     The [operation matrix](operation-matrix.html) lists each.
 
   """
@@ -206,9 +209,6 @@ defmodule Tempo.ConversionError do
   defp not_built_calendar(:rrule),
     do:
       "since RFC 5545 counts them in the Gregorian calendar and RFC 7529's RSCALE is not written"
-
-  defp not_built_calendar(:week_of_month),
-    do: "since a week selected from within a month is a week of that month, which no value names"
 
   defp not_built_calendar(_target), do: "whose year does not begin with its first month"
 

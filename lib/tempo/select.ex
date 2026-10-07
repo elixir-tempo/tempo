@@ -189,11 +189,25 @@ defmodule Tempo.Select do
   Tempo.select(~o"2026-06-15", ~o"100O") # nothing: the 100th day is 10 April
   ```
 
-  A week selected from a month is the week of the month, which Tempo
-  does not yet build: it returns a `Tempo.ConversionError` whose
+  A week selected from a year is an ISO 8601 week of the year. A week
+  selected from a month is a week of that month, which the calendar
+  numbers: in the Gregorian calendar a whole week from a Monday, the
+  first of a month the one that holds its first day, so it is not
+  always within its month.
+
+  ```elixir
+  Tempo.select(~o"2026-06", ~o"2W")      # 8 to 14 June
+  Tempo.select(~o"2026-07", ~o"1W")      # 29 June to 5 July
+  Tempo.select(~o"2026-06", ~o"-1W")     # 22 to 28 June, its fourth and last
+  Tempo.select(~o"2026-06", ~o"2W3K")    # Wednesday 10 June
+  Tempo.select(~o"2026-06", ~o"5W")      # nothing: June 2026 has four weeks
+  ```
+
+  A week selected from a day or a time of day keeps it where it is in
+  that week of the year. A week of a month that is no one whole number
+  (`~o"XW"`), and one in a calendar whose year does not begin with its
+  first month, is not built: it returns a `Tempo.ConversionError` whose
   `:reason` is `:not_built` and whose `:target` is `:week_of_month`.
-  Select a week from a year or from a week, and a day of the week
-  (`~o"1K"`) from any base.
 
   ## A selector as coarse as its base, or coarser
 
@@ -256,6 +270,7 @@ defmodule Tempo.Select do
   alias Tempo.IntervalEndpointsError
   alias Tempo.IntervalSet
   alias Tempo.InvalidDateError
+  alias Tempo.Iso8601.Group
   alias Tempo.Iso8601.Unit
   alias Tempo.Math
   alias Tempo.NotBuilt
@@ -814,7 +829,7 @@ defmodule Tempo.Select do
          selector
        )
        when is_integer(year) do
-    with true <- names_week_of_year?(selector),
+    with true <- names_week?(selector),
          false <- Tempo.week_based_calendar?(Compare.effective_calendar(calendar)),
          {:ok, first} <- week_time_to_date([year: year, week: 1], calendar),
          {:ok, next} <- week_time_to_date([year: year + 1, week: 1], calendar) do
@@ -827,9 +842,35 @@ defmodule Tempo.Select do
     end
   end
 
+  # A week selected from a month is a week of that month, which the calendar
+  # numbers and which is not always within it: the first week of July 2026
+  # starts on 29 June. It is kept by starting among the month's weeks, from
+  # the first date of the first to the day after the last date of the last,
+  # so each week is the week of one month and a span of months selects none
+  # twice.
+  defp span_selected_in(
+         %Interval{from: %Tempo{time: [year: year, month: month], calendar: calendar} = from} =
+           period,
+         selector
+       )
+       when is_integer(year) and is_integer(month) do
+    with true <- names_week?(selector),
+         {:ok, [%Date.Range{first: first} | _weeks] = weeks} <-
+           UnitValues.weeks_of_month(year, month, Compare.effective_calendar(calendar)),
+         %Date.Range{last: last} <- List.last(weeks),
+         %Date{} = next <- Calendrical.next(last, :day) do
+      %Interval{
+        from: build_day_tempo(from, first.year, first.month, first.day, calendar),
+        to: build_day_tempo(from, next.year, next.month, next.day, calendar)
+      }
+    else
+      _the_period -> period
+    end
+  end
+
   defp span_selected_in(period, _selector), do: period
 
-  defp names_week_of_year?(%Tempo{time: time}) when is_list(time) do
+  defp names_week?(%Tempo{time: time}) when is_list(time) do
     Enum.any?(time, fn
       {:week, _weeks} -> true
       {:selection, selection} -> List.keymember?(selection, :week, 0)
@@ -837,7 +878,7 @@ defmodule Tempo.Select do
     end)
   end
 
-  defp names_week_of_year?(_selector), do: false
+  defp names_week?(_selector), do: false
 
   # A selected span with no place in the period's order (a day of no year
   # selected from a time of day) starts nowhere in it.
@@ -1066,10 +1107,10 @@ defmodule Tempo.Select do
     {unit, _precision} = Tempo.resolution(from)
     freq = cadence_unit(unit)
 
-    with :ok <- no_week_of_month(rule, unit, from) do
+    with :ok <- week_of_month_built(rule, unit, from) do
       rule = in_calendar_of(rule, from)
 
-      if Selection.expands?(rule, freq),
+      if Selection.expands?(rule, freq) or week_of_month_rule?(rule, unit),
         do: occurrences_in(period, rule, freq),
         else: kept_or_dropped(period, rule, freq)
     end
@@ -1114,19 +1155,30 @@ defmodule Tempo.Select do
       else: NotBuilt.selector(selection, from)
   end
 
-  # A week selected from a month is the week of the month, which is refused
-  # in a selection as it is in a constraint (`periods_on_axis/4`), and named
-  # by what was selected from what.
-  defp no_week_of_month(%Tempo{time: [selection: selection]}, :month, from) do
-    if Enum.any?(selection, &week_part?/1),
-      do: NotBuilt.week_of_month(selection, from),
-      else: :ok
+  # A week selected from a month is a week of the month, which the resolver
+  # gives as the span of its dates: an occurrence within the month's weeks,
+  # where every other part that only keeps or drops its period leaves the
+  # period as it is.
+  defp week_of_month_rule?(%Tempo{time: [selection: selection]}, :month),
+    do: List.keymember?(selection, :week, 0)
+
+  defp week_of_month_rule?(_rule, _unit), do: false
+
+  # What a selection of a week from a month is not yet built for is refused
+  # by name (`Tempo.NotBuilt.week_in_month/3`): a week of the calendar's own
+  # numbering (`w`), and a week beside a part that picks within it.
+  defp week_of_month_built(
+         %Tempo{time: [selection: selection]},
+         :month,
+         %Tempo{calendar: calendar} = from
+       ) do
+    case NotBuilt.week_in_month(selection, from, Compare.effective_calendar(calendar)) do
+      :ok -> :ok
+      {:error, _not_built} -> NotBuilt.week_of_month(selection, from)
+    end
   end
 
-  defp no_week_of_month(_rule, _unit, _from), do: :ok
-
-  defp week_part?({unit, _weeks}), do: unit in [:week, :calendar_week]
-  defp week_part?(_other), do: false
+  defp week_of_month_built(_rule, _unit, _from), do: :ok
 
   # A rule written in another calendar than the period's holds only what
   # selects in any calendar (`one_calendar/2`), and is resolved in the
@@ -1514,12 +1566,14 @@ defmodule Tempo.Select do
   # * a month or a day of one onto the months a week touches, so `1D` is
   #   1 July from the week that starts on 29 June.
   #
-  # A week under a month is the week of the month, which is not built
-  # (`Tempo.NotBuilt.week_of_month/2`): a week merged onto a month, or with
-  # finer units onto a period within one. A week alone selected from a day or
-  # a time is a filter and is not merged (`select_constraint/2`). A calendar
-  # of weeks has no other axis, and refuses a month or a day of one where it
-  # is merged.
+  # A week under a month is the week of the month, which the calendar
+  # numbers: one week selected from a month is merged onto the month it is
+  # of (`week_of_month/2`). What is not built is refused by name
+  # (`Tempo.NotBuilt.week_of_month/2`): a week that is no one whole number,
+  # and a week merged with finer units onto a period within a month. A week
+  # alone selected from a day or a time is a filter and is not merged
+  # (`select_constraint/2`). A calendar of weeks has no other axis, and
+  # refuses a month or a day of one where it is merged.
   defp on_each_period(%Interval{} = base, c_time, project) do
     case periods_on_axis(base, c_time) do
       {:ok, [^base]} -> project.(base)
@@ -1543,8 +1597,11 @@ defmodule Tempo.Select do
   defp periods_on_axis(:month, :week, base, _c_time),
     do: periods_touched(base, &[year: &1.year, month: &1.month])
 
-  defp periods_on_axis(:week, :month, %Interval{from: from}, c_time),
-    do: NotBuilt.week_of_month(c_time, from)
+  defp periods_on_axis(:week, :month, %Interval{from: from} = base, c_time) do
+    if week_of_month?(from, c_time),
+      do: {:ok, [base]},
+      else: NotBuilt.week_of_month(c_time, from)
+  end
 
   defp periods_on_axis(_axis, _period_axis, base, _c_time), do: {:ok, [base]}
 
@@ -1628,8 +1685,8 @@ defmodule Tempo.Select do
   # A span either end of which cannot land on the member (29 February, in a
   # common year) is skipped, as a point that cannot land is.
   defp project_span(%Interval{} = base, %Tempo{} = c_from, %Tempo{} = c_to) do
-    with %Tempo{} = span_from <- merged_constraint_tempo(base, c_from.time),
-         %Tempo{} = span_to <- merged_constraint_tempo(base, c_to.time) do
+    with %Tempo{} = span_from <- merged_start(base, c_from.time),
+         %Tempo{} = span_to <- merged_start(base, c_to.time) do
       shown_span(span_from, roll_past_midnight(span_from, span_to))
     end
   end
@@ -1640,7 +1697,7 @@ defmodule Tempo.Select do
   # `T02/PT2H` on the night New York's clocks go from 02:00 to 03:00 is
   # 03:00 to 05:00.
   defp project_span_duration(%Interval{} = base, %Tempo{} = c_from, %Duration{} = duration) do
-    with %Tempo{} = span_from <- merged_constraint_tempo(base, c_from.time),
+    with %Tempo{} = span_from <- merged_start(base, c_from.time),
          %Tempo{} = shown_from <- Zone.shown_by_the_clock(span_from),
          %Tempo{} = span_to <- Math.add(shown_from, duration) do
       build_span(shown_from, span_to)
@@ -1720,11 +1777,17 @@ defmodule Tempo.Select do
 
   # A selector Tempo answers for in the base's calendar is merged onto the
   # base; one it does not yet is refused, and named.
-  defp merge_built_constraint(base, c_time) do
-    case NotBuilt.selector(c_time, base.from) do
-      :ok -> merge_constraint(base, c_time)
+  defp merge_built_constraint(%Interval{from: from} = base, c_time) do
+    case NotBuilt.selector(c_time, from) do
+      :ok -> merged_onto(base, from, c_time)
       {:error, _not_built} = error -> error
     end
+  end
+
+  defp merged_onto(base, from, c_time) do
+    if week_of_month?(from, c_time),
+      do: week_of_month(from, c_time),
+      else: merge_constraint(base, c_time)
   end
 
   # A selector is a value of its own calendar. Its year, its month, its day
@@ -1863,12 +1926,99 @@ defmodule Tempo.Select do
 
   defp validated_merge(:none, _base_from), do: nil
 
-  defp project_merge(%Interval{} = base, c_time),
-    do: on_each_period(base, c_time, &project_merged(&1, c_time))
+  defp project_merge(%Interval{} = base, c_time) do
+    case each_week_of_month(base, c_time) do
+      [^c_time] -> on_each_period(base, c_time, &project_merged(&1, c_time))
+      weeks -> gathered(weeks, &project_merge(base, &1))
+    end
+  end
 
+  # A week of a month alone is the span of its dates, which the merge gives
+  # whole; any other constraint is a value, and is its span.
   defp project_merged(%Interval{} = base, c_time) do
-    with %Tempo{} = merged <- merged_constraint_tempo(base, c_time) do
-      materialise_projection(merged, c_time)
+    case merged_constraint_tempo(base, c_time) do
+      %Tempo{} = merged -> materialise_projection(merged, c_time)
+      %Interval{} = week_of_a_month -> week_of_a_month
+      nothing_or_an_error -> nothing_or_an_error
+    end
+  end
+
+  # A constraint merged onto its period as the end of a span: where the
+  # value it names starts, which for a week of a month is its first date.
+  defp merged_start(%Interval{} = base, c_time) do
+    case merged_constraint_tempo(base, c_time) do
+      %Interval{from: %Tempo{} = start} -> start
+      a_value_nothing_or_an_error -> a_value_nothing_or_an_error
+    end
+  end
+
+  # The weeks a constraint names in the month it is selected from, as a
+  # constraint for each. A week of a month is one week, so a set or a range
+  # of them (`{1,3}W`, `{2..-1}W`) is each week it names among those the
+  # month has, as a set of days is each day.
+  defp each_week_of_month(
+         %Interval{from: %Tempo{time: [year: year, month: month], calendar: calendar}},
+         c_time
+       )
+       when is_integer(year) and is_integer(month) do
+    calendar = Compare.effective_calendar(calendar)
+
+    c_time
+    |> each_named(:week, fn -> weeks_in(year, month, calendar) end)
+    |> Enum.flat_map(&each_named(&1, :day_of_week, fn -> days_of_week_in(&1, calendar) end))
+  end
+
+  defp each_week_of_month(_base, c_time), do: [c_time]
+
+  # A constraint for each value a set or a range names in `unit`, among the
+  # values `values` gives it, and the constraint as it is where it names one
+  # value there, or none that can be counted.
+  defp each_named(c_time, unit, values) do
+    with {^unit, written} when not is_integer(written) <- List.keyfind(c_time, unit, 0),
+         true <- counted?(written),
+         {:ok, valid} <- values.() do
+      written
+      |> UnitValues.named(valid)
+      |> Enum.map(&List.keyreplace(c_time, unit, 0, {unit, &1}))
+    else
+      _one_value_or_none_to_name -> [c_time]
+    end
+  end
+
+  defp weeks_in(year, month, calendar) do
+    with {:ok, weeks} <- UnitValues.weeks_of_month(year, month, calendar),
+         do: {:ok, 1..Enum.count(weeks)//1}
+  end
+
+  # A day of the week is named among a week's seven only under a week of a
+  # month, where each is found among the week's dates.
+  defp days_of_week_in(c_time, calendar) do
+    if List.keymember?(c_time, :week, 0),
+      do: UnitValues.in_period(:day_of_week, [], calendar),
+      else: {:error, :no_week}
+  end
+
+  # A week selected from a month is a week of that month, which the calendar
+  # numbers (`Tempo.UnitValues.weeks_of_month/3`): one week, written as a
+  # whole number, selected from a period that is a month.
+  defp week_of_month?(%Tempo{time: [year: year, month: month]}, c_time)
+       when is_integer(year) and is_integer(month),
+       do: match?({:week, week} when is_integer(week), List.keyfind(c_time, :week, 0))
+
+  defp week_of_month?(_from, _c_time), do: false
+
+  # The week of the month a constraint names in its period, as a value
+  # written with a week after its month is read (`2026Y6M2W`): the span of
+  # the week's dates, or with a day of the week and a time of day the value
+  # they name. It is not always within its month: the first week of July
+  # 2026 starts on 29 June. A week the month does not have, and a day a
+  # week cut short does not have, select nothing, as a day a month does not
+  # have does.
+  defp week_of_month(%Tempo{time: time, calendar: calendar} = from, c_time) do
+    case Group.expand_groups(%{from | time: time ++ c_time}, Compare.effective_calendar(calendar)) do
+      {:ok, selected} -> selected
+      {:error, %InvalidDateError{unit: unit}} when unit in [:week, :day_of_week] -> nil
+      {:error, _reason} = error -> error
     end
   end
 

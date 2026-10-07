@@ -578,20 +578,23 @@ defmodule Tempo.NotBuiltTest do
     end
   end
 
-  # A week after a month is a week of that month, which no value is read as.
-  # `Tempo.select/2` merged one onto a month into a value of a year, a month
-  # and a week: its walk yielded `2026Y6M1W1K`, a set operation on it was a
-  # `ResolutionError` and its text said "Jun 29, 2025 – Jun 4, 2026".
+  # A week after a month is a week of that month, which the calendar numbers
+  # and `Tempo.select/2` gives as the span of its dates (decided 2026-10-07,
+  # `test/tempo/week_of_month_test.exs`). What is left refused is a week of
+  # a month in a year that does not begin with its first month, whose months
+  # the calendar counts otherwise than its dates name them, and a week that
+  # is no one whole number.
   describe "a week selected from within a month" do
-    test "is refused from a month, in any calendar of months" do
-      for {base, calendar} <- [
-            {"2026Y6M", Calendrical.Gregorian},
-            {"5787Y6M", Hebrew},
-            {"1750Y6M", March25}
-          ],
-          week <- ["1W", "-1W", "25W", "25W3K"] do
-        answer = Tempo.select(read(base, calendar), read(week, calendar))
-        assert refused?(answer, :week_of_month, calendar), "#{week} from #{base}"
+    test "is answered in a calendar whose months begin its years, and refused in one whose do not" do
+      for {base, calendar} <- [{"2026Y6M", Calendrical.Gregorian}, {"5787Y6M", Hebrew}],
+          week <- ["1W", "-1W", "25W", "1W3K"] do
+        assert {^base, ^week, {:ok, %IntervalSet{}}} =
+                 {base, week, Tempo.select(read(base, calendar), read(week, calendar))}
+      end
+
+      for week <- ["1W", "-1W", "25W", "1W3K"] do
+        answer = Tempo.select(read("1750Y6M", March25), read(week, March25))
+        assert refused?(answer, :week_of_month, March25), "#{week} from 1750Y6M"
       end
     end
 
@@ -606,9 +609,10 @@ defmodule Tempo.NotBuiltTest do
     end
 
     test "names what was asked for and the calendar" do
-      {:error, error} = Tempo.select(~o"2026-06", ~o"-1W")
+      {:error, error} = Tempo.select(~o"2026-06", ~o"XW")
 
-      assert Exception.message(error) =~ "the selection of [week: -1] from ~o\"2026Y6M\""
+      assert Exception.message(error) =~
+               "the selection of [week: {:mask, [:X]}] from ~o\"2026Y6M\""
 
       assert Exception.message(error) =~
                "a week of a month is not built for Calendrical.Gregorian"

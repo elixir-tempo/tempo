@@ -1836,6 +1836,13 @@ defmodule Tempo.Validation do
 
   defp date_in_week(_week_start, _day, _calendar), do: {:error, :invalid_date}
 
+  @doc false
+  # The date among `week_days` on ISO 8601's weekday `weekday` (`1`, Monday,
+  # to `7`, Sunday): a day of a week of a month, whose weeks the calendar
+  # numbers and may cut short.
+  def date_of_weekday(%Date.Range{} = week_days, weekday),
+    do: weekday_in_week(week_days, weekday)
+
   # The day of `week_days` with ISO 8601's weekday number `weekday`, from
   # the calendar's own day of the week.
   defp weekday_in_week(%Date.Range{} = week_days, weekday)

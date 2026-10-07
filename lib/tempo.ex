@@ -9979,7 +9979,9 @@ defmodule Tempo do
   # *day*, and a §12.10 window ending the selection runs from a day). With
   # no selection, the day floor keeps a plain cadence (`R/../P1D`) walking
   # days.
-  defp start_unit(%Tempo.Interval{repeat_rule: %Tempo{time: [{:selection, selection} | _units]}})
+  defp start_unit(
+         %Tempo.Interval{repeat_rule: %Tempo{time: [{:selection, selection} | _units]}} = interval
+       )
        when selection != [] do
     # The finest unit is the last selection component (they are written
     # coarse-to-fine), the week start (`q`) and a skip aside: they are
@@ -9988,12 +9990,21 @@ defmodule Tempo do
     # declared `time_unit()` return elides the selection-only keys (`:byday`,
     # `:day_of_week`) this must normalise.
     case selection |> Enum.reject(&context?/1) |> List.last() do
-      {finest_unit, _value} -> finest_unit |> calendar_start_unit() |> in_a_window(selection)
-      nil -> :day
+      {finest_unit, _value} ->
+        finest_unit |> calendar_start_unit(stepped_by(interval)) |> in_a_window(selection)
+
+      nil ->
+        :day
     end
   end
 
   defp start_unit(%Tempo.Interval{}), do: :day
+
+  # The unit a recurrence steps by, where it is written with a cadence.
+  defp stepped_by(%Tempo.Interval{duration: %Tempo.Duration{time: [{unit, _amount} | _finer]}}),
+    do: unit
+
+  defp stepped_by(_no_cadence), do: nil
 
   # The week start (`q`) and a rule's skip are context, and name no unit.
   defp context?({part, _value}), do: part in [:wkst, :skip]
@@ -10016,13 +10027,19 @@ defmodule Tempo do
   # the candidate's year. The dayless start is also what marks the
   # selection as native (a whole week), distinct from RRULE `BYWEEKNO`,
   # whose `DTSTART` day expands the week to its seven days.
-  defp calendar_start_unit(week) when week in [:week, :calendar_week], do: :year
+  #
+  # A week selected by a rule that steps by months is a week of the month,
+  # which the calendar numbers, and starts from its month as a week of the
+  # year does from its year.
+  defp calendar_start_unit(:week, :month), do: :month
 
-  defp calendar_start_unit(unit)
+  defp calendar_start_unit(week, _stepped_by) when week in [:week, :calendar_week], do: :year
+
+  defp calendar_start_unit(unit, _stepped_by)
        when unit in [:byday, :day_of_week, :day_of_year, :instance, :event, :interval],
        do: :day
 
-  defp calendar_start_unit(unit), do: unit
+  defp calendar_start_unit(unit, _stepped_by), do: unit
 
   defp empty_bound_error do
     UnboundedRecurrenceError.exception(

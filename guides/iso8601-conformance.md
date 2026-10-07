@@ -224,6 +224,8 @@ These syntaxes are Tempo conveniences, not part of any standard:
 
 * **Calendar week** — `2027Y1w` is the calendar's own week 1, where `2027Y1W` is ISO 8601's; described below.
 
+* **Week of a month** — `2026Y6M2W` is the second week of June 2026, where ISO 8601 has a week only of a year; described below.
+
 * **A year in a recurrence selection** — `FL{2026,2028}Y1M1DN` keeps the occurrences in those years, where ISO 8601-2 §12.2 has no year rule; described with the recurrence domain below.
 
 * **Explicit suffixes** — `2022Y11M20D` instead of `2022-11-20`. Used by the `~o` sigil as the canonical output form.
@@ -382,6 +384,20 @@ ISO 8601 numbers weeks one way: each starts on a Monday, and week 1 is the one h
 In a **concrete date** a `w` week resolves to its dates, so the lowercase marker never survives a round-trip, as `m` does not. In a **selection** it survives and resolves per year: `R/../P1Y/FL10wN` is the calendar's week 10 of each year and `FL10w3KN` its Wednesday. A week-based calendar's own weeks are its `W` weeks, and every other calendar's are the weeks Calendrical numbers (`Calendrical.Interval.week/3`). A calendar that numbers its weeks within its own year (Hebrew, Islamic, Julian, …) cuts week 1 and the last week short, so `5787Y1w[u-ca=hebrew]` is 1 Tishri alone, a Saturday; the day of the week `K` is ISO 8601's, and a short week holds only its own days (`5787Y1w1K` is not a date). RFC 5545's `BYWEEKNO` counts ISO 8601 weeks (from `WKST`), so `Tempo.RRule.to_string/1` cannot express `w`.
 
 Either week can hold days of the year before or after it, and they belong to the year that numbers the week wherever they land: `Tempo.to_interval(~o"R/../P1Y/FL1W1KN", within: ~o"2025Y12M")` is Monday 29 December 2025, the first day of 2026's week 1.
+
+### Week of a month — `W` after a month
+
+ISO 8601 has a week of a year and none of a month. In the explicit form a `W` after a month is a week of that month, as the calendar numbers a month's weeks (`Calendrical.week_of_month/1`). In the Gregorian calendar those are whole weeks from a Monday, the first of a month the one that holds its first day, so a week of a month is not always within its month, and each week is the week of one month alone.
+
+```elixir
+~o"2026Y6M2W"            # 2026-06-08/2026-06-15, the week's seven days
+~o"2026Y7M1W"            # 2026-06-29/2026-07-06: 1 July is a Wednesday
+~o"2026Y6M-1W"           # 2026-06-22/2026-06-29, the last of June's four
+~o"2026Y6M2W3K"          # 2026-06-10, the Wednesday of that week
+~o"2026Y6M2W3KT10H30M"   # 2026-06-10T10:30
+```
+
+Like a `w` week it resolves to its dates in a **concrete date**, so it is written back as the dates it names, and a week the month does not have is an error (`2026Y6M5W`). It is one week of one month of one year: the weeks of a month are selected with `Tempo.select/2`, where `~o"2W"` from a month is its second week, `~o"{1,3}W"` its first and third and `~o"-1W"` its last. In a **selection** resolved in a month it is the week's span, so `R/2026Y6M/P1M/FL2WN` is the second week of each month from June 2026. A calendar that numbers a month's weeks from its first day to its last (Hebrew, Islamic, Julian, …) cuts the first and the last of them short, so `5786Y1M1W[u-ca=hebrew]` is the five days from 1 Tishri to its first Saturday.
 
 ### Exclusions and the recurrence domain — the `^` marker and `e`/`o`/`l`/`c` filters
 

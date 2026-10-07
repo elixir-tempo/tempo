@@ -227,13 +227,29 @@ defmodule Tempo.RRule.PeriodPartsTest do
   end
 
   describe "a week selected in a month" do
-    test "is the week of the month, which is not built" do
+    test "is the week of the month, which the calendar numbers" do
+      # A week under a month is a week of that month (decided 2026-10-07):
+      # whole weeks from a Monday in the Gregorian calendar, the first the
+      # one that holds the month's first day. June 2026 begins on a Monday
+      # and has four, and no twenty-third.
+      assert Date.day_of_week(~D[2026-06-01]) == 1
+
+      assert spans(Tempo.select(~o"2026-06", ~o"L2WN")) == [{~D[2026-06-08], 7}]
+      assert spans(Tempo.to_interval(read("2026Y6ML-1WN"))) == [{~D[2026-06-22], 7}]
+      assert spans(Tempo.to_interval(read("2026Y6ML23WN"))) == []
+
+      assert spans(Tempo.to_interval(read("R2/2026Y6M/P1M/FL2WN"))) ==
+               [{~D[2026-06-08], 7}, {~D[2026-07-06], 7}]
+
+      assert spans(Tempo.to_interval(read("R/../P1M/FL-1WN"), within: ~o"2026-06")) ==
+               [{~D[2026-06-22], 7}]
+    end
+
+    test "beside a part that picks within the week is not built" do
       for answer <- [
-            Tempo.select(~o"2026-06", ~o"L23WN"),
             Tempo.select(~o"2026-06", ~o"L1W1KN"),
-            Tempo.to_interval(read("2026Y6ML23WN")),
-            Tempo.to_interval(read("R2/2026Y6M/P1M/FL23WN")),
-            Tempo.to_interval(read("R/../P1M/FL-1WN"), within: ~o"2026-06")
+            Tempo.to_interval(read("2026Y6ML1W1KN")),
+            Tempo.to_interval(read("R2/2026Y6M/P1M/FL1WT10HN"))
           ] do
         assert {:error, %ConversionError{reason: :not_built, target: :week_of_month}} = answer
       end

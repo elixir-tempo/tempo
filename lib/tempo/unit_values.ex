@@ -1328,6 +1328,192 @@ defmodule Tempo.UnitValues do
   defp run_of_days({year, month, first, last}), do: {year, month, first..last//1}
 
   @doc """
+  Returns the weeks of a month of a year, each as the dates the calendar numbers in it.
+
+  A week of a month is the calendar's to number: each date around the month is asked which week of which month it is in (`week_of_month/3` of a Calendrical calendar), and a month's weeks are the dates that answer with it. So a week is whatever the calendar holds it to be. In `Calendrical.Gregorian` it is a whole week that starts on a Monday, the first of a month the one that holds its first day: a month's first week may start in the month before, and its last days may be in the first week of the next. A calendar that numbers a month's weeks from its first day to its last cuts the first and the last of them short.
+
+  ### Arguments
+
+  * `year` is the year, in the calendar's own numbering.
+
+  * `month` is the month of the year.
+
+  * `calendar` is the calendar module the units are counted in.
+
+  ### Returns
+
+  * `{:ok, weeks}`, a list of `t:Date.Range.t/0` in order, the first the dates of week 1.
+
+  * `{:error, :no_period}` when the calendar has no such month or numbers no weeks in it: a calendar of weeks, which has no months, and one whose year does not begin with its first month, whose months it counts otherwise than its dates name them.
+
+  ### Examples
+
+      iex> {:ok, weeks} = Tempo.UnitValues.weeks_of_month(2026, 7, Calendrical.Gregorian)
+      iex> Enum.map(weeks, &{Date.to_iso8601(&1.first), Date.to_iso8601(&1.last)})
+      [
+        {"2026-06-29", "2026-07-05"},
+        {"2026-07-06", "2026-07-12"},
+        {"2026-07-13", "2026-07-19"},
+        {"2026-07-20", "2026-07-26"}
+      ]
+
+      iex> Tempo.UnitValues.weeks_of_month(2026, 13, Calendrical.Gregorian)
+      {:error, :no_period}
+
+  """
+  @spec weeks_of_month(integer(), pos_integer(), module()) ::
+          {:ok, [Date.Range.t(), ...]} | {:error, :no_period}
+  def weeks_of_month(year, month, calendar)
+      when is_integer(year) and is_integer(month) and is_atom(calendar) do
+    with true <- numbers_weeks_of_months?(year, calendar),
+         {:ok, %Date.Range{first: first}} <- month_range(year, month, calendar),
+         first_day = calendar.date_to_iso_days(first.year, first.month, first.day),
+         {:ok, start} <- first_day_of_first_week(first_day, month, calendar),
+         [_week | _weeks] = weeks <- weeks_from(start, 1, month, calendar) do
+      {:ok, Enum.map(weeks, &dates_of_week(&1, calendar))}
+    else
+      _no_weeks -> {:error, :no_period}
+    end
+  end
+
+  def weeks_of_month(_year, _month, _calendar), do: {:error, :no_period}
+
+  @doc """
+  Returns the dates of a week of a month of a year, as the calendar numbers its weeks.
+
+  ### Arguments
+
+  * `year` is the year, in the calendar's own numbering.
+
+  * `month` is the month of the year.
+
+  * `week` is the week of the month: a whole number, counted from the month's last week when it is negative.
+
+  * `calendar` is the calendar module the units are counted in.
+
+  ### Returns
+
+  * `{:ok, dates}`, the `t:Date.Range.t/0` from the week's first date to its last.
+
+  * `{:error, :no_period}` when the month has no such week, or `weeks_of_month/3` has none to give for it.
+
+  ### Examples
+
+      iex> {:ok, week} = Tempo.UnitValues.week_of_month(2026, 7, 1, Calendrical.Gregorian)
+      iex> {Date.to_iso8601(week.first), Date.to_iso8601(week.last)}
+      {"2026-06-29", "2026-07-05"}
+
+      iex> {:ok, week} = Tempo.UnitValues.week_of_month(2026, 6, -1, Calendrical.Gregorian)
+      iex> {Date.to_iso8601(week.first), Date.to_iso8601(week.last)}
+      {"2026-06-22", "2026-06-28"}
+
+      iex> Tempo.UnitValues.week_of_month(2026, 6, 5, Calendrical.Gregorian)
+      {:error, :no_period}
+
+  """
+  @spec week_of_month(integer(), pos_integer(), integer(), module()) ::
+          {:ok, Date.Range.t()} | {:error, :no_period}
+  def week_of_month(year, month, week, calendar) when is_integer(week) and week != 0 do
+    with {:ok, weeks} <- weeks_of_month(year, month, calendar),
+         %Date.Range{} = dates <- Enum.at(weeks, if(week > 0, do: week - 1, else: week)) do
+      {:ok, dates}
+    else
+      _no_such_week -> {:error, :no_period}
+    end
+  end
+
+  def week_of_month(_year, _month, _week, _calendar), do: {:error, :no_period}
+
+  # A calendar of months that says which week of a month a date is in, in a
+  # year whose months it counts as its dates name them.
+  defp numbers_weeks_of_months?(year, calendar) do
+    exported?(calendar, :week_of_month, 3) and calendar.calendar_base() == :month and
+      year_begins_with_first_month?(year, calendar)
+  end
+
+  # A week is seven days at most, and a month has no more weeks than this.
+  @days_of_a_week 7
+  @most_weeks_of_a_month 7
+
+  # The week of a month the calendar numbers a day in, the day given as the
+  # count of days the calendar gives its date. Nothing is worked out of a
+  # date here: a day is asked, and the days asked are next to one another.
+  defp week_asked(day, calendar) do
+    {year, month, day_of_month} = calendar.date_from_iso_days(day)
+    calendar.week_of_month(year, month, day_of_month)
+  end
+
+  # The first day of a month's first week. Where the month's first day is in
+  # it, it starts on that day or on one of the six before it; where the
+  # calendar gives the month's first days to the last week of the month
+  # before, it starts on one of the six after.
+  defp first_day_of_first_week(first_day, month, calendar) do
+    case week_asked(first_day, calendar) do
+      {^month, 1} ->
+        earlier =
+          Enum.take_while(
+            1..(@days_of_a_week - 1)//1,
+            &(week_asked(first_day - &1, calendar) == {month, 1})
+          )
+
+        {:ok, first_day - Enum.count(earlier)}
+
+      {_the_month_before, _its_last_week} ->
+        1..(@days_of_a_week - 1)//1
+        |> Enum.find(&(week_asked(first_day + &1, calendar) == {month, 1}))
+        |> day_found(first_day)
+
+      _no_week ->
+        :error
+    end
+  end
+
+  defp day_found(nil, _first_day), do: :error
+  defp day_found(days_on, first_day), do: {:ok, first_day + days_on}
+
+  # Each week of the month from the first day of week `week`, as its first
+  # day and its last: the week ends where the day after is of another week,
+  # and the month's weeks where that day is of another month's.
+  defp weeks_from(_day, week, _month, _calendar) when week > @most_weeks_of_a_month, do: []
+
+  defp weeks_from(day, week, month, calendar) do
+    last = last_day_of_week(day, {month, week}, calendar)
+
+    case week_asked(last + 1, calendar) do
+      {^month, next} when next == week + 1 ->
+        [{day, last} | weeks_from(last + 1, week + 1, month, calendar)]
+
+      _another_month ->
+        [{day, last}]
+    end
+  end
+
+  # The last day of a week from its first. The days of a week are next to
+  # one another and seven at most, so a whole week is asked once, six days
+  # on; a week the calendar cuts short is asked a day at a time.
+  defp last_day_of_week(first, named, calendar) do
+    if week_asked(first + @days_of_a_week - 1, calendar) == named do
+      first + @days_of_a_week - 1
+    else
+      later =
+        Enum.take_while(
+          1..(@days_of_a_week - 2)//1,
+          &(week_asked(first + &1, calendar) == named)
+        )
+
+      first + Enum.count(later)
+    end
+  end
+
+  defp dates_of_week({first, last}, calendar),
+    do: Date.range(date_of_day(first, calendar), date_of_day(last, calendar))
+
+  defp date_of_day(day, calendar) do
+    {year, month, day_of_month} = calendar.date_from_iso_days(day)
+    Date.new!(year, month, day_of_month, calendar)
+  end
+
+  @doc """
   Returns the month of its year that holds a date, as the calendar counts its months.
 
   It is the month the date names wherever the calendar counts a year's months as its dates number them. Where it counts them from the day the year begins, it is the place of the date's month in the year: 10 March 1750 in `Calendrical.Julian.March25` is in the twelfth month of its year, which runs from 1 February to 24 March.

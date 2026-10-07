@@ -237,6 +237,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Added
 
+* A week of a month: a `W` after a month in the explicit form is the week the calendar numbers there, read as the span of its dates (`2026Y6M2W` is `~o"2026Y6M8D/15D"`, and `2026Y7M1W` starts on 29 June, the Monday of the week that holds 1 July) or, with a day of the week, as its date (`2026Y6M2W3K`). `Tempo.select/2` selects one from a month (`~o"2W"`, `~o"{1,3}W"`, `~o"-1W"`, `~o"2W3K"`) and a rule resolved in a month names one (`2026Y6ML2WN`, `R/2026Y6M/P1M/FL2WN`), where each was a `Tempo.ConversionError`.
+
 * `Tempo.roll_to_workday/3` rolls a day off to a workday by a business day convention, `roll: :following` (the default), `:preceding`, `:modified_following` or `:modified_preceding`, a modified roll turning back where the workday it rolls to is in another month: Saturday 30 May 2026 is Monday 1 June following and Friday 29 May modified following. It and `Tempo.workdays/2` take their options in the territory's place, for the territory the resolution chain gives.
 
 * `Tempo.shift/3`, `Tempo.trunc/2` and `Tempo.round/2` take an interval: a shift moves both ends and keeps the length (two days at the end of January are two days a month on, `2026-02-28/2026-03-02`), `trunc/2` gives the whole units the interval touches, and `round/2` takes each end to the unit nearer it. `~o"2026-06-15T10:30/2026-06-15T12:45"` truncated to the hour is `T10/T13` and rounded to it `T11/T13`.

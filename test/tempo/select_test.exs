@@ -393,16 +393,18 @@ defmodule Tempo.Select.Test do
       assert iv_2028.from.time[:week] == 52
     end
 
-    test "a week on a month base is the week of the month, which is not built" do
-      # A week after a month is a week of that month. No value is read as
-      # one, and what the merge gave (`2026Y6M1W/2W`) was walked, converted
-      # and compared wrongly, so it is refused by name until it is built.
-      for selector <- [~o"1W", ~o"-1W", ~o"25W"] do
-        assert {:error, %ConversionError{reason: :not_built, target: :week_of_month} = error} =
-                 Tempo.select(~o"2026-06", selector)
+    test "a week on a month base is the week of the month" do
+      # A week after a month is a week of that month, which the calendar
+      # numbers (decided 2026-10-07): June 2026 begins on a Monday and has
+      # four whole weeks, and no twenty-fifth. What the merge once gave
+      # (`2026Y6M1W/2W`) was walked, converted and compared wrongly.
+      {:ok, first} = Tempo.select(~o"2026-06", ~o"1W")
+      {:ok, last} = Tempo.select(~o"2026-06", ~o"-1W")
+      {:ok, none} = Tempo.select(~o"2026-06", ~o"25W")
 
-        assert Exception.message(error) =~ "a week of a month is not built"
-      end
+      assert IntervalSet.members(first) == [~o"2026-06-01/2026-06-08"]
+      assert IntervalSet.members(last) == [~o"2026-06-22/2026-06-29"]
+      assert IntervalSet.count(none) == 0
     end
 
     test "`-1O` (ordinal-day) on a year base selects the last day of the year" do
@@ -1266,15 +1268,25 @@ defmodule Tempo.Select.Test do
       assert spans(~o"2026-W25", by_day) == [{~D[2026-06-15], 2}]
     end
 
-    test "a week from a month is the week of the month, which is not built" do
+    test "a week from a month is the week of the month" do
+      # No month has a twenty-fifth week, and each month of a span has a
+      # first: the one that holds its first day, which for July 2026 starts
+      # on 29 June.
       for base <- [~o"2026-06", ~o"2026-06/2026-09"],
-          selector <- [~o"25W", ~o"25W1K", ~o"L25WN", [~o"15D", ~o"1W"]] do
-        assert {:error, %ConversionError{reason: :not_built, target: :week_of_month}} =
-                 Tempo.select(base, selector)
+          selector <- [~o"25W", ~o"25W1K", ~o"L25WN"] do
+        assert spans(base, selector) == []
       end
 
-      assert {:error, %ConversionError{reason: :not_built}} =
-               Tempo.select(~o"2026-06/..", ~o"1W")
+      assert spans(~o"2026-06", [~o"15D", ~o"1W"]) == [{~D[2026-06-01], 7}, {~D[2026-06-15], 1}]
+
+      assert spans(~o"2026-06/2026-09", ~o"1W") ==
+               [{~D[2026-06-01], 7}, {~D[2026-06-29], 7}, {~D[2026-07-27], 7}]
+
+      # A span of months with no end is walked, a week at a time.
+      {:ok, weeks} = Tempo.select(~o"2026-06/..", ~o"1W")
+
+      assert weeks |> IntervalSet.walk() |> Enum.take(2) |> Enum.map(&Interval.from/1) ==
+               [~o"2026-06-01", ~o"2026-06-29"]
     end
 
     test "a week is selected from a year and from a week, and a weekday from any base" do

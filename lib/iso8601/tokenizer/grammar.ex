@@ -194,10 +194,14 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
 
   def explicit_date do
     choice([
-      # Year, month, day
+      # Year, month, and a day of the month, or a week of it and a day of
+      # that week. The year and the month are read once for both.
       parsec({Tempo.Iso8601.Tokenizer.Date, :explicit_century_decade_or_year_p})
       |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :explicit_month_p}))
-      |> concat(explicit_day_of_month()),
+      |> choice([
+        explicit_day_of_month(),
+        week_of_month() |> optional(explicit_day_of_week())
+      ]),
 
       # Year, week, day of week
       parsec({Tempo.Iso8601.Tokenizer.Date, :explicit_century_decade_or_year_p})
@@ -817,6 +821,13 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
       parsec({Tempo.Iso8601.Tokenizer.Set, :group}),
       positive_integer_or_integer_set(:week, 2)
     ])
+  end
+
+  # A week after a month is a week of the month, which the calendar numbers
+  # (`Tempo.UnitValues.weeks_of_month/3`), where a week after a year is an
+  # ISO 8601 week of the year.
+  def week_of_month do
+    maybe_negative_number_or_integer_set("W", :week, min: 1)
   end
 
   # Explicit month will consume the group

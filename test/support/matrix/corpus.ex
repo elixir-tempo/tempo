@@ -124,6 +124,9 @@ defmodule Tempo.Matrix.Corpus do
     # The last two count from the end of the period they are selected in.
     value_selection: ["2026Y4ML1K1IN", "2026Y6ML2KN", "2026YL-1M-1DN", "2026Y6M15DLT-1HN"],
     season: ["2026-21", "2026Y24M"],
+    # A week after a month is a week of the month, read as the span of the
+    # dates the calendar numbers in it, and with a day of the week as a date.
+    week_of_month: ["2026Y6M2W", "2026Y7M1W", "2026Y6M-1W", "2026Y6M2W3K"],
     zone_transition: ["2026-10-25T02:30[Europe/Paris]", "2026-03-29[Europe/Paris]"],
     mask_from_end: ["2026Y-XM", "2026Y6M-1XD", "2026Y-XM15D"],
     mask_narrow: ["2026YXM", "2026Y6MXD", "2026YXXD"],

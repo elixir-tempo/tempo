@@ -69,6 +69,30 @@ defmodule Tempo.Iso8601.Group do
     end
   end
 
+  # A week after a month is a week of the month, which the calendar numbers
+  # (`Tempo.UnitValues.weeks_of_month/3`), where a week after a year is an
+  # ISO 8601 week. With a day of the week it is that day's date, and alone
+  # the span of the dates the calendar numbers in it, as a calendar week of
+  # a year (`w`) is. It is not always within its month: the first week of
+  # July 2026 starts on 29 June. It is read before a season is, whose number
+  # is no month's.
+  def expand_groups([{:year, year}, {:month, month}, {:week, week} | rest], calendar)
+      when is_integer(year) and is_integer(month) and is_integer(week) do
+    week_of_month(year, month, week, rest, calendar)
+  end
+
+  def expand_groups([{:year, year}, {:month, month}, {:week, week} | _rest], _calendar) do
+    several = Enum.find([year, month, week], &(not is_integer(&1)))
+
+    {:error,
+     ParseError.exception(
+       reason:
+         "A week of a month is one week of one month of one year, each written as a whole " <>
+           "number, and #{inspect(several)} is not one. Select the weeks from the month with " <>
+           "`Tempo.select/2`."
+     )}
+  end
+
   # Seasons (ISO 8601-2 Part 2, Table 2)
   #
   # Codes 25-32 are **astronomical** seasons: the boundaries are the
@@ -949,6 +973,108 @@ defmodule Tempo.Iso8601.Group do
 
   defp date_components(:month, year, month, day), do: [year: year, month: month, day: day]
   defp date_components(:week, year, week, day), do: [year: year, week: week, day_of_week: day]
+
+  ## Weeks of a month
+
+  # A negative week counts back from the month's last, as `-1W` does in a
+  # year.
+  defp week_of_month(year, month, week, rest, calendar) do
+    case UnitValues.week_of_month(year, month, week, calendar) do
+      {:ok, %Date.Range{} = dates} ->
+        week_of_month_days(dates, rest, calendar, {year, month, week})
+
+      {:error, :no_period} ->
+        {:error, no_week_of_month(year, month, week, calendar)}
+    end
+  end
+
+  # A month has the weeks its calendar numbers in it, and no other. In a
+  # year that does not begin with its first month the calendar counts the
+  # year's months otherwise than its dates name them, and the weeks of one
+  # are not yet worked out (`Tempo.NotBuilt`).
+  defp no_week_of_month(year, month, week, calendar) do
+    if UnitValues.year_begins_with_first_month?(year, calendar) do
+      InvalidDateError.exception(
+        unit: :week,
+        value: week,
+        year: year,
+        month: month,
+        calendar: calendar,
+        reason: "#{inspect(calendar)} numbers no week #{week} in month #{month} of #{year}"
+      )
+    else
+      NotBuilt.error("week #{week} of month #{month} of #{year}", :week_of_month, calendar)
+    end
+  end
+
+  # A day of the week is the date among the week's with that weekday, so a
+  # week the calendar cuts short at an end of its month has fewer, and a
+  # negative one counts back from the week's last, as `-7K` does in an ISO
+  # 8601 week.
+  defp week_of_month_days(dates, [{:day_of_week, day} | rest], calendar, named)
+       when is_integer(day) do
+    with {:ok, days} <- UnitValues.in_period(:day_of_week, [], calendar),
+         {:ok, day} <- Validation.conform(day, days),
+         {:ok, date} <- Validation.date_of_weekday(dates, day) do
+      [{:year, date.year}, {:month, date.month}, {:day, date.day} | rest]
+    else
+      _not_a_day -> week_of_month_day_error(named, day, calendar)
+    end
+  end
+
+  defp week_of_month_days(_dates, [{:day_of_week, day} | _rest], _calendar, {year, month, week}) do
+    {:error,
+     ParseError.exception(
+       reason:
+         "Week #{week} of month #{month} of #{year} takes a single day of the week, " <>
+           "not #{inspect(day)}. Select the days from the month with `Tempo.select/2`."
+     )}
+  end
+
+  # The week's dates, from its first to the day after its last.
+  defp week_of_month_days(%Date.Range{first: first, last: last}, [], calendar, _named) do
+    next = Calendrical.next(last, :day)
+
+    [
+      interval: [
+        datetime: [year: first.year, month: first.month, day: first.day],
+        datetime: [year: next.year, month: next.month, day: next.day]
+      ]
+    ]
+    |> Parser.parse(calendar)
+    |> season_interval_result()
+  end
+
+  # A time of day under a week is on the week's first day, as it is under a
+  # week of a year (`2026Y24WT10H` is 10:00 on its Monday), which here is
+  # the first date the calendar numbers in the week.
+  defp week_of_month_days(%Date.Range{first: first}, [{unit, _value} | _finer] = time, _, _)
+       when unit in [:hour, :minute, :second] do
+    [{:year, first.year}, {:month, first.month}, {:day, first.day} | time]
+  end
+
+  defp week_of_month_days(_dates, [{unit, _value} | _rest], _calendar, {year, month, week}) do
+    {:error,
+     ParseError.exception(
+       reason:
+         "Week #{week} of month #{month} of #{year} is followed by #{inspect(unit)}, and a " <>
+           "week of a month takes a day of the week (`K`) and a time of day after it"
+     )}
+  end
+
+  defp week_of_month_day_error({year, month, week}, day, calendar) do
+    {:error,
+     InvalidDateError.exception(
+       unit: :day_of_week,
+       value: day,
+       year: year,
+       month: month,
+       calendar: calendar,
+       reason:
+         "Day #{inspect(day)} of week #{week} of month #{month} of #{year} " <>
+           "is not a date in #{inspect(calendar)}"
+     )}
+  end
 
   ## Calendar weeks
 
