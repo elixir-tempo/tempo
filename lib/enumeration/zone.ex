@@ -3,6 +3,7 @@ defmodule Tempo.Enumeration.Zone do
 
   alias Calendrical.Gregorian
   alias Tempo.Compare
+  alias Tempo.Interval.Steps
   alias Tempo.TimeZoneDatabase
   alias Tempo.Validation
 
@@ -257,7 +258,7 @@ defmodule Tempo.Enumeration.Zone do
   # value that is no one reading (a set, a mask or a group in a unit) is
   # asked in full.
   defp away_from_every_change?(%Tempo{extended: %{zone_id: zone}} = value) when is_binary(zone) do
-    case value |> in_gregorian() |> reading() do
+    case value |> in_gregorian() |> first_reading() do
       {:ok, reading} -> not TimeZoneDatabase.change_within?(zone, reading, @a_day_or_so)
       :no_one_reading -> false
     end
@@ -265,18 +266,7 @@ defmodule Tempo.Enumeration.Zone do
 
   defp away_from_every_change?(%Tempo{}), do: true
 
-  defp reading(%Tempo{
-         time: [{:year, year}, {:month, month}, {:day, day} | clock],
-         calendar: calendar
-       })
-       when is_integer(year) and year >= 1 and is_integer(month) and is_integer(day) and
-              calendar in [Gregorian, Calendar.ISO, nil] do
-    with {:ok, seconds} <- seconds_into_the_day(clock),
-         do: {:ok, Gregorian.date_to_iso_days(year, month, day) * @seconds_in_a_day + seconds}
-  end
-
-  defp reading(%Tempo{}), do: :no_one_reading
-
+  defp seconds_into_the_day([]), do: {:ok, 0}
   defp seconds_into_the_day([{:hour, hour}]) when is_integer(hour), do: {:ok, hour * 3_600}
 
   defp seconds_into_the_day([{:hour, hour}, {:minute, minute}])
@@ -525,6 +515,94 @@ defmodule Tempo.Enumeration.Zone do
     if twice? or is_list(shift),
       do: %{value | time: time, shift: offset_as_written(offset, shift)},
       else: %{value | time: time}
+  end
+
+  @doc """
+  A value written with an offset, at the offset its zone is at on the
+  reading it has.
+
+  A value in a named zone may be written with its offset from UTC, as a
+  timestamp is (`2024-03-09T12:00-05:00[America/New_York]`). A value made
+  from it is at another reading, where the zone may be at another offset:
+  the day after is `2024-03-10T12:00-04:00`, the clocks having gone forward
+  in the night. It was given with the offset of the value it was made from,
+  which names another moment to a reader that goes by the offset, as RFC
+  9557 has one go.
+
+  The offset is kept in the shape it was written in. A reading the clock
+  shows twice keeps a written offset that is one of its two, which tells
+  the occurrences apart, and is given the first otherwise. A value whose
+  first reading the clock skips starts when the clock comes out of the gap,
+  at the offset it has then.
+
+  ### Arguments
+
+  * `value` is a `t:Tempo.t/0`.
+
+  ### Returns
+
+  * The value, with its `:shift` the offset of its zone at its reading. A
+    value with no written offset or no named zone, one that is no date or
+    date and time of whole numbers, and one in a zone the database does not
+    know are returned as they are.
+
+  """
+  @spec at_its_offset(Tempo.t()) :: Tempo.t()
+  def at_its_offset(%Tempo{shift: [_ | _] = written, extended: %{zone_id: zone}} = value)
+      when is_binary(zone) and zone != "" do
+    with {:ok, reading} <- value |> in_gregorian() |> first_reading(),
+         [_ | _] = offsets <- offsets_at(zone, reading),
+         false <- Compare.offset_seconds(written) in offsets do
+      %{value | shift: offset_as_written(hd(offsets), written)}
+    else
+      _as_it_is_written -> value
+    end
+  end
+
+  def at_its_offset(%Tempo{} = value), do: value
+
+  # The first reading of a Gregorian date, or date and time, in gregorian
+  # seconds: midnight for a date, the hour for an hour.
+  defp first_reading(%Tempo{
+         time: [{:year, year}, {:month, month}, {:day, day} | clock],
+         calendar: calendar
+       })
+       when is_integer(year) and year >= 1 and is_integer(month) and is_integer(day) and
+              calendar in [Gregorian, Calendar.ISO, nil] do
+    with {:ok, seconds} <- seconds_into_the_day(clock),
+         do: {:ok, Gregorian.date_to_iso_days(year, month, day) * @seconds_in_a_day + seconds}
+  end
+
+  # A coarser value, a month or a year, starts on its first day, and a
+  # value of another calendar or on the week's axis that could not be given
+  # as a Gregorian date is asked where it starts
+  # (`Tempo.Compare.to_wall_seconds/1`).
+  defp first_reading(%Tempo{time: [{:year, year} | _rest] = time} = value)
+       when is_integer(year) and year >= 1 do
+    if Steps.whole_units?(time),
+      do: {:ok, trunc(Compare.to_wall_seconds(value))},
+      else: :no_one_reading
+  end
+
+  defp first_reading(%Tempo{}), do: :no_one_reading
+
+  # The offsets a zone's clock is at on a reading: one, the two of a reading
+  # it shows twice, the one it comes out of a gap at for a reading it skips,
+  # and none for a zone the database does not know.
+  defp offsets_at(zone, reading) do
+    case TimeZoneDatabase.period_at_wall(zone, reading) do
+      {:ok, period} ->
+        [TimeZoneDatabase.total_offset(period)]
+
+      {:ambiguous, first, second} ->
+        [TimeZoneDatabase.total_offset(first), TimeZoneDatabase.total_offset(second)]
+
+      {:gap, _before, {later, _comes_out}} ->
+        [TimeZoneDatabase.total_offset(later)]
+
+      {:error, _reason} ->
+        []
+    end
   end
 
   @doc """

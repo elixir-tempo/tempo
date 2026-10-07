@@ -483,7 +483,9 @@ defmodule Tempo.Select do
   defp as_the_clock_shows(selected, _base), do: selected
 
   defp as_the_clock_shows(%Interval{from: %Tempo{} = from} = selected) do
-    if Zone.shown?(from), do: [ending_as_the_clock_shows(selected)], else: []
+    if Zone.shown?(from),
+      do: [selected |> ending_as_the_clock_shows() |> at_the_offsets_of_its_ends()],
+      else: []
   end
 
   defp as_the_clock_shows(selected), do: [selected]
@@ -496,6 +498,19 @@ defmodule Tempo.Select do
   end
 
   defp ending_as_the_clock_shows(selected), do: selected
+
+  # A member selected from a base written with an offset is at the offset
+  # its zone is at on each of its ends (`Tempo.Enumeration.Zone.at_its_offset/1`):
+  # it took the base's, which is another's once the clock has changed.
+  defp at_the_offsets_of_its_ends(
+         %Interval{from: %Tempo{shift: [_ | _]} = from, to: to} = selected
+       ),
+       do: %{selected | from: Zone.at_its_offset(from), to: at_its_offset(to)}
+
+  defp at_the_offsets_of_its_ends(selected), do: selected
+
+  defp at_its_offset(%Tempo{} = to), do: Zone.at_its_offset(to)
+  defp at_its_offset(open_or_none), do: open_or_none
 
   # A set's members, each as the members `fun` gives for it, in a set that
   # is walked as the set is: at once where it is bounded, and member by

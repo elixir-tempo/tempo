@@ -599,6 +599,105 @@ defmodule Tempo.BesideAGapTest do
     end
   end
 
+  describe "a value made from one written with an offset" do
+    # A timestamp is written with its zone's offset
+    # (`2024-03-09T12:00-05:00[America/New_York]`). A value made from it is
+    # at another reading, where the zone may be at another offset, and it
+    # was given with the offset of the value it was made from, which names
+    # another moment to a reader that goes by the offset.
+
+    # The offset Elixir places a reading at in a zone, in seconds.
+    defp offset_at(%NaiveDateTime{} = reading, zone) do
+      placed = DateTime.from_naive!(reading, zone)
+      placed.utc_offset + placed.std_offset
+    end
+
+    defp offset_of(%Tempo{shift: shift}), do: Compare.offset_seconds(shift)
+
+    test "is at the offset its zone is at on its own reading" do
+      zone = "America/New_York"
+
+      # New York goes from five hours behind UTC to four at 02:00 on
+      # 10 March 2024, and back at 02:00 on 3 November.
+      assert offset_at(~N[2024-03-10 00:00:00], zone) == -5 * 3_600
+      assert offset_at(~N[2024-03-11 00:00:00], zone) == -4 * 3_600
+
+      for {made, reading} <- [
+            {Tempo.shift(~o"2024Y3M10DZ-5H[America/New_York]", day: 1), ~N[2024-03-11 00:00:00]},
+            {Tempo.shift(~o"2024Y3M10DZ-5H[America/New_York]", month: 1),
+             ~N[2024-04-10 00:00:00]},
+            {Tempo.shift(~o"2024Y11M3DZ-4H[America/New_York]", day: 1), ~N[2024-11-04 00:00:00]},
+            {Tempo.shift(~o"2024-03-09T12:00-05:00[America/New_York]", day: 1),
+             ~N[2024-03-10 12:00:00]},
+            {Tempo.trunc(~o"2024-03-10T03:00-04:00[America/New_York]", :day),
+             ~N[2024-03-10 00:00:00]},
+            {Tempo.round(~o"2024-03-10T03:00-04:00[America/New_York]", :day),
+             ~N[2024-03-10 00:00:00]},
+            {Tempo.trunc(~o"2024-03-10T03:00-04:00[America/New_York]", :month),
+             ~N[2024-03-01 00:00:00]},
+            {elem(Tempo.split(~o"2024-03-10T03:00-04:00[America/New_York]"), 0),
+             ~N[2024-03-10 00:00:00]},
+            {elem(Tempo.at(~o"2024-11-03T00:30-04:00[America/New_York]", ~o"T02"), 1),
+             ~N[2024-11-03 02:00:00]},
+            {Tempo.next_workday(~o"2024Y3M9DZ-5H[America/New_York]", :US),
+             ~N[2024-03-11 00:00:00]}
+          ] do
+        assert {made, offset_of(made)} == {made, offset_at(reading, zone)}
+      end
+    end
+
+    test "is at its zone's offset at each end of a span" do
+      zone = "America/New_York"
+
+      {:ok, day} = Tempo.to_interval(~o"2024Y3M10DZ-5H[America/New_York]")
+      assert offset_of(Interval.from(day)) == offset_at(~N[2024-03-10 00:00:00], zone)
+      assert offset_of(Interval.to(day)) == offset_at(~N[2024-03-11 00:00:00], zone)
+
+      {:ok, month} = Tempo.to_interval(~o"2024Y3MZ-5H[America/New_York]")
+      assert offset_of(Interval.from(month)) == offset_at(~N[2024-03-01 00:00:00], zone)
+      assert offset_of(Interval.to(month)) == offset_at(~N[2024-04-01 00:00:00], zone)
+
+      {:ok, night} = Tempo.select(~o"2024Y3M10DZ-5H[America/New_York]", ~o"T22/T06")
+      [shift] = IntervalSet.members(night)
+      assert offset_of(Interval.from(shift)) == offset_at(~N[2024-03-10 22:00:00], zone)
+      assert offset_of(Interval.to(shift)) == offset_at(~N[2024-03-11 06:00:00], zone)
+
+      {:ok, rule} =
+        RRule.parse("FREQ=MONTHLY;BYMONTHDAY=30;COUNT=2",
+          from: ~o"2024-03-10T00:00-05:00[America/New_York]"
+        )
+
+      {:ok, occurrences} = Tempo.to_interval(rule)
+
+      assert occurrences |> IntervalSet.members() |> Enum.map(&offset_of(Interval.from(&1))) ==
+               [
+                 offset_at(~N[2024-03-30 00:00:00], zone),
+                 offset_at(~N[2024-04-30 00:00:00], zone)
+               ]
+    end
+
+    test "keeps the offset that tells apart the two showings of a reading" do
+      # 01:30 on 3 November 2024 is shown twice in New York, at four hours
+      # behind UTC and then at five.
+      assert {:ambiguous, _first, _second} =
+               DateTime.from_naive(~N[2024-11-03 01:30:00], "America/New_York")
+
+      {:ok, first} = Tempo.at(~o"2024-11-03T00:30-04:00[America/New_York]", ~o"T01:30")
+      {:ok, second} = Tempo.at(~o"2024-11-03T03:00-05:00[America/New_York]", ~o"T01:30")
+
+      assert {offset_of(first), offset_of(second)} == {-4 * 3_600, -5 * 3_600}
+    end
+
+    test "is left with no offset where it was written with none" do
+      assert Tempo.shift(~o"2024-03-10[America/New_York]", day: 1).shift == nil
+      assert Tempo.trunc(~o"2024-03-10T03:00[America/New_York]", :day).shift == nil
+    end
+
+    test "is so of every operation", %{harvest: harvest} do
+      assert found(harvest, :another_offset) == []
+    end
+  end
+
   # A Gregorian date as it is written in each other calendar, each worked
   # out apart from Tempo: a Buddhist year is 543 on, a Hebrew date is asked
   # of Elixir's `Date`, and a day of a week of Erlang.

@@ -1300,9 +1300,12 @@ defmodule Tempo.Interval do
     end
   end
 
+  # Each bound of a value written with an offset is at the offset its zone
+  # is at there: the day the clocks go forward ends at another offset than
+  # it starts at, and was given its end at the offset of its start.
   defp build_bounds(%Tempo{} = source, lower_time, upper_time) do
-    lower = %{source | time: lower_time}
-    upper = %{source | time: upper_time}
+    lower = Zone.at_its_offset(%{source | time: lower_time})
+    upper = Zone.at_its_offset(%{source | time: upper_time})
     {lower, upper}
   end
 

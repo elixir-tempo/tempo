@@ -2973,11 +2973,20 @@ defmodule Tempo do
       tempo
       |> truncate(day_unit(truncate_to, tempo))
       |> qualified_as_it_stands()
+      |> at_its_offset()
       |> NotBuilt.result()
     end
   end
 
   def trunc(value, _truncate_to), do: {:error, not_one_value("trunc/2", value)}
+
+  # A value written with an offset, cut or rounded to a coarser unit or
+  # placed at another time, is at the offset its zone is at on the reading
+  # it then has (`Tempo.Enumeration.Zone.at_its_offset/1`): 03:00 at −04:00
+  # on the day New York's clocks go forward is cut to a day that begins at
+  # −05:00, and was given the day at the offset of the hour.
+  defp at_its_offset(%__MODULE__{} = value), do: Zone.at_its_offset(value)
+  defp at_its_offset(other), do: other
 
   # A group of a set (`{1,2}G3MU`) is kept as a three-element entry that names
   # a span in each of its groups, so a value that holds one is no one value to
@@ -3188,7 +3197,11 @@ defmodule Tempo do
   def round(%__MODULE__{} = tempo, round_to) do
     with {:ok, round_to} <- validate_unit(round_to),
          :ok <- one_to_round(tempo, round_to) do
-      tempo |> Rounding.round(round_to) |> qualified_as_it_stands() |> NotBuilt.result()
+      tempo
+      |> Rounding.round(round_to)
+      |> qualified_as_it_stands()
+      |> at_its_offset()
+      |> NotBuilt.result()
     end
   end
 
@@ -3254,7 +3267,8 @@ defmodule Tempo do
         {nil, %{tempo | time: time}}
 
       {date, time} ->
-        {Qualification.only(%{tempo | time: date}), Qualification.only(%{tempo | time: time})}
+        {at_its_offset(Qualification.only(%{tempo | time: date})),
+         Qualification.only(%{tempo | time: time})}
     end
   end
 
@@ -3440,7 +3454,7 @@ defmodule Tempo do
   def at(%__MODULE__{} = value, %__MODULE__{} = other) do
     with {:ok, placed} <- place_on(value, other),
          :ok <- Validation.validate_zone_existence(placed) do
-      {:ok, placed}
+      {:ok, at_its_offset(placed)}
     end
   end
 

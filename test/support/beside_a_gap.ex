@@ -46,12 +46,29 @@ defmodule Tempo.BesideAGap do
         2011-12-3X 2011-12-XX 2011-{11,12}-30 2011-W52 2011-363)}
   ]
 
+  # Values beside a change of the clock that are written with the offset
+  # their zone is at, as a timestamp is: what an operation gives from one
+  # carries an offset too, and it is the zone's at the reading it is given
+  # with, which is another offset once the clock has changed.
+  @with_an_offset [
+    {"America/New_York", ~w(2024-03-10T00:00-05:00 2024-03-10T01:30-05:00 2024-03-10T03:00-04:00
+        2024-03-09T12:00-05:00 2024-03-09T02:30-05:00 2024Y3M10DZ-5H 2024Y3M9DZ-5H
+        2024-11-03T00:30-04:00 2024-11-03T01:30-04:00 2024-11-03T01:30-05:00
+        2024Y11M3DZ-4H)},
+    {"Europe/Paris", ~w(2026-03-29T01:00+01:00 2026-03-29T03:00+02:00 2026Y3M29DZ1H)},
+    {"Australia/Lord_Howe", ~w(2026-10-04T01:00+10:30 2026-10-04T02:30+11:00)},
+    {"Africa/Cairo", ~w(2023-04-27T23:00+02:00 2023Y4M27DZ2H)},
+    {"Pacific/Apia", ~w(2011-12-29T10:00-10:00 2011Y12M29DZ-10H)}
+  ]
+
   @doc """
   The texts of the values beside a gap, each with its zone.
   """
   @spec texts() :: [String.t()]
   def texts do
-    for {zone, values} <- @beside, value <- values, do: value <> "[" <> zone <> "]"
+    for {zone, values} <- @beside ++ @with_an_offset,
+        value <- values,
+        do: value <> "[" <> zone <> "]"
   end
 
   @doc """
@@ -332,9 +349,10 @@ defmodule Tempo.BesideAGap do
 
   A finding is `{property, operation, text, detail}`, the property `:raises`
   for an operation that raised, `:not_read` for a value it gave that the
-  reader does not take, or reads as another, and `:not_as_its_twin` for a
+  reader does not take, or reads as another, `:not_as_its_twin` for a
   value of another calendar that is given other dates and times than the
-  Gregorian value of the same day is.
+  Gregorian value of the same day is, and `:another_offset` for a value
+  given with an offset its zone is not at on that reading.
   """
   @spec harvest() :: %{cells: non_neg_integer(), gave: map(), findings: [tuple()]}
   def harvest do
@@ -369,7 +387,7 @@ defmodule Tempo.BesideAGap do
 
   defp cell({text, {name, operation}}) do
     values = text |> Tempo.from_iso8601!() |> operation.() |> values_in()
-    {name, values, not_read_among(values), []}
+    {name, values, not_read_among(values), [], another_offset_among(values)}
   end
 
   # A twin is given what its Gregorian value is, date for date.
@@ -383,11 +401,66 @@ defmodule Tempo.BesideAGap do
         {gregorian, twin} -> [{inspect(gregorian, limit: 24), inspect(twin, limit: 24)}]
       end
 
-    {name, values, not_read_among(values), differs}
+    {name, values, not_read_among(values), differs, another_offset_among(values)}
   end
 
   defp not_read_among(values),
     do: for(value <- values, found = not_read(value), found != nil, do: {value, found})
+
+  # The values given with an offset their zone is not at on the reading they
+  # are given with, each with the offsets Elixir places the reading at.
+  defp another_offset_among(values) do
+    for %Tempo{shift: [_ | _] = shift, extended: %{zone_id: zone}} = value <- values,
+        is_binary(zone),
+        {:ok, reading} <- [reading_of(value)],
+        offsets = offsets_at(reading, zone),
+        offsets != [],
+        seconds(shift) not in offsets,
+        do: {inspect(value), offsets}
+  end
+
+  # A Gregorian date, or date and time, as the reading of the clock it is
+  # given with. A value of another calendar or shape is not asked.
+  defp reading_of(%Tempo{
+         time: [{:year, year}, {:month, month}, {:day, day} | clock],
+         calendar: calendar
+       })
+       when is_integer(year) and is_integer(month) and is_integer(day) and
+              calendar in [Calendrical.Gregorian, Calendar.ISO] do
+    with {:ok, {hour, minute, second}} <- time_of_day(clock),
+         do: NaiveDateTime.new(year, month, day, hour, minute, second)
+  end
+
+  defp reading_of(%Tempo{}), do: :error
+
+  defp time_of_day(clock) do
+    units = for {unit, value} <- clock, unit in [:hour, :minute, :second], do: {unit, value}
+
+    if Enum.all?(units, fn {_unit, value} -> is_integer(value) end),
+      do: {:ok, {units[:hour] || 0, units[:minute] || 0, units[:second] || 0}},
+      else: :error
+  end
+
+  # The offsets Elixir places a reading at in a zone: one, two for a reading
+  # the clock shows twice, and none for one it skips, which is another
+  # finding (`not_read/1`).
+  defp offsets_at(%NaiveDateTime{} = reading, zone) do
+    case DateTime.from_naive(reading, zone) do
+      {:ok, placed} -> [placed.utc_offset + placed.std_offset]
+      {:ambiguous, first, second} -> Enum.map([first, second], &(&1.utc_offset + &1.std_offset))
+      _skipped_or_not_known -> []
+    end
+  end
+
+  # A shift in seconds, its sign carried by its first unit that is not zero.
+  defp seconds(shift) do
+    hours = Keyword.get(shift, :hour, 0)
+    minutes = Keyword.get(shift, :minute, 0)
+    seconds = Keyword.get(shift, :second, 0)
+    sign = if Enum.any?([hours, minutes, seconds], &(&1 < 0)), do: -1, else: 1
+
+    sign * (abs(hours) * 3_600 + abs(minutes) * 60 + abs(seconds))
+  end
 
   defp dated(%Tempo{time: time, shift: shift}), do: {time, shift}
 
@@ -420,12 +493,13 @@ defmodule Tempo.BesideAGap do
 
   defp gregorian(%Tempo{} = value, _calendar), do: dated(value)
 
-  defp reported({{:ok, {name, values, not_read, differs}}, cell}) do
+  defp reported({{:ok, {name, values, not_read, differs, another_offset}}, cell}) do
     text = elem(cell, 0)
 
     findings =
       for({value, found} <- not_read, do: {:not_read, name, text, {inspect(value), found}}) ++
-        for detail <- differs, do: {:not_as_its_twin, name, text, detail}
+        for(detail <- differs, do: {:not_as_its_twin, name, text, detail}) ++
+        for detail <- another_offset, do: {:another_offset, name, text, detail}
 
     {name, if(values == [], do: :gave_none, else: :gave), findings}
   end

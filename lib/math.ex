@@ -1092,6 +1092,10 @@ defmodule Tempo.Math do
   # 30 December 2011). It is then the day after, or the day before where the
   # step runs back, as the calendar there went from the 29th to the 31st. It
   # was left on the day, which no value is read as.
+  #
+  # A date written with an offset is at the offset its zone is at when the
+  # day begins: the day after the clocks go forward begins at another than
+  # the day they go forward on, and was given that day's.
   defp settle(%Tempo{time: time} = stepped, zone, shift, step) do
     cond do
       Keyword.has_key?(time, :hour) ->
@@ -1099,12 +1103,15 @@ defmodule Tempo.Math do
         settle_reading(stepped, shift, reading)
 
       on_a_day_left_out?(stepped) ->
-        add_wall(stepped, %Tempo.Duration{time: [day: direction(step)]})
+        stepped |> add_wall(%Tempo.Duration{time: [day: direction(step)]}) |> at_its_offset()
 
       true ->
-        stepped
+        at_its_offset(stepped)
     end
   end
+
+  defp at_its_offset(%Tempo{} = landed), do: Zone.at_its_offset(landed)
+  defp at_its_offset(other), do: other
 
   # A week stepped by days is a day of that week until the step is done
   # (`add_where_built/2`), and is asked as the calendar date it names: four

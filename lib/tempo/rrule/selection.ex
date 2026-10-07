@@ -173,10 +173,27 @@ defmodule Tempo.RRule.Selection do
   # Saturday's. RFC 5545 §3.3.10 has an instance on a local time that does
   # not exist ignored, and not counted. An occurrence a recurrence steps to
   # is another matter, and is the reading that long after (§3.3.5).
-  defp on_readings_the_clock_shows(occurrences) when is_list(occurrences),
-    do: Enum.reject(occurrences, &starts_on_a_reading_skipped?/1)
+  #
+  # An occurrence of a rule whose start is written with an offset is at the
+  # offset its zone is at on each of its ends
+  # (`Tempo.Enumeration.Zone.at_its_offset/1`).
+  defp on_readings_the_clock_shows(occurrences) when is_list(occurrences) do
+    for occurrence <- occurrences,
+        not starts_on_a_reading_skipped?(occurrence),
+        do: at_the_offsets_of_its_ends(occurrence)
+  end
 
   defp on_readings_the_clock_shows({:error, _reason} = error), do: error
+
+  defp at_the_offsets_of_its_ends(
+         %Interval{from: %Tempo{shift: [_ | _]} = from, to: to} = occurrence
+       ),
+       do: %{occurrence | from: Zone.at_its_offset(from), to: at_its_offset(to)}
+
+  defp at_the_offsets_of_its_ends(occurrence), do: occurrence
+
+  defp at_its_offset(%Tempo{} = to), do: Zone.at_its_offset(to)
+  defp at_its_offset(open_or_none), do: open_or_none
 
   defp starts_on_a_reading_skipped?(%Interval{from: %Tempo{} = from}),
     do: not Zone.shown?(from)
