@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A recurrence of one occurrence that has a rule keeps to its `:within` window: `FREQ=DAILY;BYDAY=SU;COUNT=1` from 2019 within `~o"2026"` is the empty set, where it was the Sunday of 2019 whatever the window, and `COUNT=2` was nothing. With no rule it is the interval it is, as an interval is.
+
 * A value that names more than 10,000 values is refused at once by `Tempo.to_interval/2`, with a `Tempo.ConversionError` whose reason is `:too_many_values`, as a recurrence of more than 10,000 occurrences is refused: `~o"2026Y{1..12}M{1..28}DT{0..23}H{0..59}M"` took ten seconds to give its 483,840 minutes, and `{0001-01-01..9999-12-31}` did not end. It holds for sets, masks (`1XXX-XX-15`), ranges, selections, `Tempo.shift/3` and `Tempo.select/2`, and a mask of more than 10,000 years is not walked; `Enum` takes a value's values one at a time still.
 
 * An interval whose end starts before its start does is refused with a `Tempo.IntervalEndpointsError`, the two ordered by where each starts: `2004-06-11/2004-06` (a day of June to June) and `2026-06-15T10:30/2026-06-15` were read, as intervals that end before they start and hold nothing, where EDTF's corpus lists the first as invalid. An end that starts where its start does is still read (`1111-01-01/1111`), as is one that names several values or has no year.
@@ -396,6 +398,10 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* A rule of one occurrence is converted as a rule however it is written. With no start (`R1/../P1D/FL7KN`, `FREQ=DAILY;BYDAY=SU;COUNT=1`) and with a start and an end (`R1/2019-01-01/2019-01-02/FL7KN`) it was handed back as it was given, with a start that has no year it was a `Tempo.UnanchoredError`, and `Enum` walked the span from its start; each is now the first its rule selects.
+
+* A rule with a count and no start, in a window with no end, has as many occurrences from the window's start as it counts: `Tempo.to_interval(~o"R2/../P1D", within: ~o"2026-01-01/..")` is 1 and 2 January, where it was two days of each stretch the walk took, without end.
 
 * `Tempo.RRule.to_string/1` writes the count of a rule of one occurrence (`FREQ=DAILY;COUNT=1`), where it wrote `FREQ=DAILY`, a rule with no end. It writes the frequency first, as RFC 5545 §3.3.10 requires of a rule that is written (`FREQ=DAILY;COUNT=10`, where it was `COUNT=10;FREQ=DAILY`).
 

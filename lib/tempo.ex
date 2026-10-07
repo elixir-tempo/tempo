@@ -7253,6 +7253,13 @@ defmodule Tempo do
     with an open start (`R/../P1Y/…`) and a selection in an
     unspecified year; a single value or interval ignores it.
 
+    A recurrence of one occurrence that has a rule
+    (`FREQ=DAILY;BYDAY=SU;COUNT=1`) is its one interval where that
+    overlaps the window and the empty set where it does not, as a
+    longer one's occurrences are kept. A rule with an open start
+    starts where the window does, so one with a count has that many
+    occurrences from there.
+
     A window with no zone bounds a value in a zone in that zone:
     `~o"2026-06"` is June in New York for a recurrence written in
     `[America/New_York]`. A window written with a zone or an offset
@@ -7551,15 +7558,20 @@ defmodule Tempo do
   # window's first day, month or year, whichever its start lacks — as
   # `at/2` places one value on another: `R/T22H/PT1H` within 15 June is from
   # 22:00 on 15 June, and `R/12M31D/P1D` within 2026 from 31 December 2026.
+  #
+  # One occurrence that has a rule is such a recurrence (`R1/T10H/PT1H/FL7KN`,
+  # the first hour of the first Sunday), and was refused as a value with no
+  # year. With no rule it is an interval, on the cycle it is written on.
   defp placed_on_window(
          %Interval{
            recurrence: recurrence,
+           repeat_rule: rule,
            from: %__MODULE__{time: [{unit, _} | _] = time} = start
          } =
            interval,
          within
        )
-       when recurrence != 1 and not is_nil(within) do
+       when (recurrence != 1 or is_struct(rule, __MODULE__)) and not is_nil(within) do
     with false <- on_the_time_line?(time),
          %__MODULE__{time: window_time} = window_from <- bound_lower(within),
          true <- on_the_time_line?(window_time),
@@ -7919,8 +7931,12 @@ defmodule Tempo do
   # the set it reads its condition from has no end.
   defp unending?(%Tempo.Interval{from: %Tempo.Set{} = domain}), do: open_domain?(domain)
 
-  defp unending?(%Tempo.Interval{from: from, to: to, recurrence: recurrence})
-       when from in [nil, :undefined] and to in [nil, :undefined] and recurrence != 1,
+  # A rule with no start and a count has as many occurrences from the
+  # window's start as it counts, and ends. It was walked as one with no end,
+  # stretch by stretch, and counted afresh in each: `FREQ=DAILY;COUNT=2`
+  # from 2026 on was two days of each stretch the walk took.
+  defp unending?(%Tempo.Interval{from: from, to: to, recurrence: :infinity})
+       when from in [nil, :undefined] and to in [nil, :undefined],
        do: true
 
   defp unending?(%Tempo.Interval{from: %Tempo{}, to: to, recurrence: :infinity})
@@ -8210,7 +8226,9 @@ defmodule Tempo do
   # survives the filter", not the raw `[from, from + duration)` period
   # (DTSTART itself need not satisfy the rule — it may be a Monday). So
   # apply the selection and return that first occurrence, still a single
-  # interval per the count-1 contract and consistent with COUNT ≥ 2.
+  # interval per the count-1 contract and consistent with COUNT ≥ 2. A
+  # `:within` window keeps it or does not, as it does the occurrences of a
+  # longer rule (`one_occurrence_within/2`).
   defp materialise(
          %Tempo.Interval{
            recurrence: 1,
@@ -8220,7 +8238,7 @@ defmodule Tempo do
            repeat_rule: %Tempo{},
            to: to
          } = interval,
-         _opts
+         opts
        )
        when to in [nil, :undefined] do
     {from, floor, interval} = selection_start(from, interval)
@@ -8236,7 +8254,7 @@ defmodule Tempo do
            1
          ) do
       {:ok, [%Tempo.Interval{} = first | _]} ->
-        {:ok, first}
+        one_occurrence_within(first, opts)
 
       {:ok, []} ->
         {:error,
@@ -8394,8 +8412,18 @@ defmodule Tempo do
   # selection names rather than being forced to a day. With no window there is
   # nothing to start from, so it stays an error rather than reporting success
   # while handing back the unmaterialised rule.
-  defp materialise(%Tempo.Interval{from: from, to: to, recurrence: recurrence} = interval, opts)
-       when from in [nil, :undefined] and to in [nil, :undefined] and recurrence != 1 do
+  #
+  # One of one occurrence is such a recurrence where it is written with a
+  # cadence (`R1/../P1D/FL7KN`, `FREQ=DAILY;BYDAY=SU;COUNT=1` with no start):
+  # it was handed back as it was given, window or none, where one of two
+  # occurrences gave the first two Sundays of the window. An interval open at
+  # both ends with no cadence (`../..`) is the span it is.
+  defp materialise(
+         %Tempo.Interval{from: from, to: to, recurrence: recurrence, duration: cadence} = interval,
+         opts
+       )
+       when from in [nil, :undefined] and to in [nil, :undefined] and
+              (recurrence != 1 or is_struct(cadence, Tempo.Duration)) do
     case Keyword.get(opts, :within) do
       nil ->
         {:error,
@@ -8423,16 +8451,22 @@ defmodule Tempo do
   # two months at a time. It materialises as the same recurrence written with
   # that duration, so its count, an unending one's `:within` window and a repeat
   # rule apply as they do there.
+  #
+  # One occurrence that has a rule (`R1/2019-01-01/2019-01-02/FL7KN`) is the
+  # first its rule selects, as one written with a duration is: it was handed
+  # back as it was given. With no rule it is the interval its two ends are.
   defp materialise(
          %Tempo.Interval{
            recurrence: recurrence,
            from: %Tempo{} = from,
            to: %Tempo{} = to,
-           duration: nil
+           duration: nil,
+           repeat_rule: rule
          } = interval,
          opts
        )
-       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
+       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) or
+              (recurrence == 1 and is_struct(rule, Tempo)) do
     with {:ok, duration} <- duration(from, to) do
       case materialise(%{interval | to: nil, duration: duration}, opts) do
         {:error, %UnboundedRecurrenceError{} = error} -> {:error, %{error | interval: interval}}
@@ -8564,6 +8598,21 @@ defmodule Tempo do
 
   defp materialise(value, _opts) do
     {:error, ConversionError.exception(value: value, target: Tempo.Interval)}
+  end
+
+  # The one occurrence of a recurrence that has a rule is kept to a `:within`
+  # window as the occurrences of a longer one are (decided 2026-10-08): where
+  # it does not overlap the window the recurrence has none there, which is
+  # the empty set. It was given whatever the window was, so
+  # `FREQ=DAILY;BYDAY=SU;COUNT=1` from 2019 within 2026 was a Sunday of 2019,
+  # where `COUNT=2` was nothing, and a window that is no window was passed
+  # over. One with no rule is the interval it is, as an interval is.
+  defp one_occurrence_within(%Tempo.Interval{} = occurrence, opts) do
+    case keep_within([occurrence], opts) do
+      {:ok, [kept]} -> {:ok, kept}
+      {:ok, []} -> IntervalSet.new([])
+      {:error, _reason} = error -> error
+    end
   end
 
   # The start a window supplies takes the zone the rule's suffix names, unless
@@ -10281,7 +10330,18 @@ defmodule Tempo do
   # Starting at that grain (rather than always a day) is what lets a
   # coarse selection yield a coarse occurrence; the window already says
   # where it starts, so a separate start option would be redundant.
+  # The start a window gives a rule that has none: where the window starts,
+  # at the grain the rule starts at. An open-ended window starts at its
+  # start, and is no span to put in a set.
   defp window_start(bound, %Tempo.Interval{} = interval) do
+    case open_window_start(bound) do
+      {:ok, %Tempo{} = from} -> start_at_unit(from, start_unit(interval))
+      {:error, _reason} = error -> error
+      :bounded -> bounded_window_start(bound, interval)
+    end
+  end
+
+  defp bounded_window_start(bound, interval) do
     case to_interval_set(bound) do
       {:ok, %Tempo.IntervalSet{} = set} -> window_start_from_set(set, start_unit(interval))
       {:error, _} = err -> err

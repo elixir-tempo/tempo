@@ -48,6 +48,10 @@ defimpl Enumerable, for: Tempo.Interval do
     {:error, __MODULE__}
   end
 
+  # One occurrence that has a rule is a recurrence still: the occurrence is
+  # the one its rule selects, and not the span from its start.
+  def count(%Tempo.Interval{repeat_rule: %Tempo{}}), do: {:error, __MODULE__}
+
   def count(%Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to} = interval) do
     case stepped_count(interval, from, to) do
       {n, _from, _unit} when is_integer(n) -> {:ok, max(n, 0)}
@@ -68,6 +72,8 @@ defimpl Enumerable, for: Tempo.Interval do
   def member?(%Tempo.Interval{recurrence: recurrence}, _element) when recurrence != 1 do
     {:error, __MODULE__}
   end
+
+  def member?(%Tempo.Interval{repeat_rule: %Tempo{}}, _element), do: {:error, __MODULE__}
 
   def member?(
         %Tempo.Interval{from: %Tempo{calendar: calendar} = from, to: %Tempo{} = to} = interval,
@@ -178,6 +184,8 @@ defimpl Enumerable, for: Tempo.Interval do
     {:error, __MODULE__}
   end
 
+  def slice(%Tempo.Interval{repeat_rule: %Tempo{}}), do: {:error, __MODULE__}
+
   def slice(
         %Tempo.Interval{from: %Tempo{calendar: calendar} = from, to: %Tempo{} = to} = interval
       ) do
@@ -255,6 +263,7 @@ defimpl Enumerable, for: Tempo.Interval do
   # to an end that holds a set (`2026Y6M{1,15}D/P1D`), which is the span from
   # each of its values.
   defp occurrences?(%Tempo.Interval{recurrence: recurrence}) when recurrence != 1, do: true
+  defp occurrences?(%Tempo.Interval{repeat_rule: %Tempo{}}), do: true
 
   defp occurrences?(%Tempo.Interval{from: from, to: to, duration: duration}) do
     selects?(from) or selects?(to) or
@@ -278,13 +287,26 @@ defimpl Enumerable, for: Tempo.Interval do
       {:ok, %Tempo.IntervalSet{} = occurrences} ->
         Enumerable.reduce(occurrences, acc, fun)
 
-      {:ok, %Tempo.Interval{}} ->
-        raise no_occurrences_error(interval)
+      {:ok, %Tempo.Interval{} = one} ->
+        reduce_one_occurrence(interval, one, acc, fun)
 
       {:error, exception} when is_exception(exception) ->
         raise exception
     end
   end
+
+  # The one occurrence of a recurrence that has a rule is walked as a set of
+  # one is. Any other value that comes back as one interval is refused.
+  defp reduce_one_occurrence(
+         %Tempo.Interval{recurrence: 1, repeat_rule: %Tempo{}},
+         %Tempo.Interval{repeat_rule: nil} = one,
+         acc,
+         fun
+       ),
+       do: Enumerable.reduce(Tempo.IntervalSet.new!([one]), acc, fun)
+
+  defp reduce_one_occurrence(interval, _one, _acc, _fun),
+    do: raise(no_occurrences_error(interval))
 
   defp no_occurrences_error(%Tempo.Interval{recurrence: recurrence} = interval)
        when recurrence != 1,
