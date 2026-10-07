@@ -244,6 +244,108 @@ defmodule Tempo.RRule.Selection do
 
   def expands?(_repeat_rule, _freq), do: false
 
+  @doc """
+  Returns where a walk goes on from when a part of a rule drops a candidate with the candidates after it.
+
+  A part that limits keeps or drops a candidate by a unit of its start: its month, its day, its hour. A candidate it drops is dropped with every candidate after it until that unit is one the part names, so a walk that learns that here passes over them without asking of each. `FREQ=MINUTELY;BYHOUR=9` drops the minute 00:00 by its hour, and with it every minute until 09:00.
+
+  ### Arguments
+
+  * `candidate` is a `t:Tempo.Interval.t/0`, the candidate a walk has reached.
+
+  * `repeat_rule` is either `nil` or a `%Tempo{}` whose `:time` holds `[selection: [...]]`, as for `apply/4`.
+
+  * `freq` is the enclosing `FREQ` atom, as for `apply/4`.
+
+  ### Returns
+
+  * `{:on, unit, value}` when the coarsest part that drops the candidate names a later value of `unit` in the period the candidate is in: the walk goes on from where the candidate's `unit` is `value`.
+
+  * `{:in_days, days}` when that part names days of the week: the walk goes on from the start of the day that many days on.
+
+  * `{:on_day, month, day}` when that part names days of the year: the walk goes on from the start of that month and day of the candidate's year.
+
+  * `{:next, unit}` when it names none: the walk goes on from the start of the next `unit`, a year, a month, a day, an hour or a minute.
+
+  * `nil` when no such part drops the candidate, which may be an occurrence, as `apply/4` says.
+
+  ### Examples
+
+      iex> midnight = %Tempo.Interval{from: ~o"2026-06-15T00:00", to: ~o"2026-06-15T00:01"}
+      iex> at_nine = %Tempo{time: [selection: [hour: 9]], calendar: Calendrical.Gregorian}
+      iex> Tempo.RRule.Selection.rules_out(midnight, at_nine, :minute)
+      {:on, :hour, 9}
+
+      iex> ten = %Tempo.Interval{from: ~o"2026-06-15T10:00", to: ~o"2026-06-15T10:01"}
+      iex> at_nine = %Tempo{time: [selection: [hour: 9]], calendar: Calendrical.Gregorian}
+      iex> Tempo.RRule.Selection.rules_out(ten, at_nine, :minute)
+      {:next, :day}
+
+      iex> nine = %Tempo.Interval{from: ~o"2026-06-15T09:00", to: ~o"2026-06-15T09:01"}
+      iex> at_nine = %Tempo{time: [selection: [hour: 9]], calendar: Calendrical.Gregorian}
+      iex> Tempo.RRule.Selection.rules_out(nine, at_nine, :minute)
+      nil
+
+  """
+  @spec rules_out(Interval.t(), Tempo.t() | nil, atom()) ::
+          {:on, atom(), integer()}
+          | {:in_days, pos_integer()}
+          | {:on_day, pos_integer(), pos_integer()}
+          | {:next, atom()}
+          | nil
+  def rules_out(
+        %Interval{from: %Tempo{calendar: calendar}} = candidate,
+        %Tempo{time: [{:selection, selection} | _units], calendar: rule_calendar} = rule,
+        freq
+      ) do
+    if passes_over?(rule, freq) and not week_calendar?(calendar) do
+      selection
+      |> days_of_week_in_candidate_calendar(rule_calendar, candidate)
+      |> coarsest_part_ruling_out(dated(candidate), freq)
+    end
+  end
+
+  def rules_out(_candidate, _repeat_rule, _freq), do: nil
+
+  @doc """
+  Returns whether a rule has a part that drops a candidate with the candidates after it, so that `rules_out/3` can have an answer.
+
+  ### Arguments
+
+  * `repeat_rule` is either `nil` or a `%Tempo{}` whose `:time` holds `[selection: [...]]`, as for `apply/4`.
+
+  * `freq` is the enclosing `FREQ` atom, as for `apply/4`.
+
+  ### Returns
+
+  * `true` for a rule of days, hours, minutes or seconds with a part that limits by a coarser unit, or by the unit it steps by, and no §12.10 window.
+
+  * `false` otherwise.
+
+  ### Examples
+
+      iex> at_nine = %Tempo{time: [selection: [hour: 9]], calendar: Calendrical.Gregorian}
+      iex> Tempo.RRule.Selection.passes_over?(at_nine, :minute)
+      true
+
+      iex> at_nine = %Tempo{time: [selection: [hour: 9]], calendar: Calendrical.Gregorian}
+      iex> Tempo.RRule.Selection.passes_over?(at_nine, :day)
+      false
+
+      iex> in_june = %Tempo{time: [selection: [month: 6]], calendar: Calendrical.Gregorian}
+      iex> Tempo.RRule.Selection.passes_over?(in_june, :week)
+      false
+
+  """
+  @spec passes_over?(Tempo.t() | nil, atom()) :: boolean()
+  def passes_over?(%Tempo{time: [{:selection, selection} | _units]}, freq)
+      when freq in [:day, :hour, :minute, :second] do
+    split_window(selection) == :none and
+      Enum.any?(selection, &(limit_held_to(&1, freq, selection) != nil))
+  end
+
+  def passes_over?(_repeat_rule, _freq), do: false
+
   @doc false
   # Whether a selection has a part that is counted in a date: a day of a
   # month or of a year, a week, a weekday, an event, a window, or a month
@@ -1077,6 +1179,151 @@ defmodule Tempo.RRule.Selection do
   end
 
   defp role(_entry, _scope, _selection), do: :limit
+
+  # The unit a part that limits holds a candidate to, which is the same for
+  # every candidate of that unit's period: a candidate's year, its month, its
+  # date, its hour, its minute and its second. A week is not one of them, as
+  # a week runs across a month and a year, and nor is a part whose days are
+  # worked out in another way (an event, a nearest weekday).
+  @held_to %{
+    year: :year,
+    month: :month,
+    traditional_month: :month,
+    day: :day,
+    day_of_year: :day,
+    day_of_week: :day,
+    hour: :hour,
+    minute: :minute,
+    second: :second
+  }
+
+  # A part that limits by a unit coarser than the frequency drops every
+  # candidate of that unit's period. One that limits by the unit the rule
+  # steps by drops each candidate until the next value it names: an hour, a
+  # minute or a second, and in a rule of days a day of the month, of the
+  # year or of the week.
+  defp limit_held_to({token, _value} = part, freq, selection) do
+    with unit when not is_nil(unit) <- Map.get(@held_to, token),
+         true <- held_above?(unit, freq),
+         :limit <- role(part, freq, selection) do
+      unit
+    else
+      _no_such_limit -> nil
+    end
+  end
+
+  defp limit_held_to(_entry, _freq, _selection), do: nil
+
+  defp held_above?(unit, unit), do: true
+
+  defp held_above?(unit, freq),
+    do: Map.fetch!(@unit_weight, unit) < Map.fetch!(@unit_weight, freq)
+
+  defp coarsest_part_ruling_out(selection, candidate, freq) do
+    wkst = Keyword.get(selection, :wkst, 1)
+
+    selection
+    |> Enum.flat_map(fn part ->
+      case limit_held_to(part, freq, selection) do
+        nil -> []
+        unit -> [{Map.fetch!(@unit_weight, unit), part}]
+      end
+    end)
+    |> Enum.sort_by(fn {weight, _part} -> weight end)
+    |> Enum.find_value(fn {_weight, part} ->
+      if drops?(part, candidate, freq, selection, wkst),
+        do: further_than_a_step(goes_on_from(part, candidate), freq)
+    end)
+  end
+
+  # The start of the next period of the frequency is the walk's own next
+  # step, and no further.
+  defp further_than_a_step({:next, freq}, freq), do: nil
+  defp further_than_a_step(goes_on, _freq), do: goes_on
+
+  # A year limits the periods a selection resolves in (`resolve_in_period/4`),
+  # and every other part is asked as the walk asks it.
+  defp drops?({:year, years}, candidate, _freq, _selection, _wkst),
+    do: not period_selected?(candidate, years)
+
+  defp drops?(part, candidate, freq, selection, wkst),
+    do: apply_entry(part, [candidate], freq, selection, wkst) == []
+
+  # Where the walk goes on from: the next value the part names in the period
+  # the candidate is in, and the start of the next such period where it
+  # names none. The values are the ones the part is asked by when it limits
+  # (`apply_role/6`). A weekday is so many days on, and a day of the year is
+  # the date Calendrical gives it.
+  defp goes_on_from({:year, _years}, _candidate), do: {:next, :year}
+
+  defp goes_on_from({:month, months}, candidate),
+    do: next_named(values_named(months, :month, candidate), :month, month_of(candidate), :year)
+
+  defp goes_on_from({:day, days}, candidate) do
+    days
+    |> List.wrap()
+    |> counted_values(:day, candidate)
+    |> next_named(:day, day_of(candidate), :month)
+  end
+
+  defp goes_on_from({:day_of_week, days}, candidate) do
+    with weekday when is_integer(weekday) <- weekday_of(candidate),
+         {:ok, %Range{} = week} <- period_values(:day_of_week, candidate),
+         [_ | _] = named <- whole(values_named(days, :day_of_week, candidate)) do
+      {:in_days, named |> Enum.map(&days_on(&1, weekday, Range.size(week))) |> Enum.min()}
+    else
+      _no_weekday_to_count_from -> {:next, :day}
+    end
+  end
+
+  defp goes_on_from(
+         {:day_of_year, days},
+         %Interval{from: %Tempo{calendar: calendar}} = candidate
+       ) do
+    with today when is_integer(today) <- day_of_year_of(candidate),
+         named = counted_values(List.wrap(days), :day_of_year, candidate),
+         later when is_integer(later) <- next_after(named, today),
+         {month, day} <- year_day_to_month_day(calendar, year_of(candidate), later) do
+      {:on_day, month, day}
+    else
+      _none_later_in_the_year -> {:next, :year}
+    end
+  end
+
+  defp goes_on_from({unit, values}, candidate) when unit in [:hour, :minute, :second] do
+    values
+    |> values_named(unit, candidate)
+    |> next_named(unit, get_time_unit(candidate, unit), period_of(unit))
+  end
+
+  defp goes_on_from({token, _value}, _candidate), do: {:next, Map.fetch!(@held_to, token)}
+
+  defp period_of(:hour), do: :day
+  defp period_of(:minute), do: :hour
+  defp period_of(:second), do: :minute
+
+  defp whole(values), do: Enum.filter(values, &is_integer/1)
+
+  # The days from one day of the week on to another, a week for the day
+  # itself.
+  defp days_on(named, weekday, days_in_week) do
+    case Integer.mod(named - weekday, days_in_week) do
+      0 -> days_in_week
+      days -> days
+    end
+  end
+
+  defp next_named(named, unit, current, period) when is_integer(current) do
+    case next_after(named, current) do
+      nil -> {:next, period}
+      value -> {:on, unit, value}
+    end
+  end
+
+  defp next_named(_named, _unit, _no_value, period), do: {:next, period}
+
+  defp next_after(named, current),
+    do: named |> whole() |> Enum.filter(&(&1 > current)) |> Enum.min(fn -> nil end)
 
   defp day_named_before_day_of_month?(selection),
     do: Keyword.has_key?(selection, :day_of_year) or Keyword.has_key?(selection, :event)

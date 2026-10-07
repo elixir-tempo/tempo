@@ -321,7 +321,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * A plain date or timestamp (`2026-06-15`, `2026-06`, `2026-06-15T10:30:00Z`, with or without an IXDTF suffix) is read by a scan of its bytes: `Tempo.from_iso8601/1` takes 14 µs for a date where it took 440, and 38 µs for a timestamp in a named zone where it took 250. Every other form is read by the grammar as before, and the scan is held to the grammar's reading of each text of its shapes.
 
-* `Tempo.shift/2` by a count of months or years takes the time of one step, the calendar saying where the count lands: a hundred thousand months takes 14 µs where it took 29 ms, and ten thousand years 12 µs where it took a millisecond. A yearly rule that never selects (`FREQ=YEARLY;BYMONTH=4` from 31 January) says so in half a second where it took five and a half.
+* `Tempo.shift/2` by a count of months or years takes the time of one step, the calendar saying where the count lands: a hundred thousand months takes 14 µs where it took 29 ms, and ten thousand years 12 µs where it took a millisecond.
 
 * A `SKIP` beside `BYYEARDAY=366` is read, and the day passed over in a year of 365 days: RFC 7529 moves a day of the month, and not a day of the year. A `SKIP` beside a day counted from the end that a month can lack (`BYMONTHDAY=-31`) is `{:error, {:unsupported_skip, {skip, [bymonthday: [-31]]}}}`, for `FORWARD` as for `BACKWARD`.
 
@@ -371,6 +371,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A rule whose occurrences are far apart for its frequency has them: `FREQ=MINUTELY;BYHOUR=9;BYMINUTE=0;COUNT=30` is thirty mornings and `FREQ=DAILY;BYMONTH=2;BYMONTHDAY=29;BYDAY=MO;COUNT=3` the three Mondays to 2112, where each was a `Tempo.UnboundedRecurrenceError`, the walk having asked every minute and every day; it now goes on from the next value a part names. A rule with no occurrence at all (`FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=31`, an April from 31 January, every fourth year's 29 February from 2026) has none, where its walk was cut short.
+
 * A value made from one written with an offset in a named zone is at the offset its zone is at on its own reading: `Tempo.shift(~o"2024-03-09T12:00-05:00[America/New_York]", day: 1)` was at `-04:00` already, and so now are a date stepped across a change of the clock, each end of a span, a selected member, a rule's occurrence, and what `Tempo.trunc/2`, `Tempo.round/2`, `Tempo.split/1` and `Tempo.at/2` give. Each kept the offset of the value it was made from, which names another moment to a reader that goes by the offset.
 
 * A time of day selected from the last day of a week, in a calendar of weeks, is that time on that day: `Tempo.select(Tempo.from_iso8601!("2024-W10-7[u-ca=iso-week]"), ~o"T09")` is 09:00 on the Sunday, where it was the empty set, the time having been merged onto the week's Monday.
@@ -381,7 +383,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.RRule.parse/2` refuses a `:from` that is not one value with `{:error, {:invalid_from, value}}`. An interval was taken for a start, and the recurrence built from it was returned by `Tempo.to_interval/2` as it was, with no occurrences and no error.
 
-* The occurrences of a recurrence in a window long after its start are found: `R/1990-01-01/P1D` within June 2026 is its thirty days, and an hourly rule from 2020 has its twenty-four hours of a day this year, where each gave none, the walk having given up before it came to the window. A recurrence that was cut short said nothing, so `FREQ=MINUTELY;BYHOUR=9;BYMINUTE=0;COUNT=30` gave seven occurrences and `R20000/2026-06-01/P1D` ten thousand; each is now refused by name.
+* The occurrences of a recurrence in a window long after its start are found: `R/1990-01-01/P1D` within June 2026 is its thirty days, and an hourly rule from 2020 has its twenty-four hours of a day this year, where each gave none, the walk having given up before it came to the window. A recurrence that was cut short said nothing, so `R20000/2026-06-01/P1D` gave ten thousand occurrences, which is now refused by name.
 
 * A suffix key written twice in an IXDTF suffix is read the first time, as RFC 9557 §3.3 requires: `[u-ca=chinese][u-ca=japanese]` is the Chinese calendar and `[foo=a][foo=b]` holds `a`, where the last was read. With a critical one among them that names another value (`[!u-ca=chinese][u-ca=japanese]`) the string is a `Tempo.ParseError`.
 

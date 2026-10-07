@@ -6813,7 +6813,11 @@ defmodule Tempo do
     does not come to its end, a count, an `UNTIL` or the close of the
     `:within` window, in 10,000 periods of its cadence, or has more than
     10,000 occurrences before it. What was found is then not all of its
-    occurrences, so none are given. A walk kept to a `:within` window
+    occurrences, so none are given. A rule whose parts leave its
+    occurrences far apart for its frequency is not asked of each period
+    (`FREQ=MINUTELY;BYHOUR=9;BYMINUTE=0` goes from each morning to the
+    next), and a rule that has no occurrence, the 31st of April, returns
+    the empty set. A walk kept to a `:within` window
     begins at the first period that can reach the window, however long
     before it the recurrence starts, so a daily rule from 1990 has its
     days of this month; a rule with a count is counted from its start.
@@ -8490,10 +8494,9 @@ defmodule Tempo do
   # A walk takes at most `@recurrence_safety_cap` periods of its cadence, and
   # gives at most that many occurrences where it has no count. Past either
   # it fails. It was cut short there and said nothing, so
-  # `FREQ=MINUTELY;BYHOUR=9;BYMINUTE=0;COUNT=30` gave seven occurrences,
-  # `R20000/2026-06-01/P1D` ten thousand, and a rule that selects nothing
-  # none, as if it had none. A walk that has what it was asked for before
-  # the cap never meets the failure, which is its last element (`walked/2`).
+  # `R20000/2026-06-01/P1D` gave ten thousand occurrences, as if it had no
+  # more. A walk that has what it was asked for before the cap never meets
+  # the failure, which is its last element (`walked/2`).
   defp no_more_than_the_cap(walked, counted) do
     Stream.transform(walked, 0, fn
       _element, :past -> {:halt, :past}
@@ -8520,6 +8523,137 @@ defmodule Tempo do
           "has more before its end. What was found is not all of them, so none are given. " <>
           "Give it a narrower :within window."
     )
+  end
+
+  # A rule that has no occurrence has nothing for a walk to find: the 31st of
+  # April (`FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=31`), the 30th of February, an
+  # April of a rule of years that starts on the 31st of a month. Such a rule
+  # has no occurrences, which is its answer, and it was a walk that never
+  # ended until it was cut short (decided 2026-10-07).
+  #
+  # A walk asks when it has made `@periods_before_asking` periods and found
+  # nothing (`selected_within_the_cap/3`): a rule with occurrences nearly
+  # always has one by then, and is never asked. It is told in two ways, each
+  # of a rule in the Gregorian calendar whose parts are counted in a date or
+  # a time of day. One whose dates are worked out in another way (an event,
+  # a window, a listed year) or in another calendar is not told so, and its
+  # walk goes on until it is cut short.
+  #
+  # The Gregorian calendar comes round every four hundred years, in its
+  # dates and in their days of the week. So a rule of years that has
+  # selected nothing in four hundred of its periods never will, whatever it
+  # starts on and however many years it steps by, and nor will a rule of
+  # months in the months of four hundred years: the periods after them are
+  # those again, and the walk has shown it.
+  #
+  # A rule of a finer frequency has more periods in four hundred years than
+  # a walk makes, and is told from its parts. A Gregorian year is one of
+  # fourteen kinds, a leap year or not that begins on one of the seven days
+  # of the week, and a year's kind settles every date in it: its months'
+  # lengths, its weekdays, its weeks. So the parts of a rule that name a
+  # date, asked of one year of each kind, select a date in some year or in
+  # none. They are asked as the walk asks them (`Tempo.RRule.Selection`), of
+  # every period of the year, which is as many periods as the rule has or
+  # more: a rule that has no occurrence because of what it steps by
+  # (`FREQ=DAILY;INTERVAL=7;BYDAY=MO` from a Tuesday) is not told so. The
+  # parts that do not name a date are left out there: a time of day, and a
+  # position among what a period selects, each of which only keeps or drops
+  # what the others select.
+  @names_a_date [:wkst, :skip, :month, :week, :day_of_year, :day, :day_of_week, :byday]
+  @names_no_date [:hour, :minute, :second, :instance]
+  @time_of_day [:hour, :minute, :second, :microsecond]
+
+  # The periods a walk has made, having found nothing, when it asks whether
+  # its rule has any occurrence: early, and again where a rule of months has
+  # made the months of the years the calendar comes round in.
+  @years_of_a_cycle 400
+  @periods_before_asking @years_of_a_cycle
+  @months_of_a_cycle 12 * @years_of_a_cycle
+
+  defp has_no_occurrence?(
+         %Tempo.Interval{
+           from: %Tempo{time: [{:year, year} | _rest], calendar: calendar},
+           repeat_rule: %Tempo{time: [{:selection, selection} | units]}
+         } = interval,
+         cadence,
+         periods
+       )
+       when is_integer(year) and year >= 1 do
+    Compare.effective_calendar(calendar) == Gregorian and
+      Enum.all?(selection, fn {token, _value} ->
+        token in @names_a_date or token in @names_no_date
+      end) and
+      Enum.all?(units, fn {token, _value} -> token in @time_of_day end) and
+      (come_round?(cadence, periods) or
+         (periods == @periods_before_asking and selects_no_date?(interval, cadence)))
+  end
+
+  defp has_no_occurrence?(_interval, _cadence, _periods), do: false
+
+  # Whether a walk has made every period its rule ever has, the calendar
+  # having come round: a rule of every fourth year makes four hundred
+  # periods in sixteen hundred years, which are four hundred years' kinds
+  # again.
+  defp come_round?(%Tempo.Duration{time: [year: years]}, periods)
+       when is_integer(years) and years > 0,
+       do: periods >= @years_of_a_cycle
+
+  defp come_round?(%Tempo.Duration{time: [month: months]}, periods)
+       when is_integer(months) and months > 0,
+       do: periods >= @months_of_a_cycle
+
+  defp come_round?(_cadence, _periods), do: false
+
+  defp selects_no_date?(
+         %Tempo.Interval{
+           from: %Tempo{time: [{:year, year} | _rest]},
+           repeat_rule: %Tempo{time: [{:selection, selection} | _units]} = rule
+         },
+         %Tempo.Duration{time: [{unit, _amount} | _]}
+       ) do
+    dates = Enum.reject(selection, fn {token, _value} -> token in @names_no_date end)
+
+    dates != [] and
+      year
+      |> one_year_of_each_kind()
+      |> Enum.all?(&no_date_in_year?(&1, %{rule | time: [selection: dates]}, each(unit)))
+  end
+
+  # Every period of a year: each of the rule's own, or each day where its
+  # periods are shorter than a day.
+  defp each(unit) when unit in [:year, :month, :week, :day],
+    do: %Tempo.Duration{time: [{unit, 1}]}
+
+  defp each(_shorter_than_a_day), do: %Tempo.Duration{time: [day: 1]}
+
+  @kinds_of_year 14
+
+  defp one_year_of_each_kind(year) do
+    year
+    |> Stream.iterate(&(&1 + 1))
+    |> Stream.uniq_by(&kind_of_year/1)
+    |> Enum.take(@kinds_of_year)
+  end
+
+  defp kind_of_year(year),
+    do: {Gregorian.leap_year?(year), Gregorian.day_of_week(year, 1, 1, :monday)}
+
+  defp no_date_in_year?(year, rule, cadence) do
+    start = %Tempo{time: [year: year, month: 1, day: 1], calendar: Gregorian}
+    last = %Tempo{time: [year: year, month: 12, day: 31], calendar: Gregorian}
+    rule_of_dates = %Tempo.Interval{from: start, duration: cadence, repeat_rule: rule}
+
+    walk =
+      iterate_recurrence(
+        {start, start, 0},
+        cadence,
+        fn period_start, _period -> Math.add(period_start, cadence) end,
+        &under_until?(&1, last),
+        selected_by_the_rule(rule_of_dates, cadence),
+        %{}
+      )
+
+    walk == {:ok, []}
   end
 
   # The occurrences a walk gave. A step its cadence could not take ends the
@@ -8607,41 +8741,72 @@ defmodule Tempo do
          cadence,
          occurrence_end,
          start_predicate,
-         selection_fn,
+         selection,
          metadata,
          first \\ 0
-       )
-
-  defp period_occurrences(
-         from,
-         cadence,
-         occurrence_end,
-         start_predicate,
-         {:each_start_once, selection_fn},
-         metadata,
-         first
        ) do
-    from
-    |> period_occurrences(cadence, occurrence_end, start_predicate, selection_fn, metadata, first)
-    |> Stream.uniq_by(&start_of/1)
+    %{select: select, rules_out: rules_out, once?: once?, nothing?: nothing?} =
+      selection_parts(selection)
+
+    occurrences =
+      from
+      |> candidates(cadence, occurrence_end, metadata, first, {select, rules_out})
+      |> Stream.take_while(&walking?(&1, start_predicate))
+      |> selected_within_the_cap(select, nothing?)
+      |> until_failure()
+
+    if once?, do: Stream.uniq_by(occurrences, &start_of/1), else: occurrences
   end
 
-  defp period_occurrences(
-         from,
-         cadence,
-         occurrence_end,
-         start_predicate,
-         selection_fn,
-         metadata,
-         first
-       )
-       when is_function(selection_fn, 1) do
-    from
-    |> recurrence_candidates(cadence, occurrence_end, metadata, first)
-    |> Stream.take_while(&walking?(&1, start_predicate))
-    |> no_more_than_the_cap(:periods)
-    |> Stream.flat_map(&selected(&1, selection_fn))
-    |> until_failure()
+  # What a selection is made of (`selection_fn/2`): the resolver, and what a
+  # rule adds to it. A rule that moves a day (`moves_days?/1`) gives each
+  # start once; one with a part that limits by a unit coarser than its
+  # frequency is walked past the periods that part drops; and a rule may
+  # be asked whether it selects any date at all.
+  defp selection_parts(select) when is_function(select, 1),
+    do: %{select: select, rules_out: nil, once?: false, nothing?: nil}
+
+  defp selection_parts({:each_start_once, selection}),
+    do: %{selection_parts(selection) | once?: true}
+
+  defp selection_parts({:passing_over, rules_out, selection}),
+    do: %{selection_parts(selection) | rules_out: rules_out}
+
+  defp selection_parts({:nothing_where, nothing?, selection}),
+    do: %{selection_parts(selection) | nothing?: nothing?}
+
+  defp candidates(from, cadence, occurrence_end, metadata, first, {_select, rules_out} = asked)
+       when is_function(rules_out, 1) and is_function(occurrence_end, 2),
+       do: candidates_passing_over(from, cadence, occurrence_end, metadata, first, asked)
+
+  defp candidates(from, cadence, occurrence_end, metadata, first, _asked),
+    do: recurrence_candidates(from, cadence, occurrence_end, metadata, first)
+
+  # What each period selects, for at most `@recurrence_safety_cap` periods
+  # (`no_more_than_the_cap/2`). A walk that has found nothing in its first
+  # `@periods_before_asking`, or in the months of a cycle, asks whether its
+  # rule has any occurrence (`has_no_occurrence?/3`), and ends there with
+  # nothing where it has none.
+  defp selected_within_the_cap(periods, select, nothing?) do
+    Stream.transform(periods, {0, false}, fn
+      _period, :past ->
+        {:halt, :past}
+
+      _period, {@recurrence_safety_cap, _found?} ->
+        {[{:error, walk_too_long_error(:periods)}], :past}
+
+      period, {count, false} = made
+      when count in [@periods_before_asking, @months_of_a_cycle] and is_function(nothing?, 1) ->
+        if nothing?.(count), do: {:halt, :past}, else: selected_in(period, select, made)
+
+      period, made ->
+        selected_in(period, select, made)
+    end)
+  end
+
+  defp selected_in(period, select, {count, found?}) do
+    occurrences = selected(period, select)
+    {occurrences, {count + 1, found? or occurrences != []}}
   end
 
   defp start_of(%Tempo.Interval{from: from}), do: from
@@ -8665,6 +8830,8 @@ defmodule Tempo do
   defp walking?({start, _candidate}, start_predicate), do: start_predicate.(start)
 
   defp selected({:error, _reason} = failure, _selection_fn), do: [failure]
+  defp selected({_start, :passed_over}, _selection_fn), do: []
+  defp selected({_start, {:selected, occurrences}}, _selection_fn), do: occurrences
   defp selected({_start, candidate}, selection_fn), do: selection_fn.(candidate)
 
   # Contiguous fast path: walk the starts once and pair each with the
@@ -8729,6 +8896,234 @@ defmodule Tempo do
   defp held_for_the_next(candidate, nil), do: {[], candidate}
   defp held_for_the_next({start, _span} = candidate, {start, _held}), do: {[], candidate}
   defp held_for_the_next(candidate, held), do: {[held], candidate}
+
+  # The candidates of a rule one of whose parts limits by a unit coarser than
+  # its frequency, or by the unit it steps by: `FREQ=MINUTELY;BYHOUR=9` keeps
+  # a minute by its hour, and `FREQ=DAILY;BYMONTH=2` a day by its month. Such
+  # a part drops a candidate with every candidate after it until the next
+  # value it names, so where a period selects nothing the walk asks whether
+  # such a part dropped it (`Tempo.RRule.Selection.rules_out/3`), and goes on
+  # from the first period that starts no earlier than that value, asking
+  # nothing of the periods between.
+  #
+  # Each period was asked, and a walk takes ten thousand at most, so a rule
+  # whose occurrences are far apart for its frequency never came to them:
+  # `FREQ=MINUTELY;BYHOUR=9;BYMINUTE=0;COUNT=30` is thirty mornings and
+  # 43,000 minutes, and it was refused. It is now walked in a few periods a
+  # day. A period that selects nothing is one of the walk's, and is counted
+  # as one.
+  #
+  # A period is asked what it selects here, where the walk is made, and the
+  # walk asks where to go on from at a period that selects nothing. An
+  # answer that takes it no further than its next step is asked for less
+  # often: after a run of two such periods, and then of three
+  # (`@longest_run_before_asking`). So a rule for Mondays, Wednesdays and
+  # Fridays, which has a day between its occurrences, is walked as it was
+  # and asked nothing more, and one for Mondays alone goes from each Tuesday
+  # to the Monday after.
+  defp candidates_passing_over(from, cadence, occurrence_end_fn, metadata, first, asked) do
+    walk = {from, cadence, occurrence_end_fn, strip_span_directives(metadata)}
+
+    {first, 0, 1}
+    |> Stream.unfold(&candidate_or_passed_over(&1, walk, asked))
+    |> each_start_once(from)
+  end
+
+  defp candidate_or_passed_over(:stopped, _walk, _asked), do: nil
+
+  defp candidate_or_passed_over(
+         {step, run, run_before_asking},
+         {from, cadence, occurrence_end_fn, metadata} = walk,
+         asked
+       ) do
+    case stepped_candidate(step, from, cadence, occurrence_end_fn, metadata) do
+      {{%Tempo{} = start, candidate}, next} ->
+        selected_or_passed_over(start, candidate, {next, run, run_before_asking}, walk, asked)
+
+      {failure, :stopped} ->
+        {failure, :stopped}
+    end
+  end
+
+  @longest_run_before_asking 3
+
+  defp selected_or_passed_over(
+         start,
+         candidate,
+         {next, run, run_before_asking},
+         walk,
+         {select, rules_out}
+       ) do
+    case select.(candidate) do
+      [] when run + 1 < run_before_asking ->
+        {{start, :passed_over}, {next, run + 1, run_before_asking}}
+
+      [] ->
+        goes_on = going_on(rules_out.(candidate), start, next, walk)
+        {{start, :passed_over}, {goes_on, 0, run_after(goes_on, next, run_before_asking)}}
+
+      occurrences ->
+        {{start, {:selected, occurrences}}, {next, 0, run_before_asking}}
+    end
+  end
+
+  # The run of periods that select nothing before the walk asks again: the
+  # next such period where the answer took it further than its next step,
+  # and a longer run where it did not.
+  defp run_after(next, next, run_before_asking),
+    do: min(run_before_asking + 1, @longest_run_before_asking)
+
+  defp run_after(_further, _next, _run_before_asking), do: 1
+
+  @seconds_in %{second: 1, minute: 60, hour: 3_600, day: 86_400}
+
+  # Where a walk goes on from is found by counting to it and asking a few of
+  # the walk's starts, which is more than the next few steps cost: Mondays,
+  # Wednesdays and Fridays are two days apart, and a rule of days is walked
+  # to each by its steps. A month and a year are always further.
+  @periods_worth_passing_over 3
+
+  defp going_on(nil, _start, next, _walk), do: next
+
+  defp going_on(goes_on, start, next, {_from, cadence, _end, _metadata} = walk) do
+    if anchored?(start) and worth_passing_over?(seconds_on(goes_on, start), cadence),
+      do: step_going_on(goes_on, start, next, walk),
+      else: next
+  end
+
+  defp worth_passing_over?(:longer, _cadence), do: true
+
+  defp worth_passing_over?(seconds, %Tempo.Duration{time: [{unit, amount}]}),
+    do: seconds > @periods_worth_passing_over * amount * Map.fetch!(@seconds_in, unit)
+
+  # How far on the walk would go, where that is a count of seconds.
+  defp seconds_on({:in_days, days}, _start), do: days * Map.fetch!(@seconds_in, :day)
+  defp seconds_on({:next, unit}, _start), do: Map.get(@seconds_in, unit, :longer)
+  defp seconds_on({:on_day, _month, _day}, _start), do: :longer
+
+  defp seconds_on({:on, unit, value}, %Tempo{time: time}) do
+    case {Map.get(@seconds_in, unit), Keyword.get(time, unit)} do
+      {seconds, current} when is_integer(seconds) and is_integer(current) ->
+        (value - current) * seconds
+
+      _a_month_or_a_year ->
+        :longer
+    end
+  end
+
+  # The first step whose period starts no earlier than where the walk goes
+  # on from: the reading of `start` with its `unit` a later value the part
+  # names (09:00 of its day), a later day of its year, the start of the day
+  # so many days on, or the start of the next `unit`. A reading the clock of
+  # its zone skips is no reading to go on from, and the walk goes on from
+  # the next `unit` there.
+  defp step_going_on({:next, unit}, start, next, walk), do: step_past(unit, start, next, walk)
+
+  defp step_going_on({:on, unit, value}, start, next, walk),
+    do: step_onto(start, unit, [{unit, value}], next, walk)
+
+  defp step_going_on({:on_day, month, day}, start, next, walk),
+    do: step_onto(start, :day, [month: month, day: day], next, walk)
+
+  defp step_going_on({:in_days, days}, start, next, {from, cadence, _end, _metadata} = walk) do
+    with %Tempo{} = day <- trunc(start, :day),
+         %Tempo{} = named <- Math.add(day, %Tempo.Duration{time: [day: days]}) do
+      first_step_reaching(named, start, next, from, cadence)
+    else
+      _no_such_day -> step_past(:day, start, next, walk)
+    end
+  end
+
+  # The reading of `start` cut to `unit`, with the units named given their
+  # values.
+  defp step_onto(start, unit, named_units, next, {from, cadence, _end, _metadata} = walk) do
+    with %Tempo{time: time} = unit_start <- trunc(start, unit),
+         named = earliest_showing(%{unit_start | time: Keyword.merge(time, named_units)}),
+         true <- Zone.shown?(named) do
+      first_step_reaching(named, start, next, from, cadence)
+    else
+      _no_such_reading -> step_past(unit, start, next, walk)
+    end
+  end
+
+  # A reading made from another's units is at its zone's offset and not at
+  # the other's, and at the earlier of two where the clock shows it twice:
+  # no period that starts on it is passed over.
+  defp earliest_showing(%Tempo{extended: %{zone_id: zone}} = named) when is_binary(zone),
+    do: %{named | shift: nil}
+
+  defp earliest_showing(named), do: named
+
+  # The first step whose period starts no earlier than the end of the
+  # `unit` that `start` is in: the next minute, hour, day, month or year.
+  # `next` is the step after the one that gave `start`, and the answer where
+  # there is no such moment to reach.
+  defp step_past(unit, %Tempo{} = start, next, {from, cadence, _occurrence_end, _metadata}) do
+    with %Tempo{} = unit_start <- trunc(start, unit),
+         %Tempo{} = unit_end <- Math.add(unit_start, %Tempo.Duration{time: [{unit, 1}]}) do
+      first_step_reaching(unit_end, start, next, from, cadence)
+    else
+      _no_such_moment -> next
+    end
+  end
+
+  # How far an estimate of a step is put right, a step at a time: a day is
+  # an hour longer or shorter where the clock changes, and no more.
+  @steps_put_right 4
+
+  # The steps are a whole number of seconds apart but where a day is longer
+  # or shorter than twenty-four hours, so the step is counted from the time
+  # between and then held to the walk's own starts: the period before it
+  # starts before the limit, so every period passed over does, and it does
+  # not.
+  defp first_step_reaching(
+         limit,
+         start,
+         next,
+         from,
+         %Tempo.Duration{time: [{unit, amount}]} = cadence
+       ) do
+    apart = seconds_between(start, limit)
+    period = amount * Map.fetch!(@seconds_in, unit)
+    estimate = next - 1 + max(1, div(apart + period - 1, period))
+    before? = &period_starts_before?(nth_start(from, cadence, &1), limit)
+
+    with {:ok, count} <- back_to_the_first(estimate, next, before?, @steps_put_right),
+         {:ok, count} <- on_to_the_first(count, before?, @steps_put_right) do
+      count
+    else
+      :not_found -> next
+    end
+  end
+
+  defp first_step_reaching(_limit, _start, next, _from, _cadence), do: next
+
+  defp seconds_between(from, to),
+    do: Kernel.trunc(Compare.to_utc_seconds(to)) - Kernel.trunc(Compare.to_utc_seconds(from))
+
+  defp period_starts_before?(%Tempo{} = start, limit),
+    do: Compare.compare_endpoints(start, limit) == :earlier
+
+  defp period_starts_before?(_no_start, _limit), do: false
+
+  # The estimate, or the step before it, and so on, down to the first whose
+  # predecessor starts before the limit.
+  defp back_to_the_first(count, next, _before?, _tries) when count <= next, do: {:ok, next}
+  defp back_to_the_first(_count, _next, _before?, 0), do: :not_found
+
+  defp back_to_the_first(count, next, before?, tries) do
+    if before?.(count - 1),
+      do: {:ok, count},
+      else: back_to_the_first(count - 1, next, before?, tries - 1)
+  end
+
+  defp on_to_the_first(_count, _before?, 0), do: :not_found
+
+  defp on_to_the_first(count, before?, tries) do
+    if before?.(count),
+      do: on_to_the_first(count + 1, before?, tries - 1),
+      else: {:ok, count}
+  end
 
   # The candidate that starts at `start` and the start of the one after it,
   # which is where it ends. A step the cadence cannot take is the walk's last
@@ -8850,7 +9245,14 @@ defmodule Tempo do
     fn candidate -> [candidate] end
   end
 
-  defp selection_fn(
+  # A rule's selection, with the question a walk that finds nothing asks of
+  # it (`has_no_occurrence?/3`).
+  defp selection_fn(%Tempo.Interval{repeat_rule: %Tempo{}} = interval, cadence) do
+    {:nothing_where, &has_no_occurrence?(interval, cadence, &1),
+     selected_by_the_rule(interval, cadence)}
+  end
+
+  defp selected_by_the_rule(
          %Tempo.Interval{repeat_rule: %Tempo{} = rule, metadata: metadata} = interval,
          %Tempo.Duration{} = cadence
        ) do
@@ -8869,8 +9271,21 @@ defmodule Tempo do
       end
     end
 
+    select = passing_over(select, rule, freq, cadence)
     if moves_days?(rule), do: {:each_start_once, select}, else: select
   end
+
+  # A rule of days, hours, minutes or seconds, a whole number of them apart
+  # and running forward, that has a part which limits by a coarser unit is
+  # walked past the periods that part drops.
+  defp passing_over(select, rule, freq, %Tempo.Duration{time: [{unit, amount}]})
+       when unit in [:day, :hour, :minute, :second] and is_integer(amount) and amount > 0 do
+    if Selection.passes_over?(rule, freq),
+      do: {:passing_over, &Selection.rules_out(&1, rule, freq), select},
+      else: select
+  end
+
+  defp passing_over(select, _rule, _freq, _cadence), do: select
 
   # A rule that moves a day its month lacks (RFC 7529's `SKIP`) can move it
   # onto a day the period after selects too: the 31st of February moved

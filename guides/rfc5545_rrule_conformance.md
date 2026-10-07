@@ -105,6 +105,14 @@ A rule with `FREQ` but no `COUNT`, no `UNTIL`, and no `:within` window is infini
 
 The error message points callers at the `:within` option. This is a deliberate design choice (see the [scheduling guide](./scheduling.md)) — infinite recurrences are rule-shaped, not set-shaped, and Tempo refuses to silently iterate without a stop condition.
 
+## A walk is bounded
+
+A rule's occurrences are found by walking the periods of its frequency. A walk makes at most 10,000 periods and gives at most 10,000 occurrences at once, and a rule that has not come to its `COUNT`, its `UNTIL` or the end of its window by then returns a `Tempo.UnboundedRecurrenceError` and none of what it found, which would not be all of it.
+
+A rule whose parts leave its occurrences far apart for its frequency is not asked of every period. Where a period selects nothing, the walk goes on from the next value named by the part that dropped it — a `BYMONTH`, `BYMONTHDAY`, `BYYEARDAY` or `BYDAY`, a `BYHOUR`, `BYMINUTE` or `BYSECOND` — so `FREQ=MINUTELY;BYHOUR=9;BYMINUTE=0;COUNT=30` is thirty mornings in a few periods a day, and `FREQ=DAILY;BYMONTH=2;BYMONTHDAY=29;BYDAY=MO` comes to each 29 February that is a Monday, decades apart. A `BYWEEKNO` is asked of each period, a week running across a month and a year.
+
+A rule that has no occurrence has none, and returns the empty set: the 31st of April (`FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=31`), an April from a start on 31 January, the 29 February of every fourth year from 2026. A rule of years or months is told so once it has selected nothing in the periods of four hundred years, in which the Gregorian calendar comes round, and a rule of a finer frequency from the dates its parts name. One finer than a month that has no occurrence because of what it steps by (`FREQ=DAILY;INTERVAL=7;BYDAY=MO` from a Tuesday) is not told so, and is cut short as any long walk is; nor is a rule in another calendar.
+
 ## Not supported
 
 A small list of features outside Tempo's current RRULE scope:

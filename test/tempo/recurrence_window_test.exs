@@ -261,15 +261,15 @@ defmodule Tempo.RecurrenceWindowTest do
   describe "a walk that is cut short" do
     test "fails by name, where it gave the occurrences it had come to" do
       for {text, from} <- [
-            # Thirty occurrences, 43,000 minutes apart in all.
-            {"FREQ=MINUTELY;BYHOUR=9;BYMINUTE=0;COUNT=30", "2026-06-01T00:00:00"},
-            {"FREQ=HOURLY;BYHOUR=9;COUNT=500", "2026-06-01T00:00:00"},
-            {"FREQ=DAILY;BYDAY=MO;COUNT=2000", "2026-06-01"},
             {"FREQ=DAILY;COUNT=10001", "2026-06-01"},
-            # The next 29 February that is a Monday is 28 years on.
-            {"FREQ=DAILY;BYMONTH=2;BYMONTHDAY=29;BYDAY=MO;COUNT=3", "2026-01-01"},
-            # A rule that selects nothing has no occurrence to come to.
-            {"FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=31;COUNT=2", "2026-01-31"}
+            # A Monday, and the Tuesday the walk goes on from to the next,
+            # are two periods.
+            {"FREQ=DAILY;BYDAY=MO;COUNT=5100", "2026-06-01"},
+            # And so are the first second of a minute and the one after it.
+            {"FREQ=SECONDLY;BYSECOND=0;COUNT=6000", "2026-06-01T00:00:00"},
+            # A week runs across a month and a year, so each is asked: ten
+            # Mondays that are 29 February are nearly three centuries of them.
+            {"FREQ=WEEKLY;BYMONTH=2;BYMONTHDAY=29;BYDAY=MO;COUNT=10", "2026-01-01"}
           ] do
         assert {:error, %UnboundedRecurrenceError{} = error} =
                  Tempo.to_interval(rule(text, read(from)))
@@ -290,6 +290,26 @@ defmodule Tempo.RecurrenceWindowTest do
     test "is no failure where the walk has what it was asked for by then" do
       assert {:ok, set} = Tempo.to_interval(rule("FREQ=DAILY;COUNT=10000", read("2026-06-01")))
       assert IntervalSet.count(set) == 10_000
+
+      # Rules whose occurrences are far apart for their frequency, each of
+      # which was cut short: thirty mornings are 43,000 minutes, and the
+      # next 29 February that is a Monday is eighteen years of days on.
+      for {text, from, count} <- [
+            {"FREQ=MINUTELY;BYHOUR=9;BYMINUTE=0;COUNT=30", "2026-06-01T00:00:00", 30},
+            {"FREQ=HOURLY;BYHOUR=9;COUNT=500", "2026-06-01T00:00:00", 500},
+            {"FREQ=DAILY;BYDAY=MO;COUNT=2000", "2026-06-01", 2000},
+            {"FREQ=DAILY;BYMONTH=2;BYMONTHDAY=29;BYDAY=MO;COUNT=3", "2026-01-01", 3},
+            {"FREQ=DAILY;BYYEARDAY=100;COUNT=40", "2026-01-01", 40}
+          ] do
+        assert {:ok, set} = Tempo.to_interval(rule(text, read(from)))
+        assert {text, IntervalSet.count(set)} == {text, count}
+      end
+
+      # A rule that selects no date has no occurrence to come to, and none.
+      april_31st = rule("FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=31;COUNT=2", read("2026-01-31"))
+
+      assert {:ok, nothing} = Tempo.to_interval(april_31st)
+      assert IntervalSet.count(nothing) == 0
 
       # The rule of 29 February on a Monday, a year at a time, comes to each.
       yearly = rule("FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=29;BYDAY=MO;COUNT=3", read("2026-01-01"))
