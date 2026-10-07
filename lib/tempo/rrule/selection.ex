@@ -37,7 +37,7 @@ defmodule Tempo.RRule.Selection do
 
   A computed event is each of its days that falls in the period it is selected in: it expands a `YEARLY`, a `MONTHLY` and a `WEEKLY` rule, so the Easter of April 2026 and of its fourteenth week are both 5 April, and it limits a `DAILY` rule and a finer one to the candidates on its day. A weekday or a day of the month beside it limits that day.
 
-  RFC 5545's candidate at every frequency is a day, and its table gives a weekly rule no `BYMONTHDAY` and no `BYYEARDAY`, and a monthly rule no `BYYEARDAY`. A selection made in a whole week or month (`Tempo.select/2` from one, a value such as `2026Y25WL15DN`, a recurrence that starts at its cadence's resolution or has no start) has that period for its candidate, and such a part is then each day of the period it names: `L15DN` in a week is the day of the week that is the 15th of its month, and `L166ON` in June is 15 June 2026. A part that names a day after it keeps the days it names too, and a weekday beside one keeps or drops them. Where the candidate is a day, as in a rule read from an RRULE, the period is the week (from `WKST`) or the month that holds it. A week resolved in a month is a week of the month, which the calendar numbers (`Tempo.UnitValues.weeks_of_month/3`): `L2WN` in June 2026 is 8 to 14 June, the span of its dates, and `L1WN` in July starts on 29 June. Beside a part that picks within the week it hands that part its days, as a week does in a year: `L2W3KN` in June 2026 is Wednesday the 10th, `L2WT10HN` ten o'clock on each of the week's seven days and `L2W1IN` its first day. `read_in_its_period/1` says which a week is, of its month or of the year: in a rule that steps by months from a date, as one read from an RRULE does, each candidate is a day, which the week keeps or drops by its week of the year.
+  RFC 5545's candidate at every frequency is a day, and its table gives a weekly rule no `BYMONTHDAY` and no `BYYEARDAY`, and a monthly rule no `BYYEARDAY`. A selection made in a whole week or month (`Tempo.select/2` from one, a value such as `2026Y25WL15DN`, a recurrence that starts at its cadence's resolution or has no start) has that period for its candidate, and such a part is then each day of the period it names: `L15DN` in a week is the day of the week that is the 15th of its month, and `L166ON` in June is 15 June 2026. A part that names a day after it keeps the days it names too, and a weekday beside one keeps or drops them. Where the candidate is a day, as in a rule read from an RRULE, the period is the week (from `WKST`) or the month that holds it. A week resolved in a month is a week of the month, which the calendar numbers (`Tempo.UnitValues.weeks_of_month/3`): `L2WN` in June 2026 is 8 to 14 June, the span of its dates, and `L1WN` in July starts on 29 June. Beside a part that picks within the week it hands that part its days, as a week does in a year: `L2W3KN` in June 2026 is Wednesday the 10th, `L2WT10HN` ten o'clock on each of the week's seven days and `L2W1IN` its first day. `read_in_its_period/1` says which a week is, of its month or of the year: in a rule that steps by months from a date, as one read from an RRULE does, each candidate is a day, which the week keeps or drops by its week of the year. A week beside the month it is written with is a week of that month wherever it is resolved (`L6M2WN` in a year is the second week of June), and a week asked of a day or a time of day, which are written with their month, keeps it where that week of the month holds it. A week after a §12.10 window is asked of the window's days, by the week of the year each is in.
 
   A day with no month (`D`) in a rule that is resolved in a year, and that nothing gives a month, is a day of the year, as the value `2026Y45D` is: `2026YL45DN` and `R/2026/P1Y/FL45DN` are 14 February, and `L-1DN` there is 31 December. A recurrence's start that names a month gives the day that month (ISO 8601-2 §13.6.3), a rule read from an RRULE with a start states it (`L3M15DN`), and a month, a week, a day of the year or a computed event beside the day places it already. `read_in_its_period/1` is that reading, which the conversion, the RRULE writer and `Tempo.explain/1` all ask.
 
@@ -433,18 +433,34 @@ defmodule Tempo.RRule.Selection do
   defp in_period_of(context, selection, false) do
     cond do
       a_year_or_none?(context) -> in_year(selection)
-      a_month?(context) -> in_month(selection)
+      names_a_month?(context) -> in_month(selection)
       true -> selection
     end
   end
 
-  defp in_year(selection), do: days_of_year_where_no_month(selection)
+  # A week beside the month it is written with is a week of that month
+  # (decided 2026-10-08): `L6M2WN` in a year is the second week of June, as
+  # `2026Y6ML2WN` is. It was a week of the year with its month passed over.
+  # A week after a §12.10 window is asked of the window's days, and is the
+  # week of the year each is in, as it was.
+  defp in_year(selection) do
+    selection = days_of_year_where_no_month(selection)
+
+    if List.keymember?(selection, :month, 0) and not List.keymember?(selection, :interval, 0),
+      do: in_month(selection),
+      else: selection
+  end
 
   defp a_year_or_none?([]), do: true
   defp a_year_or_none?([{:year, _years}]), do: true
   defp a_year_or_none?(_finer_context), do: false
 
   defp a_month?(context), do: match?({:month, _months}, List.last(context))
+
+  # A value written with its month, to the month or to a day or a time of
+  # day in it: a week selected from it is a week of that month (decided
+  # 2026-10-08), which keeps a day where the week holds it.
+  defp names_a_month?(context), do: List.keymember?(context, :month, 0)
 
   # A week resolved in a month is a week of the month, which the calendar
   # numbers (decided 2026-10-07): the `W` of a value whose selection follows
@@ -457,6 +473,27 @@ defmodule Tempo.RRule.Selection do
 
   defp week_of_the_month({:week, weeks}), do: {:week_of_month, weeks}
   defp week_of_the_month(part), do: part
+
+  @doc false
+  # `BYWEEKNO` counts the weeks of a year (RFC 5545 §3.3.10). A rule read
+  # from an RRULE that has no start on a date is resolved in its period,
+  # where a week beside a month, or in a rule that steps by months, is a
+  # week of that month (`read_in_its_period/1`), which an RRULE cannot say.
+  # It is refused where it is read: it was answered with the week of the
+  # month, and a yearly rule with the week of the year and its month passed
+  # over.
+  @spec week_number_of_a_year(Interval.t()) :: :ok | {:error, {:byweekno_without_a_date, term()}}
+  def week_number_of_a_year(%Interval{repeat_rule: %Tempo{}} = recurrence) do
+    %Interval{repeat_rule: %Tempo{time: [{:selection, read} | _units]}} =
+      read_in_its_period(recurrence)
+
+    case List.keyfind(read, :week_of_month, 0) do
+      {:week_of_month, weeks} -> {:error, {:byweekno_without_a_date, weeks}}
+      nil -> :ok
+    end
+  end
+
+  def week_number_of_a_year(%Interval{}), do: :ok
 
   @doc false
   # A week of the calendar's own numbering (`w`) is a week of its year, and
@@ -1271,8 +1308,11 @@ defmodule Tempo.RRule.Selection do
   # A week of a month beside a part that picks within it makes the week's
   # days, which that part and those after it keep, drop or put times on, as
   # a week makes them in a year. With no such part it is the week itself.
-  defp role({:week_of_month, _weeks}, _scope, selection) do
-    if picks_within_a_week?(selection), do: :expand, else: :limit
+  #
+  # Selected from a day or a time of day it keeps or drops what it is asked
+  # of, which is a day already: the week makes no days there.
+  defp role({:week_of_month, _weeks}, scope, selection) do
+    if scope in [:month, :year] and picks_within_a_week?(selection), do: :expand, else: :limit
   end
 
   # A numbered weekday beside a part that names the day keeps the day or
@@ -1618,10 +1658,14 @@ defmodule Tempo.RRule.Selection do
   # candidate's month. Alone it is the span of that week's dates, which is
   # not always within the month, and beside a part that picks within it,
   # each of those dates.
+  #
+  # A candidate written to a day, or to a time of one, is kept where a week
+  # the part names holds its day (decided 2026-10-08): 10 June 2026 is in
+  # the second week of its month.
   defp apply_role(:limit, {:week_of_month, weeks}, candidates, _scope, _selection, _wkst) do
     each_candidate(candidates, fn candidate ->
       with {:ok, named} <- weeks_of_month_named(candidate, weeks),
-           do: {:ok, Enum.map(named, &week_of_month_span(&1, candidate))}
+           do: {:ok, weeks_or_the_day_they_hold(named, candidate)}
     end)
   end
 
@@ -2689,6 +2733,25 @@ defmodule Tempo.RRule.Selection do
       _past_the_year ->
         nil
     end
+  end
+
+  defp weeks_or_the_day_they_hold(named, %Interval{from: %Tempo{time: time}} = candidate) do
+    case Keyword.fetch(time, :day) do
+      {:ok, day} when is_integer(day) -> kept_where_held(named, candidate, day)
+      _a_month -> Enum.map(named, &week_of_month_span(&1, candidate))
+    end
+  end
+
+  defp kept_where_held(named, candidate, day) do
+    held? =
+      Enum.any?(named, fn %Date.Range{} = week ->
+        Enum.any?(
+          week,
+          &({&1.year, &1.month, &1.day} == {year_of(candidate), month_of(candidate), day})
+        )
+      end)
+
+    if held?, do: [candidate], else: []
   end
 
   # The weeks a part names among those the calendar numbers in a candidate's

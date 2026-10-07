@@ -1302,14 +1302,27 @@ defmodule Tempo.Select.Test do
     # constraint was merged onto the period, so `~o"6M"` selected nothing from
     # a day, and from the first of June the month of June.
     #
-    # The measure is `Date` and `:calendar` alone: each day of the span is
-    # asked whether the selector names its month, its week or its year.
+    # A week is the week of the day's month (decided 2026-10-08), where it was
+    # the week of the year: the days are written with their month.
+    #
+    # The measure is `Date` alone: each day of the span is asked whether the
+    # selector names its month, its week of that month or its year.
 
     @days Date.range(~D[2026-05-25], ~D[2026-07-09])
 
     defp kept(named?), do: for(date <- @days, named?.(date), do: {date, 1})
 
-    defp week_of(date), do: date |> Date.to_erl() |> :calendar.iso_week_number() |> elem(1)
+    # The week of its month a day is in, and none where its week is the first
+    # of the month after: a week runs from Monday, and the first of a month
+    # is the one that holds its first day.
+    defp week_of_its_month(date) do
+      monday = Date.beginning_of_week(date, :monday)
+      first_week = date |> Date.beginning_of_month() |> Date.beginning_of_week(:monday)
+      next_month = date |> Date.end_of_month() |> Date.add(1)
+
+      if Date.before?(Date.add(monday, 6), next_month),
+        do: div(Date.diff(monday, first_week), 7) + 1
+    end
 
     test "keeps each day that is in the month, the week or the year it names" do
       days = ~o"2026-05-25/2026-07-10"
@@ -1321,8 +1334,9 @@ defmodule Tempo.Select.Test do
 
         assert spans(days, selector.("6M")) == kept(&(&1.month == 6))
         assert spans(days, selector.("{5,7}M")) == kept(&(&1.month in [5, 7]))
-        assert spans(days, selector.("25W")) == kept(&(week_of(&1) == 25))
-        assert spans(days, selector.("{22..24}W")) == kept(&(week_of(&1) in 22..24))
+        assert spans(days, selector.("2W")) == kept(&(week_of_its_month(&1) == 2))
+        assert spans(days, selector.("{1,3}W")) == kept(&(week_of_its_month(&1) in [1, 3]))
+        assert spans(days, selector.("25W")) == []
         assert spans(days, selector.("15D")) == kept(&(&1.day == 15))
         assert spans(days, selector.("6M15D")) == [{~D[2026-06-15], 1}]
         assert spans(days, selector.("7M15D")) == []
@@ -1335,7 +1349,8 @@ defmodule Tempo.Select.Test do
     test "keeps each hour of the day it names" do
       hours = ~o"2026-06-14T22/2026-06-15T03"
 
-      for selector <- [~o"15D", ~o"6M15D", ~o"L15DN", ~o"25W"] do
+      # 15 June 2026 is a Monday, the first day of the third week of June.
+      for selector <- [~o"15D", ~o"6M15D", ~o"L15DN", ~o"3W"] do
         {:ok, set} = Tempo.select(hours, selector)
 
         assert Enum.map(IntervalSet.members(set), &Interval.from/1) ==
@@ -1357,7 +1372,7 @@ defmodule Tempo.Select.Test do
     test "the period kept is the period, as it is written" do
       {:ok, first_of_june} = Tempo.to_interval(~o"2026-06-01")
 
-      for selector <- [~o"6M", ~o"L6MN", ~o"23W", ~o"2026Y"] do
+      for selector <- [~o"6M", ~o"L6MN", ~o"1W", ~o"2026Y"] do
         {:ok, set} = Tempo.select(~o"2026-06-01", selector)
         assert {selector, IntervalSet.members(set)} == {selector, [first_of_june]}
       end
@@ -1373,7 +1388,8 @@ defmodule Tempo.Select.Test do
       {:ok, set} = Tempo.select(days, ~o"6MT10H")
       assert Enum.map(IntervalSet.members(set), &Interval.from/1) == [~o"2026Y6M1DT10H"]
 
-      {:ok, set} = Tempo.select(days, ~o"23WT10H")
+      # 31 May is in the fifth week of May, and 1 June in the first of June.
+      {:ok, set} = Tempo.select(days, ~o"1WT10H")
       assert Enum.map(IntervalSet.members(set), &Interval.from/1) == [~o"2026Y6M1DT10H"]
 
       # A month and a day of it, from a week that runs across two months.

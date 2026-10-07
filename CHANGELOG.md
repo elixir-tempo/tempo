@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A week beside the month it is written with is a week of that month: `2026YL6M2WN` is 8 to 14 June where it was the second week of the year, and `Tempo.select(~o"2026-06-10", ~o"2W")` keeps the day where `~o"24W"` did. A rule that starts on a date keeps RFC 5545's week of the year, and `Tempo.RRule.parse/2` refuses a `BYWEEKNO` that would be read in a month with `{:byweekno_without_a_date, weeks}`.
+
 * A mask in a constraint given to `Tempo.select/2` is each value its digits match, as it is in a selection: `Tempo.select(~o"2026-06", ~o"1XD")` is the ten days from 10 June, each the day's own value, where it was the one span from the 10th to the 20th. A masked constraint as coarse as its period keeps what its digits match (15 June was dropped by `~o"1XD"`), and a week selected from a month as a mask (`~o"XW"`) is each week of the month, where it was refused as `:not_built`.
 
 * A weekday selected from a time of day keeps the hours or minutes that are on it, as the selection `~o"L1KN"` did: `Tempo.select(~o"2026-06-15T10", Tempo.workdays(:US))` is that hour of a Monday, where it and `~o"1K"` selected nothing, and from a span of hours that runs into the next day it is the hours of the weekday, where it was the whole of a day the span starts part way through. `Tempo.count_workdays/2` counts whole days, as it did.

@@ -598,11 +598,12 @@ defmodule Tempo.NotBuiltTest do
       end
     end
 
-    test "from a day or a time of day is a filter by the week of the year" do
-      # 15 June 2026 is in ISO week 25.
+    test "from a day or a time of day is a filter by the week of its month" do
+      # 15 June 2026 is a Monday, in the third week of June (decided
+      # 2026-10-08: it was kept by its week of the year, the 25th).
       for base <- ["2026Y6M15D", "2026Y6M15DT10H"] do
-        {:ok, kept} = Tempo.select(read(base, Calendrical.Gregorian), ~o"25W")
-        {:ok, dropped} = Tempo.select(read(base, Calendrical.Gregorian), ~o"26W")
+        {:ok, kept} = Tempo.select(read(base, Calendrical.Gregorian), ~o"3W")
+        {:ok, dropped} = Tempo.select(read(base, Calendrical.Gregorian), ~o"25W")
 
         assert {base, IntervalSet.count(kept), IntervalSet.count(dropped)} == {base, 1, 0}
       end

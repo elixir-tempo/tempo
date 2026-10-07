@@ -106,7 +106,7 @@ defmodule Tempo.RRule do
 
   * `{:ok, %Tempo.Interval{}}` on success.
 
-  * `{:error, reason}` on a malformed rule or unknown keyword, and for what RFC 7529's `RSCALE` and `SKIP` say that Tempo does not build: `{:unsupported_rscale, name}` for a calendar other than the Gregorian, `{:unsupported_skip, {skip, part}}` for `BACKWARD` or `FORWARD` beside a day counted from the end of a month that a month can lack (`BYMONTHDAY=-31`), `{:unsupported_skip, value}` for a `SKIP` that is none of the three, and `{:skip_without_rscale, skip}`. A `:from` that is not one value (an interval, a set) is `{:invalid_from, value}`, an `INTERVAL` that is not one or more is `{:invalid_interval, value}` and a `COUNT` below none is `{:invalid_count, value}`.
+  * `{:error, reason}` on a malformed rule or unknown keyword, and for what RFC 7529's `RSCALE` and `SKIP` say that Tempo does not build: `{:unsupported_rscale, name}` for a calendar other than the Gregorian, `{:unsupported_skip, {skip, part}}` for `BACKWARD` or `FORWARD` beside a day counted from the end of a month that a month can lack (`BYMONTHDAY=-31`), `{:unsupported_skip, value}` for a `SKIP` that is none of the three, and `{:skip_without_rscale, skip}`. A `:from` that is not one value (an interval, a set) is `{:invalid_from, value}`, an `INTERVAL` that is not one or more is `{:invalid_interval, value}` and a `COUNT` below none is `{:invalid_count, value}`. A `BYWEEKNO` beside a `BYMONTH`, or in a rule that steps by months, with no `:from` that is a date is `{:byweekno_without_a_date, weeks}`: it counts the weeks of a year, which such a rule is asked of each day it starts from.
 
   ### Examples
 
@@ -422,7 +422,9 @@ defmodule Tempo.RRule do
     case Keyword.fetch(parts, :freq) do
       {:ok, freq_unit} ->
         with :ok <- Rule.skip_built(struct(Rule, parts)),
-             do: {:ok, do_build(freq_unit, parts, options)}
+             recurrence = do_build(freq_unit, parts, options),
+             :ok <- Selection.week_number_of_a_year(recurrence),
+             do: {:ok, recurrence}
 
       :error ->
         {:error, :missing_freq}

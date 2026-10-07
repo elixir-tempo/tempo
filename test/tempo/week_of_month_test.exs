@@ -339,18 +339,21 @@ defmodule Tempo.WeekOfMonthTest do
                Tempo.select(Tempo.from_iso8601!("5786Y1M", Hebrew), ~o"1W")
     end
 
-    test "from a year is still a week of the year, and from a day a filter by one" do
+    test "from a year is still a week of the year, and from a day a filter by the week of its month" do
       {:ok, of_the_year} = Tempo.select(~o"2026", ~o"2W")
       assert Enum.map(IntervalSet.members(of_the_year), &Interval.from/1) == [~o"2026Y2W"]
 
-      # 15 June 2026 is in ISO week 25.
+      # 15 June 2026 is in ISO week 25, and in the third week of June. A day
+      # is written with its month, and its week is that month's (decided
+      # 2026-10-08): it was kept by its week of the year.
       assert :calendar.iso_week_number({2026, 6, 15}) == {2026, 25}
+      assert week(2026, 6, 3) == {~D[2026-06-15], ~D[2026-06-22]}
 
-      assert spans(Tempo.select(~o"2026-06-15", ~o"25W")) == [
+      assert spans(Tempo.select(~o"2026-06-15", ~o"3W")) == [
                seconds({~D[2026-06-15], ~D[2026-06-16]})
              ]
 
-      assert spans(Tempo.select(~o"2026-06-15", ~o"3W")) == []
+      assert spans(Tempo.select(~o"2026-06-15", ~o"25W")) == []
     end
 
     test "is each week its digits match where it is a mask" do

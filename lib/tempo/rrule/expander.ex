@@ -39,6 +39,7 @@ defmodule Tempo.RRule.Expander do
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.RRule.Rule
+  alias Tempo.RRule.Selection
 
   @doc """
   Expand a rule into a list of concrete `%Tempo.Interval{}`
@@ -144,6 +145,8 @@ defmodule Tempo.RRule.Expander do
 
   * `{:error, {:invalid_interval, interval}}` when the rule steps by other than a whole number of its frequency, one or more, and `{:error, {:invalid_count, count}}` when its count is other than a number of occurrences, none or more.
 
+  * `{:error, {:byweekno_without_a_date, weeks}}` when the rule names a week number beside a month, or steps by months, and has no start that is a date: `BYWEEKNO` counts the weeks of a year, which such a rule is asked of each day it starts from.
+
   ### Examples
 
       iex> rule = %Tempo.RRule.Rule{freq: :week, interval: 1, count: 5}
@@ -153,12 +156,15 @@ defmodule Tempo.RRule.Expander do
 
   """
   @spec to_ast(Rule.t(), Tempo.t(), keyword()) ::
-          {:ok, Interval.t()} | {:error, {:invalid_interval | :invalid_count, term()}}
+          {:ok, Interval.t()}
+          | {:error, {:invalid_interval | :invalid_count | :byweekno_without_a_date, term()}}
   def to_ast(%Rule{} = rule, dtstart, options \\ [])
       when is_nil(dtstart) or is_struct(dtstart, Tempo) do
     with {:ok, interval} <- steps_by(rule.interval),
-         {:ok, recurrence} <- counted(rule.count) do
-      {:ok, recurring(rule, dtstart, interval, recurrence, options)}
+         {:ok, recurrence} <- counted(rule.count),
+         ast = recurring(rule, dtstart, interval, recurrence, options),
+         :ok <- Selection.week_number_of_a_year(ast) do
+      {:ok, ast}
     end
   end
 

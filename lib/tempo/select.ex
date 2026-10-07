@@ -211,11 +211,22 @@ defmodule Tempo.Select do
   Tempo.select(~o"2026-06", ~o"5W")      # nothing: June 2026 has four weeks
   ```
 
-  A week selected from a day or a time of day keeps it where it is in
-  that week of the year. A week of a month that is no one whole number
-  (`~o"XW"`), and one in a calendar whose year does not begin with its
-  first month, is not built: it returns a `Tempo.ConversionError` whose
-  `:reason` is `:not_built` and whose `:target` is `:week_of_month`.
+  A day and a time of day are written with their month, so a week
+  selected from one is a week of that month too, and keeps it where
+  that week holds it. A week beside a month in a selector is the week of
+  that month wherever it is selected.
+
+  ```elixir
+  Tempo.select(~o"2026-06-10", ~o"2W")   # 10 June: it is in June's second week
+  Tempo.select(~o"2026-06-10", ~o"24W")  # nothing: June has no 24th week
+  Tempo.select(~o"2026", ~o"L6M2WN")     # 8 to 14 June
+  ```
+
+  A week of a month in a calendar whose year does not begin with its
+  first month, and a day or a time under a week of a month that is a
+  mask (`~o"XW3K"`), is not built: it returns a `Tempo.ConversionError`
+  whose `:reason` is `:not_built` and whose `:target` is
+  `:week_of_month`.
 
   ## A selector as coarse as its base, or coarser
 
@@ -1188,7 +1199,7 @@ defmodule Tempo.Select do
          freq
        ) do
     with :ok <- filters_in(selection, from, calendar) do
-      case Selection.apply(period, rule, freq) do
+      case Selection.apply(period, read_in_its_period(rule, from), freq) do
         {:error, _reason} = error -> error
         [] -> IntervalSet.new([], coalesce: false)
         [_kept | _] -> IntervalSet.new([period], coalesce: false)
@@ -1197,6 +1208,17 @@ defmodule Tempo.Select do
   end
 
   defp kept_or_dropped(period, rule, freq), do: occurrences_in(period, rule, freq)
+
+  # The rule as it is read in the period it is asked of
+  # (`Tempo.RRule.Selection.read_in_its_period/1`), which a value with the
+  # rule written after it is: a week asked of a day written with its month
+  # is a week of that month.
+  defp read_in_its_period(%Tempo{time: [selection: selection]} = rule, %Tempo{time: time} = from) do
+    %Tempo{time: read} =
+      Selection.read_in_its_period(%{from | time: time ++ [selection: selection]})
+
+    %{rule | time: [List.last(read)]}
+  end
 
   # What a merged constraint is asked before it is merged
   # (`merged_constraint_tempo/2`): a calendar of weeks has no month to
