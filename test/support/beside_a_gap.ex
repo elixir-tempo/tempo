@@ -126,12 +126,10 @@ defmodule Tempo.BesideAGap do
   defp of_any_calendar?(name),
     do: not (name =~ ~r/year|month|30D|29D\/31D|P1M|BYMONTHDAY/)
 
-  # What a calendar of weeks is not yet given, each an open item of
-  # `TODO.md` that is nothing of the zone's: a workday counted from a date
-  # and time is refused there, and a time of day selected from the last day
-  # of a week is nothing, which each day beside a change of the clock here
-  # is, clocks being changed on a Sunday.
-  defp built_for_weeks?(name), do: not (name =~ ~r/workday|^select T/)
+  # What a calendar of weeks is not yet given, an open item of `TODO.md`
+  # that is nothing of the zone's: a workday counted from a date and time is
+  # refused there.
+  defp built_for_weeks?(name), do: not (name =~ ~r/workday/)
 
   @doc """
   The operations each value is given to, by name.

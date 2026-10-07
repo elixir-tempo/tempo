@@ -367,6 +367,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A time of day selected from the last day of a week, in a calendar of weeks, is that time on that day: `Tempo.select(Tempo.from_iso8601!("2024-W10-7[u-ca=iso-week]"), ~o"T09")` is 09:00 on the Sunday, where it was the empty set, the time having been merged onto the week's Monday.
+
 * A value of another calendar in a named zone is asked of the zone's clock by the day it is, where its units were read as Gregorian ones: `5786-07-11T02:30[Europe/Paris][u-ca=hebrew]`, 02:30 on 29 March 2026, is a `Tempo.ZoneGapError`, and that day is 23 hours by the walk and by `Enum.count/1` in the Hebrew, the Buddhist and the ISO week calendar. A day whose numbers are those of a change of the clock in some other Gregorian year was walked an hour short.
 
 * A time of day the clock skips is not selected on the day it is skipped, nor an occurrence of a rule that picks it (`BYHOUR=2`), which is not counted: `Tempo.select(~o"2024-03-10[America/New_York]", ~o"T02")` is the empty set, where each gave a span that starts on a reading no value is read from. A window is the part of it the clock shows, `~o"T02/T04"` being 03:00 to 04:00 that night and `~o"T02/PT2H"` 03:00 to 05:00, and one that ends inside a gap ends when the gap does.

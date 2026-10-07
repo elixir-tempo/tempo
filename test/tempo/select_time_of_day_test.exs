@@ -8,6 +8,7 @@ defmodule Tempo.SelectTimeOfDayTest do
 
   import Tempo.Sigils
 
+  alias Tempo.Compare
   alias Tempo.Duration
   alias Tempo.Interval
   alias Tempo.IntervalSet
@@ -111,6 +112,58 @@ defmodule Tempo.SelectTimeOfDayTest do
 
       assert IntervalSet.count(open) == 46
       assert Duration.to_unit(IntervalSet.duration(open), :hour) == {:ok, 23 * 7.0}
+    end
+  end
+
+  describe "a time of day selected from a day of a week, in a calendar of weeks" do
+    # A time of day is on no axis of dates, and takes no unit from the day it
+    # is merged onto. It was held to be on the month's axis, so the day of
+    # the week was taken from a week's last day, whose span ends in the next
+    # week: 09:00 of a Sunday was 09:00 of that week's Monday, which is no
+    # time of the Sunday, and nothing was selected.
+
+    @unix_epoch :calendar.datetime_to_gregorian_seconds({{1970, 1, 1}, {0, 0, 0}})
+
+    # The date Erlang gives a day of a week of ISO 8601.
+    defp date_of_week_day(year, week, day) do
+      Enum.find(Date.range(Date.new!(year, 1, 1), Date.new!(year, 12, 31)), fn date ->
+        :calendar.iso_week_number(Date.to_erl(date)) == {year, week} and
+          Date.day_of_week(date) == day
+      end)
+    end
+
+    defp starts(%IntervalSet{} = set) do
+      for member <- IntervalSet.members(set),
+          do: Compare.to_utc_seconds(Interval.from(member)) - @unix_epoch
+    end
+
+    test "is that time on each day of the week, its last too" do
+      for day <- 1..7 do
+        base = Tempo.from_iso8601!("2024-W10-#{day}[u-ca=iso-week]")
+        date = date_of_week_day(2024, 10, day)
+        nine = date |> DateTime.new!(~T[09:00:00]) |> DateTime.to_unix()
+
+        {:ok, hour} = Tempo.select(base, ~o"T09")
+        {:ok, window} = Tempo.select(base, ~o"T09/T17")
+        {:ok, placed} = Tempo.select(base, [9])
+
+        assert {day, starts(hour), starts(window), starts(placed)} ==
+                 {day, [nine], [nine], [nine]}
+      end
+    end
+
+    test "is that time on the last day of a week in a zone" do
+      # Sunday 10 March 2024, when New York's clocks go from 02:00 to 03:00.
+      base = Tempo.from_iso8601!("2024-W10-7[America/New_York][u-ca=iso-week]")
+
+      nine =
+        ~D[2024-03-10] |> DateTime.new!(~T[09:00:00], "America/New_York") |> DateTime.to_unix()
+
+      {:ok, hour} = Tempo.select(base, ~o"T09")
+      {:ok, skipped} = Tempo.select(base, ~o"T02")
+
+      assert starts(hour) == [nine]
+      assert starts(skipped) == []
     end
   end
 end

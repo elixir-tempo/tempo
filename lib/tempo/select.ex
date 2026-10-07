@@ -1873,6 +1873,13 @@ defmodule Tempo.Select do
   @week_axis [:year, :week, :day_of_week, :hour, :minute, :second]
   @ordinal_axis [:year, :day_of_year, :hour, :minute, :second]
 
+  # A time of day alone is on no one of them and goes with any, so it takes
+  # no unit from what it is merged onto. It was held to be on the month's
+  # axis, and the day of a week was taken from the last day of a week,
+  # whose span ends in the next: 09:00 of the Sunday of a week, in a
+  # calendar of weeks, was 09:00 of its Monday, and so no time of the day.
+  @date_units [:year, :month, :day, :week, :day_of_week, :day_of_year]
+
   defp axis_for_constraint(c_time) do
     cond do
       Keyword.has_key?(c_time, :week) or Keyword.has_key?(c_time, :day_of_week) ->
@@ -1881,8 +1888,11 @@ defmodule Tempo.Select do
       Keyword.has_key?(c_time, :day_of_year) ->
         @ordinal_axis
 
-      true ->
+      Enum.any?(@date_units, &Keyword.has_key?(c_time, &1)) ->
         @gregorian_axis
+
+      true ->
+        :any
     end
   end
 
@@ -1898,9 +1908,13 @@ defmodule Tempo.Select do
   # constraint on another axis than those is merged onto periods of
   # its own axis first (`on_each_period/3`), so none is off its axis
   # here.
-  defp prune_off_axis_defaults(base_time, c_time, base_resolution) do
+  defp prune_off_axis_defaults(base_time, c_time, base_resolution),
+    do: pruned_to_axis(base_time, axis_for_constraint(c_time), base_resolution)
+
+  defp pruned_to_axis(base_time, :any, _base_resolution), do: base_time
+
+  defp pruned_to_axis(base_time, axis, base_resolution) do
     base_res_idx = unit_index(base_resolution) || -1
-    axis = axis_for_constraint(c_time)
 
     Enum.filter(base_time, fn {unit, _} ->
       case unit_index(unit) do
