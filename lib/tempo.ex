@@ -1747,7 +1747,6 @@ defmodule Tempo do
   end
 
   defp value_kind(%Interval{}), do: :interval
-  defp value_kind(%Duration{}), do: :duration
 
   defp value_kind(%__MODULE__{} = tempo) do
     case split(tempo) do
@@ -1761,7 +1760,6 @@ defmodule Tempo do
   defp kind_phrase(:datetime), do: "a datetime"
   defp kind_phrase(:time), do: "a time of day"
   defp kind_phrase(:interval), do: "an interval"
-  defp kind_phrase(:duration), do: "a duration"
 
   defp raise_on_error({:ok, value}), do: value
   defp raise_on_error({:error, exception}) when is_exception(exception), do: raise(exception)
@@ -1947,8 +1945,6 @@ defmodule Tempo do
 
   defp zone_critical?(%__MODULE__{extended: extended}) when is_map(extended),
     do: Map.get(extended, :zone_critical, false)
-
-  defp zone_critical?(_other), do: false
 
   @doc """
   Parse a date, time, datetime, interval, duration or recurrence,

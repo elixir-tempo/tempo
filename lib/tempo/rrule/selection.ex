@@ -71,6 +71,13 @@ defmodule Tempo.RRule.Selection do
   alias Tempo.UnitValues
   alias Tempo.Validation
 
+  @typedoc """
+  A rule: a `%Tempo{}` whose `:time` is a selection (`[selection: [...]]`) and any units after it, as `Tempo.RRule.Rule.to_selection/2` builds one.
+
+  It is not a `t:Tempo.t/0`, whose units do not name a selection: a function whose rule is typed as one has the clauses that read the rule taken for dead by Dialyzer.
+  """
+  @type rule :: %Tempo{time: [{atom(), term()}, ...]}
+
   # ISO 8601's weeks, and RFC 5545's by default, start on a Monday, weekday 1.
   @monday 1
 
@@ -127,7 +134,7 @@ defmodule Tempo.RRule.Selection do
       []
 
   """
-  @spec apply(Interval.t(), Tempo.t() | nil, atom(), keyword()) ::
+  @spec apply(Interval.t(), rule() | nil, atom(), keyword()) ::
           [Interval.t()] | {:error, EventError.t()}
   def apply(candidate, repeat_rule, freq, options \\ [])
 
@@ -230,7 +237,7 @@ defmodule Tempo.RRule.Selection do
       false
 
   """
-  @spec expands?(Tempo.t() | nil, atom()) :: boolean()
+  @spec expands?(rule() | nil, atom()) :: boolean()
   def expands?(%Tempo{time: [{:selection, _selection}, _unit | _units]}, _freq), do: true
 
   def expands?(%Tempo{time: [selection: selection]}, freq) do
@@ -289,7 +296,7 @@ defmodule Tempo.RRule.Selection do
       nil
 
   """
-  @spec rules_out(Interval.t(), Tempo.t() | nil, atom()) ::
+  @spec rules_out(Interval.t(), rule() | nil, atom()) ::
           {:on, atom(), integer()}
           | {:in_days, pos_integer()}
           | {:on_day, pos_integer(), pos_integer()}
@@ -339,7 +346,7 @@ defmodule Tempo.RRule.Selection do
       false
 
   """
-  @spec passes_over?(Tempo.t() | nil, atom()) :: boolean()
+  @spec passes_over?(rule() | nil, atom()) :: boolean()
   def passes_over?(%Tempo{time: [{:selection, selection} | _units]}, freq)
       when freq in [:day, :hour, :minute, :second] do
     split_window(selection) == :none and
@@ -2587,12 +2594,10 @@ defmodule Tempo.RRule.Selection do
   defp event_error(name, _year, {:error, {:unzoned_event, _event}}),
     do: EventError.exception(event: name, reason: :unzoned_event)
 
+  # What a registered resolver gave that is no date is such an error too,
+  # with the reason `{:not_a_date, given}` (`Tempo.Event.date/3`).
   defp event_error(name, year, {:error, reason}),
     do: EventError.exception(event: name, year: year, reason: reason)
-
-  # What a registered resolver gave that is no date.
-  defp event_error(name, year, other),
-    do: EventError.exception(event: name, year: year, reason: {:not_a_date, other})
 
   # LIMIT form (finer FREQs): does the candidate's date fall on the event? A
   # candidate that is no one date is on no event's day.

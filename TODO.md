@@ -60,6 +60,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Release and housekeeping
 
+* [ ] **`t:Tempo.t/0` does not describe every value** — its `token_list` names ten units and no selection, group, quarter, season, century or decade, so a spec that says `Tempo.t()` for such a value has Dialyzer read the clauses that match it as dead: `Tempo.RRule.Selection.rules_out/3` was inferred to return only `nil` (its rule is typed `rule()` since 2026-10-08), and `apply/4`, `expands?/2` and `Tempo.RRule.Rule.to_selection/2` are typed round it. To do: name every unit in the type, and take out the specs written round it.
+
 * [ ] **Livebooks install 2.0 at the release** — `getting-started`, `tempo_tour`, `scheduling-workbook` and `uncertain-dates-workbook` install `{:ex_tempo, "~> 1.6"}` and the Melbourne deck `~> 1.6.3`, while their code uses the 2.0 names: at the 2.0.0 release each installs `~> 2.0`, as `everyday-holidays` already does.
 
 * [ ] **`rescue` in the library** — `lib/ical.ex` (`parse/2`, `available/2`, errors from the `ical` parser), `lib/inspect.ex` (Localize's calendar encoding) and `lib/iso8601/parser.ex` rescue exceptions where the rest of Tempo passes tagged tuples.

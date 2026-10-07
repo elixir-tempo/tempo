@@ -57,15 +57,17 @@ defmodule Tempo.Iso8601.Tokenizer do
   # (`Tempo.parse/2`) asks it too, so that a text the tokenizer refuses for
   # its length is not then read another way.
   @spec within_length(binary()) :: :ok | {:error, ParseError.t()}
-  def within_length(string) when byte_size(string) > @max_input_bytes do
-    {:error,
-     ParseError.exception(
-       input: binary_part(string, 0, 64) <> "…",
-       reason: "Input of #{byte_size(string)} bytes exceeds the #{@max_input_bytes}-byte limit"
-     )}
-  end
+  def within_length(string) when byte_size(string) > @max_input_bytes,
+    do: {:error, too_long(string)}
 
   def within_length(_string), do: :ok
+
+  defp too_long(string) do
+    ParseError.exception(
+      input: binary_part(string, 0, 64) <> "…",
+      reason: "Input of #{byte_size(string)} bytes exceeds the #{@max_input_bytes}-byte limit"
+    )
+  end
 
   @doc """
   Tokenize an ISO 8601 or IXDTF string.
@@ -88,7 +90,7 @@ defmodule Tempo.Iso8601.Tokenizer do
 
   """
   def tokenize(string) when byte_size(string) > @max_input_bytes do
-    within_length(string)
+    {:error, too_long(string)}
   end
 
   # A plain date or time of day is read by its bytes
@@ -157,7 +159,7 @@ defmodule Tempo.Iso8601.Tokenizer do
 
   """
   def tokenize_duration(string) when byte_size(string) > @max_input_bytes do
-    within_length(string)
+    {:error, too_long(string)}
   end
 
   def tokenize_duration(string) do
@@ -219,7 +221,7 @@ defmodule Tempo.Iso8601.Tokenizer do
   """
   def tokenize(string, profile)
       when profile in @profiles and byte_size(string) > @max_input_bytes do
-    within_length(string)
+    {:error, too_long(string)}
   end
 
   def tokenize(string, profile) when profile in @profiles do

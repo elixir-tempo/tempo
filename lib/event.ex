@@ -168,6 +168,9 @@ defmodule Tempo.Event do
     outside the range `Astro` supports (1000–3000 CE); a registered resolver
     may return its own `{:error, reason}` for a year it cannot compute.
 
+  * `{:error, {:not_a_date, given}}` when a registered resolver gives what is
+    neither `{:ok, date}` nor an error.
+
   ### Examples
 
       iex> Tempo.Event.date("easter", 2026)
@@ -324,9 +327,16 @@ defmodule Tempo.Event do
   # which the selection resolver returns as a `Tempo.EventError`.
   defp resolve_via_resolvers(name, year, calendar) do
     Enum.find_value(registered_resolvers(), {:error, {:unknown_event, name}}, fn resolver ->
-      if name in resolver.known(), do: resolver.date(name, year, calendar)
+      if name in resolver.known(), do: a_date_or_an_error(resolver.date(name, year, calendar))
     end)
   end
+
+  # A resolver is a consumer's module, and what it gives is a date or an
+  # error. Anything else is an error that says so, where it was handed on as
+  # the answer.
+  defp a_date_or_an_error({:ok, %Date{}} = date), do: date
+  defp a_date_or_an_error({:error, _reason} = error), do: error
+  defp a_date_or_an_error(given), do: {:error, {:not_a_date, given}}
 
   defp registered_resolvers do
     List.wrap(Application.get_env(:ex_tempo, :event_resolvers, []))

@@ -411,6 +411,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.Event.date/3` returns `{:error, {:not_a_date, given}}` when a registered `Tempo.Event.Resolver` gives what is neither `{:ok, date}` nor an error, where it handed that answer on as its own.
+
 * `Tempo.explain/1` shows an end that holds a set as it is written, and says of an interval with one that it is a span from each value: the end of `2026Y6M1D/2026Y6M{20,25}D` was shown as 1 June, the first day of its month.
 
 * `Tempo.to_string/2` shows a span of clock times that starts at a fraction of a second, where it raised a `FunctionClauseError`, and one that holds no time at all (`2026-06-15T10/2026-06-15T10`) is the value it starts at, where it was shown backwards, "10 – 9 AM".

@@ -221,10 +221,9 @@ defmodule Tempo.Cron do
   defp firing_start(%Tempo{time: time} = from, rule, _expression) when is_list(time) do
     grain = grain(rule)
 
-    with %Tempo{} = on_grain <- Tempo.trunc(from, grain) do
-      if past_grain?(time, grain),
-        do: next_grain(on_grain, grain),
-        else: {:ok, on_grain}
+    case Tempo.trunc(from, grain) do
+      %Tempo{} = on_grain -> on_or_after(on_grain, time, grain)
+      {:error, _reason} = error -> error
     end
   end
 
@@ -234,6 +233,10 @@ defmodule Tempo.Cron do
        input: expression,
        reason: "The :from option must be a date or time, got #{inspect(from)}"
      )}
+  end
+
+  defp on_or_after(on_grain, time, grain) do
+    if past_grain?(time, grain), do: next_grain(on_grain, grain), else: {:ok, on_grain}
   end
 
   defp grain(%Rule{freq: :second}), do: :second
