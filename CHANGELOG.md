@@ -389,6 +389,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.to_string/2` shows the interval an hour, a minute or a second converts to as the value is shown: `Tempo.to_string(Tempo.to_interval!(~o"2026-06-15T10"))` is "Jun 15, 2026, 10 AM", where it was "10:00 – 10:59 AM". Each member of a value that names several hours or minutes (`~o"2026Y6M15DT{9,14}H"`) is shown so too.
+
 * `Tempo.explain/1` words a time to its second and says its time shift: `2026-06-15T10:30:15Z` is "June 15, 2026 at 10:30:15" from `…T10:30:15Z` to `…T10:30:16Z`, where it was "at 10:30" with a span from 10:30 to 10:30 and no word of UTC. Qualifiers of single components are worded ("the year and the month approximate") where the map that holds them was printed, a year at an end of a span is written to four digits (`0800-06-15`), and `PT1.5S` is "1.5 seconds".
 
 * A rule of days, hours, minutes or seconds that steps past every value its parts name has no occurrences: `FREQ=DAILY;INTERVAL=7;BYDAY=MO` from a Tuesday and `FREQ=HOURLY;INTERVAL=12;BYHOUR=9` from 10:00 are an empty set, where each was a `Tempo.UnboundedRecurrenceError` after 10,000 periods. It is so in every calendar, and in a zone where the rule steps by days.

@@ -209,11 +209,39 @@ defmodule Tempo.Format do
   end
 
   defp render_dates(%Tempo.Interval{} = interval, options) do
+    case the_one_value(interval) do
+      %Tempo{} = value -> render_value(value, options)
+      nil -> render_span(interval, options)
+    end
+  end
+
+  defp render_span(%Tempo.Interval{} = interval, options) do
     with {:ok, from, to} <- interval_endpoints_for_format(interval) do
       {from, to} = collapse_midnight_endpoints(from, to)
       render_closed(from, closed_last_for_interval(from, to), options)
     end
   end
+
+  # An hour, a minute or a second is shown as the one value it is ("10 AM"),
+  # and the interval it converts to is that value's span, with the unit it
+  # is walked by. Shown in that unit it was its first and last minutes
+  # ("10:00 – 10:59 AM"), and each member of a set of hours was too. So a
+  # span that runs from a time of day to the next of its own unit is shown
+  # as that value. A day's span is one already, its ends being midnights.
+  @one_value_units [:hour, :minute, :second]
+
+  defp the_one_value(%Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to, unit: unit})
+       when not is_nil(unit) do
+    with {resolution, _span} when resolution in @one_value_units <- Tempo.resolution(from),
+         %Tempo{} = next <- Math.add(from, Tempo.Duration.build([{resolution, 1}])),
+         :same <- Compare.compare_endpoints(next, to) do
+      from
+    else
+      _a_span_of_several_values -> nil
+    end
+  end
+
+  defp the_one_value(_interval), do: nil
 
   # A week of a calendar of weeks is a unit of that calendar as a month is
   # of the Gregorian, and is shown as the locale words one: "week 25 of
