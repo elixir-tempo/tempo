@@ -9035,11 +9035,12 @@ defmodule Tempo do
   #
   # A walk asks when it has made `@periods_before_asking` periods and found
   # nothing (`selected_within_the_cap/3`): a rule with occurrences nearly
-  # always has one by then, and is never asked. It is told in two ways, each
-  # of a rule in the Gregorian calendar whose parts are counted in a date or
-  # a time of day. One whose dates are worked out in another way (an event,
-  # a window, a listed year) or in another calendar is not told so, and its
-  # walk goes on until it is cut short.
+  # always has one by then, and is never asked. It is told of a rule whose
+  # parts are counted in a date or a time of day: in two ways from its
+  # dates, each in the Gregorian calendar, and in one from its steps. One
+  # whose dates are worked out in another way (an event, a window, a listed
+  # year), or that names no date in another calendar, is not told so, and
+  # its walk goes on until it is cut short.
   #
   # The Gregorian calendar comes round every four hundred years, in its
   # dates and in their days of the week. So a rule of years that has
@@ -9056,11 +9057,14 @@ defmodule Tempo do
   # date, asked of one year of each kind, select a date in some year or in
   # none. They are asked as the walk asks them (`Tempo.RRule.Selection`), of
   # every period of the year, which is as many periods as the rule has or
-  # more: a rule that has no occurrence because of what it steps by
-  # (`FREQ=DAILY;INTERVAL=7;BYDAY=MO` from a Tuesday) is not told so. The
-  # parts that do not name a date are left out there: a time of day, and a
-  # position among what a period selects, each of which only keeps or drops
-  # what the others select.
+  # more. The parts that do not name a date are left out there: a time of
+  # day, and a position among what a period selects, each of which only
+  # keeps or drops what the others select.
+  #
+  # That asks nothing of what a rule steps by, and a rule whose parts name
+  # dates can still step past every one: `FREQ=DAILY;INTERVAL=7;BYDAY=MO`
+  # from a Tuesday. It is told so from its steps (`steps_past_its_parts?/2`),
+  # in whatever calendar it is: a week and a clock are the same in each.
   @names_a_date [:wkst, :skip, :month, :week, :day_of_year, :day, :day_of_week, :byday]
   @names_no_date [:hour, :minute, :second, :instance]
   @time_of_day [:hour, :minute, :second, :microsecond]
@@ -9074,23 +9078,147 @@ defmodule Tempo do
 
   defp has_no_occurrence?(
          %Tempo.Interval{
-           from: %Tempo{time: [{:year, year} | _rest], calendar: calendar},
+           from: %Tempo{time: [{:year, year} | _rest]},
            repeat_rule: %Tempo{time: [{:selection, selection} | units]}
          } = interval,
          cadence,
          periods
        )
        when is_integer(year) and year >= 1 do
-    Compare.effective_calendar(calendar) == Gregorian and
-      Enum.all?(selection, fn {token, _value} ->
-        token in @names_a_date or token in @names_no_date
-      end) and
+    Enum.all?(selection, fn {token, _value} ->
+      token in @names_a_date or token in @names_no_date
+    end) and
       Enum.all?(units, fn {token, _value} -> token in @time_of_day end) and
+      ((periods == @periods_before_asking and steps_past_its_parts?(interval, cadence)) or
+         names_no_date_of_any_year?(interval, cadence, periods))
+  end
+
+  defp has_no_occurrence?(_interval, _cadence, _periods), do: false
+
+  # The Gregorian calendar's question: of the periods it comes round in, and
+  # of one year of each kind.
+  defp names_no_date_of_any_year?(
+         %Tempo.Interval{from: %Tempo{calendar: calendar}} = interval,
+         cadence,
+         periods
+       ) do
+    Compare.effective_calendar(calendar) == Gregorian and
       (come_round?(cadence, periods) or
          (periods == @periods_before_asking and selects_no_date?(interval, cadence)))
   end
 
-  defp has_no_occurrence?(_interval, _cadence, _periods), do: false
+  # A walk that steps by a whole number of days, hours, minutes or seconds
+  # stops at places in the week that are a fixed distance apart: every
+  # seventh day from a Tuesday is a Tuesday, and every twelfth hour from
+  # 10:00 is 10:00 or 22:00. The parts of a rule that keep or drop a period
+  # by where it is in the week name places too: its day of the week, and
+  # each unit of the clock no finer than the step (a finer one makes times
+  # in the period, `Tempo.RRule.Selection`). Where the walk stops at none of
+  # them the rule has no occurrence, which no walk of its periods shows.
+  #
+  # A place is counted in the step's unit from the start of a week. A walk
+  # of `amount` at a time stops at each place that is a multiple of what
+  # `amount` and the week's count have in common on from its start, and at
+  # no other. A place the parts name is looked for a unit at a time from the
+  # finest, and a unit's value is passed over where no place that has it is
+  # one the walk stops at, whatever the coarser units are.
+  #
+  # The clock of a zone changes, so an hour of its day is not the same place
+  # in every week. A rule in a zone is asked only where it steps by days
+  # from a date, in a zone that leaves no day out: a date that lands on a
+  # day left out is moved a day on, to another day of the week, and a time
+  # of day a zone's clock skips can be moved past midnight.
+  @places_in_a_week [:second, :minute, :hour, :day_of_week]
+  @places_finer_than %{second: 0, minute: 1, hour: 2, day: 3}
+
+  defp steps_past_its_parts?(
+         %Tempo.Interval{
+           from: %Tempo{} = from,
+           repeat_rule: %Tempo{time: [{:selection, selection} | _units], calendar: calendar}
+         },
+         %Tempo.Duration{time: [{unit, amount}]}
+       )
+       when is_integer(amount) and amount > 0 and is_map_key(@places_finer_than, unit) do
+    calendar = Compare.effective_calendar(calendar)
+    parts = Enum.drop(@places_in_a_week, Map.fetch!(@places_finer_than, unit))
+    places = Enum.map(parts, &place_named(&1, selection, from, calendar))
+
+    steps_evenly?(from, unit) and Enum.all?(places, &is_tuple/1) and
+      not stops_at_one?(places, amount)
+  end
+
+  defp steps_past_its_parts?(_interval, _cadence), do: false
+
+  defp steps_evenly?(%Tempo{extended: %{zone_id: zone}, time: time}, unit) when is_binary(zone) do
+    unit == :day and not Keyword.has_key?(time, :hour) and
+      Tempo.TimeZoneDatabase.days_left_out(zone) == []
+  end
+
+  defp steps_evenly?(%Tempo{}, _unit), do: true
+
+  # One unit of a place in the week: how many values it takes, the one the
+  # walk starts from and those the rule's part names, each counted from the
+  # unit's first. A rule with no such part names them all. They are the
+  # values the part is asked by when it limits (`Tempo.RRule.Selection`): a
+  # day of the week is a number of the rule's calendar, the first day of its
+  # own week in a calendar of weeks, and is the weekday ISO 8601 numbers
+  # here, as the start's is.
+  defp place_named(part, selection, %Tempo{} = from, calendar) do
+    with {:ok, %Range{first: first} = values} <- UnitValues.in_period(part, [], calendar),
+         {:ok, start} <- value_stepped_from(from, part) do
+      named = selection |> named_by(part, values) |> Enum.map(&as_stepped(&1, part, calendar))
+      {Range.size(values), start - first, Enum.map(named, &(&1 - first))}
+    else
+      _no_one_value -> nil
+    end
+  end
+
+  defp named_by(selection, part, values) do
+    case List.keyfind(selection, part, 0) do
+      {^part, written} -> UnitValues.named(written, values)
+      nil -> Enum.to_list(values)
+    end
+  end
+
+  defp as_stepped(day, :day_of_week, calendar),
+    do: UnitValues.iso_weekday_from_day_of_week(day, calendar)
+
+  defp as_stepped(value, _unit_of_the_clock, _calendar), do: value
+
+  defp value_stepped_from(%Tempo{} = from, :day_of_week), do: iso_day_of_week(from, :to_interval)
+
+  # A unit of the clock a start is not written to is at its first value.
+  defp value_stepped_from(%Tempo{time: time}, unit) do
+    case List.keyfind(time, unit, 0, {unit, 0}) do
+      {^unit, value} when is_integer(value) -> {:ok, value}
+      _several_values -> :error
+    end
+  end
+
+  # Whether a walk stops at a place the parts name. `apart` is how far apart
+  # its stops are, `weight` how many places one of a unit is, and `place`
+  # the place the finer units' values make.
+  defp stops_at_one?(places, amount) do
+    {count, start} =
+      Enum.reduce(places, {1, 0}, fn {size, began, _named}, {weight, start} ->
+        {weight * size, start + began * weight}
+      end)
+
+    stops_at_one?(places, start, Integer.gcd(amount, count), 1, 0)
+  end
+
+  defp stops_at_one?([], _start, _apart, _weight, _place), do: true
+
+  defp stops_at_one?([{size, _began, named} | coarser], start, apart, weight, place) do
+    held_to = Integer.gcd(apart, weight * size)
+
+    Enum.any?(named, fn value ->
+      place = place + value * weight
+
+      rem(place - start, held_to) == 0 and
+        stops_at_one?(coarser, start, apart, weight * size, place)
+    end)
+  end
 
   # Whether a walk has made every period its rule ever has, the calendar
   # having come round: a rule of every fourth year makes four hundred

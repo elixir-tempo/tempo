@@ -564,14 +564,17 @@ defmodule Tempo.RRule.SparseWalkTest do
                %{true => 9, false => 8}
     end
 
-    test "is not told of a rule of days that steps past every date it could have" do
+    test "is told of a rule of days that steps past every date it could have" do
       # Every seventh day from a Tuesday is a Tuesday, so this has no
-      # Monday, though a rule of every day has: its walk is cut short.
+      # Monday, though a rule of every day has. It is told so from its steps
+      # (`test/tempo/rrule/step_past_parts_test.exs`), where its walk was
+      # cut short.
       {:ok, recurrence} =
         RRule.parse("FREQ=DAILY;INTERVAL=7;BYDAY=MO;COUNT=2", from: ~o"2026-06-02")
 
       assert Date.day_of_week(~D[2026-06-02]) == 2
-      assert {:error, %Tempo.UnboundedRecurrenceError{}} = Tempo.to_interval(recurrence)
+      assert {:ok, %IntervalSet{} = set} = Tempo.to_interval(recurrence)
+      assert IntervalSet.members(set) == []
     end
   end
 end

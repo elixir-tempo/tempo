@@ -389,6 +389,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A rule of days, hours, minutes or seconds that steps past every value its parts name has no occurrences: `FREQ=DAILY;INTERVAL=7;BYDAY=MO` from a Tuesday and `FREQ=HOURLY;INTERVAL=12;BYHOUR=9` from 10:00 are an empty set, where each was a `Tempo.UnboundedRecurrenceError` after 10,000 periods. It is so in every calendar, and in a zone where the rule steps by days from a date.
+
 * A day written after a division of a year is read past its thirty-first: `2026Y34M45D`, the forty-fifth day of the second quarter, is 15 May, as `2026Y2G3MU45D` is, where it was a `Tempo.ParseError`. A day past the division's last is a `Tempo.InvalidDateError`.
 
 * `Tempo.at/2` places a time of day after a selection that has no period, on each date it selects: `Tempo.at(~o"L5KN", ~o"T17H30M")` is `~o"L5KNT17H30M"`, the Fridays at half past five, where it was `~o"T17H30ML5KN"`, which no reader takes.
