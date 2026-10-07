@@ -399,6 +399,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A rule on a recurrence written to its end (`R3/P1D/2019-01-08/FL7KN`) is refused, with a `Tempo.ConversionError` whose reason is `:not_built` and whose target is `:rule_to_an_end`: the rule was passed over, so it was the three days before 8 January where its rule selects Sundays. With no rule the recurrence is the periods back from its end, as it was.
+
 * A rule of one occurrence is converted as a rule however it is written. With no start (`R1/../P1D/FL7KN`, `FREQ=DAILY;BYDAY=SU;COUNT=1`) and with a start and an end (`R1/2019-01-01/2019-01-02/FL7KN`) it was handed back as it was given, with a start that has no year it was a `Tempo.UnanchoredError`, and `Enum` walked the span from its start; each is now the first its rule selects.
 
 * A rule with a count and no start, in a window with no end, has as many occurrences from the window's start as it counts: `Tempo.to_interval(~o"R2/../P1D", within: ~o"2026-01-01/..")` is 1 and 2 January, where it was two days of each stretch the walk took, without end.

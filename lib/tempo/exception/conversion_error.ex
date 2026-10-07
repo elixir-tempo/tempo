@@ -56,9 +56,12 @@ defmodule Tempo.ConversionError do
     year of `Calendrical.Reform.England` before 1751); `:rrule` is an
     RRULE that steps or selects by a month, a year, a week of the year or
     a day of one, for a recurrence of another calendar than the Gregorian;
-    and `:week_of_month` is a week of a month in a calendar whose year
+    `:week_of_month` is a week of a month in a calendar whose year
     does not begin with its first month, and one selected from a month as
-    other than a whole number (a mask).
+    other than a whole number (a mask); and `:rule_to_an_end` is a rule
+    on a recurrence written with a duration and an end
+    (`~o"R3/P1D/2019-01-08/FL7KN"`), whose occurrences run back from it,
+    in every calendar.
     The [operation matrix](operation-matrix.html) lists each.
 
   * `:calendar_week_in_month` — a week of the calendar's own numbering
@@ -226,6 +229,9 @@ defmodule Tempo.ConversionError do
 
   defp not_built(:week_of_month), do: "a week of a month"
 
+  defp not_built(:rule_to_an_end),
+    do: "a rule on a recurrence written to its end, whose occurrences run back from it,"
+
   defp not_built(other), do: "#{other}"
 
   defp not_built_calendar(:month),
@@ -239,6 +245,8 @@ defmodule Tempo.ConversionError do
   # what is said of the calendar is said of the two cases.
   defp not_built_calendar(:week_of_month),
     do: "in a year that does not begin with its first month and where it is no whole number"
+
+  defp not_built_calendar(:rule_to_an_end), do: "as for every calendar"
 
   defp not_built_calendar(_target), do: "whose year does not begin with its first month"
 

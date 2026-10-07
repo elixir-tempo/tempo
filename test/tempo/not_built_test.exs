@@ -629,4 +629,65 @@ defmodule Tempo.NotBuiltTest do
       assert IntervalSet.count(mondays) == 5
     end
   end
+
+  # Found 2026-10-08: the walk back from an end steps its cadence and never
+  # asked the rule, so `R3/P1D/2019-01-08/FL7KN` was the three days before
+  # 8 January, a Saturday, a Sunday and a Monday.
+  describe "a rule on a recurrence written to its end" do
+    @to_an_end [
+      {"R3/P1D/2019-01-08/FL7KN", []},
+      {"R1/P1D/2019-01-08/FL7KN", []},
+      {"P1D/2019-01-08/FL7KN", []},
+      {"R3/P1W/2019-01-08/FL7KN", []},
+      {"R3/P1M/2019-06-01/FL15DN", []},
+      {"R/P1D/2019-01-08/FL7KN", [within: ~o"2018-12"]},
+      {"R3/P1D/2019Y1M{8,15}D/FL7KN", []}
+    ]
+
+    test "is refused, whatever its count" do
+      for {text, options} <- @to_an_end do
+        answer = Tempo.to_interval(Tempo.from_iso8601!(text), options)
+        assert refused?(answer, :rule_to_an_end, Calendrical.Gregorian), text
+      end
+
+      {:ok, built} =
+        Interval.new(to: ~o"2019-01-08", duration: ~o"P1D", recurrence: 3, repeat_rule: ~o"L7KN")
+
+      assert refused?(Tempo.to_interval(built), :rule_to_an_end, Calendrical.Gregorian)
+      assert refused?(Tempo.to_string(built), :rule_to_an_end, Calendrical.Gregorian)
+      assert_raise ConversionError, fn -> Enum.to_list(built) end
+    end
+
+    test "is refused in another calendar, which the error names" do
+      answer = Tempo.to_interval(read("R3/P1D/5786-09-30/FL7KN", Hebrew))
+      assert refused?(answer, :rule_to_an_end, Hebrew)
+    end
+
+    test "names the recurrence and says what is not built" do
+      {:error, error} = Tempo.to_interval(~o"R3/P1D/2019-01-08/FL7KN")
+
+      assert Exception.message(error) =~ ~s|Cannot answer ~o"R3/P1D/2019Y1M8D/FL7KN"|
+
+      assert Exception.message(error) =~
+               "a rule on a recurrence written to its end, whose occurrences run back from it, " <>
+                 "is not built for Calendrical.Gregorian, as for every calendar"
+    end
+
+    test "with no rule is the periods back from its end, as it was" do
+      back = fn count -> for k <- count..1//-1, do: Date.add(~D[2019-01-08], -k) end
+
+      assert first_days(Tempo.to_interval(~o"R3/P1D/2019-01-08"), Calendar.ISO) == back.(3)
+      assert first_days(Tempo.to_interval(~o"R5/P1D/2019-01-08"), Calendar.ISO) == back.(5)
+
+      assert Tempo.to_interval(~o"P1D/2019-01-08") ==
+               {:ok, Tempo.from_iso8601!("2019-01-07/2019-01-08")}
+    end
+
+    test "a rule on a recurrence written from its start is answered" do
+      sundays =
+        Enum.filter(Date.range(~D[2019-01-01], ~D[2019-01-21]), &(Date.day_of_week(&1) == 7))
+
+      assert first_days(Tempo.to_interval(~o"R3/2019-01-01/P1D/FL7KN"), Calendar.ISO) == sundays
+    end
+  end
 end

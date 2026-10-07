@@ -26,7 +26,9 @@ defmodule Tempo.NotBuilt do
   # in a year that does not begin with its first month, and one selected from
   # a month that is no whole number. A week of the calendar's own numbering
   # (`w`) under a month is no such area: it is refused for good
-  # (`Tempo.RRule.Selection.calendar_week_in_its_year/2`).
+  # (`Tempo.RRule.Selection.calendar_week_in_its_year/2`). The seventh is in
+  # every calendar: a rule on a recurrence written to its end, whose
+  # occurrences run back from it.
 
   alias Tempo.{Compare, ConversionError, Duration, Interval, UnitValues}
 
@@ -240,6 +242,18 @@ defmodule Tempo.NotBuilt do
     asked = "the selection of #{inspect(selector)} from #{inspect(from)}"
     {:error, error(asked, :week_of_month, Compare.effective_calendar(calendar))}
   end
+
+  @doc false
+  # A rule on a recurrence written with a duration and an end
+  # (`R3/P1D/2019-01-08/FL7KN`). Its occurrences run back from the end, a
+  # cadence each, and the walk back steps the cadence and never asks the
+  # rule: what it gave was each period, the three days before 8 January,
+  # where the rule selects the Sundays among them. To build: each period
+  # back from the end resolved by its rule, the count being of what the rule
+  # selects, nearest the end first.
+  @spec rule_to_an_end(Interval.t()) :: ConversionError.t()
+  def rule_to_an_end(%Interval{to: %Tempo{calendar: calendar}} = recurrence),
+    do: error(recurrence, :rule_to_an_end, Compare.effective_calendar(calendar))
 
   @doc false
   # A step from a value that holds several months (a set, a range, a mask or

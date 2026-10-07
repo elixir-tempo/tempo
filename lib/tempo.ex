@@ -8327,6 +8327,22 @@ defmodule Tempo do
     end
   end
 
+  # A rule on a recurrence written to its end is not built, whatever its
+  # count: the walk back from the end steps its cadence and does not ask the
+  # rule (`Tempo.NotBuilt.rule_to_an_end/1`).
+  defp materialise(
+         %Tempo.Interval{
+           from: from,
+           duration: %Tempo.Duration{},
+           to: %Tempo{},
+           repeat_rule: %Tempo{}
+         } = interval,
+         _opts
+       )
+       when from in [nil, :undefined] do
+    {:error, NotBuilt.rule_to_an_end(interval)}
+  end
+
   # A `duration + to` interval (`P1M/1985-06`). Materialise to a
   # closed `[to - duration, to)` interval.
   defp materialise(
