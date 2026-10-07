@@ -20,7 +20,6 @@ defmodule Tempo.RRule.PeriodPartsTest do
 
   import Tempo.Sigils
 
-  alias Tempo.ConversionError
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.RRule
@@ -245,14 +244,26 @@ defmodule Tempo.RRule.PeriodPartsTest do
                [{~D[2026-06-22], 7}]
     end
 
-    test "beside a part that picks within the week is not built" do
-      for answer <- [
-            Tempo.select(~o"2026-06", ~o"L1W1KN"),
-            Tempo.to_interval(read("2026Y6ML1W1KN")),
-            Tempo.to_interval(read("R2/2026Y6M/P1M/FL1WT10HN"))
-          ] do
-        assert {:error, %ConversionError{reason: :not_built, target: :week_of_month}} = answer
-      end
+    test "beside a part that picks within the week hands it the week's days" do
+      # The first week of June 2026 starts on Monday the 1st, and July's on
+      # Monday 29 June (`test/tempo/week_of_month_test.exs`).
+      assert Enum.map([~D[2026-06-01], ~D[2026-06-29]], &Date.day_of_week/1) == [1, 1]
+
+      assert spans(Tempo.select(~o"2026-06", ~o"L1W1KN")) == [{~D[2026-06-01], 1}]
+      assert spans(Tempo.to_interval(read("2026Y6ML1W1KN"))) == [{~D[2026-06-01], 1}]
+
+      # A rule's count is of its occurrences: seven days of each of two weeks.
+      {:ok, at_ten} = Tempo.to_interval(read("R14/2026Y6M/P1M/FL1WT10HN"))
+
+      assert Enum.map(IntervalSet.members(at_ten), &Interval.from/1) ==
+               for(
+                 date <-
+                   Enum.concat(
+                     Date.range(~D[2026-06-01], ~D[2026-06-07]),
+                     Date.range(~D[2026-06-29], ~D[2026-07-05])
+                   ),
+                 do: Tempo.from_iso8601!("#{date}T10")
+               )
     end
 
     test "limits a rule whose candidates are days, as it did" do

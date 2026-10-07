@@ -1895,6 +1895,10 @@ defmodule Tempo.Explain do
   defp selection_clause({:day, d}), do: "on #{ordinals_phrase(d)}"
   defp selection_clause({:week, w}), do: "in #{ordinals_phrase(w)} ISO week"
   defp selection_clause({:calendar_week, w}), do: "in #{ordinals_phrase(w)} calendar week"
+
+  defp selection_clause({:week_of_month, w}),
+    do: "in #{ordinals_phrase(w)} week of the month"
+
   defp selection_clause({:day_of_year, d}), do: "on #{ordinals_phrase(d)} day of the year"
   defp selection_clause({:instance, p}), do: "keeping #{ordinals_phrase(p)} occurrence"
   defp selection_clause({:event, name}), do: "on #{event_phrase(name)}"
@@ -2104,6 +2108,7 @@ defmodule Tempo.Explain do
   defp masked_unit_phrase(:month), do: "in a month"
   defp masked_unit_phrase(:week), do: "in an ISO week"
   defp masked_unit_phrase(:calendar_week), do: "in a calendar week"
+  defp masked_unit_phrase(:week_of_month), do: "in a week of the month"
   defp masked_unit_phrase(:day), do: "on a day"
   defp masked_unit_phrase(:day_of_year), do: "on a day of the year"
   defp masked_unit_phrase(:day_of_week), do: "on a day of the week"

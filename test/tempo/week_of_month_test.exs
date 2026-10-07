@@ -28,6 +28,7 @@ defmodule Tempo.WeekOfMonthTest do
   alias Tempo.IntervalSet
   alias Tempo.InvalidDateError
   alias Tempo.ParseError
+  alias Tempo.RRule
   alias Tempo.UnitValues
 
   ## The measure
@@ -57,12 +58,20 @@ defmodule Tempo.WeekOfMonthTest do
 
   defp seconds({%Date{} = from, %Date{} = to}), do: {seconds(from), seconds(to)}
 
+  defp seconds({%Date{} = from, count}) when is_integer(count),
+    do: seconds({from, Date.add(from, count)})
+
   defp bounds(%Interval{} = span),
     do: {Compare.to_utc_seconds(Interval.from(span)), Compare.to_utc_seconds(Interval.to(span))}
 
   defp spans({:ok, %IntervalSet{} = set}), do: set |> IntervalSet.members() |> Enum.map(&bounds/1)
 
   defp text(year, month, rest), do: "#{year}Y#{month}M#{rest}"
+
+  defp pad(number), do: String.pad_leading(Integer.to_string(number), 2, "0")
+
+  # The spans of days, each from its date for so many days.
+  defp days(answer), do: spans(answer)
 
   describe "a week of a month, read" do
     test "is the whole week from a Monday, the first the one that holds the month's first day" do
@@ -401,6 +410,25 @@ defmodule Tempo.WeekOfMonthTest do
                for(month <- 6..8, do: seconds(week(2026, month, weeks_in(2026, month))))
     end
 
+    test "has the first week of its start's month, where that starts before the month does" do
+      # The first week of a month starts before it in every month that does
+      # not begin on a Monday, and was dropped as coming before the start.
+      for {year, month} <- @months do
+        {next_year, next_month} = if month == 12, do: {year + 1, 1}, else: {year, month + 1}
+        rule = Tempo.from_iso8601!("R2/#{year}Y#{month}M/P1M/FL1WN")
+
+        assert {year, month, spans(Tempo.to_interval_set(rule))} ==
+                 {year, month,
+                  [seconds(week(year, month, 1)), seconds(week(next_year, next_month, 1))]}
+      end
+
+      assert spans(Tempo.to_interval_set(Tempo.from_iso8601!("R2/2026Y7M/P1M/FL1WN"))) ==
+               [
+                 seconds({~D[2026-06-29], ~D[2026-07-06]}),
+                 seconds({~D[2026-07-27], ~D[2026-08-03]})
+               ]
+    end
+
     test "is a fifth week only in the months that have one" do
       expected =
         for month <- 1..12, weeks_in(2026, month) >= 5, do: seconds(week(2026, month, 5))
@@ -420,18 +448,153 @@ defmodule Tempo.WeekOfMonthTest do
                [~o"2026-06-15", ~o"2032-06-15"]
     end
 
-    test "is refused by name beside a part that picks within the week, and as the calendar's own" do
-      for text <- ["2026Y6ML2W3KN", "2026Y6ML2WT10HN", "2026Y6ML2W1IN", "2026Y6ML2wN"] do
-        assert {^text, {:error, %ConversionError{reason: :not_built, target: :week_of_month}}} =
-                 {text, Tempo.to_interval(Tempo.from_iso8601!(text))}
+    test "is refused by name as the calendar's own week, which is a week of its year" do
+      assert {:error, %ConversionError{reason: :not_built, target: :week_of_month}} =
+               Tempo.to_interval(Tempo.from_iso8601!("2026Y6ML2wN"))
+
+      assert {:error, %ConversionError{reason: :not_built, target: :week_of_month} = error} =
+               Tempo.select(~o"2026-06", ~o"L2wN")
+
+      assert Exception.message(error) =~ "from ~o\"2026Y6M\""
+    end
+  end
+
+  # A week of a month in a selection, beside a part that picks within it,
+  # was refused as not built: the week's start was a day of the month, which
+  # the resolver kept or dropped by its week of the year. It hands its days
+  # to the parts after it, as a week of a year does (`2026YL24W3KN`).
+  describe "a week of a month beside a part that picks within it, in a selection" do
+    test "with a day of the week is that day's date" do
+      for {year, month} <- @months, week <- 1..weeks_in(year, month), day <- 1..7 do
+        {monday, _next} = week(year, month, week)
+        date = Date.add(monday, day - 1)
+        value = Tempo.from_iso8601!(text(year, month, "L#{week}W#{day}KN"))
+
+        assert {year, month, week, day, spans(Tempo.to_interval(value))} ==
+                 {year, month, week, day, [seconds({date, Date.add(date, 1)})]}
       end
 
-      for selector <- [~o"L2W3KN", ~o"L2wN"] do
-        assert {:error, %ConversionError{reason: :not_built, target: :week_of_month} = error} =
-                 Tempo.select(~o"2026-06", selector)
+      # Wednesday of the second week of June 2026 is the 10th, as the value
+      # written with no selection is.
+      assert spans(Tempo.to_interval(~o"2026Y6ML2W3KN")) ==
+               [bounds(Tempo.to_interval!(Tempo.from_iso8601!("2026Y6M2W3K")))]
+    end
 
-        assert Exception.message(error) =~ "from ~o\"2026Y6M\""
+    test "keeps a day of the week that is outside the month, and a month beside it limits the month" do
+      # The first week of July 2026 starts on Monday 29 June.
+      assert week(2026, 7, 1) == {~D[2026-06-29], ~D[2026-07-06]}
+      monday = [seconds({~D[2026-06-29], ~D[2026-06-30]})]
+
+      assert spans(Tempo.to_interval(~o"2026Y7ML1W1KN")) == monday
+      assert spans(Tempo.to_interval(~o"2026Y7ML7M1W1KN")) == monday
+      assert spans(Tempo.to_interval(~o"2026Y7ML6M1W1KN")) == []
+    end
+
+    test "with a time of day is that time on each of its days" do
+      {monday, _next} = week(2026, 6, 2)
+
+      at_ten =
+        for day <- 0..6 do
+          start = NaiveDateTime.new!(Date.add(monday, day), ~T[10:00:00])
+
+          {start |> NaiveDateTime.to_gregorian_seconds() |> elem(0),
+           start |> NaiveDateTime.add(1, :hour) |> NaiveDateTime.to_gregorian_seconds() |> elem(0)}
+        end
+
+      assert spans(Tempo.to_interval(~o"2026Y6ML2WT10HN")) == at_ten
+      assert spans(Tempo.to_interval(~o"2026Y6ML2W3KT10HN")) == [Enum.at(at_ten, 2)]
+    end
+
+    test "with a day of the month keeps the day it names, and with a position the day so placed" do
+      # The second week of June 2026 is the 8th to the 14th.
+      assert week(2026, 6, 2) == {~D[2026-06-08], ~D[2026-06-15]}
+      day = &[seconds({&1, Date.add(&1, 1)})]
+
+      assert spans(Tempo.to_interval(~o"2026Y6ML2W9DN")) == day.(~D[2026-06-09])
+      assert spans(Tempo.to_interval(~o"2026Y6ML2W20DN")) == []
+      assert spans(Tempo.to_interval(~o"2026Y6ML2W1IN")) == day.(~D[2026-06-08])
+      assert spans(Tempo.to_interval(~o"2026Y6ML2W-1IN")) == day.(~D[2026-06-14])
+      assert spans(Tempo.to_interval(~o"2026Y6ML2W{1,3}K1IN")) == day.(~D[2026-06-08])
+      assert spans(Tempo.to_interval(~o"2026Y6ML-1W-1KN")) == day.(~D[2026-06-28])
+
+      assert spans(Tempo.to_interval(~o"2026Y6ML{1,2}W{1,3}KN")) ==
+               Enum.flat_map(
+                 [~D[2026-06-01], ~D[2026-06-03], ~D[2026-06-08], ~D[2026-06-10]],
+                 day
+               )
+    end
+
+    test "is what Tempo.select/2 gives, each day the value it is" do
+      {:ok, by_selection} = Tempo.select(~o"2026-06", ~o"L2W3KN")
+      {:ok, by_constraint} = Tempo.select(~o"2026-06", ~o"2W3K")
+
+      assert [%Interval{unit: :hour} = wednesday] = IntervalSet.members(by_selection)
+      assert bounds(wednesday) == seconds({~D[2026-06-10], ~D[2026-06-11]})
+      assert IntervalSet.members(by_constraint) == [wednesday]
+
+      # A time under the week alone is on each of its days by a selection, as
+      # it is under a week of a year, and on its first by a constraint, as
+      # the value so written is read.
+      for {period, selection, constraint} <- [
+            {~o"2026-06", ~o"L2WT10HN", ~o"2WT10H"},
+            {~o"2026", ~o"L24WT10HN", ~o"24WT10H"}
+          ] do
+        {:ok, each_day} = Tempo.select(period, selection)
+        {:ok, first_day} = Tempo.select(period, constraint)
+
+        assert Enum.map(IntervalSet.members(each_day), &Interval.from/1) ==
+                 for(day <- 8..14, do: Tempo.from_iso8601!("2026-06-#{pad(day)}T10"))
+
+        assert Enum.map(IntervalSet.members(first_day), &Interval.from/1) == [~o"2026-06-08T10"]
       end
+    end
+
+    test "is each month's in a rule that steps by months" do
+      mondays = for month <- 7..9, do: seconds({elem(week(2026, month, 1), 0), 1})
+
+      assert days(Tempo.to_interval(Tempo.from_iso8601!("R3/2026Y7M/P1M/FL1W1KN"))) == mondays
+
+      # From a year, the months of it from the first.
+      assert days(Tempo.to_interval(Tempo.from_iso8601!("R3/2026Y/P1M/FL1W1KN"))) ==
+               for(month <- 1..3, do: seconds({elem(week(2026, month, 1), 0), 1}))
+
+      # With no start, those of them in the window: the Monday of July's
+      # first week is 29 June.
+      assert days(
+               Tempo.to_interval(Tempo.from_iso8601!("R/../P1M/FL1W1KN"),
+                 within: ~o"2026-07/2026-09"
+               )
+             ) == Enum.drop(mondays, 1)
+
+      # A month has no seventh week, and the rule no occurrence.
+      assert days(Tempo.to_interval(Tempo.from_iso8601!("R3/2026Y6M/P1M/FL7W1KN"))) == []
+    end
+
+    test "is the day its calendar numbers in the week, where the calendar cuts a month's weeks short" do
+      # The days of the second week of Adar 5787, as Calendrical numbers
+      # them, and the one of them that is a Wednesday.
+      in_week =
+        for day <- 1..Hebrew.days_in_month(5787, 6),
+            Hebrew.week_of_month(5787, 6, day) == {6, 2},
+            do: Date.new!(5787, 6, day, Hebrew)
+
+      assert [wednesday] =
+               Enum.filter(in_week, &(Date.day_of_week(Date.convert!(&1, Calendar.ISO)) == 3))
+
+      {:ok, selected} = Tempo.to_interval(Tempo.from_iso8601!("5787Y6ML2W3KN[u-ca=hebrew]"))
+
+      assert Enum.map(IntervalSet.members(selected), &Tempo.to_date(Interval.from(&1))) ==
+               [{:ok, wednesday}]
+    end
+
+    test "is worded as a week of the month, and has no RRULE to be written as" do
+      assert Tempo.explain(~o"2026Y6ML2W3KN") =~ "in the 2nd week of the month, on a Wednesday"
+      assert Tempo.explain(~o"2026YL24W3KN") =~ "in the 24th ISO week"
+
+      assert {:error, %ConversionError{target: :rrule} = error} =
+               RRule.to_string(Tempo.from_iso8601!("R/2026Y6M/P1M/FL2W3KN"))
+
+      assert Exception.message(error) =~ "a week of a month"
     end
   end
 

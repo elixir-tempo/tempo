@@ -156,6 +156,7 @@ defmodule Tempo.RRule.Encoder do
     :day_of_year,
     :week,
     :calendar_week,
+    :week_of_month,
     :event,
     :nearest_weekday,
     :or_day,
@@ -743,6 +744,9 @@ defmodule Tempo.RRule.Encoder do
   # cannot say it.
   defp token_description(:calendar_week),
     do: "a calendar week (w), since BYWEEKNO counts ISO 8601 weeks"
+
+  defp token_description(:week_of_month),
+    do: "a week of a month (W after a month), since BYWEEKNO counts the weeks of a year"
 
   defp token_description(:traditional_month),
     do: "a traditional month (m), since BYMONTH numbers a month by its position"

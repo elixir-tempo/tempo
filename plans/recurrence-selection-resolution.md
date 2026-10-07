@@ -1,6 +1,6 @@
 # Recurrence selection resolution
 
-**Status:** in progress, 2026-10-07
+**Status:** implemented (v2.0.0), 2026-10-08
 
 An unanchored recurrence materialises against a `:bound` alone. Each
 occurrence should land at the grain the selection names — day for
@@ -51,9 +51,9 @@ Week **of month** ("the 2nd week of June") needed no new designator: the spellin
 
 * **The constraint** — `Tempo.select/2` gives a week selected from a month the same reading (`merged_onto/3` in `lib/tempo/select.ex`), each week a set or a range names in the month as a constraint of its own (`each_week_of_month/2`), and keeps a selected week by starting among the month's weeks and not in the month (`span_selected_in/2`), so the week that starts on 29 June is July's first and is selected once from a span of months.
 
-* **The selection** — a week part at the scope of a month, with a candidate that is a month, is the week's span (`week_in_month/3` in `lib/tempo/rrule/selection.ex`), marked to keep that span as a calendar week's is. A rule that steps by months starts from its month (`calendar_start_unit/2` in `lib/tempo.ex`). A candidate that is a day is still kept or dropped by its week of the year.
+* **The selection** — `Tempo.RRule.Selection.read_in_its_period/1` is the one place that says which a week is: in a value whose selection follows a month, and in a rule that steps by months from a month, a year or no start, it writes the part as `:week_of_month`, and every reader of a rule asks it (the conversion, `Tempo.explain/1`, the RRULE writer, which has no part for one and refuses it). The resolver gives that part alone as the week's span, marked to keep it as a calendar week's is, and beside a part that picks within the week as the week's days, handed on at the scope of a day as a week's are in a year (`scope_after/2`). A rule of them starts from its month (`calendar_start_unit/2` in `lib/tempo.ex`) and is held to the day its start's first week begins on (`start_floor/3`), which can be before the month. A rule that steps by months from a date keeps `:week`, and each of its days is kept or dropped by its week of the year.
 
-Not built, and refused by name: a week of a month beside a part that picks within it (`2026Y6ML2W3KN`), whose start is filled to a day; a week of the calendar's own numbering under a month (`w`); a mask of weeks. A month beside a week in a yearly selection (`2026YL6M2WN`) is still ISO week 2 of the year. Each is an item of `TODO.md`.
+Not built, and refused by name: a week of the calendar's own numbering under a month (`w`), and a mask of weeks given to `Tempo.select/2` as a constraint. A month beside a week in a yearly selection (`2026YL6M2WN`) is still ISO week 2 of the year. Each is an item of `TODO.md`.
 
 ## Tasks
 
@@ -63,6 +63,6 @@ Not built, and refused by name: a week of a month beside a part that picks withi
 
 * [x] Parse `W` after a month (`2026Y6M2W`) as week-of-month, and materialise it via `Calendrical.week_of_month/3`: Calendrical counts whole weeks, week 1 the one that holds the month's first day, so 29 and 30 June 2026 are in week 1 of July. 2026-10-07.
 
-* [ ] A week of a month beside a part that picks within it, in a selection (`TODO.md`).
+* [x] A week of a month beside a part that picks within it, in a selection: its days, handed on as a week's are in a year. 2026-10-08.
 
 * [x] Replace the hard-coded ISO `week_dates_in_year/3` on the RRULE `BYWEEKNO` path with Calendrical's calendar-aware week functions (`Tempo.Validation.week_starts/3`).

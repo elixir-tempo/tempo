@@ -37,7 +37,7 @@ defmodule Tempo.RRule.Selection do
 
   A computed event is each of its days that falls in the period it is selected in: it expands a `YEARLY`, a `MONTHLY` and a `WEEKLY` rule, so the Easter of April 2026 and of its fourteenth week are both 5 April, and it limits a `DAILY` rule and a finer one to the candidates on its day. A weekday or a day of the month beside it limits that day.
 
-  RFC 5545's candidate at every frequency is a day, and its table gives a weekly rule no `BYMONTHDAY` and no `BYYEARDAY`, and a monthly rule no `BYYEARDAY`. A selection made in a whole week or month (`Tempo.select/2` from one, a value such as `2026Y25WL15DN`, a recurrence that starts at its cadence's resolution or has no start) has that period for its candidate, and such a part is then each day of the period it names: `L15DN` in a week is the day of the week that is the 15th of its month, and `L166ON` in June is 15 June 2026. A part that names a day after it keeps the days it names too, and a weekday beside one keeps or drops them. Where the candidate is a day, as in a rule read from an RRULE, the period is the week (from `WKST`) or the month that holds it. A week resolved in a month is a week of the month, which the calendar numbers (`Tempo.UnitValues.weeks_of_month/3`): `L2WN` in June 2026 is 8 to 14 June, the span of its dates, and `L1WN` in July starts on 29 June. Beside a part that picks within the week it is not built, and is refused by name; a candidate that is a day is kept or dropped by its week of the year.
+  RFC 5545's candidate at every frequency is a day, and its table gives a weekly rule no `BYMONTHDAY` and no `BYYEARDAY`, and a monthly rule no `BYYEARDAY`. A selection made in a whole week or month (`Tempo.select/2` from one, a value such as `2026Y25WL15DN`, a recurrence that starts at its cadence's resolution or has no start) has that period for its candidate, and such a part is then each day of the period it names: `L15DN` in a week is the day of the week that is the 15th of its month, and `L166ON` in June is 15 June 2026. A part that names a day after it keeps the days it names too, and a weekday beside one keeps or drops them. Where the candidate is a day, as in a rule read from an RRULE, the period is the week (from `WKST`) or the month that holds it. A week resolved in a month is a week of the month, which the calendar numbers (`Tempo.UnitValues.weeks_of_month/3`): `L2WN` in June 2026 is 8 to 14 June, the span of its dates, and `L1WN` in July starts on 29 June. Beside a part that picks within the week it hands that part its days, as a week does in a year: `L2W3KN` in June 2026 is Wednesday the 10th, `L2WT10HN` ten o'clock on each of the week's seven days and `L2W1IN` its first day. `read_in_its_period/1` says which a week is, of its month or of the year: in a rule that steps by months from a date, as one read from an RRULE does, each candidate is a day, which the week keeps or drops by its week of the year.
 
   A day with no month (`D`) in a rule that is resolved in a year, and that nothing gives a month, is a day of the year, as the value `2026Y45D` is: `2026YL45DN` and `R/2026/P1Y/FL45DN` are 14 February, and `L-1DN` there is 31 December. A recurrence's start that names a month gives the day that month (ISO 8601-2 §13.6.3), a rule read from an RRULE with a start states it (`L3M15DN`), and a month, a week, a day of the year or a computed event beside the day places it already. `read_in_its_period/1` is that reading, which the conversion, the RRULE writer and `Tempo.explain/1` all ask.
 
@@ -362,6 +362,7 @@ defmodule Tempo.RRule.Selection do
     :traditional_month,
     :week,
     :calendar_week,
+    :week_of_month,
     :day_of_year,
     :event,
     :day,
@@ -374,10 +375,11 @@ defmodule Tempo.RRule.Selection do
 
   @doc false
   # A recurrence, or a value that holds a selection, with the selection as it
-  # is resolved where that is in a year: a day with no month is a day of the
-  # year (`days_of_year_where_no_month/1`). Every reader of a rule asks here,
-  # so the occurrences, the RRULE written and the words of `Tempo.explain/1`
-  # are of one reading.
+  # is resolved in its period. In a year a day with no month is a day of the
+  # year (`days_of_year_where_no_month/1`), and in a month a week is a week
+  # of the month (`:week_of_month`, a part no value is written with). Every
+  # reader of a rule asks here, so the occurrences, the RRULE written and
+  # the words of `Tempo.explain/1` are of one reading.
   #
   # A recurrence that steps by years resolves its rule in a year, and where
   # its start names a month (a date, a month of a year) the day is that
@@ -399,12 +401,23 @@ defmodule Tempo.RRule.Selection do
       else: recurrence
   end
 
+  def read_in_its_period(
+        %Interval{
+          duration: %Tempo.Duration{time: [{:month, _count} | _finer]},
+          from: from,
+          repeat_rule: %Tempo{time: [{:selection, selection} | units]} = rule
+        } = recurrence
+      ) do
+    if gives_no_day?(from, rule),
+      do: %{recurrence | repeat_rule: %{rule | time: [{:selection, in_month(selection)} | units]}},
+      else: recurrence
+  end
+
   def read_in_its_period(%Tempo{time: time, calendar: calendar} = value) when is_list(time) do
     case Enum.split_while(time, &(not match?({:selection, _selection}, &1))) do
       {context, [{:selection, selection} | trailing]} ->
-        if a_year_or_none?(context) and not week_calendar?(calendar),
-          do: %{value | time: context ++ [{:selection, in_year(selection)} | trailing]},
-          else: value
+        read = in_period_of(context, selection, week_calendar?(calendar))
+        %{value | time: context ++ [{:selection, read} | trailing]}
 
       {_time, []} ->
         value
@@ -413,11 +426,54 @@ defmodule Tempo.RRule.Selection do
 
   def read_in_its_period(value), do: value
 
+  # A calendar of weeks has no months, and a selection in one is as it was.
+  defp in_period_of(_context, selection, true), do: selection
+
+  defp in_period_of(context, selection, false) do
+    cond do
+      a_year_or_none?(context) -> in_year(selection)
+      a_month?(context) -> in_month(selection)
+      true -> selection
+    end
+  end
+
   defp in_year(selection), do: days_of_year_where_no_month(selection)
 
   defp a_year_or_none?([]), do: true
   defp a_year_or_none?([{:year, _years}]), do: true
   defp a_year_or_none?(_finer_context), do: false
+
+  defp a_month?(context), do: match?({:month, _months}, List.last(context))
+
+  # A week resolved in a month is a week of the month, which the calendar
+  # numbers (decided 2026-10-07): the `W` of a value whose selection follows
+  # a month (`2026Y6ML2WN`), and of a rule that steps by months from a
+  # month, a year or no start. A rule that steps by months from a date has a
+  # day for each candidate, as RFC 5545's has, and its week keeps or drops
+  # that day by its week of the year. The two are told apart here, once, and
+  # the rule as it is read says which it is.
+  defp in_month(selection), do: Enum.map(selection, &week_of_the_month/1)
+
+  defp week_of_the_month({:week, weeks}), do: {:week_of_month, weeks}
+  defp week_of_the_month(part), do: part
+
+  defp gives_no_day?(%Tempo{time: time, calendar: calendar}, _rule) when is_list(time),
+    do: not week_calendar?(calendar) and Enum.all?(time, &month_unit?/1)
+
+  defp gives_no_day?(%Tempo.Set{set: [_ | _] = starts}, rule),
+    do: Enum.all?(starts, &gives_no_day?(&1, rule))
+
+  defp gives_no_day?(%Tempo.Range{first: first, last: last}, rule),
+    do: gives_no_day?(first, rule) and gives_no_day?(last, rule)
+
+  defp gives_no_day?(no_start, %Tempo{calendar: calendar}) when no_start in [nil, :undefined],
+    do: not week_calendar?(calendar)
+
+  defp gives_no_day?(_another_start, _rule), do: false
+
+  # A start written to its month, or to a span of years, and no finer.
+  defp month_unit?({:month, _months}), do: true
+  defp month_unit?(unit), do: year_unit?(unit)
 
   defp gives_no_month?(%Tempo{time: time, calendar: calendar}, _rule) when is_list(time),
     do: not week_calendar?(calendar) and Enum.all?(time, &year_unit?/1)
@@ -743,8 +799,12 @@ defmodule Tempo.RRule.Selection do
   # DAILY rule: BYDAY limits them (RFC 5545's special expand within the
   # week), BYYEARDAY and BYMONTHDAY intersect with them, and BYHOUR,
   # BYMINUTE and BYSECOND still expand each day.
+  #
+  # A week of a month hands its days on in the same way, whatever it is
+  # resolved in.
   defp scope_after({:week, _weeks}, :year), do: :day
   defp scope_after({:calendar_week, _weeks}, :year), do: :day
+  defp scope_after({:week_of_month, _weeks}, _scope), do: :day
   defp scope_after(_entry, scope), do: scope
 
   # The parts in the order and at the scope `resolve_in_period/4` applies
@@ -1077,6 +1137,7 @@ defmodule Tempo.RRule.Selection do
     :traditional_month,
     :week,
     :calendar_week,
+    :week_of_month,
     :day_of_year,
     :event,
     :day,
@@ -1162,6 +1223,13 @@ defmodule Tempo.RRule.Selection do
   end
 
   defp role({:day_of_week, _days}, scope, selection), do: no_ordinal_byday_role(scope, selection)
+
+  # A week of a month beside a part that picks within it makes the week's
+  # days, which that part and those after it keep, drop or put times on, as
+  # a week makes them in a year. With no such part it is the week itself.
+  defp role({:week_of_month, _weeks}, _scope, selection) do
+    if picks_within_a_week?(selection), do: :expand, else: :limit
+  end
 
   # A numbered weekday beside a part that names the day keeps the day or
   # drops it (RFC 5545 §3.3.10, Notes 1 and 2), as a weekday with no number
@@ -1503,18 +1571,22 @@ defmodule Tempo.RRule.Selection do
     end)
   end
 
-  # A week under a month is a week of the month, which the calendar numbers
-  # (decided 2026-10-07): a candidate that is a month is each week the part
-  # names in it, the span of that week's dates, which is not always within
-  # the month. A candidate that is a day, as a rule read from an RRULE or
-  # one that starts on a date has it, is kept or dropped by its week of the
-  # year, as every other period's is.
-  defp apply_role(:limit, {:week, weeks}, candidates, :month, _selection, wkst) do
-    Enum.reduce_while(candidates, [], fn candidate, selected ->
-      case week_in_month(candidate, List.wrap(weeks), wkst) do
-        {:error, _not_built} = error -> {:halt, error}
-        of_the_candidate -> {:cont, selected ++ of_the_candidate}
-      end
+  # A week of a month, which the calendar numbers (decided 2026-10-07, and
+  # written so by `read_in_its_period/1`): each week the part names in the
+  # candidate's month. Alone it is the span of that week's dates, which is
+  # not always within the month, and beside a part that picks within it,
+  # each of those dates.
+  defp apply_role(:limit, {:week_of_month, weeks}, candidates, _scope, _selection, _wkst) do
+    each_candidate(candidates, fn candidate ->
+      with {:ok, named} <- weeks_of_month_named(candidate, weeks),
+           do: {:ok, Enum.map(named, &week_of_month_span(&1, candidate))}
+    end)
+  end
+
+  defp apply_role(:expand, {:week_of_month, weeks}, candidates, _scope, _selection, _wkst) do
+    each_candidate(candidates, fn candidate ->
+      with {:ok, named} <- weeks_of_month_named(candidate, weeks),
+           do: {:ok, Enum.flat_map(named, &week_of_month_days(&1, candidate))}
     end)
   end
 
@@ -2556,36 +2628,63 @@ defmodule Tempo.RRule.Selection do
     end
   end
 
-  # The weeks a part names in a candidate that is a month, each as one
-  # occurrence, and a candidate that is a day kept where it is in a week of
-  # the year the part names.
-  defp week_in_month(
-         %Interval{from: %Tempo{time: [year: year, month: month], calendar: calendar}} = candidate,
-         weeks,
-         _wkst
-       )
-       when is_integer(year) and is_integer(month) do
-    case UnitValues.weeks_of_month(year, month, calendar) do
-      {:ok, in_month} ->
-        weeks
-        |> UnitValues.named(1..Enum.count(in_month)//1)
-        |> Enum.map(&week_of_month_span(Enum.at(in_month, &1 - 1), candidate))
-
-      {:error, :no_period} ->
-        no_weeks_of_month(candidate, year, calendar)
+  # The weeks a part names among those the calendar numbers in a candidate's
+  # month, each the range of its dates.
+  defp weeks_of_month_named(%Interval{from: %Tempo{calendar: calendar}} = candidate, weeks) do
+    with year when is_integer(year) <- year_of(candidate),
+         month when is_integer(month) <- month_of(candidate),
+         {:ok, in_month} <- UnitValues.weeks_of_month(year, month, calendar) do
+      named = weeks |> List.wrap() |> UnitValues.named(1..Enum.count(in_month)//1)
+      {:ok, Enum.map(named, &Enum.at(in_month, &1 - 1))}
+    else
+      {:error, :no_period} -> no_weeks_of_month(candidate, calendar)
+      _no_one_month -> {:ok, []}
     end
   end
-
-  defp week_in_month(candidate, weeks, wkst),
-    do: if(in_week_no_list?(candidate, weeks, wkst), do: [candidate], else: [])
 
   # A month the calendar numbers no weeks in selects none. In a year that
   # does not begin with its first month the calendar counts its months
   # otherwise than its dates name them, and the weeks of one are not built.
-  defp no_weeks_of_month(%Interval{from: from}, year, calendar) do
-    if UnitValues.year_begins_with_first_month?(year, calendar),
-      do: [],
+  defp no_weeks_of_month(%Interval{from: from} = candidate, calendar) do
+    if UnitValues.year_begins_with_first_month?(year_of(candidate), calendar),
+      do: {:ok, []},
       else: {:error, NotBuilt.error(from, :week_of_month, calendar)}
+  end
+
+  # The parts that go with a week of a month and pick nothing within it:
+  # those that name the periods it is in, and what is no part at all, the
+  # day its weeks start on and what a walk tells the resolver.
+  @beside_a_week_of_month [
+    :year,
+    :month,
+    :traditional_month,
+    :week_of_month,
+    :wkst,
+    :skip,
+    :origin_day,
+    :keep_span
+  ]
+
+  defp picks_within_a_week?(selection),
+    do: Enum.any?(selection, fn {part, _value} -> part not in @beside_a_week_of_month end)
+
+  # The dates of a week of a month, each as a candidate that is its day. A
+  # candidate written to a day or finer is moved onto each, keeping its
+  # time of day, and one that is a month is each day of the week.
+  defp week_of_month_days(%Date.Range{} = week, %Interval{from: %Tempo{time: time}} = candidate) do
+    if Keyword.has_key?(time, :day),
+      do: swap_dates(candidate, for(date <- week, do: {date.year, date.month, date.day, date})),
+      else: Enum.map(week, &day_of_week_of_month(&1, candidate))
+  end
+
+  defp day_of_week_of_month(%Date{} = date, %Interval{from: %Tempo{} = from} = candidate) do
+    next = Calendrical.next(date, :day)
+
+    %{
+      candidate
+      | from: %{from | time: [year: date.year, month: date.month, day: date.day]},
+        to: %{from | time: [year: next.year, month: next.month, day: next.day]}
+    }
   end
 
   # A week of a month as one occurrence, from its first date to the day

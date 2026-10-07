@@ -1158,6 +1158,10 @@ defmodule Tempo.Inspect do
   defp inspect_value({:day_of_week, day}), do: [inspect_list(day), ?K]
   defp inspect_value({:week, week}), do: [inspect_list(week), ?W]
   defp inspect_value({:calendar_week, week}), do: [inspect_list(week), ?w]
+
+  # A week of a month, as a rule read in its period holds it
+  # (`Tempo.RRule.Selection.read_in_its_period/1`), is written as it was.
+  defp inspect_value({:week_of_month, week}), do: [inspect_list(week), ?W]
   defp inspect_value({:instance, instance}), do: [inspect_list(instance), ?I]
 
   # A computed-event selection renders as `(name)e` — the project-specific

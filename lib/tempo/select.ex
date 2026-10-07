@@ -1201,7 +1201,7 @@ defmodule Tempo.Select do
 
   # What a selection of a week from a month is not yet built for is refused
   # by name (`Tempo.NotBuilt.week_in_month/3`): a week of the calendar's own
-  # numbering (`w`), and a week beside a part that picks within it.
+  # numbering (`w`).
   defp week_of_month_built(
          %Tempo{time: [selection: selection]},
          :month,

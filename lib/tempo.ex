@@ -8747,7 +8747,7 @@ defmodule Tempo do
     week = %Tempo.Duration{time: [week: 1]}
 
     cond do
-      selects_any?(selection, [:week, :calendar_week]) ->
+      selects_any?(selection, [:week, :calendar_week, :week_of_month]) ->
         {[week], [week]}
 
       freq_of(cadence) == :week and selects_any?(selection, [:day_of_week, :byday]) ->
@@ -9065,7 +9065,17 @@ defmodule Tempo do
   # dates can still step past every one: `FREQ=DAILY;INTERVAL=7;BYDAY=MO`
   # from a Tuesday. It is told so from its steps (`steps_past_its_parts?/2`),
   # in whatever calendar it is: a week and a clock are the same in each.
-  @names_a_date [:wkst, :skip, :month, :week, :day_of_year, :day, :day_of_week, :byday]
+  @names_a_date [
+    :wkst,
+    :skip,
+    :month,
+    :week,
+    :week_of_month,
+    :day_of_year,
+    :day,
+    :day_of_week,
+    :byday
+  ]
   @names_no_date [:hour, :minute, :second, :instance]
   @time_of_day [:hour, :minute, :second, :microsecond]
 
@@ -10175,14 +10185,28 @@ defmodule Tempo do
     {start, start_floor(from, interval, start), filled}
   end
 
+  #
+  # A week of a month can start before its month does, as the first week of
+  # July 2026 does on 29 June, so a rule of them is held to the day the
+  # first week of its start's month begins on: that week is the first
+  # occurrence of `R/2026Y7M/P1M/FL1WN`, as it is the value `2026Y7ML1WN`.
   defp start_floor(
-         %Tempo{time: [year: year], calendar: calendar} = from,
+         %Tempo{} = from,
          %Tempo.Interval{repeat_rule: %Tempo{time: [{:selection, selection} | _units]}},
          start
-       )
+       ) do
+    cond do
+      List.keymember?(selection, :week_of_month, 0) -> first_week_of_month_floor(from, start)
+      List.keymember?(selection, :week, 0) -> week_year_floor(from, start)
+      true -> start
+    end
+  end
+
+  defp start_floor(_from, _interval, start), do: start
+
+  defp week_year_floor(%Tempo{time: [year: year], calendar: calendar} = from, start)
        when is_integer(year) do
-    with true <- List.keymember?(selection, :week, 0),
-         false <- week_based_calendar?(Compare.effective_calendar(calendar)),
+    with false <- week_based_calendar?(Compare.effective_calendar(calendar)),
          {:ok, %Date{} = monday} <- Validation.date_from_iso_week(year, 1, 1, calendar),
          {:ok, %Date{} = monday} <- Date.convert(monday, calendar) do
       %{from | time: [year: monday.year, month: monday.month, day: monday.day]}
@@ -10191,7 +10215,23 @@ defmodule Tempo do
     end
   end
 
-  defp start_floor(_from, _interval, start), do: start
+  defp week_year_floor(_from, start), do: start
+
+  defp first_week_of_month_floor(
+         %Tempo{calendar: calendar} = from,
+         %Tempo{time: [{:year, year}, {:month, month} | _finer]} = start
+       )
+       when is_integer(year) and is_integer(month) do
+    case UnitValues.weeks_of_month(year, month, Compare.effective_calendar(calendar)) do
+      {:ok, [%Date.Range{first: first} | _later_weeks]} ->
+        %{from | time: [year: first.year, month: first.month, day: first.day]}
+
+      _no_weeks ->
+        start
+    end
+  end
+
+  defp first_week_of_month_floor(_from, start), do: start
 
   # A written start coarser than the grain its selection names —
   # `R/2020Y/P4Y/FL11M3DN`, a year starting a day selection — is filled down to
@@ -10319,10 +10359,10 @@ defmodule Tempo do
   # selection as native (a whole week), distinct from RRULE `BYWEEKNO`,
   # whose `DTSTART` day expands the week to its seven days.
   #
-  # A week selected by a rule that steps by months is a week of the month,
-  # which the calendar numbers, and starts from its month as a week of the
-  # year does from its year.
-  defp calendar_start_unit(:week, :month), do: :month
+  # A week of a month, which the calendar numbers, starts from its month as
+  # a week of the year does from its year
+  # (`Tempo.RRule.Selection.read_in_its_period/1` says which a week is).
+  defp calendar_start_unit(:week_of_month, _stepped_by), do: :month
 
   defp calendar_start_unit(week, _stepped_by) when week in [:week, :calendar_week], do: :year
 

@@ -53,9 +53,7 @@ defmodule Tempo.ConversionError do
     and `:week_of_month` is a week of a month in a calendar whose year
     does not begin with its first month, one selected from a month as
     other than a whole number (a mask), and one selected by a rule
-    resolved in a month beside a part that picks within the week (a
-    weekday, a day, a time of day) or as a week of the calendar's own
-    numbering (`w`).
+    resolved in a month as a week of the calendar's own numbering (`w`).
     The [operation matrix](operation-matrix.html) lists each.
 
   """
