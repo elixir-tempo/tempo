@@ -146,11 +146,6 @@ defmodule Tempo.BesideAGap do
   defp of_any_calendar?(name),
     do: not (name =~ ~r/year|month|30D|29D\/31D|P1M|BYMONTHDAY/)
 
-  # What a calendar of weeks is not yet given, an open item of `TODO.md`
-  # that is nothing of the zone's: a workday counted from a date and time is
-  # refused there.
-  defp built_for_weeks?(name), do: not (name =~ ~r/workday/)
-
   @doc """
   The operations each value is given to, by name.
   """
@@ -366,7 +361,6 @@ defmodule Tempo.BesideAGap do
         for {text, twin, calendar} <- twins(),
             {name, _operation} = operation <- operations(),
             calendar == "buddhist" or of_any_calendar?(name),
-            calendar != "iso-week" or built_for_weeks?(name),
             do: {twin, operation, {text, calendar}}
 
     {:ok, supervisor} = Task.Supervisor.start_link()

@@ -13453,8 +13453,10 @@ defmodule Tempo do
       {year, month, day} when is_integer(year) and is_integer(month) and is_integer(day) ->
         Date.new(year, month, day, calendar_of(tempo))
 
+      # A day of the year or of a week, with or without a time of day: a
+      # calendar of weeks keeps its week and day beside a time.
       _ordinal_or_week_date ->
-        to_date(tempo)
+        tempo |> trunc(:day) |> to_date()
     end
   end
 

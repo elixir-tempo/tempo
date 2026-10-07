@@ -383,6 +383,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* The workday functions take a day and a time of day in a calendar of weeks, which keeps its week and day beside a time: `Tempo.add_workdays(Tempo.from_iso8601!("2024-W10-7T01[u-ca=iso-week]"), 1, :US)` is `~o"2024Y11W1KT1H"W`, and so with `next_workday/2`, `previous_workday/2`, `nearest_workday/2` and `roll_to_workday/3`, where each was a `Tempo.ResolutionError` that said the value denoted no day. `Tempo.workday?/2` and `Tempo.weekend?/2` answer it, where they raised.
+
 * A time zone written after another suffix is a `Tempo.ParseError`, as RFC 9557 §4.1 has a time zone first or not at all: `2022-11-20T10:30[u-ca=hebrew][Europe/Paris]` was read with its zone dropped, as a value in no zone. A second time zone after a first is still dropped where it is elective, the value having the zone it was given first.
 
 * A rule whose occurrences are far apart for its frequency has them: `FREQ=MINUTELY;BYHOUR=9;BYMINUTE=0;COUNT=30` is thirty mornings and `FREQ=DAILY;BYMONTH=2;BYMONTHDAY=29;BYDAY=MO;COUNT=3` the three Mondays to 2112, where each was a `Tempo.UnboundedRecurrenceError`, the walk having asked every minute and every day; it now goes on from the next value a part names. A rule with no occurrence at all (`FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=31`, an April from 31 January, every fourth year's 29 February from 2026) has none, where its walk was cut short.
