@@ -159,6 +159,43 @@ defmodule Tempo.WeekOfMonthTest do
                Tempo.from_iso8601!("5786Y1M1D/5786Y1M6D", Hebrew)
     end
 
+    test "is the week that holds four or more of the month's days, where its calendar counts by that rule" do
+      # `Calendrical.ISO` gives a week to the month that holds its Thursday,
+      # as ISO 8601 gives one to its year: the first days of a month may be
+      # in the last week of the month before.
+      for year <- [2021, 2026], month <- 1..12 do
+        first = Date.new!(year, month, 1)
+        next = first |> Date.end_of_month() |> Date.add(1)
+
+        thursday_week = fn date ->
+          monday_of(Date.add(date, Integer.mod(4 - Date.day_of_week(date), 7)))
+        end
+
+        weeks = div(Date.diff(thursday_week.(next), thursday_week.(first)), 7)
+
+        for week <- 1..weeks do
+          start = Date.add(thursday_week.(first), 7 * (week - 1))
+          read = Tempo.from_iso8601!(text(year, month, "#{week}W"), Calendrical.ISO)
+
+          assert {year, month, week, bounds(read)} ==
+                   {year, month, week, seconds({start, Date.add(start, 7)})}
+        end
+
+        assert {^year, ^month, {:error, %InvalidDateError{unit: :week}}} =
+                 {year, month,
+                  Tempo.from_iso8601(text(year, month, "#{weeks + 1}W"), Calendrical.ISO)}
+      end
+
+      # 1 October 2021 is a Friday, in the fifth week of September.
+      assert Date.day_of_week(~D[2021-10-01]) == 5
+
+      assert bounds(Tempo.from_iso8601!("2021Y10M1W", Calendrical.ISO)) ==
+               seconds({~D[2021-10-04], ~D[2021-10-11]})
+
+      assert bounds(Tempo.from_iso8601!("2021Y9M5W", Calendrical.ISO)) ==
+               seconds({~D[2021-09-27], ~D[2021-10-04]})
+    end
+
     test "is where it starts as the end of an interval, and a member of a set" do
       assert Tempo.from_iso8601!("2026Y6M2W/2026Y6M4W") == ~o"2026-06-08/2026-06-22"
       assert Tempo.from_iso8601!("2026Y6M2W/P3D") == ~o"2026-06-08/P3D"

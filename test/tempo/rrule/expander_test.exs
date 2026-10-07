@@ -19,6 +19,54 @@ defmodule Tempo.RRule.ExpanderTest do
   # * Iteration, termination, and per-step arithmetic all live in
   #   `Tempo.to_interval/2` — never duplicated here.
 
+  describe "from_ical_recurrence/1" do
+    test "takes each frequency RFC 5545 has, and refuses any other" do
+      for {frequency, unit} <- [
+            secondly: :second,
+            minutely: :minute,
+            hourly: :hour,
+            daily: :day,
+            weekly: :week,
+            monthly: :month,
+            yearly: :year
+          ] do
+        assert {^frequency, {:ok, %Rule{freq: ^unit, interval: 1}}} =
+                 {frequency,
+                  Expander.from_ical_recurrence(%ICal.Recurrence{frequency: frequency})}
+      end
+
+      assert {:error, %Tempo.RRuleError{} = error} =
+               Expander.from_ical_recurrence(%ICal.Recurrence{frequency: :fortnightly})
+
+      assert Exception.message(error) =~ "fortnightly"
+    end
+
+    test "names the weekdays by their ISO numbers, with and without a position" do
+      {:ok, rule} =
+        Expander.from_ical_recurrence(%ICal.Recurrence{
+          frequency: :monthly,
+          week_start_day: :sunday,
+          by_day: [{0, :saturday}, {-1, :sunday}, :friday]
+        })
+
+      assert {rule.wkst, rule.byday} == {7, [{nil, 6}, {-1, 7}, {nil, 5}]}
+
+      {:ok, plain} = Expander.from_ical_recurrence(%ICal.Recurrence{by_day: []})
+      assert {plain.wkst, plain.byday} == {1, nil}
+    end
+
+    test "takes an UNTIL that is a date, a date and time, or a moment" do
+      for until <- [~D[2026-07-01], ~N[2026-07-01 09:00:00], ~U[2026-07-01 09:00:00Z]] do
+        {:ok, rule} = Expander.from_ical_recurrence(%ICal.Recurrence{until: until})
+
+        assert {until, rule.until} == {until, Tempo.from_elixir(until)}
+      end
+
+      {:ok, rule} = Expander.from_ical_recurrence(%ICal.Recurrence{until: "2026-07-01"})
+      assert rule.until == nil
+    end
+  end
+
   describe "to_ast/3 — AST projection" do
     test "bounded COUNT becomes an Interval with recurrence: n" do
       rule = %Rule{freq: :day, interval: 1, count: 5}

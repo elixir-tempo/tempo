@@ -70,7 +70,7 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **`rescue` in the library** — `lib/ical.ex` (`parse/2`, `available/2`, errors from the `ical` parser), `lib/inspect.ex` (Localize's calendar encoding) and `lib/iso8601/parser.ex` rescue exceptions where the rest of Tempo passes tagged tuples.
 
-* [ ] **Coverage has little headroom** — 90.14% against the 90% the lint row requires since 2026-10-07, about twenty lines, so the next lines no test runs fail CI. Most of the lines not run are refusals, and shapes of value no test builds: `Tempo` (216), `Tempo.Explain` (93), `Tempo.Math` (86), `Tempo.Interval` (83), `Tempo.RRule.Selection` (72), `Tempo.Select` (65), `Tempo.Validation` (61). Each of the independent measures written for the 90% found a defect, so the lines are worth more than their count.
+* [ ] **Coverage has little headroom** — 90.28% against the 90% the lint row requires (2026-10-07, after tests for the weeks of a month in a calendar that counts by ISO 8601's rule, a selector that is a function and the iCal recurrence conversion), about forty lines, so the next lines no test runs fail CI. Most of the lines not run are refusals, and shapes of value no test builds: `Tempo` (216), `Tempo.Explain` (93), `Tempo.Math` (86), `Tempo.Interval` (83), `Tempo.RRule.Selection` (72), `Tempo.Select` (65), `Tempo.Validation` (61). Each of the independent measures written for the 90% found a defect, so the lines are worth more than their count.
 
 ## In progress
 
