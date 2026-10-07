@@ -600,6 +600,9 @@ defmodule Tempo.Compare do
     offset and the other none, and `Tempo.UnanchoredError` when one has
     a year and the other none: neither pair has an order.
 
+  * Raises `Tempo.ConversionError` when a value names more than 10,000
+    values, the most that are converted at once to find where it starts.
+
   ### Examples
 
   Tempo values compare as start-moments on the time line:

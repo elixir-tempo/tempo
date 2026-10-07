@@ -6638,6 +6638,10 @@ defmodule Tempo do
     span of values and none to shift one by one. A step that passes the
     group by is computed.
 
+  * `{:error, %Tempo.ConversionError{reason: :too_many_values}}` when
+    each value the value names is stepped and it names more than 10,000,
+    the most that are listed at once.
+
   * `{:error, reason}` when the value holds a selection and the shift
     steps a unit it does not carry: a month on `~o"2027Y4ML1K1IN"`, the
     first Monday of April 2027, is the first Monday of May, but it has no
@@ -7303,6 +7307,14 @@ defmodule Tempo do
     before it the recurrence starts, so a daily rule from 1990 has its
     days of this month; a rule with a count is counted from its start.
 
+  * `{:error, %Tempo.ConversionError{reason: :too_many_values}}` when
+    the value names more than 10,000 values: the sets of
+    `~o"2026Y{1..12}M{1..28}DT{0..23}H{0..59}M"` (483,840 minutes), the
+    candidates of a mask (`~o"1XXX-XX-15"`), a range of values, the
+    dates a selection picks. A value is converted to at most 10,000
+    spans at once, as a recurrence gives at most 10,000 occurrences;
+    `Enum` and `Stream` take its values one at a time.
+
   * `{:error, %Tempo.UnanchoredError{}}` when the value has no
     concrete year and resolving the span would depend on the missing
     one — `~o"X*Y2M28D"` (February is 28 or 29 days), or a yearless
@@ -7634,25 +7646,46 @@ defmodule Tempo do
 
   defp recurrence_from_each_value(_value, _opts), do: :one_start
 
+  # The most spans a value is converted to at once, as a recurrence gives at
+  # most `@recurrence_safety_cap` occurrences. It is the most values of one
+  # that are listed (`Tempo.Enumeration.listed_at_once/0`).
+  @spans_at_once 10_000
+
   # The interval with each value of an end that holds a set in its place.
   defp from_each(%__MODULE__{} = endpoint, with_value, interval, opts) do
     case Enumeration.expand(endpoint) do
-      {:ok, values} -> occurrences_from_each(Enum.map(values, with_value), interval, opts, [])
-      {:error, _exception} = error -> error
-      :not_expandable -> :one_start
+      {:ok, values} ->
+        occurrences_from_each(Enum.map(values, with_value), interval, opts, {[], 0})
+
+      {:error, _exception} = error ->
+        error
+
+      :not_expandable ->
+        :one_start
     end
   end
 
-  defp occurrences_from_each([], _interval, opts, occurrences),
+  # The occurrences from each start, gathered with their count: no more than
+  # `@spans_at_once` are given, as from one start.
+  defp occurrences_from_each(_starts, interval, _opts, {_occurrences, count})
+       when count > @spans_at_once,
+       do: {:error, too_many_spans_error(interval)}
+
+  defp occurrences_from_each([], _interval, opts, {occurrences, _count}),
     do: IntervalSet.new(occurrences, coalesce: coalesce_opt(opts))
 
-  defp occurrences_from_each([from_one | from_others], interval, opts, occurrences) do
+  defp occurrences_from_each([from_one | from_others], interval, opts, {occurrences, count}) do
     case to_interval(from_one, opts) do
       {:ok, %Interval{} = occurrence} ->
-        occurrences_from_each(from_others, interval, opts, [occurrence | occurrences])
+        occurrences_from_each(
+          from_others,
+          interval,
+          opts,
+          {[occurrence | occurrences], count + 1}
+        )
 
       {:ok, %IntervalSet{} = set} ->
-        gathered_from_each(set, from_others, interval, opts, occurrences)
+        gathered_from_each(set, from_others, interval, opts, {occurrences, count})
 
       {:error, _exception} = error ->
         error
@@ -7661,10 +7694,11 @@ defmodule Tempo do
 
   # An open-ended window gives each start's occurrences lazily, and lazy sets
   # are not merged.
-  defp gathered_from_each(set, starts, interval, opts, occurrences) do
+  defp gathered_from_each(set, starts, interval, opts, {occurrences, count}) do
     if IntervalSet.bounded?(set) do
-      occurrences = Enum.reverse(IntervalSet.members(set), occurrences)
-      occurrences_from_each(starts, interval, opts, occurrences)
+      own = IntervalSet.members(set)
+      gathered = {Enum.reverse(own, occurrences), count + Enum.count(own)}
+      occurrences_from_each(starts, interval, opts, gathered)
     else
       {:error,
        ConversionError.exception(
@@ -8492,15 +8526,15 @@ defmodule Tempo do
   defp materialise(%Tempo.Set{set: [%Duration{} | _durations]} = set, _opts),
     do: {:error, ConversionError.exception(value: set, reason: :bare_duration)}
 
-  defp materialise(%Tempo.Set{type: :all, set: members, except: [_ | _] = except}, opts) do
-    with {:ok, included} <- members_to_interval_set(members),
-         {:ok, excluded} <- members_to_interval_set(except) do
+  defp materialise(%Tempo.Set{type: :all, set: members, except: [_ | _] = except} = set, opts) do
+    with {:ok, included} <- members_to_interval_set(members, set),
+         {:ok, excluded} <- members_to_interval_set(except, set) do
       difference(included, excluded, opts)
     end
   end
 
-  defp materialise(%Tempo.Set{type: :all, set: members}, _opts) do
-    members_to_interval_set(members)
+  defp materialise(%Tempo.Set{type: :all, set: members} = set, _opts) do
+    members_to_interval_set(members, set)
   end
 
   defp materialise(%Tempo.Set{type: :one} = value, _opts) do
@@ -8511,13 +8545,13 @@ defmodule Tempo do
   # so it materialises to every value from `first` to `last` at the range's own
   # resolution — a year range yields years, a month range months. An open-ended
   # range (`:undefined` endpoint) spans no finite set and cannot materialise.
-  defp materialise(%Tempo.Range{first: %Tempo{} = first, last: %Tempo{} = last}, _opts) do
+  defp materialise(%Tempo.Range{first: %Tempo{} = first, last: %Tempo{} = last} = range, _opts) do
     {unit, _level} = resolution(first)
 
     first
     |> Stream.iterate(&shift(&1, [{unit, 1}]))
-    |> Enum.take_while(fn value -> compare(value, last) != :gt end)
-    |> members_to_interval_set()
+    |> Stream.take_while(fn value -> compare(value, last) != :gt end)
+    |> members_to_interval_set(range)
   end
 
   defp materialise(%Tempo.Range{} = range, _opts) do
@@ -10745,26 +10779,19 @@ defmodule Tempo do
     # own month or year (leap-aware, per ISO 8601-2 §4.4.1), exactly
     # as a scalar literal resolves at parse.
     with {:ok, members} <- expand_members(tempo) do
-      materialise_members(members)
+      members
+      |> Stream.map(&member_interval/1)
+      |> gathered_at_once(tempo)
     end
-  end
-
-  defp materialise_members(members) do
-    members
-    |> Enum.map(&member_interval/1)
-    |> gather_members()
   end
 
   # Members expanded from a mask, or from a set before one, are kept only when
   # they hold a date, as a set drops the values its context cannot hold
   # (`2026-XX-3X` has no February). When none does, the value names no date.
-  defp materialise_mask_members(members) do
-    results = Enum.map(members, &member_interval/1)
-
-    case Enum.reject(results, &match?({:error, %InvalidDateError{}}, &1)) do
-      [] when results != [] -> hd(results)
-      kept -> gather_members(kept)
-    end
+  defp materialise_mask_members(members, value) do
+    members
+    |> Stream.map(&member_interval/1)
+    |> gathered_at_once(value, :the_answer_if_alone)
   end
 
   defp member_interval(member) do
@@ -10774,17 +10801,54 @@ defmodule Tempo do
     end
   end
 
-  # A member that still holds a mask (`2026-01-1X` from `2026-XX-1X`) may be a
-  # span or several, so the members' intervals are gathered into one set.
-  defp gather_members(results) do
-    case Enum.find(results, &match?({:error, _}, &1)) do
-      nil -> results |> Enum.flat_map(&member_intervals/1) |> IntervalSet.new()
-      {:error, _} = err -> err
-    end
+  # The spans of a value's members, gathered into one set, or the first
+  # error among them. A member that still holds a mask (`2026-01-1X` from
+  # `2026-XX-1X`) may be a span or several.
+  #
+  # A value is converted to at most `@spans_at_once` spans, and is refused
+  # past them (decided 2026-10-08). Its spans were found however many it
+  # named: `2026Y{1..12}M{1..28}DT{0..23}H{0..59}M` was half a million
+  # minutes, ten seconds in the finding, and `{0001-01-01..9999-12-31}` did
+  # not come to an end. The results are read no further than the first error
+  # or the span past the most, so they are given as a stream.
+  #
+  # A member its context cannot hold (an `InvalidDateError`) is that error,
+  # or is passed over as a set drops a value its context lacks: `:dropped`,
+  # or `:the_answer_if_alone` where a value none of whose members holds a
+  # date names none.
+  defp gathered_at_once(results, value, lacking \\ :an_error) do
+    results
+    |> Enum.reduce_while({[], 0, nil}, &gather_one(&1, &2, value, lacking))
+    |> gathered(lacking)
   end
+
+  defp gather_one({:error, %InvalidDateError{}} = lacks, {spans, count, first}, _value, lacking)
+       when lacking != :an_error,
+       do: {:cont, {spans, count, first || lacks}}
+
+  defp gather_one({:error, _reason} = error, _gathered, _value, _lacking), do: {:halt, error}
+
+  defp gather_one({:ok, _converted} = result, {spans, count, first}, value, _lacking) do
+    own = member_intervals(result)
+    count = count + Enum.count(own)
+
+    if count > @spans_at_once,
+      do: {:halt, {:error, too_many_spans_error(value)}},
+      else: {:cont, {[own | spans], count, first}}
+  end
+
+  defp gathered({:error, _reason} = error, _lacking), do: error
+  defp gathered({[], _count, {:error, _invalid} = lacks}, :the_answer_if_alone), do: lacks
+
+  defp gathered({spans, _count, _first}, _lacking),
+    do: spans |> Enum.reverse() |> Enum.concat() |> IntervalSet.new()
 
   defp member_intervals({:ok, %IntervalSet{} = set}), do: IntervalSet.members(set)
   defp member_intervals({:ok, %Tempo.Interval{} = interval}), do: [interval]
+  defp member_intervals({:ok, spans}) when is_list(spans), do: spans
+
+  defp too_many_spans_error(value),
+    do: ConversionError.exception(value: value, reason: :too_many_values)
 
   # The members are the values the walk of `Tempo.Enumeration` names: each
   # component resolves against its already-concrete coarser units, so nested
@@ -10810,28 +10874,12 @@ defmodule Tempo do
     Validation.validate(member)
   end
 
-  defp members_to_interval_set(members) do
-    intervals =
-      Enum.reduce_while(members, {:ok, []}, fn member, {:ok, acc} ->
-        case to_interval(member) do
-          {:ok, %Tempo.Interval{} = i} ->
-            {:cont, {:ok, [i | acc]}}
-
-          {:ok, %Tempo.IntervalSet{} = inner_set} ->
-            {:cont, {:ok, Enum.reverse(IntervalSet.members(inner_set)) ++ acc}}
-
-          {:error, _} = err ->
-            {:halt, err}
-        end
-      end)
-
-    case intervals do
-      {:ok, reversed} ->
-        reversed |> Enum.reverse() |> IntervalSet.new()
-
-      {:error, _} = err ->
-        err
-    end
+  # The spans of the members of a set, or of the values of a range, which
+  # may be a stream: no more than `@spans_at_once` of them, as of a value's.
+  defp members_to_interval_set(members, value) do
+    members
+    |> Stream.map(&to_interval/1)
+    |> gathered_at_once(value)
   end
 
   # Materialise a recurrence's selection over its domain's periods (each an
@@ -11682,32 +11730,44 @@ defmodule Tempo do
 
     with {:ok, window} <- within_window(opts),
          {:ok, years} <- selection_years(tempo, Keyword.get(context, :year), window),
-         members = selection_members(tempo, years, finer_context),
-         {:ok, occurrences} <- members_selection(members, rule, cadence, points_as(opts)) do
-      occurrences
-      |> IntervalSet.new()
+         {:ok, members} <- selection_members(tempo, years, finer_context) do
+      members
+      |> members_selection(rule, cadence, points_as(opts), tempo)
       |> keep_occurrences_in_window(window)
-      |> with_trailing_units(trailing)
+      |> with_trailing_units(trailing, tempo)
     end
   end
 
   # Each period of the context the selection resolves in: a year, or a month
-  # of a year, of each year the context names.
+  # of a year, of each year the context names. They are listed as a value's
+  # values are, no more than `@spans_at_once` of them.
   defp selection_members(tempo, years, finer_context) do
-    for year <- years,
-        member <- context_members(%{tempo | time: [{:year, year} | finer_context]}),
-        do: member
+    years
+    |> Stream.flat_map(&context_members(%{tempo | time: [{:year, &1} | finer_context]}))
+    |> Enum.reduce_while({[], 0}, fn
+      {:error, _exception} = error, _listed -> {:halt, error}
+      _period, {_periods, @spans_at_once} -> {:halt, {:error, too_many_spans_error(tempo)}}
+      period, {periods, count} -> {:cont, {[period | periods], count + 1}}
+    end)
+    |> case do
+      {:error, _exception} = error -> error
+      {periods, _count} -> {:ok, Enum.reverse(periods)}
+    end
   end
 
-  # The dates the selection picks in every period, or the error of the first
-  # period it has no answer for.
-  defp members_selection(members, rule, cadence, points_as) do
-    Enum.reduce_while(members, {:ok, []}, fn member, {:ok, occurrences} ->
-      case member_selection(member, rule, cadence, points_as) do
-        {:error, _reason} = error -> {:halt, error}
-        selected -> {:cont, {:ok, occurrences ++ selected}}
-      end
-    end)
+  # The dates the selection picks in every period, as one set, or the error
+  # of the first period it has no answer for.
+  defp members_selection(members, rule, cadence, points_as, value) do
+    members
+    |> Stream.map(&selected_in_period(&1, rule, cadence, points_as))
+    |> gathered_at_once(value)
+  end
+
+  defp selected_in_period(member, rule, cadence, points_as) do
+    case member_selection(member, rule, cadence, points_as) do
+      {:error, _reason} = error -> error
+      selected -> {:ok, selected}
+    end
   end
 
   # The dates the selection picks in one period of the context: the period,
@@ -11778,15 +11838,14 @@ defmodule Tempo do
      )}
   end
 
-  defp selection_years(%Tempo{calendar: calendar}, year, :none) do
-    {:ok, context_years(year, calendar)}
-  end
+  defp selection_years(%Tempo{} = tempo, year, :none), do: context_years(tempo, year)
 
   # An open-ended window keeps the named years from its start on.
-  defp selection_years(%Tempo{calendar: calendar}, year, {%Tempo{} = window_from, nil})
+  defp selection_years(%Tempo{calendar: calendar} = tempo, year, {%Tempo{} = window_from, nil})
        when year not in [nil, :any] do
-    with {:ok, first} <- year_in_calendar(window_from, calendar) do
-      {:ok, year |> context_years(calendar) |> Enum.filter(&(&1 >= first))}
+    with {:ok, first} <- year_in_calendar(window_from, calendar),
+         {:ok, years} <- context_years(tempo, year) do
+      {:ok, Stream.filter(years, &(&1 >= first))}
     end
   end
 
@@ -11796,19 +11855,23 @@ defmodule Tempo do
     end
   end
 
-  defp context_years(year, _calendar) when is_integer(year), do: [year]
+  defp context_years(_tempo, year) when is_integer(year), do: {:ok, [year]}
 
-  defp context_years({:mask, mask}, calendar) do
-    {:ok, years} = Mask.valid_values(:year, mask, [], calendar)
-    years
+  # A mask that stands for more years than are listed at once is refused,
+  # as the value is.
+  defp context_years(%Tempo{calendar: calendar} = tempo, {:mask, mask}) do
+    with {:error, reason} <- Mask.valid_values(:year, mask, [], calendar),
+         do: {:error, Mask.error(tempo, reason)}
   end
 
-  defp context_years(years, calendar) when is_list(years) do
-    Enum.flat_map(years, fn
-      %Range{} = range -> Enum.to_list(range)
-      year -> context_years(year, calendar)
-    end)
-  end
+  # The years of a set are taken as they are asked for: a range of them is
+  # not listed, since no more than `@spans_at_once` are read.
+  defp context_years(_tempo, years) when is_list(years),
+    do: {:ok, Stream.flat_map(years, &years_of/1)}
+
+  defp years_of(%Range{} = range), do: range
+  defp years_of(years) when is_list(years), do: Stream.flat_map(years, &years_of/1)
+  defp years_of(year), do: [year]
 
   defp year_named?(_year, year) when year in [nil, :any], do: true
   defp year_named?(year, named), do: Selection.year_selected?(year, named)
@@ -11844,6 +11907,9 @@ defmodule Tempo do
     case multi_tempo?(member) and expand_members(member) do
       false -> [member]
       {:ok, members} -> members
+      # A year that holds more periods than are listed at once is refused,
+      # as the value is.
+      {:error, %ConversionError{reason: :too_many_values}} = error -> [error]
       # A context is expanded with its year, which bounds every range in
       # it; one that cannot be listed names no period.
       {:error, _exception} -> []
@@ -11879,39 +11945,25 @@ defmodule Tempo do
 
   # The units after a selection apply to every date it selects (ISO 8601-2
   # §12.11.2): `2018YL{1,2,5}KNT10H0M0S` is each of those days at 10:00:00.
-  defp with_trailing_units(result, []), do: result
+  defp with_trailing_units(result, [], _value), do: result
 
-  defp with_trailing_units({:ok, %IntervalSet{} = set}, trailing) do
+  # A date the units do not make (`2026YL{1,2}MN30D` has no 30 February) is
+  # passed over, as a selection passes over a value its period lacks.
+  defp with_trailing_units({:ok, %IntervalSet{} = set}, trailing, value) do
     set
     |> IntervalSet.members()
-    |> Enum.reduce_while({:ok, []}, fn %Tempo.Interval{from: %Tempo{} = from}, {:ok, acc} ->
-      case selected_with_units(from, trailing) do
-        {:ok, %Tempo.Interval{} = interval} ->
-          {:cont, {:ok, [interval | acc]}}
-
-        {:ok, %IntervalSet{} = expanded} ->
-          {:cont, {:ok, Enum.reverse(IntervalSet.members(expanded)) ++ acc}}
-
-        # A date the units do not make (`2026YL{1,2}MN30D` has no 30
-        # February) is passed over, as a selection passes over a value its
-        # period lacks.
-        {:error, %InvalidDateError{}} ->
-          {:cont, {:ok, acc}}
-
-        {:error, _reason} = error ->
-          {:halt, error}
-      end
+    |> Stream.map(fn %Tempo.Interval{from: %Tempo{} = from} ->
+      from |> selected_with_units(trailing) |> as_selected_spans()
     end)
-    |> case do
-      {:ok, intervals} ->
-        intervals |> Enum.reverse() |> Enum.map(&selected_span/1) |> IntervalSet.new()
-
-      {:error, _reason} = error ->
-        error
-    end
+    |> gathered_at_once(value, :dropped)
   end
 
-  defp with_trailing_units({:error, _reason} = error, _trailing), do: error
+  defp with_trailing_units({:error, _reason} = error, _trailing, _value), do: error
+
+  defp as_selected_spans({:error, _reason} = error), do: error
+
+  defp as_selected_spans(converted),
+    do: {:ok, Enum.map(member_intervals(converted), &selected_span/1)}
 
   # A date the selection picked with the units after it, read as the same
   # text is: a unit counted from the end (`2026YL6MN-1D`) is counted in the
@@ -11967,8 +12019,8 @@ defmodule Tempo do
          {:ok, groups} <- Group.groups_of_set(unit, members, size, prefix, calendar) do
       groups
       |> Enum.map(&%{tempo | time: prefix ++ [{unit, {:group, &1}} | rest]})
-      |> Enum.map(&group_spans(&1, calendar))
-      |> spans_of_groups_in_container()
+      |> Stream.map(&group_spans(&1, calendar))
+      |> gathered_at_once(tempo, :the_answer_if_alone)
     else
       :one -> {:error, materialisation_error(tempo, :one_of_set)}
       {:error, {:unresolved, unit}} -> {:error, uncounted_group_error(tempo, unit)}
@@ -11977,13 +12029,6 @@ defmodule Tempo do
 
   defp group_spans(%Tempo{} = group, calendar) do
     with {:ok, %Tempo{} = read} <- Validation.validate(group, calendar), do: to_interval(read)
-  end
-
-  defp spans_of_groups_in_container(results) do
-    case Enum.reject(results, &match?({:error, %InvalidDateError{}}, &1)) do
-      [] when results != [] -> hd(results)
-      kept -> gather_members(kept)
-    end
   end
 
   defp uncounted_group_error(%Tempo{} = tempo, unit) do
@@ -12036,7 +12081,7 @@ defmodule Tempo do
 
   defp ungrouped_interval(%Tempo{} = tempo) do
     case mask_context_members(tempo) do
-      {:ok, members} -> materialise_mask_members(members)
+      {:ok, members} -> materialise_mask_members(members, tempo)
       {:error, _exception} = error -> error
       :none -> narrowed_interval(tempo)
     end
@@ -12073,7 +12118,7 @@ defmodule Tempo do
     case expand_non_contiguous_mask(tempo) do
       {:ok, tempo} -> materialise_expanded(tempo)
       {:span, first, last} -> masked_span(first, last)
-      {:members, members} -> materialise_mask_members(members)
+      {:members, members} -> materialise_mask_members(members, tempo)
       {:error, _reason} = error -> error
     end
   end

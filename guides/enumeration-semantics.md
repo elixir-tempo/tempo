@@ -102,7 +102,7 @@ A mask is read in each context it lands in: `1985-XX-3X` is the 30th and 31st of
 | Significant-digits year | `1950S2` | block `1900..1999`; 100 × 12 months |
 | Significant-digits long | `Y171010000S8` | block of 10 candidates |
 
-Significant-digits blocks are capped at **10 000 candidates**. Larger blocks (e.g. `Y171010000S3`, which would be 10⁶ candidates) raise a clear `ArgumentError` — the parsed value is still usable as a data value, you just cannot iterate it.
+Significant-digits blocks are capped at **10 000 candidates**. Larger blocks (e.g. `Y171010000S3`, which would be 10⁶ candidates) raise a clear `ArgumentError` — the parsed value is still usable as a data value, you just cannot iterate it. A mask of years is such a block too, and one that stands for more than 10 000 years (`XXXXXY6M`, five unspecified digits) is refused alike (§3.5).
 
 ### 2.6. Groups and selections
 
@@ -207,6 +207,17 @@ Mask rules:
 | One-of set `~o"[2020Y,2021Y,2022Y]"` | `{:error, "... epistemic disjunction ..."}` |
 | Bare Duration `~o"P3M"` | `{:error, "... no place on the time line"}` |
 
+A value is converted to at most **10 000 spans** at once, as a recurrence gives at most 10 000 occurrences. One that names more is a `Tempo.ConversionError` (`:too_many_values`), returned at once: the sets of a value, the candidates of its masks, a range of values, the dates a selection picks, and the spans `Tempo.shift/3` and `Tempo.select/2` give for such a value. `Enum` and `Stream` take a value's values one at a time, and have no such end.
+
+```elixir
+iex> every_minute = ~o"2026Y{1..12}M{1..28}DT{0..23}H{0..59}M"
+iex> {:error, %Tempo.ConversionError{reason: :too_many_values}} = Tempo.to_interval(every_minute)
+iex> Enum.take(every_minute, 2)
+[~o"2026Y1M1DT0H0M", ~o"2026Y1M1DT0H1M"]
+```
+
+> *"Every minute of the first twenty-eight days of each month of 2026 is 483,840 minutes: **too many to convert at once**, and **taken two at a time** they are the first two minutes of the year."*
+
 For the canonical instant-set form (touching members merged into one span), pipe the result through `Tempo.IntervalSet.coalesce/1`.
 
 ### 2.11. `%Tempo.IntervalSet{}` — multi-interval values
@@ -287,9 +298,9 @@ iex> Enum.take(~o"2026-01-15T10:30:00", 3)
 [~o"2026Y1M15DT10H30M0.0S", ~o"2026Y1M15DT10H30M0.1S", ~o"2026Y1M15DT10H30M0.2S"]
 ```
 
-### 3.5. Significant-digits blocks larger than 10 000
+### 3.5. Significant-digits blocks and year masks larger than 10 000
 
-`Y171010000S3` would expand to `171010000..171019999` — a million candidate years. Tempo refuses to iterate a block that large rather than hang or consume unbounded memory.
+`Y171010000S3` would expand to `171010000..171019999` — a million candidate years. Tempo refuses to iterate a block that large rather than hang or consume unbounded memory. A mask of years that stands for more than 10 000 of them is the same block written another way, and walking one (`XXXXXY6M`, the June of each of ninety thousand years) raises a `Tempo.ConversionError`.
 
 ```elixir
 iex> {:ok, value} = Tempo.from_iso8601("Y171010000S3")

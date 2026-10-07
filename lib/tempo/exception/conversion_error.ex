@@ -35,6 +35,12 @@ defmodule Tempo.ConversionError do
   * `:recurring_interval` and `:recurring_duration` — a recurrence
     is a rule for its occurrences, not one span.
 
+  * `:too_many_values` — the value names more than 10,000 values, the
+    most that are listed or converted at once, as a recurrence gives at
+    most 10,000 occurrences: `~o"2026Y{1..12}M{1..28}DT{0..23}H{0..59}M"`
+    is 483,840 minutes. Returned by `Tempo.shift/3` and `Tempo.select/2`
+    too. `Enum` and `Stream` take such a value's values one at a time.
+
   * `:recurrence_set_member` and `:conditional_member` — a
     `Tempo.RecurrenceSet` member of a shape it cannot hold.
 
@@ -57,6 +63,8 @@ defmodule Tempo.ConversionError do
     The [operation matrix](operation-matrix.html) lists each.
 
   """
+
+  alias Tempo.Enumeration
 
   defexception [:value, :target, :reason, :calendar]
 
@@ -99,6 +107,14 @@ defmodule Tempo.ConversionError do
       "needs :falls_on, a metadata map or a recurrence set, and either :at, a list of durations " <>
       "(Tempo.RecurrenceSet.keep_when/2), or :to_next, a selector " <>
       "(Tempo.RecurrenceSet.move_when/2)."
+  end
+
+  def message(%__MODULE__{reason: :too_many_values, value: value}) do
+    most = Enumeration.listed_at_once()
+
+    "#{inspect(value)} names more than #{most} values, and #{most} are the most listed or " <>
+      "converted at once. Convert a narrower value, or take its values one at a time " <>
+      "with `Enum` or `Stream`."
   end
 
   def message(%__MODULE__{reason: :recurring_interval}) do

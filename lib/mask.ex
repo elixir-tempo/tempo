@@ -2,6 +2,7 @@ defmodule Tempo.Mask do
   @moduledoc false
 
   alias Tempo.ConversionError
+  alias Tempo.Enumeration
   alias Tempo.InvalidDateError
   alias Tempo.UnanchoredError
   alias Tempo.UnitValues
@@ -66,9 +67,14 @@ defmodule Tempo.Mask do
 
   @doc false
   # The exception for a mask that cannot be read, naming the value it is in.
-  @spec error(Tempo.t(), :unanchored | {:no_candidates, atom()} | {:unmaskable, atom()}) ::
-          Exception.t()
+  @spec error(
+          Tempo.t(),
+          :unanchored | :too_many_values | {:no_candidates, atom()} | {:unmaskable, atom()}
+        ) :: Exception.t()
   def error(tempo, :unanchored), do: UnanchoredError.exception(value: tempo)
+
+  def error(tempo, :too_many_values),
+    do: ConversionError.exception(value: tempo, reason: :too_many_values)
 
   def error(tempo, {:no_candidates, unit}) do
     InvalidDateError.exception(
@@ -125,6 +131,9 @@ defmodule Tempo.Mask do
   * `{:error, {:unmaskable, unit}}` for any other unit, which has
     no range of values to narrow to.
 
+  * `{:error, :too_many_values}` for a mask of years that stands for
+    more than 10,000 of them, the most values listed at once.
+
   ### Examples
 
       iex> Tempo.Mask.valid_values(:month, [:X, :X], [year: 1985], Calendrical.Gregorian)
@@ -142,26 +151,31 @@ defmodule Tempo.Mask do
           mask :: list(),
           previous :: keyword(),
           calendar :: module()
-        ) :: {:ok, [integer()]} | {:error, :unanchored | {:unmaskable, atom()}}
+        ) ::
+          {:ok, [integer()]} | {:error, :unanchored | :too_many_values | {:unmaskable, atom()}}
   # Year masks are digit-bounded — there is no calendar range for years —
   # so their candidates come straight from the digit pattern, those the
   # calendar has: the Julian calendar has no year 0, and its `000X` is the
   # years 1 to 9.
   def valid_values(:year, [:negative | rest], _previous, calendar) do
-    {min, max} = mask_bounds(rest)
+    with :ok <- few_enough_to_list(rest) do
+      {min, max} = mask_bounds(rest)
 
-    {:ok,
-     for(
-       candidate <- min..max,
-       matches_mask?(candidate, rest) and UnitValues.year?(-candidate, calendar),
-       do: -candidate
-     )}
+      {:ok,
+       for(
+         candidate <- min..max,
+         matches_mask?(candidate, rest) and UnitValues.year?(-candidate, calendar),
+         do: -candidate
+       )}
+    end
   end
 
   def valid_values(:year, mask, _previous, calendar) do
-    {min, max} = mask_bounds(mask)
+    with :ok <- few_enough_to_list(mask) do
+      {min, max} = mask_bounds(mask)
 
-    {:ok, Enum.filter(min..max, &(matches_mask?(&1, mask) and UnitValues.year?(&1, calendar)))}
+      {:ok, Enum.filter(min..max, &(matches_mask?(&1, mask) and UnitValues.year?(&1, calendar)))}
+    end
   end
 
   def valid_values(unit, mask, previous, calendar) do
@@ -178,6 +192,25 @@ defmodule Tempo.Mask do
         error
     end
   end
+
+  # A mask of years stands for ten times as many for each digit it leaves
+  # unspecified, and is found among the years from its least to its
+  # greatest. One that stands for more than are listed at once is not
+  # listed, as a block of significant digits that large is not
+  # (`Y171010000S3`): `XXXXXXXXXY6M` is the June of a thousand million
+  # years, and listing them did not come to an end. The value is held,
+  # written and compared still.
+  defp few_enough_to_list(mask) do
+    if years_masked(mask) > Enumeration.listed_at_once(),
+      do: {:error, :too_many_values},
+      else: :ok
+  end
+
+  defp years_masked(mask), do: Enum.reduce(mask, 1, &(digit_choices(&1) * &2))
+
+  defp digit_choices(:X), do: 10
+  defp digit_choices(digits) when is_list(digits), do: digits |> set_digits() |> Enum.count()
+  defp digit_choices(_digit), do: 1
 
   # A range whose length depends on the missing year — February's 28 or 29
   # days, a Hebrew year's 12 or 13 months. The candidates are known when every

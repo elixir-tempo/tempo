@@ -1596,8 +1596,16 @@ defmodule Tempo.Math do
   # they stand for as many. A step that changes the time of day alone leaves
   # the dates as they were, and needs no count.
   defp as_many_candidates?(%Tempo{time: time} = masked, %Tempo{time: stepped_time} = passed_by) do
-    dated(time) == dated(stepped_time) or candidate_count(masked) == candidate_count(passed_by)
+    dated(time) == dated(stepped_time) or
+      as_many?(candidate_count(masked), candidate_count(passed_by))
   end
+
+  # More candidates than are listed at once are not counted, so nothing says
+  # the two stand for as many: each candidate is stepped, which is refused
+  # for as many as that (`candidates_of/1`).
+  defp as_many?(:too_many, _count), do: false
+  defp as_many?(count, count), do: true
+  defp as_many?(_count, _another), do: false
 
   defp dated(time), do: Enum.reject(time, &clock_entry?/1)
 
@@ -1606,6 +1614,7 @@ defmodule Tempo.Math do
   defp candidate_count(masked) do
     case Enumeration.members(masked) do
       {:ok, candidates} -> Enum.count(candidates)
+      {:error, %ConversionError{reason: :too_many_values}} -> :too_many
       {:error, _exception} -> :none
     end
   end

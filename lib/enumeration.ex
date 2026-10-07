@@ -52,6 +52,11 @@ defmodule Tempo.Enumeration do
   # The most values a significant-digits block is walked through.
   @significant_digits_limit 10_000
 
+  # The most values of a value that are listed at once (`members/1`), as a
+  # recurrence gives at most as many occurrences at once. A walk through
+  # `Enum` takes them one at a time, and has no such end.
+  @listed_at_once 10_000
+
   # The most values `next/1` reads at once, so a walk stays lazy over a
   # component with many (`XXXX`, nine thousand years) and a walk of a few
   # costs what a list of them does.
@@ -417,14 +422,36 @@ defmodule Tempo.Enumeration do
   defp finished(_walk), do: :done
 
   @doc false
+  # The most values `members/1` lists, which is the most spans a value is
+  # converted to at once.
+  @spec listed_at_once() :: pos_integer()
+  def listed_at_once, do: @listed_at_once
+
+  @doc false
   # Every value a walk names, in the order it names them, or the error that
-  # stops it.
+  # stops it. A value that names more than `@listed_at_once` is not listed
+  # (decided 2026-10-08). Each was, however many there were: the half a
+  # million minutes of `2026Y{1..12}M{1..28}DT{0..23}H{0..59}M` took ten
+  # seconds to convert, and the three million days of
+  # `{1..9999}Y{1..12}M{1..28}D` did not come to an end.
   @spec members(Tempo.t()) :: {:ok, [Tempo.t()]} | {:error, Exception.t()}
-  def members(%Tempo{} = tempo) do
-    with {:ok, values} <- tempo |> walk() |> gather([]) do
-      {:ok, shown_by_the_clock(values, tempo)}
-    end
+  def members(%Tempo{time: time} = tempo) do
+    if more_years_than_listed?(time),
+      do: {:error, ConversionError.exception(value: tempo, reason: :too_many_values)},
+      else: tempo |> walk() |> gather([], 0, @listed_at_once)
   end
+
+  # The years of a set are read whole before a unit after them is, and each
+  # is a value of the set, so a set of more years than are listed is refused
+  # before any is read: `{1..99999999}Y` took as long as its years did.
+  defp more_years_than_listed?([{:year, years} | _finer]) when is_list(years),
+    do: written(years) > @listed_at_once
+
+  defp more_years_than_listed?(_time), do: false
+
+  defp written(values) when is_list(values), do: values |> Enum.map(&written/1) |> Enum.sum()
+  defp written(%Range{} = range), do: Range.size(range)
+  defp written(_one_value), do: 1
 
   # In a zone, a value the clock skips the whole of is no value: the hour a
   # spring-forward skips, and the day a zone leaves out. One written alone
@@ -439,11 +466,20 @@ defmodule Tempo.Enumeration do
 
   defp shown_by_the_clock(values, _no_zone), do: values
 
-  defp gather(walk, gathered) do
+  defp gather(%{tempo: tempo}, _gathered, count, most) when is_integer(most) and count > most,
+    do: {:error, ConversionError.exception(value: tempo, reason: :too_many_values)}
+
+  defp gather(%{tempo: tempo} = walk, gathered, count, most) do
     case next(walk) do
-      {:ok, values, walk} -> gather(walk, [values | gathered])
-      :done -> {:ok, gathered |> Enum.reverse() |> Enum.concat()}
-      {:error, _exception} = error -> error
+      {:ok, values, walk} ->
+        shown = shown_by_the_clock(values, tempo)
+        gather(walk, [shown | gathered], count + Enum.count(shown), most)
+
+      :done ->
+        {:ok, gathered |> Enum.reverse() |> Enum.concat()}
+
+      {:error, _exception} = error ->
+        error
     end
   end
 
@@ -473,19 +509,34 @@ defmodule Tempo.Enumeration do
     calendar = Compare.effective_calendar(calendar)
     {before, [group]} = Enum.split(time, -1)
 
-    with {:ok, [_ | _]} <- members(tempo),
+    with :ok <- names_a_value(walk(tempo)),
          {:ok, contexts} <- contexts(tempo, before),
          {:ok, values} <- named_in_each(group, contexts, calendar, tempo) do
       {:ok, %{tempo | time: before ++ [{elem(group, 0), Parser.consolidate_ranges(values)}]}}
     end
   end
 
+  # Whether a walk names a value, read no further than its first: the values
+  # of a group under many years are not listed to learn that there is one.
+  defp names_a_value(%{tempo: tempo} = walk) do
+    case next(walk) do
+      {:ok, values, walk} -> named_or_read_on(shown_by_the_clock(values, tempo), walk)
+      :done -> {:ok, []}
+      {:error, _exception} = error -> error
+    end
+  end
+
+  defp named_or_read_on([], walk), do: names_a_value(walk)
+  defp named_or_read_on([_value | _more], _walk), do: :ok
+
   # The concrete components a value's last component is read after, finest
   # first: one list for each value the components before it name.
   defp contexts(_tempo, []), do: {:ok, [[]]}
 
+  # They are read to learn what the group names in each, and are none of the
+  # values the result lists, so every one is read however many there are.
   defp contexts(tempo, before) do
-    with {:ok, values} <- members(%{tempo | time: before}) do
+    with {:ok, values} <- %{tempo | time: before} |> walk() |> gather([], 0, :every) do
       {:ok, Enum.map(values, fn %Tempo{time: time} -> :lists.reverse(time) end)}
     end
   end
