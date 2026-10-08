@@ -86,6 +86,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Done
 
+* [x] **A rule with an `UNTIL` and no start** — it starts where its window does and runs to its end (`from_where_its_window_starts/2` in `lib/tempo.ex`), where `Tempo.to_interval/2` handed it back as it was given and, with a part that selects, refused it as a rule written to its end. Found and fixed 2026-10-08.
+
 * [x] **A count with no start, in a window** — decided 2026-10-08 (user): counted from the window's start. `R2/../P1Y/FL1M1DN` within June 2026 to June 2029 is 1 January 2027 and 2028, the walk dropping what is over before the window opens before it counts (`from_the_start/2` in `lib/tempo.ex`); an occurrence the window opens in is the first of the count. 2026-10-08.
 
 * [x] **A week selected from a day written as a week date** — decided 2026-10-08 (user): left as it is. A Gregorian day is a day of its month however it is written, so `~o"24W"` selects nothing from `2026-W24-3` and `~o"2W"` keeps it; the conformance guide says so. 2026-10-08.

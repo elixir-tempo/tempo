@@ -8393,16 +8393,21 @@ defmodule Tempo do
   # A rule on a recurrence written to its end is not built, whatever its
   # count: the walk back from the end steps its cadence and does not ask the
   # rule (`Tempo.NotBuilt.rule_to_an_end/1`).
+  #
+  # A rule with no start that runs until an end (`from: nil`, as an RRULE
+  # with `UNTIL` read with no start is) is not one: it starts where its
+  # window does (`from_where_its_window_starts/2`).
   defp materialise(
          %Tempo.Interval{
            from: from,
+           recurrence: recurrence,
            duration: %Tempo.Duration{},
            to: %Tempo{},
            repeat_rule: %Tempo{}
          } = interval,
          _opts
        )
-       when from in [nil, :undefined] do
+       when from == :undefined or (is_nil(from) and recurrence != :infinity) do
     {:error, NotBuilt.rule_to_an_end(interval)}
   end
 
@@ -8503,25 +8508,26 @@ defmodule Tempo do
        )
        when from in [nil, :undefined] and to in [nil, :undefined] and
               (recurrence != 1 or is_struct(cadence, Tempo.Duration)) do
-    case Keyword.get(opts, :within) do
-      nil ->
-        {:error,
-         IntervalEndpointsError.exception(
-           interval: interval,
-           operation: "convert a recurrence that has no start",
-           reason: :open_start
-         )}
+    from_where_its_window_starts(interval, opts)
+  end
 
-      within ->
-        case window_start(within, interval) do
-          {:ok, start} ->
-            start = in_rule_zone(start, interval)
-            materialise_from_bound(interval, start, within, counted_from_window(opts, within))
-
-          {:error, _} = error ->
-            error
-        end
-    end
+  # A rule with no start that runs until an end, as an RRULE with `UNTIL`
+  # read with no start is (`FREQ=DAILY;UNTIL=20190108`): it starts where its
+  # window does and runs on to its end. It was handed back as it was given,
+  # with no occurrences and no error, and with a part that selects it was
+  # refused as a rule written to its end, which is another thing: a
+  # recurrence written with a duration and an end (`R3/P1D/2019-01-08`) has
+  # no start to be given, and is counted back from its end.
+  defp materialise(
+         %Tempo.Interval{
+           from: nil,
+           recurrence: :infinity,
+           duration: %Tempo.Duration{},
+           to: %Tempo{}
+         } = interval,
+         opts
+       ) do
+    from_where_its_window_starts(interval, opts)
   end
 
   # A recurrence written with a start and an end (`R5/2026-06-15/2026-06-20`,
@@ -8687,6 +8693,28 @@ defmodule Tempo do
   # `FREQ=DAILY;BYDAY=SU;COUNT=1` from 2019 within 2026 was a Sunday of 2019,
   # where `COUNT=2` was nothing, and a window that is no window was passed
   # over. One with no rule is the interval it is, as an interval is.
+  defp from_where_its_window_starts(%Tempo.Interval{} = interval, opts) do
+    case Keyword.get(opts, :within) do
+      nil ->
+        {:error,
+         IntervalEndpointsError.exception(
+           interval: interval,
+           operation: "convert a recurrence that has no start",
+           reason: :open_start
+         )}
+
+      within ->
+        case window_start(within, interval) do
+          {:ok, start} ->
+            start = in_rule_zone(start, interval)
+            materialise_from_bound(interval, start, within, counted_from_window(opts, within))
+
+          {:error, _} = error ->
+            error
+        end
+    end
+  end
+
   defp one_occurrence_within(%Tempo.Interval{} = occurrence, opts) do
     case keep_within([occurrence], opts) do
       {:ok, [kept]} -> {:ok, kept}
