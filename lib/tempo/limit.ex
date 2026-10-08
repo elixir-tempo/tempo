@@ -26,7 +26,10 @@ defmodule Tempo.Limit do
             inspect(@values_at_once)
   end
 
+  # The function returns the number it was compiled with, so its contract
+  # is that number: a wider one (`pos_integer()`) is more than Dialyzer
+  # finds it to return.
   @doc false
-  @spec values_at_once() :: pos_integer()
+  @spec values_at_once() :: unquote(@values_at_once)
   def values_at_once, do: @values_at_once
 end

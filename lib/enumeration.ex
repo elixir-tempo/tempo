@@ -440,7 +440,7 @@ defmodule Tempo.Enumeration do
   @doc false
   # The most values `members/1` lists, which is the most spans a value is
   # converted to at once.
-  @spec listed_at_once() :: pos_integer()
+  @spec listed_at_once() :: unquote(@listed_at_once)
   def listed_at_once, do: @listed_at_once
 
   @doc false
