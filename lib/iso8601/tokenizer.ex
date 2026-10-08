@@ -109,9 +109,15 @@ defmodule Tempo.Iso8601.Tokenizer do
   # the two do not read between them is the whole grammar's to answer.
   defp plain(string) do
     case :binary.match(string, "[") do
-      :nomatch -> with {:ok, tokens} <- Plain.tokens(string), do: {:ok, {tokens, nil}}
+      :nomatch -> with {:ok, tokens} <- plain_tokens(string), do: {:ok, {tokens, nil}}
       {at, 1} -> plain_with_suffix(string, at)
     end
+  end
+
+  # A value, and where it is none an interval of plain ends or a plain
+  # duration.
+  defp plain_tokens(string) do
+    with :general <- Plain.tokens(string), do: Plain.span(string)
   end
 
   defp plain_with_suffix(string, at) do

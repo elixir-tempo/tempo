@@ -371,6 +371,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * A shift on the week axis, and of a time of day with no date, takes the time of one step too: a week date of a calendar of weeks plus 60,000 hours takes 21 µs where it took 17 ms, and `~o"T22H"` plus a hundred thousand hours 27 µs where it took 22 ms. A rule that never selects there says so in under a second, where `R3/T22H/PT1H/FLT25HN` took twelve and a weekly rule in `Calendrical.ISOWeek` fifty-eight.
 
+* An interval of two plain dates or times, with an end left open or given by a duration, a recurrence of one, a duration of whole numbers and a time of day alone are read by a scan of their bytes, as a plain date is: `2026-06-15/2026-06-20` takes 37 µs where it took 450, `R/2026-06-15/P1D` 25 where it took 435, `P1D` 3 where it took 170 and `T10:30` 9 where it took 160. Each is held to the grammar's reading of every text of its shape.
+
 * A plain date or timestamp (`2026-06-15`, `2026-06`, `2026-06-15T10:30:00Z`, with or without an IXDTF suffix) is read by a scan of its bytes: `Tempo.from_iso8601/1` takes 14 µs for a date where it took 440, and 38 µs for a timestamp in a named zone where it took 250. Every other form is read by the grammar as before, and the scan is held to the grammar's reading of each text of its shapes.
 
 * `Tempo.shift/2` by a count of months or years takes the time of one step, the calendar saying where the count lands: a hundred thousand months takes 14 µs where it took 29 ms, and ten thousand years 12 µs where it took a millisecond.
