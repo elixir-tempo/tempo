@@ -876,6 +876,7 @@ defmodule Tempo.RRule.Selection do
       selection
       |> Enum.sort_by(&application_order_key/1)
       |> limits_after_the_days_made(freq, selection)
+      |> weekday_with_its_position()
 
     if is_integer(most),
       do: counted_parts(parts, most, {[candidate], freq}, {selection, wkst}),
@@ -884,6 +885,23 @@ defmodule Tempo.RRule.Selection do
 
   defp each_part(parts, candidates_at_scope, selection, wkst),
     do: Enum.reduce_while(parts, candidates_at_scope, &resolve_part(&1, &2, selection, wkst))
+
+  # A weekday with a position straight after it is the weekday at that
+  # position in its period: `L1K1IN` in a month is its first Monday, and
+  # `L4K-1IN` in a year its last Thursday, the shape a holiday is written
+  # in. The two are applied as one part (`nth_weekdays/5`), which asks
+  # Calendrical for that day where there is one period to find it in. Each
+  # day of the period was asked its day of the week, every one that
+  # matched was made an occurrence, and the position picked among them.
+  defp weekday_with_its_position([{:day_of_week, day}, {:instance, positions} | parts])
+       when is_integer(day) do
+    if positions |> List.wrap() |> Enum.all?(&(is_integer(&1) and &1 != 0)),
+      do: [{:weekday_at, {day, List.wrap(positions)}} | parts],
+      else: [{:day_of_week, day}, {:instance, positions} | parts]
+  end
+
+  defp weekday_with_its_position([part | parts]), do: [part | weekday_with_its_position(parts)]
+  defp weekday_with_its_position([]), do: []
 
   # A time of day multiplies what the parts before it made, each day by the
   # hours named, each hour by the minutes and each minute by the seconds: a
@@ -1355,9 +1373,14 @@ defmodule Tempo.RRule.Selection do
     :instance
   ]
 
-  defp application_order_key({token, _value}) do
-    Enum.find_index(@application_order, &(&1 == token)) || length(@application_order)
-  end
+  # Where each part comes in that order, and a token that is no part after
+  # them all. It is read from a map: the order was searched for each part of
+  # each candidate, which a walk asks of every period.
+  @application_rank @application_order |> Enum.with_index() |> Map.new()
+  @after_every_part length(@application_order)
+
+  defp application_order_key({token, _value}),
+    do: Map.get(@application_rank, token, @after_every_part)
 
   # Unit weight for the EXPAND-vs-LIMIT decision: rules whose
   # unit is FINER than FREQ (bigger weight) act as EXPAND; rules
@@ -1907,6 +1930,24 @@ defmodule Tempo.RRule.Selection do
   # end (`-1` = last).
   defp apply_role(:limit, {:instance, positions}, candidates, _scope, _selection, _wkst) do
     pick_set_positions(candidates, List.wrap(positions))
+  end
+
+  # A weekday at a position (`weekday_with_its_position/1`): in one period
+  # that the weekday makes days in, the days Calendrical gives for each
+  # position, and otherwise the weekday's days with the position picked
+  # among them, as the two parts apply apart.
+  defp apply_role(_role, {:weekday_at, {day, positions}}, candidates, scope, selection, wkst) do
+    with [candidate] <- candidates,
+         {:expand, period} when period in [:month, :year] <-
+           role({:day_of_week, day}, scope, selection),
+         [_one | _] = made <- nth_weekdays(candidate, day, positions, period, wkst) do
+      Enum.reject(made, &(&1 == :no_such_day))
+    else
+      _the_parts_apart ->
+        {:day_of_week, day}
+        |> apply_entry(candidates, scope, selection, wkst)
+        |> pick_set_positions(positions)
+    end
   end
 
   # WKST, a context-only token `apply_selection/4` has already read, and
@@ -3140,6 +3181,34 @@ defmodule Tempo.RRule.Selection do
 
       _ ->
         []
+    end
+  end
+
+  # The weekday at each position in the candidate's month or year, in the
+  # order of time and once each, as a position picks them. `:no_such_day`
+  # stands for a position the period lacks, so that a weekday the period
+  # cannot be asked for (no dates to count from, a day of the week that is
+  # no one day) is the empty list, and is resolved the long way.
+  defp nth_weekdays(
+         %Interval{from: %Tempo{calendar: calendar}} = candidate,
+         day,
+         positions,
+         period,
+         wkst
+       ) do
+    with [named] <- values_named(day, :day_of_week, candidate),
+         {start_date, end_date} <- period_bounds(candidate, period) do
+      weekday = UnitValues.iso_weekday_from_day_of_week(named, calendar)
+
+      case Enum.flat_map(
+             positions,
+             &resolve_byday_pair(candidate, {&1, weekday}, start_date, end_date, period, wkst)
+           ) do
+        [] -> [:no_such_day]
+        made -> in_order_of_time(made)
+      end
+    else
+      _not_one_weekday_of_a_dated_period -> []
     end
   end
 
