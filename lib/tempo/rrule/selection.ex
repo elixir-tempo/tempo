@@ -80,6 +80,10 @@ defmodule Tempo.RRule.Selection do
   # ISO 8601's weeks, and RFC 5545's by default, start on a Monday, weekday 1.
   @monday 1
 
+  # The most weekdays that are each found a week at a time in a month
+  # (`weekdays_of_month/4`), where more are asked of each of its days.
+  @weekdays_found_by_weeks 3
+
   # The most candidates of a period a position picks among: the most values
   # Tempo gives at once, the application's `:max_values_at_once`.
   @candidates_at_once Tempo.Limit.values_at_once()
@@ -2380,6 +2384,28 @@ defmodule Tempo.RRule.Selection do
 
   # The days of one month of the candidate's year that fall on the weekdays,
   # the month's days being those `Tempo.UnitValues` counts.
+  #
+  # A few weekdays are each found from the first of them in the month, a
+  # week at a time, by Calendrical's arithmetic: five dates for a weekday,
+  # where each of the month's thirty days was asked its day of the week.
+  # More of them are as well asked of each day, the days being most of the
+  # month.
+  defp weekdays_of_month(
+         %Interval{from: %Tempo{calendar: calendar}} = candidate,
+         year,
+         month,
+         weekdays
+       )
+       when length(weekdays) <= @weekdays_found_by_weeks do
+    case month_bounds(year, month, month, calendar) do
+      {first_day, last_day} ->
+        swap_dates(candidate, weekdays_between(weekdays, first_day, last_day, calendar))
+
+      nil ->
+        []
+    end
+  end
+
   defp weekdays_of_month(
          %Interval{from: %Tempo{calendar: calendar}} = candidate,
          year,
@@ -2390,6 +2416,25 @@ defmodule Tempo.RRule.Selection do
       {:ok, days} -> emit_matching_days(candidate, year, month, days, weekdays)
       {:error, _no_such_month} -> []
     end
+  end
+
+  # The dates from one day to another on each of some days of the week, in
+  # the order of time: the first of each on or after the first day, and the
+  # dates a week on from it. A day of the week is numbered as the calendar
+  # numbers it, and `Calendrical.Kday` takes ISO 8601's weekday.
+  defp weekdays_between(weekdays, %Date{} = first_day, %Date{} = last_day, calendar) do
+    weekdays
+    |> Enum.uniq()
+    |> Enum.flat_map(fn day ->
+      weekday = UnitValues.iso_weekday_from_day_of_week(day, calendar)
+
+      first_day
+      |> Kday.kday_on_or_after(weekday)
+      |> Stream.iterate(&Calendrical.next(&1, :week))
+      |> Enum.take_while(&(Compare.compare_days(&1, last_day) != :gt))
+    end)
+    |> Enum.sort(&(Compare.compare_days(&1, &2) != :gt))
+    |> Enum.map(&{&1.year, &1.month, &1.day, &1})
   end
 
   defp expand_weekdays_in_week(%Interval{} = candidate, weekdays, wkst) do

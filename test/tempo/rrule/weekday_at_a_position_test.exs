@@ -132,4 +132,67 @@ defmodule Tempo.RRule.WeekdayAtAPositionTest do
                june |> at_positions(1, [2, 3, 4, 5])
     end
   end
+
+  describe "weekdays with no position" do
+    # One, two or three weekdays are each found a week at a time from the
+    # first of them in the month, and more are asked of each of its days:
+    # either way they are the month's days on those weekdays.
+    @weekday_sets [
+      [1],
+      [7],
+      [1, 3],
+      [2, 4, 6],
+      [6, 7],
+      [1, 2, 3, 4],
+      [1, 2, 3, 4, 5],
+      [1, 2, 3, 4, 5, 6, 7]
+    ]
+
+    defp on_weekdays(%Date.Range{} = days, weekdays),
+      do: Enum.filter(days, &(Date.day_of_week(&1, :monday) in weekdays))
+
+    test "are the days of a month on them, in the order of time" do
+      for year <- [2024, 2026], month <- 1..12, weekdays <- @weekday_sets do
+        text = "#{year}Y#{month}ML#{written(weekdays)}KN"
+
+        assert {text, selected(text)} ==
+                 {text, on_weekdays(month_of(year, month), weekdays)}
+      end
+    end
+
+    test "are the days of a year on them" do
+      for year <- [2024, 2026, 2027], weekdays <- [[2], [6, 7], [1, 2, 3, 4, 5]] do
+        text = "#{year}YL#{written(weekdays)}KN"
+        assert {text, selected(text)} == {text, on_weekdays(year_of(year), weekdays)}
+      end
+    end
+
+    test "are those of a month of another calendar, by its own days" do
+      for {year, month} <- [{5786, 1}, {5786, 12}, {5787, 6}],
+          weekdays <- [[7], [1, 6], [1, 2, 3, 4, 5]] do
+        text = "#{year}Y#{month}ML#{written(weekdays)}KN[u-ca=hebrew]"
+
+        assert {text, selected(text)} ==
+                 {text, on_weekdays(month_of(year, month, Hebrew), weekdays)}
+      end
+    end
+
+    test "are each Tuesday of a rule that steps by months, and by years" do
+      {:ok, monthly} =
+        RRule.parse("FREQ=MONTHLY;BYDAY=TU;COUNT=30", from: Tempo.from_iso8601!("2026-01-06"))
+
+      {:ok, yearly} =
+        RRule.parse("FREQ=YEARLY;BYDAY=TU,TH;COUNT=150", from: Tempo.from_iso8601!("2026-01-01"))
+
+      days = Date.range(~D[2026-01-01], ~D[2028-12-31])
+
+      assert days_of(Tempo.to_interval(monthly)) ==
+               days
+               |> on_weekdays([2])
+               |> Enum.reject(&(Date.compare(&1, ~D[2026-01-06]) == :lt))
+               |> Enum.take(30)
+
+      assert days_of(Tempo.to_interval(yearly)) == days |> on_weekdays([2, 4]) |> Enum.take(150)
+    end
+  end
 end
