@@ -12258,12 +12258,18 @@ defmodule Tempo do
   # of the first period it has no answer for.
   defp members_selection(members, rule, cadence, points_as, value) do
     members
-    |> Stream.map(&selected_in_period(&1, rule, cadence, points_as))
+    |> Stream.map(&selected_in_period(&1, rule, cadence, points_as, value))
     |> gathered_at_once(value)
   end
 
-  defp selected_in_period(member, rule, cadence, points_as) do
+  # A period that gives more than every period together may
+  # (`@spans_at_once`) is refused as the count of them all is, and the
+  # resolver is told the most so that it makes no more to find it out:
+  # `2026YL{1..12}M{1..28}DT{0..23}H{0..59}M{0..59}SN` names 29 million
+  # seconds.
+  defp selected_in_period(member, rule, cadence, points_as, value) do
     case member_selection(member, rule, cadence, points_as) do
+      {:error, {:more_than, @spans_at_once}} -> {:error, too_many_spans_error(value)}
       {:error, _reason} = error -> error
       selected -> {:ok, selected}
     end
@@ -12281,7 +12287,9 @@ defmodule Tempo do
 
     # A selection that only keeps or drops its period keeps it whole, as a
     # recurrence's does: week 25, selected in week 25, is the week.
-    case Selection.apply(candidate, rule, freq, origin_day: origin_day_of(recurrence)) do
+    options = [origin_day: origin_day_of(recurrence), at_most: @spans_at_once]
+
+    case Selection.apply(candidate, rule, freq, options) do
       {:error, _reason} = error -> error
       occurrences -> sized(occurrences, Selection.expands?(rule, freq), points_as)
     end

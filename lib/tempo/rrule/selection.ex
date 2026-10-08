@@ -113,6 +113,8 @@ defmodule Tempo.RRule.Selection do
     `expands?/2`), each occurrence is resized to its own resolution
     afterwards.
 
+  * `:at_most` is the most occurrences the caller takes of the candidate, a whole number. Where the rule gives more it is refused, and no more than that are made to find it out, unless the rule holds a position (`I`) or a §12.10 window or has units after its selection, each of which needs every occurrence made. The default is `nil`, every occurrence.
+
   ### Returns
 
   * A list of `t:Tempo.Interval.t/0` occurrences — `[]` on LIMIT
@@ -120,6 +122,8 @@ defmodule Tempo.RRule.Selection do
     `[c1, c2, …]` on EXPAND.
 
   * `{:error, %Tempo.EventError{}}` when the selection holds a computed event that has no date where it is asked for: a year outside those it is computed for, or a name no resolver knows.
+
+  * `{:error, {:more_than, at_most}}` when the rule gives more occurrences than `:at_most` asks for.
 
   ### Examples
 
@@ -135,7 +139,7 @@ defmodule Tempo.RRule.Selection do
 
   """
   @spec apply(Interval.t(), rule() | nil, atom(), keyword()) ::
-          [Interval.t()] | {:error, EventError.t()}
+          [Interval.t()] | {:error, EventError.t() | {:more_than, non_neg_integer()}}
   def apply(candidate, repeat_rule, freq, options \\ [])
 
   def apply(%Interval{} = candidate, nil, _freq, _options), do: [candidate]
@@ -154,14 +158,17 @@ defmodule Tempo.RRule.Selection do
     # occurrences carry an explicit span rides along the same way.
     # Handlers that don't consume the tags pass them through.
     context = selection_context(options)
+    most = counted_to(options, selection, units)
     selection = days_of_week_in_candidate_calendar(selection, rule_calendar, candidate)
 
-    in_calendar_terms(candidate, selection, freq, fn candidate, selection, freq ->
+    candidate
+    |> in_calendar_terms(selection, freq, fn candidate, selection, freq ->
       candidate
-      |> apply_selection(selection ++ context, freq)
+      |> apply_selection(selection ++ context, freq, most)
       |> with_units(units, Keyword.get(context, :keep_span, false))
       |> on_readings_the_clock_shows()
     end)
+    |> no_more_than(Keyword.get(options, :at_most))
   end
 
   # What the parts of a selection give is a list of occurrences, or the
@@ -793,6 +800,35 @@ defmodule Tempo.RRule.Selection do
     origin_day ++ keep_span
   end
 
+  # The most occurrences the parts are counted to as they are made
+  # (`counted_parts/4`): the most asked for (`:at_most`), and none where
+  # what the parts make is not what the rule gives. A position (`I`) picks
+  # among every occurrence of the period, a §12.10 window among the days of
+  # each window, and the units after a selection are made from what it
+  # picks: those are counted once they are all made (`no_more_than/2`).
+  #
+  # It is handed to the resolver beside the selection, and does not ride in
+  # it as the origin day does: a part asks what else the selection holds
+  # (`picks_within_a_week?/1`), and would take it for a part.
+  defp counted_to(options, selection, units) do
+    case Keyword.get(options, :at_most) do
+      most when is_integer(most) and most >= 0 ->
+        if units == [] and not picked_among_all?(selection), do: most
+
+      _none_asked ->
+        nil
+    end
+  end
+
+  defp picked_among_all?(selection),
+    do: List.keymember?(selection, :instance, 0) or List.keymember?(selection, :interval, 0)
+
+  defp no_more_than(occurrences, most)
+       when is_list(occurrences) and is_integer(most) and length(occurrences) > most,
+       do: {:error, {:more_than, most}}
+
+  defp no_more_than(occurrences_or_an_error, _most), do: occurrences_or_an_error
+
   ## ------------------------------------------------------------
   ## Selection dispatch
   ## ------------------------------------------------------------
@@ -808,7 +844,7 @@ defmodule Tempo.RRule.Selection do
   # BYDAY (and future co-dependent rules) can consult sibling
   # tokens — e.g. Note 1/2 downgrades BYDAY from EXPAND to LIMIT
   # when BYMONTHDAY or BYYEARDAY is co-present.
-  defp apply_selection(candidate, selection, freq) do
+  defp apply_selection(candidate, selection, freq, most \\ nil) do
     wkst = Keyword.get(selection, :wkst, 1)
 
     case split_window(selection) do
@@ -816,7 +852,7 @@ defmodule Tempo.RRule.Selection do
         apply_windowed_selection(candidate, scope, window, within, freq, wkst)
 
       :none ->
-        resolve_in_period(candidate, selection, freq, wkst)
+        resolve_in_period(candidate, selection, freq, wkst, most)
     end
   end
 
@@ -825,22 +861,96 @@ defmodule Tempo.RRule.Selection do
   # it selects, wherever a week or a window carries it, and a period in any
   # other year selects nothing. (A year among a window's own selectors keeps
   # the window's days in that year instead.)
-  defp resolve_in_period(candidate, selection, freq, wkst) do
+  defp resolve_in_period(candidate, selection, freq, wkst, most) do
     {years, selection} = Keyword.pop(selection, :year)
 
     if period_selected?(candidate, years),
-      do: resolve_parts(candidate, selection, freq, wkst),
+      do: resolve_parts(candidate, selection, freq, wkst, most),
       else: []
   end
 
   # Each part in the order it applies, the scope it leaves handed to the
   # next, until one has no answer.
-  defp resolve_parts(candidate, selection, freq, wkst) do
-    selection
-    |> Enum.sort_by(&application_order_key/1)
-    |> limits_after_the_days_made(freq, selection)
-    |> Enum.reduce_while({[candidate], freq}, &resolve_part(&1, &2, selection, wkst))
-    |> selected()
+  defp resolve_parts(candidate, selection, freq, wkst, most) do
+    parts =
+      selection
+      |> Enum.sort_by(&application_order_key/1)
+      |> limits_after_the_days_made(freq, selection)
+
+    if is_integer(most),
+      do: counted_parts(parts, most, {[candidate], freq}, {selection, wkst}),
+      else: parts |> each_part({[candidate], freq}, selection, wkst) |> selected()
+  end
+
+  defp each_part(parts, candidates_at_scope, selection, wkst),
+    do: Enum.reduce_while(parts, candidates_at_scope, &resolve_part(&1, &2, selection, wkst))
+
+  # A time of day multiplies what the parts before it made, each day by the
+  # hours named, each hour by the minutes and each minute by the seconds: a
+  # selection of forty characters names 29 million seconds of a year, and
+  # each part applied to every candidate at once makes them all before any
+  # is counted. Where no more than so many occurrences are asked for, the
+  # parts from the first time of day on are applied to one candidate at a
+  # time, each of what a part gives through the parts after it before the
+  # next, and an occurrence is counted as it is made: the walk stops at the
+  # first one past the most. What it gives short of that is what the parts
+  # give applied to all at once, in the same order, each being asked of a
+  # candidate alone.
+  #
+  # A reading the clock skips is dropped once the parts are through
+  # (`on_readings_the_clock_shows/1`) and is no occurrence, so a count that
+  # passes the most is taken again of the readings the clock shows.
+  defp counted_parts(parts, most, candidates_at_scope, {selection, wkst} = asked_with) do
+    {dates, times} = Enum.split_while(parts, &(not time_of_day?(&1)))
+
+    case each_part(dates, candidates_at_scope, selection, wkst) do
+      {:error, _reason} = error -> error
+      {candidates, scope} -> counted(candidates, times, scope, most, asked_with)
+    end
+  end
+
+  defp time_of_day?({unit, _values}), do: unit in [:hour, :minute, :second]
+
+  defp counted(candidates, parts, scope, most, asked_with) do
+    with :more <- each_through(candidates, parts, scope, {most, :made, asked_with}, {[], 0}),
+         :more <- each_through(candidates, parts, scope, {most, :shown, asked_with}, {[], 0}) do
+      {:error, {:more_than, most}}
+    else
+      {:error, _reason} = error -> error
+      {occurrences, _count} -> Enum.reverse(occurrences)
+    end
+  end
+
+  # What is made so far, with one candidate after another through the parts:
+  # the occurrences, the latest first, and how many they are, or `:more`.
+  defp each_through([], _parts, _scope, _asked, made), do: made
+
+  defp each_through([candidate | others], parts, scope, asked, made) do
+    case through(candidate, parts, scope, asked, made) do
+      {_occurrences, _count} = made -> each_through(others, parts, scope, asked, made)
+      more_or_an_error -> more_or_an_error
+    end
+  end
+
+  defp through(candidate, [], _scope, {most, counted, _asked_with}, {occurrences, count} = made) do
+    cond do
+      counted == :shown and starts_on_a_reading_skipped?(candidate) -> made
+      count == most -> :more
+      true -> {[candidate | occurrences], count + 1}
+    end
+  end
+
+  defp through(
+         candidate,
+         [part | parts],
+         scope,
+         {_most, _counted, {selection, wkst}} = asked,
+         made
+       ) do
+    case apply_entry(part, [candidate], scope, selection, wkst) do
+      {:error, _reason} = error -> error
+      given -> each_through(given, parts, scope_after(part, scope), asked, made)
+    end
   end
 
   # A weekly or a monthly candidate stands for its week or its month, and a
@@ -900,7 +1010,7 @@ defmodule Tempo.RRule.Selection do
   defp scope_after({:week_of_month, _weeks}, _scope), do: :day
   defp scope_after(_entry, scope), do: scope
 
-  # The parts in the order and at the scope `resolve_in_period/4` applies
+  # The parts in the order and at the scope `resolve_in_period/5` applies
   # them: a BYWEEKNO that expands a year hands its days on at day scope.
   defp any_part_expands?([], _scope, _selection), do: false
 
@@ -1406,7 +1516,7 @@ defmodule Tempo.RRule.Selection do
   defp further_than_a_step({:next, freq}, freq), do: nil
   defp further_than_a_step(goes_on, _freq), do: goes_on
 
-  # A year limits the periods a selection resolves in (`resolve_in_period/4`),
+  # A year limits the periods a selection resolves in (`resolve_in_period/5`),
   # and every other part is asked as the walk asks it.
   defp drops?({:year, years}, candidate, _freq, _selection, _wkst),
     do: not period_selected?(candidate, years)
@@ -1786,7 +1896,7 @@ defmodule Tempo.RRule.Selection do
 
   # A year (`Y`) among a window's selectors — LIMIT: keep the window's days
   # in a listed year (a year number, a mask such as `202XY`, or `X*Y` for any
-  # year). Anywhere else a year limits the period (`resolve_in_period/4`).
+  # year). Anywhere else a year limits the period (`resolve_in_period/5`).
   defp apply_role(:limit, {:year, years}, candidates, _scope, _selection, _wkst) do
     Enum.filter(candidates, &year_selected?(year_of(&1), years))
   end
@@ -1799,7 +1909,7 @@ defmodule Tempo.RRule.Selection do
     pick_set_positions(candidates, List.wrap(positions))
   end
 
-  # WKST, a context-only token `apply_selection/3` has already read, and
+  # WKST, a context-only token `apply_selection/4` has already read, and
   # unknown tokens pass through unchanged.
   defp apply_role(_role, _entry, candidates, _scope, _selection, _wkst), do: candidates
 
