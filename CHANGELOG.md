@@ -411,6 +411,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A rule with a count and no start is counted from its `:within` window's start: `Tempo.to_interval(~o"R2/../P1Y/FL1M1DN", within: ~o"2026-06-01/2029-06-01")` is 1 January 2027 and 2028, where it was 2027 alone. An occurrence of the window's first period that was over before the window opened took one of the count.
+
 * `Tempo.Event.date/3` returns `{:error, {:not_a_date, given}}` when a registered `Tempo.Event.Resolver` gives what is neither `{:ok, date}` nor an error, where it handed that answer on as its own.
 
 * `Tempo.explain/1` shows an end that holds a set as it is written, and says of an interval with one that it is a span from each value: the end of `2026Y6M1D/2026Y6M{20,25}D` was shown as 1 June, the first day of its month.

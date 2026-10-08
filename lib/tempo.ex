@@ -7259,7 +7259,10 @@ defmodule Tempo do
     overlaps the window and the empty set where it does not, as a
     longer one's occurrences are kept. A rule with an open start
     starts where the window does, so one with a count has that many
-    occurrences from there.
+    occurrences from there: `R2/../P1Y/FL1M1DN` within June 2026 to
+    June 2029 is 1 January 2027 and 2028, as
+    `R2/2026-06-01/P1Y/FL1M1DN` is, and an occurrence the window
+    opens in is the first of them.
 
     A window with no zone bounds a value in a zone in that zone:
     `~o"2026-06"` is June in New York for a recurrence written in
@@ -8207,7 +8210,7 @@ defmodule Tempo do
 
     walk =
       iterate_recurrence(
-        {from, floor, 0},
+        {from, counted_from(floor, opts), 0},
         step,
         occurrence_end_fn(from, duration, interval),
         fn _start -> true end,
@@ -8305,7 +8308,7 @@ defmodule Tempo do
     step = if direction == -1, do: Duration.negate(duration), else: duration
 
     case iterate_recurrence(
-           {from, floor, 0},
+           {from, counted_from(floor, opts), 0},
            step,
            occurrence_end_fn(from, duration, interval),
            fn _start -> true end,
@@ -8512,7 +8515,8 @@ defmodule Tempo do
       within ->
         case window_start(within, interval) do
           {:ok, start} ->
-            materialise_from_bound(interval, in_rule_zone(start, interval), within, opts)
+            start = in_rule_zone(start, interval)
+            materialise_from_bound(interval, start, within, counted_from_window(opts, within))
 
           {:error, _} = error ->
             error
@@ -9187,7 +9191,7 @@ defmodule Tempo do
   # combinations (e.g. `BYMONTHDAY=31` for months that never have
   # 31 days — the filter would reject every candidate forever).
   defp iterate_recurrence(
-         {%Tempo{} = from, %Tempo{} = floor, first},
+         {%Tempo{} = from, floor, first},
          %Tempo.Duration{} = cadence,
          occurrence_end,
          start_predicate,
@@ -10109,6 +10113,51 @@ defmodule Tempo do
     if on_the_time_line?(time),
       do: Stream.reject(occurrences, &before_dtstart?(&1, from)),
       else: Stream.drop_while(occurrences, &before_dtstart?(&1, from))
+  end
+
+  # A rule with no start begins where its window does, and its count is of
+  # the occurrences from the window's start (decided 2026-10-08). The walk
+  # begins at the period the window starts in, so an occurrence of that
+  # period that is over before the window opens is no part of the count: it
+  # was counted and then dropped, and `R2/../P1Y/FL1M1DN` within June 2026 to
+  # June 2029 was 1 January 2027 alone, where `R2/2026-06-01/P1Y/FL1M1DN` is
+  # that day and 1 January 2028.
+  defp from_the_start(occurrences, {%Tempo{} = from, %Tempo{} = window_from}) do
+    occurrences
+    |> from_the_start(from)
+    |> Stream.reject(&over_before?(&1, window_from))
+  end
+
+  defp over_before?(%Tempo.Interval{to: %Tempo{} = to}, window_from),
+    do: not ends_after?(to, window_from)
+
+  # The step that ended a walk is not an occurrence to drop.
+  defp over_before?(_failure, _window_from), do: false
+
+  # The floor of a walk that is counted from a window's start, which the
+  # conversion of a rule with no start says in the option `:counted_from`:
+  # it is no option of a caller's.
+  defp counted_from(floor, opts) do
+    case Keyword.get(opts, :counted_from) do
+      %Tempo{} = window_from -> {floor, window_from}
+      _no_window -> floor
+    end
+  end
+
+  defp counted_from_window(opts, within) do
+    case window_lower(within) do
+      %Tempo{} = window_from -> Keyword.put(opts, :counted_from, window_from)
+      _no_lower -> opts
+    end
+  end
+
+  # Where a window starts: an open-ended one at its start, and a set of
+  # spans at the first of theirs.
+  defp window_lower(within) do
+    case open_window_start(within) do
+      {:ok, %Tempo{} = from} -> from
+      _bounded -> bound_lower(within)
+    end
   end
 
   defp before_dtstart?(%Tempo.Interval{from: %Tempo{} = candidate_from}, %Tempo{} = dtstart) do
