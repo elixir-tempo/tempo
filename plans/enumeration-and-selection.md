@@ -14,7 +14,7 @@ Three instruments hold such answers:
 
 * **The selections** — `Tempo.Matrix.Selections`, for a selection: each part written seven ways in 42 periods, a week of a month among them since 2026-10-09, and the days of the period every part names.
 
-* **The calendar census** — a run of 2026-10-04 (`calcensus.exs` in the session's scratchpad, to be made part of the matrix) of every calendar module Calendrical ships: each form of a value on three dates, and thirty selections, against spans counted from the calendar's `valid_date?/3`, `months_in_year/1` and `weeks_in_year/1`.
+* **The calendar census** — a run of 2026-10-04 of a script, and since 2026-10-09 a test (`test/tempo/calendar_census_test.exs`), of every calendar module Calendrical ships but the astronomical ones: each form of a value on three dates, and thirty selections, against spans counted from the calendar's `valid_date?/3`, `months_in_year/1` and `weeks_in_year/1`.
 
 ## The space
 
@@ -74,7 +74,7 @@ The same 1,170 cells on the code of `0deedac`. Thirty-eight changed, and none is
 
 * **`Julian.March25`** — the census's own answer is the reading decided against on 2026-10-05 (a month is the nth the calendar counts, so `2026Y6M` is the dates of `month(2026, 6)`, which are August's), and its year raises in the census itself. Its nine full forms and twelve selections in a year that differ therefore say nothing, and its fifteen selections in a month are the named refusal (`:not_built`).
 
-So the census as a test needs two answers it does not have: the calendar's own week in a calendar of weeks, and the decided reading of a year that starts within its months.
+So the census as a test needed two answers it did not have: the calendar's own week in a calendar of weeks, and the decided reading of a year that starts within its months. It has both since 2026-10-09, and with them every full form in the 22 calendars and every selection in the eighteen it measures them in are right.
 
 ## Status
 
@@ -184,13 +184,13 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 
 * [ ] **One implementation** — `Tempo.UnitValues`, then each of the five callers moved to it in turn, the matrix green after each. Moved: a selection's resolver, `Tempo.select/2`'s count from the end and its weekdays, and the walk's reading of a range that reaches past a period's values (the walk reads everything else through the reading of a value). `Tempo.Validation.conform/2` is `resolve/2`, and a set or a range of a clock unit is held to the unit's values. What a unit takes with no year is `in_any_year/3`, for every module that asked. The reading of a value and its masks take a unit's values in a year from `in_period/3` (`validation.ex`, `mask.ex`, the calendar weeks of `group.ex`). A step from a value asks `following/4` and `preceding/4` what comes after and before a value, `first/3` and `last/3` for the value a carry or a borrow lands on, and `at_or_before/4` for the day a step of months lands on (`math.ex`, which has no count of its own left but the weeks of a year with no year and a fraction of a year in months). A selection's resolver takes a month's days, a year's months and their ends from it too (`selection.ex`). `Tempo.explain/1` expanded a range as Elixir's, which names nothing where the range reaches the end; it counts a weekday, an hour, a minute and a second, and a month where a year's months can be counted, through `resolve/2` and `named/2`, and words a day, a week and a position, whose period a rule selects in each of, as they are written. To move: the week counts of `Tempo.Validation` into the module. Still arithmetic of its own in the resolver: the nearest weekday of cron's `W`, which steps a day or two within a month. Not to move: the arithmetic of a group and of a fraction (the nth day of a group of months, half of a year), which counts a period's units, where the calendar's own count is the answer. All five callers are moved (2026-10-04); the week counts are what is left, and the week of the year a day is in, counted from a rule's `WKST`, joined them on 2026-10-08.
 
-* [ ] **The census in the matrix** — every calendar module as a generated class of `Tempo.Matrix.Corpus`, with the calendar-only answer as a check, so that the table above is a test.
-
 * [ ] **A value with no year, measured** — an answer worked out apart from the library for a value with no year, in every calendar (Calendrical's `days_in_month/1` and `months_in_year/0` are what it is worked out from), and the walk and the conversion asking one place what needs a year. Nothing holds either to an answer of its own yet.
 
 * [ ] **The measure widened** — shapes, intervals, recurrences and rules in every calendar; a calendar-generic answer for a week, for `NRF`; the astronomical calendars with a time limit that suits them.
 
 ### Done
+
+* [x] **The census as a test** — `test/tempo/calendar_census_test.exs` holds a value in each full form, converted and walked, and a selection of each kind to `Tempo.Matrix.CalendarCensus`, which works each answer out from the calendar's own functions and `Date`: 22 calendars (the 19 of the census and the Julian years from 1 March, 1 September and 25 December), 579 full forms and 520 selections, in five seconds. A calendar of weeks is held to its own `week/2`, and a year that starts within its months to the calendar's `year/1` and `month/2`, which `Tempo.Matrix.Extent` now reads such a value by. It is a test of its own and not a class of the matrix's corpus, where every operation would run on a thousand values more. Not in it: the astronomical calendars, a selection in a year that starts within its months (not built) and a value with no year. 2026-10-09.
 
 * [x] **A week selected in a year of a calendar of weeks** — a year and a week of it are combined, so the selection is the week where it was the year: the six cells of the baseline, which lists none. The weekday in a Gregorian week, 42 more, was fixed on 2026-10-05. 2026-10-07.
 

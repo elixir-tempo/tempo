@@ -448,8 +448,15 @@ defmodule Tempo.Matrix.Extent do
   defp on_axis?(:month_and_week, units), do: :month in units and :week in units
   defp on_axis?(unit, units), do: unit in units
 
-  defp date_on(:month, time, calendar),
-    do: calendar_date(time[:year], time[:month], time[:day] || 1, calendar)
+  # A month with a day is the date. A month with no day is its first date,
+  # which in a year that starts within its months is the first date of the
+  # nth month the calendar counts.
+  defp date_on(:month, time, calendar) do
+    case time[:day] do
+      nil -> first_of_month(time[:year], time[:month], calendar)
+      day -> calendar_date(time[:year], time[:month], day, calendar)
+    end
+  end
 
   defp date_on(:week, time, calendar),
     do: week_date(time[:year], time[:week], time[:day_of_week] || time[:day] || 1, calendar)
@@ -458,10 +465,45 @@ defmodule Tempo.Matrix.Extent do
     do: day_of_year(time[:year], time[:day_of_year], calendar)
 
   defp date_on(:day, time, calendar), do: day_of_year(time[:year], time[:day], calendar)
-  defp date_on(:year, time, calendar), do: calendar_date(time[:year], 1, 1, calendar)
+  defp date_on(:year, time, calendar), do: first_of_year(time[:year], calendar)
 
   # A week of a month, or a day of the week with no week, is no date here.
   defp date_on(_another_axis, _time, _calendar), do: :none
+
+  # In a calendar whose year starts within its months (a Julian year from
+  # 25 March), a year begins on the first date the calendar's `year/1`
+  # gives, and a month with no day is the nth month it counts, the dates of
+  # its `month/2`; a date keeps the month it names (decided 2026-10-04).
+  defp first_of_year(year, calendar) do
+    case year_within_its_months(year, calendar) do
+      %Date.Range{first: first} -> converted(first)
+      nil -> calendar_date(year, 1, 1, calendar)
+    end
+  end
+
+  defp first_of_month(year, month, calendar) do
+    case year_within_its_months(year, calendar) do
+      %Date.Range{} -> first_of_counted_month(calendar.month(year, month))
+      nil -> calendar_date(year, month, 1, calendar)
+    end
+  end
+
+  defp first_of_counted_month(%Date.Range{first: first}), do: converted(first)
+  defp first_of_counted_month(_no_month), do: :none
+
+  # The dates of a year that does not begin on the first day of its first
+  # month, and `nil` for a year that does.
+  defp year_within_its_months(_year, Calendrical.Gregorian), do: nil
+
+  defp year_within_its_months(year, calendar) do
+    with true <- function_exported?(calendar, :year, 1),
+         %Date.Range{first: %Date{month: month, day: day}} = dates <- calendar.year(year),
+         true <- {month, day} != {1, 1} do
+      dates
+    else
+      _a_year_from_its_first_month -> nil
+    end
+  end
 
   defp calendar_date(year, month, day, calendar) do
     with {:ok, date} <- Date.new(year, month, day, calendar),
