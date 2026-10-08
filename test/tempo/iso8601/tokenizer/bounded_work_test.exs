@@ -1,5 +1,8 @@
 defmodule Tempo.Iso8601.Tokenizer.BoundedWorkTest do
-  use ExUnit.Case, async: true
+  # It measures time, so it runs alone: beside the suite's other tests, and
+  # under `mix test --cover`, a read of milliseconds was once not done in its
+  # two seconds.
+  use ExUnit.Case, async: false
 
   # The work the tokenizer does for a text is bounded by the text's length.
   #
