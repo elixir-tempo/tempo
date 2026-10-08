@@ -1252,7 +1252,25 @@ defmodule Tempo.Math do
     end
   end
 
+  # A whole number of months or of years added to a plain Gregorian date is
+  # as common, the step of every rule of months and of years, and its
+  # prelude is as empty: the value holds no mask and no annotation, is no
+  # week date and no day of the year, and its calendar's years begin with
+  # their first month, so the general path comes down to the months counted
+  # on and the day brought into the month they land in (`apply_duration/2`).
+  # It took four times a step of days.
+  defp fast_add(%Tempo{time: time, calendar: calendar} = tempo, [{unit, n}] = duration_time)
+       when unit in [:month, :year] and is_integer(n) and
+              calendar in [nil, Calendrical.Gregorian, Calendar.ISO] do
+    if plain_datetime?(time),
+      do: fast_stepped(apply_duration(tempo, duration_time)),
+      else: :fallback
+  end
+
   defp fast_add(_tempo, _duration_time), do: :fallback
+
+  defp fast_stepped({:ok, %Tempo{}} = stepped), do: stepped
+  defp fast_stepped({:error, _reason}), do: :fallback
 
   # A step the fast path cannot take is left to the general path, which
   # names the value in its error.
