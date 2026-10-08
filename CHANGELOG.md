@@ -415,6 +415,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A rule of hours, minutes or seconds in a zone that steps past every value its parts name has no occurrence and returns the empty set, as one in no zone does: every twenty-fourth hour from 10:00 in Paris is 10:00 or 09:00, so a rule for three o'clock is empty at once, where the walk ran for six seconds to a `Tempo.UnboundedRecurrenceError`. So does a position no period has (`FREQ=DAILY;BYSETPOS=2`).
+
 * A masked week of a month with a day or a time under it is each week its digits match: `Tempo.select(~o"2026-06", ~o"XW3K")` is the Wednesday of each of June's weeks, where it was refused as not built. `Tempo.explain/1` words an unspecified unit in a selection and `Tempo.RRule.to_string/1` refuses one by name, where each raised.
 
 * A sign before an unspecified number (`-X*D`, `L-X*DN`, `{-X*D,5D}`) is a `Tempo.ParseError` that says it names no values of its own. Reading a string that held one raised a `FunctionClauseError`.

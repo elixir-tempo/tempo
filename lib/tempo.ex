@@ -9368,11 +9368,30 @@ defmodule Tempo do
       token in @names_a_date or token in @names_no_date
     end) and
       Enum.all?(units, fn {token, _value} -> token in @time_of_day end) and
-      ((periods == @periods_before_asking and steps_past_its_parts?(interval, cadence)) or
+      ((periods == @periods_before_asking and
+          (steps_past_its_parts?(interval, cadence) or position_no_period_has?(interval, cadence))) or
          names_no_date_of_any_year?(interval, cadence, periods))
   end
 
   defp has_no_occurrence?(_interval, _cadence, _periods), do: false
+
+  # A position among what a period selects (RFC 5545's `BYSETPOS`) that no
+  # period has. A rule whose parts only keep or drop its period has one
+  # occurrence in a period at most, which is its first and its last, so a
+  # position that is neither is none of them: the second of each day's one
+  # (`FREQ=DAILY;BYSETPOS=2`). It was walked to its end and was an error.
+  defp position_no_period_has?(
+         %Tempo.Interval{repeat_rule: %Tempo{time: [{:selection, selection} | _units]} = rule},
+         %Tempo.Duration{time: [{unit, _amount} | _finer]}
+       ) do
+    case List.keyfind(selection, :instance, 0) do
+      {:instance, positions} ->
+        not Selection.expands?(rule, unit) and UnitValues.named(positions, 1..1//1) == []
+
+      nil ->
+        false
+    end
+  end
 
   # The Gregorian calendar's question: of the periods it comes round in, and
   # of one year of each kind.
@@ -9423,10 +9442,10 @@ defmodule Tempo do
     calendar = Compare.effective_calendar(calendar)
     parts = Enum.drop(@places_in_a_week, Map.fetch!(@places_finer_than, unit))
     places = Enum.map(parts, &place_named(&1, selection, from, calendar))
-    moved = moved_by_its_zone(from, unit)
+    moved = moved_by_its_zone(from, unit, amount)
 
     moved != :not_known and Enum.all?(places, &is_tuple/1) and
-      not stops_at_one?(named_where_stopped(places, moved), amount)
+      not stops_where_named?(places, moved, amount)
   end
 
   defp steps_past_its_parts?(_interval, _cadence), do: false
@@ -9438,20 +9457,83 @@ defmodule Tempo do
   # is, as Samoa's 30 December 2011, and so is a time of day the clock skips
   # until midnight or past it, as 23:45 on 4 May 2018 in Pyongyang and 23:30
   # on the Saturday before the last Sunday of each March in Nuuk. It is
-  # never moved further, a zone skipping a day at most, nor back. What a
-  # zone does to a walk of hours or less is not known without its changes.
-  defp moved_by_its_zone(%Tempo{extended: %{zone_id: zone}, time: time}, :day)
+  # never moved further, a zone skipping a day at most, nor back.
+  #
+  # A walk of hours, minutes or seconds in a zone steps by time passed, and
+  # a change of the zone's clock moves every stop after it by what the clock
+  # changed by: every twenty-fourth hour from 10:00 in Paris is 10:00 until
+  # the clocks go back, and 09:00 after. So its stops are at the places it
+  # steps to, each moved by one of the offsets the clock is at over the time
+  # the walk can cover (`shifted_by_its_clock/3`).
+  defp moved_by_its_zone(%Tempo{extended: %{zone_id: zone}, time: time}, :day, _amount)
        when is_binary(zone) do
     if not Keyword.has_key?(time, :hour) and Tempo.TimeZoneDatabase.days_left_out(zone) == [],
       do: :never,
       else: :a_day_on
   end
 
-  defp moved_by_its_zone(%Tempo{extended: %{zone_id: zone}}, _finer_than_a_day)
+  defp moved_by_its_zone(%Tempo{extended: %{zone_id: zone}} = from, unit, amount)
        when is_binary(zone),
-       do: :not_known
+       do: shifted_by_its_clock(from, unit, amount)
 
-  defp moved_by_its_zone(%Tempo{}, _unit), do: :never
+  defp moved_by_its_zone(%Tempo{}, _unit, _amount), do: :never
+
+  @seconds_in %{hour: 3_600, minute: 60, second: 1}
+
+  # The time a walk can cover that a zone's changes are looked for in: a
+  # walk makes `@recurrence_safety_cap` periods at most, and the zone's
+  # changes are found a day at a time (`Tempo.TimeZoneDatabase.changes/3`),
+  # so one that could cover more than thirty years is not asked.
+  @years_of_changes_asked 30
+  @seconds_of_changes_asked @years_of_changes_asked * 366 * 86_400
+
+  # How far a zone's clock moves the stops of a walk of hours or less, as
+  # so many of the walk's unit for each offset the clock is at from the
+  # walk's start for as long as the walk can run: none, and an hour back,
+  # for a walk from the summer in Paris. `:not_known` where the walk can
+  # cover more time than is asked of the zone, where a change is no whole
+  # number of the walk's unit (half an hour, in a walk of hours), and where
+  # the start names no one moment.
+  defp shifted_by_its_clock(%Tempo{extended: %{zone_id: zone}} = from, unit, amount) do
+    per_unit = Map.fetch!(@seconds_in, unit)
+    reach = @recurrence_safety_cap * amount * per_unit
+
+    with true <- reach <= @seconds_of_changes_asked,
+         start when is_number(start) <- utc_seconds_of(from),
+         start = Kernel.trunc(start),
+         shifts = clock_shifts(zone, start, start + reach),
+         true <- Enum.all?(shifts, &(rem(&1, per_unit) == 0)) do
+      {:by, Enum.map(shifts, &div(&1, per_unit))}
+    else
+      _not_asked -> :not_known
+    end
+  end
+
+  defp utc_seconds_of(%Tempo{} = from) do
+    if anchored?(from) and Compare.point?(from.time), do: Compare.to_utc_seconds(from)
+  end
+
+  # Each offset a zone's clock is at between two moments, as its distance
+  # from the offset at the first.
+  defp clock_shifts(zone, from, to) do
+    case Tempo.TimeZoneDatabase.changes(zone, from, to) do
+      [] ->
+        [0]
+
+      [{_moment, at_the_start, _later} | _] = changes ->
+        Enum.uniq([
+          0 | Enum.map(changes, fn {_moment, _before, later} -> later - at_the_start end)
+        ])
+    end
+  end
+
+  # Whether a walk stops at a place its parts name, wherever its zone moves
+  # its stops to.
+  defp stops_where_named?(places, {:by, shifts}, amount),
+    do: Enum.any?(shifts, &stops_at_one?(places, amount, &1))
+
+  defp stops_where_named?(places, moved, amount),
+    do: stops_at_one?(named_where_stopped(places, moved), amount, 0)
 
   # The places the parts name, as places the walk stops at: a day of the
   # week a stop can be moved onto is named where the day before it is.
@@ -9502,13 +9584,16 @@ defmodule Tempo do
   # Whether a walk stops at a place the parts name. `apart` is how far apart
   # its stops are, `weight` how many places one of a unit is, and `place`
   # the place the finer units' values make.
-  defp stops_at_one?(places, amount) do
+  #
+  # `shift` is how far every stop is moved from the place it steps to, in
+  # the step's unit: none, but where a zone's clock has changed.
+  defp stops_at_one?(places, amount, shift) do
     {count, start} =
       Enum.reduce(places, {1, 0}, fn {size, began, _named}, {weight, start} ->
         {weight * size, start + began * weight}
       end)
 
-    stops_at_one?(places, start, Integer.gcd(amount, count), 1, 0)
+    stops_at_one?(places, start + shift, Integer.gcd(amount, count), 1, 0)
   end
 
   defp stops_at_one?([], _start, _apart, _weight, _place), do: true

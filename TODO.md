@@ -6,11 +6,9 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Open
 
-### Conformance and completeness
-
-* [ ] **A rule of hours or less in a zone that has no occurrence because of what it steps by** — a rule that steps past every value its parts name is told it has no occurrences from the places in the week its steps stop at (2026-10-08), and a zone's clock changes those of a walk of hours, minutes or seconds: every twenty-fourth hour from 10:00 in Paris is 10:00 or 09:00. So `R5/2026-06-16T10[Europe/Paris]/PT24H/FLT3HN` is still a `Tempo.UnboundedRecurrenceError`, after five seconds of walking, where a rule of days in a zone is told (a stop is on the day stepped to or the day after). To build: the places a zone's own changes bring such a walk to (`Tempo.TimeZoneDatabase.changes/3` lists them for a span, and the question is of every year to come). Not told either: a rule of days in a zone whose parts name only the day after the one it stops on (`R5/2026-06-16T10[Europe/Paris]/P7D/FL3KN`), and a position no period has (`FREQ=DAILY;BYSETPOS=2`). Found 2026-10-07.
-
 ### Performance
+
+* [ ] **A zoned rule with no occurrence that is still walked to its error** — three kinds are not told and take their ten thousand periods, three to seven seconds, before a `Tempo.UnboundedRecurrenceError`: a walk of hours or less that could cover more than thirty years (`PT168H`), the zone's changes being found a day at a time; one in a zone whose clock changes by other than whole units of the step (`Australia/Lord_Howe`, by half an hour, in a walk of hours); and a rule of days in a zone whose parts name only the day after the one it stops on (`R5/2026-06-16T10[Europe/Paris]/P7D/FL3KN`).
 
 * [ ] **A selection's parts are expanded in one period without bound** — the resolver expands each part of a selection in a period before anything counts what it gives, so `~o"2026YL{1..12}M{1..28}DT{0..23}H{0..59}MN"` is refused (`:too_many_values`) only after its 483,840 minutes are made, 2.5 s, one with seconds too is 29 million, and an RRULE that expands as far in one period (`FREQ=YEARLY;BYHOUR=…;BYMINUTE=…;BYSECOND=…`) is walked as long. A limit in `Tempo.RRule.Selection` must leave a rule with a `COUNT` or a window its first occurrences, so it is no cap on a period. Found 2026-10-08.
 
@@ -89,6 +87,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A rule of hours or less in a zone that has no occurrence because of what it steps by** — told so from the offsets its zone's clock is at over the time the walk can cover (`shifted_by_its_clock/3` in `lib/tempo.ex`): `R5/2026-06-16T10[Europe/Paris]/PT24H/FLT3HN` is the empty set at once, where it was an error after six seconds. A position no period has (`FREQ=DAILY;BYSETPOS=2`) is the empty set too. 2026-10-08.
 
 * [x] **`Tempo.explain/1` wrote an end more finely than its value** — reported by the user 2026-10-08: `~o"1984/1986"` was "From: 1984-01-01". Each end is written as far as the value is written (`render_endpoint/1` in `lib/explain.ex`), an hour as `T10`, and the day a week or a year of a calendar that turns on another day starts on is told beside it (decided 2026-10-08, user). 2026-10-08.
 
