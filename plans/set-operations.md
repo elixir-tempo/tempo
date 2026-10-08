@@ -1,6 +1,6 @@
 # Set operations
 
-**Status:** in progress, 2026-10-04
+**Status:** in progress, 2026-10-08
 
 The requirement (user, 2026-10-04): once validation, the walk, `Tempo.select/2`, the selection's resolver and `Tempo.explain/1` rest on one implementation, the next step is strong confidence in a single implementation of the set operations. This is the inventory that work starts from: what the operations are and where each is implemented, what holds them to an answer, what does not, what has been found, and the tasks in order. The measure of its first task has landed, and the one defect it found, in `covered/2`, is fixed.
 

@@ -1,6 +1,6 @@
 # Enumeration and selection in every calendar
 
-**Status:** in progress, 2026-10-07
+**Status:** in progress, 2026-10-08
 
 Enumeration and selection are core capabilities of Tempo, and the requirement (user, 2026-10-04) is confidence that they work correctly for all calendar types, at all resolutions, on all full and partial date and time combinations. This document says what that space is, what in it is verified, what is wrong, what is missing and what has not been measured yet, and sets the order of the work. It continues [plans/validated-core.md](validated-core.md), whose matrix it extends.
 
@@ -54,6 +54,28 @@ A full form is a year, a month, a day, an hour, a minute, a second, a day of the
 
 So for a date or a time with a year, in the fifteen calendars of whole months that begin their year with their first month, and in `Reform.England` outside the month of its reform, every cell is right: the span, the walk at every resolution, and every selection of the thirty. That part of the requirement is met and measured. What is not right is below, and it is in four places: a month with days missing, a year that starts within the months, a calendar of weeks, and a value with no year.
 
+### Run again on 2026-10-08
+
+The same 1,170 cells on the code of `0deedac`. Thirty-eight changed, and none is an answer that became wrong.
+
+| Calendar | Full forms | Selections | No year |
+|---|---|---|---|
+| The sixteen calendars of months | 441 of 441 | 480 of 480 | not verified |
+| ISOWeek | 15 of 15 | 20 of 20 | not verified |
+| NRF | 15 of 15 | 4 of 20 | not verified |
+| Julian.March25 | 15 of 27 | 3 of 30 | not verified |
+| All | 486 of 498 | 507 of 550 | 0 of 122 |
+
+* **`Reform.England`** — the six cells of its month with days missing are right (36 of 36).
+
+* **`ISOWeek`** — the eight cells of a week selected in a year, and of a year's weekdays, are right.
+
+* **`NRF`** — the sixteen cells flagged are held to ISO 8601's week, which is not the calendar's. Held to `Calendrical.NRF.week/2`, a week, a weekday of one and a year's weekdays, each written four ways in 2025, 2026 and 2028, are the calendar's in all 36 cells, as `ISOWeek`'s 36 are held to its own.
+
+* **`Julian.March25`** — the census's own answer is the reading decided against on 2026-10-05 (a month is the nth the calendar counts, so `2026Y6M` is the dates of `month(2026, 6)`, which are August's), and its year raises in the census itself. Its nine full forms and twelve selections in a year that differ therefore say nothing, and its fifteen selections in a month are the named refusal (`:not_built`).
+
+So the census as a test needs two answers it does not have: the calendar's own week in a calendar of weeks, and the decided reading of a year that starts within its months.
+
 ## Status
 
 | Area | Status |
@@ -63,12 +85,12 @@ So for a date or a time with a year, in the fifteen calendars of whole months th
 | Full dates and times in a calendar of weeks | Done |
 | Every shape of a Gregorian value (the matrix) | Done |
 | One implementation of a unit's values and of a count from the end | Done |
-| A selection in a calendar of weeks | Open |
+| A selection in a calendar of weeks | Done |
 | A weekday selected in a Gregorian week | Done |
 | A month whose days are not `1..n` (a reform) | Done |
 | A year that starts within the months | Done for values, Open for selections |
 | A value with no year in a calendar other than the Gregorian | In progress |
-| `inspect/1` and `to_iso8601/1` on a selection under an hour | Open |
+| `inspect/1` and `to_iso8601/1` on a selection under an hour | Done |
 | `Tempo.select/2` against the selection | Done |
 | A recurrence with no year and a rule | Done |
 | The astronomical calendars | In progress |
@@ -84,11 +106,11 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 
 * **The weeks of a year with no year** — no calendar counts them without a year, so the stepper holds a literal 52, `53W` has no span and `54W` is read. An item of `TODO.md`, with a decision: a count from Calendrical, or a week with no year that is neither bounded nor stepped.
 
-* **A selection in a calendar of weeks** — a week selected in a year is the whole year, in `ISOWeek` and `NRF` alike. Six cells of the matrix. A year's weekdays, which stopped at its twelfth week, are those of each of its weeks since 2026-10-04 (nine cells).
+* **A selection in a calendar of weeks** — a week selected in a year is the whole year, in `ISOWeek` and `NRF` alike. Six cells of the matrix. A year's weekdays, which stopped at its twelfth week, are those of each of its weeks since 2026-10-04 (nine cells). Done 2026-10-07: a week selected in a year is the week, and on 2026-10-08 each is the calendar's own `week/2` in both calendars.
 
 * **A weekday selected in a Gregorian week** — `2026Y25WL3KN` was the week's Monday whatever the weekday, in a value and in a recurrence's rule (42 cells). Fixed 2026-10-05 with the days of a Gregorian week being given as calendar dates: the day selected was a week and a day of it, which the conversion to a span cut back to its week.
 
-* **A selection under an hour cannot be written** — `inspect/1` and `Tempo.to_iso8601/1` raise a `FunctionClauseError` on `2026Y6M15DT10HLT30MN`. 35 cells.
+* **A selection under an hour cannot be written** — `inspect/1` and `Tempo.to_iso8601/1` raised a `FunctionClauseError` on `2026Y6M15DT10HLT30MN`. 35 cells. Done 2026-10-06: both write it.
 
 ## Feature gaps
 
@@ -108,7 +130,7 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 
 * **A value with no year** — no answer is worked out apart from the library for any calendar. The matrix checks that the walk and the conversion agree, for the Gregorian calendar alone.
 
-* **A selection in `NRF`** — the answer worked out for a week is ISO 8601's, so twelve of its sixteen failing cells say nothing yet.
+* **A selection in `NRF`** — the answer the census works out for a week is ISO 8601's, so its sixteen failing cells say nothing. Held to the calendar's own `week/2` on 2026-10-08 they are right; that answer is not yet in the census or the matrix.
 
 * **Shapes in other calendars** — sets, ranges, masks, groups and counts from the end are generated for the Gregorian calendar and, for dates, the Hebrew.
 
@@ -160,23 +182,23 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 
 ## Tasks
 
-* [ ] **One implementation** — `Tempo.UnitValues`, then each of the five callers moved to it in turn, the matrix green after each. Moved: a selection's resolver, `Tempo.select/2`'s count from the end and its weekdays, and the walk's reading of a range that reaches past a period's values (the walk reads everything else through the reading of a value). `Tempo.Validation.conform/2` is `resolve/2`, and a set or a range of a clock unit is held to the unit's values. What a unit takes with no year is `in_any_year/3`, for every module that asked. The reading of a value and its masks take a unit's values in a year from `in_period/3` (`validation.ex`, `mask.ex`, the calendar weeks of `group.ex`). A step from a value asks `following/4` and `preceding/4` what comes after and before a value, `first/3` and `last/3` for the value a carry or a borrow lands on, and `at_or_before/4` for the day a step of months lands on (`math.ex`, which has no count of its own left but the weeks of a year with no year and a fraction of a year in months). A selection's resolver takes a month's days, a year's months and their ends from it too (`selection.ex`). `Tempo.explain/1` expanded a range as Elixir's, which names nothing where the range reaches the end; it counts a weekday, an hour, a minute and a second, and a month where a year's months can be counted, through `resolve/2` and `named/2`, and words a day, a week and a position, whose period a rule selects in each of, as they are written. To move: the week counts of `Tempo.Validation` into the module. Still arithmetic of its own in the resolver: the nearest weekday of cron's `W`, which steps a day or two within a month. Not to move: the arithmetic of a group and of a fraction (the nth day of a group of months, half of a year), which counts a period's units, where the calendar's own count is the answer.
+* [ ] **One implementation** — `Tempo.UnitValues`, then each of the five callers moved to it in turn, the matrix green after each. Moved: a selection's resolver, `Tempo.select/2`'s count from the end and its weekdays, and the walk's reading of a range that reaches past a period's values (the walk reads everything else through the reading of a value). `Tempo.Validation.conform/2` is `resolve/2`, and a set or a range of a clock unit is held to the unit's values. What a unit takes with no year is `in_any_year/3`, for every module that asked. The reading of a value and its masks take a unit's values in a year from `in_period/3` (`validation.ex`, `mask.ex`, the calendar weeks of `group.ex`). A step from a value asks `following/4` and `preceding/4` what comes after and before a value, `first/3` and `last/3` for the value a carry or a borrow lands on, and `at_or_before/4` for the day a step of months lands on (`math.ex`, which has no count of its own left but the weeks of a year with no year and a fraction of a year in months). A selection's resolver takes a month's days, a year's months and their ends from it too (`selection.ex`). `Tempo.explain/1` expanded a range as Elixir's, which names nothing where the range reaches the end; it counts a weekday, an hour, a minute and a second, and a month where a year's months can be counted, through `resolve/2` and `named/2`, and words a day, a week and a position, whose period a rule selects in each of, as they are written. To move: the week counts of `Tempo.Validation` into the module. Still arithmetic of its own in the resolver: the nearest weekday of cron's `W`, which steps a day or two within a month. Not to move: the arithmetic of a group and of a fraction (the nth day of a group of months, half of a year), which counts a period's units, where the calendar's own count is the answer. All five callers are moved (2026-10-04); the week counts are what is left, and the week of the year a day is in, counted from a rule's `WKST`, joined them on 2026-10-08.
 
 * [ ] **The census in the matrix** — every calendar module as a generated class of `Tempo.Matrix.Corpus`, with the calendar-only answer as a check, so that the table above is a test.
-
-* [ ] **A week selected in a year of a calendar of weeks** — 6 cells of the baseline. The weekday in a Gregorian week, 42 more, is fixed (2026-10-05).
-
-* [ ] **A selection under an hour** — `inspect/1` and `to_iso8601/1`, 35 cells of the baseline.
 
 * [ ] **A value with no year, measured** — an answer worked out apart from the library for a value with no year, in every calendar (Calendrical's `days_in_month/1` and `months_in_year/0` are what it is worked out from), and the walk and the conversion asking one place what needs a year. Nothing holds either to an answer of its own yet.
 
 * [ ] **The measure widened** — shapes, intervals, recurrences and rules in every calendar; a calendar-generic answer for a week, for `NRF`; the astronomical calendars with a time limit that suits them.
 
-* [x] **A month with days missing** — the days of such a month come from Calendrical (its `valid_date?/3`, since `month/2` of a year that begins on 25 March lists a part of March), not from `1..days_in_month/2`, and a unit's values stop being a run: `in_period/3`'s range, the counts `named/2`, `resolve/2` and `from_end/2` make in it, and `first/3`, `last/3`, `following/4` and `preceding/4`, are the places to change, and their callers none. `Reform.England` is the measure: September 1752 (1, 2, 14 to 30), and 1751, which has no January or February and a March of the days 25 to 31. Timed, since a step asks on every value.
-
-* [x] **A year that starts within the months** — the walk, and everything else that reads a value, follows Calendrical's `month/2` and `year/1`: `Tempo.UnitValues.year_begins_with_first_month?/2`, `first_date/2`, `dates_of_month/3` and `month_of_date/4`. Selections there are an item of `TODO.md`.
-
 ### Done
+
+* [x] **A week selected in a year of a calendar of weeks** — a year and a week of it are combined, so the selection is the week where it was the year: the six cells of the baseline, which lists none. The weekday in a Gregorian week, 42 more, was fixed on 2026-10-05. 2026-10-07.
+
+* [x] **A selection under an hour** — `inspect/1` and `to_iso8601/1` write a selection that follows a time of day; the 35 cells of the baseline. 2026-10-06.
+
+* [x] **A month with days missing** — the days of such a month come from Calendrical (its `valid_date?/3`, since `month/2` of a year that begins on 25 March lists a part of March), not from `1..days_in_month/2`, and a unit's values stop being a run: `in_period/3`'s range, the counts `named/2`, `resolve/2` and `from_end/2` make in it, and `first/3`, `last/3`, `following/4` and `preceding/4`, are the places to change, and their callers none. `Reform.England` is the measure: September 1752 (1, 2, 14 to 30), and 1751, which has no January or February and a March of the days 25 to 31. Timed, since a step asks on every value. 2026-10-05.
+
+* [x] **A year that starts within the months** — the walk, and everything else that reads a value, follows Calendrical's `month/2` and `year/1`: `Tempo.UnitValues.year_begins_with_first_month?/2`, `first_date/2`, `dates_of_month/3` and `month_of_date/4`. Selections there are an item of `TODO.md`. 2026-10-05.
 
 * [x] **`Tempo.explain/1` on the one implementation** — the last of the five callers. A range that reaches the end is worded by its ends, a weekday, a month and a time of day are counted and named, and a selection's minutes, seconds and the month of its period are worded where they were left out. A probe of 1,288 explanations (selections and rules, 72 parts on seven periods and five recurrences, four calendars) raised in 356 and raises in none; the baseline's nineteen `explain/1` cells are fixed, and it lists 83. 2026-10-04.
 

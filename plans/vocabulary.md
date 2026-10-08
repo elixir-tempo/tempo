@@ -1,6 +1,6 @@
 # Vocabulary
 
-**Status:** in progress, 2026-09-29
+**Status:** in progress, 2026-10-08
 
 A review of the words Tempo and tempo_holidays use in their public API — the names of functions, options, modules and errors, and the prose that explains them — against three tests: each word is familiar, each word means one thing, and each thing has one word. The precedent is `select/2`, chosen over the more exact `project/2`. The changes ship as Tempo 2.0.
 
