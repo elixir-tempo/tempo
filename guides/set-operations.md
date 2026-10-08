@@ -166,6 +166,8 @@ A window places a time of day on each day it touches, and what is placed is insi
 
 The `:within` option is also required on `complement/2` — for the same reason. An unbounded complement is infinite; Tempo refuses to pick a universe.
 
+A window may be several spans, an interval set of two separate days say. A time of day is placed inside each span. A recurrence, or a set of recurrences, is kept across the one stretch from the first span's start to the last one's end, so a daily rule within 2 June and 5 June has 3 and 4 June too. The other operand serves as the window the same way when no `:within` is given: `Tempo.difference(holidays, meetings)` is every holiday from the first meeting to the last, less the meetings.
+
 ### Composing across axes — `at/2` and `on/2`
 
 When you want to *compose* a date with a time-of-day rather than intersect them, place one on the other with `at/2` or `on/2`. This is axis composition, not a set operation, and no algebraic laws apply — these are constructors.

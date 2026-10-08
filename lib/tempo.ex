@@ -7291,6 +7291,8 @@ defmodule Tempo do
     `[America/New_York]`. A window written with a zone or an offset
     is the moments it names.
 
+    A window of several spans, a `t:Tempo.IntervalSet.t/0` of two separate days say, is the one stretch from the first of their starts to the last of their ends, so a recurrence keeps its occurrences between the spans too: a daily rule within 2 June and 5 June has 3 and 4 June.
+
     An open-ended window — `~o"2026-09-28/.."`, or
     `Tempo.Interval.new(from: today)` — keeps the occurrences from
     its start on. For a value with no end of its own they are a
@@ -7416,6 +7418,12 @@ defmodule Tempo do
       iex> {:ok, christmases} = Tempo.to_interval(~o"R/../P1Y/FL12M25DN", within: ~o"2026-12-26/..")
       iex> Tempo.IntervalSet.first(christmases)
       ~o"2027Y12M25D/26D"
+
+      iex> nine_each_day = ~o"R/2026-06-01/P1D/FLT9HN"
+      iex> {:ok, two_days} = Tempo.union(~o"2026-06-02", ~o"2026-06-05")
+      iex> {:ok, kept} = Tempo.to_interval(nine_each_day, within: two_days)
+      iex> Tempo.IntervalSet.count(kept)
+      4
 
   """
   @spec to_interval(
@@ -12157,12 +12165,7 @@ defmodule Tempo do
 
   ### Options
 
-  * `:within` is the window whose occurrences you want. Every
-    recurrence (or a `t:Tempo.RecurrenceSet.t/0` of them) keeps the
-    occurrences that overlap it — one already in progress when the
-    window opens, and one that runs past its end. An open-ended
-    window (`~o"2026-09-28/.."`) keeps those from its start on,
-    lazily for a value with no end of its own. See `to_interval/2`.
+  * `:within` is the window whose occurrences you want. Every recurrence (or a `t:Tempo.RecurrenceSet.t/0` of them) keeps the occurrences that overlap it — one already in progress when the window opens, and one that runs past its end. A window of several spans is the one stretch from its first start to its last end. An open-ended window (`~o"2026-09-28/.."`) keeps those from its start on, lazily for a value with no end of its own. See `to_interval/2`.
 
   ### Returns
 

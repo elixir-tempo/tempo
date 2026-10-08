@@ -10,8 +10,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **Whether an interval written to a date holds its end** — a decision for the user, asked 2026-10-08. `~o"2024Y/2026Y"` is 2024 and 2025, where `~o"{2024..2026}Y"` is three years and ISO 8601-2 Annex A.4.4 has an interval of dates end in its end. The proposal, an end written to a day or coarser included and one written to a time of day as it is, with the struct left half-open, is in [plans/interval-end-inclusive.md](plans/interval-end-inclusive.md) with what follows from it and a census: 1,425 written intervals in this repository would change.
 
-* [ ] **A window of several spans, for a recurrence** — a decision for the user, asked 2026-10-09. A time of day is placed inside each span of such a window, but a recurrence is kept where it overlaps the stretch from the first span's start to the last one's end, so a daily rule within two separate days has the days between them (`Tempo.to_interval_set/2`, and a set of recurrences beside a set of several members). The measure holds each as it is; the stretch is not in the public documentation.
-
 ### Features
 
 * [ ] **`Tempo.Intervallic` protocol** — let user-defined structs such as `%Booking{check_in, check_out}` take part in Allen comparisons and set operations without being copied into `%Tempo.Interval{}`; default implementations for `Tempo.Interval`, `Tempo` and single-member `Tempo.IntervalSet`.
@@ -69,6 +67,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A window of several spans, for a recurrence** — decided 2026-10-09 (user): left as it is and said. A time of day is placed inside each span of such a window, and a recurrence is kept across the one stretch from the first span's start to the last one's end, as the other operand is when it serves as the window; `Tempo.to_interval/2`, `Tempo.to_interval_set/2`, the set operations and the set-operations guide say so. 2026-10-09.
 
 * [x] **One implementation of the set operations, verified** — the set operations are one implementation, three sweeps behind one preflight ([plans/set-operations.md](plans/set-operations.md)), and the measure (`test/tempo/set_operations_measure_test.exs`) holds each to members worked out by arithmetic on whole numbers: two sets of several members on a list and a tree, in two zones and three calendars, with no year on four cycles, a list of operands, the `:metadata` option, times of day on a window with a zone and of several spans, a set of recurrences as an operand, and the four places that answer whether two spans overlap. Two bugs were found and fixed on the way. 2026-10-09.
 

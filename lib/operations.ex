@@ -56,12 +56,7 @@ defmodule Tempo.Operations do
 
   ### Options
 
-  * `:within` — a Tempo value (any of the above types), the window
-    the operation works within: a time-of-day operand is placed on
-    every day of it, inside the window, and a
-    `t:Tempo.RecurrenceSet.t/0` operand gives the occurrences that
-    overlap it (the other operand, by default). Required when `a` and
-    `b` belong to different anchor classes.
+  * `:within` — a Tempo value (any of the above types), the window the operation works within: a time-of-day operand is placed on every day of it, inside the window, and a `t:Tempo.RecurrenceSet.t/0` operand gives the occurrences that overlap it (the other operand, by default). A window of several spans places a time of day inside each of them, and is one stretch for a recurrence, from its first start to its last end, as the other operand is when it serves as the window. Required when `a` and `b` belong to different anchor classes.
 
   ### Returns
 

@@ -72,7 +72,7 @@ The matrix measures the time covered, with one plain partner at a time. The meas
 
 * **The forms that take a list of operands, the `:metadata` option, and a recurrence set as an operand** — measured since 2026-10-09.
 
-* **A window of several spans is read two ways** — a time of day is placed inside each span, and a recurrence is kept where it overlaps the stretch from the first span's start to the last one's end (`window_edges/1`), so a daily rule within two separate days has the days between them. The measure holds each as it is; whether they should agree is a question for the user.
+* **A window of several spans is read two ways** — a time of day is placed inside each span, and a recurrence is kept where it overlaps the stretch from the first span's start to the last one's end (`window_edges/1`), so a daily rule within two separate days has the days between them. The measure holds each as it is. Decided 2026-10-09 (user): left as it is, and said in the `:within` documentation.
 
 * **The lazy backend** — the measure builds lists and trees. What an operation gives of an unending lazy set is the deferred [plans/open-ended-set-algebra.md](plans/open-ended-set-algebra.md).
 
