@@ -1099,14 +1099,27 @@ defmodule Tempo.Math do
   defp settle(%Tempo{time: time} = stepped, zone, shift, step) do
     cond do
       Keyword.has_key?(time, :hour) ->
-        reading = TimeZoneDatabase.period_at_wall(zone, wall_reading(stepped))
-        settle_reading(stepped, shift, reading)
+        settle_time_of_day(stepped, zone, shift)
 
       on_a_day_left_out?(stepped) ->
         stepped |> add_wall(%Tempo.Duration{time: [day: direction(step)]}) |> at_its_offset()
 
       true ->
         at_its_offset(stepped)
+    end
+  end
+
+  # A time of day written with no offset is moved only where the clock
+  # skips it, so one nowhere near a change of its zone's clock is where it
+  # landed, and the zone database is not asked: each step of a rule of days,
+  # weeks or months in a zone asked it, at 130 µs a question past the years
+  # the database holds a table for.
+  defp settle_time_of_day(stepped, zone, shift) do
+    if is_nil(shift) and Zone.clear_of_changes?(stepped, 0) do
+      stepped
+    else
+      reading = TimeZoneDatabase.period_at_wall(zone, wall_reading(stepped))
+      settle_reading(stepped, shift, reading)
     end
   end
 

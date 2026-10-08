@@ -34,6 +34,32 @@ defmodule Tempo.ZonedStepClearOfChangesTest do
 
   defp shown_once?(date, time, zone), do: match?({:ok, _reading}, DateTime.new(date, time, zone))
 
+  # The reading a time of day is on a date in a zone: itself, or where the
+  # clock skips it the reading as long after the skip begins as it is
+  # written after (RFC 5545 §3.3.5), which is the time moved on by what the
+  # clock skips.
+  defp reading_on(date, time, zone) do
+    naive = NaiveDateTime.new!(date, time)
+
+    landed =
+      case DateTime.from_naive(naive, zone) do
+        {:gap, before, later} ->
+          skipped = later.utc_offset + later.std_offset - before.utc_offset - before.std_offset
+          NaiveDateTime.add(naive, skipped, :second)
+
+        _shown ->
+          naive
+      end
+
+    [
+      year: landed.year,
+      month: landed.month,
+      day: landed.day,
+      hour: landed.hour,
+      minute: landed.minute
+    ]
+  end
+
   defp found_changes(zone) do
     from = :calendar.datetime_to_gregorian_seconds({{2025, 1, 1}, {0, 0, 0}})
     to = :calendar.datetime_to_gregorian_seconds({{2028, 1, 1}, {0, 0, 0}})
@@ -127,6 +153,24 @@ defmodule Tempo.ZonedStepClearOfChangesTest do
 
           assert {zone, date, time, minutes, stepped.time} ==
                    {zone, date, time, minutes, reading_after(date, time, zone, minutes * 60)}
+        end
+      end
+    end
+  end
+
+  describe "a value in a zone stepped by days, weeks or months" do
+    test "is that time of day on the date its calendar steps to, moved on where the clock skips it" do
+      for zone <- @zones do
+        found_changes(zone)
+
+        for date <- Date.range(~D[2026-01-01], ~D[2026-12-31]),
+            time <- [~T[01:30:00], ~T[02:15:00], ~T[09:30:00]],
+            shown_once?(date, time, zone),
+            step <- [[day: 1], [day: -1], [week: 1], [month: 1], [month: -1]] do
+          stepped = Tempo.shift(at(date, time, zone, :minute), step)
+
+          assert {zone, date, time, step, stepped.time} ==
+                   {zone, date, time, step, reading_on(Date.shift(date, step), time, zone)}
         end
       end
     end
