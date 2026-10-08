@@ -31,6 +31,11 @@ defmodule Tempo.SetOperationsMeasureTest do
   Times of day placed on a `:within` window are held to their placing worked
   out in hours: each on each day the window touches, and inside the window.
 
+  A set of recurrences as an operand is the occurrences that overlap its
+  window, each whole, worked out in hours from each rule's start and step.
+  The window is the `:within` option's, or the other operand from its first
+  start to its last end.
+
   An intersection's `:metadata` option is held by the marks: a part has the
   first member's, the second's where the two are merged, and what a function
   of the two makes of them. The forms that take a list of operands are held
@@ -43,6 +48,7 @@ defmodule Tempo.SetOperationsMeasureTest do
   alias Tempo.IntervalSet
   alias Tempo.Matrix.Extent
   alias Tempo.Matrix.Sets
+  alias Tempo.RecurrenceSet
 
   @day 86_400_000_000
 
@@ -665,34 +671,71 @@ defmodule Tempo.SetOperationsMeasureTest do
 
   ## A time of day on a window
 
-  # The spans a set of times of day is placed as on a window, in hours from
-  # the line's first: each starts on each day the window touches, runs into
-  # the next day where its end is not after its start, and is cut to the
-  # window. Each keeps the mark of the time of day it is.
-  defp placed(daily, {window_from, window_to}) do
-    for day <- Integer.floor_div(window_from, 24)..Integer.floor_div(window_to - 1, 24)//1,
-        {{from, to}, index} <- Enum.with_index(daily),
-        last = if(to > from, do: to, else: to + 24),
-        start = max(24 * day + from, window_from),
-        stop = min(24 * day + last, window_to),
-        start < stop do
-      {position(point(:hours, start)), position(point(:hours, stop)), {:a, index}}
-    end
-    |> Sets.ordered()
+  # Where a point of a line is on the clock its values are written on, and
+  # the point a time on that clock is: a line in a zone is written on its
+  # zone's clock.
+  defp on_the_clock(:hours, slot), do: hour(slot)
+
+  defp on_the_clock(:paris_hours, slot) do
+    slot
+    |> hour()
+    |> DateTime.from_naive!("Etc/UTC")
+    |> DateTime.shift_zone!("Europe/Paris")
+    |> DateTime.to_naive()
   end
+
+  defp slot_at(:hours, %NaiveDateTime{} = clock),
+    do: clock |> NaiveDateTime.diff(hour(0), :hour)
+
+  defp slot_at(:paris_hours, %NaiveDateTime{} = clock) do
+    clock
+    |> DateTime.from_naive!("Europe/Paris")
+    |> DateTime.shift_zone!("Etc/UTC")
+    |> DateTime.to_naive()
+    |> NaiveDateTime.diff(hour(0), :hour)
+  end
+
+  # The spans a set of times of day is placed as on a window, in the points
+  # of the window's line: each starts on each day the window touches, on the
+  # clock the window is written on, runs into the next day where its end is
+  # not after its start, and is cut to the window. Each keeps the mark of
+  # the time of day it is.
+  defp placed(daily, {window_from, window_to}, line) do
+    first = NaiveDateTime.to_date(on_the_clock(line, window_from))
+    last = NaiveDateTime.to_date(on_the_clock(line, window_to - 1))
+
+    for day <- Date.range(first, last),
+        {{from, to}, index} <- Enum.with_index(daily),
+        hours = if(to > from, do: to - from, else: to + 24 - from),
+        opens = NaiveDateTime.new!(day, Time.new!(from, 0, 0)),
+        start = max(slot_at(line, opens), window_from),
+        stop = min(slot_at(line, NaiveDateTime.add(opens, hours, :hour)), window_to),
+        start < stop do
+      {position(point(line, start)), position(point(line, stop)), {:a, index}}
+    end
+  end
+
+  defp window_of([{from, to}], line),
+    do: Interval.new!(from: point(line, from), to: point(line, to))
+
+  defp window_of(spans, line), do: IntervalSet.new!(Enum.map(spans, &window_of([&1], line)))
 
   # Every operation of times of day and a set of hours, the times placed on
   # a window that may open and close within a day. What is placed is inside
   # the window (decided 2026-10-04): a time of day was placed on the whole of
-  # every day the window touches.
-  defp assert_operations_within(daily, b_slots, {window_from, window_to} = hours) do
+  # every day the window touches. A window of several spans places the times
+  # on each, and a window in a zone on the days of its zone's clock.
+  defp assert_operations_within(daily, b_slots, windows, {line, b_line} \\ {:hours, :hours}) do
     times = set(daily, :day_hours, :a, [])
-    b = set(b_slots, :hours, :b, [])
-    window = Interval.new!(from: point(:hours, window_from), to: point(:hours, window_to))
-    in_p = placed(daily, hours)
+    b = set(b_slots, b_line, :b, [])
+    window = window_of(windows, line)
+    in_p = windows |> Enum.flat_map(&placed(daily, &1, line)) |> Sets.ordered()
     in_b = read(b)
-    in_w = [{position(point(:hours, window_from)), position(point(:hours, window_to)), nil}]
-    named = "#{inspect(daily)} within #{inspect(hours)} and #{inspect(b_slots)}"
+
+    in_w =
+      for {from, to} <- windows, do: {position(point(line, from)), position(point(line, to)), nil}
+
+    named = "#{inspect(daily)} within #{inspect(windows)} on #{line} and #{inspect(b_slots)}"
 
     assert read(Tempo.union(times, b, within: window)) == Sets.union(in_p, in_b),
            "union of #{named}"
@@ -719,26 +762,216 @@ defmodule Tempo.SetOperationsMeasureTest do
            "complement of #{named}"
   end
 
-  describe "times of day placed on a window" do
-    property "are placed inside it, for every operation" do
-      window =
-        gen all(from <- integer(0..71), to <- integer((from + 1)..96)) do
-          {from, to}
-        end
+  # One span of a window, or two with time between them, between the hours
+  # of four days.
+  defp windows do
+    gen all(points <- uniq_list_of(integer(0..96), length: 4), two? <- boolean()) do
+      [first_from, first_to, second_from, second_to] = Enum.sort(points)
 
-      check all(
-              daily <- arcs_between(24),
-              b_slots <- spans_on(:hours, 4),
-              hours <- window,
-              max_runs: 120
-            ) do
-        assert_operations_within(daily, b_slots, hours)
+      if two?,
+        do: [{first_from, first_to}, {second_from, second_to}],
+        else: [{first_from, second_to}]
+    end
+  end
+
+  describe "times of day placed on a window" do
+    for {line, b_line, what} <- [
+          {:hours, :hours, "with no zone"},
+          {:paris_hours, :paris_hours, "in a zone"},
+          {:paris_hours, :utc_hours, "in a zone, beside a set in another"}
+        ] do
+      property "#{what} are placed inside it, for every operation" do
+        check all(
+                daily <- arcs_between(24),
+                b_slots <- spans_on(unquote(b_line), 4),
+                windows <- windows(),
+                max_runs: 120
+              ) do
+          assert_operations_within(daily, b_slots, windows, {unquote(line), unquote(b_line)})
+        end
       end
     end
 
     test "a window from noon to noon holds no time before it opens or after it closes" do
-      assert_operations_within([{9, 17}], [{10, 11}], {12, 60})
-      assert_operations_within([{23, 1}, {0, 0}], [{0, 96}], {12, 36})
+      assert_operations_within([{9, 17}], [{10, 11}], [{12, 60}])
+      assert_operations_within([{23, 1}, {0, 0}], [{0, 96}], [{12, 36}])
+    end
+
+    test "a window of two spans of one day places a time of day on each" do
+      assert_operations_within([{9, 17}], [{10, 11}], [{9, 12}, {14, 18}])
+    end
+
+    test "a window in a zone places a time of day on the days of its zone's clock" do
+      # Point 22 of the line is midnight in Paris, two hours ahead of UTC in
+      # June: nine to five there is points 31 to 39.
+      assert on_the_clock(:paris_hours, 22) == ~N[2026-06-02 00:00:00]
+      assert slot_at(:paris_hours, ~N[2026-06-02 09:00:00]) == 31
+
+      assert_operations_within([{9, 17}], [{30, 33}], [{22, 46}], {:paris_hours, :paris_hours})
+      assert_operations_within([{9, 17}], [{30, 33}], [{22, 46}], {:paris_hours, :utc_hours})
+    end
+  end
+
+  ## A set of recurrences
+
+  # A member of a set of recurrences, as text between the points of the line
+  # of hours: a span that repeats end to end, one hour of each day, or a
+  # span that does not repeat.
+  defp member_text({:end_to_end, from, days}), do: "R/#{at_hour(from)}/P#{days}D"
+  defp member_text({:hour_of_each_day, day, hour}), do: "R/#{on_day(day)}/P1D/FLT#{hour}HN"
+  defp member_text({:once, from, to}), do: "#{at_hour(from)}/#{at_hour(to)}"
+
+  defp at_hour(slot), do: slot |> hour() |> Calendar.strftime("%Y-%m-%dT%H")
+  defp on_day(day), do: ~D[2026-06-01] |> Date.add(day) |> Date.to_iso8601()
+
+  # The occurrences of a member that overlap a window, in hours from the
+  # line's first, each whole: one in progress when the window opens is one,
+  # and so is one that runs past its end.
+  defp occurrences({:end_to_end, from, days}, window),
+    do: repeated(from, 24 * days, 24 * days, window)
+
+  defp occurrences({:hour_of_each_day, day, hour}, window),
+    do: repeated(24 * day + hour, 1, 24, window)
+
+  defp occurrences({:once, from, to}, window),
+    do: Enum.filter([{from, to}], &reaches?(&1, window))
+
+  defp repeated(from, length, step, {_window_from, window_to} = window) do
+    from
+    |> Stream.iterate(&(&1 + step))
+    |> Stream.take_while(&(&1 < window_to))
+    |> Stream.map(&{&1, &1 + length})
+    |> Enum.filter(&reaches?(&1, window))
+  end
+
+  defp reaches?({from, to}, {window_from, window_to}), do: from < window_to and to > window_from
+
+  defp recurrences(members) do
+    members
+    |> Enum.with_index()
+    |> Enum.map(fn {member, index} ->
+      member |> member_text() |> Tempo.from_iso8601!() |> Tempo.put_metadata(%{id: {:a, index}})
+    end)
+    |> RecurrenceSet.new!()
+  end
+
+  defp occurring(members, window) do
+    for {member, index} <- Enum.with_index(members), {from, to} <- occurrences(member, window) do
+      {position(point(:hours, from)), position(point(:hours, to)), {:a, index}}
+    end
+    |> Sets.ordered()
+  end
+
+  # Every operation of a set of recurrences and a set of hours. The window
+  # is the `:within` option's where one is given, and otherwise the other
+  # operand, from its first start to its last end.
+  defp assert_operations_of_recurrences(members, b_slots, window) do
+    a = recurrences(members)
+    b = set(b_slots, :hours, :b, [])
+    in_b = read(b)
+
+    {options, {window_from, window_to} = hours} =
+      case window do
+        :the_other_operand ->
+          {[],
+           {b_slots |> Enum.map(&elem(&1, 0)) |> Enum.min(),
+            b_slots |> Enum.map(&elem(&1, 1)) |> Enum.max()}}
+
+        {from, to} ->
+          {[within: Interval.new!(from: point(:hours, from), to: point(:hours, to))], window}
+      end
+
+    in_a = occurring(members, hours)
+    in_w = [{position(point(:hours, window_from)), position(point(:hours, window_to)), nil}]
+    named = "#{inspect(members)} within #{inspect(window)} and #{inspect(b_slots)}"
+
+    assert read(Tempo.union(a, b, options)) == Sets.union(in_a, in_b), "union of #{named}"
+
+    assert read(Tempo.intersection(a, b, options)) == Sets.pairwise(in_a, in_b),
+           "intersection of #{named}"
+
+    assert read(Tempo.intersection(b, a, options)) == Sets.pairwise(in_b, in_a),
+           "intersection with #{named}"
+
+    assert read(Tempo.difference(a, b, options)) == Sets.difference(in_a, in_b),
+           "difference of #{named}"
+
+    assert read(Tempo.difference(b, a, options)) == Sets.difference(in_b, in_a),
+           "difference from #{named}"
+
+    assert read(Tempo.symmetric_difference(a, b, options)) ==
+             Sets.symmetric_difference(in_a, in_b),
+           "symmetric_difference of #{named}"
+
+    assert read(Tempo.members_overlapping(a, b, options)) ==
+             Sets.members_overlapping(in_a, in_b),
+           "members_overlapping of #{named}"
+
+    assert read(Tempo.members_outside(a, b, options)) == Sets.members_outside(in_a, in_b),
+           "members_outside of #{named}"
+
+    assert Tempo.overlaps?(a, b, options) == (Sets.shared(in_a, in_b) != []),
+           "overlaps? of #{named}"
+
+    if options != [] do
+      assert stretches(read(Tempo.complement(a, options))) ==
+               stretches(Sets.difference(in_w, in_a)),
+             "complement of #{named}"
+    end
+  end
+
+  # Up to three members of a set of recurrences that start in the first
+  # three days of the line.
+  defp recurring_members do
+    member =
+      one_of([
+        gen all(from <- integer(0..71), days <- integer(1..3)) do
+          {:end_to_end, from, days}
+        end,
+        gen all(day <- integer(0..2), hour <- integer(0..23)) do
+          {:hour_of_each_day, day, hour}
+        end,
+        gen all(from <- integer(0..95), length <- integer(1..30)) do
+          {:once, from, from + length}
+        end
+      ])
+
+    list_of(member, min_length: 1, max_length: 3)
+  end
+
+  describe "a set of recurrences as an operand" do
+    property "is its occurrences that overlap the :within window, each whole" do
+      window =
+        gen all(from <- integer(0..120), length <- integer(1..96)) do
+          {from, from + length}
+        end
+
+      check all(
+              members <- recurring_members(),
+              b_slots <- spans_on(:hours, 6),
+              hours <- window,
+              max_runs: 100
+            ) do
+        assert_operations_of_recurrences(members, b_slots, hours)
+      end
+    end
+
+    property "is its occurrences from the other operand's first start to its last end" do
+      check all(
+              members <- recurring_members(),
+              b_slots <- spans_on(:hours, 6),
+              b_slots != [],
+              max_runs: 100
+            ) do
+        assert_operations_of_recurrences(members, b_slots, :the_other_operand)
+      end
+    end
+
+    test "has the occurrence in progress when the window opens, and the one that runs past it" do
+      # Every two days from noon on the first: the second span is in progress
+      # at midnight on the fourth, and runs past noon on the fifth.
+      assert occurrences({:end_to_end, 12, 2}, {72, 100}) == [{60, 108}]
+      assert_operations_of_recurrences([{:end_to_end, 12, 2}], [{80, 90}], {72, 100})
     end
   end
 

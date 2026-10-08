@@ -68,9 +68,11 @@ None is a second algebra. But "do these two spans overlap" has four answers in t
 
 The matrix measures the time covered, with one plain partner at a time. The measure reaches two sets of several members, the members an answer holds, a tree beside a list, two calendars neither of which is the Gregorian, and two sets with no year. Neither reaches:
 
-* **A `:within` window with a zone, or of several members** — the measure places times of day on one window with no zone, for every operation; a window in a zone, and one that is a set of several spans, are measured by the matrix for `complement/2` alone.
+* **A `:within` window with a zone, or of several members** — measured since 2026-10-09: the measure places times of day on a window with no zone, on one in a zone and on one of two spans, for every operation.
 
-* **The forms that take a list of operands, the `:metadata` option, and a recurrence set as an operand** — held to no answer worked out apart from the library.
+* **The forms that take a list of operands, the `:metadata` option, and a recurrence set as an operand** — measured since 2026-10-09.
+
+* **A window of several spans is read two ways** — a time of day is placed inside each span, and a recurrence is kept where it overlaps the stretch from the first span's start to the last one's end (`window_edges/1`), so a daily rule within two separate days has the days between them. The measure holds each as it is; whether they should agree is a question for the user.
 
 * **The lazy backend** — the measure builds lists and trees. What an operation gives of an unending lazy set is the deferred [plans/open-ended-set-algebra.md](plans/open-ended-set-algebra.md).
 
@@ -92,11 +94,11 @@ Both by the user, 2026-10-04.
 
 ## Tasks
 
-* [ ] **The measure widened** — a `:within` window in a zone and of several members; a lazy set within a window.
-
 * [ ] **One answer to whether two spans overlap** — a property that the sweeps, the backends, Allen's relation and a window's bound agree on every generated pair; then whether any is to be read through another.
 
 ### Done
+
+* [x] **A window in a zone, a window of several spans and a set of recurrences, measured** — times of day are placed on the days of a zoned window's own clock, beside a set in the same zone and in another, and on each span of a window of two, for every operation; a `Tempo.RecurrenceSet` operand is its occurrences that overlap its window, each whole, the window being the `:within` option's or the other operand from its first start to its last end. Nothing differed; the measure fails where an occurrence that only meets the window is counted. The lazy backend is the deferred [plans/open-ended-set-algebra.md](open-ended-set-algebra.md). 2026-10-09.
 
 * [x] **A list of operands and `:metadata`, measured** — `union/3`, `difference/3` and `intersection/3` of a list are held to the operation of the first two and then of that and the third, on days, hours and days, two zones and three calendars, and to the first alone for an empty list; an intersection's part carries the first member's mark, the second's where the two are merged, and what a function makes of the two, on a line and on the four cycles. Nothing differed. 2026-10-09.
 
