@@ -20,7 +20,7 @@ defmodule Tempo.RRule.WeekNumberFromWkstTest do
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.RRule
-  alias Tempo.Validation
+  alias Tempo.UnitValues
 
   @weekdays %{
     1 => {:monday, "MO"},
@@ -78,7 +78,7 @@ defmodule Tempo.RRule.WeekNumberFromWkstTest do
         {year, week, weeks} = week_of(date, wkst)
         start = Date.convert!(date, Gregorian)
 
-        assert {wkst, date, Validation.week_number(Gregorian, year, wkst, start)} ==
+        assert {wkst, date, UnitValues.week_number(Gregorian, year, wkst, start)} ==
                  {wkst, date, {:ok, week, weeks}}
       end
     end
@@ -87,9 +87,9 @@ defmodule Tempo.RRule.WeekNumberFromWkstTest do
       # Monday 29 December 2025 starts week 1 of 2026.
       start = Date.convert!(~D[2025-12-29], Gregorian)
 
-      assert Validation.week_number(Gregorian, 2026, 1, start) == {:ok, 1, 53}
-      assert Validation.week_number(Gregorian, 2025, 1, start) == :error
-      assert Validation.week_number(Gregorian, 2027, 1, start) == :error
+      assert UnitValues.week_number(Gregorian, 2026, 1, start) == {:ok, 1, 53}
+      assert UnitValues.week_number(Gregorian, 2025, 1, start) == :error
+      assert UnitValues.week_number(Gregorian, 2027, 1, start) == :error
     end
   end
 

@@ -2268,7 +2268,7 @@ defmodule Tempo.Math do
     with {week_year, week} when is_integer(week) <- calendar.iso_week_of_year(year, month, day),
          {weekday, _first, _last} <- calendar.day_of_week(year, month, day, :monday),
          {:ok, %Date{year: ^year, month: ^month, day: ^day}} <-
-           Validation.date_from_iso_week(week_year, week, weekday, calendar) do
+           UnitValues.date_from_iso_week(week_year, week, weekday, calendar) do
       [{:year, week_year}, {:week, week}, {:day_of_week, weekday} | rest]
     else
       _no_week_reads_back_as_it -> time
@@ -2997,7 +2997,7 @@ defmodule Tempo.Math do
   end
 
   defp iso_week_on(year, week, rest, n, calendar) do
-    with {:ok, %Date{} = first} <- Validation.date_from_iso_week(year, week, 1, calendar),
+    with {:ok, %Date{} = first} <- UnitValues.date_from_iso_week(year, week, 1, calendar),
          {year, month, day} <- calendar.plus(first.year, first.month, first.day, :weeks, n),
          {week_year, week} when is_integer(week_year) and is_integer(week) <-
            calendar.iso_week_of_year(year, month, day) do

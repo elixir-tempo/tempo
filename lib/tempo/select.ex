@@ -1400,7 +1400,7 @@ defmodule Tempo.Select do
   end
 
   # Week-axis endpoint — `[year, week, day_of_week]`, a date of the
-  # ISO 8601 weeks `Tempo.Validation.date_from_iso_week/4` counts,
+  # ISO 8601 weeks `Tempo.UnitValues.date_from_iso_week/4` counts,
   # converted into the base calendar. A week-resolution endpoint
   # denotes the start of its week, so a missing `:day_of_week`
   # defaults to 1.
@@ -1408,7 +1408,7 @@ defmodule Tempo.Select do
     with year when is_integer(year) <- Keyword.get(time, :year),
          week when is_integer(week) <- Keyword.get(time, :week),
          day when is_integer(day) <- Keyword.get(time, :day_of_week, 1),
-         {:ok, week_date} <- Validation.date_from_iso_week(year, week, day, calendar) do
+         {:ok, week_date} <- UnitValues.date_from_iso_week(year, week, day, calendar) do
       Date.convert(week_date, calendar)
     else
       _ -> :error

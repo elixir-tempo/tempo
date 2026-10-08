@@ -37,7 +37,6 @@ defmodule Tempo.Compare do
   alias Tempo.TimeZoneDatabase
   alias Tempo.UnanchoredError
   alias Tempo.UnitValues
-  alias Tempo.Validation
   alias Tempo.ZoneOffsetMismatchError
 
   @doc """
@@ -1126,7 +1125,7 @@ defmodule Tempo.Compare do
   # list, handling the three date representations Tempo stores:
   #
   #   * Week date — `[year, week, day_of_week]`, in ISO 8601 weeks or a
-  #     week-based calendar's own (`Tempo.Validation.date_from_iso_week/4`).
+  #     week-based calendar's own (`Tempo.UnitValues.date_from_iso_week/4`).
   #   * Ordinal date — `[year, day]` with `:day` holding the
   #     day-of-year and no `:month` (the absence of `:month` is the
   #     disambiguator, matching `Tempo.to_date/1`).
@@ -1144,7 +1143,7 @@ defmodule Tempo.Compare do
         day = Keyword.get(time, :day_of_week, Keyword.get(time, :day, 1))
 
         year
-        |> Validation.date_from_iso_week(Keyword.get(time, :week), day, calendar)
+        |> UnitValues.date_from_iso_week(Keyword.get(time, :week), day, calendar)
         |> gregorian_ymd(year)
 
       not Keyword.has_key?(time, :month) and Keyword.has_key?(time, :day) ->

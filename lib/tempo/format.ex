@@ -53,8 +53,6 @@ defmodule Tempo.Format do
   alias Tempo.UnboundedSetError
   alias Tempo.UnitValues
   alias Tempo.UnknownZoneError
-  alias Tempo.Validation
-
   @time_units [:hour, :minute, :second, :microsecond]
 
   # Localize's relative-time units, coarsest first.
@@ -848,7 +846,7 @@ defmodule Tempo.Format do
     with week when is_integer(week) <- Keyword.get(time, :week),
          year when is_integer(year) <- Keyword.get(time, :year),
          day when is_integer(day) <- Keyword.get(time, :day_of_week, 1),
-         {:ok, date} <- Validation.date_from_iso_week(year, week, day, calendar) do
+         {:ok, date} <- UnitValues.date_from_iso_week(year, week, day, calendar) do
       [year: date.year, month: date.month, day: date.day] ++
         Keyword.drop(time, [:year, :week, :day_of_week])
     else

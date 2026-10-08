@@ -77,7 +77,6 @@ defmodule Tempo.Explain do
   alias Tempo.RecurrenceSet.Conditional
   alias Tempo.RRule.Selection
   alias Tempo.UnitValues
-  alias Tempo.Validation
 
   @doc """
   Return a structured `t:Tempo.Explanation.t/0` for any Tempo
@@ -514,7 +513,7 @@ defmodule Tempo.Explain do
   # weeks starts its week as its configuration says, so its day 2 need not be
   # a Tuesday.
   defp weekday_of(year, week, day, calendar) do
-    case Validation.date_from_iso_week(year, week, day, calendar) do
+    case UnitValues.date_from_iso_week(year, week, day, calendar) do
       {:ok, %Date{} = date} -> weekday_name(Date.day_of_week(date, :monday))
       _no_such_date -> "Day #{day}"
     end
@@ -1774,7 +1773,7 @@ defmodule Tempo.Explain do
     do: start_other_than([year: year, month: month], {year, month, 1}, calendar)
 
   defp start_not_written(year, nil, week, calendar) when is_integer(week) do
-    case Validation.date_from_iso_week(year, week, 1, calendar) do
+    case UnitValues.date_from_iso_week(year, week, 1, calendar) do
       {:ok, %Date{} = date} -> month_date(date.year, date.month, date.day)
       _no_such_week -> nil
     end

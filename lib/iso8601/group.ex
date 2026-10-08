@@ -668,7 +668,7 @@ defmodule Tempo.Iso8601.Group do
   defp maximum_within(:year, :month, %{year: year}, calendar), do: calendar.months_in_year(year)
 
   defp maximum_within(:year, :week, %{year: year}, calendar),
-    do: Validation.iso_weeks_in_year(year, calendar)
+    do: UnitValues.iso_weeks_in_year(year, calendar)
 
   defp maximum_within(:year, :day, %{year: year}, calendar), do: calendar.days_in_year(year)
 
@@ -1015,7 +1015,7 @@ defmodule Tempo.Iso8601.Group do
        when is_integer(day) do
     with {:ok, days} <- UnitValues.in_period(:day_of_week, [], calendar),
          {:ok, day} <- Validation.conform(day, days),
-         {:ok, date} <- Validation.date_of_weekday(dates, day) do
+         {:ok, date} <- UnitValues.date_of_weekday(dates, day) do
       [{:year, date.year}, {:month, date.month}, {:day, date.day} | rest]
     else
       _not_a_day -> week_of_month_day_error(named, day, calendar)
@@ -1105,7 +1105,7 @@ defmodule Tempo.Iso8601.Group do
        when is_integer(day) do
     with {:ok, days} <- UnitValues.in_period(:day_of_week, [], calendar),
          {:ok, day} <- Validation.conform(day, days),
-         {:ok, date} <- Validation.date_from_calendar_week(year, week, day, calendar) do
+         {:ok, date} <- UnitValues.date_from_calendar_week(year, week, day, calendar) do
       [{:year, date.year}, {:month, date.month}, {:day, date.day} | rest]
     else
       _not_a_day -> calendar_week_day_error(year, week, day, calendar)
@@ -1123,7 +1123,7 @@ defmodule Tempo.Iso8601.Group do
   # The week's days, from its first to the day after its last: a week the
   # calendar cuts short at the start or end of its year spans only its own.
   defp calendar_week_days(year, week, rest, calendar) do
-    case Validation.calendar_week_range(year, week, calendar) do
+    case UnitValues.calendar_week_range(year, week, calendar) do
       %Date.Range{first: first, last: last} ->
         next = Calendrical.next(last, :day)
 

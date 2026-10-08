@@ -4844,7 +4844,7 @@ defmodule Tempo do
   # counted by ISO 8601's rule over the calendar's own year.
   def to_date(%Tempo{time: [year: year, week: week, day_of_week: day]} = tempo)
       when is_integer(year) and is_integer(week) and is_integer(day) do
-    with {:ok, date} <- Validation.date_from_iso_week(year, week, day, calendar_of(tempo)) do
+    with {:ok, date} <- UnitValues.date_from_iso_week(year, week, day, calendar_of(tempo)) do
       Date.convert(date, native_calendar(tempo))
     end
   end
@@ -4999,7 +4999,7 @@ defmodule Tempo do
   # A week date's day as its calendar numbers it — the calendar's own week
   # in a week-based calendar, ISO 8601's in any other — at its time of day.
   defp week_naive_datetime(tempo, {year, week, day}, {hour, minute, second, microsecond}) do
-    with {:ok, date} <- Validation.date_from_iso_week(year, week, day, calendar_of(tempo)) do
+    with {:ok, date} <- UnitValues.date_from_iso_week(year, week, day, calendar_of(tempo)) do
       NaiveDateTime.new(
         date.year,
         date.month,
@@ -5280,7 +5280,7 @@ defmodule Tempo do
        )
        when is_atom(source) and not is_nil(source) and is_integer(year) and is_integer(week) and
               is_integer(day) do
-    convert_date(value, Validation.date_from_iso_week(year, week, day, source), calendar)
+    convert_date(value, UnitValues.date_from_iso_week(year, week, day, source), calendar)
   end
 
   defp in_calendar(%Tempo{} = value, calendar) do
@@ -6537,7 +6537,7 @@ defmodule Tempo do
   # day in a week-based calendar, and the date of the ISO 8601 week's day in
   # any other.
   defp week_date_ymd!(tempo, function, {year, week, day}) do
-    case Validation.date_from_iso_week(year, week, day, calendar_of(tempo)) do
+    case UnitValues.date_from_iso_week(year, week, day, calendar_of(tempo)) do
       {:ok, date} ->
         {date.year, date.month, date.day}
 
@@ -10852,7 +10852,7 @@ defmodule Tempo do
   defp week_year_floor(%Tempo{time: [year: year], calendar: calendar} = from, start)
        when is_integer(year) do
     with false <- week_based_calendar?(Compare.effective_calendar(calendar)),
-         {:ok, %Date{} = monday} <- Validation.date_from_iso_week(year, 1, 1, calendar),
+         {:ok, %Date{} = monday} <- UnitValues.date_from_iso_week(year, 1, 1, calendar),
          {:ok, %Date{} = monday} <- Date.convert(monday, calendar) do
       %{from | time: [year: monday.year, month: monday.month, day: monday.day]}
     else

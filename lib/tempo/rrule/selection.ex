@@ -1708,7 +1708,7 @@ defmodule Tempo.RRule.Selection do
   defp goes_on_to_a_week(weeks, %Interval{from: %Tempo{time: time, calendar: calendar}}, wkst) do
     with {:ok, date} <- date_of(time, calendar),
          {week_start, week_year} <- week_and_its_year(date, calendar, wkst),
-         {:ok, week, _weeks} <- Validation.week_number(calendar, week_year, wkst, week_start),
+         {:ok, week, _weeks} <- UnitValues.week_number(calendar, week_year, wkst, week_start),
          %Date{} = named <- next_week_named(List.wrap(weeks), {week_year, week}, calendar, wkst),
          days when days > 0 <- Date.diff(named, date) do
       {:in_days, days}
@@ -1718,10 +1718,10 @@ defmodule Tempo.RRule.Selection do
   end
 
   defp next_week_named(weeks, {year, week}, calendar, wkst) do
-    starts = Validation.week_starts(calendar, year, wkst)
+    starts = UnitValues.week_starts(calendar, year, wkst)
 
     case weeks |> weeks_named(starts) |> Enum.find(&(&1 > week)) do
-      nil -> first_week_named(weeks, Validation.week_starts(calendar, year + 1, wkst))
+      nil -> first_week_named(weeks, UnitValues.week_starts(calendar, year + 1, wkst))
       later -> Enum.at(starts, later - 1)
     end
   end
@@ -2321,13 +2321,13 @@ defmodule Tempo.RRule.Selection do
   # year before, and its last days in week 1 of the next.
   #
   # The week is counted from the first day of its year's week 1
-  # (`Tempo.Validation.week_number/4`), and its fourth day is three days on
+  # (`Tempo.UnitValues.week_number/4`), and its fourth day is three days on
   # from its first by the calendar's arithmetic: a rule of days or less asks
   # this of each of its periods, and the year's weeks, and the week's days,
   # were listed for each.
   defp week_number_from_wkst(date, calendar, wkst) do
     with {week_start, week_year} <- week_and_its_year(date, calendar, wkst),
-         do: Validation.week_number(calendar, week_year, wkst, week_start)
+         do: UnitValues.week_number(calendar, week_year, wkst, week_start)
   end
 
   # The first day of the week a date is in, and the year that week is of.
@@ -3029,7 +3029,7 @@ defmodule Tempo.RRule.Selection do
     if Keyword.has_key?(time, :day) do
       # RRULE `BYWEEKNO` carries `DTSTART`'s day, so it expands each week
       # to its seven days per RFC 5545 §3.3.10.
-      week_starts = Validation.week_starts(calendar, year, wkst)
+      week_starts = UnitValues.week_starts(calendar, year, wkst)
       month = if within_month?, do: month_of(candidate)
 
       weeks
@@ -3099,7 +3099,7 @@ defmodule Tempo.RRule.Selection do
   # seven for a week the calendar cuts short at the start or end of its
   # year. `month` is as for `week_candidate_dates/4`.
   defp calendar_week_dates(week, candidate, year, calendar, month) do
-    case Validation.calendar_week_range(year, week, calendar) do
+    case UnitValues.calendar_week_range(year, week, calendar) do
       %Date.Range{} = days ->
         dates = for d <- days, is_nil(month) or d.month == month, do: {d.year, d.month, d.day, d}
         swap_dates(candidate, dates)
@@ -3231,7 +3231,7 @@ defmodule Tempo.RRule.Selection do
          year,
          calendar
        ) do
-    case Validation.calendar_week_range(year, week, calendar) do
+    case UnitValues.calendar_week_range(year, week, calendar) do
       %Date.Range{first: first, last: last} ->
         next = Calendrical.next(last, :day)
 

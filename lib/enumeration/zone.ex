@@ -5,8 +5,8 @@ defmodule Tempo.Enumeration.Zone do
   alias Tempo.Compare
   alias Tempo.Interval.Steps
   alias Tempo.TimeZoneDatabase
+  alias Tempo.UnitValues
   alias Tempo.Validation
-
   @seconds_in_an_hour 3_600
 
   # Shared DST classification for enumeration. Both `Enumerable.Tempo`
@@ -85,7 +85,7 @@ defmodule Tempo.Enumeration.Zone do
       when is_integer(year) and is_integer(week) and is_integer(day) do
     calendar = Compare.effective_calendar(calendar)
 
-    with {:ok, %Date{} = date} <- Validation.date_from_iso_week(year, week, day, calendar),
+    with {:ok, %Date{} = date} <- UnitValues.date_from_iso_week(year, week, day, calendar),
          {:ok, date} <- gregorian_units(date) do
       %{value | time: date ++ clock, calendar: Gregorian}
     else
