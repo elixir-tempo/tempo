@@ -293,12 +293,17 @@ defmodule Tempo.ValidatedCoreTest do
       end
     end
 
+    # Pairing every candidate with every other took 27 seconds, and relating
+    # them along their runs takes a tenth of one. Under `mix test --cover`
+    # the same call is some fifty times slower and took 5.2 seconds beside
+    # the rest of the suite, against the five this allowed: the bound is one
+    # the pairing still fails and the instrumented run does not come near.
     test "are related quickly" do
       day = ~o"TXXH{0..-1}M"
 
       {microseconds, :possible} = :timer.tc(fn -> Tempo.overlap_certainty(day, day) end)
 
-      assert microseconds < 5_000_000
+      assert microseconds < 20_000_000
     end
   end
 
