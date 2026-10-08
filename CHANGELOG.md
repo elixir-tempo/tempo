@@ -349,7 +349,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Changed
 
-* `Tempo.explain/1` writes each end of a span as far as the value is written: `~o"1984/1986"` is "From: 1984." and "To:   1986", where each end was written out to its first day. Where that does not say the day a value starts on, a week and a year of a calendar that turns on another day, the day is told beside it (`2026-W25 (starts on 2026-06-15)`).
+* `Tempo.explain/1` writes and words a value as far as it is written, and no further: `~o"1984/1986"` is "From: 1984." where each end was written out to its first day, and an hour is "at hour 10" where it was "at 10:00". Where an end does not say the day it starts on, a week and a year of a calendar that turns on another day, the day is told beside it (`2026-W25 (starts on 2026-06-15)`).
 
 * A week of the calendar's own numbering (`w`) selected in a month is refused for good, with a `Tempo.ConversionError` whose reason is `:calendar_week_in_month`: `2026Y6ML2wN` and `Tempo.select(~o"2026-06", ~o"L2wN")` were refused as `:not_built`, in words that said the calendar's year does not begin with its first month, and a rule of months from a set of months selected nothing. Such a week is a week of its year (`2026YL2wN`), and a week of a month is written `W`.
 

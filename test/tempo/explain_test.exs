@@ -159,6 +159,31 @@ defmodule Tempo.Explain.Test do
       assert Tempo.explain(week_calendar) =~ "To:   2026-W27 (exclusive"
     end
 
+    test "a time of day is worded with the units it is written to, and no others" do
+      # An hour was worded with minutes it does not have ("at 10:00"), and a
+      # minute with no hour as half past midnight ("00:30").
+      for {text, headline} <- [
+            {"1984-06-15T10", "June 15, 1984 at hour 10."},
+            {"1984-06-15T10:30", "June 15, 1984 at 10:30."},
+            {"1984-06-15T10:30:15", "June 15, 1984 at 10:30:15."},
+            {"T10", "Hour 10 of the day (unanchored — recurs every day)."},
+            {"T10:30", "The time-of-day 10:30 (unanchored — recurs every day)."},
+            {"T30M", "Minute 30 of the hour (unanchored — recurs every hour)."},
+            {"T15S", "Second 15 of the minute (unanchored — recurs every minute)."},
+            {"T{9,14}H", "Hours 9 and 14 of the day (unanchored — they recur every day)."}
+          ] do
+        assert {text, headline(text)} == {text, headline}
+      end
+
+      week_date = Tempo.from_iso8601!("2026-W25-2T10", Calendrical.ISOWeek)
+      assert Tempo.explain(week_date) =~ "Tuesday of week 25 of 2026 at hour 10."
+
+      # Its ends are written the same way: a minute with no hour by its unit.
+      assert Tempo.explain(~o"T30M") =~ "Span: [T30M, T31M)."
+      assert Tempo.explain(~o"T15S") =~ "Span: [T15S, T16S)."
+      assert Tempo.explain(~o"T10") =~ "Span: [T10, T11)."
+    end
+
     test "a year, a month, a day and a time at an end are written as far as they are" do
       for {text, from, to} <- [
             {"1984/1986", "1984", "1986"},
@@ -306,13 +331,16 @@ defmodule Tempo.Explain.Test do
                "Selects: in month 11 to the last month."
     end
 
-    test "a time of day is each hour with each minute and second" do
-      assert selects("R/../P1D/FLT9HN") == "Selects: at 09:00."
+    test "a time of day is each hour with each minute and second, as far as it is written" do
+      # An hour is worded as the hour, and not with minutes it does not have
+      # (decided 2026-10-08): it was "at 09:00".
+      assert selects("R/../P1D/FLT9HN") == "Selects: at hour 9."
+      assert selects("R/../P1D/FLT{9,17}HN") == "Selects: at hour 9 or 17."
       assert selects("R/../P1D/FLT10H30MN") == "Selects: at 10:30."
       assert selects("R/../P1D/FLT10H30M15SN") == "Selects: at 10:30:15."
       assert selects("R/../P1D/FLT{9,17}H30MN") == "Selects: at 09:30 or 17:30."
-      assert selects("R/../P1D/FLT-1HN") == "Selects: at 23:00."
-      assert selects("R/../P1D/FLT{22..-1}HN") == "Selects: at 22:00 or 23:00."
+      assert selects("R/../P1D/FLT-1HN") == "Selects: at hour 23."
+      assert selects("R/../P1D/FLT{22..-1}HN") == "Selects: at hour 22 or 23."
       assert selects("R/../P1D/FLT10H-1MN") == "Selects: at 10:59."
 
       assert selects("R/../P1D/FLT{9..17}H{0,30}MN") ==
@@ -348,13 +376,13 @@ defmodule Tempo.Explain.Test do
     test "the period a value's selection is in is named" do
       assert selects("2026YL3M15DN") == "In 2026, selects in March, on the 15th."
       assert selects("2026Y6ML15DN") == "In June 2026, selects on the 15th."
-      assert selects("2026Y6M15DLT9HN") == "On June 15, 2026, selects at 09:00."
+      assert selects("2026Y6M15DLT9HN") == "On June 15, 2026, selects at hour 9."
       assert selects("2026Y25WL1KN") == "In week 25 of 2026, selects on a Monday."
       assert selects("2026Y{6,7}ML15DN") == "In June and July 2026, selects on the 15th."
       assert selects("6ML15DN") == "In June, in any year, selects on the 15th."
 
       assert selects("2026Y6M15DT10HLT30MN") ==
-               "On June 15, 2026 at 10:00, selects at minute 30 of each hour."
+               "On June 15, 2026 at hour 10, selects at minute 30 of each hour."
 
       assert selects("5787Y6ML{28..-1}DN", Calendrical.Hebrew) ==
                "In Adar I 5787, selects on the 28th to the last."
@@ -417,12 +445,12 @@ defmodule Tempo.Explain.Test do
     end
 
     test "several times of a day are each written" do
-      assert headline("2026-06-15T{10,14}") == "June 15, 2026 at 10:00 and 14:00."
+      assert headline("2026-06-15T{10,14}") == "June 15, 2026 at hours 10 and 14."
       assert headline("2026-06-15T10:{00,30}") == "June 15, 2026 at 10:00 and 10:30."
       assert headline("2026-06-15T{10,14}:30") == "June 15, 2026 at 10:30 and 14:30."
 
       assert headline("T{10,14}H") ==
-               "The times of day 10:00 and 14:00 (unanchored — they recur every day)."
+               "Hours 10 and 14 of the day (unanchored — they recur every day)."
 
       assert headline("T10H{0,30}M") =~ "The times of day 10:00 and 10:30"
     end
@@ -486,19 +514,19 @@ defmodule Tempo.Explain.Test do
   describe "a window from a time of day" do
     test "is worded in its hours and minutes" do
       # It was "the PT4H window from at 22:00".
-      assert selects("R/2027-01-01/P1D/FLLT22HN/PT4HN") == "Selects: the 4 hours from 22:00."
+      assert selects("R/2027-01-01/P1D/FLLT22HN/PT4HN") == "Selects: the 4 hours from hour 22."
 
       assert selects("R/2027-01-01/P1D/FLLT22H30MN/PT90MN") ==
                "Selects: the 90 minutes from 22:30."
 
       assert selects("R/2027-01-01/P1D/FLLT9HN/PT1H30MN") ==
-               "Selects: the 1 hour, 30 minutes from 09:00."
+               "Selects: the 1 hour, 30 minutes from hour 9."
 
-      assert selects("R/2027-01-01/P1D/FLLT22HN/PT-4HN") == "Selects: the 4 hours before 22:00."
+      assert selects("R/2027-01-01/P1D/FLLT22HN/PT-4HN") == "Selects: the 4 hours before hour 22."
     end
 
     test "names the time without its \"at\" in a window of days too" do
-      assert selects("R/2027-01-01/P1D/FLLT22HN/P2DN") == "Selects: the 2 days from 22:00."
+      assert selects("R/2027-01-01/P1D/FLLT22HN/P2DN") == "Selects: the 2 days from hour 22."
       assert selects("R/2027-01-01/P1W/FLL1KN/P3DN") == "Selects: the 3 days from a Monday."
     end
   end

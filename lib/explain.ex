@@ -418,15 +418,42 @@ defmodule Tempo.Explain do
 
   defp counted_as_named?(_no_one_year, _calendar), do: true
 
-  # A clock time as it is written: the hour and the minute, the second where
-  # the value is written to one, and the fraction of it where it has one. A
-  # second was left out, so 10:30:15 was "10:30" and its span from 10:30 to
-  # 10:30.
+  # A clock time as far as it is written, and no further: the hour and the
+  # minute, the second where the value is written to one, and the fraction
+  # of it where it has one. A unit the value is not written to is not
+  # worded (decided 2026-10-08): an hour is "hour 10", where it was "10:00",
+  # a time with minutes it does not have, and a minute with no hour is
+  # "minute 30", where it was "00:30", half past midnight.
   defp clock_phrase(time) do
-    hour = find_unit(time, :hour) || 0
-    minute = find_unit(time, :minute) || 0
+    hour = find_unit(time, :hour)
+    minute = find_unit(time, :minute)
 
-    "#{two_digit(hour)}:#{two_digit(minute)}#{seconds_text(time)}"
+    if is_integer(hour) and is_integer(minute),
+      do: "#{two_digit(hour)}:#{two_digit(minute)}#{seconds_text(time)}",
+      else: units_named(time)
+  end
+
+  # Each unit of the clock a value is written to, by its name: "hour 10",
+  # and "hour 10, second 15" where it has no minute between them.
+  defp units_named(time) do
+    [:hour, :minute, :second]
+    |> Enum.map(&{&1, find_unit(time, &1)})
+    |> Enum.filter(fn {_unit, value} -> is_integer(value) end)
+    |> Enum.map_join(", ", fn
+      {:second, second} -> "second #{second}#{fraction_text(find_unit(time, :microsecond))}"
+      {unit, value} -> "#{unit} #{value}"
+    end)
+  end
+
+  # What a time of day with no date comes round in: a day for one written
+  # to its hour, an hour for a minute with no hour, a minute for a second
+  # alone.
+  defp comes_round_in(time) do
+    cond do
+      find_unit(time, :hour) != nil -> "day"
+      find_unit(time, :minute) != nil -> "hour"
+      true -> "minute"
+    end
   end
 
   defp seconds_text(time) do
@@ -592,8 +619,16 @@ defmodule Tempo.Explain do
 
   defp all_present?(time, keys), do: Enum.all?(keys, &is_integer(find_unit(time, &1)))
 
-  defp time_of_day_headline(time),
-    do: "The time-of-day #{clock_phrase(time)} (unanchored — recurs every day)."
+  defp time_of_day_headline(time) do
+    period = comes_round_in(time)
+
+    if is_integer(find_unit(time, :hour)) and is_integer(find_unit(time, :minute)),
+      do: "The time-of-day #{clock_phrase(time)} (unanchored — recurs every #{period}).",
+      else:
+        capitalised(
+          "#{clock_phrase(time)} of the #{period} (unanchored — recurs every #{period})."
+        )
+  end
 
   # A value holding a set or a group names several values, or a span of them,
   # so its headline writes each unit out: "The 1st and 15th of June 2026",
@@ -778,15 +813,26 @@ defmodule Tempo.Explain do
   defp values_of({:group, %Range{} = range}), do: Enum.to_list(range)
   defp values_of(set), do: set |> Enum.flat_map(&expand_int/1) |> Enum.sort() |> Enum.dedup()
 
-  # Each hour with each minute, as a clock time: "10:00" and "14:00", or
-  # "10:00" and "10:30", and with each second where the value is written to
-  # one: "10:30:15" and "10:30:45".
+  # Each hour with each minute, as a clock time: "10:00" and "10:30", and
+  # with each second where the value is written to one: "10:30:15" and
+  # "10:30:45". Hours with no minute are the hours they are, "hours 10 and
+  # 14", and are not given the minutes they do not have.
   defp clock_times(time) do
-    for hour <- values_of(find_unit(time, :hour) || 0),
-        minute <- values_of(find_unit(time, :minute) || 0),
-        second <- seconds_written(find_unit(time, :second)),
-        do: "#{two_digit(hour)}:#{two_digit(minute)}#{second}"
+    case find_unit(time, :minute) do
+      nil ->
+        hours_named(values_of(find_unit(time, :hour) || 0))
+
+      minutes ->
+        for hour <- values_of(find_unit(time, :hour) || 0),
+            minute <- values_of(minutes),
+            second <- seconds_written(find_unit(time, :second)),
+            do: "#{two_digit(hour)}:#{two_digit(minute)}#{second}"
+    end
   end
+
+  # One phrase for the hours a value names: "hour 10", "hours 10 and 14".
+  defp hours_named([hour]), do: ["hour #{hour}"]
+  defp hours_named(hours), do: ["hours " <> and_join(Enum.map(hours, &Integer.to_string/1))]
 
   defp seconds_written(second) when is_integer(second), do: [":" <> two_digit(second)]
 
@@ -801,6 +847,9 @@ defmodule Tempo.Explain do
   defp at_times(time) do
     if find_unit(time, :hour), do: " at " <> and_join(clock_times(time)), else: ""
   end
+
+  defp times_of_day_phrase(["hour" <> _ = hours]),
+    do: "#{hours} of the day (unanchored — they recur every day)"
 
   defp times_of_day_phrase([one]), do: "the time-of-day #{one} (unanchored — recurs every day)"
 
@@ -1775,19 +1824,41 @@ defmodule Tempo.Explain do
   defp render_week_axis(_week, day) when is_integer(day), do: "day #{day} of the week"
   defp render_week_axis(_week, _day), do: nil
 
+  # The time of day an end is written to, and no more of it: an hour alone
+  # is the hour, and is given no minute it does not have. A time that is no
+  # hour and its minute (a minute with no hour, an hour and a second) has no
+  # clock reading to write, and is written by its units as the explicit
+  # form writes them (`T30M`): it was read as past midnight ("00:30").
   defp render_time_part(time) do
-    h = Keyword.get(time, :hour)
-    mi = Keyword.get(time, :minute)
+    hour = Keyword.get(time, :hour)
+    minute = Keyword.get(time, :minute)
 
-    # An hour alone is the hour, and is not written to a minute it does not
-    # have.
     cond do
-      is_integer(h) and is_integer(mi) -> "#{two_digit(h)}:#{two_digit(mi)}#{seconds_text(time)}"
-      is_integer(h) -> two_digit(h)
-      is_integer(mi) -> "00:#{two_digit(mi)}#{seconds_text(time)}"
-      true -> nil
+      is_integer(hour) and is_integer(minute) ->
+        "#{two_digit(hour)}:#{two_digit(minute)}#{seconds_text(time)}"
+
+      is_integer(hour) and Keyword.get(time, :second) == nil ->
+        two_digit(hour)
+
+      true ->
+        units_designated(time)
     end
   end
+
+  defp units_designated(time) do
+    written =
+      Enum.map_join([hour: "H", minute: "M", second: "S"], fn {unit, designator} ->
+        case Keyword.get(time, unit) do
+          value when is_integer(value) -> "#{value}#{fraction_of(unit, time)}#{designator}"
+          _not_written -> ""
+        end
+      end)
+
+    if written != "", do: written
+  end
+
+  defp fraction_of(:second, time), do: fraction_text(Keyword.get(time, :microsecond))
+  defp fraction_of(_unit, _time), do: ""
 
   # An endpoint written with a time shift is at that shift from UTC, which
   # is part of the moment it names: `Z`, or the hours and minutes.
@@ -2281,10 +2352,17 @@ defmodule Tempo.Explain do
         Enum.map_join(clock, ", ", fn {unit, written} -> "#{unit} #{written_phrase(written)}" end)
   end
 
+  # An hour with no minute is the hour it is, "hour 9", and is not written
+  # with the minutes it does not have ("09:00").
+  defp clock_phrase_of([{:hour, hours}]), do: hours_phrase(hours, length(hours))
+
+  defp clock_phrase_of([{:hour, hours}, {:second, seconds}]),
+    do: "#{hours_phrase(hours, length(hours))}, second #{number_list(seconds)}"
+
   defp clock_phrase_of([{:hour, hours} | finer]) do
     times =
       for hour <- hours, rest <- finer_times(finer) do
-        Enum.map_join([hour | rest], ":", &two_digit/1) <> if(rest == [], do: ":00", else: "")
+        Enum.map_join([hour | rest], ":", &two_digit/1)
       end
 
     times_phrase(times, "times of day")
@@ -2300,6 +2378,12 @@ defmodule Tempo.Explain do
 
   defp clock_phrase_of([{:second, seconds}]),
     do: "second #{number_list(seconds)} of each minute"
+
+  # A handful of hours are each named, and more are counted.
+  defp hours_phrase(hours, count) when count <= 12, do: "hour #{number_list(hours)}"
+
+  defp hours_phrase(hours, count),
+    do: "#{count} hours from #{hd(hours)} to #{List.last(hours)}"
 
   # Each minute with each second, as the numbers that follow an hour.
   defp finer_times([]), do: [[]]
