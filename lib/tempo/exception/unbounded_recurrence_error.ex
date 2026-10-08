@@ -10,7 +10,10 @@ defmodule Tempo.UnboundedRecurrenceError do
   It is also returned for a recurrence that has an end and does not
   come to it in the 10,000 periods a walk takes, or has more than
   10,000 occurrences before it: `:reason` says which, and a narrower
-  `:within` window is the remedy there too.
+  `:within` window is the remedy there too. The 10,000 is the
+  application's `:max_values_at_once`, the most values Tempo gives at
+  once, which is read when Tempo is compiled:
+  `config :ex_tempo, max_values_at_once: 100_000`.
 
   """
 

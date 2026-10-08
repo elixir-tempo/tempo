@@ -81,6 +81,10 @@ defmodule Tempo.RRule.Selection do
   # ISO 8601's weeks, and RFC 5545's by default, start on a Monday, weekday 1.
   @monday 1
 
+  # The most candidates of a period a position picks among: the most values
+  # Tempo gives at once, the application's `:max_values_at_once`.
+  @candidates_at_once Tempo.Limit.values_at_once()
+
   @doc """
   Apply a `repeat_rule` to one candidate occurrence and return the
   resulting list of occurrences.
@@ -123,7 +127,7 @@ defmodule Tempo.RRule.Selection do
 
   * `{:error, %Tempo.EventError{}}` when the selection holds a computed event that has no date where it is asked for: a year outside those it is computed for, or a name no resolver knows.
 
-  * `{:error, {:more_than, at_most}}` when the rule gives more occurrences than `:at_most` asks for.
+  * `{:error, {:more_than, most}}` when the rule gives more occurrences than `:at_most` asks for, and when a position (`I`, RFC 5545's `BYSETPOS`) would pick among more candidates of the period than the most values Tempo gives at once, the application's `:max_values_at_once` (10,000 unless it is set).
 
   ### Examples
 
@@ -878,9 +882,38 @@ defmodule Tempo.RRule.Selection do
       |> limits_after_the_days_made(freq, selection)
       |> weekday_with_its_position()
 
-    if is_integer(most),
-      do: counted_parts(parts, most, {[candidate], freq}, {selection, wkst}),
-      else: parts |> each_part({[candidate], freq}, selection, wkst) |> selected()
+    resolved(
+      Enum.split_while(parts, &(not match?({:instance, _positions}, &1))),
+      most,
+      {[candidate], freq},
+      {selection, wkst}
+    )
+  end
+
+  # The parts with no position among them, counted where their caller asks
+  # for no more than so many; and a position with the parts before it, which
+  # make the candidates it picks among, and those after it.
+  #
+  # A position picks among every candidate of its period, so every one is
+  # made for it, and a period may hold no more of them than Tempo gives of
+  # any value at once (`@candidates_at_once`, decided 2026-10-08): the first
+  # of every minute of a year was half a million minutes made to give one,
+  # and of every second, 29 million, did not come to an end. They are
+  # counted as they are made, and a period with more is refused.
+  defp resolved({parts, []}, most, start, asked_with) when is_integer(most),
+    do: parts |> counted_parts({most, :shown}, start, asked_with) |> selected()
+
+  defp resolved({parts, []}, _every_occurrence, start, {selection, wkst}),
+    do: parts |> each_part(start, selection, wkst) |> selected()
+
+  defp resolved({made, picked}, _most, start, {selection, wkst} = asked_with) do
+    case counted_parts(made, {@candidates_at_once, :made}, start, asked_with) do
+      {:error, _reason} = error ->
+        error
+
+      candidates_at_scope ->
+        picked |> each_part(candidates_at_scope, selection, wkst) |> selected()
+    end
   end
 
   defp each_part(parts, candidates_at_scope, selection, wkst),
@@ -916,28 +949,38 @@ defmodule Tempo.RRule.Selection do
   # candidate alone.
   #
   # A reading the clock skips is dropped once the parts are through
-  # (`on_readings_the_clock_shows/1`) and is no occurrence, so a count that
-  # passes the most is taken again of the readings the clock shows.
-  defp counted_parts(parts, most, candidates_at_scope, {selection, wkst} = asked_with) do
+  # (`on_readings_the_clock_shows/1`) and is no occurrence, so a count of
+  # occurrences (`:shown`) that passes the most is taken again of the
+  # readings the clock shows. A position's candidates (`:made`) are each one
+  # of them, whatever the clock shows.
+  #
+  # What is made is given with the scope the parts leave, as `each_part/4`
+  # gives it, for the parts after them.
+  defp counted_parts(parts, most_counted, candidates_at_scope, {selection, wkst} = asked_with) do
     {dates, times} = Enum.split_while(parts, &(not time_of_day?(&1)))
 
     case each_part(dates, candidates_at_scope, selection, wkst) do
       {:error, _reason} = error -> error
-      {candidates, scope} -> counted(candidates, times, scope, most, asked_with)
+      {candidates, scope} -> counted(candidates, times, scope, most_counted, asked_with)
     end
   end
 
   defp time_of_day?({unit, _values}), do: unit in [:hour, :minute, :second]
 
-  defp counted(candidates, parts, scope, most, asked_with) do
+  defp counted(candidates, parts, scope, {most, counted}, asked_with) do
     with :more <- each_through(candidates, parts, scope, {most, :made, asked_with}, {[], 0}),
-         :more <- each_through(candidates, parts, scope, {most, :shown, asked_with}, {[], 0}) do
+         :more <- recounted(counted, candidates, parts, scope, {most, asked_with}) do
       {:error, {:more_than, most}}
     else
       {:error, _reason} = error -> error
-      {occurrences, _count} -> Enum.reverse(occurrences)
+      {made, _count} -> {Enum.reverse(made), Enum.reduce(parts, scope, &scope_after/2)}
     end
   end
+
+  defp recounted(:made, _candidates, _parts, _scope, _asked), do: :more
+
+  defp recounted(:shown, candidates, parts, scope, {most, asked_with}),
+    do: each_through(candidates, parts, scope, {most, :shown, asked_with}, {[], 0})
 
   # What is made so far, with one candidate after another through the parts:
   # the occurrences, the latest first, and how many they are, or `:more`.

@@ -17,8 +17,11 @@ defmodule Tempo.RRule.SelectionCountedTest do
   use ExUnit.Case, async: true
 
   alias Tempo.ConversionError
+  alias Tempo.Enumeration
   alias Tempo.Interval
   alias Tempo.IntervalSet
+  alias Tempo.Limit
+  alias Tempo.RRule
   alias Tempo.RRule.Selection
 
   @most 10_000
@@ -97,9 +100,82 @@ defmodule Tempo.RRule.SelectionCountedTest do
 
       assert said(converted("2026Y3ML29DT{0..3}H{0..59}M{0..59}SN[Europe/Paris]")) == :refused
     end
+  end
 
-    test "is the one a position picks of them, every one being made for it to pick among" do
-      assert said(converted("2026Y1ML{1..7}DT{0..23}H{0..59}M1IN")) == {:spans, 1}
+  describe "a position among the candidates of a period" do
+    # A position picks among every candidate of its period, so each is made
+    # for it, and a period holds no more of them than a value names values
+    # (decided 2026-10-08). The first minute of a year was half a million
+    # minutes made to give one, and its last second did not come to an end.
+    #
+    # A selection as it is written, and the candidates its position picks
+    # among.
+    @positioned [
+      {"2026Y1ML{1..25}DT{0..19}H{0..19}M1IN", 25 * 20 * 20},
+      {"2026Y1ML{1..25}DT{0..19}H{0..19}M-1IN", 25 * 20 * 20},
+      {"2026Y1ML{1..25}DT{0..19}H{0..20}M1IN", 25 * 20 * 21},
+      {"2026Y1ML{1..7}DT{0..23}H{0..59}M1IN", 7 * 24 * 60},
+      {"2026YL{1..12}M{1..28}DT{0..23}H{0..59}M1IN", 12 * 28 * 24 * 60},
+      {"2026YL{1..12}M{1..28}DT{0..23}H{0..59}M{0..59}S-1IN", 12 * 28 * 24 * 60 * 60}
+    ]
+
+    test "is one of them where there are 10,000 or fewer, and refused past them" do
+      for {text, candidates} <- @positioned do
+        picked = if candidates > @most, do: :refused, else: {:spans, 1}
+        assert {text, said(converted(text))} == {text, picked}
+      end
+    end
+
+    test "is the candidate at that position, counted from either end" do
+      {:ok, first} = converted("2026Y1ML{1..25}DT{0..19}H{0..19}M1IN")
+      {:ok, last} = converted("2026Y1ML{1..25}DT{0..19}H{0..19}M-1IN")
+      {:ok, both} = converted("2026Y1ML{1..25}DT{0..19}H{0..19}M{-1,1}IN")
+
+      assert Enum.map(IntervalSet.members(first), &Interval.from(&1).time) ==
+               [[year: 2026, month: 1, day: 1, hour: 0, minute: 0]]
+
+      assert Enum.map(IntervalSet.members(last), &Interval.from(&1).time) ==
+               [[year: 2026, month: 1, day: 25, hour: 19, minute: 19]]
+
+      assert IntervalSet.members(both) == IntervalSet.members(first) ++ IntervalSet.members(last)
+    end
+
+    test "is refused in a rule whose period has more candidates, and picked in one that has not" do
+      hours = Enum.join(0..23, ",")
+      minutes = Enum.join(0..59, ",")
+      from = Tempo.from_iso8601!("2026-01-01T00:00:00")
+
+      # Six days of a month are 8,640 minutes, and eight are 11,520.
+      {:ok, six} =
+        RRule.parse(
+          "FREQ=MONTHLY;BYMONTHDAY=1,2,3,4,5,6;BYHOUR=#{hours};BYMINUTE=#{minutes};" <>
+            "BYSETPOS=-1;COUNT=2",
+          from: from
+        )
+
+      {:ok, eight} =
+        RRule.parse(
+          "FREQ=MONTHLY;BYMONTHDAY=1,2,3,4,5,6,7,8;BYHOUR=#{hours};BYMINUTE=#{minutes};" <>
+            "BYSETPOS=-1;COUNT=2",
+          from: from
+        )
+
+      {:ok, last_minutes} = Tempo.to_interval(six)
+
+      assert Enum.map(IntervalSet.members(last_minutes), &Interval.from(&1).time) == [
+               [year: 2026, month: 1, day: 6, hour: 23, minute: 59, second: 0],
+               [year: 2026, month: 2, day: 6, hour: 23, minute: 59, second: 0]
+             ]
+
+      assert said(Tempo.to_interval(eight)) == :refused
+    end
+  end
+
+  describe "the most values at once" do
+    test "is the application's :max_values_at_once, 10,000 unless it is set" do
+      assert Limit.values_at_once() == Application.get_env(:ex_tempo, :max_values_at_once, 10_000)
+      assert Enumeration.listed_at_once() == Limit.values_at_once()
+      assert @most == Limit.values_at_once()
     end
   end
 

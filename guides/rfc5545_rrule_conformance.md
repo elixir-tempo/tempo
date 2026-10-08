@@ -109,7 +109,7 @@ The error message points callers at the `:within` option. This is a deliberate d
 
 ## A walk is bounded
 
-A rule's occurrences are found by walking the periods of its frequency. A walk makes at most 10,000 periods and gives at most 10,000 occurrences at once, and a rule that has not come to its `COUNT`, its `UNTIL` or the end of its window by then returns a `Tempo.UnboundedRecurrenceError` and none of what it found, which would not be all of it.
+A rule's occurrences are found by walking the periods of its frequency. A walk makes at most 10,000 periods and gives at most 10,000 occurrences at once, and a rule that has not come to its `COUNT`, its `UNTIL` or the end of its window by then returns a `Tempo.UnboundedRecurrenceError` and none of what it found, which would not be all of it. A `BYSETPOS` picks among at most 10,000 candidates of a period, and a rule whose period has more is a `Tempo.ConversionError`. The 10,000 is the application's `:max_values_at_once`, read when Tempo is compiled.
 
 A rule whose parts leave its occurrences far apart for its frequency is not asked of every period. Where a period selects nothing, the walk goes on from the next value named by the part that dropped it — a `BYMONTH`, `BYMONTHDAY`, `BYYEARDAY` or `BYDAY`, a `BYHOUR`, `BYMINUTE` or `BYSECOND` — so `FREQ=MINUTELY;BYHOUR=9;BYMINUTE=0;COUNT=30` is thirty mornings in a few periods a day, and `FREQ=DAILY;BYMONTH=2;BYMONTHDAY=29;BYDAY=MO` comes to each 29 February that is a Monday, decades apart. A `BYWEEKNO` is asked of each period, a week running across a month and a year.
 

@@ -50,12 +50,13 @@ defmodule Tempo.Enumeration do
         }
 
   # The most values a significant-digits block is walked through.
-  @significant_digits_limit 10_000
+  @significant_digits_limit Tempo.Limit.values_at_once()
 
   # The most values of a value that are listed at once (`members/1`), as a
-  # recurrence gives at most as many occurrences at once. A walk through
-  # `Enum` takes them one at a time, and has no such end.
-  @listed_at_once 10_000
+  # recurrence gives at most as many occurrences at once: the application's
+  # `:max_values_at_once` (`Tempo.Limit`), 10,000 unless it is set. A walk
+  # through `Enum` takes them one at a time, and has no such end.
+  @listed_at_once Tempo.Limit.values_at_once()
 
   # The most values `next/1` reads at once, so a walk stays lazy over a
   # component with many (`XXXX`, nine thousand years) and a walk of a few
@@ -439,7 +440,7 @@ defmodule Tempo.Enumeration do
   @doc false
   # The most values `members/1` lists, which is the most spans a value is
   # converted to at once.
-  @spec listed_at_once() :: 10_000
+  @spec listed_at_once() :: pos_integer()
   def listed_at_once, do: @listed_at_once
 
   @doc false

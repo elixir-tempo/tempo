@@ -93,8 +93,9 @@ if Code.ensure_loaded?(ICal) do
     # A hard ceiling on how many occurrences any single RRULE can
     # materialise. Prevents a malformed rule or a very wide bound
     # from consuming unbounded memory; 10 000 is more than a human
-    # calendar would ever contain in a recurring series.
-    @safety_cap 10_000
+    # calendar would ever contain in a recurring series. It is the
+    # application's `:max_values_at_once` (`Tempo.Limit`).
+    @safety_cap Tempo.Limit.values_at_once()
 
     @doc """
     Parse an iCalendar string and return a `%Tempo.IntervalSet{}`.

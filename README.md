@@ -216,6 +216,15 @@ Any implementation works — [`:tz`](https://hex.pm/packages/tz) (compile-time I
 
 Without a configured database, parsing still works fully — zone names in IXDTF suffixes are accepted without registry validation — but any operation that needs the zone's rules (UTC projection, `Tempo.shift_zone/2`, DST-aware walks, offset validation) will error or degrade. iCalendar import also needs the database: the upstream `:ical` library only populates an event's `dtstart`/`dtend` fields when a default `Calendar.TimeZoneDatabase` is installed, so `DTSTART;TZID=...` events silently come through empty without one.
 
+### The most values at once
+
+Tempo refuses a value that asks for more than 10,000 values at once — the members of a set, the spans a mask or a selection is converted to, the occurrences of a recurrence and the periods its walk takes, the candidates a position picks among — so that a short string cannot ask for work without end: `~o"2026Y{1..12}M{1..28}DT{0..23}H{0..59}M{0..59}S"` names 29 million seconds. The refusal is a `Tempo.ConversionError` whose reason is `:too_many_values`, or a `Tempo.UnboundedRecurrenceError` for a recurrence, and `Enum` and `Stream` still take such a value's values one at a time. The limit is read when Tempo is compiled:
+
+```elixir
+# config/config.exs
+config :ex_tempo, max_values_at_once: 100_000
+```
+
 ## Livebooks
 
 Interactive, runnable tours for [Livebook](https://livebook.dev):

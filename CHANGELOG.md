@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A position (`I`, RFC 5545's `BYSETPOS`) picks among at most 10,000 candidates of a period, and a value or a rule whose period has more is refused with a `Tempo.ConversionError` (`:too_many_values`). `~o"2026YL{1..12}M{1..28}DT{0..23}H{0..59}M1IN"` made 483,840 minutes in two seconds to give the first, and with seconds did not come to an end.
+
 * An unspecified unit (`X*`) given to `Tempo.select/2` is every value its unit takes, as a mask of as many digits is: `Tempo.select(~o"2026-06", ~o"X*D")` is June's thirty days where it was the month as one span. A selection written with one (`~o"LX*DN"`) selects each of them too, where it selected nothing.
 
 * A week beside the month it is written with is a week of that month: `2026YL6M2WN` is 8 to 14 June where it was the second week of the year, and `Tempo.select(~o"2026-06-10", ~o"2W")` keeps the day where `~o"24W"` did. A rule that starts on a date keeps RFC 5545's week of the year, and `Tempo.RRule.parse/2` refuses a `BYWEEKNO` that would be read in a month with `{:byweekno_without_a_date, weeks}`.
@@ -260,6 +262,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * `1950S0` is a `Tempo.ParseError`, since the count of significant digits is a positive integer (ISO 8601-2 §4.4.3). Its walk yielded the year 1950 and its conversion was an error.
 
 ### Added
+
+* `config :ex_tempo, max_values_at_once: 100_000` — the most values Tempo gives at once, 10,000 unless it is set: the values listed, the spans converted to, the occurrences and the periods of a recurrence's walk, and the candidates a position picks among. It is read when Tempo is compiled.
 
 * `Tempo.TimeZoneDatabase.clear_of_changes?/3` — whether the changes already found for a zone show none within so many seconds of a moment. It asks nothing of the database and is `false` where they have not been found, until a year has been asked of as often as finding its changes takes.
 

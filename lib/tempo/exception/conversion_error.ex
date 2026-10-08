@@ -38,8 +38,12 @@ defmodule Tempo.ConversionError do
   * `:too_many_values` — the value names more than 10,000 values, the
     most that are listed or converted at once, as a recurrence gives at
     most 10,000 occurrences: `~o"2026Y{1..12}M{1..28}DT{0..23}H{0..59}M"`
-    is 483,840 minutes. Returned by `Tempo.shift/3` and `Tempo.select/2`
-    too. `Enum` and `Stream` take such a value's values one at a time.
+    is 483,840 minutes. A position (`I`) picks among at most as many
+    candidates of a period. Returned by `Tempo.shift/3` and
+    `Tempo.select/2` too. `Enum` and `Stream` take such a value's values
+    one at a time. The most is the application's `:max_values_at_once`,
+    10,000 unless it is set, and is read when Tempo is compiled:
+    `config :ex_tempo, max_values_at_once: 100_000`.
 
   * `:recurrence_set_member` and `:conditional_member` — a
     `Tempo.RecurrenceSet` member of a shape it cannot hold.

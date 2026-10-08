@@ -7322,9 +7322,12 @@ defmodule Tempo do
     the value names more than 10,000 values: the sets of
     `~o"2026Y{1..12}M{1..28}DT{0..23}H{0..59}M"` (483,840 minutes), the
     candidates of a mask (`~o"1XXX-XX-15"`), a range of values, the
-    dates a selection picks. A value is converted to at most 10,000
+    dates a selection picks, and the candidates of a period that a
+    position (`I`) picks among. A value is converted to at most 10,000
     spans at once, as a recurrence gives at most 10,000 occurrences;
-    `Enum` and `Stream` take its values one at a time.
+    `Enum` and `Stream` take its values one at a time. The 10,000 here
+    and above is the application's `:max_values_at_once`, which is read
+    when Tempo is compiled: `config :ex_tempo, max_values_at_once: 100_000`.
 
   * `{:error, %Tempo.UnanchoredError{}}` when the value has no
     concrete year and resolving the span would depend on the missing
@@ -7723,8 +7726,9 @@ defmodule Tempo do
 
   # The most spans a value is converted to at once, as a recurrence gives at
   # most `@recurrence_safety_cap` occurrences. It is the most values of one
-  # that are listed (`Tempo.Enumeration.listed_at_once/0`).
-  @spans_at_once 10_000
+  # that are listed (`Tempo.Enumeration.listed_at_once/0`): the application's
+  # `:max_values_at_once` (`Tempo.Limit`), 10,000 unless it is set.
+  @spans_at_once Tempo.Limit.values_at_once()
 
   # The interval with each value of an end that holds a set in its place.
   defp from_each(%__MODULE__{} = endpoint, with_value, interval, opts) do
@@ -9197,8 +9201,10 @@ defmodule Tempo do
   ## ---------------------------------------------------------
 
   # Hard safety ceiling on how many occurrences any single
-  # recurrence can materialise. Matches `Tempo.ICal.@safety_cap`.
-  @recurrence_safety_cap 10_000
+  # recurrence can materialise, and on the periods its walk takes. Matches
+  # `Tempo.ICal.@safety_cap`: each is the application's `:max_values_at_once`
+  # (`Tempo.Limit`), 10,000 unless it is set.
+  @recurrence_safety_cap Tempo.Limit.values_at_once()
 
   # Coalescing is the default for back-compat with `to_interval/1`
   # semantics: an `R3/1985-01/P1M` interval is a single 3-month
@@ -10466,6 +10472,9 @@ defmodule Tempo do
              origin_day: origin_day,
              keep_span: explicit_span?
            ) do
+        # A position that would pick among more candidates than are given
+        # at once: the rule is refused as a value that names as many is.
+        {:error, {:more_than, _most}} -> [{:error, too_many_spans_error(interval)}]
         {:error, _reason} = failure -> [failure]
         occurrences -> resize_selected_occurrences(occurrences, resize?)
       end
@@ -12306,7 +12315,7 @@ defmodule Tempo do
   # seconds.
   defp selected_in_period(member, rule, cadence, points_as, value) do
     case member_selection(member, rule, cadence, points_as) do
-      {:error, {:more_than, @spans_at_once}} -> {:error, too_many_spans_error(value)}
+      {:error, {:more_than, _most}} -> {:error, too_many_spans_error(value)}
       {:error, _reason} = error -> error
       selected -> {:ok, selected}
     end
