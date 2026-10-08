@@ -1342,10 +1342,16 @@ defmodule Tempo.Math do
   # wherever its date lands, and the dates alone are asked.
   defp kept_where_the_masks_stand_for_it({:ok, %Tempo{} = passed_by} = kept, tempo, duration) do
     masked = unspecified_as_masks(tempo, :every)
+    dates = dates_of(masked)
 
-    if stand_for_what_is_landed_on?(dates_of(masked), dates_of(passed_by), duration),
-      do: kept,
-      else: shift_masked(tempo, masked, duration)
+    case stand_for_what_is_landed_on(dates, dates_of(passed_by), duration) do
+      :stood_for -> kept
+      # The value's own candidates were each stepped to find that the masks
+      # do not stand for what they land on, and are the answer: they were
+      # stepped a second time for it.
+      {:stepped, landed} when dates == masked -> spans_landed_on(landed)
+      _not_stood_for -> shift_masked(tempo, masked, duration)
+    end
   end
 
   defp kept_where_the_masks_stand_for_it(answer, _tempo, _duration), do: answer
@@ -1359,12 +1365,53 @@ defmodule Tempo.Math do
   # are the same values where they begin and end on the same ones: two
   # steps answer. Otherwise each value `from` stands for is stepped, and
   # they are held to those `onto` stands for.
-  defp stand_for_what_is_landed_on?(%Tempo{time: time} = from, onto, duration) do
+  #
+  # `:stood_for` where the masks stand for what is landed on, and otherwise
+  # `:not_stood_for`, or `{:stepped, landed}` with each value landed on, in
+  # the order of the values stepped, where each was stepped to say so.
+  defp stand_for_what_is_landed_on(%Tempo{time: time} = from, onto, duration) do
     cond do
-      find_masks(time) == [] -> true
-      same_values?(from, onto) -> true
-      block_stays_whole?(from, duration) -> ends_landed_on(from, duration) == ends_of(onto)
-      true -> landed_on(from, duration) == stood_for(onto)
+      find_masks(time) == [] -> :stood_for
+      same_values?(from, onto) -> :stood_for
+      block_stays_whole?(from, duration) -> ends_stood_for(from, onto, duration)
+      true -> each_stood_for(from, onto, duration)
+    end
+  end
+
+  defp ends_stood_for(from, onto, duration) do
+    if ends_landed_on(from, duration) == ends_of(onto), do: :stood_for, else: :not_stood_for
+  end
+
+  defp each_stood_for(from, onto, duration) do
+    with {:ok, candidates} <- candidates_of(from),
+         {:ok, landed} <- each_stepped(candidates, duration) do
+      on = landed |> Enum.map(& &1.time) |> Enum.sort() |> Enum.dedup()
+      if on == stood_for(onto), do: :stood_for, else: {:stepped, Enum.reverse(landed)}
+    else
+      _no_candidates_or_no_step -> :not_stood_for
+    end
+  end
+
+  # The spans of values already stepped, as `shift_each_candidate/2` gives
+  # those it steps.
+  defp spans_landed_on(landed) do
+    with {:ok, spans} <- each_span(landed),
+         {:ok, set} <- IntervalSet.new(spans) do
+      IntervalSet.coalesce(set)
+    end
+  end
+
+  defp each_span(landed) do
+    landed
+    |> Enum.reduce_while({:ok, []}, fn stepped, {:ok, spans} ->
+      case one_span(Tempo.to_interval(stepped)) do
+        {:ok, span} -> {:cont, {:ok, [span | spans]}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, spans} -> {:ok, Enum.reverse(spans)}
+      {:error, _reason} = error -> error
     end
   end
 
@@ -1478,13 +1525,6 @@ defmodule Tempo.Math do
     value
     |> Validation.calendar_date_from_week_date()
     |> Validation.calendar_date_from_ordinal_date()
-  end
-
-  defp landed_on(from, duration) do
-    with {:ok, candidates} <- candidates_of(from),
-         {:ok, landed} <- each_stepped(candidates, duration) do
-      landed |> Enum.map(& &1.time) |> Enum.sort() |> Enum.dedup()
-    end
   end
 
   defp each_stepped(candidates, duration) do
