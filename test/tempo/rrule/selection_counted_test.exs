@@ -160,7 +160,7 @@ defmodule Tempo.RRule.SelectionCountedTest do
       }
 
       quarters = Selection.apply(nine, rule, :hour)
-      assert length(quarters) == 4
+      assert [_first, _second, _third, _fourth] = quarters
 
       assert Selection.apply(nine, rule, :hour, at_most: 4) == quarters
       assert Selection.apply(nine, rule, :hour, at_most: 3) == {:error, {:more_than, 3}}
