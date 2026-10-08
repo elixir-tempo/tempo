@@ -415,6 +415,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.compare/3` finds where a value that names many values starts from its first value: one of 8,064 values took 130 ms and takes under one, and one of more than 10,000 raised a `Tempo.ConversionError` where it now sorts. `Tempo.explain/1` counts more than twelve times of day in a headline where it listed each, 1,440 for every minute of a day.
+
 * `Tempo.explain/1` headlines a date with no year with its time of day: `~o"6M15DT10H"` is "June 15 at hour 10, in any year", where the time was left out. A day of the year or of the week with no year and a time is written at its ends as the value is, where the words for its date were run into the time.
 
 * `Tempo.explain/1` explains a recurrence of one occurrence that has a rule as a recurrence, with what its rule selects, where it was "an interval given as a start and a duration" or "an unusual shape". A rule with an `UNTIL` and no start is headlined by its end, where it was called unbounded.

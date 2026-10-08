@@ -188,7 +188,15 @@ defmodule Tempo.SpansAtOnceTest do
       assert Tempo.shift(many, ~o"P1D") == refused
 
       assert_raise ConversionError, fn -> Tempo.overlaps?(many, ~o"2027") end
-      assert_raise ConversionError, fn -> Tempo.compare(many, ~o"2027-01-01T00:00") end
+    end
+
+    test "leaves a value to be compared by where it starts, which its first value says" do
+      # `Tempo.compare/3` raised for it until 2026-10-08, having converted
+      # every value to find the first (`test/tempo/start_of_many_values_test.exs`).
+      many = Tempo.from_iso8601!("2026Y{1..12}M{1..28}DT{0..23}H{0,30}M")
+
+      assert Tempo.compare(many, ~o"2027-01-01T00:00") == :lt
+      assert Tempo.compare(many, ~o"2026-01-01T00:00") == :eq
     end
 
     test "leaves a value's values to be taken one at a time" do

@@ -511,6 +511,19 @@ defmodule Tempo.Explain.Test do
     end
   end
 
+  describe "a value of many times of day" do
+    test "is headlined by how many they are, where each was written out" do
+      # Every minute of a day was listed: 1,440 clock times in one line.
+      assert headline("2026Y6M15DT{0..23}H{0..59}M") ==
+               "June 15, 2026 at 1440 times of day from 00:00 to 23:59."
+
+      assert headline("2026Y6M15DT{0..23}H") == "June 15, 2026 at 24 hours from 0 to 23."
+
+      # A handful are each named still.
+      assert headline("2026Y6M15DT{9..12}H") == "June 15, 2026 at hours 9, 10, 11, and 12."
+    end
+  end
+
   describe "a date with no year and a time of day" do
     # Its headline named the date and left the time out: "June 15, in any
     # year" for ten o'clock on it.

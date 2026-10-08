@@ -30,6 +30,7 @@ defmodule Tempo.Compare do
   alias Calendrical.Gregorian
   alias Tempo.ConversionError
   alias Tempo.Duration
+  alias Tempo.Enumeration
   alias Tempo.FloatingTempoError
   alias Tempo.Interval
   alias Tempo.IntervalSet
@@ -300,8 +301,44 @@ defmodule Tempo.Compare do
   # a point (a mask, a group, a set, significant digits, a count from the end)
   # is read as a moment, so that comparing agrees with converting.
   @spec start_point(Tempo.t()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
+  #
+  # A value that names each of several values starts where the first of
+  # them does, which the walk gives without the rest: every span was
+  # converted to find the first, 160 ms for a value of 8,000 and an error
+  # past 10,000.
   def start_point(%Tempo{time: time} = value) do
-    if point?(time), do: {:ok, value}, else: value |> Tempo.to_interval() |> span_start(value)
+    cond do
+      point?(time) -> {:ok, value}
+      starts_with_its_first_value?(value) -> first_value_start(value)
+      true -> converted_start(value)
+    end
+  end
+
+  defp converted_start(value), do: value |> Tempo.to_interval() |> span_start(value)
+
+  # The walk gives a value's values in the order of their numbers, which is
+  # the order of time but in a year that does not begin with its first
+  # month: there the conversion, which puts its spans in order, is asked.
+  defp starts_with_its_first_value?(%Tempo{time: time, calendar: calendar} = value) do
+    Enumeration.names_each_value?(value) and
+      UnitValues.years_begin_with_first_month?(
+        Keyword.get(time, :year),
+        effective_calendar(calendar)
+      )
+  end
+
+  # The first value is one value, and starts where it is a point or where
+  # its own span does. Where the walk gives none, or cannot say, the
+  # conversion answers as it did.
+  defp first_value_start(%Tempo{} = value) do
+    case Enumeration.first_member(value) do
+      {:ok, %Tempo{} = first} when first != value -> start_of_one(first, value)
+      _none_or_an_error -> converted_start(value)
+    end
+  end
+
+  defp start_of_one(%Tempo{time: time} = first, value) do
+    if point?(time), do: {:ok, first}, else: first |> Tempo.to_interval() |> span_start(value)
   end
 
   defp span_start({:ok, %Interval{from: %Tempo{time: time} = start}}, value) do
@@ -600,8 +637,10 @@ defmodule Tempo.Compare do
     offset and the other none, and `Tempo.UnanchoredError` when one has
     a year and the other none: neither pair has an order.
 
-  * Raises `Tempo.ConversionError` when a value names more than 10,000
-    values, the most that are converted at once to find where it starts.
+  * Raises `Tempo.ConversionError` when a value is written with more than
+    10,000 years, which are read whole to find where it starts. A value
+    of any number of months, days or times starts at its first, which is
+    found without the rest.
 
   ### Examples
 

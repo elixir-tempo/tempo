@@ -441,6 +441,30 @@ defmodule Tempo.Enumeration do
       else: tempo |> walk() |> gather([], 0, @listed_at_once)
   end
 
+  @doc false
+  # The first value a value names that its zone's clock shows, found without
+  # listing the rest: where a value that names thousands of values starts
+  # is its first, and listing them all to find it took as long as they did
+  # and was refused past the most that are listed. `:none` where it names no
+  # value.
+  @spec first_member(Tempo.t()) :: {:ok, Tempo.t()} | :none | {:error, Exception.t()}
+  def first_member(%Tempo{time: time} = tempo) do
+    if more_years_than_listed?(time),
+      do: {:error, ConversionError.exception(value: tempo, reason: :too_many_values)},
+      else: tempo |> walk() |> first_shown()
+  end
+
+  defp first_shown(%{tempo: tempo} = walk) do
+    case next(walk) do
+      {:ok, values, walk} -> first_of(shown_by_the_clock(values, tempo), walk)
+      :done -> :none
+      {:error, _exception} = error -> error
+    end
+  end
+
+  defp first_of([first | _rest], _walk), do: {:ok, first}
+  defp first_of([], walk), do: first_shown(walk)
+
   # The years of a set are read whole before a unit after them is, and each
   # is a value of the set, so a set of more years than are listed is refused
   # before any is read: `{1..99999999}Y` took as long as its years did.

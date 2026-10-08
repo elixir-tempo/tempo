@@ -16,8 +16,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **A selection's parts are expanded in one period without bound** — the resolver expands each part of a selection in a period before anything counts what it gives, so `~o"2026YL{1..12}M{1..28}DT{0..23}H{0..59}MN"` is refused (`:too_many_values`) only after its 483,840 minutes are made, 2.5 s, one with seconds too is 29 million, and an RRULE that expands as far in one period (`FREQ=YEARLY;BYHOUR=…;BYMINUTE=…;BYSECOND=…`) is walked as long. A limit in `Tempo.RRule.Selection` must leave a rule with a `COUNT` or a window its first occurrences, so it is no cap on a period. Found 2026-10-08.
 
-* [ ] **Where a value that names many values starts** — `Tempo.compare/3` converts a value to find where its span starts, so it takes 140 ms for one of 8,064 values and raises a `Tempo.ConversionError` past 10,000 (it took ten seconds for 483,840), where the first value of its walk would say. `Tempo.explain/1` lists every value of a set in words (18 s for 1,440 minutes of each of 336 days). Found 2026-10-08.
-
 * [ ] **A set of years of an absurd size is listed whole by the walk** — a component's values are read whole before the next is, so `Enum.take(~o"{1..99999999}Y", 2)` takes 13 s and a larger range runs out of memory; `Tempo.to_interval/2` refuses such a set before it is read. Found 2026-10-08.
 
 * [ ] **A day of the year selected from a month or a week** — `Tempo.select(~o"2026-06", ~o"166O")` takes 280 µs since a constraint is resolved as a selection (2026-10-07), where the merge took 90: the resolver lists the period's days to find the one the part names (`days_of_period/3`), where it could place the day named and ask whether the period holds it. A range of them (`~o"{160..170}O"`) took 1.9 ms and takes 0.4 since 2026-10-08, the days a part names being found once for each year of the period and not for each of its days. Every other constraint is within an eighth of what it took, and a selection two to eight times faster.
@@ -87,6 +85,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **Where a value that names many values starts** — `Tempo.Compare.start_point/1` takes the first value of the walk (`Tempo.Enumeration.first_member/1`) where the value names each of several and its year begins with its first month, and the conversion otherwise: 130 ms to under one for 8,064 values, and no error past 10,000 but for a set of that many years. `Tempo.explain/1` counts more than twelve times of day where it listed each. 2026-10-08.
 
 * [x] **`Tempo.explain/1` of a date with no year and a time** — headlined with its time (`at_clock/1` in `lib/explain.ex`), for each shape of a day with no year, one value or several, and its ends written as the value is where its date has no ISO spelling. Asked by the user 2026-10-08. 2026-10-08.
 

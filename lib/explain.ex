@@ -103,6 +103,10 @@ defmodule Tempo.Explain do
             when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) or
                    (recurrence == 1 and is_struct(rule, Tempo))
 
+  # The most times of day a headline names each of, past which it counts
+  # them.
+  @times_named 12
+
   # What is said of the end of a span, which is no part of it.
   @half_open "exclusive — half-open `[from, to)`"
 
@@ -858,8 +862,13 @@ defmodule Tempo.Explain do
     end
   end
 
-  # One phrase for the hours a value names: "hour 10", "hours 10 and 14".
+  # One phrase for the hours a value names: "hour 10", "hours 10 and 14",
+  # and more than a handful counted, "24 hours from 0 to 23".
   defp hours_named([hour]), do: ["hour #{hour}"]
+
+  defp hours_named(hours) when length(hours) > @times_named,
+    do: ["#{length(hours)} hours from #{hd(hours)} to #{List.last(hours)}"]
+
   defp hours_named(hours), do: ["hours " <> and_join(Enum.map(hours, &Integer.to_string/1))]
 
   defp seconds_written(second) when is_integer(second), do: [":" <> two_digit(second)]
@@ -873,8 +882,15 @@ defmodule Tempo.Explain do
   defp seconds_written(_none_or_no_plain_seconds), do: [""]
 
   defp at_times(time) do
-    if find_unit(time, :hour), do: " at " <> and_join(clock_times(time)), else: ""
+    if find_unit(time, :hour), do: " at " <> times_listed(clock_times(time)), else: ""
   end
+
+  # A handful of times are each named, and more are counted: every minute
+  # of a day was written out, 1,440 of them.
+  defp times_listed(times) when length(times) > @times_named,
+    do: "#{length(times)} times of day from #{hd(times)} to #{List.last(times)}"
+
+  defp times_listed(times), do: and_join(times)
 
   defp times_of_day_phrase(["hour" <> _ = hours]),
     do: "#{hours} of the day (unanchored — they recur every day)"
@@ -882,7 +898,7 @@ defmodule Tempo.Explain do
   defp times_of_day_phrase([one]), do: "the time-of-day #{one} (unanchored — recurs every day)"
 
   defp times_of_day_phrase(times),
-    do: "the times of day #{and_join(times)} (unanchored — they recur every day)"
+    do: "the times of day #{times_listed(times)} (unanchored — they recur every day)"
 
   defp mask_headline(%Tempo{time: time}) do
     case find_first_mask(time) do
