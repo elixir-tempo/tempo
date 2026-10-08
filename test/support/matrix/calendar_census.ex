@@ -369,6 +369,212 @@ defmodule Tempo.Matrix.CalendarCensus do
   defp fewest_and_most({:ambiguous, %Range{first: first, last: last}}),
     do: {min(first, last), max(first, last)}
 
+  ## Shapes, intervals and recurrences
+
+  @doc """
+  A value in each shape, an interval and a recurrence, on the census's
+  first date: a set, a range, a count from the end, a mask and an
+  unspecified unit; an interval of days and one of months or weeks; a
+  recurrence that steps by days, by months or weeks, and by years.
+
+  ### Arguments
+
+  * `calendar` is a calendar module.
+
+  ### Returns
+
+  * A list of `%{shape: name, text: text, members: spans, walk: walk}`,
+    where `spans` is a list with the spans of each member the value
+    converts to, and `walk` is `{:ok, starts}`, where each value the walk
+    yields starts, or `:unchecked`. It is empty for a calendar whose year
+    starts within its months.
+
+  """
+  @spec shapes(module()) :: [map()]
+  def shapes(calendar) do
+    date = hd(anchors(calendar))
+
+    cond do
+      week?(calendar) -> week_shapes(date, calendar)
+      starts_within_its_months?(date.year, calendar) -> []
+      true -> month_shapes(date, calendar)
+    end
+  end
+
+  defp month_shapes(%Date{} = date, calendar),
+    do:
+      shaped_months(date, calendar) ++
+        spanned_months(date, calendar) ++ repeated_months(date, calendar)
+
+  # A set, a range, a count from the end, a mask and an unspecified unit.
+  defp shaped_months(%Date{year: y, month: m}, calendar) do
+    months = calendar.months_in_year(y)
+    dates = month_dates(y, m, calendar)
+    last_month = month_dates(y, months, calendar)
+    month = month_span(y, m, calendar)
+
+    [
+      shape("a set of months", "#{y}Y{1,3}M", [
+        month_span(y, 1, calendar),
+        month_span(y, 3, calendar)
+      ]),
+      shape(
+        "a range of days",
+        "#{y}Y#{m}M{1..3}D",
+        dates |> Enum.take(3) |> Enum.map(&day_span/1)
+      ),
+      shape("a set of days", "#{y}Y#{m}M{1,3}D", [
+        day_span(hd(dates)),
+        day_span(Enum.at(dates, 2))
+      ]),
+      whole(
+        "the last month",
+        "#{y}Y-1M",
+        month_span(y, months, calendar),
+        Enum.map(last_month, &at/1)
+      ),
+      whole(
+        "the last day of a month",
+        "#{y}Y#{m}M-1D",
+        day_span(List.last(dates)),
+        hours(List.last(dates))
+      ),
+      whole(
+        "the last day of the last month",
+        "#{y}Y-1M-1D",
+        day_span(List.last(last_month)),
+        :unchecked
+      ),
+      whole("a masked day", "#{y}Y#{m}MXXD", month, Enum.map(dates, &at/1)),
+      whole("an unspecified day", "#{y}Y#{m}MX*D", month, Enum.map(dates, &at/1)),
+      whole(
+        "an unspecified month",
+        "#{y}YX*M",
+        year_span(y, calendar),
+        month_starts(y, 1, months, calendar)
+      )
+    ]
+  end
+
+  # An interval of days that runs into the next month, and one of months.
+  defp spanned_months(%Date{year: y, month: m, day: d}, calendar) do
+    day = iso(y, m, d, calendar)
+    later = Date.convert!(Date.add(day, 40), calendar)
+    {after_y, after_m} = months_on(y, m, 2, calendar)
+    from = elem(month_span(y, m, calendar), 0)
+
+    [
+      whole(
+        "an interval of days",
+        "#{y}Y#{m}M#{d}D/#{later.year}Y#{later.month}M#{later.day}D",
+        {at(day), at(day) + 40 * @day},
+        Enum.map(0..39, &(at(day) + &1 * @day))
+      ),
+      whole(
+        "an interval of months",
+        "#{y}Y#{m}M/#{after_y}Y#{after_m}M",
+        {from, elem(month_span(after_y, after_m, calendar), 0)},
+        month_starts(y, m, 2, calendar)
+      )
+    ]
+  end
+
+  # A recurrence by days, by months and by years, each occurrence as long as
+  # its step.
+  defp repeated_months(%Date{year: y, month: m, day: d}, calendar) do
+    day = at(iso(y, m, d, calendar))
+
+    [
+      shape(
+        "a recurrence by days",
+        "R4/#{y}Y#{m}M#{d}D/P10D",
+        Enum.map(0..3, &{day + 10 * &1 * @day, day + 10 * (&1 + 1) * @day})
+      ),
+      shape(
+        "a recurrence by months",
+        "R4/#{y}Y#{m}M/P1M",
+        Enum.map(0..3, &counted_month_span(y, m, &1, calendar))
+      ),
+      shape("a recurrence by years", "R3/#{y}Y/P1Y", Enum.map(0..2, &year_span(y + &1, calendar)))
+    ]
+  end
+
+  # Where each of so many months starts, from a month on.
+  defp month_starts(y, m, count, calendar),
+    do: Enum.map(0..(count - 1), &elem(counted_month_span(y, m, &1, calendar), 0))
+
+  defp week_shapes(%Date{year: y, month: w}, calendar) do
+    weeks = weeks_in_year(y, calendar)
+    dates = week_dates(y, w, calendar)
+    week = week_span(y, w, calendar)
+
+    [
+      shape("a set of weeks", "#{y}Y{1,3}W", for(n <- [1, 3], do: week_span(y, n, calendar))),
+      whole(
+        "the last week",
+        "#{y}Y-1W",
+        week_span(y, weeks, calendar),
+        Enum.map(week_dates(y, weeks, calendar), &at/1)
+      ),
+      shape(
+        "a range of days",
+        "#{y}Y#{w}W{1..3}K",
+        dates |> Enum.take(3) |> Enum.map(&day_span/1)
+      ),
+      whole(
+        "the last day of a week",
+        "#{y}Y#{w}W-1K",
+        day_span(List.last(dates)),
+        hours(List.last(dates))
+      ),
+      whole(
+        "an interval of weeks",
+        "#{y}Y#{w}W/#{y}Y#{w + 2}W",
+        {elem(week, 0), elem(week_span(y, w + 2, calendar), 0)},
+        for(n <- 0..1, do: elem(week_span(y, w + n, calendar), 0))
+      ),
+      shape(
+        "a recurrence by weeks",
+        "R3/#{y}Y#{w}W/P1W",
+        for(n <- 0..2, do: week_span(y, w + n, calendar))
+      ),
+      shape(
+        "a recurrence by years",
+        "R3/#{y}Y/P1Y",
+        for(n <- 0..2, do: elem(expected({:week_year, y + n}, calendar), 0))
+      )
+    ]
+  end
+
+  # A value of several members, each its own span, whose walk is not asked.
+  defp shape(name, text, spans),
+    do: %{shape: name, text: text, members: Enum.map(spans, &[&1]), walk: :unchecked}
+
+  # A value of one span, and where each value its walk yields starts.
+  defp whole(name, text, span, starts) when is_list(starts),
+    do: %{shape: name, text: text, members: [[span]], walk: {:ok, starts}}
+
+  defp whole(name, text, span, :unchecked),
+    do: %{shape: name, text: text, members: [[span]], walk: :unchecked}
+
+  defp hours(%Date{} = day), do: hours_from(at(day))
+
+  defp year_span(y, calendar), do: elem(expected({:year, y}, calendar), 0)
+
+  # The month so many months on, counted through the months each year has.
+  defp months_on(y, m, 0, _calendar), do: {y, m}
+
+  defp months_on(y, m, count, calendar) do
+    if m < calendar.months_in_year(y),
+      do: months_on(y, m + 1, count - 1, calendar),
+      else: months_on(y + 1, 1, count - 1, calendar)
+  end
+
+  defp counted_month_span(y, m, count, calendar) do
+    {on_y, on_m} = months_on(y, m, count, calendar)
+    month_span(on_y, on_m, calendar)
+  end
+
   ## Selections
 
   @doc """
@@ -386,12 +592,17 @@ defmodule Tempo.Matrix.CalendarCensus do
 
   ### Returns
 
-  * A list of `%{scenario: name, text: text, selected: spans}`, where
-    `spans` is a list with the spans of each occurrence, in the order of
-    time. It is empty for a calendar whose year starts within its months.
+  * A list of `%{scenario: name, text: text, selected: spans, rule: rule,
+    select: select}`, where `spans` is a list with the spans of each
+    occurrence, in the order of time. `rule` is `{text, window}`, the same
+    parts as the rule of a recurrence of the period and the period as its
+    window, and `select` is `{base, selector}`, the period and the parts as
+    `Tempo.select/2` takes them, or `nil` for a position, which is a
+    selection's alone. The list is empty for a calendar whose year starts
+    within its months.
 
   """
-  @spec selections(module()) :: [%{scenario: String.t(), text: String.t(), selected: [[span()]]}]
+  @spec selections(module()) :: [map()]
   def selections(calendar) do
     date = hd(anchors(calendar))
 
@@ -422,12 +633,31 @@ defmodule Tempo.Matrix.CalendarCensus do
           {"month: position", month, [day_of_week: [1], instance: weekday(x)]}
         ] do
       datum = %{calendar: calendar, period: period, parts: parts}
+      selected = Enum.map(Selections.extents(datum), & &1.spans)
 
-      %{
-        scenario: "#{scenario} #{way}",
-        text: Selections.text(datum),
-        selected: Enum.map(Selections.extents(datum), & &1.spans)
-      }
+      selection("#{scenario} #{way}", datum, selected)
+    end
+  end
+
+  defp selection(scenario, %{period: period, parts: parts} = datum, selected) do
+    window = Selections.period_text(period)
+    written = Selections.parts_text(parts)
+
+    %{
+      scenario: scenario,
+      text: Selections.text(datum),
+      selected: selected,
+      rule: {"R/#{window}/#{cadence(period)}/FL#{written}N", window},
+      select: if(Keyword.has_key?(parts, :instance), do: nil, else: {window, written})
+    }
+  end
+
+  # A recurrence of a period steps by the period's own length.
+  defp cadence(period) do
+    case List.last(period) do
+      {:year, _year} -> "P1Y"
+      {:month, _month} -> "P1M"
+      {:week, _week} -> "P1W"
     end
   end
 
@@ -454,8 +684,11 @@ defmodule Tempo.Matrix.CalendarCensus do
           {"week: weekday", [year: y, week: w], [day_of_week: weekday(x)],
            days_of_weeks([w], weekday(x), y, calendar)}
         ] do
-      datum = %{calendar: calendar, period: period, parts: parts}
-      %{scenario: "#{scenario} #{way}", text: Selections.text(datum), selected: selected}
+      selection(
+        "#{scenario} #{way}",
+        %{calendar: calendar, period: period, parts: parts},
+        selected
+      )
     end
   end
 

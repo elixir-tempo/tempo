@@ -45,8 +45,8 @@ defmodule Tempo.CalendarCensusTest do
     end
   end
 
-  defp selected(value) do
-    {:ok, converted} = Tempo.to_interval(value)
+  defp selected(value, options \\ []) do
+    {:ok, converted} = Tempo.to_interval(value, options)
     {:ok, members} = Extent.members(converted)
     Enum.map(members, & &1.spans)
   end
@@ -124,6 +124,46 @@ defmodule Tempo.CalendarCensusTest do
           value = Tempo.from_iso8601!(text, calendar)
 
           assert {scenario, text, selected(value)} == {scenario, text, expected}
+        end
+      end
+
+      test "the same parts as a recurrence's rule, within its period, select the same" do
+        calendar = unquote(calendar)
+
+        for %{rule: {rule, window}, selected: expected} <- CalendarCensus.selections(calendar) do
+          recurrence = Tempo.from_iso8601!(rule, calendar)
+          within = Tempo.from_iso8601!(window, calendar)
+
+          assert {rule, selected(recurrence, within: within)} == {rule, expected}
+        end
+      end
+
+      test "the same parts given to select/2 on the period select the same" do
+        calendar = unquote(calendar)
+
+        asked =
+          for %{select: {base, selector}, selected: expected} <-
+                CalendarCensus.selections(calendar),
+              {:ok, selector} <- [Tempo.from_iso8601(selector, calendar)] do
+            {:ok, selection} = Tempo.select(Tempo.from_iso8601!(base, calendar), selector)
+            {:ok, members} = Extent.members(selection)
+
+            assert {base, selector, Enum.map(members, & &1.spans)} == {base, selector, expected}
+          end
+
+        # Parts that are no value's text cannot be asked; most are.
+        if CalendarCensus.selections(calendar) != [], do: assert(Enum.count(asked) >= 8)
+      end
+
+      test "a shape, an interval and a recurrence cover and yield what the calendar says" do
+        calendar = unquote(calendar)
+
+        for %{shape: shape, text: text, members: members, walk: walk} <-
+              CalendarCensus.shapes(calendar) do
+          value = Tempo.from_iso8601!(text, calendar)
+
+          assert {shape, text, selected(value)} == {shape, text, members}
+          assert_walk_with_no_year(text, calendar, walk)
         end
       end
     end

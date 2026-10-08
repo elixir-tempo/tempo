@@ -94,7 +94,8 @@ So the census as a test needed two answers it did not have: the calendar's own w
 | `Tempo.select/2` against the selection | Done |
 | A recurrence with no year and a rule | Done |
 | The astronomical calendars | In progress |
-| Shapes, intervals, recurrences and zones in other calendars | Open |
+| Shapes, intervals and recurrences in other calendars | Done |
+| A zone with another calendar | Open |
 
 ## Bugs
 
@@ -132,9 +133,9 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 
 * **A selection in `NRF`** — the answer the census works out for a week is ISO 8601's, so its sixteen failing cells say nothing. Held to the calendar's own `week/2` on 2026-10-08 they are right; that answer is not yet in the census or the matrix.
 
-* **Shapes in other calendars** — sets, ranges, masks, groups and counts from the end are generated for the Gregorian calendar and, for dates, the Hebrew.
+* **Shapes in other calendars** — measured since 2026-10-09 in the census test for a set, a range, a count from the end, a mask and an unspecified unit; a group and qualification are generated for the Gregorian calendar alone.
 
-* **Intervals, sets and recurrences in other calendars** — the walk of an explicit span and the occurrences of a recurrence, and a recurrence's rule in any calendar but the Gregorian, the Hebrew and `ISOWeek`.
+* **Intervals, sets and recurrences in other calendars** — measured since 2026-10-09 in the census test: the walk of an explicit span, the occurrences of a recurrence, a recurrence's rule and `Tempo.select/2`.
 
 * **A zone with another calendar**, **a fraction of a second**, and **a selection of hours or minutes** in any calendar but the Gregorian.
 
@@ -184,9 +185,11 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 
 * [ ] **One implementation** — `Tempo.UnitValues`, then each of the five callers moved to it in turn, the matrix green after each. Moved: a selection's resolver, `Tempo.select/2`'s count from the end and its weekdays, and the walk's reading of a range that reaches past a period's values (the walk reads everything else through the reading of a value). `Tempo.Validation.conform/2` is `resolve/2`, and a set or a range of a clock unit is held to the unit's values. What a unit takes with no year is `in_any_year/3`, for every module that asked. The reading of a value and its masks take a unit's values in a year from `in_period/3` (`validation.ex`, `mask.ex`, the calendar weeks of `group.ex`). A step from a value asks `following/4` and `preceding/4` what comes after and before a value, `first/3` and `last/3` for the value a carry or a borrow lands on, and `at_or_before/4` for the day a step of months lands on (`math.ex`, which has no count of its own left but the weeks of a year with no year and a fraction of a year in months). A selection's resolver takes a month's days, a year's months and their ends from it too (`selection.ex`). `Tempo.explain/1` expanded a range as Elixir's, which names nothing where the range reaches the end; it counts a weekday, an hour, a minute and a second, and a month where a year's months can be counted, through `resolve/2` and `named/2`, and words a day, a week and a position, whose period a rule selects in each of, as they are written. To move: the week counts of `Tempo.Validation` into the module. Still arithmetic of its own in the resolver: the nearest weekday of cron's `W`, which steps a day or two within a month. Not to move: the arithmetic of a group and of a fraction (the nth day of a group of months, half of a year), which counts a period's units, where the calendar's own count is the answer. All five callers are moved (2026-10-04); the week counts are what is left, and the week of the year a day is in, counted from a rule's `WKST`, joined them on 2026-10-08.
 
-* [ ] **The measure widened** — shapes, intervals, recurrences and rules in every calendar; a calendar-generic answer for a week, for `NRF`; the astronomical calendars with a time limit that suits them.
+* [ ] **The astronomical calendars, measured** — `Chinese`, `Korean`, `Vietnamese`, `LunarJapanese`, `Islamic.Observational` and `Islamic.Rgsa` with a time limit that suits them: a cell takes seconds, the census's own answer for a year could not be worked out in eight, and `1447YL{2..-1}ON` did not convert in eight in `Islamic.Observational` (2026-10-08). Shapes, intervals and recurrences in a year that starts within its months wait on the items of `TODO.md` for such a year.
 
 ### Done
+
+* [x] **The measure widened to every calendar** — the census test holds, in each of its eighteen calendars whose year begins with its first month or is of weeks: each selection again as the rule of a recurrence of its period within that period (520) and as `Tempo.select/2` of the period (388, a position being a selection's alone and some parts no value's text); and a set, a range, a count from the end, a mask and an unspecified unit, an interval of days and one of months or weeks, and a recurrence by days, by months or weeks and by years (238 values), each with its members and its walk worked out from the calendar. The calendar-generic answer for a week is the calendar's own `week/2`. Every one is right. 2026-10-09.
 
 * [x] **A value with no year, measured** — the census test holds every month and every day of each, and every day of the week, with no year, to the calendar's own counts (`months_in_year/0`, `days_in_month/1`): the span each covers on the cycle of the longest year, the values its walk yields, that its span needs a year where what follows it depends on one, and that no year has it. 5,632 values in eighteen calendars, of which 47 need a year and 204 are no value; a reform calendar counts nothing with no year, so each of its months and days needs one. Every one is right. `Tempo.Matrix.Extent` now closes the cycle of a calendar whose years differ in their months (the Hebrew thirteenth month read as empty). The walk and the conversion already ask one place what needs a year: only `Tempo.UnitValues` calls a calendar with no year. 2026-10-09.
 
