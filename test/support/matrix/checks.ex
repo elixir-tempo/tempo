@@ -713,14 +713,16 @@ defmodule Tempo.Matrix.Checks do
   # code: the conversion gives those spans, each once and in order, or the
   # two read the selection two ways.
   defp selection(%{selection: datum}, value),
-    do: selected(Tempo.to_interval(value), datum, "to_interval/2")
+    do: selected(Tempo.to_interval(value), Selections.extents(datum), "to_interval/2")
 
   defp selection(_entry, _value), do: :skip
 
   # The same parts as the rule of a recurrence of the period, within the
   # period: the two are resolved by one resolver from two starting points.
   # A year's weeks reach into the years beside it, which the window cuts
-  # off, so they are not asked.
+  # off, so they are not asked. A month's weeks reach past it too, and are
+  # asked: the answer is the weeks of the month and of the month after that
+  # reach into it (`Selections.extents_within_period/1`).
   defp selection_as_rule(%{selection: datum} = entry, _value) do
     if reaches_past_period?(datum) do
       :skip
@@ -730,7 +732,11 @@ defmodule Tempo.Matrix.Checks do
 
       with {:ok, recurrence} <- Corpus.read(%{entry | text: rule}),
            {:ok, window} <- Corpus.read(%{entry | text: period}) do
-        selected(Tempo.to_interval(recurrence, within: window), datum, "the rule #{rule}")
+        selected(
+          Tempo.to_interval(recurrence, within: window),
+          Selections.extents_within_period(datum),
+          "the rule #{rule}"
+        )
       else
         {:error, exception} -> {:fail, "#{rule} is not read: #{message(exception)}"}
       end
@@ -768,7 +774,11 @@ defmodule Tempo.Matrix.Checks do
 
       with {:ok, base} <- Corpus.read(%{entry | text: period}),
            {:ok, selector} <- Corpus.read(%{entry | text: constraint}) do
-        selected(Tempo.select(base, selector), datum, "select/2 of #{constraint}")
+        selected(
+          Tempo.select(base, selector),
+          Selections.extents(datum),
+          "select/2 of #{constraint}"
+        )
       else
         {:error, _not_a_value} -> :skip
       end
@@ -777,8 +787,8 @@ defmodule Tempo.Matrix.Checks do
 
   defp selection_as_select(_entry, _value), do: :skip
 
-  defp selected({:ok, converted}, datum, name) do
-    expected = Enum.map(Selections.extents(datum), & &1.spans)
+  defp selected({:ok, converted}, extents, name) do
+    expected = Enum.map(extents, & &1.spans)
 
     case Extent.members(converted) do
       {:ok, members} ->
@@ -789,10 +799,9 @@ defmodule Tempo.Matrix.Checks do
     end
   end
 
-  defp selected({:error, exception}, datum, name) do
+  defp selected({:error, exception}, extents, name) do
     {:fail,
-     "#{name} refuses it (#{message(exception)}), and its parts name " <>
-       "#{length(Selections.extents(datum))} spans"}
+     "#{name} refuses it (#{message(exception)}), and its parts name #{length(extents)} spans"}
   end
 
   defp same_members(expected, expected, _name), do: :ok

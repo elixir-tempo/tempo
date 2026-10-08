@@ -308,6 +308,8 @@ The matrix did not measure a selection, for two reasons, and fixing one count fr
 
 The first run failed 135 cells of 55,986, five causes, which the baseline lists and `TODO.md` names. The months, the days, the days of the year, the weeks of a Gregorian year, the hours, the minutes and the positions agree with the reference in every way they are written, in both month calendars.
 
+The baseline lists none of them since 2026-10-07. Since 2026-10-09 the reference writes a week of a month too, in the period or beside its month among the parts (42 periods, 294 values): whole weeks from a Monday, the first the one that holds the month's first day. Such a week reaches past its month, so the rule's check is held to the weeks of the month and of the month after that reach into the period, where a year's weeks are still not asked.
+
 ### Open questions
 
 Found and not decided, since each is the user's.

@@ -24,6 +24,14 @@ defmodule Tempo.Matrix.Selections do
   month, week or day of the year beside it, is a day of the year, as the
   value `2026Y45D` is (decided 2026-10-04).
 
+  A week beside a month, in the period or among the parts, is a week of
+  that month (decided 2026-10-07 and 2026-10-08), and is written here as
+  `:week_of_month`. A month's weeks are whole and begin on Monday; the
+  first is the one that holds the month's first day, and the week that
+  holds the first day of the next month is that month's first. So a week
+  of a month may start in the month before, and a month's last days may be
+  in no week of it.
+
   """
 
   alias Calendrical.Gregorian
@@ -47,10 +55,21 @@ defmodule Tempo.Matrix.Selections do
           parts: keyword([written()])
         }
 
-  @unit_order [:month, :week, :day_of_year, :day, :day_of_week, :hour, :minute, :instance]
+  @unit_order [
+    :month,
+    :week_of_month,
+    :week,
+    :day_of_year,
+    :day,
+    :day_of_week,
+    :hour,
+    :minute,
+    :instance
+  ]
 
   @designators %{
     month: "M",
+    week_of_month: "W",
     week: "W",
     day_of_year: "O",
     day: "D",
@@ -75,6 +94,15 @@ defmodule Tempo.Matrix.Selections do
       range_to_end: [{11, -1}],
       both_ends: [1, -1],
       absent: [14]
+    ],
+    week_of_month: [
+      one: [2],
+      from_end: [-1],
+      set: [1, 3],
+      range: [{2, 3}],
+      range_to_end: [{3, -1}],
+      both_ends: [1, -1],
+      absent: [7]
     ],
     week: [
       one: [25],
@@ -164,6 +192,14 @@ defmodule Tempo.Matrix.Selections do
     {Gregorian, [year: 2026, month: 6], [day_of_week: [1]], :instance},
     {Gregorian, [year: 2026, month: 6], [day_of_week: [{1, 5}]], :instance},
     {Gregorian, [year: 2026, month: 6], [day_of_week: [1]], :hour},
+    # June 2026 begins on a Monday and has four weeks; March begins on a
+    # Sunday, so its first week starts in February and it has five.
+    {Gregorian, [year: 2026, month: 6], [], :week_of_month},
+    {Gregorian, [year: 2026, month: 3], [], :week_of_month},
+    {Gregorian, [year: 2026, month: 6], [week_of_month: [2]], :day_of_week},
+    {Gregorian, [year: 2026, month: 3], [day_of_week: [1]], :week_of_month},
+    {Gregorian, [year: 2026], [month: [7]], :week_of_month},
+    {Gregorian, [year: 2026], [week_of_month: [1]], :month},
     {Gregorian, [year: 2026, week: 25], [], :day_of_week},
     {Gregorian, [year: 2026, week: 53], [], :day_of_week},
     {Gregorian, [year: 2026, week: 1], [], :day_of_week},
@@ -312,6 +348,43 @@ defmodule Tempo.Matrix.Selections do
   end
 
   @doc """
+  The spans a recurrence of a selection's period selects within the period,
+  in the order of time.
+
+  They are the spans the selection selects, but for a week of a month. A
+  month's first week may start in the month before, so within a month the
+  rule "the first week of each month" has the first week of the month
+  after, where that starts in this one, and has this month's first week
+  only where it reaches into the month: a window keeps what overlaps it.
+
+  ### Arguments
+
+  * `datum` is a `t:datum/0`.
+
+  ### Returns
+
+  * A list of `t:Tempo.Matrix.Extent.t/0`, one for each occurrence.
+
+  """
+  @spec extents_within_period(datum()) :: [Tempo.Matrix.Extent.t()]
+  def extents_within_period(%{calendar: calendar, period: period, parts: parts} = datum) do
+    if Keyword.has_key?(parts, :week_of_month) do
+      {:ok, %{spans: [{from, to}]}} = Reference.span(point(period, calendar))
+
+      for period <- [period, following(period)],
+          %{spans: [{member_from, member_to}]} = extent <- extents(%{datum | period: period}),
+          member_from < to and member_to > from,
+          do: extent
+    else
+      extents(datum)
+    end
+  end
+
+  defp following(year: year), do: [year: year + 1]
+  defp following(year: year, month: 12), do: [year: year + 1, month: 1]
+  defp following(year: year, month: month), do: [year: year, month: month + 1]
+
+  @doc """
   The occurrences a selection selects, in the order of time.
 
   ### Arguments
@@ -326,13 +399,51 @@ defmodule Tempo.Matrix.Selections do
   @spec members(datum()) :: [Reference.point()]
   def members(%{calendar: calendar, period: period, parts: parts}) do
     parts = read_in(parts, period)
+    {days, conditions} = days_and_conditions(period, parts, calendar)
 
-    period
-    |> days(parts, calendar)
-    |> Enum.filter(&named?(&1, parts, calendar))
+    days
+    |> Enum.filter(&named?(&1, conditions, calendar))
     |> occurrences(parts, period, calendar)
     |> Enum.flat_map(&at_times(&1, parts, period))
     |> positions(parts[:instance])
+  end
+
+  # The days the parts are conditions on, and the parts that are. A week of
+  # a month is read with its month: the days are those of each week named of
+  # each month named, which may be days of the month before, and neither the
+  # month nor the week is a condition on a day by itself.
+  defp days_and_conditions(period, parts, calendar) do
+    case Keyword.pop(parts, :week_of_month) do
+      {nil, parts} ->
+        {days(period, parts, calendar), parts}
+
+      {weeks, rest} ->
+        {days_of_weeks(period[:year], months(period, rest), weeks), Keyword.delete(rest, :month)}
+    end
+  end
+
+  defp months([year: _year, month: month], _parts), do: [month]
+  defp months([year: _year], parts), do: values(Keyword.fetch!(parts, :month), 1..12//1)
+
+  defp days_of_weeks(year, months, written) do
+    for month <- months,
+        week <- values(written, 1..weeks_in_month(year, month)//1),
+        day <- 0..6 do
+      year |> month_week_start(month, week) |> Date.add(day)
+    end
+  end
+
+  # A month's weeks begin on Monday, and its first is the one that holds its
+  # first day.
+  defp month_week_start(year, month, week) do
+    year |> Date.new!(month, 1) |> Date.beginning_of_week(:monday) |> Date.add((week - 1) * 7)
+  end
+
+  # The week that holds the first day of the next month is that month's
+  # first, so a month has the weeks before it.
+  defp weeks_in_month(year, month) do
+    next = year |> Date.new!(month, 1) |> Date.end_of_month() |> Date.add(1)
+    div(Date.diff(Date.beginning_of_week(next, :monday), month_week_start(year, month, 1)), 7)
   end
 
   # A day selected in a year is a day of the year where no part beside it is
@@ -447,7 +558,7 @@ defmodule Tempo.Matrix.Selections do
       Enum.any?(@day_units, &Keyword.has_key?(parts, &1)) ->
         Enum.map(days, &day_point/1)
 
-      Keyword.has_key?(parts, :week) ->
+      Keyword.has_key?(parts, :week) or Keyword.has_key?(parts, :week_of_month) ->
         days |> Enum.map(&week_point/1) |> Enum.uniq()
 
       Keyword.has_key?(parts, :month) ->

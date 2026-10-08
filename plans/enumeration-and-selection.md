@@ -1,6 +1,6 @@
 # Enumeration and selection in every calendar
 
-**Status:** in progress, 2026-10-08
+**Status:** in progress, 2026-10-09
 
 Enumeration and selection are core capabilities of Tempo, and the requirement (user, 2026-10-04) is confidence that they work correctly for all calendar types, at all resolutions, on all full and partial date and time combinations. This document says what that space is, what in it is verified, what is wrong, what is missing and what has not been measured yet, and sets the order of the work. It continues [plans/validated-core.md](validated-core.md), whose matrix it extends.
 
@@ -12,7 +12,7 @@ Three instruments hold such answers:
 
 * **The reference** — `Tempo.Matrix.Reference` and the 59 properties of `test/tempo/reference_test.exs`, for a date or a time written in whole numbers: the span it covers and the values its walk yields. It generates the Gregorian calendar and the Hebrew, Persian, Coptic and civil Islamic ones at year, month and day.
 
-* **The selections** — `Tempo.Matrix.Selections`, for a selection: each part written seven ways in 31 periods, and the days of the period every part names.
+* **The selections** — `Tempo.Matrix.Selections`, for a selection: each part written seven ways in 42 periods, a week of a month among them since 2026-10-09, and the days of the period every part names.
 
 * **The calendar census** — a run of 2026-10-04 (`calcensus.exs` in the session's scratchpad, to be made part of the matrix) of every calendar module Calendrical ships: each form of a value on three dates, and thirty selections, against spans counted from the calendar's `valid_date?/3`, `months_in_year/1` and `weeks_in_year/1`.
 
