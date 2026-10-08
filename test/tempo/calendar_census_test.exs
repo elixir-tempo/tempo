@@ -25,6 +25,12 @@ defmodule Tempo.CalendarCensusTest do
   alias Tempo.Matrix.CalendarCensus
   alias Tempo.Matrix.Extent
 
+  # A value in a zone is the moments its wall time is there.
+  setup_all do
+    Calendar.put_time_zone_database(Tz.TimeZoneDatabase)
+    :ok
+  end
+
   # A day's hours, an hour's minutes and a minute's seconds are walked
   # whole, and so are a month's days and a year's months or weeks.
   @walk_limit 400
@@ -169,15 +175,39 @@ defmodule Tempo.CalendarCensusTest do
     end
   end
 
+  # The observational Islamic calendars work each date out from the moon.
+  # The calendar's own answer for a year of one takes half a minute, so they
+  # run when asked for: `mix test --include exhaustive`.
+  for calendar <- CalendarCensus.observed() do
+    describe "in #{inspect(calendar)}, when asked for" do
+      @tag :exhaustive
+      @tag timeout: :infinity
+      test "a value in each full form covers what the calendar says, and is walked by its parts" do
+        calendar = unquote(calendar)
+
+        for %{form: form, text: text, expect: expect} <- CalendarCensus.forms(calendar) do
+          {span, walk} = CalendarCensus.expected(expect, calendar)
+          value = Tempo.from_iso8601!(text, calendar)
+
+          assert {form, text, covered(value)} == {form, text, [span]}
+
+          if walk != :unchecked do
+            assert {form, text, walked(value)} == {form, text, Enum.take(walk, @walk_limit)}
+          end
+        end
+      end
+    end
+  end
+
   describe "the census itself" do
     test "holds every full form of a calendar of months, and of a calendar of weeks" do
-      assert Enum.count(CalendarCensus.forms(Calendrical.Gregorian)) == 27
-      assert Enum.count(CalendarCensus.forms(Calendrical.Reform.England)) == 36
-      assert Enum.count(CalendarCensus.forms(Calendrical.ISOWeek)) == 15
+      assert Enum.count(CalendarCensus.forms(Calendrical.Gregorian)) == 33
+      assert Enum.count(CalendarCensus.forms(Calendrical.Reform.England)) == 44
+      assert Enum.count(CalendarCensus.forms(Calendrical.ISOWeek)) == 18
     end
 
-    test "holds thirty selections in a calendar of months and twenty in a calendar of weeks" do
-      assert Enum.count(CalendarCensus.selections(Calendrical.Hebrew)) == 30
+    test "holds thirty-five selections in a calendar of months and twenty in a calendar of weeks" do
+      assert Enum.count(CalendarCensus.selections(Calendrical.Hebrew)) == 35
       assert Enum.count(CalendarCensus.selections(Calendrical.NRF)) == 20
 
       # A selection in a year that starts within its months is not built,

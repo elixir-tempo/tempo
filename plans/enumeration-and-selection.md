@@ -1,6 +1,8 @@
 # Enumeration and selection in every calendar
 
-**Status:** in progress, 2026-10-09
+**Status:** implemented (v2.0.0), 2026-10-09
+
+Every task is done. What is not measured is what is not built or not Tempo's to answer, each an item of `TODO.md`: a selection in a year that starts within its months, a month with no year there, a week with no year, and a selection in the two observational Islamic calendars, whose own answers take minutes.
 
 Enumeration and selection are core capabilities of Tempo, and the requirement (user, 2026-10-04) is confidence that they work correctly for all calendar types, at all resolutions, on all full and partial date and time combinations. This document says what that space is, what in it is verified, what is wrong, what is missing and what has not been measured yet, and sets the order of the work. It continues [plans/validated-core.md](validated-core.md), whose matrix it extends.
 
@@ -93,9 +95,9 @@ So the census as a test needed two answers it did not have: the calendar's own w
 | `inspect/1` and `to_iso8601/1` on a selection under an hour | Done |
 | `Tempo.select/2` against the selection | Done |
 | A recurrence with no year and a rule | Done |
-| The astronomical calendars | In progress |
+| The astronomical calendars | Done, the observational Islamic ones for full forms |
 | Shapes, intervals and recurrences in other calendars | Done |
-| A zone with another calendar | Open |
+| A zone with another calendar | Done |
 
 ## Bugs
 
@@ -127,7 +129,7 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 
 ## Not yet measured
 
-* **The astronomical calendars** — `Chinese`, `Korean`, `Vietnamese`, `LunarJapanese`, `Islamic.Observational` and `Islamic.Rgsa`: a cell takes seconds to minutes, so the census of them was stopped. `Islamic.Observational` agreed in the 24 full-form cells whose answer could be worked out in eight seconds, and its year's could not; the others are not measured.
+* **The astronomical calendars** — measured since 2026-10-09: `Chinese`, `Korean`, `Vietnamese` and `LunarJapanese` in the census test, and the full forms of `Islamic.Observational` and `Islamic.Rgsa` in its exhaustive tier. A selection in the last two is not measured: the answer worked out for one takes minutes.
 
 * **A value with no year** — measured since 2026-10-09 in the census test, for a month, a day of one and a day of the week. Not measured: a week with no year, which no calendar counts (an item of `TODO.md`), and a month with no year in a calendar whose year starts within its months, where it is the month a date names (`1M` is January's 31 days in `Julian.March25`) and with a year the nth the calendar counts (`2026Y1M` is the seven days from 25 March): a question for the user, in `TODO.md`.
 
@@ -137,9 +139,9 @@ Each is a wrong answer, a raise or two functions that disagree, with the cells i
 
 * **Intervals, sets and recurrences in other calendars** — measured since 2026-10-09 in the census test: the walk of an explicit span, the occurrences of a recurrence, a recurrence's rule and `Tempo.select/2`.
 
-* **A zone with another calendar**, **a fraction of a second**, and **a selection of hours or minutes** in any calendar but the Gregorian.
+* **A zone with another calendar**, **a fraction of a second**, and **a selection of hours** — measured since 2026-10-09 in the census test, in every calendar. A selection of minutes is measured in the Gregorian calendar alone.
 
-* **Fiscal and configured calendars** — `Calendrical.FiscalYear` and a calendar made with `Calendrical.Config`.
+* **Fiscal and configured calendars** — `Calendrical.FiscalYear` for Australia is in the census since 2026-10-09; a calendar made with `Calendrical.Config` is not.
 
 ## Decisions
 
@@ -183,9 +185,9 @@ Validation, the walk, `select/2`, the selection and `explain/1` call it and hold
 
 ## Tasks
 
-* [ ] **The astronomical calendars, measured** — `Chinese`, `Korean`, `Vietnamese`, `LunarJapanese`, `Islamic.Observational` and `Islamic.Rgsa` with a time limit that suits them: a cell takes seconds, the census's own answer for a year could not be worked out in eight, and `1447YL{2..-1}ON` did not convert in eight in `Islamic.Observational` (2026-10-08). Shapes, intervals and recurrences in a year that starts within its months wait on the items of `TODO.md` for such a year.
-
 ### Done
+
+* [x] **The astronomical calendars, a zone, a fraction and a fiscal calendar, measured** — `Chinese`, `Korean`, `Vietnamese` and `LunarJapanese` are in the census with every other calendar, a cell of them taking milliseconds since Calendrical's lock of 2026-10-09, and so is a fiscal calendar (`Calendrical.FiscalYear` for Australia). Every calendar is asked a date and an hour in a zone, held to Elixir's `DateTime`, a second written to a tenth, and the hours of a day selected, as a rule and through `Tempo.select/2` too. The census holds 27 calendars: 872 full forms, 7,731 values with no year, 775 selections and as many rules, 582 of `select/2` and 308 shapes, intervals and recurrences; every one is right. `Islamic.Observational` and `Islamic.Rgsa`, whose own answer for a year takes half a minute, have their full forms asked in the exhaustive tier (`mix test --include exhaustive`, eight minutes), and are right; their selections are not measured. 2026-10-09.
 
 * [x] **One implementation** — `Tempo.UnitValues`, then each of the five callers moved to it in turn, the matrix green after each. Moved: a selection's resolver, `Tempo.select/2`'s count from the end and its weekdays, and the walk's reading of a range that reaches past a period's values (the walk reads everything else through the reading of a value). `Tempo.Validation.conform/2` is `resolve/2`, and a set or a range of a clock unit is held to the unit's values. What a unit takes with no year is `in_any_year/3`, for every module that asked. The reading of a value and its masks take a unit's values in a year from `in_period/3` (`validation.ex`, `mask.ex`, the calendar weeks of `group.ex`). A step from a value asks `following/4` and `preceding/4` what comes after and before a value, `first/3` and `last/3` for the value a carry or a borrow lands on, and `at_or_before/4` for the day a step of months lands on (`math.ex`, which has no count of its own left but the weeks of a year with no year and a fraction of a year in months). A selection's resolver takes a month's days, a year's months and their ends from it too (`selection.ex`). `Tempo.explain/1` expanded a range as Elixir's, which names nothing where the range reaches the end; it counts a weekday, an hour, a minute and a second, and a month where a year's months can be counted, through `resolve/2` and `named/2`, and words a day, a week and a position, whose period a rule selects in each of, as they are written. Still arithmetic of its own in the resolver: the nearest weekday of cron's `W`, which steps a day or two within a month. Not to move: the arithmetic of a group and of a fraction (the nth day of a group of months, half of a year), which counts a period's units, where the calendar's own count is the answer. All five callers were moved by 2026-10-04, and the week counts on 2026-10-09: how many weeks a year has, where each starts, the date a day of one is and which week of its year a week is (`date_from_iso_week/4`, `iso_weeks_in_year/2`, `calendar_weeks_in_year/2`, `calendar_week_range/3`, `week_starts/3`, `week_number/4`) are the module's, and it asks nothing of the reading of a value. 2026-10-09.
 

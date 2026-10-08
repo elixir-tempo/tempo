@@ -34,18 +34,24 @@ defmodule Tempo.Matrix.CalendarCensus do
     period after the last value the longest period has; between the two it
     depends on the year, and the value's span needs one.
 
-  The astronomical calendars are not here: a cell of them takes seconds to
-  minutes. Nor is a selection in a year that starts within its months,
-  which is not built.
+  The observational Islamic calendars work each date out from the moon, and
+  the calendar's own answer for one of their years takes half a minute, so
+  they are apart (`observed/0`) and their full forms alone are asked, when
+  asked for. A selection in a year that starts within its months is not
+  here: it is not built.
 
   """
 
+  alias Calendrical.FiscalYear
   alias Tempo.Matrix.Selections
 
   @anchors [~D[2026-06-15], ~D[2024-02-29], ~D[2025-08-01]]
 
   @second 1_000_000
   @day 86_400 * @second
+
+  # The zone a value is written in, to measure a zone beside each calendar.
+  @zone "Europe/Paris"
 
   @calendars [
     Calendrical.Gregorian,
@@ -62,6 +68,10 @@ defmodule Tempo.Matrix.CalendarCensus do
     Calendrical.Islamic.Tbla,
     Calendrical.Islamic.UmmAlQura,
     Calendrical.Hebrew,
+    Calendrical.Chinese,
+    Calendrical.Korean,
+    Calendrical.Vietnamese,
+    Calendrical.LunarJapanese,
     Calendrical.Reform.England,
     Calendrical.Reform.Sweden,
     Calendrical.Julian.March25,
@@ -84,7 +94,26 @@ defmodule Tempo.Matrix.CalendarCensus do
 
   """
   @spec calendars() :: [module()]
-  def calendars, do: @calendars
+  def calendars, do: @calendars ++ [fiscal_calendar()]
+
+  # A fiscal calendar is made for a territory when it is asked for: the
+  # Australian fiscal year begins in July.
+  defp fiscal_calendar do
+    {:ok, calendar} = FiscalYear.calendar_for(:AU)
+    calendar
+  end
+
+  @doc """
+  The calendars whose dates are worked out from an observation of the
+  moon, which take seconds to answer for a month and are asked apart.
+
+  ### Returns
+
+  * A list of calendar modules.
+
+  """
+  @spec observed() :: [module()]
+  def observed, do: [Calendrical.Islamic.Observational, Calendrical.Islamic.Rgsa]
 
   @doc """
   A value in each full form, on each of the census's dates.
@@ -123,7 +152,8 @@ defmodule Tempo.Matrix.CalendarCensus do
       {"Y-W", "#{y}Y#{w}W", {:week, y, w}},
       {"Y-W-K", "#{y}Y#{w}W#{k}K", {:week_day, y, w, k, []}},
       {"Y-W-K T H", "#{y}Y#{w}W#{k}KT10H", {:week_day, y, w, k, [hour: 10]}},
-      {"Y-W T H", "#{y}Y#{w}WT17H", {:week_day, y, w, 1, [hour: 17]}}
+      {"Y-W T H", "#{y}Y#{w}WT17H", {:week_day, y, w, 1, [hour: 17]}},
+      {"Y-W-K T H zone", "#{y}Y#{w}W#{k}KT10H[#{@zone}]", {:week_day_in_zone, y, w, k, 10}}
     ]
   end
 
@@ -138,7 +168,9 @@ defmodule Tempo.Matrix.CalendarCensus do
        {:day, y, m, d, [hour: 10, minute: 30, second: 45]}},
       {"Y-O", "#{y}Y#{Date.day_of_year(date)}O", {:day, y, m, d, []}},
       {"Y T H", "#{y}YT17H", {:first_day, y, nil, [hour: 17]}},
-      {"Y-M T H", "#{y}Y#{m}MT17H", {:first_day, y, m, [hour: 17]}}
+      {"Y-M T H", "#{y}Y#{m}MT17H", {:first_day, y, m, [hour: 17]}},
+      {"Y-M-D T H zone", "#{y}Y#{m}M#{d}DT10H[#{@zone}]", {:day_in_zone, y, m, d, 10}},
+      {"Y-M-D T H:M:S.s", "#{y}Y#{m}M#{d}DT10H30M45.5S", {:tenth, y, m, d, {10, 30, 45, 5}}}
     ]
   end
 
@@ -181,6 +213,18 @@ defmodule Tempo.Matrix.CalendarCensus do
 
   def expected({:week_day, y, w, k, time}, calendar),
     do: clock(Enum.at(week_dates(y, w, calendar), k - 1), time)
+
+  def expected({:day_in_zone, y, m, d, hour}, calendar),
+    do: hour_in_zone(iso(y, m, d, calendar), hour)
+
+  def expected({:week_day_in_zone, y, w, k, hour}, calendar),
+    do: hour_in_zone(Enum.at(week_dates(y, w, calendar), k - 1), hour)
+
+  # A second written to a tenth is a tenth of a second long.
+  def expected({:tenth, y, m, d, {hour, minute, second, tenth}}, calendar) do
+    from = at(iso(y, m, d, calendar)) + (hour * 3600 + minute * 60 + second) * @second
+    {{from + tenth * 100_000, from + (tenth + 1) * 100_000}, :unchecked}
+  end
 
   # The dates of a month, as `Calendar.ISO` dates: those the calendar says
   # are dates of it, or, in a year that starts within its months, the dates
@@ -240,6 +284,16 @@ defmodule Tempo.Matrix.CalendarCensus do
     do: {at(day) + seconds * @second, at(day) + (seconds + length) * @second}
 
   defp at(%Date{} = date), do: Date.to_gregorian_days(date) * @day
+
+  # An hour on a day's own clock in the zone, as the moments it is: Elixir's
+  # `DateTime` says when that wall time is.
+  defp hour_in_zone(%Date{} = day, hour) do
+    moment = DateTime.new!(day, Time.new!(hour, 0, 0), @zone)
+    from = DateTime.to_gregorian_seconds(moment) |> elem(0) |> Kernel.*(@second)
+
+    {{from, from + 3600 * @second},
+     for(minute <- 0..59, do: {from + minute * 60 * @second, from + (minute + 1) * 60 * @second})}
+  end
 
   ## A value with no year
 
@@ -630,7 +684,8 @@ defmodule Tempo.Matrix.CalendarCensus do
           {"year: day of year", year, [day_of_year: day(x, Date.day_of_year(date))]},
           {"month: day", month, [day: day(x, d)]},
           {"month: weekday", month, [day_of_week: weekday(x)]},
-          {"month: position", month, [day_of_week: [1], instance: weekday(x)]}
+          {"month: position", month, [day_of_week: [1], instance: weekday(x)]},
+          {"day: hour", [year: y, month: m, day: d], [hour: hour(way)]}
         ] do
       datum = %{calendar: calendar, period: period, parts: parts}
       selected = Enum.map(Selections.extents(datum), & &1.spans)
@@ -658,6 +713,7 @@ defmodule Tempo.Matrix.CalendarCensus do
       {:year, _year} -> "P1Y"
       {:month, _month} -> "P1M"
       {:week, _week} -> "P1W"
+      {:day, _day} -> "P1D"
     end
   end
 
@@ -666,6 +722,13 @@ defmodule Tempo.Matrix.CalendarCensus do
 
   defp weekday([value]) when value > 0 and value < 40, do: [3]
   defp weekday(written), do: written
+
+  # The hours of a day, each of the five ways.
+  defp hour(:one), do: [10]
+  defp hour(:from_end), do: [-1]
+  defp hour(:range_to_end), do: [{22, -1}]
+  defp hour(:both_ends), do: [0, -1]
+  defp hour(:absent), do: [25]
 
   # The selections of a calendar of weeks, whose answers are worked out from
   # the calendar's own weeks: the matrix's selections count a week as ISO
