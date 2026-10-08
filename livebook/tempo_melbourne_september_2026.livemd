@@ -2,12 +2,26 @@
 
 ```elixir
 Mix.install([
-  {:ex_tempo, "~> 1.6.3"},
+  # This notebook uses Tempo's main branch, which is ahead of the latest
+  # Hex release (1.6.x). The first run installs main as it stands then, and
+  # Mix.install caches it: use "Setup without cache" to pick up newer
+  # commits. Once ex_tempo 2.0 is on Hex, pin it with {:ex_tempo, "~> 2.0"}.
+  {:ex_tempo, github: "elixir-tempo/tempo"},
   {:ical, "~> 3.2"},
   {:tz, "~> 0.28"}
 ])
 
 Application.put_env(:elixir, :time_zone_database, Tz.TimeZoneDatabase)
+```
+
+## Setup
+
+Run this cell next: every example below depends on it. It imports `Tempo.Sigils`, which provides the `~o` sigil the examples use to write a Tempo value as ISO 8601 text — `~o"2026-06-15"` is the whole day of 15 June 2026. The import brings in only `sigil_o/2` and `sigil_TEMPO/2`, no other functions.
+
+It needs a cell of its own because Livebook compiles a whole cell before running it, so the setup cell above can't import a module that its own `Mix.install/2` has yet to fetch.
+
+```elixir
+import Tempo.Sigils
 ```
 
 ## Tempo
@@ -57,8 +71,6 @@ The value is not a point that we later stretch into a range. Its bounds are real
 <!-- slide: code -->
 
 ```elixir
-import Tempo.Sigils
-
 case Tempo.to_interval(~o"2026-09-02") do
   {:ok, interval} ->
     Tempo.Interval.endpoints(interval)
@@ -123,16 +135,16 @@ month_ends
 
 * The usual answers are a hard-coded table that runs out, or a cron string in a format only your app understands. ISO 8601-2 has a syntax for it, and it round-trips.
 
-* ~o"R/../P1Y/FL11M4I4KN"
+* ~o"R/../P1Y/FL11M4K4IN"
 
-  * Read it left to right: `R/../P1Y` is an unbounded yearly recurrence. `FL…N` wraps a selection. Inside, `11M` is November, `4I` is the fourth instance, `4K` is Thursday.
+  * Read it left to right: `R/../P1Y` is an unbounded yearly recurrence. `FL…N` wraps a selection. Inside, `11M` is November, `4K` is Thursday, `4I` is the fourth instance.
 
   * "Every year, in November, the fourth Thursday."
 
 <!-- slide: code -->
 
 ```elixir
-{:ok, thanksgiving} = Tempo.to_interval(~o"R5/2026-01-01/P1Y/FL11M4I4KN")
+{:ok, thanksgiving} = Tempo.to_interval(~o"R5/2026-01-01/P1Y/FL11M4K4IN")
 
 thanksgiving
 ```
@@ -142,7 +154,7 @@ thanksgiving
 <!-- slide: code -->
 
 ```elixir
-Tempo.explain(~o"R5/2026-01-01/P1Y/FL11M4I4KN") |> IO.puts()
+Tempo.explain(~o"R5/2026-01-01/P1Y/FL11M4K4IN") |> IO.puts()
 ```
 
 ## The last one, and the awkward one
@@ -154,7 +166,7 @@ Tempo.explain(~o"R5/2026-01-01/P1Y/FL11M4I4KN") |> IO.puts()
 <!-- slide: code -->
 
 ```elixir
-{:ok, memorial_day} = Tempo.to_interval(~o"R5/2026-01-01/P1Y/FL5M-1I1KN")
+{:ok, memorial_day} = Tempo.to_interval(~o"R5/2026-01-01/P1Y/FL5M1K-1IN")
 
 memorial_day
 ```
@@ -182,8 +194,8 @@ election_day
 
 ```elixir
 [
-  ~o"R5/2026-01-01/P1Y/FL11M4I4KN",
-  ~o"R5/2026-01-01/P1Y/FL5M-1I1KN",
+  ~o"R5/2026-01-01/P1Y/FL11M4K4IN",
+  ~o"R5/2026-01-01/P1Y/FL5M1K-1IN",
   ~o"R3/2028-01-01/P4Y/FL11M{2..8}D2KN"
 ]
 |> Enum.each(fn rule -> IO.puts(Tempo.explain(rule) <> "\n") end)
