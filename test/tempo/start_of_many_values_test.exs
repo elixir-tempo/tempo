@@ -154,9 +154,15 @@ defmodule Tempo.StartOfManyValuesTest do
                [~o"2025-12-31", minutes, ~o"2026-06"]
     end
 
-    test "is refused still where its years alone are more than are listed" do
+    test "starts at its first year, however many years it is written with" do
+      # Its years were listed before the first was read, and it was refused.
+      assert Compare.start_point(~o"{1..99999999}Y6M") == {:ok, ~o"1Y6M"}
+      assert Tempo.compare(~o"{1..99999999}Y6M", ~o"0001-06") == :eq
+    end
+
+    test "is refused still where a mask stands for more years than are listed" do
       assert {:error, %ConversionError{reason: :too_many_values}} =
-               Compare.start_point(~o"{1..99999999}Y6M")
+               Compare.start_point(~o"XXXXXY6M")
     end
   end
 end

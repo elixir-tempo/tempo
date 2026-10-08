@@ -714,4 +714,43 @@ defmodule Tempo.EnumerationWalk.Test do
       refute Enum.empty?(~o"2026Y/2030Y")
     end
   end
+
+  describe "a long run of years" do
+    # Each year of a range was listed before the first was read: two values
+    # of `{1..99999999}Y` took thirteen seconds, and a longer run all the
+    # memory there was. The run is read a year at a time.
+    @tag timeout: 10_000
+    test "is read a year at a time, however long it is" do
+      assert Enum.take(~o"{1..99999999}Y", 3) == [~o"1Y", ~o"2Y", ~o"3Y"]
+      assert Enum.take(~o"{1..9999999999}Y6M", 2) == [~o"1Y6M", ~o"2Y6M"]
+
+      assert Enum.take(~o"{1..99999999}Y{6,12}M", 3) == [~o"1Y6M", ~o"1Y12M", ~o"2Y6M"]
+    end
+
+    test "is the years it was when they were listed" do
+      # A run of more years than the walk reads at once, held to the
+      # numbers themselves.
+      years = fn value -> for %Tempo{time: [year: year]} <- Enum.to_list(value), do: year end
+
+      assert years.(~o"{1900..2100}Y") == Enum.to_list(1900..2100)
+      assert years.(~o"{-100..100}Y") == Enum.to_list(-100..100)
+      assert years.(~o"{-300..-100}Y") == Enum.to_list(-300..-100)
+
+      months =
+        for %Tempo{time: [year: year, month: month]} <- Enum.to_list(~o"{1990..2060}Y{1,7}M"),
+            do: {year, month}
+
+      assert months == for(year <- 1990..2060, month <- [1, 7], do: {year, month})
+    end
+
+    test "has no year the calendar lacks: the Julian calendar's run passes over year 0" do
+      julian = Tempo.from_iso8601!("{-100..100}Y", Calendrical.Julian)
+      years = for %Tempo{time: [year: year]} <- Enum.to_list(julian), do: year
+
+      assert years == Enum.to_list(-100..-1) ++ Enum.to_list(1..100)
+
+      long = Tempo.from_iso8601!("{-2..99999999}Y", Calendrical.Julian)
+      assert for(%Tempo{time: [year: year]} <- Enum.take(long, 4), do: year) == [-2, -1, 1, 2]
+    end
+  end
 end

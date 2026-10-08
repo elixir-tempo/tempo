@@ -415,6 +415,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A long run of years is walked a year at a time: `Enum.take(~o"{1..99999999}Y", 2)` is immediate where it took thirteen seconds, each year having been listed before the first was read. `Tempo.compare/3` sorts such a value by its first year, where it raised.
+
 * `Tempo.compare/3` finds where a value that names many values starts from its first value: one of 8,064 values took 130 ms and takes under one, and one of more than 10,000 raised a `Tempo.ConversionError` where it now sorts. `Tempo.explain/1` counts more than twelve times of day in a headline where it listed each, 1,440 for every minute of a day.
 
 * `Tempo.explain/1` headlines a date with no year with its time of day: `~o"6M15DT10H"` is "June 15 at hour 10, in any year", where the time was left out. A day of the year or of the week with no year and a time is written at its ends as the value is, where the words for its date were run into the time.

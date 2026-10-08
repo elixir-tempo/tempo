@@ -195,6 +195,10 @@ defmodule Tempo.Enumeration do
     descend(walk, ancestors, [{{unit, {:group, group}}, settled?} | rest])
   end
 
+  # A run of years is read from its first, and the rest of it left a run.
+  def next(%{stack: [{ancestors, unit, [%Range{} = run | values], rest} | stack]} = walk),
+    do: next(%{walk | stack: [{ancestors, unit, unrolled(run, values), rest} | stack]})
+
   # Each value of the last component is a value of the walk.
   def next(%{stack: [{ancestors, unit, values, []} | stack]} = walk),
     do: read(walk, stack, ancestors, unit, values)
@@ -222,6 +226,10 @@ defmodule Tempo.Enumeration do
     end
   end
 
+  defp read_ahead([%Range{} = run | values], count, ancestors, unit, tempo, read)
+       when count > 0,
+       do: read_ahead(unrolled(run, values), count, ancestors, unit, tempo, read)
+
   defp read_ahead([value | values], count, ancestors, unit, tempo, read) when count > 0 do
     value = yielded(tempo, :lists.reverse(ancestors, [{unit, value}]))
     read_ahead(values, count - 1, ancestors, unit, tempo, [value | read])
@@ -229,6 +237,13 @@ defmodule Tempo.Enumeration do
 
   defp read_ahead(left, _count, _ancestors, _unit, _tempo, read),
     do: {:lists.reverse(read), left}
+
+  # The first value of a run before the values after it, and the rest of the
+  # run still a run.
+  defp unrolled(%Range{first: first, last: first}, values), do: [first | values]
+
+  defp unrolled(%Range{first: first, last: last, step: step}, values),
+    do: [first, Range.new(first + step, last, step) | values]
 
   # The components before the one read, and the value they are read into, as
   # every value read after them holds them. Where they name a week and a day
@@ -448,11 +463,7 @@ defmodule Tempo.Enumeration do
   # and was refused past the most that are listed. `:none` where it names no
   # value.
   @spec first_member(Tempo.t()) :: {:ok, Tempo.t()} | :none | {:error, Exception.t()}
-  def first_member(%Tempo{time: time} = tempo) do
-    if more_years_than_listed?(time),
-      do: {:error, ConversionError.exception(value: tempo, reason: :too_many_values)},
-      else: tempo |> walk() |> first_shown()
-  end
+  def first_member(%Tempo{} = tempo), do: tempo |> walk() |> first_shown()
 
   defp first_shown(%{tempo: tempo} = walk) do
     case next(walk) do
@@ -856,6 +867,18 @@ defmodule Tempo.Enumeration do
   # years and `{-1..1}Y` the years from -1 to 1. Those are the years the
   # calendar has between its ends: the Julian calendar has no year 0, and
   # there the range is -1 and 1.
+  #
+  # A long run of years is left as the run it is, and read a year at a time
+  # (`unrolled/2`): each was listed before the first was read, so two values
+  # of `{1..99999999}Y` took thirteen seconds and a longer run all the
+  # memory there was. It is cut at a year the calendar lacks.
+  defp listed(:year, %Range{step: 1} = years, calendar)
+       when years.last - years.first >= @read_ahead do
+    if UnitValues.year?(0, calendar) or years.first > 0 or years.last < 0,
+      do: {:ok, [years]},
+      else: {:ok, Enum.filter([years.first..-1//1, 1..years.last//1], &(Range.size(&1) > 0))}
+  end
+
   defp listed(:year, %Range{} = years, calendar),
     do: {:ok, Enum.filter(years, &UnitValues.year?(&1, calendar))}
 

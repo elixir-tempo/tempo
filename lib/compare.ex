@@ -637,10 +637,11 @@ defmodule Tempo.Compare do
     offset and the other none, and `Tempo.UnanchoredError` when one has
     a year and the other none: neither pair has an order.
 
-  * Raises `Tempo.ConversionError` when a value is written with more than
-    10,000 years, which are read whole to find where it starts. A value
-    of any number of months, days or times starts at its first, which is
-    found without the rest.
+  * Raises `Tempo.ConversionError` where a value's start cannot be found
+    without listing more than 10,000 values: a mask that stands for more
+    years than that (`~o"XXXXXY6M"`). A value of any number of years,
+    months, days or times that names each of them starts at its first,
+    which is found without the rest.
 
   ### Examples
 
