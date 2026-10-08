@@ -42,8 +42,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **Two implementations of a constraint remain** — `Tempo.select/2` still places a fraction of a second (`~o"T10H30M15.5S"`), a group (`~o"2G3MU"`) and the two ends of a span (`~o"T09/T17"`) on its period by the merge (`merge_constraint/2` in `lib/tempo/select.ex`), none of which a selection can be written with, and a time under a week is on the week's first date by a constraint and on each of its days by a selection. To do, for the merge to go: each through the resolver.
 
-* [ ] **`Tempo.explain/1` of a rule of one occurrence** — `R1/2019-01-01/P1D/FL7KN` and `R1/P1D/2019-01-08/FL7KN` are explained as an interval given as a start, or an end, and a duration, with no word of the rule that selects their one occurrence, and `R1/../P1D/FL7KN` as an unusual shape. Found 2026-10-08.
-
 * [ ] **`t:Tempo.t/0` does not describe every value** — its `token_list` names ten units and no selection, group, quarter, season, century or decade, so a spec that says `Tempo.t()` for such a value has Dialyzer read the clauses that match it as dead: `Tempo.RRule.Selection.rules_out/3` was inferred to return only `nil` (its rule is typed `rule()` since 2026-10-08), and `apply/4`, `expands?/2` and `Tempo.RRule.Rule.to_selection/2` are typed round it. To do: name every unit in the type, and take out the specs written round it.
 
 * [ ] **Livebooks install 2.0 at the release** — `getting-started`, `tempo_tour`, `scheduling-workbook` and `uncertain-dates-workbook` install `{:ex_tempo, "~> 1.6"}` and the Melbourne deck `~> 1.6.3`, while their code uses the 2.0 names: at the 2.0.0 release each installs `~> 2.0`, as `everyday-holidays` already does.
@@ -85,6 +83,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **`Tempo.explain/1` of a rule of one occurrence** — explained as the recurrence it is, with what its rule selects, however it is written (`recurs/2` in `lib/explain.ex`), and a rule with an `UNTIL` and no start is headlined by its end. 2026-10-08.
 
 * [x] **`Tempo.explain/1` words an hour as a clock time** — decided 2026-10-08 (user): `explain/1` does not extend a value's resolution. An hour is "hour 10" in a headline and a rule ("at 10:00" before), several are "hours 9 and 14", a minute with no hour is "minute 30" and comes round every hour (it was "00:30", every day), and such a time at an end is written by its units (`T30M`). 2026-10-08.
 

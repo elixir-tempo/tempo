@@ -415,6 +415,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.explain/1` explains a recurrence of one occurrence that has a rule as a recurrence, with what its rule selects, where it was "an interval given as a start and a duration" or "an unusual shape". A rule with an `UNTIL` and no start is headlined by its end, where it was called unbounded.
+
 * A rule of hours, minutes or seconds in a zone that steps past every value its parts name has no occurrence and returns the empty set, as one in no zone does: every twenty-fourth hour from 10:00 in Paris is 10:00 or 09:00, so a rule for three o'clock is empty at once, where the walk ran for six seconds to a `Tempo.UnboundedRecurrenceError`. So does a position no period has (`FREQ=DAILY;BYSETPOS=2`).
 
 * A masked week of a month with a day or a time under it is each week its digits match: `Tempo.select(~o"2026-06", ~o"XW3K")` is the Wednesday of each of June's weeks, where it was refused as not built. `Tempo.explain/1` words an unspecified unit in a selection and `Tempo.RRule.to_string/1` refuses one by name, where each raised.

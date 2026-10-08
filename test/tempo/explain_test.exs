@@ -511,6 +511,67 @@ defmodule Tempo.Explain.Test do
     end
   end
 
+  describe "a recurrence of one occurrence that has a rule" do
+    # Its occurrence is the first its rule selects. It was explained as the
+    # interval its start and its duration make, with no word of the rule,
+    # and with no start as "an unusual shape".
+    test "is explained as a recurrence, with what its rule selects" do
+      for {text, lines} <- [
+            {"R1/2019-01-01/P1D/FL7KN",
+             ["A recurrence of 1 occurrence.", "Starting: 2019-01-01.", "Selects: on a Sunday."]},
+            {"R1/P1D/2019-01-08/FL7KN",
+             [
+               "A recurrence of 1 occurrence.",
+               "Ending: 2019-01-08 (exclusive — half-open `[from, to)`).",
+               "Selects: on a Sunday."
+             ]},
+            {"R1/../P1D/FL7KN",
+             [
+               "A recurrence of 1 occurrence.",
+               "Starting: open — the rule names no start.",
+               "Selects: on a Sunday."
+             ]},
+            {"R1/2019-01-01/2019-01-02/FL7KN",
+             ["A recurrence of 1 occurrence.", "Selects: on a Sunday."]}
+          ] do
+        explained = Tempo.explain(Tempo.from_iso8601!(text))
+
+        for line <- lines do
+          assert {text, line, explained =~ line} == {text, line, true}
+        end
+
+        # One with no start is told how to give it a window or a start.
+        assert {text, explained =~ ~r/Find the occurrence|names no start of its own/} ==
+                 {text, true}
+
+        refute explained =~ "unusual shape"
+        refute explained =~ "An interval given as"
+      end
+    end
+
+    test "with no rule is the interval it is, as it was" do
+      assert Tempo.explain(~o"R1/2019-01-01/P1D") =~
+               "An interval given as a start and a duration."
+
+      assert Tempo.explain(~o"2019-01-01/P1D") =~ "An interval given as a start and a duration."
+    end
+  end
+
+  describe "a rule with an UNTIL and no start" do
+    test "is headlined by its end, where it was called unbounded" do
+      {:ok, rule} = RRule.parse("FREQ=DAILY;BYDAY=SU;UNTIL=20190108")
+      explained = Tempo.explain(rule)
+
+      assert explained =~
+               "A recurrence until 2019-01-08.\nStarting: open — the rule names no start."
+
+      refute explained =~ "unbounded"
+
+      {:ok, no_end} = RRule.parse("FREQ=DAILY;BYDAY=SU")
+      assert Tempo.explain(no_end) =~ "An unbounded recurrence."
+    end
+  end
+
   describe "a window from a time of day" do
     test "is worded in its hours and minutes" do
       # It was "the PT4H window from at 22:00".

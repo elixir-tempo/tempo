@@ -95,6 +95,14 @@ defmodule Tempo.Explain do
   # A selection is worded as it is resolved: a day with no month, selected in
   # a year, is a day of the year. A selection alone has no period until it is
   # paired with one, and is worded as it is written.
+  # A recurrence: one with no count, one of more than one occurrence, and
+  # one of one occurrence that has a rule, whose occurrence is the first its
+  # rule selects. The last was explained as the interval its start and its
+  # duration make, with no word of the rule.
+  defguardp recurs(recurrence, rule)
+            when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) or
+                   (recurrence == 1 and is_struct(rule, Tempo))
+
   # What is said of the end of a span, which is no part of it.
   @half_open "exclusive — half-open `[from, to)`"
 
@@ -177,9 +185,10 @@ defmodule Tempo.Explain do
          from: :undefined,
          to: %Tempo{},
          duration: %Tempo.Duration{},
-         recurrence: recurrence
+         recurrence: recurrence,
+         repeat_rule: rule
        })
-       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1),
+       when recurs(recurrence, rule),
        do: :recurring_interval
 
   defp classify(%Tempo.Interval{from: :undefined, to: %Tempo{}, duration: %Tempo.Duration{}}),
@@ -188,8 +197,8 @@ defmodule Tempo.Explain do
   defp classify(%Tempo.Interval{from: :undefined}), do: :open_lower_interval
   defp classify(%Tempo.Interval{to: :undefined}), do: :open_upper_interval
 
-  defp classify(%Tempo.Interval{recurrence: recurrence})
-       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1),
+  defp classify(%Tempo.Interval{recurrence: recurrence, repeat_rule: rule})
+       when recurs(recurrence, rule),
        do: :recurring_interval
 
   defp classify(%Tempo.Interval{}), do: :closed_interval
@@ -1069,12 +1078,13 @@ defmodule Tempo.Explain do
   defp interval_parts(
          %Tempo.Interval{
            recurrence: recurrence,
+           repeat_rule: rule,
            from: :undefined,
            to: %Tempo{} = to,
            duration: %Tempo.Duration{time: duration_time}
          } = interval
        )
-       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
+       when recurs(recurrence, rule) do
     selection = selection_of(interval.repeat_rule)
 
     [
@@ -1146,11 +1156,12 @@ defmodule Tempo.Explain do
   defp interval_parts(
          %Tempo.Interval{
            recurrence: recurrence,
+           repeat_rule: rule,
            from: %Tempo{} = from,
            duration: %Tempo.Duration{time: dt}
          } = interval
        )
-       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
+       when recurs(recurrence, rule) do
     selection = selection_of(interval.repeat_rule)
 
     [
@@ -1172,15 +1183,16 @@ defmodule Tempo.Explain do
   defp interval_parts(
          %Tempo.Interval{
            recurrence: recurrence,
+           repeat_rule: rule,
            from: nil,
            duration: %Tempo.Duration{time: duration_time}
          } = interval
        )
-       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
+       when recurs(recurrence, rule) do
     selection = selection_of(interval.repeat_rule)
 
     [
-      {:headline, recurrence_headline(recurrence)},
+      {:headline, open_start_headline(recurrence, interval.to)},
       {:span, "Starting: open — the rule names no start."},
       selection && {:span, "Selects: #{selection_prose(selection, rule_naming(interval))}."},
       {:span, "Cadence: #{duration_prose(duration_time)}."},
@@ -1196,11 +1208,12 @@ defmodule Tempo.Explain do
   defp interval_parts(
          %Tempo.Interval{
            recurrence: recurrence,
+           repeat_rule: rule,
            from: %Tempo.Set{} = domain,
            duration: %Tempo.Duration{time: dt}
          } = interval
        )
-       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
+       when recurs(recurrence, rule) do
     selection = selection_of(interval.repeat_rule)
 
     [
@@ -1236,17 +1249,22 @@ defmodule Tempo.Explain do
   # where the one before ends and is as long.
   defp interval_parts(%Tempo.Interval{
          recurrence: recurrence,
+         repeat_rule: rule,
          from: %Tempo{} = from,
          to: %Tempo{} = to,
          duration: nil
        })
-       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
+       when recurs(recurrence, rule) do
+    selection = selection_of(rule)
+
     [
       {:headline, recurrence_headline(recurrence)},
       {:span, "First occurrence: #{told_endpoint(from)} to #{told_endpoint(to, "exclusive")}."},
       {:span, "Each occurrence starts where the one before ends and is as long."},
+      selection && {:span, "Selects: #{selection_prose(selection, {calendar_of(rule), nil})}."},
       {:hint, recurrence_hint(recurrence, from)}
     ]
+    |> Enum.reject(&is_nil/1)
   end
 
   defp interval_parts(%Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to} = interval) do
@@ -1498,11 +1516,12 @@ defmodule Tempo.Explain do
   # rest back to back.
   defp rule_phrase(%Tempo.Interval{
          recurrence: recurrence,
+         repeat_rule: rule,
          from: %Tempo{} = from,
          to: %Tempo{} = to,
          duration: nil
        })
-       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
+       when recurs(recurrence, rule) do
     "#{render_endpoint(from)} to #{render_endpoint(to)}, then back to back#{times_phrase(recurrence)}"
   end
 
@@ -1511,12 +1530,13 @@ defmodule Tempo.Explain do
   defp rule_phrase(
          %Tempo.Interval{
            recurrence: recurrence,
+           repeat_rule: rule,
            from: :undefined,
            to: %Tempo{} = to,
            duration: %Tempo.Duration{time: cadence}
          } = interval
        )
-       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
+       when recurs(recurrence, rule) do
     selection = selection_of(interval.repeat_rule)
 
     [
@@ -1528,10 +1548,14 @@ defmodule Tempo.Explain do
   end
 
   defp rule_phrase(
-         %Tempo.Interval{recurrence: recurrence, duration: %Tempo.Duration{time: cadence}} =
+         %Tempo.Interval{
+           recurrence: recurrence,
+           repeat_rule: rule,
+           duration: %Tempo.Duration{time: cadence}
+         } =
            interval
        )
-       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
+       when recurs(recurrence, rule) do
     selection = selection_of(interval.repeat_rule)
 
     [
@@ -1579,6 +1603,7 @@ defmodule Tempo.Explain do
 
   defp until_phrase(_interval), do: nil
 
+  defp times_phrase(1), do: ", once"
   defp times_phrase(count) when is_integer(count), do: ", #{count} times"
   defp times_phrase(_unbounded), do: ""
 
@@ -1972,7 +1997,15 @@ defmodule Tempo.Explain do
   defp selection_of(%Tempo{time: [{:selection, selection} | units]}), do: selection ++ units
   defp selection_of(_), do: nil
 
+  # A rule with no start that runs until an end, as an RRULE with `UNTIL`
+  # read with no start is, has an end: it was "An unbounded recurrence".
+  defp open_start_headline(:infinity, %Tempo{} = until),
+    do: "A recurrence until #{render_endpoint(until)}."
+
+  defp open_start_headline(recurrence, _no_end), do: recurrence_headline(recurrence)
+
   defp recurrence_headline(:infinity), do: "An unbounded recurrence."
+  defp recurrence_headline(1), do: "A recurrence of 1 occurrence."
   defp recurrence_headline(n) when is_integer(n), do: "A recurrence of #{n} occurrences."
 
   defp open_start_hint do
@@ -1986,6 +2019,8 @@ defmodule Tempo.Explain do
   defp recurrence_hint(:infinity, from),
     do:
       "List a window of occurrences: `Tempo.to_interval(interval, within: #{window_example(from)})`."
+
+  defp recurrence_hint(1, _from), do: "Find the occurrence: `Tempo.to_interval(interval)`."
 
   defp recurrence_hint(n, _from) when is_integer(n),
     do: "List the #{n} occurrences: `Tempo.to_interval(interval)`."
