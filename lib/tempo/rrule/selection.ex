@@ -72,11 +72,10 @@ defmodule Tempo.RRule.Selection do
   alias Tempo.Validation
 
   @typedoc """
-  A rule: a `%Tempo{}` whose `:time` is a selection (`[selection: [...]]`) and any units after it, as `Tempo.RRule.Rule.to_selection/2` builds one.
+  A rule: a `t:Tempo.t/0` whose `:time` is a selection (`[selection: [...]]`) and any units after it, as `Tempo.RRule.Rule.to_selection/2` builds one.
 
-  It is not a `t:Tempo.t/0`, whose units do not name a selection: a function whose rule is typed as one has the clauses that read the rule taken for dead by Dialyzer.
   """
-  @type rule :: %Tempo{time: [{atom(), term()}, ...]}
+  @type rule :: Tempo.t()
 
   # ISO 8601's weeks, and RFC 5545's by default, start on a Monday, weekday 1.
   @monday 1

@@ -238,9 +238,7 @@ defmodule Tempo.RRule.Rule do
       ~o"L3M10DN"
 
   """
-  # No `@spec`: the result is a `%Tempo{}` carrying a `{:selection, …}` token,
-  # which the `Tempo.t()` type's `token_list()` does not yet enumerate, so a
-  # `Tempo.t()` spec would read as an incomplete return type to Dialyzer.
+  @spec to_selection(t(), Tempo.t() | nil) :: Tempo.t() | nil
   def to_selection(%__MODULE__{} = rule, dtstart \\ nil) do
     rule = with_parts_of_start(rule, dtstart)
 

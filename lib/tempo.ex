@@ -161,23 +161,45 @@ defmodule Tempo do
     metadata: %{}
   ]
 
-  # TODO refine this to be more specific
-  @type token :: integer() | list() | tuple()
+  @typedoc """
+  What a unit of a value holds.
+
+  * A whole number: the 15 of `~o"2026-06-15"`.
+
+  * A list of whole numbers and ranges, for a set (`{1,15}D`, `{1..-1}M`).
+
+  * A tuple, for a group (`{:group, 4..6}`, the second quarter), unspecified digits (`{:mask, [1, 9, :X, :X]}`), a number with a margin of error or significant digits (`{2018, [margin_of_error: 2]}`) and a leap month of a lunisolar calendar (`{5, :leap}`).
+
+  * `:any`, for a unit that is wholly unspecified (`X*`).
+
+  * A number with a fraction, in a value as the parser reads it and before it is validated: a validated value holds none.
+
+  """
+  @type token :: integer() | float() | :any | list() | tuple()
 
   @type time_unit ::
           :year | :month | :week | :day | :hour | :minute | :second | :microsecond
 
+  @typedoc """
+  The units of a value, coarsest first, each with what it holds.
+
+  A month is counted from the year's first (`:month`) or named as a lunisolar calendar names it (`:traditional_month`); a week is ISO 8601's (`:week`) or the calendar's own (`:calendar_week`); a day is of its month (`:day`), of its year (`:day_of_year`) or of its week (`:day_of_week`). A century, a decade, a half and a quarter are groups of years or of months. A `:selection` holds the parts of a rule (`L1K1IN`, the first Monday), a keyword list of its own.
+
+  """
   @type token_list :: [
           {:year, token}
           | {:month, token}
+          | {:traditional_month, token}
           | {:week, token}
+          | {:calendar_week, token}
           | {:day, token}
           | {:day_of_year, token}
           | {:day_of_week, token | [integer()]}
           | {:hour, token}
           | {:minute, token}
           | {:second, token}
-          | {:microsecond, Tempo.Microsecond.t()}
+          | {:microsecond, Tempo.Microsecond.t() | [Tempo.Microsecond.t()]}
+          | {:selection, keyword()}
         ]
 
   @type time_shift :: [{:hour, integer()} | {:minute, integer()} | {:second, integer()}] | nil
