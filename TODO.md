@@ -84,6 +84,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Done
 
+* [x] **`Tempo.explain/1` of a date with no year and a time** — headlined with its time (`at_clock/1` in `lib/explain.ex`), for each shape of a day with no year, one value or several, and its ends written as the value is where its date has no ISO spelling. Asked by the user 2026-10-08. 2026-10-08.
+
 * [x] **`Tempo.explain/1` of a rule of one occurrence** — explained as the recurrence it is, with what its rule selects, however it is written (`recurs/2` in `lib/explain.ex`), and a rule with an `UNTIL` and no start is headlined by its end. 2026-10-08.
 
 * [x] **`Tempo.explain/1` words an hour as a clock time** — decided 2026-10-08 (user): `explain/1` does not extend a value's resolution. An hour is "hour 10" in a headline and a rule ("at 10:00" before), several are "hours 9 and 14", a minute with no hour is "minute 30" and comes round every hour (it was "00:30", every day), and such a time at an end is written by its units (`T30M`). 2026-10-08.

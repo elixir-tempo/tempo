@@ -511,6 +511,37 @@ defmodule Tempo.Explain.Test do
     end
   end
 
+  describe "a date with no year and a time of day" do
+    # Its headline named the date and left the time out: "June 15, in any
+    # year" for ten o'clock on it.
+    test "is headlined with its time, as far as the time is written" do
+      for {text, headline} <- [
+            {"6M15DT10H", "June 15 at hour 10, in any year (no year — it recurs)."},
+            {"6M15DT10H30M", "June 15 at 10:30, in any year (no year — it recurs)."},
+            {"6M15DT10H30M15S", "June 15 at 10:30:15, in any year (no year — it recurs)."},
+            {"6M15D", "June 15, in any year (no year — it recurs)."},
+            {"15DT10H", "Day 15 of any month at hour 10 (no year or month — it recurs)."},
+            {"166OT10H", "Day 166 of any year at hour 10 (no year — it recurs)."},
+            {"25W2KT10H", "Tuesday of week 25 at hour 10, in any year (no year — it recurs)."},
+            {"2KT10H", "Tuesday of any week at hour 10 (no year or week — it recurs)."},
+            {"6M15DT{9,14}H",
+             "The 15th of June at hours 9 and 14, in any year (no year — it recurs)."}
+          ] do
+        assert {text, headline(text)} == {text, headline}
+      end
+
+      assert headline("25W2KT10H30M", Calendrical.ISOWeek) ==
+               "Day 2 of week 25 at 10:30, in any year (no year — it recurs)."
+    end
+
+    test "is written at its ends as the value is, where its date has no ISO spelling" do
+      # The words for the date were run into the time: "day 166 of the yearT10".
+      assert Tempo.explain(~o"166OT10H") =~ ~s|Span: [~o"166OT10H", ~o"166OT11H").|
+      assert Tempo.explain(~o"2KT10H") =~ ~s|Span: [~o"2KT10H", ~o"2KT11H").|
+      assert Tempo.explain(~o"6M15DT10H") =~ "Span: [--06-15T10, --06-15T11)."
+    end
+  end
+
   describe "a recurrence of one occurrence that has a rule" do
     # Its occurrence is the first its rule selects. It was explained as the
     # interval its start and its duration make, with no word of the rule,

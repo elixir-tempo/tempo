@@ -533,7 +533,7 @@ defmodule Tempo.Explain do
         :error -> "#{placed("day", day)} of #{placed("month", month)}"
       end
 
-    capitalised("#{date}, in any year (no year — it recurs).")
+    capitalised("#{date}#{at_clock(time)}, in any year (no year — it recurs).")
   end
 
   defp yearless_headline(:yearless_month, %Tempo{time: time} = tempo) do
@@ -550,31 +550,44 @@ defmodule Tempo.Explain do
 
   defp yearless_headline(:day_only, %Tempo{time: time}) do
     capitalised(
-      "#{placed("day", find_unit(time, :day))} of any month (no year or month — it recurs)."
+      "#{placed("day", find_unit(time, :day))} of any month#{at_clock(time)} " <>
+        "(no year or month — it recurs)."
     )
   end
 
   defp yearless_headline(:day_of_year_only, %Tempo{time: time}) do
     capitalised(
-      "#{placed("day", find_unit(time, :day_of_year))} of any year (no year — it recurs)."
+      "#{placed("day", find_unit(time, :day_of_year))} of any year#{at_clock(time)} " <>
+        "(no year — it recurs)."
     )
   end
 
   defp yearless_headline(:yearless_week_date, %Tempo{time: time} = tempo) do
-    "#{yearless_weekday(tempo)} of #{placed("week", find_unit(time, :week))}, " <>
-      "in any year (no year — it recurs)."
+    "#{yearless_weekday(tempo)} of #{placed("week", find_unit(time, :week))}" <>
+      "#{at_clock(time)}, in any year (no year — it recurs)."
   end
 
   defp yearless_headline(:yearless_week, %Tempo{time: time}) do
     capitalised("#{placed("week", find_unit(time, :week))} of any year (no year — it recurs).")
   end
 
-  defp yearless_headline(:weekday_only, %Tempo{} = tempo),
-    do: "#{yearless_weekday(tempo)} of any week (no year or week — it recurs)."
+  defp yearless_headline(:weekday_only, %Tempo{time: time} = tempo) do
+    "#{yearless_weekday(tempo)} of any week#{at_clock(time)} (no year or week — it recurs)."
+  end
 
   defp yearless_headline(:none, %Tempo{} = tempo) do
     {unit, _scale} = Tempo.resolution(tempo)
     "A Tempo value at #{inspect(unit)} resolution."
+  end
+
+  # The time of day a value with a day is written to, as the words that
+  # follow its date: " at hour 10", " at 10:30", and nothing where it has
+  # none. A date with no year was headlined without its time: "June 15, in
+  # any year" for ten o'clock on it.
+  defp at_clock(time) do
+    if Enum.any?([:hour, :minute, :second], &is_integer(find_unit(time, &1))),
+      do: " at #{clock_phrase(time)}",
+      else: ""
   end
 
   # A unit by its number, or by its place from the end where it is counted
@@ -713,7 +726,7 @@ defmodule Tempo.Explain do
 
   defp shape_phrase([:month, :day], %Tempo{time: time} = tempo) do
     {:ok,
-     "#{days_phrase(find_unit(time, :day))} of #{months_phrase(tempo)}, " <>
+     "#{days_phrase(find_unit(time, :day))} of #{months_phrase(tempo)}#{at_times(time)}, " <>
        "in any year (no year — it recurs)"}
   end
 
@@ -721,13 +734,18 @@ defmodule Tempo.Explain do
   # days 41 to 50), so it is not days of a month.
   defp shape_phrase([:day], %Tempo{time: time}) do
     case find_unit(time, :day) do
-      {:group, _days} -> :error
-      days -> {:ok, "#{days_phrase(days)} of any month (no year or month — it recurs)"}
+      {:group, _days} ->
+        :error
+
+      days ->
+        {:ok, "#{days_phrase(days)} of any month#{at_times(time)} (no year or month — it recurs)"}
     end
   end
 
   defp shape_phrase([:day_of_year], %Tempo{time: time}) do
-    {:ok, "#{numbered("day", find_unit(time, :day_of_year))} of any year (no year — it recurs)"}
+    {:ok,
+     "#{numbered("day", find_unit(time, :day_of_year))} of any year#{at_times(time)} " <>
+       "(no year — it recurs)"}
   end
 
   defp shape_phrase([:week], %Tempo{time: time}),
@@ -735,12 +753,13 @@ defmodule Tempo.Explain do
 
   defp shape_phrase([:week, :day_of_week], %Tempo{time: time} = tempo) do
     {:ok,
-     "#{weekdays_phrase(tempo)} of #{weeks_phrase(find_unit(time, :week))}, " <>
+     "#{weekdays_phrase(tempo)} of #{weeks_phrase(find_unit(time, :week))}#{at_times(time)}, " <>
        "in any year (no year — it recurs)"}
   end
 
-  defp shape_phrase([:day_of_week], %Tempo{} = tempo),
-    do: {:ok, "#{weekdays_phrase(tempo)} of any week (no year or week — it recurs)"}
+  defp shape_phrase([:day_of_week], %Tempo{time: time} = tempo) do
+    {:ok, "#{weekdays_phrase(tempo)} of any week#{at_times(time)} (no year or week — it recurs)"}
+  end
 
   defp shape_phrase(_another_shape, _tempo), do: :error
 
@@ -1766,6 +1785,11 @@ defmodule Tempo.Explain do
       # rendering rather than `?`. `Inspect` is total — it falls back to a
       # labelled struct view for anything it cannot encode.
       {nil, nil} -> inspect(tempo)
+      {{:in_words, words}, nil} -> words
+      # A day of the year and a day of the week with no year have no ISO
+      # spelling for a time to follow: the words were run into it ("day 166
+      # of the yearT10").
+      {{:in_words, _words}, _time} -> inspect(tempo)
       {date, nil} -> date
       {nil, time} -> "T#{time}#{render_shift(tempo)}"
       {date, time} -> "#{date}T#{time}#{render_shift(tempo)}"
@@ -1836,7 +1860,7 @@ defmodule Tempo.Explain do
   # The yearless week and ordinal axes have their own ISO spellings.
   defp render_alternate_axis(time) do
     case find_unit(time, :day_of_year) do
-      day when is_integer(day) -> "day #{day} of the year"
+      day when is_integer(day) -> {:in_words, "day #{day} of the year"}
       _no_plain_ordinal -> render_week_axis(find_unit(time, :week), find_unit(time, :day_of_week))
     end
   end
@@ -1846,7 +1870,10 @@ defmodule Tempo.Explain do
     do: "-W#{two_digit(week)}-#{day}"
 
   defp render_week_axis(week, _day) when is_integer(week), do: "-W#{two_digit(week)}"
-  defp render_week_axis(_week, day) when is_integer(day), do: "day #{day} of the week"
+
+  defp render_week_axis(_week, day) when is_integer(day),
+    do: {:in_words, "day #{day} of the week"}
+
   defp render_week_axis(_week, _day), do: nil
 
   # The time of day an end is written to, and no more of it: an hour alone
