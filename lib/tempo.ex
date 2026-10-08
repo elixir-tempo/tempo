@@ -14429,11 +14429,13 @@ defmodule Tempo do
   @doc """
   Return a multi-line prose explanation of any Tempo value — what it is, what it spans, and how to work with it.
 
-  For structured output that renderers can style (ANSI, HTML), use `Tempo.Explain.explain/1` directly and pick a formatter. A recurrence set is described member by member, each led by its name; a week by its number, with the days it spans; a month by the name its calendar gives it; and a value holding a set or a group by each value it names.
+  For structured output that renderers can style (ANSI, HTML), use `Tempo.Explain.explain/1` directly and pick a formatter. A recurrence set is described member by member, each led by its name; a week by its number, with the day it starts on; a month by the name its calendar gives it; and a value holding a set or a group by each value it names.
 
   ### Arguments
 
   * `value` is any Tempo value: a `t:Tempo.t/0`, an interval, a set, a duration or a recurrence set. Anything else is described as a value Tempo does not know.
+
+  An end of a span is written as far as the value is written, and no further: a year is `1984` and a month `1984-06`, so `~o"1984/1986"` runs from 1984 to 1986. Where that does not say which day it starts on, the day is told beside it: a week (`2026-W25 (starts on 2026-06-15)`), and a year or a month of a calendar whose year does not begin on the first day of its first month.
 
   ### Returns
 
@@ -14444,8 +14446,11 @@ defmodule Tempo do
       iex> Tempo.explain(~o"2026-06") |> String.split("\\n") |> hd()
       "June 2026."
 
-      iex> Tempo.explain(~o"2026-W25") |> String.split("\\n") |> Enum.take(2)
-      ["Week 25 of 2026.", "Span: [2026-06-15, 2026-06-22)."]
+      iex> Tempo.explain(~o"1984/1986") |> String.split("\\n")
+      ["A closed interval.", "From: 1984.", "To:   1986 (exclusive — half-open `[from, to)`)."]
+
+      iex> Tempo.explain(~o"2026-W25") |> String.split("\\n") |> Enum.take(3)
+      ["Week 25 of 2026.", "Span: [2026-W25, 2026-W26).", "Starts on 2026-06-15."]
 
   """
   @spec explain(term()) :: String.t()

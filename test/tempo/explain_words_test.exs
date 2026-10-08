@@ -84,7 +84,8 @@ defmodule Tempo.ExplainWordsTest do
 
       assert explained =~ "June 15, 2026 at 10:30.\n"
       assert explained =~ "Span: [2026-06-15T10:30, 2026-06-15T10:31)."
-      assert explain("2026-06-15T10") =~ "Span: [2026-06-15T10:00, 2026-06-15T11:00)."
+      # An hour is written as far as the hour, and to no minute it does not have.
+      assert explain("2026-06-15T10") =~ "Span: [2026-06-15T10, 2026-06-15T11)."
     end
   end
 
@@ -133,7 +134,9 @@ defmodule Tempo.ExplainWordsTest do
       # was written `800`.
       for {text, from, to} <- [
             {"0800-06-15", "0800-06-15", "0800-06-16"},
-            {"0044", "0044-01-01", "0045-01-01"},
+            {"0044", "0044", "0045"},
+            {"-0044", "-0044", "-0043"},
+            {"0800-06", "0800-06", "0800-07"},
             {"0000-01-01", "0000-01-01", "0000-01-02"},
             {"-0044Y3M15D", "-0044-03-15", "-0044-03-16"},
             {"2026-06-15", "2026-06-15", "2026-06-16"}
@@ -146,8 +149,8 @@ defmodule Tempo.ExplainWordsTest do
       assert Date.to_iso8601(Date.new!(-44, 3, 15)) == "-0044-03-15"
 
       interval = explain("0800-06/0900-06")
-      assert interval =~ "From: 0800-06-01."
-      assert interval =~ "To:   0900-06-01 (exclusive"
+      assert interval =~ "From: 0800-06."
+      assert interval =~ "To:   0900-06 (exclusive"
 
       assert explain("0800Y25W3K[u-ca=iso-week]") =~ "Span: [0800-W25-3, 0800-W25-4)."
     end

@@ -123,7 +123,7 @@ And when you're looking at an unfamiliar value in iex, ask it to explain itself:
 iex> Tempo.explain(~o"156X")
 """
 A masked year spanning the 1560s.
-Span: [1560-01-01, 1570-01-01).
+Span: [1560, 1570).
 Iterates at :month granularity.
 Convert it to an interval with `Tempo.to_interval/1`.
 """
@@ -131,8 +131,8 @@ Convert it to an interval with `Tempo.to_interval/1`.
 iex> Tempo.explain(~o"1984?/2004~")
 """
 A closed interval.
-From: 1984-01-01.
-To:   2004-01-01 (exclusive — half-open `[from, to)`).
+From: 1984.
+To:   2004 (exclusive — half-open `[from, to)`).
 """
 ```
 

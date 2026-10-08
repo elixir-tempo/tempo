@@ -59,17 +59,22 @@ defmodule Tempo.Explain.Test do
   end
 
   describe "week values" do
-    test "a week is headlined as its week, with the days it spans" do
+    test "a week is headlined as its week, with its span and the day it starts on" do
       prose = Tempo.explain(~o"2026-W25")
 
       assert prose =~ "Week 25 of 2026."
-      assert prose =~ "Span: [2026-06-15, 2026-06-22)."
+      assert prose =~ "Span: [2026-W25, 2026-W26).\nStarts on 2026-06-15."
       refute prose =~ "The year"
     end
 
-    test "a week at either end of its year spans the days it has, in whichever year" do
-      assert Tempo.explain(~o"2026-W01") =~ "Span: [2025-12-29, 2026-01-05)."
-      assert Tempo.explain(~o"2026-W53") =~ "Span: [2026-12-28, 2027-01-04)."
+    test "a week at either end of its year starts on the day it does, in whichever year" do
+      assert Tempo.explain(~o"2026-W01") =~ "Span: [2026-W01, 2026-W02).\nStarts on 2025-12-29."
+      assert Tempo.explain(~o"2026-W53") =~ "Span: [2026-W53, 2027-W01).\nStarts on 2026-12-28."
+
+      # The measure: the Mondays of those weeks.
+      assert Date.from_iso8601!("2025-12-29") |> Date.day_of_week() == 1
+      assert :calendar.iso_week_number({2025, 12, 29}) == {2026, 1}
+      assert :calendar.iso_week_number({2026, 12, 28}) == {2026, 53}
     end
 
     # In the Gregorian calendar a week and a day of it are the calendar date
@@ -83,11 +88,12 @@ defmodule Tempo.Explain.Test do
     end
 
     test "a week calendar's values are written in its own notation" do
-      assert Tempo.explain(~o"2026"W) =~ "Span: [2026-W01-1, 2027-W01-1)."
+      assert Tempo.explain(~o"2026"W) =~ "Span: [2026, 2027)."
 
       week = Tempo.explain(~o"2026-W25"W)
       assert week =~ "Week 25 of 2026."
-      assert week =~ "Span: [2026-W25-1, 2026-W26-1)."
+      assert week =~ "Span: [2026-W25, 2026-W26)."
+      refute week =~ "Starts on"
 
       day = Tempo.explain(~o"2026-W25-2"W)
       assert day =~ "Tuesday of week 25 of 2026."
@@ -109,7 +115,7 @@ defmodule Tempo.Explain.Test do
       prose = Tempo.explain(Tempo.from_iso8601!("5786-W25[u-ca=hebrew]"))
 
       assert prose =~ "Week 25 of 5786."
-      assert prose =~ "Span: [5786-06-20, 5786-06-27)."
+      assert prose =~ "Span: [5786-W25, 5786-W26).\nStarts on 5786-06-20."
     end
 
     test "a week with no year recurs, as a yearless date does" do
@@ -119,20 +125,64 @@ defmodule Tempo.Explain.Test do
       assert Tempo.explain(~o"25W2K"W) =~ "Day 2 of week 25, in any year"
     end
 
-    test "a week is the day it starts on wherever it bounds something" do
-      assert Tempo.explain(~o"2026-W25/2026-W27") =~ "From: 2026-06-15."
-      assert Tempo.explain(~o"2026-W25/2026-W27") =~ "To:   2026-06-29"
-      assert Tempo.explain(Tempo.from_iso8601!("2026-W25/..")) =~ "Lower bound: 2026-06-15."
-      assert Tempo.explain(Tempo.from_iso8601!("R5/2026-W25/P1W")) =~ "Starting: 2026-06-15."
-      assert Tempo.explain(Tempo.from_iso8601!("2026-W2X")) =~ "Span: [2026-05-11, 2026-07-20)."
+    # An end is written as far as the value is, and no further (decided
+    # 2026-10-08): a week was written as the date of its first day, and a
+    # year as its first of January. The day a week starts on is told beside
+    # it, its writing not saying which.
+    test "a week is written as the week wherever it bounds something, with the day it starts on" do
+      assert Tempo.explain(~o"2026-W25/2026-W27") =~ "From: 2026-W25 (starts on 2026-06-15)."
+
+      assert Tempo.explain(~o"2026-W25/2026-W27") =~
+               "To:   2026-W27 (starts on 2026-06-29; exclusive — half-open `[from, to)`)."
+
+      assert Tempo.explain(Tempo.from_iso8601!("2026-W25/..")) =~
+               "Lower bound: 2026-W25 (starts on 2026-06-15)."
+
+      assert Tempo.explain(Tempo.from_iso8601!("R5/2026-W25/P1W")) =~
+               "Starting: 2026-W25 (starts on 2026-06-15)."
+
+      assert Tempo.explain(Tempo.from_iso8601!("2026-W2X")) =~
+               "Span: [2026-W20, 2026-W30).\nStarts on 2026-05-11."
 
       {:ok, weeks} = Tempo.union(~o"2026-W25", ~o"2026-W30")
-      assert Tempo.explain(weeks) =~ "1. 2026-06-15 → 2026-06-22"
-      assert Tempo.explain(weeks) =~ "2. 2026-07-20 → 2026-07-27"
 
+      assert Tempo.explain(weeks) =~
+               "1. 2026-W25 (starts on 2026-06-15) → 2026-W26 (starts on 2026-06-22)"
+
+      assert Tempo.explain(weeks) =~
+               "2. 2026-W30 (starts on 2026-07-20) → 2026-W31 (starts on 2026-07-27)"
+
+      # A calendar of weeks writes a week in its own notation, which says
+      # where it starts.
       week_calendar = Tempo.from_iso8601!("2026-W25/2026-W27", Calendrical.ISOWeek)
-      assert Tempo.explain(week_calendar) =~ "From: 2026-W25-1."
-      assert Tempo.explain(week_calendar) =~ "To:   2026-W27-1"
+      assert Tempo.explain(week_calendar) =~ "From: 2026-W25."
+      assert Tempo.explain(week_calendar) =~ "To:   2026-W27 (exclusive"
+    end
+
+    test "a year, a month, a day and a time at an end are written as far as they are" do
+      for {text, from, to} <- [
+            {"1984/1986", "1984", "1986"},
+            {"1984-06/1986-02", "1984-06", "1986-02"},
+            {"1984/1986-06", "1984", "1986-06"},
+            {"1984-06-15/1984-06-20", "1984-06-15", "1984-06-20"},
+            {"1984-06-15T10/1984-06-15T12", "1984-06-15T10", "1984-06-15T12"},
+            {"1984-06-15T10:30/1984-06-15T12", "1984-06-15T10:30", "1984-06-15T12"},
+            {"T10/T12", "T10", "T12"}
+          ] do
+        explained = Tempo.explain(Tempo.from_iso8601!(text))
+
+        assert {text, explained} ==
+                 {text,
+                  "A closed interval.\nFrom: #{from}.\n" <>
+                    "To:   #{to} (exclusive — half-open `[from, to)`)."}
+      end
+
+      # The interval a value converts to is explained as it is written too.
+      assert ~o"1984/1986" |> Tempo.to_interval!() |> Tempo.explain() ==
+               "A closed interval.\nFrom: 1984.\nTo:   1986 (exclusive — half-open `[from, to)`)."
+
+      assert Tempo.explain(~o"1984") =~ "The year 1984.\nSpan: [1984, 1985).\nIterates"
+      assert Tempo.explain(~o"1984-06") =~ "Span: [1984-06, 1984-07).\nIterates"
     end
   end
 
@@ -840,12 +890,12 @@ defmodule Tempo.Explain.Test do
       explanation = Tempo.explain(~o"2000±1Y")
 
       assert explanation =~ "Margin: ±1 year"
-      assert explanation =~ "groundings span [1999-01-01, 2002-01-01)"
+      assert explanation =~ "groundings span [1999, 2002)"
     end
 
     test "a plural margin pluralises the unit" do
       assert Tempo.explain(~o"2000±2Y") =~
-               "Margin: ±2 years — groundings span [1998-01-01, 2003-01-01)."
+               "Margin: ±2 years — groundings span [1998, 2003)."
     end
 
     test "the margin is a tagged part" do

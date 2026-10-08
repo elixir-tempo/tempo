@@ -95,6 +95,9 @@ defmodule Tempo.Explain do
   # A selection is worded as it is resolved: a day with no month, selected in
   # a year, is a day of the year. A selection alone has no period until it is
   # paired with one, and is worded as it is written.
+  # What is said of the end of a span, which is no part of it.
+  @half_open "exclusive — half-open `[from, to)`"
+
   defp as_resolved(%Tempo{time: [{:selection, _selection} | _units]} = selection), do: selection
   defp as_resolved(value), do: Selection.read_in_its_period(value)
 
@@ -104,7 +107,7 @@ defmodule Tempo.Explain do
   ### Examples
 
       iex> Tempo.Explain.explain(~o"2022Y") |> Tempo.Explain.to_string()
-      "The year 2022.\\nSpan: [2022-01-01, 2023-01-01).\\nIterates at :month granularity.\\nConvert it to an interval with `Tempo.to_interval/1`."
+      "The year 2022.\\nSpan: [2022, 2023).\\nIterates at :month granularity.\\nConvert it to an interval with `Tempo.to_interval/1`."
 
   """
   @spec to_string(Explanation.t()) :: String.t()
@@ -311,6 +314,7 @@ defmodule Tempo.Explain do
     [
       {:headline, scalar_headline(tempo)},
       {:span, scalar_span(tempo)},
+      {:span, starts_on_line(tempo)},
       {:margin, margin_text(tempo)},
       {:qualification, qualification_text(tempo)},
       {:shift, time_shift_text(tempo)},
@@ -1026,7 +1030,7 @@ defmodule Tempo.Explain do
 
     [
       {:headline, recurrence_headline(recurrence)},
-      {:span, "Ending: #{render_endpoint(to)} (exclusive — half-open `[from, to)`)."},
+      {:span, "Ending: #{told_endpoint(to, @half_open)}."},
       selection && {:span, "Selects: #{selection_prose(selection, rule_naming(interval))}."},
       {:span, "Cadence: #{duration_prose(duration_time)}."},
       selection && {:span, "Counted back from the end, nearest it first."},
@@ -1046,7 +1050,7 @@ defmodule Tempo.Explain do
        }) do
     [
       {:headline, "An interval given as a duration and an end."},
-      {:span, "Ends: #{render_endpoint(to)} (exclusive — half-open `[from, to)`)."},
+      {:span, "Ends: #{told_endpoint(to, @half_open)}."},
       {:span, "Duration: #{duration_prose(duration_time)}."},
       {:hint, "Resolve the implied start with `Tempo.to_interval/1`."}
     ]
@@ -1055,7 +1059,7 @@ defmodule Tempo.Explain do
   defp interval_parts(%Tempo.Interval{from: :undefined, to: %Tempo{} = to}) do
     [
       {:headline, "An open-lower interval (`../#{render_endpoint(to)}`)."},
-      {:span, "Upper bound: #{render_endpoint(to)}."},
+      {:span, "Upper bound: #{told_endpoint(to)}."},
       {:hint, "Enumeration requires a lower bound; set operations need a `:within` window."}
     ]
   end
@@ -1063,7 +1067,7 @@ defmodule Tempo.Explain do
   defp interval_parts(%Tempo.Interval{from: %Tempo{} = from, to: :undefined}) do
     [
       {:headline, "An open-upper interval (`#{render_endpoint(from)}/..`)."},
-      {:span, "Lower bound: #{render_endpoint(from)}."},
+      {:span, "Lower bound: #{told_endpoint(from)}."},
       {:hint, "Enumerates forward forever — use `Enum.take/2` to halt."}
     ]
   end
@@ -1082,7 +1086,7 @@ defmodule Tempo.Explain do
 
     [
       {:headline, "A recurrence until #{render_endpoint(until)}."},
-      {:span, "Starting: #{render_endpoint(from)}."},
+      {:span, "Starting: #{told_endpoint(from)}."},
       selection && {:span, "Selects: #{selection_prose(selection, rule_naming(interval))}."},
       {:span, "Cadence: #{duration_prose(dt)}."},
       {:hint, "List its occurrences: `Tempo.to_interval(interval)`."}
@@ -1102,7 +1106,7 @@ defmodule Tempo.Explain do
 
     [
       {:headline, recurrence_headline(recurrence)},
-      {:span, "Starting: #{render_endpoint(from)}."},
+      {:span, "Starting: #{told_endpoint(from)}."},
       selection && {:span, "Selects: #{selection_prose(selection, rule_naming(interval))}."},
       {:span, "Cadence: #{duration_prose(dt)}."},
       {:hint, recurrence_hint(recurrence, from)}
@@ -1172,7 +1176,7 @@ defmodule Tempo.Explain do
        }) do
     [
       {:headline, "An interval given as a start and a duration."},
-      {:span, "Starts: #{render_endpoint(from)}."},
+      {:span, "Starts: #{told_endpoint(from)}."},
       {:span, "Duration: #{duration_prose(duration_time)}."},
       {:hint, "Resolve the implied end with `Tempo.to_interval/1`."}
     ]
@@ -1190,8 +1194,7 @@ defmodule Tempo.Explain do
        when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
     [
       {:headline, recurrence_headline(recurrence)},
-      {:span,
-       "First occurrence: #{render_endpoint(from)} to #{render_endpoint(to)} (exclusive)."},
+      {:span, "First occurrence: #{told_endpoint(from)} to #{told_endpoint(to, "exclusive")}."},
       {:span, "Each occurrence starts where the one before ends and is as long."},
       {:hint, recurrence_hint(recurrence, from)}
     ]
@@ -1200,8 +1203,8 @@ defmodule Tempo.Explain do
   defp interval_parts(%Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to} = interval) do
     [
       {:headline, closed_headline(from, to)},
-      {:span, "From: #{render_endpoint(from)}."},
-      {:span, "To:   #{render_endpoint(to)} (exclusive — half-open `[from, to)`)."},
+      {:span, "From: #{told_endpoint(from)}."},
+      {:span, "To:   #{told_endpoint(to, @half_open)}."},
       each_value_hint(from, to),
       metadata_part(interval.metadata)
     ]
@@ -1271,7 +1274,7 @@ defmodule Tempo.Explain do
       |> Enum.with_index(1)
       |> Enum.map(fn {iv, i} ->
         summary = (iv.metadata || %{})[:summary] || "(no summary)"
-        {:member, "#{i}. #{render_endpoint(iv.from)} → #{render_endpoint(iv.to)}  · #{summary}"}
+        {:member, "#{i}. #{told_endpoint(iv.from)} → #{told_endpoint(iv.to)}  · #{summary}"}
       end)
 
     more =
@@ -1608,6 +1611,80 @@ defmodule Tempo.Explain do
 
   defp render_endpoint(other), do: inspect(other)
 
+  # An end as it is written, with the day it starts on where its writing
+  # does not say (`starts_on/1`), and with what else is to be said of it:
+  # that it is no part of the span.
+  defp told_endpoint(endpoint, aside \\ nil) do
+    case Enum.reject([starts_on_aside(endpoint), aside], &is_nil/1) do
+      [] -> render_endpoint(endpoint)
+      asides -> "#{render_endpoint(endpoint)} (#{Enum.join(asides, "; ")})"
+    end
+  end
+
+  defp starts_on_aside(endpoint) do
+    case starts_on(endpoint) do
+      nil -> nil
+      date -> "starts on #{date}"
+    end
+  end
+
+  # The line for a value alone, which starts where its span does: a masked
+  # week on the first day of the first week its digits match.
+  defp starts_on_line(%Tempo{} = tempo) do
+    with {:ok, %Tempo.Interval{from: from}} <- Tempo.to_interval(tempo),
+         date when is_binary(date) <- starts_on(from) do
+      "Starts on #{date}."
+    else
+      _several_spans_or_a_start_as_written -> nil
+    end
+  end
+
+  # The day a value starts on, where it is written to no day and its
+  # writing does not say which: a week of a calendar of months, and a year
+  # or a month of a calendar whose year does not begin on the first day of
+  # its first month. An end is written as far as the value is and no
+  # further (decided 2026-10-08), and this is told beside it.
+  defp starts_on(%Tempo{time: time} = tempo) do
+    with [_ | _] <- time,
+         true <- Enum.all?(time, &plain_date_unit?/1),
+         year when is_integer(year) <- find_unit(time, :year),
+         calendar = calendar_of(tempo),
+         false <- Tempo.week_based_calendar?(calendar) do
+      start_not_written(year, find_unit(time, :month), find_unit(time, :week), calendar)
+    else
+      _a_day_a_time_or_no_one_year -> nil
+    end
+  end
+
+  defp starts_on(_no_endpoint), do: nil
+
+  defp plain_date_unit?({unit, value}) when unit in [:year, :month, :week], do: is_integer(value)
+  defp plain_date_unit?(_a_day_a_time_or_another_shape), do: false
+
+  defp start_not_written(year, month, nil, calendar) when is_integer(month),
+    do: start_other_than([year: year, month: month], {year, month, 1}, calendar)
+
+  defp start_not_written(year, nil, week, calendar) when is_integer(week) do
+    case Validation.date_from_iso_week(year, week, 1, calendar) do
+      {:ok, %Date{} = date} -> month_date(date.year, date.month, date.day)
+      _no_such_week -> nil
+    end
+  end
+
+  defp start_not_written(year, nil, nil, calendar),
+    do: start_other_than([year: year], {year, 1, 1}, calendar)
+
+  defp start_not_written(_year, _month, _week, _calendar), do: nil
+
+  # A start is told only where it is another day than the writing reads as.
+  defp start_other_than(units, evident, calendar) do
+    case UnitValues.start_date(units, calendar) do
+      {:ok, ^evident} -> nil
+      {:ok, {year, month, day}} -> month_date(year, month, day)
+      :error -> nil
+    end
+  end
+
   defp render_moment(tempo, time) do
     case {render_date_part(tempo), render_time_part(time)} do
       # A mask (`198X`), a margin of error (`2018±2Y`) or a grouped
@@ -1621,43 +1698,34 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp render_date_part(%Tempo{time: time} = tempo) do
+  defp render_date_part(%Tempo{time: time}) do
     case find_unit(time, :year) do
-      year when is_integer(year) -> anchored_date(year, time, calendar_of(tempo))
+      year when is_integer(year) -> anchored_date(year, time)
       _no_plain_year -> render_yearless_date(time)
     end
   end
 
-  # The day an anchored endpoint starts on, by the units after its year.
-  defp anchored_date(year, time, calendar) do
+  # An anchored endpoint as far as it is written, and no further: a year is
+  # the year, a month the month and a week the week. Each was written out to
+  # the day its span starts on (`1984` as `1984-01-01`, a week as its
+  # Monday's date), a resolution the value does not have.
+  defp anchored_date(year, time) do
     month = find_unit(time, :month)
     week = find_unit(time, :week)
+    day_of_year = find_unit(time, :day_of_year)
 
     cond do
-      is_integer(month) -> month_start(year, month, find_unit(time, :day), calendar)
-      is_integer(week) -> week_date(year, week, find_unit(time, :day_of_week), calendar)
-      true -> year_start(year, calendar)
-    end
-  end
-
-  # The day a month, or a day of one, starts on. A month's first day is
-  # asked of the calendar, which counts the months of a year that does not
-  # begin with its first month from the day it begins
-  # (`Tempo.UnitValues.start_date/2`).
-  defp month_start(year, month, day, _calendar) when is_integer(day),
-    do: month_date(year, month, day)
-
-  defp month_start(year, month, _no_plain_day, calendar) do
-    case UnitValues.start_date([year: year, month: month], calendar) do
-      {:ok, {year, month, day}} -> month_date(year, month, day)
-      :error -> month_date(year, month, nil)
+      is_integer(month) -> month_date(year, month, find_unit(time, :day))
+      is_integer(week) -> week_date(year, week, find_unit(time, :day_of_week))
+      is_integer(day_of_year) -> "#{year_text(year)}-#{three_digit(day_of_year)}"
+      true -> year_text(year)
     end
   end
 
   defp month_date(year, month, day) when is_integer(day),
     do: "#{year_text(year)}-#{two_digit(month)}-#{two_digit(day)}"
 
-  defp month_date(year, month, _no_plain_day), do: "#{year_text(year)}-#{two_digit(month)}-01"
+  defp month_date(year, month, _no_plain_day), do: "#{year_text(year)}-#{two_digit(month)}"
 
   # A year as ISO 8601 writes it, to four digits, and with a minus before
   # the year 0: the year 44 BCE is `-0043` there, and was written `-43`.
@@ -1667,34 +1735,14 @@ defmodule Tempo.Explain do
   defp year_text(year) when is_integer(year),
     do: String.pad_leading(Integer.to_string(year), 4, "0")
 
-  # A week's first day, or the day of it a week date names. A calendar of
-  # weeks writes its own week date; a month-based calendar's week is the day
-  # Calendrical finds for it, written as that calendar's date.
-  defp week_date(year, week, day_of_week, calendar) do
-    day = if is_integer(day_of_week), do: day_of_week, else: 1
+  # A week, or the day of it a week date names, as ISO 8601 writes a week
+  # date.
+  defp week_date(year, week, day_of_week) when is_integer(day_of_week),
+    do: "#{year_text(year)}-W#{two_digit(week)}-#{day_of_week}"
 
-    with false <- Tempo.week_based_calendar?(calendar),
-         {:ok, %Date{} = date} <- Validation.date_from_iso_week(year, week, day, calendar) do
-      month_date(date.year, date.month, date.day)
-    else
-      _a_calendar_of_weeks_or_no_such_week -> "#{year_text(year)}-W#{two_digit(week)}-#{day}"
-    end
-  end
+  defp week_date(year, week, _no_plain_day), do: "#{year_text(year)}-W#{two_digit(week)}"
 
-  # A year's first day, which in a calendar of weeks is the first day of its
-  # first week.
-  defp year_start(year, calendar) do
-    if Tempo.week_based_calendar?(calendar),
-      do: "#{year_text(year)}-W01-1",
-      else: first_day_of_year(year, calendar)
-  end
-
-  defp first_day_of_year(year, calendar) do
-    case UnitValues.start_date([year: year], calendar) do
-      {:ok, {year, month, day}} -> month_date(year, month, day)
-      :error -> "#{year_text(year)}-01-01"
-    end
-  end
+  defp three_digit(number), do: String.pad_leading(Integer.to_string(number), 3, "0")
 
   # ISO 8601 writes a yearless date `--MM-DD`, a yearless month `--MM`,
   # and a bare day `---DD`. Use the standard's own spelling so a span
@@ -1731,9 +1779,11 @@ defmodule Tempo.Explain do
     h = Keyword.get(time, :hour)
     mi = Keyword.get(time, :minute)
 
+    # An hour alone is the hour, and is not written to a minute it does not
+    # have.
     cond do
       is_integer(h) and is_integer(mi) -> "#{two_digit(h)}:#{two_digit(mi)}#{seconds_text(time)}"
-      is_integer(h) -> "#{two_digit(h)}:00"
+      is_integer(h) -> two_digit(h)
       is_integer(mi) -> "00:#{two_digit(mi)}#{seconds_text(time)}"
       true -> nil
     end

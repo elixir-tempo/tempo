@@ -44,6 +44,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **Two implementations of a constraint remain** — `Tempo.select/2` still places a fraction of a second (`~o"T10H30M15.5S"`), a group (`~o"2G3MU"`) and the two ends of a span (`~o"T09/T17"`) on its period by the merge (`merge_constraint/2` in `lib/tempo/select.ex`), none of which a selection can be written with, and a time under a week is on the week's first date by a constraint and on each of its days by a selection. To do, for the merge to go: each through the resolver.
 
+* [ ] **`Tempo.explain/1` words an hour as a clock time** — a question for the user. Its ends are written as far as the value is since 2026-10-08, and its sentences still word an hour with the minutes it does not have: `~o"1984-06-15T10"` is headlined "June 15, 1984 at 10:00", `~o"T10"` "The time-of-day 10:00", and a rule for nine o'clock "at 09:00".
+
 * [ ] **`Tempo.explain/1` of a rule of one occurrence** — `R1/2019-01-01/P1D/FL7KN` and `R1/P1D/2019-01-08/FL7KN` are explained as an interval given as a start, or an end, and a duration, with no word of the rule that selects their one occurrence, and `R1/../P1D/FL7KN` as an unusual shape. Found 2026-10-08.
 
 * [ ] **`t:Tempo.t/0` does not describe every value** — its `token_list` names ten units and no selection, group, quarter, season, century or decade, so a spec that says `Tempo.t()` for such a value has Dialyzer read the clauses that match it as dead: `Tempo.RRule.Selection.rules_out/3` was inferred to return only `nil` (its rule is typed `rule()` since 2026-10-08), and `apply/4`, `expands?/2` and `Tempo.RRule.Rule.to_selection/2` are typed round it. To do: name every unit in the type, and take out the specs written round it.
@@ -85,6 +87,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **`Tempo.explain/1` wrote an end more finely than its value** — reported by the user 2026-10-08: `~o"1984/1986"` was "From: 1984-01-01". Each end is written as far as the value is written (`render_endpoint/1` in `lib/explain.ex`), an hour as `T10`, and the day a week or a year of a calendar that turns on another day starts on is told beside it (decided 2026-10-08, user). 2026-10-08.
 
 * [x] **What `Tempo.select/2` still places on its period** — an unspecified unit (`~o"X*D"`) is every value its unit takes, in a constraint and in a selection (it was the period's one span, and `~o"LX*DN"` selected nothing), and a masked week of a month with a day or a time is each week its digits match (`~o"XW3K"`, refused until now). The merge is kept for what has no selection to disagree with: a fraction of a second, a group, and the two ends of a span. 2026-10-08.
 

@@ -515,12 +515,18 @@ defmodule Tempo.YearStartTest do
                {:ok, "Mar 25\u2009–\u2009Apr 30, 1750"}
     end
 
-    test "is explained by the month's number and the span's own dates" do
+    # An end is written as far as the value is (decided 2026-10-08), and the
+    # day it starts on is told beside it where the writing does not say: a
+    # year and a month of this calendar were written as their first dates.
+    test "is explained by the month's number, its span as written and the day it starts on" do
       assert Tempo.explain(month(1750, 1, March25)) =~
-               "Month 1 of 1750.\nSpan: [1750-03-25, 1750-04-01)."
+               "Month 1 of 1750.\nSpan: [1750-01, 1750-02).\nStarts on 1750-03-25."
 
       assert Tempo.explain(year(1750, March25)) =~
-               "The year 1750.\nSpan: [1750-03-25, 1751-03-25)."
+               "The year 1750.\nSpan: [1750, 1751).\nStarts on 1750-03-25."
+
+      assert Tempo.explain(value("1750Y/1752Y", March25)) =~
+               "From: 1750 (starts on 1750-03-25).\nTo:   1752 (starts on 1752-03-25; exclusive"
     end
   end
 

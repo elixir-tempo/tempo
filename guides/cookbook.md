@@ -128,7 +128,7 @@ The full rule — group / individual / complete, the explicit `2004~Y6~M11D` for
 iex> Tempo.explain(~o"156X")
 """
 A masked year spanning the 1560s.
-Span: [1560-01-01, 1570-01-01).
+Span: [1560, 1570).
 Iterates at :month granularity.
 Convert it to an interval with `Tempo.to_interval/1`.
 """

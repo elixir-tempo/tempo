@@ -42,7 +42,8 @@ defmodule Tempo.ExplainCoverageTest do
     test "a closed interval is described by its endpoints" do
       prose = Tempo.explain(~o"2020Y/2021Y")
       assert prose =~ "A closed interval."
-      assert prose =~ "From: 2020-01-01."
+      assert prose =~ "From: 2020."
+      assert prose =~ "To:   2021 (exclusive"
     end
 
     test "a set reports how many disjoint intervals it materialises to" do
