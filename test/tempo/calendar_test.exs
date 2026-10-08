@@ -1,6 +1,7 @@
 defmodule Tempo.CalendarTest do
   use ExUnit.Case, async: true
 
+  alias Localize.Validity.U
   alias Tempo.{Interval, IntervalSet}
 
   # The Gregorian ISO-8601 day each interval in a materialised set falls on.
@@ -113,6 +114,23 @@ defmodule Tempo.CalendarTest do
 
         assert tempo.calendar == calendar
         assert Tempo.to_iso8601!(tempo) == "2026Y" <> suffix
+      end
+    end
+
+    test "every calendar CLDR knows round-trips through the identifier Localize writes it with" do
+      # The identifier is Localize's own (`:ethiopic_amete_alem` is `ethioaa`,
+      # `:islamic_civil` is `islamic-civil`), and the Gregorian calendar, the
+      # default, is written with none.
+      for cldr_calendar <- Localize.known_calendars() do
+        {"ca", identifier} = U.encode(:ca, cldr_calendar)
+        {:ok, tempo} = Tempo.from_iso8601("5000[u-ca=#{identifier}]")
+
+        written = if cldr_calendar == :gregorian, do: "5000Y", else: "5000Y[u-ca=#{identifier}]"
+
+        assert {cldr_calendar, tempo.calendar.cldr_calendar_type()} ==
+                 {cldr_calendar, cldr_calendar}
+
+        assert {cldr_calendar, Tempo.to_iso8601!(tempo)} == {cldr_calendar, written}
       end
     end
 

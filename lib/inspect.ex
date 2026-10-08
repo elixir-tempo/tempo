@@ -507,15 +507,20 @@ defmodule Tempo.Inspect do
 
   defp calendar_trailer(_), do: []
 
-  # `U.encode/2` raises on an atom that is not a CLDR calendar; guard it so
+  # `U.encode/2` raises on an atom that is not a CLDR calendar, so it is
+  # asked only of those CLDR knows (`Localize.known_calendars/0`), and
   # inspect/`to_iso8601` never crash on an unexpected value. A non-CLDR calendar
   # Calendrical resolves (e.g. `:julian`) is not a CLDR identifier, so Localize
   # will not encode it — its IXDTF value is the atom's own spelling.
   defp encode_calendar(cal) do
+    if cal in Localize.known_calendars(),
+      do: cldr_identifier(cal),
+      else: additional_calendar_identifier(cal)
+  end
+
+  defp cldr_identifier(cal) do
     {"ca", value} = U.encode(:ca, cal)
     {:ok, value}
-  rescue
-    _error -> additional_calendar_identifier(cal)
   end
 
   defp additional_calendar_identifier(cal) do
