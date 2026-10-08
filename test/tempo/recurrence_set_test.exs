@@ -323,6 +323,44 @@ defmodule Tempo.RecurrenceSetTest do
       assert days(set) == ["2026Y9M22D"]
     end
 
+    test "a bridge is kept alike wherever the bound ends about it" do
+      # The conditions are read over the bound itself where none reads a day
+      # outside it, and over a wider one where one does: the bridge is the
+      # same day with both neighbours in the bound, with one outside it at
+      # either end, and with both outside.
+      bridge =
+        RecurrenceSet.keep_when(~o"R/../P1Y/FL9M22DN",
+          at: [~o"-P1D", ~o"P1D"],
+          falls_on: %{type: :public}
+        )
+
+      holidays =
+        RecurrenceSet.new!([
+          typed("R/../P1Y/FL9M21DN", :public),
+          typed("R/../P1Y/FL9M23DN", :public),
+          bridge
+        ])
+
+      for {bound, expected} <- [
+            {~o"2026", ["2026Y9M21D", "2026Y9M22D", "2026Y9M23D"]},
+            {~o"2026-09-22/2026-12-31", ["2026Y9M22D", "2026Y9M23D"]},
+            {~o"2026-01-01/2026-09-23", ["2026Y9M21D", "2026Y9M22D"]},
+            {~o"2026-09-22/2026-09-23", ["2026Y9M22D"]},
+            {~o"2026-09-23/2026-12-31", ["2026Y9M23D"]}
+          ] do
+        {:ok, set} = Tempo.to_interval_set(holidays, within: bound)
+        assert {bound, days(set)} == {bound, expected}
+      end
+
+      # With one neighbour no holiday the bridge is no day, in any bound.
+      one_neighbour = RecurrenceSet.new!([typed("R/../P1Y/FL9M21DN", :public), bridge])
+
+      for bound <- [~o"2026", ~o"2026-09-22/2026-12-31", ~o"2026-09-22/2026-09-23"] do
+        {:ok, set} = Tempo.to_interval_set(one_neighbour, within: bound)
+        refute "2026Y9M22D" in days(set)
+      end
+    end
+
     test "an occurrence moved into the bound from before it is kept, one moved out is not" do
       moved =
         RecurrenceSet.move_when(~o"R/../P1Y/FL4M9DN",

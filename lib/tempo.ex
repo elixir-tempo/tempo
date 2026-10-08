@@ -11749,10 +11749,9 @@ defmodule Tempo do
 
     with :ok <- validate_conditionals(conditionals),
          {:ok, window} <- conditional_window(conditionals, opts),
-         first_opts = widened_opts(opts, window),
-         {:ok, first_pass} <- first_pass_occurrences(members, first_opts),
+         {:ok, first_pass, first_opts} <- first_pass(members, conditionals, window, opts),
          {:ok, reads} <- conditional_reads(first_pass, first_opts),
-         {:ok, others_occurrences} <- others_occurrences(first_pass, opts) do
+         {:ok, others_occurrences} <- others_occurrences(first_pass, first_opts, opts) do
       resolved =
         for {index, %Conditional{} = conditional, occurrences} <- first_pass,
             occurrence <- occurrences,
@@ -11765,14 +11764,84 @@ defmodule Tempo do
     end
   end
 
+  # What the conditions read: every member's occurrences over the window,
+  # where no condition reaches past it, and over the window widened by the
+  # conditions' reach where one does.
+  #
+  # A condition that keeps an occurrence reads the days `:at` from it, and
+  # only an occurrence at an end of the window has one of those outside it:
+  # a bridge on 2 January reads the 1st and the 3rd. The widened window
+  # touches a period more at each end, and each member was walked through
+  # the whole of both, three years for the days of one, which was two fifths
+  # of what a set of sixteen yearly rules and a bridge took. A condition
+  # that moves an occurrence can move one into the window from before it,
+  # so a set that holds one is read over the widened window, as it was.
+  defp first_pass(members, _conditionals, :none, opts),
+    do: read_over(members, opts)
+
+  defp first_pass(members, conditionals, window, opts) do
+    with true <- Enum.all?(conditionals, &match?(%Conditional{to_next: nil}, &1)),
+         {:ok, first_pass, ^opts} = read <- read_over(members, opts),
+         false <- reaches_past?(first_pass, window) do
+      read
+    else
+      {:error, _reason} = error -> error
+      _a_condition_reaches_past_the_window -> read_over(members, widened_opts(opts, window))
+    end
+  end
+
+  defp read_over(members, opts) do
+    with {:ok, first_pass} <- first_pass_occurrences(members, opts), do: {:ok, first_pass, opts}
+  end
+
+  # Whether a day a condition reads from one of its occurrences is outside
+  # the window. The occurrences are in the order of time and each is read
+  # the same days from, so the first says whether any reads before the
+  # window, and the last whether any reads after it.
+  defp reaches_past?(first_pass, {window_from, window_to, _widened}) do
+    lower = Compare.to_utc_seconds(window_from)
+    upper = if window_to, do: Compare.to_utc_seconds(window_to)
+
+    Enum.any?(first_pass, fn
+      {_index, %Conditional{at: offsets}, [first | _] = occurrences} ->
+        read_outside?(first, offsets, lower, upper) or
+          read_outside?(List.last(occurrences), offsets, lower, upper)
+
+      _another_member_or_no_occurrence ->
+        false
+    end)
+  end
+
+  defp read_outside?(occurrence, offsets, lower, upper) do
+    Enum.any?(offsets, fn offset ->
+      case offset_span(occurrence, offset) do
+        {from_seconds, to_seconds} ->
+          from_seconds < lower or (upper != nil and to_seconds > upper)
+
+        :none ->
+          false
+      end
+    end)
+  end
+
   # The occurrences of the members that are no conditional, over the window
-  # itself. The first pass has them over the widened window, and a member
-  # whose occurrences are the same wherever its window starts is taken from
-  # there, the set keeping those its window holds: each was converted a
-  # second time, which was a third of what a set with one bridge took. A
-  # member that is counted or placed from its window's start is converted
-  # in the window, as it was.
-  defp others_occurrences(first_pass, opts) do
+  # itself. Where the first pass read the window itself, they are its own.
+  # Where it read the widened window, a member whose occurrences are the
+  # same wherever its window starts is taken from there, the set keeping
+  # those its window holds: each was converted a second time, which was a
+  # third of what a set with one bridge took. A member that is counted or
+  # placed from its window's start is converted in the window, as it was.
+  defp others_occurrences(first_pass, opts, opts) do
+    others =
+      for {_index, member, occurrences} <- first_pass,
+          not is_struct(member, Conditional),
+          occurrence <- occurrences,
+          do: occurrence
+
+    {:ok, others}
+  end
+
+  defp others_occurrences(first_pass, _widened_opts, opts) do
     first_pass
     |> Enum.reject(&match?({_index, %Conditional{}, _occurrences}, &1))
     |> Enum.reduce_while({:ok, []}, fn {_index, member, occurrences}, {:ok, acc} ->
@@ -11910,8 +11979,6 @@ defmodule Tempo do
         {[Duration.negate(selection_search_span(selector)) | lower], upper}
     end)
   end
-
-  defp widened_opts(opts, :none), do: opts
 
   defp widened_opts(opts, {_bound_from, _bound_to, widened}),
     do: Keyword.put(opts, :within, widened)
