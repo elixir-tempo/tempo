@@ -83,6 +83,52 @@ defmodule Tempo.ZonedWalkPastItsPartsTest do
     end
   end
 
+  describe "a rule of hours in a zone whose clock changes by half an hour" do
+    # Lord Howe's clock goes forward half an hour in October and back in
+    # April. Every twenty-fourth hour from 10:00 in its winter is 10:30 in
+    # its summer, in hour 10 still, and from 10:45 it is 11:15, in hour 11.
+    @lord_howe "Australia/Lord_Howe"
+
+    test "has no occurrence in an hour its walk never stops in, by where in its hour it starts" do
+      for {time, written, rule, named} <- [
+            {~T[10:00:00], "T10", "LT9HN", [9]},
+            {~T[10:00:00], "T10", "LT11HN", [11]},
+            {~T[10:45:00], "T10:45", "LT9HN", [9]},
+            {~T[10:45:00], "T10:45", "LT{9,12}HN", [9, 12]},
+            {~T[10:29:59], "T10:29:59", "LT11HN", [11]}
+          ] do
+        shown = @lord_howe |> stops(time, 86_400) |> Enum.map(& &1.hour) |> Enum.uniq()
+
+        assert {written, rule, Enum.filter(named, &(&1 in shown))} == {written, rule, []}
+
+        assert {written, rule, Tempo.to_interval(walk(@lord_howe, "PT24H", rule, written))} ==
+                 {written, rule, IntervalSet.new([])}
+      end
+    end
+
+    test "has its occurrences in the hour the change brings the walk into" do
+      for {time, written, rule, hour} <- [
+            {~T[10:00:00], "T10", "LT10HN", 10},
+            {~T[10:45:00], "T10:45", "LT10HN", 10},
+            {~T[10:45:00], "T10:45", "LT11HN", 11},
+            {~T[10:30:00], "T10:30", "LT11HN", 11}
+          ] do
+        first_five =
+          @lord_howe
+          |> stops(time, 86_400)
+          |> Enum.filter(&(&1.hour == hour))
+          |> Enum.take(5)
+          |> Enum.map(&utc_seconds/1)
+
+        assert [_first, _second, _third, _fourth, _fifth] = first_five
+
+        assert {written, rule,
+                starts(Tempo.to_interval(walk(@lord_howe, "PT24H", rule, written)))} ==
+                 {written, rule, first_five}
+      end
+    end
+  end
+
   describe "a rule of minutes in a zone that names a minute its walk never stops at" do
     test "has no occurrence" do
       # Every sixtieth minute from a quarter past is a quarter past, a

@@ -9491,21 +9491,49 @@ defmodule Tempo do
   # so many of the walk's unit for each offset the clock is at from the
   # walk's start for as long as the walk can run: none, and an hour back,
   # for a walk from the summer in Paris. `:not_known` where the walk can
-  # cover more time than is asked of the zone, where a change is no whole
-  # number of the walk's unit (half an hour, in a walk of hours), and where
-  # the start names no one moment.
+  # cover more time than is asked of the zone, and where the start names no
+  # one moment.
+  #
+  # A change that is no whole number of the walk's unit moves a stop into
+  # the unit before or leaves it in its own, by how far into its unit the
+  # walk starts. Lord Howe's clock goes back half an hour, so every
+  # twenty-fourth hour from 10:00 in its summer is 09:30 in its winter,
+  # which is in hour 9, and from 10:45 it is 10:15, in hour 10 still. The
+  # stops are so many whole units on from the start of the unit the walk
+  # starts in, which is the start's seconds into its unit and the change,
+  # together, in whole units. Such a change was not answered for, and the
+  # rule was walked to its end.
   defp shifted_by_its_clock(%Tempo{extended: %{zone_id: zone}} = from, unit, amount) do
     per_unit = Map.fetch!(@seconds_in, unit)
     reach = @recurrence_safety_cap * amount * per_unit
 
     with true <- reach <= @seconds_of_changes_asked,
-         start when is_number(start) <- utc_seconds_of(from),
-         start = Kernel.trunc(start),
-         shifts = clock_shifts(zone, start, start + reach),
-         true <- Enum.all?(shifts, &(rem(&1, per_unit) == 0)) do
-      {:by, Enum.map(shifts, &div(&1, per_unit))}
+         start when is_number(start) <- utc_seconds_of(from) do
+      start = Kernel.trunc(start)
+      into_its_unit = seconds_into(from, unit)
+
+      {:by,
+       zone
+       |> clock_shifts(start, start + reach)
+       |> Enum.map(&Integer.floor_div(into_its_unit + &1, per_unit))
+       |> Enum.uniq()}
     else
       _not_asked -> :not_known
+    end
+  end
+
+  # How far a start is into the unit its walk steps by, in seconds: 10:45
+  # is 2,700 into its hour.
+  defp seconds_into(%Tempo{time: time}, :hour),
+    do: whole_of(time, :minute) * 60 + whole_of(time, :second)
+
+  defp seconds_into(%Tempo{time: time}, :minute), do: whole_of(time, :second)
+  defp seconds_into(%Tempo{}, :second), do: 0
+
+  defp whole_of(time, unit) do
+    case List.keyfind(time, unit, 0) do
+      {^unit, value} when is_integer(value) -> value
+      _not_written -> 0
     end
   end
 

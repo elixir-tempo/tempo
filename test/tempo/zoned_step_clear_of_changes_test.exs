@@ -153,7 +153,8 @@ defmodule Tempo.ZonedStepClearOfChangesTest do
                      {date, hour, units(reading_after(date, time, zone, 3_600), :hour)}
           end
 
-        assert length(compared) >= 8 * 24
+        # Eight days of hours at the least were compared.
+        assert Enum.count_until(compared, 192) == 192
       end
     end
   end
