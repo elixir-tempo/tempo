@@ -748,17 +748,23 @@ defmodule Tempo.Matrix.Extent do
   defp cycle_length(:second, _calendar), do: {:ok, 60 * @microseconds}
   defp cycle_length(:day_of_week, calendar), do: {:ok, calendar.days_in_week() * @day}
 
+  # The year's cycle is the longest year, in which every date has a place:
+  # the most months a year has, each as long as it gets.
   defp cycle_length(:month, calendar) do
-    case calendar.months_in_year() do
-      months when is_integer(months) ->
+    case most_months(calendar.months_in_year()) do
+      {:ok, months} ->
         with {:ok, days} <- days_before(months + 1, calendar), do: {:ok, days * @day}
 
-      _varies ->
+      :none ->
         :none
     end
   end
 
   defp cycle_length(_unit, _calendar), do: :none
+
+  defp most_months(months) when is_integer(months), do: {:ok, months}
+  defp most_months({:ambiguous, %Range{first: first, last: last}}), do: {:ok, max(first, last)}
+  defp most_months(_undefined), do: :none
 
   defp without_unspecified_year([{:year, :any} = year | rest]), do: {[year], rest}
   defp without_unspecified_year(time), do: {[], time}

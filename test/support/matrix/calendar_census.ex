@@ -26,10 +26,17 @@ defmodule Tempo.Matrix.CalendarCensus do
     `week/2`, and a day of the week the nth of them, whatever day the
     calendar's week begins on (decided 2026-10-05).
 
+  * **A value with no year** — a month or a day of one with no year is on
+    the cycle of the longest year, in which every date has a place: the
+    most months a year has, each as long as it gets, counted from the
+    calendar's `months_in_year/0` and `days_in_month/1`. What follows a
+    value is the next where every year has it, and the first of the next
+    period after the last value the longest period has; between the two it
+    depends on the year, and the value's span needs one.
+
   The astronomical calendars are not here: a cell of them takes seconds to
   minutes. Nor is a selection in a year that starts within its months,
-  which is not built, or a value with no year, which has no answer worked
-  out apart from the library yet.
+  which is not built.
 
   """
 
@@ -233,6 +240,134 @@ defmodule Tempo.Matrix.CalendarCensus do
     do: {at(day) + seconds * @second, at(day) + (seconds + length) * @second}
 
   defp at(%Date{} = date), do: Date.to_gregorian_days(date) * @day
+
+  ## A value with no year
+
+  @typedoc """
+  What a value with no year covers: a span of its cycle, or that it needs a
+  year to say, or that no year has such a value.
+  """
+  @type covers :: {:ok, span()} | :needs_a_year | :no_such_value
+
+  @typedoc """
+  What a walk of a value with no year yields: where each value starts on
+  the cycle, how many values, that it needs a year, or nothing asked.
+  """
+  @type walk :: {:ok, [integer()]} | {:count, pos_integer()} | :needs_a_year | :unchecked
+
+  @doc """
+  The values with no year a calendar's own counts answer: every month and
+  every day of each, in a calendar of months, and every day of the week.
+
+  A reform calendar counts nothing with no year, so each of a few months
+  and days of it needs a year. A calendar of weeks has no month, and a year
+  that starts within its months is left out: with no year a month there is
+  the one a date names, and with a year the nth the calendar counts.
+
+  ### Arguments
+
+  * `calendar` is a calendar module.
+
+  ### Returns
+
+  * A list of `%{text: text, covers: covers, walk: walk}`.
+
+  """
+  @spec no_year(module()) :: [%{text: String.t(), covers: covers(), walk: walk()}]
+  def no_year(calendar) do
+    cond do
+      week?(calendar) -> weekdays_no_year()
+      starts_within_its_months?(hd(anchors(calendar)).year, calendar) -> []
+      true -> months_no_year(calendar, calendar.months_in_year()) ++ weekdays_no_year()
+    end
+  end
+
+  defp weekdays_no_year do
+    days =
+      for k <- 1..7 do
+        from = (k - 1) * @day
+        %{text: "#{k}K", covers: {:ok, {from, from + @day}}, walk: {:ok, hours_from(from)}}
+      end
+
+    days ++ [%{text: "8K", covers: :no_such_value, walk: :unchecked}]
+  end
+
+  defp hours_from(from), do: for(h <- 0..23, do: from + h * 3600 * @second)
+
+  # A calendar that counts nothing with no year: its years are not alike
+  # enough to say.
+  defp months_no_year(_calendar, {:error, _undefined}) do
+    for m <- [1, 6, 12],
+        cell <- [%{text: "#{m}M", walk: :needs_a_year}, %{text: "#{m}M15D", walk: {:count, 24}}] do
+      Map.put(cell, :covers, :needs_a_year)
+    end
+  end
+
+  defp months_no_year(calendar, months) do
+    {least, most} = fewest_and_most(months)
+    counts = %{least_months: least, most_months: most, calendar: calendar}
+
+    Enum.flat_map(1..most, &month_no_year(&1, counts)) ++
+      [%{text: "#{most + 1}M", covers: :no_such_value, walk: :unchecked}]
+  end
+
+  defp month_no_year(m, %{calendar: calendar} = counts) do
+    {fewest, most} = fewest_and_most(calendar.days_in_month(m))
+    from = days_before(m, calendar) * @day
+    followed? = followed_in_every_year?(m, counts)
+
+    month = %{
+      text: "#{m}M",
+      covers: if(followed?, do: {:ok, {from, from + most * @day}}, else: :needs_a_year),
+      walk:
+        if(fewest == most,
+          do: {:ok, for(d <- 1..most, do: from + (d - 1) * @day)},
+          else: :needs_a_year
+        )
+    }
+
+    days =
+      for d <- 1..(most + 1) do
+        day_from = from + (d - 1) * @day
+
+        %{
+          text: "#{m}M#{d}D",
+          covers: day_covers(d, {fewest, most}, followed?, day_from),
+          walk: if(d in [1, fewest, most], do: {:ok, hours_from(day_from)}, else: :unchecked)
+        }
+      end
+
+    [month | days]
+  end
+
+  # A day below the last every year has is followed by the next. The last
+  # day the longest month has is followed by the first of the next month,
+  # where that is the same month in every year. Between the two, and where
+  # the month after depends on the year, the day's span needs a year.
+  defp day_covers(d, {_fewest, most}, _followed?, _from) when d > most, do: :no_such_value
+
+  defp day_covers(d, {fewest, _most}, _followed?, from) when d < fewest,
+    do: {:ok, {from, from + @day}}
+
+  defp day_covers(most, {_fewest, most}, true, from), do: {:ok, {from, from + @day}}
+  defp day_covers(_d, _days, _followed?, _from), do: :needs_a_year
+
+  # A month every year has is followed by the next, and the last month of
+  # the year that has the most by the first of the next year. A month
+  # between the two is followed by one or the other by the year.
+  defp followed_in_every_year?(m, %{least_months: least, most_months: most}),
+    do: m < least or m == most
+
+  defp days_before(m, calendar) do
+    Enum.sum(
+      for earlier <- 1..(m - 1)//1, do: elem(fewest_and_most(calendar.days_in_month(earlier)), 1)
+    )
+  end
+
+  defp fewest_and_most(count) when is_integer(count), do: {count, count}
+
+  defp fewest_and_most({:ambiguous, %Range{first: first, last: last}}),
+    do: {min(first, last), max(first, last)}
 
   ## Selections
 

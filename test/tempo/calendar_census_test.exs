@@ -10,6 +10,11 @@ defmodule Tempo.CalendarCensusTest do
   of Tempo's: the dates a month has, the weeks of a year, the dates of a
   week, the months of a year that starts within them.
 
+  A value with no year is held to the calendar's own counts of the months
+  a year has and the days a month has in any year: the span it covers on
+  the cycle of the longest year, the values its walk yields, and that it
+  needs a year where what follows it depends on one.
+
   It was a run of a script, whose table the plan holds; this is the table
   as a test. It found a month with days missing walked as a run of days, a
   year that starts within its months read from its January, and a week
@@ -46,6 +51,45 @@ defmodule Tempo.CalendarCensusTest do
     Enum.map(members, & &1.spans)
   end
 
+  # What a value with no year covers: a span of its cycle, or that it needs
+  # a year, or that no year has it.
+  defp covered_with_no_year(text, calendar) do
+    with {:ok, value} <- Tempo.from_iso8601(text, calendar),
+         {:ok, converted} <- Tempo.to_interval(value) do
+      {:ok, %{spans: [span]}} = Extent.of(converted)
+      {:ok, span}
+    else
+      {:error, %Tempo.UnanchoredError{}} -> :needs_a_year
+      {:error, _no_such_value} -> :no_such_value
+    end
+  end
+
+  defp assert_walk_with_no_year(_text, _calendar, :unchecked), do: :ok
+
+  # A walk cannot return an error, so one that needs a year raises it.
+  defp assert_walk_with_no_year(text, calendar, :needs_a_year) do
+    value = Tempo.from_iso8601!(text, calendar)
+
+    assert_raise Tempo.UnanchoredError, fn -> Enum.take(value, @walk_limit) end
+  end
+
+  defp assert_walk_with_no_year(text, calendar, {:count, count}) do
+    value = Tempo.from_iso8601!(text, calendar)
+
+    assert {text, Enum.count(Enum.take(value, @walk_limit))} == {text, count}
+  end
+
+  defp assert_walk_with_no_year(text, calendar, {:ok, starts}) do
+    value = Tempo.from_iso8601!(text, calendar)
+
+    assert {text, Enum.map(Enum.take(value, @walk_limit), &start/1)} == {text, starts}
+  end
+
+  defp start(yielded) do
+    {:ok, _line, position} = Extent.position(yielded)
+    position
+  end
+
   for calendar <- CalendarCensus.calendars() do
     describe "in #{inspect(calendar)}" do
       test "a value in each full form covers what the calendar says, and is walked by its parts" do
@@ -60,6 +104,15 @@ defmodule Tempo.CalendarCensusTest do
           if walk != :unchecked do
             assert {form, text, walked(value)} == {form, text, Enum.take(walk, @walk_limit)}
           end
+        end
+      end
+
+      test "a value with no year covers what the calendar counts in any year, or needs a year" do
+        calendar = unquote(calendar)
+
+        for %{text: text, covers: covers, walk: walk} <- CalendarCensus.no_year(calendar) do
+          assert {text, covered_with_no_year(text, calendar)} == {text, covers}
+          assert_walk_with_no_year(text, calendar, walk)
         end
       end
 
@@ -90,6 +143,35 @@ defmodule Tempo.CalendarCensusTest do
       # A selection in a year that starts within its months is not built,
       # and is not measured until it is.
       assert CalendarCensus.selections(Calendrical.Julian.March25) == []
+    end
+
+    test "holds every month and day with no year of a calendar of months, and its weekdays" do
+      # Twelve months and a thirteenth no year has, each month's days and
+      # the day after its last, and seven weekdays and an eighth.
+      days = Enum.sum([31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31])
+
+      assert Enum.count(CalendarCensus.no_year(Calendrical.Gregorian)) == 13 + days + 12 + 8
+      assert Enum.count(CalendarCensus.no_year(Calendrical.ISOWeek)) == 8
+      assert Enum.count(CalendarCensus.no_year(Calendrical.Reform.England)) == 6 + 8
+    end
+
+    test "reads 28 February with no year as needing one, and the 29th as the leap day" do
+      cells = Map.new(CalendarCensus.no_year(Calendrical.Gregorian), &{&1.text, &1.covers})
+      day = 86_400_000_000
+
+      assert cells["2M27D"] == {:ok, {57 * day, 58 * day}}
+      assert cells["2M28D"] == :needs_a_year
+      assert cells["2M29D"] == {:ok, {59 * day, 60 * day}}
+      assert cells["2M30D"] == :no_such_value
+      assert cells["12M"] == {:ok, {335 * day, 366 * day}}
+    end
+
+    test "reads the twelfth month of a Hebrew year as needing a year, and the thirteenth as its last" do
+      cells = Map.new(CalendarCensus.no_year(Calendrical.Hebrew), &{&1.text, &1.covers})
+
+      assert cells["12M"] == :needs_a_year
+      assert {:ok, {_from, _to}} = cells["13M"]
+      assert cells["14M"] == :no_such_value
     end
 
     test "reads the September of 1752 in England as the days the reform left it" do
