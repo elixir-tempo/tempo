@@ -6,6 +6,10 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Open
 
+### Conformance and completeness
+
+* [ ] **Whether an interval written to a date holds its end** — a decision for the user, asked 2026-10-08. `~o"2024Y/2026Y"` is 2024 and 2025, where `~o"{2024..2026}Y"` is three years and ISO 8601-2 Annex A.4.4 has an interval of dates end in its end. The proposal, an end written to a day or coarser included and one written to a time of day as it is, with the struct left half-open, is in [plans/interval-end-inclusive.md](plans/interval-end-inclusive.md) with what follows from it and a census: 1,425 written intervals in this repository would change.
+
 ### Performance
 
 * [ ] **A zoned rule with no occurrence that is still walked to its error** — three kinds are not told and take their ten thousand periods, three to seven seconds, before a `Tempo.UnboundedRecurrenceError`: a walk of hours or less that could cover more than thirty years (`PT168H`), the zone's changes being found a day at a time; one in a zone whose clock changes by other than whole units of the step (`Australia/Lord_Howe`, by half an hour, in a walk of hours); and a rule of days in a zone whose parts name only the day after the one it stops on (`R5/2026-06-16T10[Europe/Paris]/P7D/FL3KN`).

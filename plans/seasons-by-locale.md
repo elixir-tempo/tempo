@@ -6,7 +6,7 @@ Blocked on Localize giving a territory's hemisphere. The decisions below are the
 
 ## The problem
 
-ISO 8601-2 §4.8.1 lists twelve seasons: 21 to 24 are spring, summer, autumn and winter "independent of location", 25 to 28 the same four of the northern hemisphere, and 29 to 32 of the southern. §3.1.3 notes that "a single calendar date may represent different seasons depending on local customs or location, such as the difference between the northern or southern hemispheres". The standard does not say whether a season is reckoned by the months or by the sun.
+ISO 8601-2 §4.8.1 lists twelve seasons: 21 to 24 are spring, summer, autumn and winter "independent of location", 25 to 28 the same four of the northern hemisphere, and 29 to 32 of the southern. §3.1.3 notes that one calendar date can be of different seasons by local custom or by place, the two hemispheres being its example. The standard does not say whether a season is reckoned by the months or by the sun.
 
 Tempo reads a season into its dates when it parses, and the value is an interval from then on:
 
