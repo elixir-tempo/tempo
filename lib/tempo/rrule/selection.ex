@@ -1562,9 +1562,7 @@ defmodule Tempo.RRule.Selection do
   end
 
   defp apply_role(:within, {:day_of_year, days}, candidates, scope, _selection, wkst) do
-    Enum.flat_map(candidates, fn candidate ->
-      candidate |> days_of_period(scope, wkst) |> on_days_of_year(List.wrap(days))
-    end)
+    Enum.flat_map(candidates, &days_of_year_within(&1, List.wrap(days), scope, wkst))
   end
 
   # Nearest-weekday (`W`) — a non-standard cron modifier. EXPAND
@@ -1935,6 +1933,47 @@ defmodule Tempo.RRule.Selection do
 
   defp in_year_day_list?(%Interval{} = candidate, target_days),
     do: day_of_year_of(candidate) in counted_values(target_days, :day_of_year, candidate)
+
+  # The days of the year a part names that a period holds. In a period that
+  # is a whole week or month each day named is placed in each year the
+  # period touches, two at most, and kept where the period holds it. The
+  # period's days were listed and each asked its day of the year, thirty
+  # questions of the calendar to find one day of a month.
+  defp days_of_year_within(
+         %Interval{from: %Tempo{time: time, calendar: calendar}, to: to} = candidate,
+         days,
+         scope,
+         wkst
+       ) do
+    with shift when is_integer(shift) and shift > 1 <- endpoint_shift(candidate),
+         {:ok, first} <- date_of(time, calendar),
+         {:ok, last} <- end_date_of(to, first, calendar) do
+      held =
+        for year <- first.year..last.year//1,
+            date <- named_days_of_year(candidate, year, days),
+            Compare.compare_days(date, first) != :lt and Compare.compare_days(date, last) == :lt,
+            do: {date.year, date.month, date.day, date}
+
+      swap_dates(candidate, held)
+    else
+      _a_day_or_less -> candidate |> days_of_period(scope, wkst) |> on_days_of_year(days)
+    end
+  end
+
+  # The dates of the days of a year a part names, in the candidate's
+  # calendar.
+  defp named_days_of_year(
+         %Interval{from: %Tempo{time: time, calendar: calendar} = from} = candidate,
+         year,
+         days
+       ) do
+    in_year = %{candidate | from: %{from | time: replace_unit_values(time, year: year)}}
+
+    for day_of_year <- counted_values(days, :day_of_year, in_year),
+        {month, day} <- [year_day_to_month_day(calendar, year, day_of_year)],
+        {:ok, date} <- [Date.new(year, month, day, calendar)],
+        do: date
+  end
 
   # The days of a period that are days of the year a part names. What a
   # part names depends on the year a day is in (the last day of one is its
