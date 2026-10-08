@@ -488,6 +488,15 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
   # downstream consumers (`Tempo.Mask.candidates/4`,
   # `Tempo.Mask.matches_mask?/2`, enumeration, inspect) can treat
   # the mask as bounded below zero.
+  #
+  # A sign before an unspecified number (`-X*`) is tagged the same way, as a
+  # list the parser refuses by name: `X*` is an atom and no list of digits,
+  # so the sign was put before it as the head of an improper list, which the
+  # parser's scan of the tokens raised on.
+  def form_number([?-, {:mask, :"X*"} | rest]) do
+    form_number([{:mask, [:negative, :"X*"]} | rest])
+  end
+
   def form_number([?-, {:mask, list} | rest]) do
     form_number([{:mask, [:negative | list]} | rest])
   end

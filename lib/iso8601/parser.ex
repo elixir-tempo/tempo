@@ -18,10 +18,30 @@ defmodule Tempo.Iso8601.Parser do
   # it is refused, or `nil`.
   defp refused(tokens) do
     case backwards_range(tokens) do
-      nil -> short_window(tokens) || shifted_durations(tokens) || no_member(tokens)
-      range -> backwards_reason(range)
+      nil ->
+        short_window(tokens) || shifted_durations(tokens) || no_member(tokens) ||
+          signed_unspecified(tokens)
+
+      range ->
+        backwards_reason(range)
     end
   end
+
+  # A sign before an unspecified number (`-X*D`), wherever it is written. An
+  # unspecified number stands for every value its unit takes, and counted
+  # from the end those are the same values, so the sign says nothing: it is
+  # refused, where reading it raised.
+  defp signed_unspecified({:mask, [:negative, :"X*"]}) do
+    "A sign before an unspecified number (-X*) names no values of its own. " <>
+      "Write X* for every value the unit takes."
+  end
+
+  defp signed_unspecified([_ | _] = tokens), do: Enum.find_value(tokens, &signed_unspecified/1)
+
+  defp signed_unspecified(tokens) when is_tuple(tokens),
+    do: tokens |> Tuple.to_list() |> signed_unspecified()
+
+  defp signed_unspecified(_token), do: nil
 
   # What is written in a set that is no member of one, wherever the set is
   # written: as a member, as an end of a range and as a member the set leaves

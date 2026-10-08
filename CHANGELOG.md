@@ -411,6 +411,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A sign before an unspecified number (`-X*D`, `L-X*DN`, `{-X*D,5D}`) is a `Tempo.ParseError` that says it names no values of its own. Reading a string that held one raised a `FunctionClauseError`.
+
 * A rule with an `UNTIL` and no start, as `Tempo.RRule.parse("FREQ=DAILY;UNTIL=20190108")` reads one, starts where its `:within` window does and runs to its end. `Tempo.to_interval/2` handed it back unconverted, and with a part that selects refused it as a rule written to its end.
 
 * A rule with a count and no start is counted from its `:within` window's start: `Tempo.to_interval(~o"R2/../P1Y/FL1M1DN", within: ~o"2026-06-01/2029-06-01")` is 1 January 2027 and 2028, where it was 2027 alone. An occurrence of the window's first period that was over before the window opened took one of the count.
