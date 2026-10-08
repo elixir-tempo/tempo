@@ -2137,14 +2137,18 @@ defmodule Tempo.RRule.Selection do
   # when WKST is Monday. So a week belongs to the year that holds its own
   # fourth day: the first days of a year can be in the last week of the
   # year before, and its last days in week 1 of the next.
+  #
+  # The week is counted from the first day of its year's week 1
+  # (`Tempo.Validation.week_number/4`), and its fourth day is three days on
+  # from its first by the calendar's arithmetic: a rule of days or less asks
+  # this of each of its periods, and the year's weeks, and the week's days,
+  # were listed for each.
   defp week_number_from_wkst(date, calendar, wkst) do
-    week_start = Kday.kday_on_or_before(date, wkst)
-    %Date{year: week_year} = week_start |> seven_days_from() |> Enum.at(3)
-    week_starts = Validation.week_starts(calendar, week_year, wkst)
+    %Date{year: year, month: month, day: day} = week_start = Kday.kday_on_or_before(date, wkst)
 
-    case Enum.find_index(week_starts, &(Compare.compare_days(&1, week_start) == :eq)) do
-      nil -> :error
-      index -> {:ok, index + 1, length(week_starts)}
+    case calendar.plus(year, month, day, :days, 3) do
+      {week_year, _month, _day} -> Validation.week_number(calendar, week_year, wkst, week_start)
+      _no_fourth_day -> :error
     end
   end
 

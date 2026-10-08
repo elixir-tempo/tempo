@@ -1817,6 +1817,26 @@ defmodule Tempo.Validation do
 
   defp consecutive_week_starts(_first, _next_first), do: []
 
+  @doc false
+  # Which week of `year` the week that starts on `week_start` is, and how
+  # many weeks the year has, for weeks numbered as `week_starts/3` numbers
+  # them: the weeks from the first day of the year's week 1 to it, and to
+  # the first day of the next year's, as Calendrical counts them. It is
+  # found in two steps, where the year's weeks were listed to find it among
+  # them, which a rule of days with a week of the year asks of each day.
+  def week_number(calendar, year, first_day, %Date{} = week_start) do
+    with {:ok, first} <- first_week_start(calendar, year, first_day),
+         {:ok, next_first} <- first_week_start(calendar, year + 1, first_day),
+         :lt <- Compare.compare_days(week_start, next_first),
+         before when is_integer(before) and before >= 0 <-
+           Calendrical.diff(first, week_start, :weeks),
+         weeks when is_integer(weeks) <- Calendrical.diff(first, next_first, :weeks) do
+      {:ok, before + 1, weeks}
+    else
+      _not_a_week_of_the_year -> :error
+    end
+  end
+
   defp first_week_start(calendar, year, first_day) do
     case Calendrical.date_from_day_of_year(year, 4, calendar) do
       %Date{} = fourth_day -> {:ok, Kday.kday_on_or_before(fourth_day, first_day)}
