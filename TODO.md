@@ -88,6 +88,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Done
 
+* [x] **A value written with a margin, significant digits or a fraction was not asked of its unit** — `T99S2H`, `2026Y13±1M` and `T25.5H` were read, and a fraction of a week, of a day of the week, or of a month or a day of the year with no year was left in the value as a float. Each written form is refused where the value alone is (`taken_as_written_alone/3` in `Tempo.Validation`), the whole hour and minute of a fraction are asked of their units, and a fraction no clause reads is a `Tempo.ParseError`. Found by a census of what a value's `:time` holds, for `t:Tempo.t/0`. 2026-10-08.
+
 * [x] **A day of the year selected from a month or a week** — each day named is placed in the years the period touches and kept where the period holds it (`days_of_year_within/4` in `lib/tempo/rrule/selection.ex`), where the period's days were listed and each asked: `Tempo.select(~o"2026-06", ~o"166O")` takes 107 µs where it took 293, beside 90 for a day of the month. 2026-10-08.
 
 * [x] **A set of years of an absurd size is listed whole by the walk** — a run of more years than the walk reads at once is left a run and read a year at a time (`unrolled/2` in `lib/enumeration.ex`), cut at a year the calendar lacks: two values of `{1..99999999}Y` are immediate where they took thirteen seconds. `Tempo.to_interval/2` refuses such a set as it did. 2026-10-08.

@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A value written with a margin of error (`±`), significant digits (`S`) or a fraction is one its unit takes, as a whole number is: `T99S2H`, `2026Y13±1M` and `T25.5H` are refused with what `T25H` says, where each was read. A fraction of a week, of a day of the week, or of a month or a day of the year with no year (`30.5W`, `3.5K`, `6.5M`, `166.5O`) is a `Tempo.ParseError`, where it was left in the value as a number no operation reads.
+
 * A position (`I`, RFC 5545's `BYSETPOS`) picks among at most 10,000 candidates of a period, and a value or a rule whose period has more is refused with a `Tempo.ConversionError` (`:too_many_values`). `~o"2026YL{1..12}M{1..28}DT{0..23}H{0..59}M1IN"` made 483,840 minutes in two seconds to give the first, and with seconds did not come to an end.
 
 * An unspecified unit (`X*`) given to `Tempo.select/2` is every value its unit takes, as a mask of as many digits is: `Tempo.select(~o"2026-06", ~o"X*D")` is June's thirty days where it was the month as one span. A selection written with one (`~o"LX*DN"`) selects each of them too, where it selected nothing.

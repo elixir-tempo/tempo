@@ -52,7 +52,8 @@ defmodule Tempo.Validation do
     with :ok <- validate_leap_second(units, tempo),
          :ok <- validate_time_shift(tempo.shift),
          :ok <- NotBuilt.month(tempo, calendar),
-         {:ok, units} <- in_years_of_the_calendar(units, calendar) do
+         {:ok, units} <- in_years_of_the_calendar(units, calendar),
+         :ok <- taken_as_written_alone(tempo, units, calendar) do
       units = sets_of_one_as_their_member(units)
       written = written_calendar(units, calendar)
 
@@ -110,6 +111,28 @@ defmodule Tempo.Validation do
   def validate(:undefined, _calendar) do
     {:ok, :undefined}
   end
+
+  # A margin of error and significant digits ride on a value, and the value
+  # is one its unit takes, as it is written alone: `T12±1H` is about noon,
+  # and `T25±1H` about no hour, as `T25H` is none. A value written with
+  # either was not asked of its unit, so an hour of 99, a thirteenth month
+  # and a fortieth day of June were read. It is asked as the value alone is,
+  # and refused with what that says.
+  defp taken_as_written_alone(%Tempo{} = tempo, units, calendar) do
+    case Enum.map(units, &written_alone/1) do
+      ^units -> :ok
+      alone -> refusal_of(validate(%{tempo | time: alone}, calendar))
+    end
+  end
+
+  defp written_alone({unit, {value, [{annotation, _} | _]}})
+       when is_integer(value) and annotation in [:margin_of_error, :significant_digits],
+       do: {unit, value}
+
+  defp written_alone(unit), do: unit
+
+  defp refusal_of({:error, _reason} = refused), do: refused
+  defp refusal_of(_valid), do: :ok
 
   # A year the calendar does not have is no year to read: the Julian
   # calendar's year before 1 is -1, and it has no year 0
@@ -1009,27 +1032,31 @@ defmodule Tempo.Validation do
   # the minute or the second the time falls in (`T10.51` is 10:30), so the
   # value holds whole numbers: a fractional minute left in it was a value no
   # operation could read, and one its own text read back as another.
-  def resolve([{:hour, hour}], _calendar) when is_float(hour) and hour > 0 do
+  #
+  # The whole hour and the whole minute are asked of their units as one
+  # written with no fraction is: `T25.5H` was read as 25:30 and `T10H61.5M`
+  # as 10:61:30, where `T25H` and `T10H61M` are refused.
+  def resolve([{:hour, hour}], calendar) when is_float(hour) and hour > 0 do
     int_hour = trunc(hour)
     fraction_of_hour = hour - int_hour
 
     if fraction_of_hour == 0 do
-      [{:hour, int_hour}]
+      resolve([{:hour, int_hour}], calendar)
     else
       minutes = Math.round(60 * fraction_of_hour, @rounding_precision)
-      [{:hour, int_hour}, {:minute, trunc(minutes)}]
+      resolve([{:hour, int_hour}, {:minute, trunc(minutes)}], calendar)
     end
   end
 
-  def resolve([{:minute, minute}], _calendar) when is_float(minute) do
+  def resolve([{:minute, minute}], calendar) when is_float(minute) do
     int_minute = trunc(minute)
     fraction_of_minute = minute - int_minute
 
     if fraction_of_minute == 0 do
-      [{:minute, int_minute}]
+      resolve([{:minute, int_minute}], calendar)
     else
       seconds = Math.round(60 * fraction_of_minute, @rounding_precision)
-      [{:minute, int_minute}, {:second, trunc(seconds)}]
+      resolve([{:minute, int_minute}, {:second, trunc(seconds)}], calendar)
     end
   end
 
@@ -1201,6 +1228,24 @@ defmodule Tempo.Validation do
     end
   end
 
+  # A fraction is read of a year, of a month of a year, of a day, an hour, a
+  # minute and a second (above): each is so much of the unit elapsed. One of
+  # a week, of a day of the week, or of a month or a day of the year with no
+  # year to count it in, is none of those, and was left in the value as a
+  # number with a fraction, which no operation reads and its own text does
+  # not read back.
+  def resolve([{unit, fraction}], _calendar)
+      when is_float(fraction) and
+             unit in [:month, :week, :calendar_week, :day_of_week, :day_of_year] do
+    {:error,
+     ParseError.exception(
+       reason:
+         "A fraction of #{fraction_of(unit)} is not read: #{inspect(fraction)}. A fraction is " <>
+           "read of a year, of a month written with its year, of a day, an hour, a minute " <>
+           "and a second"
+     )}
+  end
+
   def resolve([{unit, _value} = first | rest], calendar) do
     with {^unit, _} = first <- resolve(first, calendar),
          rest when is_list(rest) <- resolve(rest, calendar) do
@@ -1227,6 +1272,11 @@ defmodule Tempo.Validation do
   end
 
   ### Helpers
+
+  defp fraction_of(:month), do: "a month with no year"
+  defp fraction_of(:day_of_year), do: "a day of the year with no year"
+  defp fraction_of(:day_of_week), do: "a day of the week"
+  defp fraction_of(_week), do: "a week"
 
   # The units that count from 1, so that 0 names none of them.
   @counted_from_one [:month, :week, :calendar_week, :day, :day_of_year, :day_of_week]
