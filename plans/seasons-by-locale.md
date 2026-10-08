@@ -1,8 +1,8 @@
 # Seasons by locale
 
-**Status:** planning, 2026-10-08
+**Status:** planning, 2026-10-09
 
-Blocked on Localize giving a territory's hemisphere. The decisions below are the user's, taken on 2026-10-08 in three rounds; the open questions are to be put before the work starts.
+Localize gives a territory's hemisphere since 2026-10-09 (`Localize.Territory.Hemisphere`), so nothing blocks the work but its open questions, which were put to the user on 2026-10-09. The decisions below are the user's, taken on 2026-10-08 in three rounds.
 
 ## The problem
 
@@ -22,7 +22,7 @@ So a season of 21 to 24 is the northern one for a reader in Australia, where spr
 
 * **The codes stay as they are** — 21 to 24 are meteorological, whole months, and 25 to 32 astronomical, each from an equinox or a solstice to the next, as Astro computes them. An astronomical season is written with 25 to 32, and a season of 21 to 24 is not to be switched to the astronomical by an option.
 
-* **A territory's hemisphere is Localize's to give** — neither CLDR nor Localize records one, and it is territory data. Tempo asks `Localize.Territory.hemisphere/1` and holds no table of its own.
+* **A territory's hemisphere is Localize's to give** — it is territory data, and Tempo asks `Localize.Territory.Hemisphere.hemisphere/1` and holds no table of its own.
 
 * **A season of 21 to 24 is resolved by a locale or a territory given where it is read** — an option of `Tempo.from_iso8601/2` and `Tempo.parse/2`.
 
@@ -36,18 +36,21 @@ So a season of 21 to 24 is the northern one for a reader in Australia, where spr
 
 * **An operation that needs the dates of a season not yet resolved is an error** — a named one, which says to give a locale or a territory.
 
-## What is asked of Localize
+## What Localize gives
 
 ```elixir
-Localize.Territory.hemisphere(:AU)  # {:ok, :southern}
-Localize.Territory.hemisphere(:GB)  # {:ok, :northern}
+Localize.Territory.Hemisphere.hemisphere(:AU)     # {:ok, :southern}
+Localize.Territory.Hemisphere.hemisphere(:GB)     # {:ok, :northern}
+Localize.Territory.Hemisphere.hemisphere(:BR)     # {:ok, :ambiguous}
+Localize.Territory.Hemisphere.hemisphere(:"053")  # {:ok, :southern}, Australasia
+Localize.Territory.Hemisphere.hemisphere(:ZZ)     # {:error, %Localize.UnknownTerritoryError{}}
 ```
 
-* It takes what `Localize.Territory.info/1` takes: a territory, or a language tag, whose territory is asked.
+* It takes a territory code, as an atom or a string, or a language tag, whose territory is asked.
 
-* A territory the equator crosses (Brazil, Indonesia, Kenya, Ecuador) has one answer, which is Localize's to choose.
+* A territory the equator runs through is `:ambiguous`, where one answer was asked for: Brazil, Colombia, Ecuador, Indonesia, Kenya and nine more, and a region that holds territories on both sides, the world (`:"001"`) among them. What a season is there is the fourth open question.
 
-* A region that is no one territory (`:"001"`) and a territory it does not know are an error.
+* A region that lies on one side is answered from its territories, and a territory it does not know is an error.
 
 ## Open questions
 
@@ -57,6 +60,8 @@ Localize.Territory.hemisphere(:GB)  # {:ok, :northern}
 
 * **The name of the function** — `Tempo.in_territory/2`, `Tempo.localize/2` or another.
 
+* **A territory with no one hemisphere** — Localize answers `:ambiguous` for a territory the equator runs through and for the world. A season of 21 to 24 composed with one is either a named error, which says to write the season of a hemisphere (25 to 32) or to give a territory on one side, or the northern season, as every such season is read today.
+
 ## The shape of the work
 
 The parser keeps a season of 21 to 24 as a unit where no territory is given, and expands it as it does today where one is, with the months of the territory's hemisphere. A season of 25 to 32 is expanded as it is today. The sigil then needs no run-time form: what it compiles is the abstract season.
@@ -65,12 +70,14 @@ Every function that takes a value takes the new shape, which is the cost of this
 
 ## Tasks
 
-* [ ] **The hemisphere from Localize** — `Localize.Territory.hemisphere/1`, as above. Blocked on Localize.
-
-* [ ] **The open questions** — put to the user before any of the work below.
+* [ ] **The open questions** — put to the user on 2026-10-09, four of them, before any of the work below.
 
 * [ ] **A season kept in the value** — the parser, the value's units, `inspect` and `Tempo.to_iso8601/1`.
 
 * [ ] **A season resolved** — the readers' options, the hemisphere's months, and whatever the answers to the open questions name.
 
 * [ ] **Every operation on an abstract season** — the named error or the answer, the matrix's cells, the guides.
+
+### Done
+
+* [x] **The hemisphere from Localize** — `Localize.Territory.Hemisphere.hemisphere/1`, in Tempo's lock since `117932d`. 2026-10-09.
