@@ -11677,14 +11677,14 @@ defmodule Tempo do
   # members materialise over the window itself, exactly as in a set without
   # conditionals.
   defp conditional_set_occurrences(members, opts) do
-    {conditionals, others} = Enum.split_with(members, &match?(%Conditional{}, &1))
+    conditionals = Enum.filter(members, &match?(%Conditional{}, &1))
 
     with :ok <- validate_conditionals(conditionals),
          {:ok, window} <- conditional_window(conditionals, opts),
          first_opts = widened_opts(opts, window),
          {:ok, first_pass} <- first_pass_occurrences(members, first_opts),
          {:ok, reads} <- conditional_reads(first_pass, first_opts),
-         {:ok, others_occurrences} <- members_occurrences(others, opts) do
+         {:ok, others_occurrences} <- others_occurrences(first_pass, opts) do
       resolved =
         for {index, %Conditional{} = conditional, occurrences} <- first_pass,
             occurrence <- occurrences,
@@ -11696,6 +11696,58 @@ defmodule Tempo do
       {:ok, others_occurrences ++ resolved}
     end
   end
+
+  # The occurrences of the members that are no conditional, over the window
+  # itself. The first pass has them over the widened window, and a member
+  # whose occurrences are the same wherever its window starts is taken from
+  # there, the set keeping those its window holds: each was converted a
+  # second time, which was a third of what a set with one bridge took. A
+  # member that is counted or placed from its window's start is converted
+  # in the window, as it was.
+  defp others_occurrences(first_pass, opts) do
+    first_pass
+    |> Enum.reject(&match?({_index, %Conditional{}, _occurrences}, &1))
+    |> Enum.reduce_while({:ok, []}, fn {_index, member, occurrences}, {:ok, acc} ->
+      case in_the_window(member, occurrences, opts) do
+        {:ok, occurrences} -> {:cont, {:ok, [occurrences | acc]}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, occurrences} -> {:ok, occurrences |> Enum.reverse() |> Enum.concat()}
+      {:error, _} = error -> error
+    end
+  end
+
+  defp in_the_window(member, occurrences, opts) do
+    if same_in_any_window?(member),
+      do: {:ok, occurrences},
+      else: recurrence_set_member(member, opts)
+  end
+
+  # Whether a member's occurrences in a window are those of a wider window
+  # that the window holds: a value with a year, a rule from a start that has
+  # one, and a rule with no start and no count, which is walked by the
+  # periods of the calendar wherever its window starts. A rule with no start
+  # and a count is counted from its window's start, and a start with no year
+  # is placed on it.
+  defp same_in_any_window?(%__MODULE__{} = value), do: anchored?(value)
+
+  defp same_in_any_window?(%Tempo.Interval{from: %__MODULE__{} = from}), do: anchored?(from)
+
+  defp same_in_any_window?(%Tempo.Interval{
+         from: from,
+         to: to,
+         recurrence: :infinity,
+         duration: %Tempo.Duration{}
+       })
+       when from in [nil, :undefined] and to in [nil, :undefined],
+       do: true
+
+  defp same_in_any_window?(%Tempo.RecurrenceSet{members: members}),
+    do: Enum.all?(members, &same_in_any_window?/1)
+
+  defp same_in_any_window?(_another_member), do: false
 
   # A conditional names what it falls on and either the offsets it keeps `:at`
   # or the selector it moves `:to_next`, never both.

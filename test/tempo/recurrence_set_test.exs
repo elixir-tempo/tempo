@@ -496,4 +496,60 @@ defmodule Tempo.RecurrenceSetTest do
       assert RecurrenceSet.members(conditionals) == [bridge]
     end
   end
+
+  describe "the members beside a conditional" do
+    # A set that holds a conditional converts every member over a window
+    # widened by the condition's reach, and took each of the others a second
+    # time over the window itself. One whose occurrences do not depend on
+    # where its window starts is taken from the first pass; one that is
+    # counted or placed from its window's start is converted in the window
+    # still. Either way a member has the occurrences it has in a set with
+    # no conditional.
+    @windows [
+      "2026Y",
+      "2026-06-20/2026-12-20",
+      "2026-12-31/2027-01-05",
+      "2025Y/2028Y"
+    ]
+
+    @members [
+      "R/../P1Y/FL12M25DN",
+      "R/../P1M/FL15DN",
+      "R/../P1W/FL1KN",
+      "R/../P1Y/FL1WN",
+      "R/../P1Y/FL(easter)eN",
+      "R/../P1Y/FL1M1DL6KN/P-1DN",
+      "R/2020-01-01/P1Y/FL7M4DN",
+      "R3/2025-12-30/P1D",
+      "R4/2026-12-29/2026-12-30",
+      "R2/../P1Y/FL1M1DN",
+      "R2/../P1M/FL15DN",
+      "R1/../P1D/FL7KN",
+      "2026Y7M4D",
+      "2026-12-31/2027-01-02"
+    ]
+
+    test "have the occurrences they have with no conditional in the set" do
+      never =
+        RecurrenceSet.keep_when(~o"R/../P1Y/FL9M22DN",
+          at: [~o"-P1D", ~o"P1D"],
+          falls_on: %{type: :no_member_is_of_this_type}
+        )
+
+      nested =
+        RecurrenceSet.new!([named("R/../P1Y/FL5M1DN", "nested"), named("2026Y5M2D", "one")])
+
+      members = Enum.map(@members, &named(&1, &1)) ++ [nested]
+
+      for window <- @windows, member <- members do
+        within = Tempo.from_iso8601!(window)
+
+        {:ok, alone} = Tempo.to_interval_set(RecurrenceSet.new!([member]), within: within)
+        {:ok, beside} = Tempo.to_interval_set(RecurrenceSet.new!([member, never]), within: within)
+
+        assert {window, member, IntervalSet.members(beside)} ==
+                 {window, member, IntervalSet.members(alone)}
+      end
+    end
+  end
 end
