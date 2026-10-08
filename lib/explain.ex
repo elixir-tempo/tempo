@@ -1010,19 +1010,29 @@ defmodule Tempo.Explain do
 
   # `R5/P1D/2026-06-20` — a recurrence written with a duration and an end,
   # which are its last occurrence (ISO 8601-1 §5.6.1 c); the others precede it.
-  defp interval_parts(%Tempo.Interval{
-         recurrence: recurrence,
-         from: :undefined,
-         to: %Tempo{} = to,
-         duration: %Tempo.Duration{time: duration_time}
-       })
+  #
+  # A rule on one selects among the periods back from the end, and its
+  # occurrences are the nearest the end that it selects.
+  defp interval_parts(
+         %Tempo.Interval{
+           recurrence: recurrence,
+           from: :undefined,
+           to: %Tempo{} = to,
+           duration: %Tempo.Duration{time: duration_time}
+         } = interval
+       )
        when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
+    selection = selection_of(interval.repeat_rule)
+
     [
       {:headline, recurrence_headline(recurrence)},
       {:span, "Ending: #{render_endpoint(to)} (exclusive — half-open `[from, to)`)."},
+      selection && {:span, "Selects: #{selection_prose(selection, rule_naming(interval))}."},
       {:span, "Cadence: #{duration_prose(duration_time)}."},
+      selection && {:span, "Counted back from the end, nearest it first."},
       {:hint, recurrence_hint(recurrence, to)}
     ]
+    |> Enum.reject(&is_nil/1)
   end
 
   # `P1D/2026-06-15` — a duration and an end. The lower bound is implied
@@ -1446,14 +1456,23 @@ defmodule Tempo.Explain do
 
   # A recurrence written with a duration and an end: its last occurrence ends
   # there.
-  defp rule_phrase(%Tempo.Interval{
-         recurrence: recurrence,
-         from: :undefined,
-         to: %Tempo{} = to,
-         duration: %Tempo.Duration{time: cadence}
-       })
+  defp rule_phrase(
+         %Tempo.Interval{
+           recurrence: recurrence,
+           from: :undefined,
+           to: %Tempo{} = to,
+           duration: %Tempo.Duration{time: cadence}
+         } = interval
+       )
        when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
-    "#{cadence_phrase(cadence)}, ending #{render_endpoint(to)}#{times_phrase(recurrence)}"
+    selection = selection_of(interval.repeat_rule)
+
+    [
+      selection && selection_prose(selection, rule_naming(interval)),
+      "#{cadence_phrase(cadence)}, ending #{render_endpoint(to)}#{times_phrase(recurrence)}"
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join(", ")
   end
 
   defp rule_phrase(

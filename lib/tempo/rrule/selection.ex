@@ -400,11 +400,10 @@ defmodule Tempo.RRule.Selection do
   def read_in_its_period(
         %Interval{
           duration: %Tempo.Duration{time: [{:year, _count} | _finer]},
-          from: from,
           repeat_rule: %Tempo{time: [{:selection, selection} | units]} = rule
         } = recurrence
       ) do
-    if gives_no_month?(from, rule),
+    if gives_no_month?(counted_from(recurrence), rule),
       do: %{recurrence | repeat_rule: %{rule | time: [{:selection, in_year(selection)} | units]}},
       else: recurrence
   end
@@ -412,11 +411,10 @@ defmodule Tempo.RRule.Selection do
   def read_in_its_period(
         %Interval{
           duration: %Tempo.Duration{time: [{:month, _count} | _finer]},
-          from: from,
           repeat_rule: %Tempo{time: [{:selection, selection} | units]} = rule
         } = recurrence
       ) do
-    if gives_no_day?(from, rule),
+    if gives_no_day?(counted_from(recurrence), rule),
       do: %{recurrence | repeat_rule: %{rule | time: [{:selection, in_month(selection)} | units]}},
       else: recurrence
   end
@@ -433,6 +431,12 @@ defmodule Tempo.RRule.Selection do
   end
 
   def read_in_its_period(value), do: value
+
+  # What a recurrence is counted from: its start, and its end where it is
+  # written to one (`R3/P1M/2019-03-31/FL15DN`), which stands where a start
+  # does.
+  defp counted_from(%Interval{from: :undefined, to: %Tempo{} = to}), do: to
+  defp counted_from(%Interval{from: from}), do: from
 
   # A calendar of weeks has no months, and a selection in one is as it was.
   defp in_period_of(_context, selection, true), do: selection
@@ -531,12 +535,13 @@ defmodule Tempo.RRule.Selection do
   # Whether a selection is resolved in a month, as `read_in_its_period/1`
   # has it: the rule of a recurrence that steps by months and whose start
   # gives it no day, and the selection of a value after its month.
-  defp resolved_in_a_month?(%Interval{
-         duration: %Tempo.Duration{time: [{:month, _count} | _finer]},
-         from: from,
-         repeat_rule: %Tempo{} = rule
-       }),
-       do: gives_no_day?(from, rule)
+  defp resolved_in_a_month?(
+         %Interval{
+           duration: %Tempo.Duration{time: [{:month, _count} | _finer]},
+           repeat_rule: %Tempo{} = rule
+         } = recurrence
+       ),
+       do: gives_no_day?(counted_from(recurrence), rule)
 
   defp resolved_in_a_month?(%Tempo{time: time, calendar: calendar}) when is_list(time) do
     context = Enum.take_while(time, &(not match?({:selection, _selection}, &1)))

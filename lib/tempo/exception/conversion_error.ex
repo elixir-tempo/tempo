@@ -59,10 +59,9 @@ defmodule Tempo.ConversionError do
     `:week_of_month` is a week of a month in a calendar whose year
     does not begin with its first month, and a day or a time under a week
     selected from a month where the week is a mask (`~o"XW3K"`); and
-    `:rule_to_an_end` is a rule
-    on a recurrence written with a duration and an end
-    (`~o"R3/P1D/2019-01-08/FL7KN"`), whose occurrences run back from it,
-    in every calendar.
+    `:rule_to_an_end` is a rule that holds a window (ISO 8601-2 §12.10)
+    on a recurrence written with a duration and an end, whose occurrences
+    run back from it, in every calendar.
     The [operation matrix](operation-matrix.html) lists each.
 
   * `:calendar_week_in_month` — a week of the calendar's own numbering
@@ -231,7 +230,9 @@ defmodule Tempo.ConversionError do
   defp not_built(:week_of_month), do: "a week of a month"
 
   defp not_built(:rule_to_an_end),
-    do: "a rule on a recurrence written to its end, whose occurrences run back from it,"
+    do:
+      "a rule that holds a window, on a recurrence written to its end, whose occurrences " <>
+        "run back from it,"
 
   defp not_built(other), do: "#{other}"
 

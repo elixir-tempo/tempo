@@ -634,15 +634,15 @@ defmodule Tempo.NotBuiltTest do
   # Found 2026-10-08: the walk back from an end steps its cadence and never
   # asked the rule, so `R3/P1D/2019-01-08/FL7KN` was the three days before
   # 8 January, a Saturday, a Sunday and a Monday.
-  describe "a rule on a recurrence written to its end" do
+  describe "a rule that holds a window, on a recurrence written to its end" do
+    # A rule on a recurrence written to its end is asked of each period back
+    # from the end since 2026-10-08 (`test/tempo/rule_to_an_end_test.exs`).
+    # One that holds a §12.10 window places an occurrence outside the period
+    # that selects it, which the walk back does not reach for.
     @to_an_end [
-      {"R3/P1D/2019-01-08/FL7KN", []},
-      {"R1/P1D/2019-01-08/FL7KN", []},
-      {"P1D/2019-01-08/FL7KN", []},
-      {"R3/P1W/2019-01-08/FL7KN", []},
-      {"R3/P1M/2019-06-01/FL15DN", []},
-      {"R/P1D/2019-01-08/FL7KN", [within: ~o"2018-12"]},
-      {"R3/P1D/2019Y1M{8,15}D/FL7KN", []}
+      {"R2/P1Y/2026-06-01/FL11MLL1K1IN/P7DN45W1KN", []},
+      {"R1/P1Y/2026-06-01/FL11MLL1K1IN/P7DN45W1KN", []},
+      {"R/P1Y/2026-06-01/FL11MLL1K1IN/P7DN45W1KN", [within: ~o"2020/2027"]}
     ]
 
     test "is refused, whatever its count" do
@@ -651,27 +651,26 @@ defmodule Tempo.NotBuiltTest do
         assert refused?(answer, :rule_to_an_end, Calendrical.Gregorian), text
       end
 
-      {:ok, built} =
-        Interval.new(to: ~o"2019-01-08", duration: ~o"P1D", recurrence: 3, repeat_rule: ~o"L7KN")
+      built = Tempo.from_iso8601!("R2/P1Y/2026-06-01/FL11MLL1K1IN/P7DN45W1KN")
 
-      assert refused?(Tempo.to_interval(built), :rule_to_an_end, Calendrical.Gregorian)
       assert refused?(Tempo.to_string(built), :rule_to_an_end, Calendrical.Gregorian)
       assert_raise ConversionError, fn -> Enum.to_list(built) end
     end
 
     test "is refused in another calendar, which the error names" do
-      answer = Tempo.to_interval(read("R3/P1D/5786-09-30/FL7KN", Hebrew))
+      answer = Tempo.to_interval(read("R2/P1Y/5786-09-30/FL3MLL1K1IN/P7DN1KN", Hebrew))
       assert refused?(answer, :rule_to_an_end, Hebrew)
     end
 
     test "names the recurrence and says what is not built" do
-      {:error, error} = Tempo.to_interval(~o"R3/P1D/2019-01-08/FL7KN")
+      {:error, error} = Tempo.to_interval(~o"R2/P1Y/2026-06-01/FL11MLL1K1IN/P7DN45W1KN")
 
-      assert Exception.message(error) =~ ~s|Cannot answer ~o"R3/P1D/2019Y1M8D/FL7KN"|
+      assert Exception.message(error) =~ "Cannot answer ~o\"R2/P1Y/2026Y6M1D/"
 
       assert Exception.message(error) =~
-               "a rule on a recurrence written to its end, whose occurrences run back from it, " <>
-                 "is not built for Calendrical.Gregorian, as for every calendar"
+               "a rule that holds a window, on a recurrence written to its end, whose " <>
+                 "occurrences run back from it, is not built for Calendrical.Gregorian, " <>
+                 "as for every calendar"
     end
 
     test "with no rule is the periods back from its end, as it was" do

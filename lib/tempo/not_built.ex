@@ -28,8 +28,8 @@ defmodule Tempo.NotBuilt do
   # the calendar's own numbering
   # (`w`) under a month is no such area: it is refused for good
   # (`Tempo.RRule.Selection.calendar_week_in_its_year/2`). The seventh is in
-  # every calendar: a rule on a recurrence written to its end, whose
-  # occurrences run back from it.
+  # every calendar: a rule that holds a §12.10 window, on a recurrence
+  # written to its end, whose occurrences run back from it.
 
   alias Tempo.{Compare, ConversionError, Duration, Interval, UnitValues}
 
@@ -246,13 +246,13 @@ defmodule Tempo.NotBuilt do
   end
 
   @doc false
-  # A rule on a recurrence written with a duration and an end
-  # (`R3/P1D/2019-01-08/FL7KN`). Its occurrences run back from the end, a
-  # cadence each, and the walk back steps the cadence and never asks the
-  # rule: what it gave was each period, the three days before 8 January,
-  # where the rule selects the Sundays among them. To build: each period
-  # back from the end resolved by its rule, the count being of what the rule
-  # selects, nearest the end first.
+  # A rule on a recurrence written with a duration and an end is asked of
+  # each period back from the end, and is answered (`R3/P1D/2019-01-08/FL7KN`
+  # is the three Sundays before 8 January). What is left is such a rule that
+  # holds a §12.10 window, which can place an occurrence outside the period
+  # that selects it: the walk back does not reach for those. A rule with a
+  # count, no start and an end it runs until, which only a struct built by
+  # hand is, is refused by the same name.
   @spec rule_to_an_end(Interval.t()) :: ConversionError.t()
   def rule_to_an_end(%Interval{to: %Tempo{calendar: calendar}} = recurrence),
     do: error(recurrence, :rule_to_an_end, Compare.effective_calendar(calendar))

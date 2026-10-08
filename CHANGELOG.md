@@ -421,7 +421,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.to_string/2` shows a span of clock times that starts at a fraction of a second, where it raised a `FunctionClauseError`, and one that holds no time at all (`2026-06-15T10/2026-06-15T10`) is the value it starts at, where it was shown backwards, "10 – 9 AM".
 
-* A rule on a recurrence written to its end (`R3/P1D/2019-01-08/FL7KN`) is refused, with a `Tempo.ConversionError` whose reason is `:not_built` and whose target is `:rule_to_an_end`: the rule was passed over, so it was the three days before 8 January where its rule selects Sundays. With no rule the recurrence is the periods back from its end, as it was.
+* A rule on a recurrence written to its end is asked of each period back from the end: `R3/P1D/2019-01-08/FL7KN` is the three Sundays before 8 January, where the rule was passed over and it was the three days before. One that holds a §12.10 window is a `Tempo.ConversionError` whose reason is `:not_built` and whose target is `:rule_to_an_end`.
 
 * A rule of one occurrence is converted as a rule however it is written. With no start (`R1/../P1D/FL7KN`, `FREQ=DAILY;BYDAY=SU;COUNT=1`) and with a start and an end (`R1/2019-01-01/2019-01-02/FL7KN`) it was handed back as it was given, with a start that has no year it was a `Tempo.UnanchoredError`, and `Enum` walked the span from its start; each is now the first its rule selects.
 

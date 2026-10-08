@@ -7236,7 +7236,7 @@ defmodule Tempo do
 
   A mask is the span its digits allow: `~o"156X"` is the 1560s and `~o"2026-06-1X"` the 10th to the 19th of June 2026. Candidates that are not consecutive (`~o"2026-06-X5"`), or a mask with a narrower unit after it (`~o"1985-XX-15"`), are a span each, and a candidate the calendar has no room for drops out. An unspecified month, week, day, hour, minute or second (`~o"2026Y6MX*D"`, any day of June 2026) is read as the mask of all its digits is: the month.
 
-  A recurrence is its occurrences however ISO 8601-1 §5.6.1 writes it: a start and a duration, a start and an end that are its first occurrence (each one after it starts where the one before ends and is as long), or a duration and an end that are its last.
+  A recurrence is its occurrences however ISO 8601-1 §5.6.1 writes it: a start and a duration, a start and an end that are its first occurrence (each one after it starts where the one before ends and is as long), or a duration and an end that are its last. A rule on the last of these is asked of each period back from the end, so `R3/P1D/2019-01-08/FL7KN` is the three Sundays before 8 January, each over by the end and the nearest it first.
 
   ### Arguments
 
@@ -8390,16 +8390,37 @@ defmodule Tempo do
     end
   end
 
-  # A rule on a recurrence written to its end is not built, whatever its
-  # count: the walk back from the end steps its cadence and does not ask the
-  # rule (`Tempo.NotBuilt.rule_to_an_end/1`).
+  # A rule on a recurrence written to its end (`R3/P1D/2019-01-08/FL7KN`, the
+  # three Sundays before 8 January 2019). The recurrence is counted back from
+  # its end, as one with no rule is, and the rule is asked of each period
+  # back from there, as a rule from a start is asked of each period on from
+  # it (`selected_back_from/2`). It was the three days before the end, the
+  # walk back never asking the rule, and then refused by name.
   #
-  # A rule with no start that runs until an end (`from: nil`, as an RRULE
-  # with `UNTIL` read with no start is) is not one: it starts where its
-  # window does (`from_where_its_window_starts/2`).
+  # A §12.10 window in such a rule can place an occurrence outside the period
+  # that selects it, which the walk back does not reach for: it is not built
+  # (`Tempo.NotBuilt.rule_to_an_end/1`).
   defp materialise(
          %Tempo.Interval{
-           from: from,
+           from: :undefined,
+           duration: %Tempo.Duration{},
+           to: %Tempo{},
+           repeat_rule: %Tempo{time: [{:selection, selection} | _units]}
+         } = interval,
+         opts
+       ) do
+    if List.keymember?(selection, :interval, 0),
+      do: {:error, NotBuilt.rule_to_an_end(interval)},
+      else: selected_back_from(interval, opts)
+  end
+
+  # A rule with a count, no start and an end it runs until is neither a rule
+  # written to its end nor one an RRULE reads, which has a count or an
+  # `UNTIL` and not both: it is refused by the same name. One with no count
+  # starts where its window does (`from_where_its_window_starts/2`).
+  defp materialise(
+         %Tempo.Interval{
+           from: nil,
            recurrence: recurrence,
            duration: %Tempo.Duration{},
            to: %Tempo{},
@@ -8407,7 +8428,7 @@ defmodule Tempo do
          } = interval,
          _opts
        )
-       when from == :undefined or (is_nil(from) and recurrence != :infinity) do
+       when recurrence != :infinity do
     {:error, NotBuilt.rule_to_an_end(interval)}
   end
 
@@ -9578,6 +9599,114 @@ defmodule Tempo do
     case List.last(occurrences) do
       {:error, reason} -> {:error, step_error(from, reason)}
       _occurrence -> {:ok, occurrences}
+    end
+  end
+
+  # The occurrences of a rule on a recurrence written to its end, earliest
+  # first. The end stands where a start does: the rule is read from it
+  # (`Tempo.RRule.Selection.read_in_its_period/1`), a coarse end is filled to
+  # the unit the rule names as a coarse start is, and the periods are counted
+  # from it, the first being the one that starts there. An occurrence is one
+  # that is over by the end, as each of a recurrence with no rule is, and the
+  # count is of those the rule selects, nearest the end first.
+  defp selected_back_from(
+         %Tempo.Interval{to: to, duration: duration, recurrence: recurrence, metadata: metadata} =
+           interval,
+         opts
+       ) do
+    {anchor, _floor, anchored} = selection_start(to, %{interval | from: to, to: nil})
+    %{select: select, once?: once?} = selection_parts(selected_by_the_rule(anchored, duration))
+    asked = {duration, select, strip_span_directives(metadata)}
+
+    with {:ok, as_far_back?} <- as_far_back(recurrence, interval, opts),
+         {:ok, selected} <- selected_back({anchor, to}, asked, as_far_back?, 0, []) do
+      selected
+      |> one_of_each_start(once?)
+      |> nearest_the_end(recurrence)
+      |> counted_back(recurrence, opts)
+    end
+  end
+
+  # How far back a walk goes: for a count until it has that many, and with
+  # no count to the start of its `:within` window, without which it has no
+  # first occurrence.
+  defp as_far_back(count, _interval, _opts) when is_integer(count),
+    do: {:ok, fn _period, found -> Enum.count_until(found, count) < count end}
+
+  defp as_far_back(:infinity, interval, opts) do
+    case bound_lower(Keyword.get(opts, :within)) do
+      %Tempo{} = window_from ->
+        {:ok, fn period, _found -> ends_after?(period.to, window_from) end}
+
+      nil ->
+        {:error, UnboundedRecurrenceError.exception(interval: interval)}
+    end
+  end
+
+  defp selected_back({anchor, to} = ends, {duration, select, metadata} = asked, more?, k, found)
+       when k < @recurrence_safety_cap do
+    with {:ok, period} <- period_back(anchor, duration, k, metadata),
+         true <- more?.(period, found) || {:ok, found},
+         {:ok, selected} <- over_by(select.(period), to) do
+      selected_back(ends, asked, more?, k + 1, selected ++ found)
+    end
+  end
+
+  defp selected_back(_ends, _asked, _more?, _k, _found),
+    do: {:error, walk_too_long_error(:periods)}
+
+  # The period `k` cadences back from the end, which starts there: the first
+  # is the one that starts at the end, whose occurrences are over by it only
+  # where they are no length of time, and each one after it ends where the
+  # one before starts.
+  defp period_back(anchor, duration, k, metadata) do
+    back = Duration.negate(duration)
+    stop = if k == 0, do: Math.add(anchor, duration), else: add_n_durations(anchor, back, k - 1)
+
+    case {add_n_durations(anchor, back, k), stop} do
+      {%Tempo{} = start, %Tempo{} = stop} ->
+        {:ok, %Tempo.Interval{from: start, to: stop, metadata: metadata}}
+
+      {{:error, _reason} = error, _stop} ->
+        error
+
+      {_start, {:error, _reason} = error} ->
+        error
+
+      {start, _stop} ->
+        {:error,
+         ConversionError.exception(
+           value: anchor,
+           reason:
+             "Stepping #{inspect(anchor)} back by #{inspect(back)} gives #{inspect(start)}, not one value."
+         )}
+    end
+  end
+
+  # What a period selects that is over by the end, or the error its rule
+  # gave.
+  defp over_by(selected, to) do
+    case Enum.find(selected, &match?({:error, _reason}, &1)) do
+      nil -> {:ok, Enum.reject(selected, &ends_after?(&1.to, to))}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp one_of_each_start(occurrences, true), do: Enum.uniq_by(occurrences, & &1.from)
+  defp one_of_each_start(occurrences, false), do: occurrences
+
+  defp nearest_the_end(occurrences, count) when is_integer(count),
+    do: Enum.take(occurrences, -count)
+
+  defp nearest_the_end(occurrences, :infinity), do: occurrences
+
+  # One occurrence is the interval it is, as that of a rule from a start is,
+  # and more are a set. A `:within` window keeps those that overlap it.
+  defp counted_back([%Tempo.Interval{} = one], 1, opts), do: one_occurrence_within(one, opts)
+
+  defp counted_back(occurrences, _recurrence, opts) do
+    with {:ok, kept} <- keep_within(occurrences, opts) do
+      IntervalSet.new(kept, coalesce: coalesce_opt(opts))
     end
   end
 
