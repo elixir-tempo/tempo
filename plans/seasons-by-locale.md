@@ -2,7 +2,7 @@
 
 **Status:** planning, 2026-10-08
 
-Blocked on Localize giving a territory's hemisphere. The decisions below are the user's, taken on 2026-10-08; the open questions are to be put before the work starts.
+Blocked on Localize giving a territory's hemisphere. The decisions below are the user's, taken on 2026-10-08 in three rounds; the open questions are to be put before the work starts.
 
 ## The problem
 
@@ -28,6 +28,14 @@ So a season of 21 to 24 is the northern one for a reader in Australia, where spr
 
 * **With no locale or territory given it is not resolved** — it stays an abstract season in the value until it is composed with a locale or a territory, and is never expanded when the `~o` sigil is compiled. This replaces the first answer of the day, which had the sigil resolve the season at run time by the current locale.
 
+* **It is composed with a locale or a territory by an option and by a function of its own** — an option of `Tempo.to_interval/2` and the functions built on it, and a function that takes the value and the locale or territory and returns the season resolved. Both.
+
+* **The application's `:default_territory` and the current locale count as given** — where an abstract season is composed and no option names one, the chain `Tempo.Territory.resolve/1` has is asked.
+
+* **A region override in the value does not resolve it** — `2026-21[u-rg=auzzzz]` stays an abstract season. A territory given explicitly is what decides, and wins.
+
+* **An operation that needs the dates of a season not yet resolved is an error** — a named one, which says to give a locale or a territory.
+
 ## What is asked of Localize
 
 ```elixir
@@ -43,15 +51,11 @@ Localize.Territory.hemisphere(:GB)  # {:ok, :northern}
 
 ## Open questions
 
-* **What composes an abstract season with a locale or a territory** — the options of the readers are decided. After the value is read: an option of `Tempo.to_interval/2` and the functions built on it, a function of its own, or both.
-
-* **Whether the application's `:default_territory` and the current locale count as given** — `Tempo.Territory.resolve/1` falls back to them. The user's words are "if no locale/territory is provided", which read as an explicit one only.
-
-* **Whether a region override in the value counts** — `2026-21[u-rg=auzzzz]` names a territory in the text itself.
-
-* **What an abstract season answers until it is resolved** — written back as it was read (`2026-21`), worded by `Tempo.explain/1` as the season it is, and for an operation that needs its dates a named error that says to give a locale or a territory, or the empty answer.
+* **Where the current locale is asked** — my reading of the two answers together, to be confirmed: a reader resolves a season only with an explicit `:locale` or `:territory`, since the sigil reads at compile time and a reader that asked the current locale would expand it there; a season is composed later, by the option or the function, and it is there that the application's default and the current locale are asked where none is named. So `~o"2026-21"` is abstract, and `Tempo.to_interval(~o"2026-21")` with no option is the season of the current locale's hemisphere.
 
 * **How the value holds it** — a unit of its own in the value's units (`[year: 2026, season: 21]`), and what a range of seasons (`2026-21/2026-23`), a season in a set, and a season with a day after it (`2026-21-15`, its fifteenth day) become.
+
+* **The name of the function** — `Tempo.in_territory/2`, `Tempo.localize/2` or another.
 
 ## The shape of the work
 
