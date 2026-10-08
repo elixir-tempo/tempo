@@ -110,4 +110,81 @@ defmodule Tempo.RRule.WeekNumberFromWkstTest do
       end
     end
   end
+
+  describe "a rule of days or less counted through the weeks it names" do
+    # The walk goes on from one week named to the next, where each day
+    # between was asked its week: a year of them for one week, which a count
+    # of many years did not come to the end of.
+    defp days_of_week_of_year(year, week, wkst),
+      do: for(day <- 0..6, do: Date.add(first_week_start(year, wkst), (week - 1) * 7 + day))
+
+    test "has the Monday of week 20 of ninety years" do
+      {:ok, rule} =
+        RRule.parse("FREQ=DAILY;BYWEEKNO=20;BYDAY=MO;COUNT=90",
+          from: Tempo.from_iso8601!("2026-01-01")
+        )
+
+      mondays = for year <- 2026..2115, do: hd(days_of_week_of_year(year, 20, 1))
+
+      assert Enum.map(mondays, &:calendar.iso_week_number(Date.to_erl(&1))) ==
+               for(year <- 2026..2115, do: {year, 20})
+
+      assert days_of(Tempo.to_interval(rule)) == mondays
+    end
+
+    test "has the days of a week 53 in the years that have one, counted from each WKST" do
+      for wkst <- [1, 4, 7] do
+        {_day, code} = @weekdays[wkst]
+
+        {:ok, rule} =
+          RRule.parse("FREQ=DAILY;BYWEEKNO=53;WKST=#{code};COUNT=21",
+            from: Tempo.from_iso8601!("2026-01-01")
+          )
+
+        long_years = 2025..2080 |> Enum.filter(&(weeks_in(&1, wkst) == 53))
+
+        expected =
+          long_years
+          |> Enum.flat_map(&days_of_week_of_year(&1, 53, wkst))
+          |> Enum.reject(&(Date.compare(&1, ~D[2026-01-01]) == :lt))
+          |> Enum.take(21)
+
+        assert {code, days_of(Tempo.to_interval(rule))} == {code, expected}
+      end
+    end
+
+    test "has the last week of each year, and the first, through a turn of the year" do
+      {:ok, rule} =
+        RRule.parse("FREQ=DAILY;BYWEEKNO=-1,1;COUNT=70",
+          from: Tempo.from_iso8601!("2026-06-01")
+        )
+
+      expected =
+        2026..2032
+        |> Enum.flat_map(fn year ->
+          days_of_week_of_year(year, 1, 1) ++ days_of_week_of_year(year, weeks_in(year, 1), 1)
+        end)
+        |> Enum.reject(&(Date.compare(&1, ~D[2026-06-01]) == :lt))
+        |> Enum.take(70)
+
+      assert days_of(Tempo.to_interval(rule)) == expected
+    end
+
+    test "has nine o'clock on each day of week 20 in a rule of hours" do
+      {:ok, rule} =
+        RRule.parse("FREQ=HOURLY;BYWEEKNO=20;BYHOUR=9;COUNT=50",
+          from: Tempo.from_iso8601!("2026-01-01T00:00:00")
+        )
+
+      {:ok, set} = Tempo.to_interval(rule)
+
+      expected =
+        2026..2034
+        |> Enum.flat_map(&days_of_week_of_year(&1, 20, 1))
+        |> Enum.take(50)
+        |> Enum.map(&[year: &1.year, month: &1.month, day: &1.day, hour: 9, minute: 0, second: 0])
+
+      assert Enum.map(IntervalSet.members(set), &Interval.from(&1).time) == expected
+    end
+  end
 end

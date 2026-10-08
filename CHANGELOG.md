@@ -423,6 +423,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A rule of days or less with a `BYWEEKNO` goes on from one week it names to the next, where each day between was asked its week: `FREQ=DAILY;BYWEEKNO=20;BYDAY=MO;COUNT=90` is its ninety Mondays and `FREQ=HOURLY;BYWEEKNO=20;BYHOUR=9;COUNT=50` its fifty hours, where each was a `Tempo.UnboundedRecurrenceError`. `FREQ=DAILY;BYWEEKNO=20;COUNT=100` takes 19 ms where it took 1.1 s.
+
 * A selection whose times of day name more than 10,000 occurrences in one period is refused as they are counted: `~o"2026YL{1..12}M{1..28}DT{0..23}H{0..59}M{0..59}SN"`, 29 million seconds, is refused in 30 ms where every one was made before any was counted and the conversion did not come to an end. One with a position (`I`) is still made whole, for the position to pick among.
 
 * A long run of years is walked a year at a time: `Enum.take(~o"{1..99999999}Y", 2)` is immediate where it took thirteen seconds, each year having been listed before the first was read. `Tempo.compare/3` sorts such a value by its first year, where it raised.

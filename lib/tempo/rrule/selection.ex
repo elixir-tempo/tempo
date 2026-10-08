@@ -280,7 +280,7 @@ defmodule Tempo.RRule.Selection do
 
   * `{:on, unit, value}` when the coarsest part that drops the candidate names a later value of `unit` in the period the candidate is in: the walk goes on from where the candidate's `unit` is `value`.
 
-  * `{:in_days, days}` when that part names days of the week: the walk goes on from the start of the day that many days on.
+  * `{:in_days, days}` when that part names days of the week or weeks of the year: the walk goes on from the start of the day that many days on.
 
   * `{:on_day, month, day}` when that part names days of the year: the walk goes on from the start of that month and day of the candidate's year.
 
@@ -1522,13 +1522,16 @@ defmodule Tempo.RRule.Selection do
 
   # The unit a part that limits holds a candidate to, which is the same for
   # every candidate of that unit's period: a candidate's year, its month, its
-  # date, its hour, its minute and its second. A week is not one of them, as
-  # a week runs across a month and a year, and nor is a part whose days are
-  # worked out in another way (an event, a nearest weekday).
+  # date, its hour, its minute and its second. A week of the year is held to
+  # the date too, every candidate of a day being in one week, though the
+  # week runs across a month and a year: the walk goes on from it by days
+  # (`goes_on_to_a_week/3`). A part whose days are worked out in another way
+  # (an event, a nearest weekday) is none of them.
   @held_to %{
     year: :year,
     month: :month,
     traditional_month: :month,
+    week: :day,
     day: :day,
     day_of_year: :day,
     day_of_week: :day,
@@ -1572,7 +1575,7 @@ defmodule Tempo.RRule.Selection do
     |> Enum.sort_by(fn {weight, _part} -> weight end)
     |> Enum.find_value(fn {_weight, part} ->
       if drops?(part, candidate, freq, selection, wkst),
-        do: further_than_a_step(goes_on_from(part, candidate), freq)
+        do: further_than_a_step(goes_on(part, candidate, wkst), freq)
     end)
   end
 
@@ -1588,6 +1591,10 @@ defmodule Tempo.RRule.Selection do
 
   defp drops?(part, candidate, freq, selection, wkst),
     do: apply_entry(part, [candidate], freq, selection, wkst) == []
+
+  # A week of the year is counted from the day its weeks start on.
+  defp goes_on({:week, weeks}, candidate, wkst), do: goes_on_to_a_week(weeks, candidate, wkst)
+  defp goes_on(part, candidate, _wkst), do: goes_on_from(part, candidate)
 
   # Where the walk goes on from: the next value the part names in the period
   # the candidate is in, and the start of the next such period where it
@@ -1637,6 +1644,46 @@ defmodule Tempo.RRule.Selection do
   end
 
   defp goes_on_from({token, _value}, _candidate), do: {:next, Map.fetch!(@held_to, token)}
+
+  # The first day of the next week of the year the part names (RFC 5545's
+  # `BYWEEKNO`, in a rule of days or less) is so many days on: of a later
+  # week of the year the candidate's week is in, or of the first one named
+  # in the year after, and of that year's first week where it names none of
+  # its weeks (a week 53 in a year of 52), from which the walk is asked
+  # again. Each day until then was asked which week it is in, so every
+  # Monday of week 20 was 364 questions apart, and ninety of them were more
+  # periods than a walk makes.
+  defp goes_on_to_a_week(weeks, %Interval{from: %Tempo{time: time, calendar: calendar}}, wkst) do
+    with {:ok, date} <- date_of(time, calendar),
+         {week_start, week_year} <- week_and_its_year(date, calendar, wkst),
+         {:ok, week, _weeks} <- Validation.week_number(calendar, week_year, wkst, week_start),
+         %Date{} = named <- next_week_named(List.wrap(weeks), {week_year, week}, calendar, wkst),
+         days when days > 0 <- Date.diff(named, date) do
+      {:in_days, days}
+    else
+      _no_week_to_go_on_to -> {:next, :day}
+    end
+  end
+
+  defp next_week_named(weeks, {year, week}, calendar, wkst) do
+    starts = Validation.week_starts(calendar, year, wkst)
+
+    case weeks |> weeks_named(starts) |> Enum.find(&(&1 > week)) do
+      nil -> first_week_named(weeks, Validation.week_starts(calendar, year + 1, wkst))
+      later -> Enum.at(starts, later - 1)
+    end
+  end
+
+  defp first_week_named(_weeks, []), do: nil
+
+  defp first_week_named(weeks, [first | _] = starts) do
+    case weeks_named(weeks, starts) do
+      [named | _] -> Enum.at(starts, named - 1)
+      [] -> first
+    end
+  end
+
+  defp weeks_named(weeks, starts), do: weeks |> UnitValues.named(1..length(starts)//1) |> whole()
 
   defp period_of(:hour), do: :day
   defp period_of(:minute), do: :hour
@@ -2227,10 +2274,16 @@ defmodule Tempo.RRule.Selection do
   # this of each of its periods, and the year's weeks, and the week's days,
   # were listed for each.
   defp week_number_from_wkst(date, calendar, wkst) do
+    with {week_start, week_year} <- week_and_its_year(date, calendar, wkst),
+         do: Validation.week_number(calendar, week_year, wkst, week_start)
+  end
+
+  # The first day of the week a date is in, and the year that week is of.
+  defp week_and_its_year(date, calendar, wkst) do
     %Date{year: year, month: month, day: day} = week_start = Kday.kday_on_or_before(date, wkst)
 
     case calendar.plus(year, month, day, :days, 3) do
-      {week_year, _month, _day} -> Validation.week_number(calendar, week_year, wkst, week_start)
+      {week_year, _month, _day} -> {week_start, week_year}
       _no_fourth_day -> :error
     end
   end
