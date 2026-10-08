@@ -10528,8 +10528,19 @@ defmodule Tempo do
   # clock shows and ends at 03:00 (decided 2026-10-08), as the value
   # `T2H` there does and as `Tempo.select/2` gives it. It ran to 03:30, an
   # hour from 02:30 and half an hour into the hour selected after it.
+  #
+  # A point nowhere near a change of its zone's clock ends a unit on, which
+  # is where it was stepped to, and its own end is not asked for.
   defp where_the_point_ends(%Tempo{extended: %{zone_id: zone}} = from, unit, %Tempo{} = stepped)
        when is_binary(zone) and unit in [:hour, :minute] do
+    if Zone.clear_of_changes?(from, Map.fetch!(@seconds_in, unit)),
+      do: stepped,
+      else: its_own_end_or(from, stepped)
+  end
+
+  defp where_the_point_ends(_from, _unit, stepped), do: stepped
+
+  defp its_own_end_or(from, stepped) do
     with {:ok, {_lower, %Tempo{} = own_end}, _unit} <- Interval.next_unit_boundary(from),
          :earlier <- Compare.compare_endpoints(own_end, stepped) do
       own_end
@@ -10537,8 +10548,6 @@ defmodule Tempo do
       _a_unit_on -> stepped
     end
   end
-
-  defp where_the_point_ends(_from, _unit, stepped), do: stepped
 
   defp explicit_occurrence_span?(metadata) do
     match?(%{occurrence_base_to: %Tempo{}}, metadata) or

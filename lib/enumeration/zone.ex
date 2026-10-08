@@ -270,6 +270,40 @@ defmodule Tempo.Enumeration.Zone do
 
   defp away_from_every_change?(%Tempo{}), do: true
 
+  # More than the most a zone's clock is from UTC and the most it has
+  # changed by, together: a reading this far from every change, and as far
+  # again as it is stepped, is shown once, at one offset, and so is each
+  # reading the step passes.
+  @clear_of_a_change 48 * 3_600
+
+  @doc """
+  Whether a value in a zone is known to be clear of every change of its
+  zone's clock, for a step of `seconds` from it: none of the changes
+  already found for the zone is within two days of its first reading, and
+  the length of the step.
+
+  A step from such a value by time passed lands on the reading its wall
+  clock steps to, at the offset it started at, so nothing need be asked of
+  the zone database. It is `false` where the zone's changes there have not
+  been found yet (`Tempo.TimeZoneDatabase.clear_of_changes?/3`), as where
+  one is near, and the caller then asks the database as it would have.
+  `shown?/1` finds them, which every value a selection or a set makes is
+  asked.
+  """
+  @spec clear_of_changes?(Tempo.t(), integer()) :: boolean()
+  def clear_of_changes?(%Tempo{extended: %{zone_id: zone}} = value, seconds)
+      when is_binary(zone) and is_integer(seconds) do
+    case value |> in_gregorian() |> first_reading() do
+      {:ok, reading} ->
+        TimeZoneDatabase.clear_of_changes?(zone, reading, abs(seconds) + @clear_of_a_change)
+
+      :no_one_reading ->
+        false
+    end
+  end
+
+  def clear_of_changes?(%Tempo{}, _seconds), do: false
+
   defp seconds_into_the_day([]), do: {:ok, 0}
   defp seconds_into_the_day([{:hour, hour}]) when is_integer(hour), do: {:ok, hour * 3_600}
 

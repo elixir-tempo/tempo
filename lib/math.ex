@@ -1152,9 +1152,21 @@ defmodule Tempo.Math do
 
   defp step_elapsed(stepped, [], _zone, _shift), do: stepped
 
+  # A step by time passed from a value nowhere near a change of its zone's
+  # clock lands on the reading its wall clock steps to, at the offset it
+  # started at, and that reading is shown once: the step is the wall
+  # clock's, and nothing is asked of the zone database, which the step was
+  # asked three times for. A value written with an offset is stepped as it
+  # was, its offset being read where it lands.
+  defp step_elapsed(stepped, clock, zone, shift) do
+    if is_nil(shift) and Zone.clear_of_changes?(stepped, clock_seconds(clock)),
+      do: add_wall(stepped, %Tempo.Duration{time: clock}),
+      else: step_on_the_time_line(stepped, clock, zone, shift)
+  end
+
   # The step's start reads its offset as its wall reading less its instant,
   # the offset `Tempo.Compare.to_utc_seconds/1` resolved it with.
-  defp step_elapsed(stepped, clock, zone, shift) do
+  defp step_on_the_time_line(stepped, clock, zone, shift) do
     from_utc = trunc(Compare.to_utc_seconds(stepped))
     before = wall_reading(stepped) - from_utc
     to_utc = from_utc + clock_seconds(clock)

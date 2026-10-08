@@ -366,6 +366,64 @@ defmodule Tempo.TimeZoneDatabase do
     end)
   end
 
+  @doc """
+  Whether the changes already found for a zone show none within `margin`
+  seconds of a moment.
+
+  It is `change_within?/3` answered from what has been kept, and asks
+  nothing of the database. Where the changes about the moment have not been
+  found yet it is `false`, as it is where one is near, so it serves a caller
+  that has another way to its answer, slower and in need of no list of
+  changes: a value stepped once, far in the future, does not then wait for
+  a year of its zone's days to be asked of the database.
+
+  ### Arguments
+
+  * `zone` is an IANA zone name.
+
+  * `moment` is a moment in gregorian seconds. A reading of the zone's
+    wall clock serves where `margin` is more than any offset the zone has
+    had.
+
+  * `margin` is a number of seconds.
+
+  ### Returns
+
+  * `true` where the changes of the zone have been found for all of the
+    time within `margin` seconds of `moment`, and none of them is in it.
+
+  * `false` where a change is within `margin` seconds of `moment`, and
+    where the changes there have not been found: `change_within?/3` and
+    `changes/3` find them.
+
+  ### Examples
+
+      iex> midsummer = :calendar.datetime_to_gregorian_seconds({{2026, 6, 21}, {12, 0, 0}})
+      iex> Tempo.TimeZoneDatabase.change_within?("Etc/UTC", midsummer, 86_400)
+      false
+      iex> Tempo.TimeZoneDatabase.clear_of_changes?("Etc/UTC", midsummer, 86_400)
+      true
+
+  """
+  @spec clear_of_changes?(String.t(), integer(), non_neg_integer()) :: boolean()
+  def clear_of_changes?(zone, moment, margin)
+      when is_binary(zone) and is_integer(moment) and is_integer(margin) do
+    clear_in_blocks?(zone, block_of(moment - margin), block_of(moment + margin), moment, margin)
+  end
+
+  defp clear_in_blocks?(_zone, block, last, _moment, _margin) when block > last, do: true
+
+  defp clear_in_blocks?(zone, block, last, moment, margin) do
+    case :persistent_term.get({__MODULE__, :changes, zone, block}, nil) do
+      nil ->
+        false
+
+      changes ->
+        not Enum.any?(changes, &(abs(elem(&1, 0) - moment) <= margin)) and
+          clear_in_blocks?(zone, block + 1, last, moment, margin)
+    end
+  end
+
   # A block of days whose starts are asked together, about a year long.
   @days_in_a_block 366
   @seconds_in_a_block @days_in_a_block * @seconds_per_day
