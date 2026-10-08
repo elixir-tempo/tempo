@@ -1,6 +1,6 @@
 # Set operations
 
-**Status:** in progress, 2026-10-08
+**Status:** in progress, 2026-10-09
 
 The requirement (user, 2026-10-04): once validation, the walk, `Tempo.select/2`, the selection's resolver and `Tempo.explain/1` rest on one implementation, the next step is strong confidence in a single implementation of the set operations. This is the inventory that work starts from: what the operations are and where each is implemented, what holds them to an answer, what does not, what has been found, and the tasks in order. The measure of its first task has landed, and the one defect it found, in `covered/2`, is fixed.
 
@@ -92,11 +92,13 @@ Both by the user, 2026-10-04.
 
 ## Tasks
 
-* [ ] **The measure widened** — a `:within` window in a zone and of several members; the forms that take a list of operands and the `:metadata` option; a lazy set within a window.
+* [ ] **The measure widened** — a `:within` window in a zone and of several members; a lazy set within a window.
 
 * [ ] **One answer to whether two spans overlap** — a property that the sweeps, the backends, Allen's relation and a window's bound agree on every generated pair; then whether any is to be read through another.
 
 ### Done
+
+* [x] **A list of operands and `:metadata`, measured** — `union/3`, `difference/3` and `intersection/3` of a list are held to the operation of the first two and then of that and the third, on days, hours and days, two zones and three calendars, and to the first alone for an empty list; an intersection's part carries the first member's mark, the second's where the two are merged, and what a function makes of the two, on a line and on the four cycles. Nothing differed. 2026-10-09.
 
 * [x] **A time of day placed inside its window** — placed on the part of each day the window holds, whatever the other operand is, with its metadata; the measure holds every operation with a window that opens and closes within a day. 2026-10-04.
 

@@ -30,6 +30,11 @@ defmodule Tempo.SetOperationsMeasureTest do
 
   Times of day placed on a `:within` window are held to their placing worked
   out in hours: each on each day the window touches, and inside the window.
+
+  An intersection's `:metadata` option is held by the marks: a part has the
+  first member's, the second's where the two are merged, and what a function
+  of the two makes of them. The forms that take a list of operands are held
+  to the operation of the first two, and then of that and the third.
   """
   use ExUnit.Case, async: true
   use ExUnitProperties
@@ -211,6 +216,59 @@ defmodule Tempo.SetOperationsMeasureTest do
 
     assert Sets.cover(parts) == Sets.shared(in_a, in_b),
            "the time intersection covers, of #{named}"
+
+    assert_marks(a, b, &Sets.pairwise(in_a, in_b, &1), &read/1, named)
+  end
+
+  # What a part of an intersection carries (`:metadata`): the first member's
+  # mark, the second's where the two are merged, since the second wins a key
+  # both have, or what a function makes of the two.
+  defp assert_marks(a, b, parts_marked_by, read, named) do
+    assert read.(Tempo.intersection(a, b, metadata: :left)) ==
+             parts_marked_by.(fn first, _second -> first end),
+           "intersection keeping the first's metadata, of #{named}"
+
+    assert read.(Tempo.intersection(a, b, metadata: :merge)) ==
+             parts_marked_by.(fn _first, second -> second end),
+           "intersection merging metadata, of #{named}"
+
+    assert read.(Tempo.intersection(a, b, metadata: {:merge, &both_marks/2})) ==
+             parts_marked_by.(&{&1, &2}),
+           "intersection with a function of the metadata, of #{named}"
+  end
+
+  defp both_marks(%{id: first}, %{id: second}), do: %{id: {first, second}}
+
+  # The forms that take a list of operands: the operation of the first two,
+  # then of that and the third, and the first alone for an empty list.
+  defp assert_lists_of_operands({a_slots, a_line}, {b_slots, b_line}, {c_slots, c_line}) do
+    a = set(a_slots, a_line, :a, [])
+    b = set(b_slots, b_line, :b, [])
+    c = set(c_slots, c_line, :c, [])
+    {in_a, in_b, in_c} = {read(a), read(b), read(c)}
+
+    named =
+      "#{inspect(a_slots)} on #{a_line}, #{inspect(b_slots)} on #{b_line} " <>
+        "and #{inspect(c_slots)} on #{c_line}"
+
+    assert read(Tempo.union(a, [b, c])) == in_a |> Sets.union(in_b) |> Sets.union(in_c),
+           "union of #{named}"
+
+    assert read(Tempo.difference(a, [b, c])) ==
+             in_a |> Sets.difference(in_b) |> Sets.difference(in_c),
+           "difference of #{named}"
+
+    assert read(Tempo.intersection(a, [b, c])) ==
+             in_a |> Sets.pairwise(in_b) |> Sets.pairwise(in_c),
+           "intersection of #{named}"
+
+    assert read(Tempo.intersection(a, [b, c], metadata: {:merge, &both_marks/2})) ==
+             in_a |> Sets.pairwise(in_b, &{&1, &2}) |> Sets.pairwise(in_c, &{&1, &2}),
+           "intersection with a function of the metadata, of #{named}"
+
+    assert read(Tempo.union(a, [])) == in_a, "union with no other, of #{named}"
+    assert read(Tempo.difference(a, [])) == in_a, "difference of no other, of #{named}"
+    assert read(Tempo.intersection(a, [])) == in_a, "intersection with no other, of #{named}"
   end
 
   defp assert_predicates(a, b, in_a, in_b, named) do
@@ -444,6 +502,28 @@ defmodule Tempo.SetOperationsMeasureTest do
     end
   end
 
+  for {a_line, b_line, c_line, what} <- [
+        {:days, :days, :days, "days"},
+        {:hours, :days, :hours, "hours and days"},
+        {:utc_hours, :paris_hours, :utc_hours, "hours in two zones"},
+        {:days, :hebrew_days, :persian_days, "days of three calendars"}
+      ] do
+    property "a list of operands of #{what}" do
+      check all(
+              a_slots <- spans_on(unquote(a_line), 4),
+              b_slots <- spans_on(unquote(b_line), 4),
+              c_slots <- spans_on(unquote(c_line), 4),
+              max_runs: 60
+            ) do
+        assert_lists_of_operands(
+          {a_slots, unquote(a_line)},
+          {b_slots, unquote(b_line)},
+          {c_slots, unquote(c_line)}
+        )
+      end
+    end
+  end
+
   ## A set with no year
 
   # The members of a set with no year as arcs of its cycle in the line's own
@@ -487,6 +567,8 @@ defmodule Tempo.SetOperationsMeasureTest do
 
     assert arcs(Tempo.intersection(a, b), line) == Sets.pairwise_on_cycle(in_a, in_b, cells),
            "intersection of #{named}"
+
+    assert_marks(a, b, &Sets.pairwise_on_cycle(in_a, in_b, cells, &1), &arcs(&1, line), named)
 
     assert arcs(Tempo.members_overlapping(a, b), line) ==
              Sets.members_on_cycle(in_a, in_b, cells, :overlapping),

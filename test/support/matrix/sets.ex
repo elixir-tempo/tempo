@@ -107,15 +107,36 @@ defmodule Tempo.Matrix.Sets do
 
   """
   @spec pairwise([span()], [span()]) :: [span()]
-  def pairwise(a, b) do
+  def pairwise(a, b), do: pairwise(a, b, &first_mark/2)
+
+  @doc """
+  Each member of the first list cut to each member of the second it
+  overlaps, marked by both members.
+
+  ### Arguments
+
+  * `a` and `b` are lists of `t:span/0`.
+
+  * `mark` is a function of the marks of the first's member and of the
+    second's, which gives the part's.
+
+  ### Returns
+
+  * A list of `t:span/0`, one for each pair of members that overlap.
+
+  """
+  @spec pairwise([span()], [span()], (term(), term() -> term())) :: [span()]
+  def pairwise(a, b, mark) do
     ordered(
-      for {a_from, a_to, id} <- a,
-          {b_from, b_to, _b_id} <- b,
+      for {a_from, a_to, a_id} <- a,
+          {b_from, b_to, b_id} <- b,
           max(a_from, b_from) < min(a_to, b_to) do
-        {max(a_from, b_from), min(a_to, b_to), id}
+        {max(a_from, b_from), min(a_to, b_to), mark.(a_id, b_id)}
       end
     )
   end
+
+  defp first_mark(mark, _other), do: mark
 
   @doc """
   Each member of the first list without the time the second covers.
@@ -378,13 +399,34 @@ defmodule Tempo.Matrix.Sets do
 
   """
   @spec pairwise_on_cycle([span()], [span()], pos_integer()) :: [span()]
-  def pairwise_on_cycle(a, b, cells) do
+  def pairwise_on_cycle(a, b, cells), do: pairwise_on_cycle(a, b, cells, &first_mark/2)
+
+  @doc """
+  The parts `pairwise_on_cycle/3` gives, marked by both members.
+
+  ### Arguments
+
+  * `a` and `b` are lists of arcs `{from, to, id}`, in whole cells.
+
+  * `cells` is how many cells the cycle has.
+
+  * `mark` is a function of the marks of the first's member and of the
+    second's, which gives the part's.
+
+  ### Returns
+
+  * A list of arcs, for each pair of members the cells both hold.
+
+  """
+  @spec pairwise_on_cycle([span()], [span()], pos_integer(), (term(), term() -> term())) ::
+          [span()]
+  def pairwise_on_cycle(a, b, cells, mark) do
     ordered(
-      for {_from, _to, id} = member <- a,
-          other <- b,
+      for {_from, _to, a_id} = member <- a,
+          {_other_from, _other_to, b_id} = other <- b,
           held = MapSet.new(arc_cells(other, cells)),
           {part_from, part_to} <- kept_of(member, &(&1 in held), cells),
-          do: {part_from, part_to, id}
+          do: {part_from, part_to, mark.(a_id, b_id)}
     )
   end
 
