@@ -217,7 +217,10 @@ defmodule Tempo.JSCalendarTest do
                {:error, {:unsupported_skip, {:forward, [bymonthday: [-31]]}}}
     end
 
-    test "a rule counted in another calendar than the Gregorian is reported" do
+    # RFC 8984 §4.3.3: `rscale` names the calendar a rule counts its months
+    # and its days in. A Hebrew rule was reported as not built
+    # (`:unsupported_rscale`); it is counted from its start's Hebrew date.
+    test "a rule counted in another calendar is counted from its start's date there" do
       yearly = fn rule ->
         Tempo.JSCalendar.parse(event(~s(
           "start":"2026-04-05T09:00:00","duration":"PT1H",
@@ -225,13 +228,28 @@ defmodule Tempo.JSCalendarTest do
         )))
       end
 
-      # A Hebrew rule's months are not the Gregorian calendar's.
-      assert yearly.(~s(,"rscale":"hebrew")) == {:error, {:unsupported_rscale, "hebrew"}}
+      assert {:ok, hebrew} = yearly.(~s(,"rscale":"hebrew"))
+
+      # 5 April 2026 is 18 Nisan 5786, and 18 Nisan 5787 is 25 April 2027:
+      # the eighth month of a year with a leap month.
+      assert Date.convert!(~D[2026-04-05], Calendrical.Hebrew) ==
+               Date.new!(5786, 7, 18, Calendrical.Hebrew)
+
+      assert Date.convert!(Date.new!(5787, 8, 18, Calendrical.Hebrew), Calendar.ISO) ==
+               ~D[2027-04-25]
+
+      assert spans(hebrew) == [
+               "5786Y7M18DT9H0M0S/T10H0M0S[u-ca=hebrew]",
+               "5787Y8M18DT9H0M0S/T10H0M0S[u-ca=hebrew]"
+             ]
 
       assert {:ok, gregorian} = yearly.(~s(,"rscale":"gregorian"))
       assert {:ok, unsaid} = yearly.("")
       assert spans(gregorian) == spans(unsaid)
       assert spans(unsaid) == ["2026Y4M5DT9H0M0S/T10H0M0S", "2027Y4M5DT9H0M0S/T10H0M0S"]
+
+      # A name that is no calendar's is reported.
+      assert yearly.(~s(,"rscale":"klingon")) == {:error, {:unsupported_rscale, "klingon"}}
     end
 
     test "byDay carries its ordinal" do

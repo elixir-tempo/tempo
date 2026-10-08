@@ -64,14 +64,14 @@ The three tables are three levels of guarantee.
 | Week `2026-W25` | 4 of 11 | all | all | all | all | 10 of 11 | 2 of 9 | all | 17 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.ResolutionError`, `Tempo.RoundingError` |
 | Week date `2026-W25-3` | 7 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
 | Ordinal date `2026-166` | 7 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
-| Date and hour `2026-06-15T10` | 4 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
-| Date and minute `2026-06-15T10:30` | 4 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
-| Date and second `2026-06-15T10:30:45` | 6 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
-| Date and fraction `2026-06-15T10:30:45.5` | 6 of 11 | all | all | all | all | 10 of 11 | all | all | all | `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.ResolutionError` |
-| Date and microsecond `2026-06-15T10:30:45.123456` | 6 of 11 | none | all | all | all | 9 of 11 | all | all | all | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.ResolutionError` |
-| UTC `2026-06-15T10:30:45Z` | 7 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.ZonedTempoError` |
-| Offset `2026-06-15T10:30:45+02:00` | 7 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.ZonedTempoError` |
-| Zoned `2026-06-15T10:30:45[Europe/Paris]` | 7 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.ZonedTempoError` |
+| Date and hour `2026-06-15T10` | 5 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
+| Date and minute `2026-06-15T10:30` | 5 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
+| Date and second `2026-06-15T10:30:45` | 7 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
+| Date and fraction `2026-06-15T10:30:45.5` | 7 of 11 | all | all | all | all | 10 of 11 | all | all | all | `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.ResolutionError` |
+| Date and microsecond `2026-06-15T10:30:45.123456` | 7 of 11 | none | all | all | all | 9 of 11 | all | all | all | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.ResolutionError` |
+| UTC `2026-06-15T10:30:45Z` | 8 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.ZonedTempoError` |
+| Offset `2026-06-15T10:30:45+02:00` | 8 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.ZonedTempoError` |
+| Zoned `2026-06-15T10:30:45[Europe/Paris]` | 8 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.ZonedTempoError` |
 | Zoned date `2026-06-15[Europe/Paris]` | 6 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.ZonedTempoError` |
 | Expanded year `-2026Y` | 4 of 11 | all | all | all | all | 10 of 11 | 2 of 9 | all | 17 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.ResolutionError`, `Tempo.RoundingError` |
 | Time of day `T10:30:45` | 6 of 11 | all | 8 of 9 | all | all | 9 of 11 | 2 of 9 | 4 of 5 | 13 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.ResolutionError`, `Tempo.UnanchoredError` |
@@ -88,8 +88,8 @@ The three tables are three levels of guarantee.
 | Interval, no year, open end `T10H/..` | 2 of 11 | 2 of 4 | 8 of 9 | 1 of 21 | none | 5 of 11 | 2 of 9 | 3 of 5 | 9 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.IntervalEndpointsError`, `Tempo.ResolutionError`, `Tempo.UnanchoredError` |
 | Interval, two resolutions `2026/2026-03` | 3 of 11 | all | 8 of 9 | all | all | 7 of 11 | 2 of 9 | all | 4 of 18 | `ArgumentError`, `Tempo.ConversionError` |
 | Interval, week to date `2026-W25/2026-07-01` | 3 of 11 | all | 8 of 9 | all | all | 7 of 11 | 2 of 9 | all | 8 of 18 | `ArgumentError`, `Tempo.ConversionError` |
-| Interval, zoned `2026-06-15T09:00[Europe/Paris]/2026-06-15T17:00[Europe/Paris]` | 3 of 11 | all | 8 of 9 | all | all | 5 of 11 | 2 of 9 | all | 7 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.IntervalEndpointsError` |
-| Interval, two zones `2026-06-15T10:00+02:00/2026-06-15T12:00Z` | 3 of 11 | all | 8 of 9 | all | all | 7 of 11 | 2 of 9 | all | 7 of 18 | `ArgumentError`, `Tempo.ConversionError` |
+| Interval, zoned `2026-06-15T09:00[Europe/Paris]/2026-06-15T17:00[Europe/Paris]` | 4 of 11 | all | 8 of 9 | all | all | 5 of 11 | 2 of 9 | all | 7 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.IntervalEndpointsError` |
+| Interval, two zones `2026-06-15T10:00+02:00/2026-06-15T12:00Z` | 4 of 11 | all | 8 of 9 | all | all | 7 of 11 | 2 of 9 | all | 7 of 18 | `ArgumentError`, `Tempo.ConversionError` |
 | Duration `P1D` | 1 of 11 | none | none | 1 of 21 | none | none | none | 4 of 5 | none | `ArgumentError`, `Protocol.UndefinedError`, `Tempo.ConversionError` |
 | Set of durations `{P1D,P2D}` | none | all | none | none | none | none | none | 3 of 5 | none | `ArgumentError`, `Tempo.ConversionError` |
 | Recurrence, counted `R3/2026-06-01/P1D` | 4 of 11 | all | 2 of 9 | 6 of 21 | all | 3 of 11 | 2 of 9 | all | 2 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
@@ -120,10 +120,10 @@ The three tables are three levels of guarantee.
 | Selection `2026Y4ML1K1IN` | 4 of 11 | all | all | all | all | 7 of 11 | 2 of 9 | all | all | `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.ResolutionError`, `Tempo.RoundingError` |
 | Season `2026-21` | 3 of 11 | all | 8 of 9 | all | all | 7 of 11 | 2 of 9 | all | 5 of 18 | `ArgumentError`, `Tempo.ConversionError` |
 | Week of a month `2026Y6M2W` | 4 of 11 | all | 8 of 9 | all | all | 7 of 11 | 2 of 9 | all | 6 of 18 | `ArgumentError`, `Tempo.ConversionError` |
-| Zone transition `2026-10-25T02:30[Europe/Paris]` | 4 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.ZonedTempoError` |
+| Zone transition `2026-10-25T02:30[Europe/Paris]` | 5 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.ZonedTempoError` |
 | Mask from the end `2026Y-XM` | 4 of 11 | all | all | all | all | 9 of 11 | 2 of 9 | all | 14 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.ResolutionError`, `Tempo.RoundingError` |
 | Mask of fewer digits `2026YXM` | 4 of 11 | all | all | all | all | 9 of 11 | 2 of 9 | all | 14 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.ResolutionError`, `Tempo.RoundingError` |
-| Time on a year or month `2026YT17H` | 4 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
+| Time on a year or month `2026YT17H` | 5 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
 | Recurrence from a masked day `R3/2026Y6MXXD/P1M` | 3 of 11 | all | 2 of 9 | 6 of 21 | all | 3 of 11 | 2 of 9 | all | 2 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
 | Set with a day a month lacks `{1,2}M31D` | 4 of 11 | all | 2 of 9 | all | all | 9 of 11 | 2 of 9 | 4 of 5 | 13 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.RoundingError`, `Tempo.UnanchoredError` |
 | Group of a set `2026Y{1,2}G3MU` | 4 of 11 | all | 8 of 9 | 6 of 21 | all | 3 of 11 | 2 of 9 | 4 of 5 | 14 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.IntervalEndpointsError`, `Tempo.ResolutionError`, `Tempo.RoundingError` |

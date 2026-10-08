@@ -3,6 +3,7 @@ defmodule Tempo.FromElixir.Test do
   import Tempo.Sigils
 
   alias Calendrical.FiscalYear
+  alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalSet
 
@@ -337,12 +338,16 @@ defmodule Tempo.FromElixir.Test do
       assert Interval.to(converted) in [nil, :undefined]
     end
 
-    test "an interval whose endpoints are not days is refused" do
+    test "an interval of dates with a time of day keeps the times on the converted dates" do
+      {:ok, converted} =
+        Tempo.to_calendar(~o"2026-06-15T09:00:00/2026-06-15T17:00:00", Calendrical.Hebrew)
+
+      assert Tempo.to_iso8601!(converted) == "5786Y9M30DT9H0M0S/T17H0M0S[u-ca=hebrew]"
+    end
+
+    test "an interval whose endpoints are not dates is refused" do
       assert {:error, %Tempo.ConversionError{}} =
-               Tempo.to_calendar(
-                 ~o"2026-06-15T09:00:00/2026-06-15T17:00:00",
-                 Calendrical.Hebrew
-               )
+               Tempo.to_calendar(~o"2026-06/2026-08", Calendrical.Hebrew)
     end
 
     test "an interval set converts every member" do
@@ -360,7 +365,7 @@ defmodule Tempo.FromElixir.Test do
       {:ok, set} =
         IntervalSet.new([
           ~o"2026-06-15/2026-06-16",
-          ~o"2026-07-01T09:00:00/2026-07-01T17:00:00"
+          ~o"2026-07/2026-08"
         ])
 
       assert {:error, %Tempo.ConversionError{}} =
@@ -395,12 +400,40 @@ defmodule Tempo.FromElixir.Test do
                {2026, 6, 15}
     end
 
-    test "refuses a value that is not a plain day" do
-      assert {:error, %Tempo.ConversionError{}} =
-               Tempo.to_calendar(~o"2026", Calendrical.Hebrew)
+    test "refuses a value that has no one date" do
+      for value <- [~o"2026", ~o"2026-06", ~o"T10:30", ~o"2026Y6M15DT{9..10}H"] do
+        assert {^value, {:error, %Tempo.ConversionError{}}} =
+                 {value, Tempo.to_calendar(value, Calendrical.Hebrew)}
+      end
+    end
 
-      assert {:error, %Tempo.ConversionError{}} =
-               Tempo.to_calendar(~o"2026-06-15T10:30:00", Calendrical.Hebrew)
+    # A date with a time of day was refused. It is its date in the calendar
+    # at the same time of day, in the same zone, and comes back as it was.
+    test "a date with a time of day is its date in the calendar, at the same time" do
+      hebrew = Date.convert!(~D[2026-06-15], Calendrical.Hebrew)
+      assert {hebrew.year, hebrew.month, hebrew.day} == {5786, 9, 30}
+
+      for {value, text} <- [
+            {~o"2026-06-15T10:30:00", "5786Y9M30DT10H30M0S[u-ca=hebrew]"},
+            {~o"2026-06-15T23", "5786Y9M30DT23H[u-ca=hebrew]"},
+            {~o"2026-06-15T10:30:15.250", "5786Y9M30DT10H30M15.250S[u-ca=hebrew]"},
+            {~o"2026-06-15T10:30Z", "5786Y9M30DT10H30MZ[u-ca=hebrew]"},
+            {~o"2026-06-15T10:30[Europe/Paris]", "5786Y9M30DT10H30M[Europe/Paris][u-ca=hebrew]"}
+          ] do
+        {:ok, converted} = Tempo.to_calendar(value, Calendrical.Hebrew)
+
+        assert {value, Tempo.to_iso8601!(converted)} == {value, text}
+
+        assert {value, Tempo.to_calendar(converted, Calendrical.Gregorian)} ==
+                 {value, {:ok, value}}
+      end
+    end
+
+    test "a time in a zone is the same moment in either calendar" do
+      value = ~o"2026-06-15T23:30[America/New_York]"
+      {:ok, converted} = Tempo.to_calendar(value, Calendrical.Hebrew)
+
+      assert Compare.to_utc_seconds(converted) == Compare.to_utc_seconds(value)
     end
   end
 

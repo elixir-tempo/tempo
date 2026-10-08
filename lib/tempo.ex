@@ -5164,8 +5164,10 @@ defmodule Tempo do
 
   The value is read as a native `Date` in its own calendar, converted
   with `Date.convert/2`, and brought back as a `%Tempo{}` in `calendar`.
-  A value that is not a plain day — a bare year or month, a time-of-day,
-  or a zoned value — returns an error.
+  A date with a time of day is its date in `calendar` at the same time of
+  day and in the same zone: the day its own clock is on. A value that has
+  no one date — a bare year or month, a time of day alone — returns an
+  error.
 
   An interval converts its endpoints and keeps everything else: its
   duration, recurrence, repeat rule, iteration unit and metadata are
@@ -5177,8 +5179,9 @@ defmodule Tempo do
 
   ### Arguments
 
-  * `value` is a day-resolution `t:t/0`, a `t:Tempo.Interval.t/0` whose
-    endpoints are days, or a `t:Tempo.IntervalSet.t/0` of those.
+  * `value` is a `t:t/0` that is a date, or a date and a time of day, a
+    `t:Tempo.Interval.t/0` whose endpoints are such values, or a
+    `t:Tempo.IntervalSet.t/0` of those.
 
   * `calendar` is a calendar module — a `Calendrical.*` calendar or any
     module implementing Elixir's `Calendar` behaviour.
@@ -5194,6 +5197,12 @@ defmodule Tempo do
       iex> {:ok, hebrew} = Tempo.to_calendar(~o"2026-06-15", Calendrical.Hebrew)
       iex> {Tempo.year(hebrew), Tempo.month(hebrew), Tempo.day(hebrew)}
       {5786, 9, 30}
+
+  A time of day stays as it is on the converted date:
+
+      iex> {:ok, hebrew} = Tempo.to_calendar(~o"2026-06-15T09:30", Calendrical.Hebrew)
+      iex> Tempo.to_iso8601!(hebrew)
+      "5786Y9M30DT9H30M[u-ca=hebrew]"
 
   A whole span converts as one value. This is a fiscal quarter read back
   as the Gregorian dates it covers:
@@ -5283,14 +5292,35 @@ defmodule Tempo do
     convert_date(value, UnitValues.date_from_iso_week(year, week, day, source), calendar)
   end
 
-  defp in_calendar(%Tempo{} = value, calendar) do
-    {:error,
-     ConversionError.exception(
-       value: value,
-       target: calendar,
-       reason: "only day-resolution, unzoned values convert between calendars"
-     )}
+  # A date with a time of day is its date in the calendar, at the same time
+  # of day and in the same zone: the day its own clock is on.
+  defp in_calendar(
+         %Tempo{
+           time: [{:year, year}, {:month, month}, {:day, day}, {:hour, _hour} | _finer] = time,
+           calendar: source
+         } = value,
+         calendar
+       )
+       when is_integer(year) and is_integer(month) and is_integer(day) do
+    time_of_day = Enum.drop(time, 3)
+
+    with true <- Enum.all?(time_of_day, &plain_time_unit?/1),
+         date = %{value | time: Enum.take(time, 3), shift: nil},
+         {:ok, converted} <-
+           convert_date(
+             date,
+             Date.new(year, month, day, source || Calendrical.Gregorian),
+             calendar
+           ) do
+      {:ok, %{converted | time: converted.time ++ time_of_day, shift: value.shift}}
+    else
+      false -> {:error, not_a_date_error(value, calendar)}
+      {:error, _exception} = error -> error
+    end
   end
+
+  defp in_calendar(%Tempo{} = value, calendar),
+    do: {:error, not_a_date_error(value, calendar)}
 
   defp in_calendar(value, calendar) do
     {:error,
@@ -5302,6 +5332,24 @@ defmodule Tempo do
            "dates or an interval set converts."
      )}
   end
+
+  defp not_a_date_error(value, calendar) do
+    ConversionError.exception(
+      value: value,
+      target: calendar,
+      reason: "only a date, or a date and a time of day, converts between calendars"
+    )
+  end
+
+  # A unit of a time of day that is one value: a set, a range or a mask of
+  # them has no one moment to keep.
+  defp plain_time_unit?({unit, value}) when unit in [:hour, :minute, :second],
+    do: is_integer(value)
+
+  defp plain_time_unit?({:microsecond, {value, precision}}),
+    do: is_integer(value) and is_integer(precision)
+
+  defp plain_time_unit?(_another), do: false
 
   defp convert_date(value, date_in_source, calendar) do
     with {:ok, in_source} <- date_in_source,

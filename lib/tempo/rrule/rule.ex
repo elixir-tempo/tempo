@@ -29,6 +29,8 @@ defmodule Tempo.RRule.Rule do
 
   * `:skip` — what a monthly or a yearly rule does with a day of the month that a month lacks, its start's or one it writes (`BYMONTHDAY=31`), as RFC 7529's `SKIP` and JSCalendar's `skip` name it. `:omit`, the default and RFC 5545's rule, lists no occurrence there: the rule states its start's day (ISO 8601-2 Annex C.3), and a day a month lacks is passed over. `:backward` lists the month's last day, as an ISO 8601 recurrence does, and `:forward` the first day of the month after.
 
+  * `:rscale` — the calendar module the rule is counted in, where RFC 7529's `RSCALE` or JSCalendar's `rscale` names one (`calendar_from_rscale/1`), and `nil` where the rule names none and is counted in the calendar of its start. A start in another calendar is brought into it (`start_in_rscale/2`), and a `:bymonth` is then the month RFC 7529 numbers: Nisan is the seventh month of every Hebrew year, where it is the eighth in order in a year with a leap month.
+
   * `:bymonth` — list of integers 1–12. Limit.
 
   * `:bymonthday` — list of integers -31..31 (negatives count from
@@ -74,6 +76,7 @@ defmodule Tempo.RRule.Rule do
   """
 
   alias Tempo.Iso8601.Parser
+  alias Tempo.UnitValues
 
   @type frequency :: :second | :minute | :hour | :day | :week | :month | :year
   @type weekday :: 1..7
@@ -86,6 +89,7 @@ defmodule Tempo.RRule.Rule do
           until: Tempo.t() | nil,
           wkst: weekday(),
           skip: :omit | :backward | :forward,
+          rscale: module() | nil,
           bymonth: [integer()] | nil,
           bymonthday: [integer()] | nil,
           byyearday: [integer()] | nil,
@@ -106,6 +110,7 @@ defmodule Tempo.RRule.Rule do
             until: nil,
             wkst: 1,
             skip: :omit,
+            rscale: nil,
             bymonth: nil,
             bymonthday: nil,
             byyearday: nil,
@@ -153,6 +158,92 @@ defmodule Tempo.RRule.Rule do
   end
 
   def skip_built(%__MODULE__{}), do: :ok
+
+  @doc """
+  Returns the calendar a rule's `RSCALE` names.
+
+  RFC 7529's `RSCALE`, and JSCalendar's `rscale` (RFC 8984 §4.3.3), name the calendar a rule counts its months and its days in by its CLDR calendar name, in any case: `HEBREW`, `islamic-civil`, `chinese`. It is one of the notations that carry a calendar's name by definition, and is resolved to the calendar module where the rule is read.
+
+  ### Arguments
+
+  * `name` is the calendar's name as the rule writes it, or `nil` for a rule that names none.
+
+  ### Returns
+
+  * `{:ok, calendar}`, a calendar module, and `{:ok, nil}` for no name: the rule is counted in the calendar of its start.
+
+  * `{:error, {:unsupported_rscale, name}}` for a name that is no calendar's.
+
+  ### Examples
+
+      iex> Tempo.RRule.Rule.calendar_from_rscale("HEBREW")
+      {:ok, Calendrical.Hebrew}
+
+      iex> Tempo.RRule.Rule.calendar_from_rscale("islamic-civil")
+      {:ok, Calendrical.Islamic.Civil}
+
+      iex> Tempo.RRule.Rule.calendar_from_rscale(nil)
+      {:ok, nil}
+
+      iex> Tempo.RRule.Rule.calendar_from_rscale("KLINGON")
+      {:error, {:unsupported_rscale, "KLINGON"}}
+
+  """
+  @spec calendar_from_rscale(String.t() | nil) ::
+          {:ok, module() | nil} | {:error, {:unsupported_rscale, term()}}
+  def calendar_from_rscale(nil), do: {:ok, nil}
+
+  def calendar_from_rscale(name) when is_binary(name) do
+    case Calendrical.calendar_from_cldr_calendar_type(String.downcase(name)) do
+      {:ok, calendar} -> {:ok, calendar}
+      {:error, _unknown_calendar} -> {:error, {:unsupported_rscale, name}}
+    end
+  end
+
+  def calendar_from_rscale(other), do: {:error, {:unsupported_rscale, other}}
+
+  @doc """
+  Brings a rule's start into the calendar the rule is counted in.
+
+  A rule that names a calendar (`:rscale`) counts its months and its days from its start's date in that calendar: a yearly rule in the Hebrew calendar from 2 April 2026 is from 15 Nisan 5786. A time of day and a zone stay as they are.
+
+  ### Arguments
+
+  * `rule` is a `t:t/0`.
+
+  * `start` is the rule's start, a `t:Tempo.t/0`, or `nil`.
+
+  ### Returns
+
+  * `{:ok, start}`, in the rule's calendar, or as it was for a rule that names none and for no start.
+
+  * `{:error, {:from_is_no_date, start}}` for a start that is no date, a month or a time of day alone, which has no place in another calendar.
+
+  ### Examples
+
+      iex> rule = %Tempo.RRule.Rule{freq: :year, rscale: Calendrical.Hebrew}
+      iex> {:ok, start} = Tempo.RRule.Rule.start_in_rscale(rule, ~o"2026-04-02")
+      iex> Tempo.to_iso8601!(start)
+      "5786Y7M15D[u-ca=hebrew]"
+
+      iex> Tempo.RRule.Rule.start_in_rscale(%Tempo.RRule.Rule{freq: :year}, ~o"2026-04-02")
+      {:ok, ~o"2026-04-02"}
+
+  """
+  @spec start_in_rscale(t(), Tempo.t() | nil) ::
+          {:ok, Tempo.t() | nil} | {:error, {:from_is_no_date, Tempo.t()}}
+  def start_in_rscale(%__MODULE__{rscale: nil}, start), do: {:ok, start}
+  def start_in_rscale(%__MODULE__{}, nil), do: {:ok, nil}
+
+  def start_in_rscale(%__MODULE__{rscale: calendar}, %Tempo{calendar: calendar} = start),
+    do: {:ok, start}
+
+  def start_in_rscale(%__MODULE__{rscale: calendar}, %Tempo{} = start) do
+    case Tempo.to_calendar(start, calendar) do
+      {:ok, %Tempo{} = in_calendar} -> {:ok, in_calendar}
+      {:error, _no_date} -> {:error, {:from_is_no_date, start}}
+    end
+  end
 
   @doc """
   Does the rule include any `BY*` modifier?
@@ -246,7 +337,7 @@ defmodule Tempo.RRule.Rule do
       selection =
         []
         |> push_by(rule.byyear, :year)
-        |> push_by(rule.bymonth, :month)
+        |> push_by(rule.bymonth, month_unit(rule.rscale))
         |> push_by(rule.bymonthday, :day)
         |> push_by(rule.bymonthday_nearest, :nearest_weekday)
         |> push_or_day(rule.bymonthday_or_byday)
@@ -266,7 +357,27 @@ defmodule Tempo.RRule.Rule do
         |> Enum.reverse()
         |> Parser.consolidate_selection()
 
-      %Tempo{time: [{:selection, selection} | units], calendar: Calendrical.Gregorian}
+      %Tempo{
+        time: [{:selection, selection} | units],
+        calendar: rule.rscale || Calendrical.Gregorian
+      }
+    end
+  end
+
+  # RFC 7529 numbers a month as its calendar names it, a leap month taking
+  # the number of the month it follows: Nisan is month 7 of every Hebrew
+  # year. That is the traditional month (`m`) in a calendar whose years
+  # differ in their months, and the month in order (`M`) in every other,
+  # where the two are one.
+  defp month_unit(nil), do: :month
+
+  defp month_unit(calendar) do
+    case UnitValues.in_any_year(:month, [], calendar) do
+      {:ok, %Range{last: every_year}, %Range{last: most}} when most > every_year ->
+        :traditional_month
+
+      _the_same_months_every_year ->
+        :month
     end
   end
 

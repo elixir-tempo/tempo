@@ -157,14 +157,32 @@ defmodule Tempo.RRule.Expander do
   """
   @spec to_ast(Rule.t(), Tempo.t(), keyword()) ::
           {:ok, Interval.t()}
-          | {:error, {:invalid_interval | :invalid_count | :byweekno_without_a_date, term()}}
+          | {:error,
+             {:invalid_interval | :invalid_count | :byweekno_without_a_date | :from_is_no_date,
+              term()}}
   def to_ast(%Rule{} = rule, dtstart, options \\ [])
       when is_nil(dtstart) or is_struct(dtstart, Tempo) do
     with {:ok, interval} <- steps_by(rule.interval),
          {:ok, recurrence} <- counted(rule.count),
+         {:ok, dtstart} <- Rule.start_in_rscale(rule, dtstart),
+         {:ok, options} <- base_to_in_rscale(rule, options),
          ast = recurring(rule, dtstart, interval, recurrence, options),
          :ok <- Selection.week_number_of_a_year(ast) do
       {:ok, ast}
+    end
+  end
+
+  # RFC 7529, RFC 8984 §4.3.3: a rule that names a calendar is counted in it
+  # from its start's date there, and the end of its first occurrence is a
+  # date of it too.
+  defp base_to_in_rscale(rule, options) do
+    case Keyword.get(options, :base_to) do
+      %Tempo{} = base_to ->
+        with {:ok, base_to} <- Rule.start_in_rscale(rule, base_to),
+             do: {:ok, Keyword.put(options, :base_to, base_to)}
+
+      _none ->
+        {:ok, options}
     end
   end
 

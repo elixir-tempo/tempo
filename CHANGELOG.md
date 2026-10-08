@@ -267,6 +267,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Added
 
+* `Tempo.RRule.parse/2` and `Tempo.JSCalendar.parse/2` read a rule counted in another calendar, RFC 7529's `RSCALE` and RFC 8984's `rscale`: `RSCALE=HEBREW;FREQ=YEARLY` from 2 April 2026 recurs on 15 Nisan, and its `BYMONTH` is the month RFC 7529 numbers. It was `{:error, {:unsupported_rscale, "HEBREW"}}`, which is now a name that is no calendar's.
+
 * `config :ex_tempo, max_values_at_once: 100_000` — the most values Tempo gives at once, 10,000 unless it is set: the values listed, the spans converted to, the occurrences and the periods of a recurrence's walk, and the candidates a position picks among. It is read when Tempo is compiled.
 
 * `Tempo.TimeZoneDatabase.clear_of_changes?/3` — whether the changes already found for a zone show none within so many seconds of a moment. It asks nothing of the database and is `false` where they have not been found, until a year has been asked of as often as finding its changes takes.
@@ -358,6 +360,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * `Tempo.RecurrenceSet.filter/2` keeps the members a function keeps, as `IntervalSet.filter/2` does.
 
 ### Changed
+
+* `Tempo.to_calendar/2` converts a date with a time of day, which it refused: `~o"2026-06-15T09:30[Europe/Paris]"` in `Calendrical.Hebrew` is 30 Sivan 5786 at 09:30 in the same zone, the day its own clock is on. An interval of such values converts too.
 
 * `Tempo.explain/1` writes and words a value as far as it is written, and no further: `~o"1984/1986"` is "From: 1984." where each end was written out to its first day, and an hour is "at hour 10" where it was "at 10:00". Where an end does not say the day it starts on, a week and a year of a calendar that turns on another day, the day is told beside it (`2026-W25 (starts on 2026-06-15)`).
 

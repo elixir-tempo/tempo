@@ -242,8 +242,9 @@ defmodule Tempo.RRule.RscaleSkipTest do
                {:error, {:unsupported_skip, "SIDEWAYS"}}
     end
 
-    test "a rule counted in another calendar than the Gregorian" do
-      assert RRule.parse("RSCALE=HEBREW;FREQ=YEARLY") == {:error, {:unsupported_rscale, "HEBREW"}}
+    test "an RSCALE that names no calendar" do
+      assert RRule.parse("RSCALE=KLINGON;FREQ=YEARLY") ==
+               {:error, {:unsupported_rscale, "KLINGON"}}
     end
 
     test "SKIP with no RSCALE, which RFC 7529 forbids" do

@@ -87,7 +87,7 @@ defmodule Tempo.RRule do
 
   * `:from` — the recurrence's start, a `%Tempo{}` (DTSTART). Sets `Interval.from`
     so occurrence enumeration has a starting point. Optional;
-    callers that intend to enumerate must supply this. A rule read with a start that is a calendar date states what RFC 5545 takes from it (ISO 8601-2 Annex C.3): a weekly rule its weekday, a monthly rule its day of the month, a yearly rule its month and day. `FREQ=MONTHLY` from 31 January is `~o"R/2026-01-31/P1M/FL31DN"`, which lists the months of 31 days, and each occurrence is as long as the start is precise, a day for a date.
+    callers that intend to enumerate must supply this. A rule that names a calendar (RFC 7529's `RSCALE=HEBREW`) is counted in it from the start's date there, whatever calendar the start is written in, and its `BYMONTH` is the month RFC 7529 numbers, Nisan being month 7 of every Hebrew year. A rule read with a start that is a calendar date states what RFC 5545 takes from it (ISO 8601-2 Annex C.3): a weekly rule its weekday, a monthly rule its day of the month, a yearly rule its month and day. `FREQ=MONTHLY` from 31 January is `~o"R/2026-01-31/P1M/FL31DN"`, which lists the months of 31 days, and each occurrence is as long as the start is precise, a day for a date.
 
   * `:duration` — a `%Tempo.Duration{}` span for each occurrence,
     the RRULE echo of iCalendar's `DURATION`. Each occurrence spans
@@ -106,7 +106,7 @@ defmodule Tempo.RRule do
 
   * `{:ok, %Tempo.Interval{}}` on success.
 
-  * `{:error, reason}` on a malformed rule or unknown keyword, and for what RFC 7529's `RSCALE` and `SKIP` say that Tempo does not build: `{:unsupported_rscale, name}` for a calendar other than the Gregorian, `{:unsupported_skip, {skip, part}}` for `BACKWARD` or `FORWARD` beside a day counted from the end of a month that a month can lack (`BYMONTHDAY=-31`), `{:unsupported_skip, value}` for a `SKIP` that is none of the three, and `{:skip_without_rscale, skip}`. A `:from` that is not one value (an interval, a set) is `{:invalid_from, value}`, an `INTERVAL` that is not one or more is `{:invalid_interval, value}` and a `COUNT` below none is `{:invalid_count, value}`. A `BYWEEKNO` beside a `BYMONTH`, or in a rule that steps by months, with no `:from` that is a date is `{:byweekno_without_a_date, weeks}`: it counts the weeks of a year, which such a rule is asked of each day it starts from.
+  * `{:error, reason}` on a malformed rule or unknown keyword, and for what RFC 7529's `RSCALE` and `SKIP` say that Tempo does not read: `{:unsupported_rscale, name}` for a name that is no calendar's, `{:rscale_without_a_start, calendar}` for a rule of another calendar than the Gregorian that has no `:from` and no part that selects, which nothing would say the calendar of, `{:from_is_no_date, value}` for a `:from` beside an `RSCALE` that is no date and so has no place in another calendar, `{:unsupported_skip, {skip, part}}` for `BACKWARD` or `FORWARD` beside a day counted from the end of a month that a month can lack (`BYMONTHDAY=-31`), `{:unsupported_skip, value}` for a `SKIP` that is none of the three, and `{:skip_without_rscale, skip}`. A `:from` that is not one value (an interval, a set) is `{:invalid_from, value}`, an `INTERVAL` that is not one or more is `{:invalid_interval, value}` and a `COUNT` below none is `{:invalid_count, value}`. A `BYWEEKNO` beside a `BYMONTH`, or in a rule that steps by months, with no `:from` that is a date is `{:byweekno_without_a_date, weeks}`: it counts the weeks of a year, which such a rule is asked of each day it starts from.
 
   ### Examples
 
@@ -124,8 +124,12 @@ defmodule Tempo.RRule do
       iex> Tempo.RRule.parse("FREQ=MONTHLY;COUNT=3", from: ~o"2026-01-31")
       {:ok, ~o"R3/2026-01-31/P1M/FL31DN"}
 
-      iex> Tempo.RRule.parse("RSCALE=HEBREW;FREQ=YEARLY")
-      {:error, {:unsupported_rscale, "HEBREW"}}
+      iex> {:ok, passover} = Tempo.RRule.parse("RSCALE=HEBREW;FREQ=YEARLY;COUNT=3", from: ~o"2026-04-02")
+      iex> Tempo.to_iso8601!(passover)
+      "R3/5786Y7M15D/P1Y/FL15DN[u-ca=hebrew]"
+
+      iex> Tempo.RRule.parse("RSCALE=KLINGON;FREQ=YEARLY")
+      {:error, {:unsupported_rscale, "KLINGON"}}
 
       iex> {:error, _} = Tempo.RRule.parse("FREQ=NOPE")
 
@@ -179,7 +183,7 @@ defmodule Tempo.RRule do
 
   A rule is written only as RFC 5545 allows its frequency. A numbered weekday is a numbered `BYDAY` in a monthly rule and in a yearly rule (`BYDAY=2WE`), and the weekday and its position (`BYDAY=WE;BYSETPOS=2`) wherever a numbered `BYDAY` is not allowed or would count something else: at any other frequency, beside a `BYWEEKNO`, a `BYMONTHDAY` or a `BYYEARDAY`, and in a yearly rule of several months, where a number counts in each month and a position across them. A part the RFC forbids at the rule's frequency is an error that names both. A rule with times of day is for a `DTSTART` with a time: RFC 5545 has a reader ignore `BYHOUR`, `BYMINUTE` and `BYSECOND` beside a start that is a date.
 
-  An RRULE is read in the Gregorian calendar (RFC 5545), and RFC 7529's `RSCALE`, which names another, is not written. A recurrence of another calendar is written where an RFC 5545 reader finds the days it selects: one that steps by weeks, days or less and selects by weekday and time of day. Its end is written as the Gregorian date it is, in a calendar of weeks `WKST` is the day the calendar's weeks begin, and the `DTSTART` a caller adds is the Gregorian date of its start (`Tempo.to_calendar/2`).
+  An RRULE is written for the Gregorian calendar (RFC 5545): RFC 7529's `RSCALE`, which names another, is read by `parse/2` and is not written. A recurrence of another calendar is written where an RFC 5545 reader finds the days it selects: one that steps by weeks, days or less and selects by weekday and time of day. Its end is written as the Gregorian date it is, in a calendar of weeks `WKST` is the day the calendar's weeks begin, and the `DTSTART` a caller adds is the Gregorian date of its start (`Tempo.to_calendar/2`).
 
   ### Arguments
 
@@ -337,13 +341,11 @@ defmodule Tempo.RRule do
   # days in, and `SKIP` what it does with a date that does not exist, the
   # 31st of a month of thirty days: `OMIT`, the default and RFC 5545's rule,
   # passes over it, `BACKWARD` takes the month's last day and `FORWARD` the
-  # first day of the month after. A rule of another calendar than the
-  # Gregorian is not built, and is reported rather than read as another, as
-  # `Tempo.JSCalendar` reports it.
+  # first day of the month after. The name is a calendar's by definition,
+  # and is resolved to the calendar module here, where the rule is read; a
+  # name that is no calendar's is reported, as `Tempo.JSCalendar` reports it.
   defp parse_kv("RSCALE", value) do
-    if String.upcase(value) in ["GREGORIAN", "GREGORY"],
-      do: {:ok, {:rscale, :gregorian}},
-      else: {:error, {:unsupported_rscale, value}}
+    with {:ok, calendar} <- Rule.calendar_from_rscale(value), do: {:ok, {:rscale, calendar}}
   end
 
   defp parse_kv("SKIP", value) do
@@ -421,7 +423,10 @@ defmodule Tempo.RRule do
   defp build_interval(parts, options) do
     case Keyword.fetch(parts, :freq) do
       {:ok, freq_unit} ->
-        with :ok <- Rule.skip_built(struct(Rule, parts)),
+        rule = struct(Rule, parts)
+
+        with :ok <- Rule.skip_built(rule),
+             {:ok, options} <- in_rscale(rule, options),
              recurrence = do_build(freq_unit, parts, options),
              :ok <- Selection.week_number_of_a_year(recurrence),
              do: {:ok, recurrence}
@@ -430,6 +435,31 @@ defmodule Tempo.RRule do
         {:error, :missing_freq}
     end
   end
+
+  # RFC 7529: a rule that names a calendar is counted in it from its start's
+  # date there, and the end of its first occurrence is a date of it too.
+  defp in_rscale(%Rule{} = rule, options) do
+    with {:ok, from} <- Rule.start_in_rscale(rule, Keyword.get(options, :from)),
+         {:ok, base_to} <- end_in_rscale(rule, Keyword.get(options, :base_to)),
+         :ok <- carries_its_calendar(rule, from) do
+      {:ok, options |> Keyword.put(:from, from) |> Keyword.put(:base_to, base_to)}
+    end
+  end
+
+  defp end_in_rscale(rule, %Tempo{} = base_to), do: Rule.start_in_rscale(rule, base_to)
+  defp end_in_rscale(_rule, other), do: {:ok, other}
+
+  # A rule of another calendar with no start says which calendar its months
+  # and days are in by the parts that select them. One with no such part has
+  # nothing to say it with, and would be counted in the Gregorian.
+  defp carries_its_calendar(%Rule{rscale: calendar} = rule, nil)
+       when calendar not in [nil, Calendrical.Gregorian] do
+    if is_nil(Rule.to_selection(rule, nil)),
+      do: {:error, {:rscale_without_a_start, calendar}},
+      else: :ok
+  end
+
+  defp carries_its_calendar(_rule, _from), do: :ok
 
   defp do_build(freq_unit, parts, options) do
     interval = Keyword.get(parts, :interval, 1)
