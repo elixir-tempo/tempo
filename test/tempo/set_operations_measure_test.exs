@@ -36,6 +36,11 @@ defmodule Tempo.SetOperationsMeasureTest do
   The window is the `:within` option's, or the other operand from its first
   start to its last end.
 
+  Whether two spans overlap is answered in four places, each in its own
+  code: the sweeps of the operations, Allen's relation, the window a
+  recurrence is kept by, and the backend a point is looked up in. They are
+  held to the one answer the spans' positions give.
+
   An intersection's `:metadata` option is held by the marks: a part has the
   first member's, the second's where the two are merged, and what a function
   of the two makes of them. The forms that take a list of operands are held
@@ -972,6 +977,117 @@ defmodule Tempo.SetOperationsMeasureTest do
       # at midnight on the fourth, and runs past noon on the fifth.
       assert occurrences({:end_to_end, 12, 2}, {72, 100}) == [{60, 108}]
       assert_operations_of_recurrences([{:end_to_end, 12, 2}], [{80, 90}], {72, 100})
+    end
+  end
+
+  ## Whether two spans overlap
+
+  # The relations of two spans that share no time.
+  @apart [:precedes, :meets, :met_by, :preceded_by]
+
+  defp span(line, {from, to}), do: Interval.new!(from: point(line, from), to: point(line, to))
+
+  # The four answers, held to the one the positions of the spans' ends give:
+  # two spans overlap when each starts before the other ends.
+  defp assert_one_answer({a_from, a_to} = a_slots, a_line, {b_from, b_to} = b_slots, b_line) do
+    a = span(a_line, a_slots)
+    b = span(b_line, b_slots)
+
+    overlap? =
+      position(point(a_line, a_from)) < position(point(b_line, b_to)) and
+        position(point(b_line, b_from)) < position(point(a_line, a_to))
+
+    named = "#{inspect(a_slots)} on #{a_line} and #{inspect(b_slots)} on #{b_line}"
+
+    # The sweeps.
+    assert Tempo.overlaps?(a, b) == overlap?, "overlaps? of #{named}"
+    assert Tempo.disjoint?(a, b) == not overlap?, "disjoint? of #{named}"
+
+    {:ok, shared} = Tempo.intersection(a, b)
+    assert IntervalSet.empty?(shared) == not overlap?, "intersection of #{named}"
+
+    {:ok, kept} = Tempo.members_overlapping(a, b)
+    assert IntervalSet.empty?(kept) == not overlap?, "members_overlapping of #{named}"
+
+    # Allen's relation, each way round.
+    assert Tempo.relation(a, b) in @apart == not overlap?,
+           "relation of #{named}: #{inspect(Tempo.relation(a, b))}"
+
+    assert Tempo.relation(b, a) in @apart == not overlap?,
+           "relation from #{named}: #{inspect(Tempo.relation(b, a))}"
+
+    # A window's bound: a span is kept by a window it overlaps.
+    {:ok, within} = Tempo.to_interval_set(RecurrenceSet.new!([a]), within: b)
+    assert IntervalSet.empty?(within) == not overlap?, "the window's keeping of #{named}"
+  end
+
+  # The backends: a point of the first span is looked up in a set that holds
+  # the second, by the point's seconds, in a list and in a tree. On one line
+  # two spans overlap when the second holds a point of the first.
+  defp assert_backends_answer({a_from, a_to} = a_slots, {b_from, b_to} = b_slots, line) do
+    overlap? = a_from < b_to and b_from < a_to
+
+    for backend <- [:list, :tree] do
+      holder = set([b_slots], line, :b, backend: backend)
+      held? = Enum.any?(a_from..(a_to - 1)//1, &IntervalSet.covered?(holder, point(line, &1)))
+
+      assert held? == overlap?,
+             "a #{backend} of #{inspect(b_slots)} and the points of #{inspect(a_slots)} on #{line}"
+    end
+  end
+
+  defp span_on(line, days) do
+    last = days * points_in_a_day(line)
+
+    gen all(from <- integer(0..(last - 1)), to <- integer((from + 1)..last)) do
+      {from, to}
+    end
+  end
+
+  describe "whether two spans overlap" do
+    test "is one answer for every pair of spans between five days" do
+      relations =
+        for a_slots <- @spans, b_slots <- @spans do
+          assert_one_answer(a_slots, :days, b_slots, :days)
+          assert_backends_answer(a_slots, b_slots, :days)
+          Tempo.relation(span(:days, a_slots), span(:days, b_slots))
+        end
+
+      # Every one of Allen's thirteen relations is among them.
+      assert relations |> Enum.uniq() |> Enum.count() == 13
+    end
+
+    for {a_line, b_line, what} <- [
+          {:hours, :hours, "hours"},
+          {:days, :hours, "days and hours"},
+          {:hours, :days, "hours and days"},
+          {:utc_hours, :paris_hours, "hours in two zones"},
+          {:paris_hours, :utc_hours, "hours in a zone and in UTC"},
+          {:hebrew_days, :days, "days of the Hebrew calendar and the Gregorian"},
+          {:days, :persian_days, "days of the Gregorian calendar and the Persian"},
+          {:hebrew_days, :persian_days, "days of the Hebrew calendar and the Persian"}
+        ] do
+      property "is one answer for spans of #{what}" do
+        check all(
+                a_slots <- span_on(unquote(a_line), 4),
+                b_slots <- span_on(unquote(b_line), 4),
+                max_runs: 150
+              ) do
+          assert_one_answer(a_slots, unquote(a_line), b_slots, unquote(b_line))
+        end
+      end
+    end
+
+    for line <- [:hours, :utc_hours, :paris_hours, :hebrew_days] do
+      property "is the backends' answer for points of #{line}" do
+        check all(
+                a_slots <- span_on(unquote(line), 2),
+                b_slots <- span_on(unquote(line), 2),
+                max_runs: 60
+              ) do
+          assert_backends_answer(a_slots, b_slots, unquote(line))
+        end
+      end
     end
   end
 

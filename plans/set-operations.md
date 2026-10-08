@@ -1,6 +1,6 @@
 # Set operations
 
-**Status:** in progress, 2026-10-09
+**Status:** implemented (v2.0.0), 2026-10-09
 
 The requirement (user, 2026-10-04): once validation, the walk, `Tempo.select/2`, the selection's resolver and `Tempo.explain/1` rest on one implementation, the next step is strong confidence in a single implementation of the set operations. This is the inventory that work starts from: what the operations are and where each is implemented, what holds them to an answer, what does not, what has been found, and the tasks in order. The measure of its first task has landed, and the one defect it found, in `covered/2`, is fixed.
 
@@ -94,9 +94,9 @@ Both by the user, 2026-10-04.
 
 ## Tasks
 
-* [ ] **One answer to whether two spans overlap** — a property that the sweeps, the backends, Allen's relation and a window's bound agree on every generated pair; then whether any is to be read through another.
-
 ### Done
+
+* [x] **One answer to whether two spans overlap** — the sweeps (`overlaps?/2`, `disjoint?/2`, `intersection/2`, `members_overlapping/2`), Allen's relation each way round, the window a span is kept by, and a point looked up in a list and in a tree are held to the answer the positions of the spans' ends give: every pair of spans between five days, where all thirteen relations occur, and generated pairs of hours, of days and hours, in two zones and in three calendars. They agree on every pair. None is read through another: each compares what its caller holds (the ends for a sweep, seconds for a backend, a relation's name, a window's two edges), and the property now holds them together. 2026-10-09.
 
 * [x] **A window in a zone, a window of several spans and a set of recurrences, measured** — times of day are placed on the days of a zoned window's own clock, beside a set in the same zone and in another, and on each span of a window of two, for every operation; a `Tempo.RecurrenceSet` operand is its occurrences that overlap its window, each whole, the window being the `:within` option's or the other operand from its first start to its last end. Nothing differed; the measure fails where an occurrence that only meets the window is counted. The lazy backend is the deferred [plans/open-ended-set-algebra.md](open-ended-set-algebra.md). 2026-10-09.
 
