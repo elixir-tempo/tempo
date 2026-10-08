@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A period of a rule gives at most 10,000 occurrences, and a rule whose period gives more is refused with a `Tempo.ConversionError` (`:too_many_values`), whatever its count or its window. `FREQ=YEARLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=9,…,17;BYMINUTE=0,…,59;COUNT=10` made the 140,940 minutes of a year's working hours for its ten, and is written with `FREQ=MINUTELY`.
+
 * A value written with a margin of error (`±`), significant digits (`S`) or a fraction is one its unit takes, as a whole number is: `T99S2H`, `2026Y13±1M` and `T25.5H` are refused with what `T25H` says, where each was read. A fraction of a week, of a day of the week, or of a month or a day of the year with no year (`30.5W`, `3.5K`, `6.5M`, `166.5O`) is a `Tempo.ParseError`, where it was left in the value as a number no operation reads.
 
 * A position (`I`, RFC 5545's `BYSETPOS`) picks among at most 10,000 candidates of a period, and a value or a rule whose period has more is refused with a `Tempo.ConversionError` (`:too_many_values`). `~o"2026YL{1..12}M{1..28}DT{0..23}H{0..59}M1IN"` made 483,840 minutes in two seconds to give the first, and with seconds did not come to an end.

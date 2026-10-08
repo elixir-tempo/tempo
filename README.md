@@ -218,7 +218,7 @@ Without a configured database, parsing still works fully — zone names in IXDTF
 
 ### The most values at once
 
-Tempo refuses a value that asks for more than 10,000 values at once — the members of a set, the spans a mask or a selection is converted to, the occurrences of a recurrence and the periods its walk takes, the candidates a position picks among — so that a short string cannot ask for work without end: `~o"2026Y{1..12}M{1..28}DT{0..23}H{0..59}M{0..59}S"` names 29 million seconds. The refusal is a `Tempo.ConversionError` whose reason is `:too_many_values`, or a `Tempo.UnboundedRecurrenceError` for a recurrence, and `Enum` and `Stream` still take such a value's values one at a time. The limit is read when Tempo is compiled:
+Tempo refuses a value that asks for more than 10,000 values at once — the members of a set, the spans a mask or a selection is converted to, the occurrences of a recurrence, of any one period of it and the periods its walk takes, the candidates a position picks among — so that a short string cannot ask for work without end: `~o"2026Y{1..12}M{1..28}DT{0..23}H{0..59}M{0..59}S"` names 29 million seconds. The refusal is a `Tempo.ConversionError` whose reason is `:too_many_values`, or a `Tempo.UnboundedRecurrenceError` for a recurrence, and `Enum` and `Stream` still take such a value's values one at a time. The limit is read when Tempo is compiled:
 
 ```elixir
 # config/config.exs

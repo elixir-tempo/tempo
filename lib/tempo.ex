@@ -7344,8 +7344,9 @@ defmodule Tempo do
     the value names more than 10,000 values: the sets of
     `~o"2026Y{1..12}M{1..28}DT{0..23}H{0..59}M"` (483,840 minutes), the
     candidates of a mask (`~o"1XXX-XX-15"`), a range of values, the
-    dates a selection picks, and the candidates of a period that a
-    position (`I`) picks among. A value is converted to at most 10,000
+    dates a selection picks, the occurrences of one period of a rule,
+    whatever its count or its window, and the candidates of a period that
+    a position (`I`) picks among. A value is converted to at most 10,000
     spans at once, as a recurrence gives at most 10,000 occurrences;
     `Enum` and `Stream` take its values one at a time. The 10,000 here
     and above is the application's `:max_values_at_once`, which is read
@@ -10492,10 +10493,15 @@ defmodule Tempo do
     select = fn candidate ->
       case Selection.apply(candidate, rule, freq,
              origin_day: origin_day,
-             keep_span: explicit_span?
+             keep_span: explicit_span?,
+             at_most: @recurrence_safety_cap
            ) do
-        # A position that would pick among more candidates than are given
-        # at once: the rule is refused as a value that names as many is.
+        # A period that gives more occurrences than a recurrence gives at
+        # once, or a position that would pick among as many (decided
+        # 2026-10-08): the rule is refused as a value that names as many
+        # is, whatever its count or its window, and no more than that are
+        # made to find it out. Every minute of the working hours of a year
+        # was 140,000 occurrences made for a count of ten.
         {:error, {:more_than, _most}} -> [{:error, too_many_spans_error(interval)}]
         {:error, _reason} = failure -> [failure]
         occurrences -> resize_selected_occurrences(occurrences, resize?)

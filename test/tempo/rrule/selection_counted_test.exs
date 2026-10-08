@@ -171,6 +171,87 @@ defmodule Tempo.RRule.SelectionCountedTest do
     end
   end
 
+  describe "a period of a rule" do
+    # A rule's period gives no more occurrences than a recurrence gives at
+    # once, whatever its count or its window (decided 2026-10-08): every
+    # minute of the working hours of a year was 140,000 occurrences made for
+    # a count of ten. The measure is the product of what its parts name.
+    defp numbers(range), do: Enum.join(range, ",")
+
+    defp rule(text, from),
+      do: RRule.parse(text, from: Tempo.from_iso8601!(from))
+
+    test "is refused where it gives more than 10,000 occurrences, however few are counted" do
+      {:ok, minutes_of_working_hours} =
+        rule(
+          "FREQ=YEARLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=#{numbers(9..17)};" <>
+            "BYMINUTE=#{numbers(0..59)};COUNT=10",
+          "2026-01-01T09:00:00"
+        )
+
+      # 261 weekdays of nine hours of sixty minutes.
+      assert 261 * 9 * 60 > @most
+      assert said(Tempo.to_interval(minutes_of_working_hours)) == :refused
+
+      {:ok, in_a_window} =
+        rule(
+          "FREQ=YEARLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=#{numbers(9..17)};BYMINUTE=#{numbers(0..59)}",
+          "2026-01-01T09:00:00"
+        )
+
+      assert said(Tempo.to_interval(in_a_window, within: Tempo.from_iso8601!("2026-06-15"))) ==
+               :refused
+    end
+
+    test "gives its occurrences where it gives 10,000 or fewer" do
+      # Ten hours of sixty minutes of sixteen seconds are 9,600 a day, and
+      # of seventeen 10,200.
+      for {seconds, count} <- [{0..15, 9_600}, {0..16, 10_200}] do
+        {:ok, daily} =
+          rule(
+            "FREQ=DAILY;BYHOUR=#{numbers(0..9)};BYMINUTE=#{numbers(0..59)};" <>
+              "BYSECOND=#{numbers(seconds)};COUNT=5",
+            "2026-06-15T00:00:00"
+          )
+
+        expected = if count > @most, do: :refused, else: {:spans, 5}
+        assert {count, said(Tempo.to_interval(daily))} == {count, expected}
+      end
+
+      written = "R5/2026-06-15T00:00:00/P1D/FLT{0..9}H{0..59}M{0..15}SN"
+      assert said(converted(written)) == {:spans, 5}
+
+      written = "R5/2026-06-15T00:00:00/P1D/FLT{0..9}H{0..59}M{0..16}SN"
+      assert said(converted(written)) == :refused
+    end
+
+    test "is counted with the times of day after a position, as they are made" do
+      # The first day of each month, and after it each second of ten
+      # minutes of it, or of every hour of it.
+      {:ok, ten_minutes} =
+        rule(
+          "FREQ=MONTHLY;BYMONTHDAY=1,2;BYHOUR=9;BYMINUTE=#{numbers(0..9)};" <>
+            "BYSECOND=#{numbers(0..59)};BYSETPOS=1;COUNT=3",
+          "2026-01-01T09:00:00"
+        )
+
+      {:ok, every_second} =
+        rule(
+          "FREQ=MONTHLY;BYMONTHDAY=1,2;BYHOUR=#{numbers(0..23)};BYMINUTE=#{numbers(0..59)};" <>
+            "BYSECOND=#{numbers(0..59)};BYSETPOS=1;COUNT=3",
+          "2026-01-01T00:00:00"
+        )
+
+      assert said(Tempo.to_interval(ten_minutes)) == {:spans, 3}
+      assert said(Tempo.to_interval(every_second)) == :refused
+    end
+
+    test "is asked nothing of where each period gives a few, however many periods there are" do
+      {:ok, daily} = rule("FREQ=DAILY;BYHOUR=9,14;COUNT=4000", "2026-01-01T09:00:00")
+      assert said(Tempo.to_interval(daily)) == {:spans, 4_000}
+    end
+  end
+
   describe "the most values at once" do
     test "is the application's :max_values_at_once, 10,000 unless it is set" do
       assert Limit.values_at_once() == Application.get_env(:ex_tempo, :max_values_at_once, 10_000)

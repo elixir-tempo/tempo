@@ -120,7 +120,7 @@ defmodule Tempo.RRule.Selection do
     `expands?/2`), each occurrence is resized to its own resolution
     afterwards.
 
-  * `:at_most` is the most occurrences the caller takes of the candidate, a whole number. Where the rule gives more it is refused, and no more than that are made to find it out, unless the rule holds a position (`I`) or a §12.10 window or has units after its selection, each of which needs every occurrence made. The default is `nil`, every occurrence.
+  * `:at_most` is the most occurrences the caller takes of the candidate, a whole number. Where the rule gives more it is refused, and no more than that are made to find it out: the times of day of a selection and the units after one are counted as they are made, and a position's candidates are held to the most values Tempo gives at once. A §12.10 window is made whole, and counted then. The default is `nil`, every occurrence.
 
   ### Returns
 
@@ -172,10 +172,10 @@ defmodule Tempo.RRule.Selection do
     |> in_calendar_terms(selection, freq, fn candidate, selection, freq ->
       candidate
       |> apply_selection(selection ++ context, freq, most)
-      |> with_units(units, Keyword.get(context, :keep_span, false))
+      |> with_units(units, Keyword.get(context, :keep_span, false), at_most(options))
       |> on_readings_the_clock_shows()
     end)
-    |> no_more_than(Keyword.get(options, :at_most))
+    |> no_more_than(at_most(options))
   end
 
   # What the parts of a selection give is a list of occurrences, or the
@@ -645,13 +645,56 @@ defmodule Tempo.RRule.Selection do
   # The units after a selection apply to every date it picks (ISO 8601-2
   # §12.11.2): the selection, its position applied last of all, picks the
   # day, and `T9H` then makes it 09:00 that day (§12.9 Example 5).
-  defp with_units({:error, _reason} = error, _units, _keep_span?), do: error
-  defp with_units(occurrences, [], _keep_span?), do: occurrences
+  #
+  # Where no more than so many occurrences are asked for, each date is
+  # given every unit before the next, and what that makes is counted as it
+  # is made, as the times of day of a selection are (`counted_parts/4`): a
+  # time of day after a position was every second of each day it picked,
+  # made before any was counted.
+  defp with_units({:error, _reason} = error, _units, _keep_span?, _most), do: error
+  defp with_units(occurrences, [], _keep_span?, _most), do: occurrences
 
-  defp with_units(occurrences, units, keep_span?) do
+  defp with_units(occurrences, units, keep_span?, nil) do
     Enum.reduce(units, occurrences, fn {unit, values}, acc ->
       expand_time(acc, unit, values, keep_span?)
     end)
+  end
+
+  defp with_units(occurrences, units, keep_span?, most) do
+    with :more <- each_with_units(occurrences, units, {keep_span?, most, :made}, {[], 0}),
+         :more <- each_with_units(occurrences, units, {keep_span?, most, :shown}, {[], 0}) do
+      {:error, {:more_than, most}}
+    else
+      {made, _count} -> Enum.reverse(made)
+    end
+  end
+
+  defp each_with_units([], _units, _asked, made), do: made
+
+  defp each_with_units([occurrence | others], units, asked, made) do
+    case with_each_unit(occurrence, units, asked, made) do
+      :more -> :more
+      made -> each_with_units(others, units, asked, made)
+    end
+  end
+
+  defp with_each_unit(occurrence, [], {_keep_span?, most, counted}, {made, count} = so_far) do
+    cond do
+      counted == :shown and starts_on_a_reading_skipped?(occurrence) -> so_far
+      count == most -> :more
+      true -> {[occurrence | made], count + 1}
+    end
+  end
+
+  defp with_each_unit(
+         occurrence,
+         [{unit, values} | units],
+         {keep_span?, _most, _counted} = asked,
+         made
+       ) do
+    [occurrence]
+    |> expand_time(unit, values, keep_span?)
+    |> each_with_units(units, asked, made)
   end
 
   # A calendar of weeks numbers a date by its year, its week and its day in
@@ -818,12 +861,17 @@ defmodule Tempo.RRule.Selection do
   # it as the origin day does: a part asks what else the selection holds
   # (`picks_within_a_week?/1`), and would take it for a part.
   defp counted_to(options, selection, units) do
-    case Keyword.get(options, :at_most) do
-      most when is_integer(most) and most >= 0 ->
-        if units == [] and not picked_among_all?(selection), do: most
+    case at_most(options) do
+      nil -> nil
+      most -> if units == [] and not picked_among_all?(selection), do: most
+    end
+  end
 
-      _none_asked ->
-        nil
+  # The most occurrences asked for, a whole number, or `nil` for all.
+  defp at_most(options) do
+    case Keyword.get(options, :at_most) do
+      most when is_integer(most) and most >= 0 -> most
+      _none_asked -> nil
     end
   end
 
