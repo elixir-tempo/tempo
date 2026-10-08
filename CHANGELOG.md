@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* An unspecified unit (`X*`) given to `Tempo.select/2` is every value its unit takes, as a mask of as many digits is: `Tempo.select(~o"2026-06", ~o"X*D")` is June's thirty days where it was the month as one span. A selection written with one (`~o"LX*DN"`) selects each of them too, where it selected nothing.
+
 * A week beside the month it is written with is a week of that month: `2026YL6M2WN` is 8 to 14 June where it was the second week of the year, and `Tempo.select(~o"2026-06-10", ~o"2W")` keeps the day where `~o"24W"` did. A rule that starts on a date keeps RFC 5545's week of the year, and `Tempo.RRule.parse/2` refuses a `BYWEEKNO` that would be read in a month with `{:byweekno_without_a_date, weeks}`.
 
 * A mask in a constraint given to `Tempo.select/2` is each value its digits match, as it is in a selection: `Tempo.select(~o"2026-06", ~o"1XD")` is the ten days from 10 June, each the day's own value, where it was the one span from the 10th to the 20th. A masked constraint as coarse as its period keeps what its digits match (15 June was dropped by `~o"1XD"`), and a week selected from a month as a mask (`~o"XW"`) is each week of the month, where it was refused as `:not_built`.
@@ -410,6 +412,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* A masked week of a month with a day or a time under it is each week its digits match: `Tempo.select(~o"2026-06", ~o"XW3K")` is the Wednesday of each of June's weeks, where it was refused as not built. `Tempo.explain/1` words an unspecified unit in a selection and `Tempo.RRule.to_string/1` refuses one by name, where each raised.
 
 * A sign before an unspecified number (`-X*D`, `L-X*DN`, `{-X*D,5D}`) is a `Tempo.ParseError` that says it names no values of its own. Reading a string that held one raised a `FunctionClauseError`.
 

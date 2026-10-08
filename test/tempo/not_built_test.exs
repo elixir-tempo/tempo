@@ -610,13 +610,13 @@ defmodule Tempo.NotBuiltTest do
     end
 
     test "names what was asked for and the calendar" do
-      {:error, error} = Tempo.select(~o"2026-06", ~o"XW3K")
+      {:error, error} = Tempo.select(read("1750Y6M", March25), read("2W", March25))
+
+      assert Exception.message(error) =~ "1750Y6M[u-ca=julian-march25]"
 
       assert Exception.message(error) =~
-               "the selection of [week: {:mask, [:X]}, day_of_week: 3] from ~o\"2026Y6M\""
-
-      assert Exception.message(error) =~
-               "a week of a month is not built for Calendrical.Gregorian"
+               "a week of a month is not built for Calendrical.Julian.March25, in a year that " <>
+                 "does not begin with its first month"
     end
 
     test "a week is selected from a year and from a week, and a weekday from a month" do

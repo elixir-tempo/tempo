@@ -222,11 +222,24 @@ defmodule Tempo.Select do
   Tempo.select(~o"2026", ~o"L6M2WN")     # 8 to 14 June
   ```
 
-  A week of a month in a calendar whose year does not begin with its
-  first month, and a day or a time under a week of a month that is a
-  mask (`~o"XW3K"`), is not built: it returns a `Tempo.ConversionError`
-  whose `:reason` is `:not_built` and whose `:target` is
-  `:week_of_month`.
+  A week of a month that is a mask is each week its digits match, with
+  a day or a time under it as with none: `~o"XW3K"` from June 2026 is
+  the Wednesday of each of its four weeks. A week of a month in a
+  calendar whose year does not begin with its first month is not built:
+  it returns a `Tempo.ConversionError` whose `:reason` is `:not_built`
+  and whose `:target` is `:week_of_month`.
+
+  ## An unspecified unit
+
+  An unspecified unit (`X*`) stands for every value the unit takes in
+  its period, as a mask of as many digits does, in a constraint and in
+  a selection alike.
+
+  ```elixir
+  Tempo.select(~o"2026-06", ~o"X*D")     # each of June's thirty days
+  Tempo.select(~o"2026", ~o"X*M15D")     # the 15th of each month
+  Tempo.select(~o"2026-06-15", ~o"TX*H") # each of the day's hours
+  ```
 
   ## A selector as coarse as its base, or coarser
 
@@ -1142,7 +1155,12 @@ defmodule Tempo.Select do
   # 2026-10-08): `~o"1XD"` from June is its ten days from the 10th. Placed
   # on its period it was the one span the value `2026Y6M1XD` is, and a day
   # it was asked to keep was dropped.
+  #
+  # An unspecified unit (`~o"X*D"`) is every value the unit takes, as the
+  # mask of as many digits is: placed on its period it was the one span the
+  # period is, and from a day it selected nothing.
   defp counted_unit?({unit, {:mask, mask}}) when is_list(mask), do: is_map_key(@coarseness, unit)
+  defp counted_unit?({unit, :any}), do: is_map_key(@coarseness, unit)
   defp counted_unit?({unit, value}), do: is_map_key(@coarseness, unit) and counted?(value)
   defp counted_unit?(_other), do: false
 
@@ -2060,7 +2078,7 @@ defmodule Tempo.Select do
   # value there, or none that can be counted.
   defp each_named(c_time, unit, values) do
     with {^unit, written} when not is_integer(written) <- List.keyfind(c_time, unit, 0),
-         true <- counted?(written),
+         true <- counted?(written) or masked?(written),
          {:ok, valid} <- values.() do
       written
       |> UnitValues.named(valid)
@@ -2284,6 +2302,12 @@ defmodule Tempo.Select do
     do: Enum.all?(written, &(is_integer(&1) or is_struct(&1, Range)))
 
   defp counted?(_written), do: false
+
+  # A mask, and an unspecified unit, stand for each value their digits
+  # match among those the unit takes.
+  defp masked?({:mask, mask}) when is_list(mask), do: true
+  defp masked?(:any), do: true
+  defp masked?(_written), do: false
 
   defp one_value?({_unit, value}), do: is_integer(value)
 

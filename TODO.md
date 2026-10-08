@@ -10,8 +10,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **A rule of hours or less in a zone that has no occurrence because of what it steps by** — a rule that steps past every value its parts name is told it has no occurrences from the places in the week its steps stop at (2026-10-08), and a zone's clock changes those of a walk of hours, minutes or seconds: every twenty-fourth hour from 10:00 in Paris is 10:00 or 09:00. So `R5/2026-06-16T10[Europe/Paris]/PT24H/FLT3HN` is still a `Tempo.UnboundedRecurrenceError`, after five seconds of walking, where a rule of days in a zone is told (a stop is on the day stepped to or the day after). To build: the places a zone's own changes bring such a walk to (`Tempo.TimeZoneDatabase.changes/3` lists them for a span, and the question is of every year to come). Not told either: a rule of days in a zone whose parts name only the day after the one it stops on (`R5/2026-06-16T10[Europe/Paris]/P7D/FL3KN`), and a position no period has (`FREQ=DAILY;BYSETPOS=2`). Found 2026-10-07.
 
-* [ ] **What `Tempo.select/2` still places on its period** — a constraint the resolver counts is resolved as the selection of the same parts since 2026-10-07, a mask among them since 2026-10-08, and the merge (`merge_constraint/2` in `lib/tempo/select.ex`) is left for what the resolver has no reading for: an unspecified unit (`~o"X*D"`, which the selection `~o"LX*DN"` selects nothing by), a fraction of a second or a group in a constraint, the two ends of a span (`~o"T09/T17"`), and a day or a time of a week of a month (`~o"2W3K"`, and `~o"XW3K"`, which is refused as not built where the selection `~o"LXW3KN"` is answered). To build, for the merge to go: each of these through the resolver.
-
 ### Performance
 
 * [ ] **A selection's parts are expanded in one period without bound** — the resolver expands each part of a selection in a period before anything counts what it gives, so `~o"2026YL{1..12}M{1..28}DT{0..23}H{0..59}MN"` is refused (`:too_many_values`) only after its 483,840 minutes are made, 2.5 s, one with seconds too is 29 million, and an RRULE that expands as far in one period (`FREQ=YEARLY;BYHOUR=…;BYMINUTE=…;BYSECOND=…`) is walked as long. A limit in `Tempo.RRule.Selection` must leave a rule with a `COUNT` or a window its first occurrences, so it is no cap on a period. Found 2026-10-08.
@@ -43,6 +41,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **Lazy backend follow-ups** — splicing a lazy set into a busy list (needs a sorted stream merge), lazy set algebra (the research project under Deferred), and holiday generator sources. The refusal semantics must hold: an answer that needs an unbounded walk without a `:within` window refuses rather than hangs.
 
 ### Release and housekeeping
+
+* [ ] **Two implementations of a constraint remain** — `Tempo.select/2` still places a fraction of a second (`~o"T10H30M15.5S"`), a group (`~o"2G3MU"`) and the two ends of a span (`~o"T09/T17"`) on its period by the merge (`merge_constraint/2` in `lib/tempo/select.ex`), none of which a selection can be written with, and a time under a week is on the week's first date by a constraint and on each of its days by a selection. To do, for the merge to go: each through the resolver.
 
 * [ ] **`Tempo.explain/1` of a rule of one occurrence** — `R1/2019-01-01/P1D/FL7KN` and `R1/P1D/2019-01-08/FL7KN` are explained as an interval given as a start, or an end, and a duration, with no word of the rule that selects their one occurrence, and `R1/../P1D/FL7KN` as an unusual shape. Found 2026-10-08.
 
@@ -85,6 +85,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **What `Tempo.select/2` still places on its period** — an unspecified unit (`~o"X*D"`) is every value its unit takes, in a constraint and in a selection (it was the period's one span, and `~o"LX*DN"` selected nothing), and a masked week of a month with a day or a time is each week its digits match (`~o"XW3K"`, refused until now). The merge is kept for what has no selection to disagree with: a fraction of a second, a group, and the two ends of a span. 2026-10-08.
 
 * [x] **A rule on a recurrence written to its end** — asked of each period back from the end (`selected_back_from/2` in `lib/tempo.ex`): `R3/P1D/2019-01-08/FL7KN` is the three Sundays before 8 January, each over by the end, the count being of what the rule selects, nearest the end first. The end stands where a start does, for how the rule is read and for the day a step is brought into its month from; `Tempo.explain/1` words the rule, and the RRULE writer's rule from the first occurrence has the same occurrences. One that holds a §12.10 window stays refused (`:rule_to_an_end`). 2026-10-08.
 

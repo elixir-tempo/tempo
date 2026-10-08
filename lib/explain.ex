@@ -2018,6 +2018,8 @@ defmodule Tempo.Explain do
   defp fuse_time_of_day([{_unit, {:mask, _mask}} = entry | rest]),
     do: [entry | fuse_time_of_day(rest)]
 
+  defp fuse_time_of_day([{_unit, :any} = entry | rest]), do: [entry | fuse_time_of_day(rest)]
+
   defp fuse_time_of_day([{unit, _value} = first | rest]) when unit in [:hour, :minute, :second] do
     {finer, rest} = Enum.split_while(rest, &unit_in?(&1, [:minute, :second]))
     [{:time_of_day, [first | finer]} | fuse_time_of_day(rest)]
@@ -2030,6 +2032,9 @@ defmodule Tempo.Explain do
   # the digits match, which depend on the period, and is worded as written.
   defp selection_clause({unit, {:mask, mask}}, _naming),
     do: "#{masked_unit_phrase(unit)} written #{mask_text(mask)}"
+
+  # An unspecified unit (`X*`) stands for every value its unit takes.
+  defp selection_clause({unit, :any}, _naming), do: "#{masked_unit_phrase(unit)} written X*"
 
   # A month is named in the selection's calendar, and a weekday and a time
   # of day are counted in it; no other clause needs it.

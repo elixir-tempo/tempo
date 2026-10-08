@@ -517,7 +517,7 @@ defmodule Tempo.RRule.Encoder do
   # unspecified digits (`1XD`) stands for each value its digits match, which
   # the RFC has no way to say.
   defp numbers_alone(parts, interval) do
-    if Enum.any?(parts, &match?({_unit, {:mask, _mask}}, &1)),
+    if Enum.any?(parts, &(match?({_unit, {:mask, _mask}}, &1) or match?({_unit, :any}, &1))),
       do:
         {:error,
          not_allowed(

@@ -158,9 +158,17 @@ defmodule Tempo.MaskedConstraintTest do
   end
 
   describe "what a mask is not" do
-    test "is an unspecified unit, which is the one span of every value still" do
+    test "is an unspecified unit, which is every value as a mask of as many digits is" do
+      # It was the one span of every value until 2026-10-08
+      # (`test/tempo/unspecified_unit_selected_test.exs`).
       assert spans(Tempo.select(~o"2026-06", ~o"X*D")) ==
-               [{seconds(~D[2026-06-01]), seconds(~D[2026-07-01])}]
+               spans(Tempo.select(~o"2026-06", ~o"XXD"))
+
+      assert spans(Tempo.select(~o"2026-06", ~o"X*D")) ==
+               for(
+                 date <- Date.range(~D[2026-06-01], ~D[2026-06-30]),
+                 do: {seconds(date), seconds(Date.add(date, 1))}
+               )
     end
 
     test "is refused by name in a calendar whose year begins within a month, as a day of a month is" do

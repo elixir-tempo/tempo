@@ -368,10 +368,31 @@ defmodule Tempo.WeekOfMonthTest do
       assert spans(Tempo.select(~o"2026-06", ~o"0XW")) == weeks
     end
 
-    test "is refused by name with a day under a week that is a mask, and in a year that begins within a month" do
-      assert {:error, %ConversionError{reason: :not_built, target: :week_of_month}} =
-               Tempo.select(~o"2026-06", ~o"XW3K")
+    test "is each week a mask matches with a day or a time under it, as the selection is" do
+      # It was refused as not built until 2026-10-08. The Wednesday of a
+      # week is two days after its Monday.
+      wednesdays =
+        for week <- 1..weeks_in(2026, 6) do
+          {monday, _next} = week(2026, 6, week)
+          seconds({Date.add(monday, 2), 1})
+        end
 
+      for constraint <- [~o"XW3K", ~o"X*W3K", ~o"LXW3KN"] do
+        assert {constraint, spans(Tempo.select(~o"2026-06", constraint))} ==
+                 {constraint, wednesdays}
+      end
+
+      # A time under a week is on its first date, as under one week.
+      {:ok, at_ten} = Tempo.select(~o"2026-06", ~o"XWT10H")
+
+      assert Enum.map(IntervalSet.members(at_ten), &Interval.from/1) ==
+               for(
+                 week <- 1..weeks_in(2026, 6),
+                 do: Tempo.from_iso8601!("#{elem(week(2026, 6, week), 0)}T10")
+               )
+    end
+
+    test "is refused by name in a year that begins within a month" do
       assert {:error,
               %ConversionError{reason: :not_built, target: :week_of_month, calendar: March25}} =
                Tempo.select(

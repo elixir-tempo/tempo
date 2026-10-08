@@ -23,8 +23,7 @@ defmodule Tempo.NotBuilt do
   # selects by a month, a year, a week of the year or a day of one, which
   # RFC 5545 counts in the Gregorian calendar. The sixth is what is left of a
   # week of a month, which the calendar numbers and is otherwise answered: one
-  # in a year that does not begin with its first month, and a day or a time
-  # under a week selected from a month where the week is a mask. A week of
+  # in a year that does not begin with its first month. A week of
   # the calendar's own numbering
   # (`w`) under a month is no such area: it is refused for good
   # (`Tempo.RRule.Selection.calendar_week_in_its_year/2`). The seventh is in
@@ -234,8 +233,9 @@ defmodule Tempo.NotBuilt do
   # A week selected from a month that is not built. A week after a month is
   # a week of the month, which `Tempo.select/2` gives as the span of its
   # dates where it is a whole number selected from a month, each of a set
-  # of them or each a mask matches. What is refused here is a day or a time
-  # under a week that is a mask.
+  # of them or each a mask matches, with a day or a time under it or none.
+  # What is refused here is a week the merge cannot place, in a year that
+  # does not begin with its first month.
   # `selector` is what was to be merged onto `from`. A week selected from a
   # day or a time of day is as coarse as its period or coarser, and is a
   # filter by the week of the year.

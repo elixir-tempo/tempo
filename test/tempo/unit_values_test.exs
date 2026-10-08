@@ -500,8 +500,14 @@ defmodule Tempo.UnitValuesTest do
       assert UnitValues.named([1..999_999_999//1], 1..30//1) == Enum.to_list(1..30)
     end
 
-    test "what is not a number, a range or a mask names nothing" do
-      assert UnitValues.named([:any, {3, [approximate: true]}, 3], 1..30//1) == [3]
+    test "what is not a number, a range, a mask or an unspecified unit names nothing" do
+      assert UnitValues.named([{3, [approximate: true]}, :nothing, 3], 1..30//1) == [3]
+    end
+
+    test "an unspecified unit names every value" do
+      # It was passed over, so a part written `X*` selected nothing.
+      assert UnitValues.named(:any, 1..30//1) == Enum.to_list(1..30)
+      assert UnitValues.named(:any, [1..2//1, 14..30//1]) == [1, 2] ++ Enum.to_list(14..30)
     end
 
     test "a mask names the values whose digits it matches, written to its width" do

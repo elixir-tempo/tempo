@@ -851,6 +851,11 @@ defmodule Tempo.UnitValues do
   defp values_named({:mask, mask}, values) when is_list(mask),
     do: values |> numbers() |> Mask.matching(mask)
 
+  # An unspecified unit (`X*`) stands for every value the unit takes, as a
+  # mask of as many digits does (`XX` of a month's days). It was passed
+  # over, so a part written with one selected nothing.
+  defp values_named(:any, values), do: numbers(values)
+
   defp values_named(_not_a_number, _values), do: []
 
   @doc """

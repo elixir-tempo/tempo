@@ -57,8 +57,7 @@ defmodule Tempo.ConversionError do
     RRULE that steps or selects by a month, a year, a week of the year or
     a day of one, for a recurrence of another calendar than the Gregorian;
     `:week_of_month` is a week of a month in a calendar whose year
-    does not begin with its first month, and a day or a time under a week
-    selected from a month where the week is a mask (`~o"XW3K"`); and
+    does not begin with its first month; and
     `:rule_to_an_end` is a rule that holds a window (ISO 8601-2 §12.10)
     on a recurrence written with a duration and an end, whose occurrences
     run back from it, in every calendar.
@@ -246,9 +245,7 @@ defmodule Tempo.ConversionError do
   # A day or a time under a masked week of a month is refused in every
   # calendar, so what is said of the calendar is said of the two cases.
   defp not_built_calendar(:week_of_month),
-    do:
-      "in a year that does not begin with its first month, and with a day or a time under " <>
-        "a week that is a mask"
+    do: "in a year that does not begin with its first month"
 
   defp not_built_calendar(:rule_to_an_end), do: "as for every calendar"
 
