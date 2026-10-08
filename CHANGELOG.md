@@ -261,7 +261,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Added
 
-* `Tempo.TimeZoneDatabase.clear_of_changes?/3` — whether the changes already found for a zone show none within so many seconds of a moment. It asks nothing of the database, and is `false` where they have not been found.
+* `Tempo.TimeZoneDatabase.clear_of_changes?/3` — whether the changes already found for a zone show none within so many seconds of a moment. It asks nothing of the database and is `false` where they have not been found, until a year has been asked of as often as finding its changes takes.
 
 * A week of a month: a `W` after a month in the explicit form is the week the calendar numbers there, read as the span of its dates (`2026Y6M2W` is `~o"2026Y6M8D/15D"`, and `2026Y7M1W` starts on 29 June, the Monday of the week that holds 1 July) or, with a day of the week, as its date (`2026Y6M2W3K`). `Tempo.select/2` selects one from a month (`~o"2W"`, `~o"{1,3}W"`, `~o"-1W"`, `~o"2W3K"`) and a rule resolved in a month names one (`2026Y6ML2WN`, `R/2026Y6M/P1M/FL2WN`), handing its days to a part that picks within it (`2026Y6ML2W3KN` is Wednesday 10 June, `L2WT10HN` ten o'clock on each of its days), where each was a `Tempo.ConversionError`.
 
@@ -281,7 +281,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.duration/1` measures a span with no year where it is as long on any day or in any week: `~o"T22/T02"` is `PT4H`, an hour alone `PT1H`, and Monday to Saturday (`~o"1K/6K"`) `P5D`, each of which was a `Tempo.UnanchoredError`. A span of months and days has the length of a year it has not got, and is that error still.
 
-* `Tempo.TimeZoneDatabase.changes/3` — the moments a zone's clock changes between two moments, each with the offset before and after. The `Calendar.TimeZoneDatabase` behaviour lists none, so they are found by asking each day's start, and kept.
+* `Tempo.TimeZoneDatabase.changes/3` — the moments a zone's clock changes between two moments, each with the offset before and after. The `Calendar.TimeZoneDatabase` behaviour lists none, so they are found by asking each day's start: a span of half a year or less by its own days, and a whole year, which is kept, once it has been asked of as often as finding it takes.
 
 * `Tempo.TimeZoneDatabase.days_left_out/1` — the calendar days a zone's clock never showed, where the zone moved across the date line: 30 December 2011 in Samoa, 31 December 1844 in Manila. They are found once for each zone and kept.
 

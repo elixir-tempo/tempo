@@ -254,16 +254,18 @@ defmodule Tempo.Enumeration.Zone do
   # zone leaves out, and the days a zone leaves out are kept. One with a
   # time of day is skipped only beside a change of the clock, so a value
   # with none within a day or so of it is shown: the changes of a zone are
-  # kept too (`Tempo.TimeZoneDatabase.change_within?/3`). Either way nothing
-  # is asked of the zone database for nearly every value, which matters
-  # where each member of a selection is asked.
+  # kept too, once a year of them has been asked of often enough to be
+  # worth finding (`Tempo.TimeZoneDatabase.clear_of_changes?/3`), and until
+  # then the value is asked of the database itself. Nothing is then asked
+  # of the zone database for nearly every value, which matters where each
+  # member of a selection is asked.
   #
   # The reading is that of the value's Gregorian date (`in_gregorian/1`). A
   # value that is no one reading (a set, a mask or a group in a unit) is
   # asked in full.
   defp away_from_every_change?(%Tempo{extended: %{zone_id: zone}} = value) when is_binary(zone) do
     case value |> in_gregorian() |> first_reading() do
-      {:ok, reading} -> not TimeZoneDatabase.change_within?(zone, reading, @a_day_or_so)
+      {:ok, reading} -> TimeZoneDatabase.clear_of_changes?(zone, reading, @a_day_or_so)
       :no_one_reading -> false
     end
   end

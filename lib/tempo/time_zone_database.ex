@@ -28,6 +28,17 @@ defmodule Tempo.TimeZoneDatabase do
   zone rules — UTC projection, `shift_zone/2`, DST-aware walks —
   degrade or error.
 
+  ## Zoned times far ahead
+
+  A database answers from a table for some years ahead and works each
+  answer out past them. `tz` builds its table to five years from when it
+  is compiled, and a question of a later year takes about a hundred times
+  as long, which every step and every comparison of a value in a zone
+  pays. An application that works with zoned times further ahead can have
+  the table built further, when `tz` is compiled:
+
+      config :tz, build_dst_periods_until_year: 20 + NaiveDateTime.utc_now().year
+
   """
 
   @typedoc """
@@ -272,6 +283,17 @@ defmodule Tempo.TimeZoneDatabase do
     end
   end
 
+  # How long a span is asked by its own days: half a year, which is half of
+  # what finding the year asks. A longer one is as well found a year at a
+  # time.
+  @span_asked_by_its_days 183 * @seconds_per_day
+
+  # What finding a block's changes asks of the database, a question for
+  # each of its days, and what a caller that finds none kept asks in its
+  # place (`clear_of_changes?/3`).
+  @questions_to_find_a_block 367
+  @asked_in_its_place 3
+
   @doc """
   The changes of a zone's clock between two moments: each moment its
   offset from UTC changes, with the offset before and the offset after.
@@ -288,6 +310,12 @@ defmodule Tempo.TimeZoneDatabase do
   keeps its days. A zone is on its local mean time before 1800, which
   every zone in the IANA database is until its first change, so a block
   before then is asked only at its two ends.
+
+  A span of half a year or less is asked of its own days, and nothing is
+  kept for it, until its year has been asked of as often as finding the
+  whole of it takes: a database answers from a table for some years ahead and
+  works each answer out past them, a hundred times as slowly, so that a
+  year found for the sake of one day of it took fifty milliseconds.
 
   ### Arguments
 
@@ -313,10 +341,68 @@ defmodule Tempo.TimeZoneDatabase do
   """
   @spec changes(String.t(), integer(), integer()) :: [{integer(), integer(), integer()}]
   def changes(zone, from, to) when is_binary(zone) and is_integer(from) and is_integer(to) do
-    for block <- block_of(from)..block_of(to)//1,
-        {moment, _before, _later} = change <- changes_in(zone, block),
-        moment > from and moment <= to,
-        do: change
+    blocks = block_of(from)..block_of(to)//1
+
+    if kept?(zone, blocks) or to - from > @span_asked_by_its_days or
+         asked_enough?(zone, blocks, div(to - from, @seconds_per_day) + 2) do
+      for block <- blocks,
+          {moment, _before, _later} = change <- changes_in(zone, block),
+          moment > from and moment <= to,
+          do: change
+    else
+      changes_of_its_days(zone, from, to)
+    end
+  end
+
+  # The changes of a short span, found by the days of the span itself.
+  defp changes_of_its_days(zone, from, to) do
+    zone
+    |> periods_at(days_from(from, to))
+    |> Enum.chunk_every(2, 1, :discard)
+    |> Enum.flat_map(&changes_between(zone, &1))
+  end
+
+  defp days_from(from, to) when from >= to, do: []
+  defp days_from(from, to), do: Enum.to_list(from..(to - 1)//@seconds_per_day) ++ [to]
+
+  defp kept?(zone, blocks),
+    do: Enum.all?(blocks, &(:persistent_term.get({__MODULE__, :changes, zone, &1}, nil) != nil))
+
+  # Whether a year has now been asked of as often as finding its changes
+  # takes, `questions` more being asked of each of `blocks`. The count is
+  # kept for a zone the database knows, one counter for each block asked
+  # of, and by every process together, so that many short ones come to the
+  # table that each alone would not.
+  defp asked_enough?(zone, blocks, questions) do
+    Enum.reduce(blocks, false, fn block, enough? ->
+      case counter(zone, block) do
+        nil ->
+          enough?
+
+        counter ->
+          :counters.add(counter, 1, questions)
+          enough? or :counters.get(counter, 1) >= @questions_to_find_a_block
+      end
+    end)
+  end
+
+  defp counter(zone, block) do
+    key = {__MODULE__, :asked, zone, block}
+
+    case :persistent_term.get(key, nil) do
+      nil -> new_counter(key, zone, database())
+      counter -> counter
+    end
+  end
+
+  defp new_counter(_key, _zone, Calendar.UTCOnlyTimeZoneDatabase), do: nil
+
+  defp new_counter(key, zone, _database) do
+    if zone_exists?(zone) do
+      counter = :counters.new(1, [:write_concurrency])
+      :persistent_term.put(key, counter)
+      counter
+    end
   end
 
   @doc """
@@ -353,17 +439,7 @@ defmodule Tempo.TimeZoneDatabase do
   @spec change_within?(String.t(), integer(), non_neg_integer()) :: boolean()
   def change_within?(zone, moment, margin)
       when is_binary(zone) and is_integer(moment) and is_integer(margin) do
-    first = block_of(moment - margin)
-    last = block_of(moment + margin)
-
-    change_in_block_within?(zone, first, moment, margin) or
-      (last != first and change_in_block_within?(zone, last, moment, margin))
-  end
-
-  defp change_in_block_within?(zone, block, moment, margin) do
-    Enum.any?(changes_in(zone, block), fn {change, _before, _later} ->
-      abs(change - moment) <= margin
-    end)
+    changes(zone, moment - margin - 1, moment + margin) != []
   end
 
   @doc """
@@ -375,7 +451,9 @@ defmodule Tempo.TimeZoneDatabase do
   found yet it is `false`, as it is where one is near, so it serves a caller
   that has another way to its answer, slower and in need of no list of
   changes: a value stepped once, far in the future, does not then wait for
-  a year of its zone's days to be asked of the database.
+  a year of its zone's days to be asked of the database. A year it has been
+  asked of as often as finding its changes takes is found, and answered
+  from.
 
   ### Arguments
 
@@ -393,14 +471,14 @@ defmodule Tempo.TimeZoneDatabase do
     time within `margin` seconds of `moment`, and none of them is in it.
 
   * `false` where a change is within `margin` seconds of `moment`, and
-    where the changes there have not been found: `change_within?/3` and
-    `changes/3` find them.
+    where the changes there have not been found: `changes/3` of a span
+    longer than half a year finds them.
 
   ### Examples
 
       iex> midsummer = :calendar.datetime_to_gregorian_seconds({{2026, 6, 21}, {12, 0, 0}})
-      iex> Tempo.TimeZoneDatabase.change_within?("Etc/UTC", midsummer, 86_400)
-      false
+      iex> Tempo.TimeZoneDatabase.changes("Etc/UTC", midsummer - 31_622_400, midsummer + 31_622_400)
+      []
       iex> Tempo.TimeZoneDatabase.clear_of_changes?("Etc/UTC", midsummer, 86_400)
       true
 
@@ -408,7 +486,29 @@ defmodule Tempo.TimeZoneDatabase do
   @spec clear_of_changes?(String.t(), integer(), non_neg_integer()) :: boolean()
   def clear_of_changes?(zone, moment, margin)
       when is_binary(zone) and is_integer(moment) and is_integer(margin) do
-    clear_in_blocks?(zone, block_of(moment - margin), block_of(moment + margin), moment, margin)
+    first = block_of(moment - margin)
+    last = block_of(moment + margin)
+
+    cond do
+      kept?(zone, first..last//1) ->
+        clear_in_blocks?(zone, first, last, moment, margin)
+
+      asked_enough?(zone, first..last//1, @asked_in_its_place) ->
+        found_clear?(zone, moment, margin)
+
+      true ->
+        false
+    end
+  end
+
+  # The changes of the blocks about a moment, found and kept, and whether
+  # they show none near it.
+  defp found_clear?(zone, moment, margin) do
+    first = block_of(moment - margin)
+    last = block_of(moment + margin)
+
+    Enum.each(first..last//1, &changes_in(zone, &1))
+    kept?(zone, first..last//1) and clear_in_blocks?(zone, first, last, moment, margin)
   end
 
   defp clear_in_blocks?(_zone, block, last, _moment, _margin) when block > last, do: true
