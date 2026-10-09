@@ -271,6 +271,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.season/1` returns the season a value holds with no hemisphere, 21 to 24, beside `Tempo.month/1`, and `nil` for a value that holds none.
 
+* A `SKIP` beside a day counted from the end that a month lacks (`BYMONTHDAY=-31` in a month of thirty days) is read as the day before the month's first: `FORWARD` is the first, and `BACKWARD` the last day of the month before. It was `{:error, {:unsupported_skip, …}}`, neither RFC 7529 nor RFC 8984 saying where it is moved to.
+
 * `Tempo.in_territory/2` gives a season of 21 to 24 its dates on a territory's side of the equator (`Tempo.in_territory(~o"2026-21", :AU)` is `~o"2026Y9M/12M"`), and so do the `:territory` and `:locale` options of `Tempo.from_iso8601/2` and `Tempo.to_interval/2`. With neither, `Tempo.to_interval/2` and what is built on it (the comparisons, the set operations, `Tempo.select/2`, `Tempo.to_string/2`) ask the application's `:default_territory` and then the current locale.
 
 * `Tempo.AbstractSeasonError` — what needs the dates of a season with no hemisphere says so: a walk, `Tempo.shift/3` by anything but years, `Tempo.at/2`, `Tempo.extend/2` and `Tempo.round/2`. It is also the answer for a territory the equator runs through, such as Brazil.
@@ -371,8 +373,6 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Changed
 
-* A rule built as a `Tempo.RRule.Rule` struct is held to what a rule that is read is: `Tempo.RRule.Expander.to_ast/3` returns `{:error, {:unsupported_skip, {skip, part}}}` for a `:skip` beside a day counted from the end that a month can lack, where the `:skip` was not applied.
-
 * `Tempo.to_calendar/2` converts a date with a time of day, which it refused: `~o"2026-06-15T09:30[Europe/Paris]"` in `Calendrical.Hebrew` is 30 Sivan 5786 at 09:30 in the same zone, the day its own clock is on. An interval of such values converts too.
 
 * `Tempo.explain/1` writes and words a value as far as it is written, and no further: `~o"1984/1986"` is "From: 1984." where each end was written out to its first day, and an hour is "at hour 10" where it was "at 10:00". Where an end does not say the day it starts on, a week and a year of a calendar that turns on another day, the day is told beside it (`2026-W25 (starts on 2026-06-15)`).
@@ -395,7 +395,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.shift/2` by a count of months or years takes the time of one step, the calendar saying where the count lands: a hundred thousand months takes 14 µs where it took 29 ms, and ten thousand years 12 µs where it took a millisecond.
 
-* A `SKIP` beside `BYYEARDAY=366` is read, and the day passed over in a year of 365 days: RFC 7529 moves a day of the month, and not a day of the year. A `SKIP` beside a day counted from the end that a month can lack (`BYMONTHDAY=-31`) is `{:error, {:unsupported_skip, {skip, [bymonthday: [-31]]}}}`, for `FORWARD` as for `BACKWARD`.
+* A `SKIP` beside `BYYEARDAY=366` is read, and the day passed over in a year of 365 days: RFC 7529 moves a day of the month, and not a day of the year.
 
 * `Tempo.to_string/2` shows a week of a calendar of weeks as the locale's words for it, "week 25 of 2026" and "Woche 25 des Jahres 2026" (CLDR's `yw`), and a span of weeks from its first to its last, where it showed the first and last days in the calendar's notation ("2026-W25-1 – 2026-W25-7"). A week of a calendar of months is its days still.
 
@@ -622,8 +622,6 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * `Tempo.shift/3` reaches each value a set or a range names, in every calendar: `~o"2026Y6M{1,15}D"` plus a day is `~o"2026Y6M{2,16}D"`, and where no one value names what they land on the answer is the `Tempo.IntervalSet` of their spans (the 15th and the 30th of June a day on are 16 June and 1 July), where a step from the unit that holds the set was a `Tempo.ConversionError`. A set is no longer stepped as one value either, so hours added to a set of days in a zone land on each day's own reading, a date a set names in no year or month of its own is not stepped (`~o"{2024,2025}Y2M29D"` plus a day is 1 March 2024 alone), and week dates step by a year or a month as the dates they are.
 
 * An interval counted by a duration from a start or an end that holds a set (`2026Y6M{1,15}D/P1D`) is a `Tempo.IntervalEndpointsError` that names the interval as it is written, and so is such a span given to `Tempo.select/2` as a selector, which gave one span whose ends held the sets (`2026Y6M{1,15}D/7M{1,15}D`).
-
-* A rule whose `skip` is `backward` and that writes a day a month or a year can lack (a `BYMONTHDAY` past the 28th, a `BYYEARDAY` past the 365th) returns `{:error, {:unsupported_skip, {:backward, part}}}` from `Tempo.JSCalendar.parse/2` and `Tempo.RRule.parse/2`, where JSCalendar's was read as `omit` and passed over the months without the day. `Tempo.RRule.Rule.skip_built/1` is the check.
 
 * A recurrence that starts at a year and selects a week lists that year's own week first, wherever the week starts: `R2/2026/P1Y/FL1WN` is weeks 1 of 2026 and 2027, the first from 29 December 2025, as the value `2026YL1WN` is, where it dropped that week as one before its start and listed 2027 and 2028. A start that is a date still holds its occurrences to that date, as RFC 5545's DTSTART does.
 

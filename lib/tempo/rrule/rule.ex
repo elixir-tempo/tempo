@@ -27,7 +27,7 @@ defmodule Tempo.RRule.Rule do
   * `:wkst` — week-start day as an integer 1–7 (Monday–Sunday, ISO
     convention). Default `1`. Affects `:byweekno` calculations.
 
-  * `:skip` — what a monthly or a yearly rule does with a day of the month that a month lacks, its start's or one it writes (`BYMONTHDAY=31`), as RFC 7529's `SKIP` and JSCalendar's `skip` name it. `:omit`, the default and RFC 5545's rule, lists no occurrence there: the rule states its start's day (ISO 8601-2 Annex C.3), and a day a month lacks is passed over. `:backward` lists the month's last day, as an ISO 8601 recurrence does, and `:forward` the first day of the month after.
+  * `:skip` — what a monthly or a yearly rule does with a day of the month that a month lacks, its start's or one it writes (`BYMONTHDAY=31`), as RFC 7529's `SKIP` and JSCalendar's `skip` name it. `:omit`, the default and RFC 5545's rule, lists no occurrence there: the rule states its start's day (ISO 8601-2 Annex C.3), and a day a month lacks is passed over. `:backward` lists the month's last day, as an ISO 8601 recurrence does, and `:forward` the first day of the month after. A day counted from the end that a month lacks (`BYMONTHDAY=-31` in a month of thirty days) is the day before the month's first: `:forward` lists the first, and `:backward` the last day of the month before.
 
   * `:rscale` — the calendar module the rule is counted in, where RFC 7529's `RSCALE` or JSCalendar's `rscale` names one (`calendar_from_rscale/1`), and `nil` where the rule names none and is counted in the calendar of its start. A start in another calendar is brought into it (`start_in_rscale/2`), and a `:bymonth` is then the month RFC 7529 numbers: Nisan is the seventh month of every Hebrew year, where it is the eighth in order in a year with a leap month.
 
@@ -241,41 +241,6 @@ defmodule Tempo.RRule.Rule do
   defp moved_within_the_year(_leap_months, _last_month, _skip), do: :ok
 
   @doc """
-  Returns whether a rule's `:skip` is one Tempo builds for the parts the rule holds.
-
-  `:backward` and `:forward` move a day of the month that a month lacks, the rule's start's or one it writes, counted from the start of the month: the 31st of a month of thirty days is its 30th, or the 1st of the month after. A day counted from the end that a month can lack (`BYMONTHDAY=-31`) lies before the month's first day, and neither RFC 7529 nor RFC 8984 says where it is moved to: a reader reports such a rule rather than reading it as another. A day of the year is not a day of the month, and `BYYEARDAY=366` is passed over in a year of 365 days whatever the rule's `:skip`.
-
-  ### Arguments
-
-  * `rule` is a `t:t/0`.
-
-  ### Returns
-
-  * `:ok` for a rule whose `:skip` is `:omit`, and for one whose `:skip` is `:backward` or `:forward` and that writes no day counted from the end of a month that a month can lack.
-
-  * `{:error, {:unsupported_skip, {skip, part}}}` otherwise, where `part` is the part that holds such a day, as `[bymonthday: [-31]]`.
-
-  ### Examples
-
-      iex> Tempo.RRule.Rule.skip_built(%Tempo.RRule.Rule{freq: :month, skip: :forward, bymonthday: [15, 31]})
-      :ok
-
-      iex> Tempo.RRule.Rule.skip_built(%Tempo.RRule.Rule{freq: :month, skip: :backward, bymonthday: [-1, -31]})
-      {:error, {:unsupported_skip, {:backward, [bymonthday: [-31]]}}}
-
-  """
-  @spec skip_built(t()) ::
-          :ok | {:error, {:unsupported_skip, {:backward | :forward, keyword()}}}
-  def skip_built(%__MODULE__{skip: skip} = rule) when skip in [:backward, :forward] do
-    case Enum.filter(List.wrap(rule.bymonthday), &(&1 < -28)) do
-      [] -> :ok
-      before_the_first -> {:error, {:unsupported_skip, {skip, [bymonthday: before_the_first]}}}
-    end
-  end
-
-  def skip_built(%__MODULE__{}), do: :ok
-
-  @doc """
   Returns the calendar a rule's `RSCALE` names.
 
   RFC 7529's `RSCALE`, and JSCalendar's `rscale` (RFC 8984 §4.3.3), name the calendar a rule counts its months and its days in by its CLDR calendar name, in any case: `HEBREW`, `islamic-civil`, `chinese`. It is one of the notations that carry a calendar's name by definition, and is resolved to the calendar module where the rule is read.
@@ -462,7 +427,7 @@ defmodule Tempo.RRule.Rule do
         |> push_byday(rule.byday, position_of_numbered_weekday(rule))
         |> push_times(rule, not times_after_selection?(rule))
         |> push_by(rule.bysetpos, :instance)
-        |> push_skip(rule)
+        |> push_skip(rule, rule.rscale || calendar_of_start(dtstart))
         |> push_wkst(rule.wkst)
         |> Enum.reverse()
         |> Parser.consolidate_selection()
@@ -744,18 +709,36 @@ defmodule Tempo.RRule.Rule do
   #
   # It is written too where the rule names a leap month, which a year that
   # has none moves to the month before it or after it (RFC 7529 §4.1).
-  defp push_skip(acc, %__MODULE__{skip: skip} = rule) when skip in [:backward, :forward] do
-    if moves_a_day?(rule) or Enum.any?(List.wrap(rule.bymonth), &leap_month?/1),
+  defp push_skip(acc, %__MODULE__{skip: skip} = rule, calendar)
+       when skip in [:backward, :forward] do
+    if moves_a_day?(rule, calendar) or Enum.any?(List.wrap(rule.bymonth), &leap_month?/1),
       do: [{:skip, skip} | acc],
       else: acc
   end
 
-  defp push_skip(acc, _rule), do: acc
+  defp push_skip(acc, _rule, _calendar), do: acc
 
-  defp moves_a_day?(%__MODULE__{freq: freq, bymonthday: days}) when freq in [:month, :year],
-    do: Enum.any?(List.wrap(days), &(&1 > 28))
+  # Whether a rule states a day of the month that some month of its calendar
+  # may lack, counted from either end. In the Gregorian calendar that is a
+  # day past the 28th. Twenty-eight was taken for every calendar's, so the
+  # sixth day of an Ethiopic year's thirteenth month, which has five days or
+  # six, was not moved. How many days every month of another calendar has is
+  # that calendar's to say, and Calendrical has no one answer for it, so
+  # there a skip is written beside any day of the month: each month is asked
+  # its own days where the rule is resolved, and the skip changes nothing in
+  # a month that has the day.
+  defp moves_a_day?(%__MODULE__{freq: freq, bymonthday: days}, calendar)
+       when freq in [:month, :year] and calendar in [Calendrical.Gregorian, Calendar.ISO],
+       do: Enum.any?(List.wrap(days), &(abs(&1) > 28))
 
-  defp moves_a_day?(_rule), do: false
+  defp moves_a_day?(%__MODULE__{freq: freq, bymonthday: days}, _another_calendar)
+       when freq in [:month, :year],
+       do: List.wrap(days) != []
+
+  defp moves_a_day?(_rule, _calendar), do: false
+
+  defp calendar_of_start(%Tempo{calendar: calendar}) when not is_nil(calendar), do: calendar
+  defp calendar_of_start(_no_start), do: Calendrical.Gregorian
 
   # Only emit `{:wkst, n}` for a non-default week start (WKST=MO is 1); the
   # common case keeps the AST identical and the token signals intent.

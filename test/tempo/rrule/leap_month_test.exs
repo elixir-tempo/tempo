@@ -264,9 +264,9 @@ defmodule Tempo.RRule.LeapMonthTest do
                {:error, {:leap_month_without_rscale, {5, :leap}}}
 
       assert Expander.to_ast(
-               %Rule{freq: :month, rscale: Hebrew, skip: :forward, bymonthday: [-31]},
+               %Rule{freq: :year, rscale: Hebrew, skip: :forward, bymonth: [{12, :leap}]},
                ~o"2014-02-08"
-             ) == {:error, {:unsupported_skip, {:forward, [bymonthday: [-31]]}}}
+             ) == {:error, {:unsupported_skip, {:forward, [bymonth: [{12, :leap}]]}}}
     end
   end
 

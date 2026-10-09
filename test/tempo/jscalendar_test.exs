@@ -211,10 +211,16 @@ defmodule Tempo.JSCalendarTest do
                "2026Y4M30DT9H0M0S/T10H0M0S"
              ]
 
-      # A day counted from the end that a month can lack is before the
-      # month's first day, and where it is moved to is not said.
-      assert monthly.(~s(,"skip":"forward","byMonthDay":[-31])) ==
-               {:error, {:unsupported_skip, {:forward, [bymonthday: [-31]]}}}
+      # A day counted from the end that a month lacks is the day before
+      # the month's first: moved on, it is the first.
+      assert {:ok, set} = monthly.(~s(,"skip":"forward","byMonthDay":[-31]))
+
+      assert spans(set) == [
+               "2026Y2M1DT9H0M0S/T10H0M0S",
+               "2026Y3M1DT9H0M0S/T10H0M0S",
+               "2026Y4M1DT9H0M0S/T10H0M0S",
+               "2026Y5M1DT9H0M0S/T10H0M0S"
+             ]
     end
 
     # RFC 8984 §4.3.3: `rscale` names the calendar a rule counts its months

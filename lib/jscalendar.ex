@@ -78,7 +78,7 @@ if Code.ensure_loaded?(JSCalendar) do
 
     A rule's `skip` is read. `omit`, the default, passes over a month or a year that lacks the start's day, so a rule on the 31st lists the months of 31 days; `backward` keeps the last day of such a month, and `forward` the first day of the month after.
 
-    Four things a rule can say are reported, each as `{:error, {reason, value}}`, rather than read as something they are not: a `skip` beside a day counted from the end of a month that a month can lack, such as `-31` (`:unsupported_skip`); an `rscale` that names no calendar (`:unsupported_rscale`), where one that names a calendar, such as `hebrew`, is a rule counted in it from its start's date there; a month that is none (`:unsupported_month`), and a leap month such as `"5L"` in a calendar that has no leap months, as the Gregorian, a rule's calendar where it names none, has not (`:calendar_has_no_leap_month`), where under `"rscale": "hebrew"` it is Adar I; and a day of the week that is none of `mo` to `su` (`:unsupported_day`). An `interval` of `0` is `{:error, {:invalid_interval, 0}}`, and a `count` of `0` is a rule with no occurrences.
+    Four things a rule can say are reported, each as `{:error, {reason, value}}`, rather than read as something they are not: a `skip` that is none of the three (`:unsupported_skip`); an `rscale` that names no calendar (`:unsupported_rscale`), where one that names a calendar, such as `hebrew`, is a rule counted in it from its start's date there; a month that is none (`:unsupported_month`), and a leap month such as `"5L"` in a calendar that has no leap months, as the Gregorian, a rule's calendar where it names none, has not (`:calendar_has_no_leap_month`), where under `"rscale": "hebrew"` it is Adar I; and a day of the week that is none of `mo` to `su` (`:unsupported_day`). An `interval` of `0` is `{:error, {:invalid_interval, 0}}`, and a `count` of `0` is a rule with no occurrences.
 
     """
 
@@ -440,31 +440,26 @@ if Code.ensure_loaded?(JSCalendar) do
            {:ok, calendar} <- Rule.calendar_from_rscale(rule.rscale),
            {:ok, week_start} <- week_start(rule.first_day_of_week),
            {:ok, days} <- byday(rule.by_day) do
-        skip_built(%Rule{
-          freq: freq,
-          interval: rule.interval || 1,
-          count: rule.count,
-          until: rule.until && Tempo.from_elixir(rule.until),
-          wkst: week_start,
-          skip: skip,
-          rscale: calendar,
-          bymonth: months,
-          bymonthday: rule.by_month_day,
-          byyearday: rule.by_year_day,
-          byweekno: rule.by_week_no,
-          byday: days,
-          byhour: rule.by_hour,
-          byminute: rule.by_minute,
-          bysecond: rule.by_second,
-          bysetpos: rule.by_set_position
-        })
+        {:ok,
+         %Rule{
+           freq: freq,
+           interval: rule.interval || 1,
+           count: rule.count,
+           until: rule.until && Tempo.from_elixir(rule.until),
+           wkst: week_start,
+           skip: skip,
+           rscale: calendar,
+           bymonth: months,
+           bymonthday: rule.by_month_day,
+           byyearday: rule.by_year_day,
+           byweekno: rule.by_week_no,
+           byday: days,
+           byhour: rule.by_hour,
+           byminute: rule.by_minute,
+           bysecond: rule.by_second,
+           bysetpos: rule.by_set_position
+         }}
       end
-    end
-
-    # A `skip` beside a day counted from the end of a month that a month can
-    # lack is not built, and is reported (`Tempo.RRule.Rule.skip_built/1`).
-    defp skip_built(%Rule{} = rule) do
-      with :ok <- Rule.skip_built(rule), do: {:ok, rule}
     end
 
     defp frequency("yearly"), do: {:ok, :year}

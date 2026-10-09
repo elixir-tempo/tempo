@@ -36,6 +36,22 @@ defmodule Tempo.RRule.RscaleSkipTest do
   # Where a day of the month is in a month: the day where the month has it,
   # and otherwise nowhere, the month's last day or the first of the month
   # after.
+  #
+  # A day counted from the end that the month lacks lies before its first
+  # day (decided 2026-10-09, the RFCs not saying): moved on it is the 1st,
+  # and moved back the last day of the month before.
+  defp day_or_moved(%Date{} = month, day, skip) when day < 0 do
+    first = Date.beginning_of_month(month)
+    counted = Date.days_in_month(month) + 1 + day
+
+    cond do
+      counted >= 1 -> [Date.new!(month.year, month.month, counted)]
+      skip == :omit -> []
+      skip == :backward -> [Date.add(first, -1)]
+      skip == :forward -> [first]
+    end
+  end
+
   defp day_or_moved(%Date{} = month, day, skip) do
     last = Date.end_of_month(month)
 
@@ -139,12 +155,69 @@ defmodule Tempo.RRule.RscaleSkipTest do
       end
     end
 
-    test "counted from the end that a month can lack is reported" do
-      for skip <- [:backward, :forward] do
-        rule = "RSCALE=GREGORIAN;FREQ=MONTHLY;BYMONTHDAY=15,-29,-31;#{skip_part(skip)}"
+    test "counted from the end that a month lacks is the day before its first" do
+      # It was reported and not read (`:unsupported_skip`).
+      for skip <- [:backward, :forward, :omit],
+          days <- [[-31], [-30], [-29, -31], [15, -29, -31], [1, -31], [-1, -31], [31, -31]] do
+        rule =
+          "RSCALE=GREGORIAN;FREQ=MONTHLY;BYMONTHDAY=#{Enum.join(days, ",")};" <>
+            "#{skip_part(skip)};COUNT=30"
 
-        assert {skip, read(rule, ~D[2026-01-31])} ==
-                 {skip, {:error, {:unsupported_skip, {skip, [bymonthday: [-29, -31]]}}}}
+        expected =
+          days |> days_selected(skip) |> Enum.sort_by(&elem(&1, 0), Date) |> Enum.take(30)
+
+        assert {rule, occurrences(read(rule, ~D[2026-01-01]))} == {rule, expected}
+      end
+
+      # The 31st from the end of each month of 2026 that has thirty days or
+      # fewer is the last day of the month before it, moved back, and the
+      # month's first, moved on.
+      back =
+        occurrences(
+          read(
+            "RSCALE=GREGORIAN;FREQ=MONTHLY;BYMONTHDAY=-31;SKIP=BACKWARD;COUNT=4",
+            ~D[2026-01-01]
+          )
+        )
+
+      on =
+        occurrences(
+          read(
+            "RSCALE=GREGORIAN;FREQ=MONTHLY;BYMONTHDAY=-31;SKIP=FORWARD;COUNT=4",
+            ~D[2026-01-01]
+          )
+        )
+
+      assert Enum.map(back, &elem(&1, 0)) == [
+               ~D[2026-01-01],
+               ~D[2026-01-31],
+               ~D[2026-03-01],
+               ~D[2026-03-31]
+             ]
+
+      assert Enum.map(on, &elem(&1, 0)) == [
+               ~D[2026-01-01],
+               ~D[2026-02-01],
+               ~D[2026-03-01],
+               ~D[2026-04-01]
+             ]
+    end
+
+    test "moved back before the rule's start is no occurrence" do
+      # April has no 31st from its end, and 31 March is before a start of 10 April.
+      rule = "RSCALE=GREGORIAN;FREQ=MONTHLY;BYMONTHDAY=-31;SKIP=BACKWARD;COUNT=3"
+
+      assert Enum.map(occurrences(read(rule, ~D[2026-04-10])), &elem(&1, 0)) ==
+               [~D[2026-05-01], ~D[2026-05-31], ~D[2026-07-01]]
+    end
+
+    test "counted from the end of a February is moved in a year without its 29th" do
+      for {skip, moved} <- [backward: ~D[2026-01-31], forward: ~D[2026-02-01]] do
+        rule = "RSCALE=GREGORIAN;FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=-29;#{skip_part(skip)};COUNT=3"
+
+        # 2028 has a 29th of February, and the 29th from its end is its 1st.
+        assert {skip, Enum.map(occurrences(read(rule, ~D[2026-01-01])), &elem(&1, 0))} ==
+                 {skip, [moved, Date.shift(moved, year: 1), ~D[2028-02-01]]}
       end
     end
 
@@ -233,6 +306,93 @@ defmodule Tempo.RRule.RscaleSkipTest do
 
       assert RRule.parse("rscale=gregorian;freq=monthly;count=3", from: start) ==
                RRule.parse("FREQ=MONTHLY;COUNT=3", from: start)
+    end
+  end
+
+  describe "a calendar whose shortest month is not the Gregorian calendar's" do
+    alias Calendrical.Ethiopic
+    alias Calendrical.Hebrew
+
+    # The Gregorian date each occurrence starts on.
+    defp gregorian_starts({:ok, rule}) do
+      {:ok, set} = Tempo.to_interval(rule)
+
+      for occurrence <- IntervalSet.members(set) do
+        {:ok, date} = occurrence |> Interval.from() |> Tempo.to_calendar(Calendrical.Gregorian)
+        Date.new!(Tempo.year(date), Tempo.month(date), Tempo.day(date))
+      end
+    end
+
+    defp in_gregorian(year, month, day, calendar),
+      do: year |> Date.new!(month, day, calendar) |> Date.convert!(Calendar.ISO)
+
+    test "has its own days moved: the sixth of an Ethiopic year's thirteenth month" do
+      # The thirteenth month has five days, and six in a leap year. Its 6th
+      # was not moved, a day up to the 28th having been taken for one every
+      # month of every calendar has.
+      years = 2010..2014
+      assert Enum.map(years, &Ethiopic.days_in_month(&1, 13)) == [5, 6, 5, 5, 5]
+
+      rule = fn skip ->
+        RRule.parse("RSCALE=ETHIOPIC;FREQ=YEARLY;BYMONTH=13;BYMONTHDAY=6#{skip};COUNT=5",
+          from: ~o"2018-01-01"
+        )
+      end
+
+      sixth_or = fn moved ->
+        for year <- years do
+          if Ethiopic.days_in_month(year, 13) == 6,
+            do: in_gregorian(year, 13, 6, Ethiopic),
+            else: moved.(year)
+        end
+      end
+
+      assert gregorian_starts(rule.(";SKIP=BACKWARD")) ==
+               sixth_or.(&in_gregorian(&1, 13, 5, Ethiopic))
+
+      assert gregorian_starts(rule.(";SKIP=FORWARD")) ==
+               sixth_or.(&in_gregorian(&1 + 1, 1, 1, Ethiopic))
+
+      assert Enum.take(gregorian_starts(rule.("")), 1) == [in_gregorian(2011, 13, 6, Ethiopic)]
+    end
+
+    test "is RFC 7529's example of the Ethiopic thirteenth month" do
+      # §4.3.2: the first day of the thirteenth month, from 6 September 2013.
+      rule = RRule.parse("RSCALE=ETHIOPIC;FREQ=MONTHLY;BYMONTH=13;COUNT=5", from: ~o"2013-09-06")
+
+      assert gregorian_starts(rule) ==
+               [~D[2013-09-06], ~D[2014-09-06], ~D[2015-09-06], ~D[2016-09-06], ~D[2017-09-06]]
+    end
+
+    test "is RFC 7529's example of the Gregorian leap day" do
+      # §4.3.4: 29 February, forward to 1 March in a year without it.
+      rule =
+        RRule.parse("RSCALE=GREGORIAN;FREQ=YEARLY;SKIP=FORWARD;COUNT=6", from: ~o"2012-02-29")
+
+      assert gregorian_starts(rule) ==
+               [~D[2012-02-29], ~D[2013-03-01], ~D[2014-03-01], ~D[2015-03-01]] ++
+                 [~D[2016-02-29], ~D[2017-03-01]]
+    end
+
+    test "has the 30th from the end of a Hebrew month of twenty-nine days moved" do
+      # From 1 Shevat 5786: Shevat, Nisan and Sivan have thirty days, and
+      # Adar, Iyar and Tammuz twenty-nine.
+      months = 5..10
+      assert Enum.map(months, &Hebrew.days_in_month(5786, &1)) == [30, 29, 30, 29, 30, 29]
+
+      back =
+        RRule.parse("RSCALE=HEBREW;FREQ=MONTHLY;BYMONTHDAY=-30;SKIP=BACKWARD;COUNT=6",
+          from: ~o"2026-01-19"
+        )
+
+      expected =
+        for month <- months do
+          if Hebrew.days_in_month(5786, month) == 30,
+            do: in_gregorian(5786, month, 1, Hebrew),
+            else: Date.add(in_gregorian(5786, month, 1, Hebrew), -1)
+        end
+
+      assert gregorian_starts(back) == expected
     end
   end
 

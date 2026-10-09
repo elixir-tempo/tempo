@@ -169,7 +169,6 @@ defmodule Tempo.RRule.Expander do
       when is_nil(dtstart) or is_struct(dtstart, Tempo) do
     with {:ok, interval} <- steps_by(rule.interval),
          {:ok, recurrence} <- counted(rule.count),
-         :ok <- Rule.skip_built(rule),
          :ok <- Rule.leap_months_built(rule),
          {:ok, dtstart} <- Rule.start_in_rscale(rule, dtstart),
          {:ok, options} <- base_to_in_rscale(rule, options),

@@ -2824,6 +2824,27 @@ defmodule Tempo.RRule.Selection do
     end
   end
 
+  # A day counted from the end that the month lacks lies before its first
+  # day (decided 2026-10-09, neither RFC 7529 nor RFC 8984 saying where it
+  # is moved to): the 31st from the end of a month of thirty days is the
+  # day before the 1st. Moved on it is the 1st, and moved back the last day
+  # of the month before, which is Calendrical's.
+  defp day_or_where_moved(day, {year, month}, last, _calendar, :forward)
+       when day < 0 and last + 1 + day < 1,
+       do: [{year, month, 1}]
+
+  defp day_or_where_moved(day, {year, month}, last, calendar, :backward)
+       when day < 0 and last + 1 + day < 1 do
+    case Date.new(year, month, 1, calendar) do
+      {:ok, first_day} ->
+        %Date{year: year, month: month, day: day} = Calendrical.previous(first_day, :day)
+        [{year, month, day}]
+
+      {:error, _no_such_date} ->
+        []
+    end
+  end
+
   defp day_or_where_moved(_day, _month, _last, _calendar, _skip), do: []
 
   ## ------------------------------------------------------------
