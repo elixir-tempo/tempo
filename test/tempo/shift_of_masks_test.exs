@@ -439,13 +439,15 @@ defmodule Tempo.ShiftOfMasksTest do
 
     defp year_month_day(%Date{year: year, month: month, day: day}), do: {year, month, day}
 
-    defp march25_days(%IntervalSet{} = set) do
+    defp march25_days(answer) do
+      {:ok, set} = Tempo.to_interval_set(answer)
       for member <- IntervalSet.members(set), date <- days_between(member), do: date
     end
 
+    # A member written to its month is the days of it.
     defp days_between(member) do
-      {:ok, first} = member |> Interval.from() |> Tempo.to_date()
-      {:ok, last} = member |> Interval.to() |> Tempo.to_date()
+      {:ok, first} = member |> Interval.from() |> Tempo.extend_resolution(:day) |> Tempo.to_date()
+      {:ok, last} = member |> Interval.to() |> Tempo.extend_resolution(:day) |> Tempo.to_date()
 
       first
       |> Stream.iterate(&Date.add(&1, 1))

@@ -237,10 +237,10 @@ defmodule Tempo.WeekOfMonthTest do
       assert {:error, %ParseError{}} = Tempo.from_iso8601("6M2W")
     end
 
-    test "is not built where the year does not begin with its first month, and has no calendar of weeks" do
-      assert {:error,
-              %ConversionError{reason: :not_built, target: :week_of_month, calendar: March25}} =
-               Tempo.from_iso8601("1750Y6M2W", March25)
+    test "is read in a year that begins within a month, and has no calendar of weeks" do
+      # `Calendrical.Julian.March25` counts its months from 25 March, and
+      # the week is the one Calendrical gives of the month it counts sixth.
+      assert Tempo.from_iso8601("1750Y6M2W", March25) == {:ok, march25_week(1750, 6, 2)}
 
       assert {:error, %InvalidDateError{}} = Tempo.from_iso8601("2026Y6M2W[u-ca=iso-week]")
     end
@@ -392,14 +392,24 @@ defmodule Tempo.WeekOfMonthTest do
                )
     end
 
-    test "is refused by name in a year that begins within a month" do
-      assert {:error,
-              %ConversionError{reason: :not_built, target: :week_of_month, calendar: March25}} =
-               Tempo.select(
-                 Tempo.from_iso8601!("1750Y6M", March25),
-                 Tempo.from_iso8601!("2W", March25)
-               )
+    test "is the week of the month in a year that begins within a month" do
+      {:ok, selected} =
+        Tempo.select(
+          Tempo.from_iso8601!("1750Y6M", March25),
+          Tempo.from_iso8601!("2W", March25)
+        )
+
+      assert IntervalSet.members(selected) == [march25_week(1750, 6, 2)]
     end
+  end
+
+  # The nth week of a month of `Calendrical.Julian.March25`, as
+  # `Calendrical.Interval.week/4` gives its dates: from its first day up to
+  # the day after its last.
+  defp march25_week(year, month, week) do
+    %Date.Range{first: first, last: last} = Calendrical.Interval.week(year, month, week, March25)
+
+    %Interval{from: Tempo.from_elixir(first), to: Tempo.from_elixir(Date.add(last, 1))}
   end
 
   describe "a week selected by a rule in a month" do
@@ -681,11 +691,22 @@ defmodule Tempo.WeekOfMonthTest do
                [~o"2026-06-08", ~o"2027-06-08"]
     end
 
-    test "is refused in a rule of a calendar whose year begins within a month" do
-      for text <- ["R2/1750Y6M/P1M/FL2WN", "R2/1750Y6M/P1M/FL2W3KN"] do
-        assert {^text, {:error, %ConversionError{reason: :not_built, calendar: March25}}} =
-                 {text, Tempo.to_interval(Tempo.from_iso8601!(text, March25))}
-      end
+    test "is answered in a rule of a calendar whose year begins within a month" do
+      {:ok, weeks} = Tempo.to_interval(Tempo.from_iso8601!("R2/1750Y6M/P1M/FL2WN", March25))
+
+      assert IntervalSet.members(weeks) == [march25_week(1750, 6, 2), march25_week(1750, 7, 2)]
+
+      # The Wednesday of each of those weeks, by the calendar's own days.
+      {:ok, wednesdays} =
+        Tempo.to_interval(Tempo.from_iso8601!("R2/1750Y6M/P1M/FL2W3KN", March25))
+
+      expected =
+        for month <- [6, 7],
+            date <- Calendrical.Interval.week(1750, month, 2, March25),
+            Date.day_of_week(date) == 3,
+            do: Tempo.from_elixir(date)
+
+      assert Enum.map(IntervalSet.members(wednesdays), &Interval.from/1) == expected
     end
 
     test "is the day its calendar numbers in the week, where the calendar cuts a month's weeks short" do
@@ -737,10 +758,16 @@ defmodule Tempo.WeekOfMonthTest do
       end
     end
 
+    test "are the weeks Calendrical gives of a month in a year that begins within a month" do
+      weeks = Calendrical.Interval.weeks_in_month(1750, 6, March25)
+
+      assert UnitValues.weeks_of_month(1750, 6, March25) ==
+               {:ok, for(week <- 1..weeks, do: Calendrical.Interval.week(1750, 6, week, March25))}
+    end
+
     test "are none for a month the calendar does not have, and in a calendar of weeks" do
       assert UnitValues.weeks_of_month(2026, 13, Gregorian) == {:error, :no_period}
       assert UnitValues.weeks_of_month(2026, 6, Calendrical.ISOWeek) == {:error, :no_period}
-      assert UnitValues.weeks_of_month(1750, 6, March25) == {:error, :no_period}
       assert UnitValues.week_of_month(2026, 6, 0, Gregorian) == {:error, :no_period}
       assert UnitValues.week_of_month(2026, 6, "2", Gregorian) == {:error, :no_period}
     end

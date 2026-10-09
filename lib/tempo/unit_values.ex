@@ -459,6 +459,174 @@ defmodule Tempo.UnitValues do
     end
   end
 
+  @doc """
+  The day of its month a date names.
+
+  A calendar that counts its months from the day its year begins numbers a day by its place in the month it counts: the first day of a `Calendrical.Julian.March25` year is day 1 of month 1, and is named 25 March. The calendar is asked (`cardinal_day/3`); one that does not answer names a day by its number.
+
+  ### Arguments
+
+  * `year`, `month` and `day` are a date's fields.
+
+  * `calendar` is a calendar module.
+
+  ### Returns
+
+  * The day the date is named by.
+
+  ### Examples
+
+      iex> Tempo.UnitValues.named_day(1750, 1, 1, Calendrical.Julian.March25)
+      25
+
+      iex> Tempo.UnitValues.named_day(2026, 6, 15, Calendrical.Gregorian)
+      15
+
+  """
+  @spec named_day(integer(), pos_integer(), pos_integer(), module()) :: pos_integer()
+  def named_day(year, month, day, calendar) do
+    if exported?(calendar, :cardinal_day, 3),
+      do: calendar.cardinal_day(year, month, day),
+      else: day
+  end
+
+  @doc """
+  The year, month and day a date is named by.
+
+  A calendar that counts its months from the day its year begins names a date otherwise than by its fields: the first day of a `Calendrical.Julian.March25` year, month 1 and day 1, is 25 March. The calendar is asked for the month the date is of (`month_of_year/3`, named by `cardinal_month/1`) and for its day (`cardinal_day/3`).
+
+  ### Arguments
+
+  * `year`, `month` and `day` are a date's fields.
+
+  * `calendar` is a calendar module.
+
+  ### Returns
+
+  * `{year, month, day}`, the month and the day as they are named.
+
+  ### Examples
+
+      iex> Tempo.UnitValues.named_date(1750, 1, 1, Calendrical.Julian.March25)
+      {1750, 3, 25}
+
+      iex> Tempo.UnitValues.named_date(1750, 13, 24, Calendrical.Julian.March25)
+      {1750, 3, 24}
+
+      iex> Tempo.UnitValues.named_date(2026, 6, 15, Calendrical.Gregorian)
+      {2026, 6, 15}
+
+  """
+  @spec named_date(integer(), pos_integer(), pos_integer(), module()) ::
+          {integer(), pos_integer(), pos_integer()}
+  def named_date(year, month, day, calendar)
+      when calendar in [Calendrical.Gregorian, Calendar.ISO],
+      do: {year, month, day}
+
+  def named_date(year, month, day, calendar),
+    do: {year, month_named(year, month, day, calendar), named_day(year, month, day, calendar)}
+
+  @doc """
+  Whether a month is the only one of its year with its name.
+
+  A year that begins within a month holds that month twice, as its first days and as its last: months 1 and 13 of a `Calendrical.Julian.March25` year are both March. Calendrical is asked for the spans of the named month (`Calendrical.named_month/3`).
+
+  ### Arguments
+
+  * `year` and `month` are a month as its calendar counts it.
+
+  * `calendar` is a calendar module.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  ### Examples
+
+      iex> Tempo.UnitValues.month_named_once?(1750, 1, Calendrical.Julian.March25)
+      false
+
+      iex> Tempo.UnitValues.month_named_once?(1750, 2, Calendrical.Julian.March25)
+      true
+
+      iex> Tempo.UnitValues.month_named_once?(2026, 6, Calendrical.Gregorian)
+      true
+
+  """
+  @spec month_named_once?(integer(), pos_integer(), module()) :: boolean()
+  def month_named_once?(_year, _month, calendar)
+      when calendar in [Calendrical.Gregorian, Calendar.ISO],
+      do: true
+
+  def month_named_once?(year, month, calendar) when is_integer(year) and is_integer(month) do
+    if exported?(calendar, :cardinal_day, 3),
+      do:
+        match?(
+          [_one_span],
+          Calendrical.named_month(year, month_named(year, month, 1, calendar), calendar)
+        ),
+      else: true
+  end
+
+  def month_named_once?(_year, _month, _calendar), do: true
+
+  @doc """
+  Whether a year's first month and its last have different names.
+
+  They have in a year that begins with a whole month, which its months then name from first to last. A year that begins within a month starts and ends in the month of one name (25 March to the next 24 March).
+
+  ### Arguments
+
+  * `year` is a year.
+
+  * `calendar` is a calendar module.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  ### Examples
+
+      iex> Tempo.UnitValues.year_named_by_its_months?(2026, Calendrical.Gregorian)
+      true
+
+      iex> Tempo.UnitValues.year_named_by_its_months?(1750, Calendrical.Julian.Sept1)
+      true
+
+      iex> Tempo.UnitValues.year_named_by_its_months?(1750, Calendrical.Julian.March25)
+      false
+
+  """
+  @spec year_named_by_its_months?(integer(), module()) :: boolean()
+  def year_named_by_its_months?(_year, calendar)
+      when calendar in [Calendrical.Gregorian, Calendar.ISO],
+      do: true
+
+  def year_named_by_its_months?(year, calendar) when is_integer(year) do
+    with true <- exported?(calendar, :cardinal_day, 3),
+         %Date.Range{first: first, last: last} <- calendar.year(year) do
+      month_named(first.year, first.month, first.day, calendar) !=
+        month_named(last.year, last.month, last.day, calendar)
+    else
+      _named_by_its_numbers -> true
+    end
+  end
+
+  def year_named_by_its_months?(_year, _calendar), do: true
+
+  # The month a date names, as its calendar numbers the months of a year by
+  # name: the month its date is of (`month_of_year/3`), named once
+  # (`cardinal_month/1`). A leap month is named by the calendar's own words,
+  # and is its number here.
+  defp month_named(year, month, day, calendar) do
+    with true <- exported?(calendar, :month_of_year, 3),
+         named when is_integer(named) <- calendar.month_of_year(year, month, day) do
+      calendar.cardinal_month(named)
+    else
+      _named_by_its_number -> month
+    end
+  end
+
   # `function_exported?/3` is false for a module that is not yet loaded, so
   # one that seems not to export the function is loaded and asked again.
   defp exported?(calendar, function, arity) do
@@ -1113,7 +1281,7 @@ defmodule Tempo.UnitValues do
       true
 
       iex> Tempo.UnitValues.year_begins_with_first_month?(1750, Calendrical.Julian.March25)
-      false
+      true
 
   """
   @spec year_begins_with_first_month?(integer(), module()) :: boolean()
@@ -1195,10 +1363,10 @@ defmodule Tempo.UnitValues do
   ### Examples
 
       iex> Tempo.UnitValues.first_date([year: 1750], Calendrical.Julian.March25)
-      {:ok, {1750, 3, 25}}
+      {:ok, {1750, 1, 1}}
 
       iex> Tempo.UnitValues.first_date([year: 1750, month: 2], Calendrical.Julian.March25)
-      {:ok, {1750, 4, 1}}
+      {:ok, {1750, 2, 1}}
 
       iex> Tempo.UnitValues.first_date([year: 2026, month: 6], Calendrical.Gregorian)
       {:ok, {2026, 6, 1}}
@@ -1302,10 +1470,10 @@ defmodule Tempo.UnitValues do
       {:ok, [{2026, 2, 1..28}]}
 
       iex> Tempo.UnitValues.dates_of_month(1750, 1, Calendrical.Julian.March25)
-      {:ok, [{1750, 3, 25..31}]}
+      {:ok, [{1750, 1, 1..7}]}
 
       iex> Tempo.UnitValues.dates_of_month(1750, 12, Calendrical.Julian.March25)
-      {:ok, [{1750, 2, 1..28}, {1750, 3, 1..24}]}
+      {:ok, [{1750, 12, 1..28}]}
 
   """
   @spec dates_of_month(integer(), pos_integer(), module()) ::
@@ -1556,10 +1724,10 @@ defmodule Tempo.UnitValues do
   ### Examples
 
       iex> Tempo.UnitValues.month_of_date(1750, 3, 25, Calendrical.Julian.March25)
-      {:ok, 1}
+      {:ok, 3}
 
       iex> Tempo.UnitValues.month_of_date(1750, 3, 10, Calendrical.Julian.March25)
-      {:ok, 12}
+      {:ok, 3}
 
       iex> Tempo.UnitValues.month_of_date(2026, 6, 15, Calendrical.Gregorian)
       {:ok, 6}
@@ -1679,7 +1847,7 @@ defmodule Tempo.UnitValues do
       true
 
       iex> Tempo.UnitValues.months_counted_from_year_start?(1750, Calendrical.Reform.England)
-      false
+      true
 
       iex> Tempo.UnitValues.months_counted_from_year_start?(1751, Calendrical.Reform.England)
       true

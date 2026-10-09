@@ -11,14 +11,14 @@ defmodule Tempo.YearStartTest do
   alias Tempo.IntervalSet
   alias Tempo.UnitValues
 
-  # A year that does not begin with its first month.
+  # A year that begins on another day than 1 January.
   #
-  # Calendrical's Julian calendars whose year turns on another day than 1
-  # January keep each month's Julian number, so a year's dates do not run in
-  # the order of their numbers (1 January follows 31 December of the same
-  # year), and the calendar counts the months of a year from the day it
-  # begins (`month/2`): the first month of a `March25` year is 25 to 31
-  # March, and its twelfth 1 February to 24 March.
+  # Calendrical's Julian calendars whose year turns on another day count the
+  # months of a year from the day it begins, and a date's fields are those
+  # months and the days of them, in the order of time. A year that begins on
+  # the first of a month has twelve; one that begins within a month has
+  # thirteen: the first month of a `March25` year is 25 to 31 March, and its
+  # thirteenth 1 to 24 March.
   #
   # Every answer here is the calendar's own, asked of Calendrical apart from
   # Tempo: `year/1` for a year's days, `month/2` for a month's, `quarter/2`
@@ -53,14 +53,31 @@ defmodule Tempo.YearStartTest do
   defp cases, do: for(calendar <- @calendars, year <- @years, do: {calendar, year})
 
   describe "the calendars" do
-    test "do not begin their year with their first month" do
+    test "count their months from the day their year begins, which is not 1 January" do
       for {calendar, year} <- cases() do
-        refute UnitValues.year_begins_with_first_month?(year, calendar)
-        assert calendar.year(year).first != Date.new!(year, 1, 1, calendar)
-      end
+        first = calendar.year(year).first
+        julian = Date.convert!(first, Calendrical.Julian)
 
-      assert UnitValues.year_begins_with_first_month?(1750, Calendrical.Julian)
-      assert UnitValues.year_begins_with_first_month?(1750, Calendrical.Julian.Jan1)
+        assert first == Date.new!(year, 1, 1, calendar)
+        assert {julian.month, julian.day} != {1, 1}
+        assert calendar.months_in_year(year) in [12, 13]
+      end
+    end
+
+    test "name a date's month and day otherwise than by its fields" do
+      assert UnitValues.named_date(1750, 1, 1, March25) == {1750, 3, 25}
+      assert UnitValues.named_date(1750, 13, 24, March25) == {1750, 3, 24}
+      assert UnitValues.named_date(1750, 1, 1, Sept1) == {1750, 9, 1}
+
+      refute UnitValues.month_named_once?(1750, 1, March25)
+      refute UnitValues.month_named_once?(1750, 13, March25)
+      assert UnitValues.month_named_once?(1750, 2, March25)
+      assert UnitValues.month_named_once?(1750, 1, March1)
+
+      refute UnitValues.year_named_by_its_months?(1750, March25)
+      refute UnitValues.year_named_by_its_months?(1750, Dec25)
+      assert UnitValues.year_named_by_its_months?(1750, March1)
+      assert UnitValues.year_named_by_its_months?(1750, Sept1)
     end
   end
 
@@ -90,7 +107,8 @@ defmodule Tempo.YearStartTest do
       for {calendar, year} <- cases() do
         months = Enum.to_list(year(year, calendar))
 
-        assert months == for(month <- 1..12, do: month(year, month, calendar))
+        assert months ==
+                 for(month <- 1..calendar.months_in_year(year), do: month(year, month, calendar))
 
         for [earlier, later] <- Enum.chunk_every(months, 2, 1, :discard) do
           assert Tempo.compare(earlier, later) == :lt
@@ -172,9 +190,11 @@ defmodule Tempo.YearStartTest do
       end
     end
 
-    test "is a month long, and a year twelve of them" do
+    test "is a month long, and a year as many of them as the calendar counts" do
       for {calendar, year} <- cases() do
-        for month <- 1..12 do
+        months_in_year = calendar.months_in_year(year)
+
+        for month <- 1..months_in_year do
           {:ok, interval} = Tempo.to_interval(month(year, month, calendar))
           assert Tempo.duration(interval) == ~o"P1M"
         end
@@ -182,15 +202,20 @@ defmodule Tempo.YearStartTest do
         {:ok, months} =
           Interval.new(from: month(year, 1, calendar), to: month(year + 1, 1, calendar))
 
-        assert Tempo.duration(months) == ~o"P12M"
+        assert Tempo.duration(months) == Tempo.from_iso8601!("P#{months_in_year}M")
       end
     end
 
     test "is stepped by months through the year's end" do
       for {calendar, year} <- cases() do
+        last = calendar.months_in_year(year)
+        last_of_the_year_before = calendar.months_in_year(year - 1)
+
         assert Tempo.shift(month(year, 1, calendar), month: 1) == month(year, 2, calendar)
-        assert Tempo.shift(month(year, 12, calendar), month: 1) == month(year + 1, 1, calendar)
-        assert Tempo.shift(month(year, 1, calendar), month: -1) == month(year - 1, 12, calendar)
+        assert Tempo.shift(month(year, last, calendar), month: 1) == month(year + 1, 1, calendar)
+
+        assert Tempo.shift(month(year, 1, calendar), month: -1) ==
+                 month(year - 1, last_of_the_year_before, calendar)
       end
     end
 
@@ -258,12 +283,13 @@ defmodule Tempo.YearStartTest do
       end
     end
 
-    test "through the turn of the calendar's months is walked day by day" do
-      for {calendar, year} <- cases() do
-        december = Date.new!(year, 12, 30, calendar)
-        {:ok, interval} = Interval.new(from: day(december), to: day(Date.add(december, 4)))
+    test "through the turn of a month, and of the year, is walked day by day" do
+      for {calendar, year} <- cases(),
+          turn <- [calendar.month(year, 2).first, calendar.year(year + 1).first] do
+        before = Date.add(turn, -2)
+        {:ok, interval} = Interval.new(from: day(before), to: day(Date.add(before, 4)))
 
-        assert Enum.to_list(interval) == days(Date.range(december, Date.add(december, 3)))
+        assert Enum.to_list(interval) == days(Date.range(before, Date.add(before, 3)))
       end
     end
   end
@@ -294,10 +320,16 @@ defmodule Tempo.YearStartTest do
         assert span(Tempo.to_interval(value)) == expected_span(calendar.quarter(year, quarter)),
                "quarter #{quarter} of #{year} in #{inspect(calendar)}"
 
-        first = (quarter - 1) * 3 + 1
+        # The months the calendar's quarter holds: three, and four in the last
+        # quarter of a year of thirteen.
+        quarter_days = calendar.quarter(year, quarter)
 
         assert Enum.to_list(value) ==
-                 for(month <- first..(first + 2), do: month(year, month, calendar))
+                 for(
+                   month <- 1..calendar.months_in_year(year),
+                   Enum.member?(quarter_days, calendar.month(year, month).first),
+                   do: month(year, month, calendar)
+                 )
       end
     end
   end
@@ -327,7 +359,7 @@ defmodule Tempo.YearStartTest do
 
     test "the months of a year joined are the year" do
       for {calendar, year} <- cases() do
-        months = for month <- 1..12, do: month(year, month, calendar)
+        months = for month <- 1..calendar.months_in_year(year), do: month(year, month, calendar)
         {:ok, joined} = Tempo.union(hd(months), tl(months))
 
         assert [whole] = joined |> IntervalSet.coalesce() |> IntervalSet.members()
@@ -375,7 +407,7 @@ defmodule Tempo.YearStartTest do
       for {calendar, year} <- cases() do
         %Date.Range{first: first, last: last} = calendar.year(year)
 
-        for date <- [first, last, Date.add(first, 10), Date.new!(year, 12, 31, calendar)],
+        for date <- [first, last, Date.add(first, 10), Date.add(last, -40)],
             months <- [1, 2, 11, 12, -1] do
           # A day the month stepped to does not have is its last.
           {stepped_year, stepped_month, stepped_day} =
@@ -394,34 +426,35 @@ defmodule Tempo.YearStartTest do
 
   describe "a day counted in a group of months" do
     test "is counted from the group's first day" do
-      for {calendar, year} <- cases(), quarter <- 1..4 do
-        %Date.Range{first: first} = dates = calendar.quarter(year, quarter)
+      # The nth group of three months is the months the calendar counts
+      # (n - 1) * 3 + 1 to n * 3, whichever quarter it puts them in.
+      for {calendar, year} <- cases(), group <- 1..4 do
+        first_month = (group - 1) * 3 + 1
+        %Date.Range{first: first} = calendar.month(year, first_month)
+        %Date.Range{last: last} = calendar.month(year, first_month + 2)
+        dates = Date.range(first, last)
 
         for count <- [1, 40, Enum.count(dates)] do
-          assert value("#{year}Y#{quarter}G3MU#{count}D", calendar) ==
+          assert value("#{year}Y#{group}G3MU#{count}D", calendar) ==
                    day(Date.add(first, count - 1)),
-                 "day #{count} of quarter #{quarter} of #{year} in #{inspect(calendar)}"
+                 "day #{count} of group #{group} of #{year} in #{inspect(calendar)}"
         end
 
         assert {:error, %Tempo.InvalidDateError{}} =
-                 Tempo.from_iso8601("#{year}Y#{quarter}G3MU#{Enum.count(dates) + 1}D", calendar)
+                 Tempo.from_iso8601("#{year}Y#{group}G3MU#{Enum.count(dates) + 1}D", calendar)
       end
     end
   end
 
   describe "the days of a month a date names" do
-    # A month with a day after it is the month the date names, whichever
-    # month of the year the calendar counts it as, so its unspecified and
-    # masked days are the days so numbered: one span, or where the year
-    # turns within the month the days on each side of the turn.
+    # A month with a day after it is the month the calendar counts, so its
+    # unspecified and masked days are the days it has, one after another.
     defp covered(result) do
       {:ok, set} = Tempo.to_interval_set(result)
       set |> IntervalSet.coalesce() |> IntervalSet.members() |> Enum.map(&span/1)
     end
 
     defp runs_of(dates) do
-      # `Date.compare/2` orders one calendar's dates by their fields, which
-      # is not the order of these calendars' days.
       dates
       |> Enum.sort_by(&Date.to_gregorian_days/1)
       |> Enum.chunk_while(
@@ -439,7 +472,7 @@ defmodule Tempo.YearStartTest do
     end
 
     test "unspecified, are the days the month has" do
-      for {calendar, year} <- cases(), month <- 1..12 do
+      for {calendar, year} <- cases(), month <- 1..calendar.months_in_year(year) do
         dates =
           for day <- 1..calendar.days_in_month(year, month),
               do: Date.new!(year, month, day, calendar)
@@ -449,15 +482,25 @@ defmodule Tempo.YearStartTest do
       end
     end
 
-    test "masked, are the days its digits allow" do
-      for {calendar, year} <- cases(), month <- 1..12 do
+    test "masked, are the days its digits allow, and none where the month is too short" do
+      for {calendar, year} <- cases(), month <- 1..calendar.months_in_year(year) do
         dates =
           for day <- 20..calendar.days_in_month(year, month)//1,
               day <= 29,
               do: Date.new!(year, month, day, calendar)
 
-        assert covered(value("#{year}Y#{month}M2XD", calendar)) == runs_of(dates),
-               "#{year}Y#{month}M2XD in #{inspect(calendar)}"
+        text = "#{year}Y#{month}M2XD"
+
+        # The seven days from 25 March have no day in the twenties.
+        case dates do
+          [] ->
+            assert {^text, {:error, %Tempo.InvalidDateError{}}} =
+                     {text, Tempo.to_interval_set(value(text, calendar))}
+
+          [_ | _] ->
+            assert covered(value(text, calendar)) == runs_of(dates),
+                   "#{text} in #{inspect(calendar)}"
+        end
       end
     end
   end
@@ -505,8 +548,9 @@ defmodule Tempo.YearStartTest do
       assert Tempo.to_string(year(1750, March25)) == {:ok, "1750"}
       assert Tempo.to_string(month(1750, 1, March25)) == {:ok, "Mar 25\u2009–\u200931, 1750"}
 
-      assert Tempo.to_string(month(1750, 12, March25)) ==
-               {:ok, "Feb 1\u2009–\u2009Mar 24, 1750"}
+      assert Tempo.to_string(month(1750, 12, March25)) == {:ok, "Feb 1\u2009–\u200928, 1750"}
+      assert Tempo.to_string(month(1750, 13, March25)) == {:ok, "Mar 1\u2009–\u200924, 1750"}
+      assert Tempo.to_string(value("1750Y1M1D", March25)) == {:ok, "Mar 25, 1750"}
 
       assert Tempo.to_string(month(1750, 1, Sept1)) == {:ok, "Sep 1\u2009–\u200930, 1750"}
       assert Tempo.to_string(month(1750, 1, March25), format: :yMMM) == {:ok, "Mar 1750"}
@@ -527,22 +571,29 @@ defmodule Tempo.YearStartTest do
 
       assert Tempo.explain(value("1750Y/1752Y", March25)) =~
                "From: 1750 (starts on 1750-03-25).\nTo:   1752 (starts on 1752-03-25; exclusive"
+
+      # A month whose name is its own in the year is told by it, and a date
+      # by the day it names.
+      assert Tempo.explain(month(1750, 2, March25)) =~ "April 1750."
+      assert Tempo.explain(month(1750, 13, March25)) =~ "Month 13 of 1750."
+      assert Tempo.explain(value("1750Y1M1D", March25)) =~ "March 25, 1750."
     end
   end
 
   describe "a date rounded" do
     test "to the month is the nearer of the month it is in and the next" do
-      # The first month of a March25 year is 25 to 31 March, and its twelfth
-      # 1 February to 24 March.
-      assert Tempo.round(value("1750Y3M27D", March25), :month) == month(1750, 1, March25)
-      assert Tempo.round(value("1750Y3M30D", March25), :month) == month(1750, 2, March25)
-      assert Tempo.round(value("1750Y2M10D", March25), :month) == month(1750, 12, March25)
-      assert Tempo.round(value("1750Y3M10D", March25), :month) == month(1751, 1, March25)
+      # The first month of a March25 year is the seven days from 25 March,
+      # its twelfth February and its thirteenth 1 to 24 March.
+      assert Tempo.round(value("1750Y1M3D", March25), :month) == month(1750, 1, March25)
+      assert Tempo.round(value("1750Y1M6D", March25), :month) == month(1750, 2, March25)
+      assert Tempo.round(value("1750Y12M10D", March25), :month) == month(1750, 12, March25)
+      assert Tempo.round(value("1750Y13M5D", March25), :month) == month(1750, 13, March25)
+      assert Tempo.round(value("1750Y13M20D", March25), :month) == month(1751, 1, March25)
     end
 
     test "to the year is the nearer of the year it is in and the next" do
       assert Tempo.round(value("1750Y6M10D", March25), :year) == year(1750, March25)
-      assert Tempo.round(value("1750Y3M10D", March25), :year) == year(1751, March25)
+      assert Tempo.round(value("1750Y13M10D", March25), :year) == year(1751, March25)
     end
   end
 
@@ -559,8 +610,10 @@ defmodule Tempo.YearStartTest do
         assert Tempo.contains?(year(year, england), day(Date.add(first, 200)))
       end
 
-      refute UnitValues.year_begins_with_first_month?(1750, england)
-      assert UnitValues.year_begins_with_first_month?(1752, england)
+      # The years to 1750 began on 25 March and have thirteen months; 1751
+      # ran from 25 March to 31 December, and 1752 began on 1 January.
+      assert england.months_in_year(1750) == 13
+      assert england.months_in_year(1752) == 12
     end
   end
 

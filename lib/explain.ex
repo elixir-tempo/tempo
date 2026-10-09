@@ -419,15 +419,27 @@ defmodule Tempo.Explain do
   defp precision_headline(yearless, %Tempo{} = tempo), do: yearless_headline(yearless, tempo)
 
   # "June 15, 2026", or "day 15 of month 6 of 5786" where the month has no name.
+  #
+  # The day is the day the date names: a calendar that counts its months from
+  # the day its year begins numbers a day by its place in the month counted,
+  # so the first day of a `Calendrical.Julian.March25` year, day 1 of month
+  # 1, is 25 March, and was told as "March 1".
   defp date_phrase(%Tempo{time: time} = tempo) do
     day = find_unit(time, :day)
+    month = find_unit(time, :month)
     year = find_unit(time, :year)
 
     case named_month(tempo) do
-      {:ok, name} -> "#{name} #{day}, #{year}"
-      :error -> "day #{day} of month #{find_unit(time, :month)} of #{year}"
+      {:ok, name} -> "#{name} #{named_day(year, month, day, calendar_of(tempo))}, #{year}"
+      :error -> "day #{day} of month #{month} of #{year}"
     end
   end
+
+  defp named_day(year, month, day, calendar)
+       when is_integer(year) and is_integer(month) and is_integer(day),
+       do: UnitValues.named_day(year, month, day, calendar)
+
+  defp named_day(_year, _month, day, _calendar), do: day
 
   # A month is named, where its calendar names the months of a year as it
   # counts them. In a year that does not begin with its first month the
@@ -436,17 +448,18 @@ defmodule Tempo.Explain do
   # its number.
   defp month_phrase(%Tempo{time: time} = tempo) do
     year = find_unit(time, :year)
+    month = find_unit(time, :month)
 
-    case counted_as_named?(year, calendar_of(tempo)) and named_month(tempo) do
+    case named_once?(year, month, calendar_of(tempo)) and named_month(tempo) do
       {:ok, name} -> "#{name} #{year}"
-      _no_name -> "month #{find_unit(time, :month)} of #{year}"
+      _no_name -> "month #{month} of #{year}"
     end
   end
 
-  defp counted_as_named?(year, calendar) when is_integer(year),
-    do: UnitValues.year_begins_with_first_month?(year, calendar)
+  defp named_once?(year, month, calendar) when is_integer(year) and is_integer(month),
+    do: UnitValues.month_named_once?(year, month, calendar)
 
-  defp counted_as_named?(_no_one_year, _calendar), do: true
+  defp named_once?(_no_one_year, _month, _calendar), do: true
 
   # A clock time as far as it is written, and no further: the hour and the
   # minute, the second where the value is written to one, and the fraction
@@ -1843,14 +1856,22 @@ defmodule Tempo.Explain do
 
   defp start_not_written(_year, _month, _week, _calendar), do: nil
 
-  # A start is told only where it is another day than the writing reads as.
+  # A start is told only where it is another day than the writing reads as:
+  # the day its first date is named by, in a calendar that counts its months
+  # from the day its year begins (the first month of a
+  # `Calendrical.Julian.March25` year, written `1750-01`, starts on 25 March).
   defp start_other_than(units, evident, calendar) do
     case UnitValues.start_date(units, calendar) do
-      {:ok, ^evident} -> nil
-      {:ok, {year, month, day}} -> month_date(year, month, day)
-      :error -> nil
+      {:ok, {year, month, day}} ->
+        year |> UnitValues.named_date(month, day, calendar) |> named_other_than(evident)
+
+      :error ->
+        nil
     end
   end
+
+  defp named_other_than(evident, evident), do: nil
+  defp named_other_than({year, month, day}, _evident), do: month_date(year, month, day)
 
   defp render_moment(tempo, time) do
     case {render_date_part(tempo), render_time_part(time)} do

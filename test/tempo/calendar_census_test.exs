@@ -210,9 +210,9 @@ defmodule Tempo.CalendarCensusTest do
       assert Enum.count(CalendarCensus.selections(Calendrical.Hebrew)) == 35
       assert Enum.count(CalendarCensus.selections(Calendrical.NRF)) == 20
 
-      # A selection in a year that starts within its months is not built,
-      # and is not measured until it is.
-      assert CalendarCensus.selections(Calendrical.Julian.March25) == []
+      # A year that starts within a month is counted by its months as any
+      # other is, and is measured with the rest (Calendrical, 2026-10-10).
+      assert Enum.count(CalendarCensus.selections(Calendrical.Julian.March25)) == 35
     end
 
     test "holds every month and day with no year of a calendar of months, and its weekdays" do
@@ -256,10 +256,14 @@ defmodule Tempo.CalendarCensusTest do
       calendar = Calendrical.Julian.March25
       {{from, _to}, months} = CalendarCensus.expected({:year, 2026}, calendar)
 
-      first = Date.convert!(Date.new!(2026, 3, 25, calendar), Calendar.ISO)
+      # The year's first day is 25 March of the Julian year of its number,
+      # and it has thirteen months: the seven days from then, eleven whole
+      # months, and the twenty-four days before the next 25 March.
+      first = Date.convert!(Date.new!(2026, 3, 25, Calendrical.Julian), Calendar.ISO)
 
+      assert Date.convert!(Date.new!(2026, 1, 1, calendar), Calendar.ISO) == first
       assert from == Date.to_gregorian_days(first) * 86_400_000_000
-      assert Enum.count(months) == 12
+      assert Enum.count(months) == 13
     end
   end
 end

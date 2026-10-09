@@ -51,61 +51,84 @@ defmodule Tempo.NotBuiltTest do
 
   defp mondays(dates), do: Enum.filter(dates, &(Date.day_of_week(&1) == 1))
 
+  # Refused until Calendrical counted these calendars' months from the day
+  # the year begins (2026-10-10): the resolver counted a month's days as
+  # those of the month a date named. Each answer is the calendar's own days.
   describe "a selection that counts days within a month or a year" do
     for calendar <- @turning do
-      test "is refused in a value of #{inspect(calendar)}" do
+      test "is answered in a value of #{inspect(calendar)}" do
         calendar = unquote(calendar)
+        month = fn number -> days(calendar.month(1750, number)) end
+        year = days(calendar.year(1750))
 
-        for text <- ~w(1750Y12ML-1DN 1750Y1ML1DN 1750Y3ML5DN 1750Y1ML1KN 1750Y12ML1K-1IN
-                       1750YL1K1IN 1750YL1K-1IN 1750YL1KN 1750YL3M1KN) do
+        for {text, expected} <- [
+              {"1750Y12ML-1DN", [List.last(month.(12))]},
+              {"1750Y1ML1DN", [hd(month.(1))]},
+              {"1750Y3ML5DN", [Enum.at(month.(3), 4)]},
+              {"1750Y1ML1KN", mondays(month.(1))},
+              {"1750Y12ML1K-1IN", [List.last(mondays(month.(12)))]},
+              {"1750YL1K1IN", [hd(mondays(year))]},
+              {"1750YL1K-1IN", [List.last(mondays(year))]},
+              {"1750YL1KN", mondays(year)},
+              {"1750YL3M1KN", mondays(month.(3))}
+            ] do
           value = read(text, calendar)
 
-          assert refused?(Tempo.to_interval(value), :selection, calendar), text
-          assert refused?(Tempo.to_interval_set(value), :selection, calendar), text
-          assert refused?(Tempo.to_string(value), :selection, calendar), text
-          assert_raise ConversionError, fn -> Enum.to_list(value) end
+          assert {text, first_days(Tempo.to_interval_set(value), calendar)} == {text, expected}
         end
       end
 
-      test "is refused in the rule of a recurrence that steps by months or years of #{inspect(calendar)}" do
+      test "is answered in the rule of a recurrence that steps by months of #{inspect(calendar)}" do
         calendar = unquote(calendar)
 
-        for text <- ~w(R4/1750Y11M/P1M/FL1DN R4/1750Y11M/P1M/FL-1DN R3/1750Y1M/P1M/FL1KN
-                       R2/1750Y5M10D/P1Y/FL1K1IN R2/1750Y5M10D/P1Y/FL15DN) do
+        # The months a step of one month reaches from the eleventh of 1750,
+        # through the year's end, as the calendar steps them.
+        stepped =
+          for count <- 0..3 do
+            {year, month, _day} = calendar.plus(1750, 11, 1, :months, count)
+            days(calendar.month(year, month))
+          end
+
+        # A count is of occurrences: the first three Mondays of the months
+        # from the first.
+        first_three =
+          1..3 |> Enum.flat_map(&mondays(days(calendar.month(1750, &1)))) |> Enum.take(3)
+
+        for {text, expected} <- [
+              {"R4/1750Y11M/P1M/FL1DN", Enum.map(stepped, &hd/1)},
+              {"R4/1750Y11M/P1M/FL-1DN", Enum.map(stepped, &List.last/1)},
+              {"R3/1750Y1M/P1M/FL1KN", first_three}
+            ] do
           recurrence = read(text, calendar)
 
-          assert refused?(Tempo.to_interval(recurrence), :selection, calendar), text
-          assert_raise ConversionError, fn -> Enum.take(recurrence, 1) end
+          assert {text, first_days(Tempo.to_interval_set(recurrence), calendar)} ==
+                   {text, expected}
         end
       end
 
-      test "is refused for a day of a month selected from a month of #{inspect(calendar)}" do
+      test "is answered for a day of a month selected from a month of #{inspect(calendar)}" do
         calendar = unquote(calendar)
+        first = days(calendar.month(1750, 1))
+        twelfth = days(calendar.month(1750, 12))
 
-        for {span, selector} <- [{"1750Y1M", "-1D"}, {"1750Y12M", "1D"}, {"1750Y12M", "{1,15}D"}] do
+        for {span, selector, expected} <- [
+              {"1750Y1M", "-1D", [List.last(first)]},
+              {"1750Y12M", "1D", [hd(twelfth)]},
+              {"1750Y12M", "{1,15}D", [hd(twelfth), Enum.at(twelfth, 14)]}
+            ] do
           selected = Tempo.select(read(span, calendar), read(selector, calendar))
 
-          assert refused?(selected, :selection, calendar), "#{selector} from #{span}"
+          assert {span, selector, first_days(selected, calendar)} == {span, selector, expected}
         end
 
-        assert refused?(Tempo.select(read("1750Y1M", calendar), [1, 15]), :selection, calendar)
+        assert first_days(Tempo.select(read("1750Y12M", calendar), [1, 15]), calendar) ==
+                 [hd(twelfth), Enum.at(twelfth, 14)]
 
-        assert refused?(
+        assert first_days(
                  Tempo.select(read("1750Y", calendar), read("L1K1IN", calendar)),
-                 :selection,
                  calendar
-               )
+               ) == [calendar.year(1750) |> days() |> mondays() |> hd()]
       end
-    end
-
-    test "names the value, what was asked for and the calendar" do
-      {:error, error} = Tempo.to_interval(read("1750Y12ML-1DN", March25))
-
-      assert Exception.message(error) =~
-               "a selection that counts days within a month or a year is not built for " <>
-                 "Calendrical.Julian.March25, whose year does not begin with its first month"
-
-      assert Exception.message(error) =~ "1750Y12ML-1DN"
     end
 
     test "a month with a day is the date they name" do
@@ -134,7 +157,7 @@ defmodule Tempo.NotBuiltTest do
     end
 
     test "a day of a month is selected from a span of dates" do
-      # The 15ths from 25 March to 1 June: 15 March is at the year's end.
+      # The 15ths from the 25th of the third month to the first of the sixth.
       selected = Tempo.select(read("1750Y3M25D/1750Y6M1D", March25), read("15D", March25))
 
       assert first_days(selected, March25) ==
@@ -188,12 +211,12 @@ defmodule Tempo.NotBuiltTest do
     end
 
     test "a selection in a recurrence that steps by weeks or by less is answered" do
-      start = Date.new!(1750, 3, 25, March25)
-      weekly = Tempo.to_interval(read("R3/1750Y3M25D/P1W/FL1KN", March25))
-      daily = Tempo.to_interval(read("R2/1750Y3M25D/P1D/FL1KN", March25))
+      start = Date.new!(1750, 1, 1, March25)
+      weekly = Tempo.to_interval(read("R3/1750Y1M1D/P1W/FL1KN", March25))
+      daily = Tempo.to_interval(read("R2/1750Y1M1D/P1D/FL1KN", March25))
 
-      # 25 March 1750 is a Sunday: the Monday of each week from it, and the
-      # first two Mondays among the days from it.
+      # The year's first day, 25 March 1750, is a Sunday: the Monday of each
+      # week from it, and the first two Mondays among the days from it.
       assert Date.day_of_week(start) == 7
       assert first_days(weekly, March25) == for(days <- [1, 8, 15], do: Date.add(start, days))
       assert first_days(daily, March25) == for(days <- [1, 8], do: Date.add(start, days))
@@ -208,32 +231,46 @@ defmodule Tempo.NotBuiltTest do
     end
   end
 
+  # A season in a calendar of another year is the Gregorian season that
+  # starts within the year, as it is in a fiscal calendar. It was refused in
+  # these while a date's months were not the months the calendar counts
+  # (decided 2026-10-08), and is answered since they are (2026-10-10). The
+  # measure is `Date.convert!/2` of the season's first days.
   describe "a season" do
-    for calendar <- @turning do
-      test "is refused in #{inspect(calendar)}" do
+    @meteorological [{21, {3, 6}}, {22, {6, 9}}, {23, {9, 12}}, {24, {12, 3}}]
+
+    # The first day of the season that starts within the calendar's 1750,
+    # and the day after its last, as dates of the calendar.
+    defp season_within(calendar, {from_month, to_month}) do
+      %Date.Range{first: first, last: last} = calendar.year(1750)
+
+      [{year, starts}] =
+        for year <- 1749..1751,
+            start = Date.convert!(Date.new!(year, from_month, 1), calendar),
+            Date.compare(start, first) != :lt and Date.compare(start, last) != :gt,
+            do: {year, start}
+
+      ends_year = if to_month < from_month, do: year + 1, else: year
+      {starts, Date.convert!(Date.new!(ends_year, to_month, 1), calendar)}
+    end
+
+    for calendar <- @turning ++ [England] do
+      test "is the Gregorian season that starts within the year, in #{inspect(calendar)}" do
         calendar = unquote(calendar)
 
-        for code <- 21..32 do
-          assert refused?(Tempo.from_iso8601("1750Y#{code}M", calendar), :season, calendar),
-                 "#{code}"
+        for {code, months} <- @meteorological do
+          {starts, ends} = season_within(calendar, months)
+
+          {:ok, season} =
+            Tempo.from_iso8601("1750Y#{code}M", calendar: calendar, territory: :GB)
+
+          assert {code, first_day(season, calendar)} == {code, starts}
+          assert {code, season |> Interval.to() |> day(calendar)} == {code, ends}
         end
+
+        # A season of a hemisphere, by the sun, is a span within a year of it.
+        assert {:ok, %Interval{}} = Tempo.from_iso8601("1750Y25M", calendar)
       end
-    end
-
-    test "is refused in a year of England that began on 25 March, and answered in one that did not" do
-      assert refused?(Tempo.from_iso8601("1750Y21M", England), :season, England)
-
-      assert {:ok, %Interval{}} =
-               Tempo.from_iso8601("1760Y21M", calendar: England, territory: :GB)
-
-      assert {:ok, %Interval{}} = Tempo.from_iso8601("1760Y25M", England)
-    end
-
-    test "names the season and the calendar" do
-      {:error, error} = Tempo.from_iso8601("1750Y21M", March25)
-
-      assert Exception.message(error) =~ "season 21 of the year 1750"
-      assert Exception.message(error) =~ "a season is not built for Calendrical.Julian.March25"
     end
 
     test "a quarter is the months the calendar counts" do
@@ -263,10 +300,8 @@ defmodule Tempo.NotBuiltTest do
     defp in_order(dates), do: dates |> Enum.uniq() |> Enum.sort_by(&Date.to_gregorian_days/1)
 
     # The first day of each span an answer names.
-    defp landed(%Tempo{} = value, calendar),
-      do: first_days(Tempo.to_interval_set(value), calendar)
-
     defp landed(%IntervalSet{} = set, calendar), do: first_days({:ok, set}, calendar)
+    defp landed(value, calendar), do: first_days(Tempo.to_interval_set(value), calendar)
 
     for calendar <- @turning do
       test "is each of its dates stepped by the calendar, in #{inspect(calendar)}" do
@@ -279,7 +314,7 @@ defmodule Tempo.NotBuiltTest do
               {[1750, 1751], [3], [24]},
               {[1750], [3], [24, 25]},
               {[1750], [11, 12], [24, 25]},
-              {[1749, 1750], [1, 12], [1, 31]}
+              {[1749, 1750], [2, 12], [1, 28]}
             ],
             {unit, part, by} <- [
               {:day, :days, 1},
@@ -343,7 +378,8 @@ defmodule Tempo.NotBuiltTest do
       end
     end
 
-    # Each day of each span an answer names, as dates of its calendar.
+    # Each day of each span an answer names, as dates of its calendar. A
+    # span written to its month is the days of it.
     defp days_named(%IntervalSet{} = set) do
       set
       |> IntervalSet.members()
@@ -351,6 +387,7 @@ defmodule Tempo.NotBuiltTest do
       |> in_order()
     end
 
+    # One of a run of days is each day of the run, from its first to its last.
     defp days_named(%Tempo.Set{type: :one, set: [%Tempo.Range{first: first, last: last}]}) do
       {:ok, first} = Tempo.to_date(first)
       {:ok, last} = Tempo.to_date(last)
@@ -358,17 +395,23 @@ defmodule Tempo.NotBuiltTest do
       first |> Stream.iterate(&Date.add(&1, 1)) |> Enum.take(Date.diff(last, first) + 1)
     end
 
+    defp days_named(value) do
+      {:ok, set} = Tempo.to_interval_set(value)
+      days_named(set)
+    end
+
     defp days_between(member) do
-      {:ok, first} = member |> Interval.from() |> Tempo.to_date()
-      {:ok, last} = member |> Interval.to() |> Tempo.to_date()
+      {:ok, first} = member |> Interval.from() |> Tempo.extend_resolution(:day) |> Tempo.to_date()
+      {:ok, last} = member |> Interval.to() |> Tempo.extend_resolution(:day) |> Tempo.to_date()
 
       first |> Stream.iterate(&Date.add(&1, 1)) |> Enum.take(Date.diff(last, first))
     end
 
     test "is each hour a mask stands for, a day on" do
-      # Each hour of the 15th of March and of April 1750, a day on: the two
-      # days after them, the 16th of April first, as the year runs.
-      %IntervalSet{} = shifted = Tempo.shift(read("1750Y{3,4}M15DTXXH", March25), day: 1)
+      # Each hour of the 15th of the third and of the fourth month of 1750,
+      # a day on: the two days after them, in the order of the year.
+      {:ok, shifted} =
+        "1750Y{3,4}M15DTXXH" |> read(March25) |> Tempo.shift(day: 1) |> Tempo.to_interval_set()
 
       days =
         for member <- IntervalSet.members(shifted) do
@@ -376,7 +419,7 @@ defmodule Tempo.NotBuiltTest do
           date
         end
 
-      assert days == [Date.new!(1750, 4, 16, March25), Date.new!(1750, 3, 16, March25)]
+      assert Enum.uniq(days) == [Date.new!(1750, 3, 16, March25), Date.new!(1750, 4, 16, March25)]
     end
 
     test "reaches the day through a time of day" do
@@ -384,23 +427,35 @@ defmodule Tempo.NotBuiltTest do
                read("1750Y{3,4}M16DT1H", March25)
     end
 
-    test "is refused where the calendar does not count the months a set or a mask names" do
-      # A year of England before 1751: its months are not listed.
-      for text <- ["1750Y{3,4}M15D", "1750YXXM15D", "1750YX*M15D"],
-          by <- [[day: 1], [month: 1], [year: 1]] do
-        assert refused?(Tempo.shift(read(text, England), by), :shift, England), text
+    test "is answered in a year of England before 1751, whose months its calendar counts" do
+      # It was refused while the composite numbered such a year's months as
+      # its dates named them, and listed none.
+      assert Tempo.shift(read("1750Y{3,4}M15D", England), day: 1) ==
+               read("1750Y{3,4}M16D", England)
+
+      for text <- ["1750YXXM15D", "1750YX*M15D"] do
+        expected =
+          for month <- 1..England.months_in_year(1750),
+              England.valid_date?(1750, month, 15),
+              {year, month, day} = England.plus(1750, month, 15, :days, 1),
+              do: Date.new!(year, month, day, England)
+
+        assert {text, landed(Tempo.shift(read(text, England), day: 1), England)} ==
+                 {text, expected}
       end
 
-      # Its years and its days are, and so are the months of a later year.
+      # Its years and its days were, and so were the months of a later year.
       assert Tempo.shift(read("{1749,1750}Y3M24D", England), day: 1) ==
-               read("{1750,1751}Y3M25D", England)
+               read("{1749,1750}Y3M25D", England)
 
       assert Tempo.shift(read("1752Y{8,9}M2D", England), month: 1) ==
                read("1752Y{9,10}M2D", England)
     end
 
     test "one date is stepped by its calendar" do
-      for calendar <- @turning, {month, day} <- [{3, 24}, {12, 31}, {2, 28}, {8, 31}, {12, 24}] do
+      for calendar <- @turning,
+          {month, day} <- [{3, 24}, {12, 31}, {2, 28}, {8, 31}, {12, 24}, {1, 7}, {13, 24}],
+          calendar.valid_date?(1750, month, day) do
         {year, to_month, to_day} = calendar.plus(1750, month, day, :days, 1)
 
         assert Tempo.shift(read("1750Y#{month}M#{day}D", calendar), day: 1) ==
@@ -418,8 +473,7 @@ defmodule Tempo.NotBuiltTest do
 
         shifted = Tempo.shift(read("175XY3M24D", calendar), day: 1)
 
-        assert first_days({:ok, shifted}, calendar) ==
-                 Enum.sort_by(expected, &Date.to_gregorian_days/1)
+        assert landed(shifted, calendar) == Enum.sort_by(expected, &Date.to_gregorian_days/1)
       end
     end
 
@@ -445,44 +499,46 @@ defmodule Tempo.NotBuiltTest do
     end
   end
 
+  # A year of England to 1750 began on 25 March, and the composite numbered
+  # its months as its dates named them: a month of one was refused. It counts
+  # thirteen from 25 March since 2026-10-10, and each is the calendar's own.
   describe "a month of a year of England before 1751" do
-    test "is not read" do
-      for text <- ~w(1750Y3M 1750Y5M 1700Y1M 1750Y{3,4}M 1750Y3MT10H {1750,1752}Y3M 1750Y3ML5DN
-                     175XY3M 1750YX*M 1750Y2G3MU) do
-        assert refused?(Tempo.from_iso8601(text, England), :month, England), text
+    test "is read as the month the calendar counts" do
+      for {year, month} <- [{1750, 1}, {1750, 3}, {1750, 5}, {1750, 13}, {1700, 1}] do
+        %Date.Range{first: first, last: last} = England.month(year, month)
+        {:ok, span} = Tempo.to_interval(read("#{year}Y#{month}M", England))
+
+        assert {year, month, first_day(span, England)} == {year, month, first}
+        assert span |> Interval.to() |> day(England) == Date.add(last, 1)
       end
 
-      assert refused?(Tempo.from_iso8601("1750Y3M/1750Y6M", England), :month, England)
-      assert refused?(Tempo.new(year: 1750, month: 3, calendar: England), :month, England)
-      assert refused?(Tempo.on(read("5M", England), read("1750Y", England)), :month, England)
+      assert Tempo.new(year: 1750, month: 3, calendar: England) == {:ok, read("1750Y3M", England)}
+
+      assert Tempo.on(read("5M", England), read("1750Y", England)) ==
+               {:ok, read("1750Y5M", England)}
+
+      assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("1750Y14M", England)
     end
 
-    test "is not what a year is walked by, extended to or selected from" do
+    test "is what a year is walked by, extended to and selected from" do
       year = read("1750Y", England)
-      {:ok, span} = Tempo.to_interval(year)
+      months = for month <- 1..England.months_in_year(1750), do: read("1750Y#{month}M", England)
+      third = England.month(1750, 3).first
 
-      assert_raise ConversionError, fn -> Enum.to_list(year) end
-      assert_raise ConversionError, fn -> Enum.take(span, 1) end
-      assert refused?(Tempo.extend(year), :month, England)
-      assert refused?(Tempo.extend_resolution(year, :month), :month, England)
-      assert refused?(Tempo.shift(year, month: 1), :month, England)
-      assert refused?(Tempo.select(year, read("3M", England)), :month, England)
-      assert refused?(Tempo.select(year, [3]), :month, England)
-      assert refused?(Tempo.to_interval(read("1750YL3MN", England)), :month, England)
+      assert England.months_in_year(1750) == 13
+      assert Enum.to_list(year) == months
+      assert Tempo.extend_resolution(year, :month) == hd(months)
+      assert first_days(Tempo.select(year, read("3M", England)), England) == [third]
+      assert first_days(Tempo.select(year, [3]), England) == [third]
+      assert first_days(Tempo.to_interval_set(read("1750YL3MN", England)), England) == [third]
     end
 
-    test "is not what a date is truncated or rounded to, or a later month stepped back to" do
-      assert refused?(Tempo.trunc(read("1750Y5M10D", England), :month), :month, England)
-      assert refused?(Tempo.round(read("1750Y5M20D", England), :month), :month, England)
-      assert refused?(Tempo.shift(read("1751Y3M", England), month: -1), :month, England)
-      assert refused?(Tempo.shift(read("1751Y6M", England), year: -1), :month, England)
-    end
+    test "is what a date is truncated or rounded to, and a later month stepped back to" do
+      assert Tempo.trunc(read("1750Y5M10D", England), :month) == read("1750Y5M", England)
+      assert Tempo.round(read("1750Y5M20D", England), :month) == read("1750Y6M", England)
 
-    test "names the value and the calendar" do
-      {:error, error} = Tempo.from_iso8601("1750Y3M", England)
-
-      assert Exception.message(error) =~
-               "a month of a year that begins within one is not built for Calendrical.Reform.England"
+      # 1751 ran from 25 March to 31 December, its months numbered as named.
+      assert Tempo.shift(read("1751Y3M", England), month: -1) == read("1750Y13M", England)
     end
 
     test "the year, its dates and their steps are answered" do
@@ -494,7 +550,7 @@ defmodule Tempo.NotBuiltTest do
 
       {year, month, day} = England.plus(last.year, last.month, last.day, :days, 1)
 
-      assert Tempo.shift(read("1750Y3M24D", England), day: 1) ==
+      assert Tempo.shift(read("#{last.year}Y#{last.month}M#{last.day}D", England), day: 1) ==
                read("#{year}Y#{month}M#{day}D", England)
 
       assert Tempo.shift(read("1750Y5M10D", England), month: 1) == read("1750Y6M10D", England)
@@ -517,7 +573,10 @@ defmodule Tempo.NotBuiltTest do
         assert {:ok, %Interval{}} = Tempo.to_interval(read("1750Y1M", calendar))
 
         assert Enum.to_list(read("1750Y", calendar)) ==
-                 for(month <- 1..12, do: read("1750Y#{month}M", calendar))
+                 for(
+                   month <- 1..calendar.months_in_year(1750),
+                   do: read("1750Y#{month}M", calendar)
+                 )
       end
     end
   end
@@ -585,22 +644,26 @@ defmodule Tempo.NotBuiltTest do
 
   # A week after a month is a week of that month, which the calendar numbers
   # and `Tempo.select/2` gives as the span of its dates (decided 2026-10-07,
-  # `test/tempo/week_of_month_test.exs`). What is left refused is a week of
-  # a month in a year that does not begin with its first month, whose months
-  # the calendar counts otherwise than its dates name them, and a week that
-  # is no one whole number.
+  # `test/tempo/week_of_month_test.exs`), in a year that begins within a
+  # month too since its calendar counts that year's months.
   describe "a week selected from within a month" do
-    test "is answered in a calendar whose months begin its years, and refused in one whose do not" do
-      for {base, calendar} <- [{"2026Y6M", Calendrical.Gregorian}, {"5787Y6M", Hebrew}],
+    test "is answered, in a calendar whose year begins within a month among them" do
+      for {base, calendar} <- [
+            {"2026Y6M", Calendrical.Gregorian},
+            {"5787Y6M", Hebrew},
+            {"1750Y6M", March25}
+          ],
           week <- ["1W", "-1W", "25W", "1W3K"] do
         assert {^base, ^week, {:ok, %IntervalSet{}}} =
                  {base, week, Tempo.select(read(base, calendar), read(week, calendar))}
       end
 
-      for week <- ["1W", "-1W", "25W", "1W3K"] do
-        answer = Tempo.select(read("1750Y6M", March25), read(week, March25))
-        assert refused?(answer, :week_of_month, March25), "#{week} from 1750Y6M"
-      end
+      # The first week of the sixth month `March25` counts, as Calendrical
+      # gives its dates.
+      %Date.Range{first: first} = Calendrical.Interval.week(1750, 6, 1, March25)
+
+      assert first_days(Tempo.select(read("1750Y6M", March25), read("1W", March25)), March25) ==
+               [first]
     end
 
     test "from a day or a time of day is a filter by the week of its month" do
@@ -612,16 +675,6 @@ defmodule Tempo.NotBuiltTest do
 
         assert {base, IntervalSet.count(kept), IntervalSet.count(dropped)} == {base, 1, 0}
       end
-    end
-
-    test "names what was asked for and the calendar" do
-      {:error, error} = Tempo.select(read("1750Y6M", March25), read("2W", March25))
-
-      assert Exception.message(error) =~ "1750Y6M[u-ca=julian-march25]"
-
-      assert Exception.message(error) =~
-               "a week of a month is not built for Calendrical.Julian.March25, in a year that " <>
-                 "does not begin with its first month"
     end
 
     test "a week is selected from a year and from a week, and a weekday from a month" do

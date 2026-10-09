@@ -692,13 +692,13 @@ defmodule Tempo.Format do
   end
 
   # A span is shown from its first value to its last in the unit it is walked
-  # by, and a month is shown by its name. In a year that does not begin with
-  # its first month the months the calendar counts are not the months named
-  # (the first of a `Calendrical.Julian.March25` year is 25 to 31 March), so
-  # a year and a span of months there are shown by their days.
+  # by, and a month is shown by its name. A year that begins within a month
+  # starts and ends in the month of one name (a `Calendrical.Julian.March25`
+  # year runs from 25 March to the next 24 March), so it and a span of its
+  # months are shown by their days: by its months it was "Mar 1750".
   defp named_unit(:month, %Tempo{time: [{:year, year} | _rest], calendar: calendar})
        when is_integer(year) do
-    if UnitValues.year_begins_with_first_month?(year, Compare.effective_calendar(calendar)),
+    if UnitValues.year_named_by_its_months?(year, Compare.effective_calendar(calendar)),
       do: :month,
       else: :day
   end

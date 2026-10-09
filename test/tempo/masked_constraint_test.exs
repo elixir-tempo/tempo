@@ -19,7 +19,6 @@ defmodule Tempo.MaskedConstraintTest do
 
   alias Calendrical.Julian.March25
   alias Tempo.Compare
-  alias Tempo.ConversionError
   alias Tempo.Interval
   alias Tempo.IntervalSet
 
@@ -171,16 +170,21 @@ defmodule Tempo.MaskedConstraintTest do
                )
     end
 
-    test "is refused by name in a calendar whose year begins within a month, as a day of a month is" do
-      for constraint <- ["15D", "1XD"] do
-        assert {constraint,
-                {:error,
-                 %ConversionError{reason: :not_built, target: :selection, calendar: March25}}} =
-                 {constraint,
-                  Tempo.select(
-                    Tempo.from_iso8601!("1750Y6M", March25),
-                    Tempo.from_iso8601!(constraint, March25)
-                  )}
+    test "is selected in a calendar whose year begins within a month, as a day of a month is" do
+      # The sixth month `Calendrical.Julian.March25` counts from 25 March, by
+      # the calendar's own list of its days. Each was refused until the
+      # calendar counted its months (Calendrical, 2026-10-10).
+      month = Enum.to_list(March25.month(1750, 6))
+
+      for {constraint, days} <- [{"15D", [15]}, {"1XD", Enum.to_list(10..19)}] do
+        {:ok, selected} =
+          Tempo.select(
+            Tempo.from_iso8601!("1750Y6M", March25),
+            Tempo.from_iso8601!(constraint, March25)
+          )
+
+        assert {constraint, Enum.map(IntervalSet.members(selected), &Interval.from/1)} ==
+                 {constraint, for(day <- days, do: Tempo.from_elixir(Enum.at(month, day - 1)))}
       end
     end
   end
