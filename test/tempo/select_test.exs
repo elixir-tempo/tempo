@@ -591,6 +591,32 @@ defmodule Tempo.Select.Test do
       assert Exception.message(error) =~ "does not recognise selector 5"
     end
 
+    test "a selector that recurs, or that has no end, is refused" do
+      # Its start alone was selected: the hour from 09:00 of a rule's three,
+      # 1 June of a week's rule, and the 10th of the days from it.
+      for selector <- [
+            ~o"R3/T9H/PT2H",
+            ~o"R/T9H/P1D",
+            ~o"R/2026-06-01/P1W",
+            ~o"T9H/..",
+            ~o"2026-06-10/..",
+            ~o"1KT9H/.."
+          ] do
+        assert {^selector, {:error, %ArgumentError{} = error}} =
+                 {selector, Tempo.select(~o"2026-06", selector)}
+
+        assert Exception.message(error) =~ "recurs or has no end"
+      end
+
+      # As a span with no start is, and a recurrence with none.
+      for selector <- [~o"../T17H", ~o"R/../P1D/FLT9HN"] do
+        assert {^selector, {:error, %ArgumentError{} = error}} =
+                 {selector, Tempo.select(~o"2026-06", selector)}
+
+        assert Exception.message(error) =~ "does not recognise selector"
+      end
+    end
+
     test "a base select/2 cannot select from returns an error tuple" do
       for base <- [nil, "", :"", "2026-06", 42, %{}, [1, 2]] do
         assert {:error, %ArgumentError{} = error} = Tempo.select(base, Tempo.workdays(:US))

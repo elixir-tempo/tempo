@@ -445,6 +445,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.select/2` refuses a selector that recurs or that has no end (`~o"R3/T9H/PT2H"`, `~o"2026-06-10/.."`) with an `ArgumentError`, as it does one with no start. Its start alone was selected: the hour from 09:00 of the three, and the 10th of the days from it.
+
 * `Tempo.select/2` by a span whose start names a day of the week is the span on each such day: `Tempo.select(~o"2026-06", ~o"1KT9H/T17H")` is nine to five on the five Mondays of June. It was the span on every day of the base, each in a value that held its date and the weekday both, and a span from one weekday to another (`~o"1KT9H/5KT17H"`) is now a `Tempo.IntervalEndpointsError`.
 
 * `Tempo.ICal.parse/2` ignores `BYHOUR`, `BYMINUTE` and `BYSECOND` in the rule of an all-day event, as RFC 5545 §3.3.10 has it. `FREQ=DAILY;BYHOUR=9` from a `DATE` was the day from 09:00 to 09:00 of the next, and two hours named made two occurrences of each day.

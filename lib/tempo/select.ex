@@ -1368,6 +1368,18 @@ defmodule Tempo.Select do
     )
   end
 
+  # A selector that recurs, or runs from a start with no end, was read as
+  # its start alone: `R3/T9H/PT2H` selected the hour from 09:00 and neither
+  # of the two after it, and `2026-06-10/..` the 10th. What each selects is
+  # not built, and it is refused, as one with no start is (`../T17H`).
+  defp recurring_or_open_selector(selector) do
+    ArgumentError.exception(
+      "Tempo.select/2 does not recognise selector #{inspect(selector)}: a span that selects " <>
+        "runs from one point to another, and this one recurs or has no end. See " <>
+        "`Tempo.Select` for the selector vocabulary."
+    )
+  end
+
   ## -----------------------------------------------------------
   ## Weekday filter — a day-of-week selector across a span, and a
   ## day-of-week constraint within a period (`project_onto_base/2`)
@@ -1630,8 +1642,8 @@ defmodule Tempo.Select do
   # not a granule at 09:00. A window whose `to` is at or before its
   # `from` (`~o"T21/T05"`, a night shift) rolls the end forward to the
   # following day. The duration form (`~o"T09/PT7H36M"`) adds the
-  # duration to the projected start. Recurring or open selectors fall
-  # back to point projection of the from-endpoint.
+  # duration to the projected start. A selector that recurs, or that has
+  # no end, is no one span and is refused (`recurring_or_open_selector/1`).
   defp project_onto_base(%Interval{} = base, %Interval{from: %Tempo{} = c_from} = constraint) do
     c_from = %{c_from | time: read_in(c_from.time, base)}
 
@@ -1654,7 +1666,7 @@ defmodule Tempo.Select do
         on_each_period(base, c_from.time, &project_span_duration(&1, c_from, duration))
 
       :point ->
-        project_onto_base(base, c_from)
+        {:error, recurring_or_open_selector(constraint)}
 
       {:each, which, values} ->
         span_from_each(values, which, base, constraint)

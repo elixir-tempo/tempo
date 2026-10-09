@@ -18,6 +18,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Features
 
+* [ ] **A recurrence, or a span with no end, as a selector** — refused since 2026-10-09, where its start alone was selected. What each would select is for the user to say: a recurrence its occurrences within each period of the base (`R3/T9H/PT2H` the two hours from 09:00, from 11:00 and from 13:00 of each day), a span with no end the rest of the period from its start (`T9H/..` nine to midnight), and a span with no start the period up to its end. A recurrence written with a selection (`R/../P1D/FLT9HN`, what `Tempo.RRule.parse/2` gives with no start) is the selection it holds, and could be read as that.
+
 * [ ] **`Tempo.Intervallic` protocol** — let user-defined structs such as `%Booking{check_in, check_out}` take part in Allen comparisons and set operations without being copied into `%Tempo.Interval{}`; default implementations for `Tempo.Interval`, `Tempo` and single-member `Tempo.IntervalSet`.
 
 * [ ] **A composable builder** — an API between `Tempo.new/1` (flat components) and `Tempo.from_iso8601/1` (a string) in complexity, building a value from composable sub-expressions with human names — `selection`, `recur`, windows, domains, exclusions, events — nesting freely, so programs (tempo_holidays among them) construct recurrences structurally instead of interpolating ISO 8601 strings and re-parsing them.
@@ -71,6 +73,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **A selector that recurs, or that has no end, is refused** — found 2026-10-09 by measuring a path of `Tempo.Select` no test ran. Such a selector was read as its start alone, so `Tempo.select(day, ~o"R3/T9H/PT2H")` was the hour from 09:00 and neither of the two after it, `~o"R/2026-06-01/P1W"` in June was 1 June, and `~o"2026-06-10/.."` the 10th. Known to answer wrongly and not built, it is an `ArgumentError` until it is (`recurring_or_open_selector/1`), as a span with no start (`../T17H`) and a recurrence with none already were. 2026-10-09.
 
 * [x] **A span selected by a day of the week** — found 2026-10-09 by measuring a path of `Tempo.Select` no test ran. `Tempo.select(week, ~o"1KT9H/1KT17H")` gave seven spans, one on each day, each from a value that held its date and the weekday both (`2026Y6M16D1KT9H`, a Tuesday and Monday): the ends were merged onto every day as they stood. A span whose start names a weekday is now the span on each such day (`weekdays_of_span/2`, `span_on_each_weekday/3`), a set of weekdays, a night that ends on the next day and the form with a duration among them; one that does not start and end on the one weekday (`1KT9H/5KT17H`, `1K/1K`, `T9H/1KT17H`) is a `Tempo.IntervalEndpointsError`. Measured against `Date` in `test/tempo/select_on_a_weekday_test.exs`, which also holds the value `1KT10H`, right and until now run by no test. 2026-10-09.
 
