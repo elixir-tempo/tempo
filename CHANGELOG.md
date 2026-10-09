@@ -269,6 +269,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Added
 
+* `Tempo.select/2` by a recurrence selects its occurrences within each period (`~o"R3/T9H/PT2H"` is three two-hour spans from 09:00 of each day), and by one with no start what its rule selects, so the interval `Tempo.RRule.parse/2` gives with no start is a selector. A span with no end or no start (`~o"T9H/.."`, `~o"../T17H"`) runs to the end of the period or from its start; each was read as its start alone, or was no selector.
+
 * `Tempo.season/1` returns the season a value holds with no hemisphere, 21 to 24, beside `Tempo.month/1`, and `nil` for a value that holds none.
 
 * A `SKIP` beside a day counted from the end that a month lacks (`BYMONTHDAY=-31` in a month of thirty days) is read as the day before the month's first: `FORWARD` is the first, and `BACKWARD` the last day of the month before. It was `{:error, {:unsupported_skip, …}}`, neither RFC 7529 nor RFC 8984 saying where it is moved to.
@@ -450,8 +452,6 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * `Tempo.from_elixir/2` returns a `Tempo.ConversionError` for a value that is none of the types it converts (a `nil`, a string, a map), where it raised a `FunctionClauseError`.
 
 * `Tempo.select/2` from an interval with a quarter, a half or another group at an end (`2026Y1Q/2026Y2Q`) selects from the months it spans, as from `2026-01/2026-04`. It gave no weekday of them and the 15th of one, and `Tempo.count_workdays/2` of such an interval with no end was 0.
-
-* `Tempo.select/2` refuses a selector that recurs or that has no end (`~o"R3/T9H/PT2H"`, `~o"2026-06-10/.."`) with an `ArgumentError`, as it does one with no start. Its start alone was selected: the hour from 09:00 of the three, and the 10th of the days from it.
 
 * `Tempo.select/2` by a span whose start names a day of the week is the span on each such day: `Tempo.select(~o"2026-06", ~o"1KT9H/T17H")` is nine to five on the five Mondays of June. It was the span on every day of the base, each in a value that held its date and the weekday both, and a span from one weekday to another (`~o"1KT9H/5KT17H"`) is now a `Tempo.IntervalEndpointsError`.
 

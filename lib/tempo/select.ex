@@ -52,6 +52,8 @@ defmodule Tempo.Select do
   | Negative components | `Tempo.select(y, ~o"-1M")` | ISO 8601-2 §4.4.1 — count from the end of the containing unit |
   | `%Tempo.Interval{}` or list | `Tempo.select(days, ~o"T09/T17")` | Project as a **span** — coarser units from the base, finer from each endpoint, half-open `[from, to)` |
   | Interval duration form | `Tempo.select(days, ~o"T09/PT7H36M")` | Span from the projected start plus the duration |
+  | Interval with no end, or no start | `Tempo.select(days, ~o"T09/..")` | Span from the projected start to the end of the period, or from its start to the projected end |
+  | Recurrence | `Tempo.select(days, ~o"R3/T09/PT2H")` | Its occurrences within each period, from its start placed on the period; with no start (`Tempo.RRule.parse/2` gives one) what its rule selects there |
   | Function | `Tempo.select(y, &fn/1)` | The function returns any of the above; evaluated against each period of the base |
 
   A constraint is the selection of the same parts: `~o"15D"` selects
@@ -122,6 +124,25 @@ defmodule Tempo.Select do
   15th 21:00 to the 16th 05:00 — a night shift reads the way a roster
   writes it. Use the duration form (`~o"T21/PT8H"`) to say the same
   thing explicitly.
+
+  A window with no end runs to the end of the period it is placed on,
+  and one with no start from the period's start: `~o"T09/.."` is nine to
+  midnight of each day, and `~o"../T17"` midnight to five.
+
+  A recurrence is its occurrences within each period, counted from its
+  start as the period places it: `~o"R3/T09/PT2H"` is the two hours from
+  09:00, from 11:00 and from 13:00 of each day, and one with no count
+  (`~o"R/T09/PT2H"`) those that start within the day. A recurrence with
+  no start is what its rule selects in each period, so an RRULE selects
+  as it is read:
+
+  ```elixir
+  {:ok, standup}  = Tempo.RRule.parse("FREQ=WEEKLY;BYDAY=MO,WE,FR;BYHOUR=9")
+  {:ok, meetings} = Tempo.select(~o"2026-06", standup)
+  ```
+
+  > *"The stand-ups of June: nine o'clock each Monday, Wednesday and
+  > Friday."*
 
   A window whose start names a day of the week is the window on each
   such day: `~o"1KT9H/T17H"` is Monday's nine to five, and
@@ -1393,18 +1414,6 @@ defmodule Tempo.Select do
     )
   end
 
-  # A selector that recurs, or runs from a start with no end, was read as
-  # its start alone: `R3/T9H/PT2H` selected the hour from 09:00 and neither
-  # of the two after it, and `2026-06-10/..` the 10th. What each selects is
-  # not built, and it is refused, as one with no start is (`../T17H`).
-  defp recurring_or_open_selector(selector) do
-    ArgumentError.exception(
-      "Tempo.select/2 does not recognise selector #{inspect(selector)}: a span that selects " <>
-        "runs from one point to another, and this one recurs or has no end. See " <>
-        "`Tempo.Select` for the selector vocabulary."
-    )
-  end
-
   ## -----------------------------------------------------------
   ## Weekday filter — a day-of-week selector across a span, and a
   ## day-of-week constraint within a period (`project_onto_base/2`)
@@ -1667,8 +1676,9 @@ defmodule Tempo.Select do
   # not a granule at 09:00. A window whose `to` is at or before its
   # `from` (`~o"T21/T05"`, a night shift) rolls the end forward to the
   # following day. The duration form (`~o"T09/PT7H36M"`) adds the
-  # duration to the projected start. A selector that recurs, or that has
-  # no end, is no one span and is refused (`recurring_or_open_selector/1`).
+  # duration to the projected start. A selector that recurs is its
+  # occurrences within the period, and one with no end or no start runs to
+  # the period's end or from its start (`occurrences_or_to_the_end/3`).
   defp project_onto_base(%Interval{} = base, %Interval{from: %Tempo{} = c_from} = constraint) do
     c_from = %{c_from | time: read_in(c_from.time, base)}
 
@@ -1679,7 +1689,92 @@ defmodule Tempo.Select do
     end
   end
 
+  # A recurrence with no start is its occurrences within the period, as its
+  # rule selects them: `R/../P1D/FLT9HN`, which an RRULE read with no start
+  # is, selects nine o'clock of each day of the period.
+  defp project_onto_base(
+         %Interval{} = base,
+         %Interval{from: from, recurrence: recurrence} = constraint
+       )
+       when recurrence != 1 and from in [nil, :undefined],
+       do: occurrences_within(base, constraint)
+
+  # A span with no start runs from the period's start to its end: `../T17H`
+  # is midnight to five of each day.
+  defp project_onto_base(
+         %Interval{from: %Tempo{} = period_start} = base,
+         %Interval{from: :undefined, to: %Tempo{} = c_to, recurrence: 1} = constraint
+       ) do
+    if weekday_alone?(c_to),
+      do: {:error, weekday_span_error(constraint)},
+      else: from_the_start(base, period_start, %{c_to | time: read_in(c_to.time, base)})
+  end
+
   defp project_onto_base(_base, constraint), do: {:error, unrecognised_selector(constraint)}
+
+  defp from_the_start(base, period_start, c_to) do
+    with %Tempo{} = span_to <- merged_start(base, c_to.time) do
+      shown_span(as_fine_as(period_start, span_to), span_to)
+    end
+  end
+
+  # A selector that recurs is its occurrences within the period, counted
+  # from its start as the period places it (decided 2026-10-09): `R3/T9H/PT2H`
+  # is the two hours from 09:00, from 11:00 and from 13:00 of each day, and
+  # `R/2026-06-01/P1W` each week from 1 June that starts in the period. One
+  # with no end runs from its start to the period's end: `T9H/..` is nine to
+  # midnight of each day. Each was read as its start alone, the hour from
+  # 09:00 and no more.
+  defp occurrences_or_to_the_end(base, c_from, %Interval{recurrence: recurrence} = constraint)
+       when recurrence != 1 do
+    with %Tempo{} = start <- merged_start(base, c_from.time),
+         {:ok, placed} <- with_its_end_placed(base, %{constraint | from: start}) do
+      occurrences_within(base, placed)
+    end
+  end
+
+  defp occurrences_or_to_the_end(
+         %Interval{to: %Tempo{} = period_end} = base,
+         c_from,
+         %Interval{to: :undefined}
+       ) do
+    with %Tempo{} = start <- merged_start(base, c_from.time) do
+      shown_span(start, as_fine_as(period_end, start))
+    end
+  end
+
+  defp occurrences_or_to_the_end(_base, _c_from, constraint),
+    do: {:error, unrecognised_selector(constraint)}
+
+  # A recurrence written with its first occurrence's end (`R3/T9H/T11H`) has
+  # that end placed on the period as its start is.
+  defp with_its_end_placed(base, %Interval{to: %Tempo{time: time}} = recurrence) do
+    with %Tempo{} = placed <- merged_start(base, read_in(time, base)) do
+      {:ok, %{recurrence | to: placed}}
+    end
+  end
+
+  defp with_its_end_placed(_base, recurrence), do: {:ok, recurrence}
+
+  # The occurrences of a recurrence that start within a period, as
+  # `Tempo.to_interval_set/2` gives them within a window.
+  defp occurrences_within(%Interval{} = period, %Interval{} = recurrence) do
+    case Tempo.to_interval_set(recurrence, within: period) do
+      {:ok, %IntervalSet{} = occurrences} -> IntervalSet.members(occurrences)
+      {:error, _reason} = error -> error
+    end
+  end
+
+  # An end of a period written as finely as the end it is paired with, so a
+  # span from 09:00 to the end of a day ends at the hour the next day starts.
+  defp as_fine_as(%Tempo{} = period_end, %Tempo{} = other) do
+    {unit, _span} = Tempo.resolution(other)
+
+    case Tempo.extend_resolution(period_end, unit) do
+      %Tempo{} = extended -> extended
+      _as_fine_already_or_no_such_unit -> period_end
+    end
+  end
 
   defp project_span_onto_base(base, c_from, constraint) do
     case span_endpoint(constraint) do
@@ -1691,7 +1786,7 @@ defmodule Tempo.Select do
         on_each_period(base, c_from.time, &project_span_duration(&1, c_from, duration))
 
       :point ->
-        {:error, recurring_or_open_selector(constraint)}
+        occurrences_or_to_the_end(base, c_from, constraint)
 
       {:each, which, values} ->
         span_from_each(values, which, base, constraint)
