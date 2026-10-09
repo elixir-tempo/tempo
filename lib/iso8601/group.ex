@@ -282,15 +282,10 @@ defmodule Tempo.Iso8601.Group do
     end
   end
 
-  def resolve_seasons(%Tempo.Range{first: first, last: last} = range, hemisphere) do
-    with {:ok, first} <- resolve_seasons(first, hemisphere),
-         {:ok, last} <- resolve_seasons(last, hemisphere) do
-      {:ok, %{range | first: first, last: last}}
-    end
-  end
-
   def resolve_seasons(other, _hemisphere), do: {:ok, other}
 
+  # A range of seasons in a set is each season between its ends by the time
+  # it is read (`expand_divisions/4`), so a set holds its seasons as members.
   defp resolve_each_season(members, hemisphere) when is_list(members) do
     members
     |> Enum.reduce_while({:ok, []}, fn member, {:ok, resolved} ->
@@ -301,8 +296,6 @@ defmodule Tempo.Iso8601.Group do
     end)
     |> reversed()
   end
-
-  defp resolve_each_season(none, _hemisphere), do: {:ok, none}
 
   defp in_order(%Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to}, written, hemisphere) do
     if Compare.compare_endpoints(to, from) == :earlier,
@@ -341,9 +334,6 @@ defmodule Tempo.Iso8601.Group do
     do:
       Enum.any?(List.wrap(set), &abstract_season?/1) or
         Enum.any?(List.wrap(except), &abstract_season?/1)
-
-  def abstract_season?(%Tempo.Range{first: first, last: last}),
-    do: abstract_season?(first) or abstract_season?(last)
 
   def abstract_season?(_other), do: false
 

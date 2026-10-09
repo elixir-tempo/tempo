@@ -510,10 +510,16 @@ defmodule Tempo.RRule do
   # day of a short month, and where it makes no points it is given the length
   # here: without it each occurrence would run a whole cadence, as an ISO
   # 8601 recurrence's does.
+  #
+  # That is a rule that steps by months or years, the only ones a `SKIP`
+  # moves a day in. In any other the skip changes nothing and the rule is
+  # the one without it: an hourly rule from a date was given occurrences a
+  # day long, an hour apart.
   defp as_long_as_its_start(metadata, parts, %Tempo{} = from, false)
        when not is_map_key(metadata, :occurrence_duration) and
               not is_map_key(metadata, :occurrence_base_to) do
     with :backward <- Keyword.get(parts, :skip),
+         frequency when frequency in [:month, :year] <- Keyword.get(parts, :freq),
          {unit, _span} when is_atom(unit) <- Tempo.resolution(from) do
       Map.put(metadata, :occurrence_duration, %Tempo.Duration{time: [{unit, 1}]})
     else

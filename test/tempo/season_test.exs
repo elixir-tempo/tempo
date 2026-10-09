@@ -199,6 +199,16 @@ defmodule Tempo.SeasonTest do
       assert dated(~o"2026-21/2026-10-15", :ZA) == ~o"2026-09/2026-10-15"
     end
 
+    test "gives a set no dates where one of its seasons has none" do
+      # A winter north of the equator runs into the next year, which a year
+      # with unspecified digits cannot say.
+      assert {:error, %Tempo.InvalidDateError{} = error} =
+               Tempo.in_territory(~o"{20XX-24,2026-21}", :GB)
+
+      assert Exception.message(error) =~ "cannot be placed in the northern hemisphere"
+      assert {:ok, %Tempo.Set{}} = Tempo.in_territory(~o"{20XX-24,2026-21}", :AU)
+    end
+
     test "keeps what qualifies the season, and its zone" do
       assert dated(~o"2026-21?", :AU) == ~o"2026-09?/2026-12?"
       assert dated(~o"2026-21[Australia/Sydney]", :AU) == ~o"2026-09/2026-12[Australia/Sydney]"
@@ -357,6 +367,32 @@ defmodule Tempo.SeasonTest do
       end
     end
 
+    test "selects by a recurrence of seasons as by the spans it converts to" do
+      Localize.put_locale("en-AU")
+      yearly = ~o"R3/2026-21/P1Y"
+      {:ok, converted} = Tempo.to_interval(yearly)
+
+      assert {:ok, selected} = Tempo.select(~o"2026/2030", yearly)
+
+      assert Enum.map(IntervalSet.members(selected), &span/1) ==
+               Enum.map(IntervalSet.members(converted), &span/1)
+
+      assert Enum.map(IntervalSet.members(selected), &span/1) ==
+               for(
+                 year <- 2026..2028,
+                 do:
+                   {elem(expected(year, 21, :southern), 0),
+                    elem(expected(year + 1, 21, :southern), 0)}
+               )
+    end
+
+    test "says a season that is the selector has no dates where the territory has no hemisphere" do
+      Localize.put_locale("en-KE")
+
+      assert {:error, %AbstractSeasonError{territory: :KE}} = Tempo.select(~o"2026", ~o"2026-21")
+      assert {:error, %AbstractSeasonError{territory: :KE}} = Tempo.select(~o"2026-21", [1])
+    end
+
     test "orders seasons and months by where each starts" do
       Localize.put_locale("en-AU")
 
@@ -477,6 +513,9 @@ defmodule Tempo.SeasonTest do
       end
 
       assert Tempo.explain(~o"2026-21/2026-23") =~ "From: the spring of 2026, in no hemisphere."
+
+      # A year with unspecified digits is written as the value is.
+      assert Tempo.explain(~o"20XX-23") =~ ~s(The autumn of ~o"20XXY23M", in no hemisphere.)
     end
   end
 

@@ -298,6 +298,29 @@ defmodule Tempo.RRule.RscaleSkipTest do
       end
     end
 
+    test "a skip in a rule that steps by weeks or less moves nothing, and is the rule without it" do
+      # `BACKWARD` gave such a rule occurrences as long as its start is
+      # precise: an hourly rule from a date had a day every hour.
+      for start <- [~o"2026-01-31", ~o"2026-01-31T10", ~o"2026-01-31T10:30"],
+          frequency <- ["WEEKLY", "DAILY", "HOURLY", "MINUTELY"],
+          skip <- ["FORWARD", "BACKWARD"] do
+        with_skip = "RSCALE=GREGORIAN;FREQ=#{frequency};SKIP=#{skip};COUNT=3"
+        without = "FREQ=#{frequency};COUNT=3"
+
+        assert {start, with_skip, RRule.parse(with_skip, from: start)} ==
+                 {start, with_skip, RRule.parse(without, from: start)}
+      end
+
+      # An hour of a date is an hour long, a day's first.
+      {:ok, hourly} =
+        RRule.parse("RSCALE=GREGORIAN;FREQ=HOURLY;SKIP=BACKWARD;COUNT=2", from: ~o"2026-01-31")
+
+      {:ok, set} = Tempo.to_interval(hourly)
+
+      assert Enum.map(IntervalSet.members(set), &Tempo.to_iso8601!/1) ==
+               ["2026Y1M31D/T1H", "2026Y1M31DT1H/T2H"]
+    end
+
     test "read as the rule without them" do
       start = Tempo.from_date(~D[2026-01-31])
 
