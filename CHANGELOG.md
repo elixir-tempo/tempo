@@ -445,6 +445,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.from_elixir/2` returns a `Tempo.ConversionError` for a value that is none of the types it converts (a `nil`, a string, a map), where it raised a `FunctionClauseError`.
+
 * `Tempo.select/2` from an interval with a quarter, a half or another group at an end (`2026Y1Q/2026Y2Q`) selects from the months it spans, as from `2026-01/2026-04`. It gave no weekday of them and the 15th of one, and `Tempo.count_workdays/2` of such an interval with no end was 0.
 
 * `Tempo.select/2` refuses a selector that recurs or that has no end (`~o"R3/T9H/PT2H"`, `~o"2026-06-10/.."`) with an `ArgumentError`, as it does one with no start. Its start alone was selected: the hour from 09:00 of the three, and the 10th of the days from it.

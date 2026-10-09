@@ -14,6 +14,7 @@ defmodule Tempo.ReaderOfNoStringTest do
   """
   use ExUnit.Case, async: true
 
+  alias Tempo.ConversionError
   alias Tempo.Cron
   alias Tempo.CronError
   alias Tempo.ICal
@@ -107,6 +108,25 @@ defmodule Tempo.ReaderOfNoStringTest do
       for value <- @no_strings do
         assert_raise ArgumentError, ~r/not_a_string/, fn -> RRule.parse!(value) end
       end
+    end
+  end
+
+  describe "from_elixir/2, handed what is none of Elixir's dates and times" do
+    test "returns a conversion error that says so" do
+      for value <- @no_strings ++ ["2026-06-15", ""] do
+        assert {^value, {:error, %ConversionError{} = error}} =
+                 {value, Tempo.from_elixir(value)}
+
+        assert Exception.message(error) =~ "is none of them"
+
+        assert {:error, %ConversionError{}} = Tempo.from_elixir(value, resolution: :day)
+      end
+    end
+
+    test "names a value far too long to show by its start" do
+      {:error, error} = Tempo.from_elixir(Enum.to_list(1..10_000))
+
+      assert String.length(Exception.message(error)) < 300
     end
   end
 

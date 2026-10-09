@@ -4569,7 +4569,8 @@ defmodule Tempo do
   * The `t:t/0` at the chosen resolution, or
 
   * `{:error, reason}` if `:resolution` is incompatible with the
-    input.
+    input, or the value is none of the types converted (a
+    `Tempo.ConversionError`).
 
   ### Examples
 
@@ -4651,6 +4652,22 @@ defmodule Tempo do
     duration
     |> elixir_duration_components()
     |> Duration.new!()
+  end
+
+  # A value of no type it converts (a `nil`, a string, a map) raised a
+  # `FunctionClauseError`: the function takes whatever a caller holds, and
+  # says which of it is none of Elixir's dates and times.
+  def from_elixir(value, _options) do
+    written = inspect(value, limit: 5, printable_limit: 60)
+
+    {:error,
+     ConversionError.exception(
+       value: value,
+       target: Tempo,
+       reason:
+         "Tempo.from_elixir/2 converts a Date, a Time, a NaiveDateTime, a DateTime, a " <>
+           "Date.Range or a Duration, and #{written} is none of them."
+     )}
   end
 
   # Elixir's `Time`, `NaiveDateTime`, and `DateTime` are
