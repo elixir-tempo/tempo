@@ -1,15 +1,26 @@
 # A tour of Tempo
 
-## Setup — required for every example
-
-The cell below installs Tempo, pulls in Kino for rich output, and — critically — `import`s `Tempo.Sigils` so the `~o` sigil used throughout this notebook is in scope. Run it first; every subsequent cell depends on it. The import brings only `sigil_o/2` and `sigil_TEMPO/2` into the caller's namespace — no helper functions leak in.
-
 ```elixir
 Mix.install([
-  {:ex_tempo, "~> 1.6"},
-  {:kino, "~> 0.14"}
+  # This notebook uses Tempo's main branch, which is ahead of the latest
+  # Hex release (1.6.x). The first run installs main as it stands then, and
+  # Mix.install caches it: use "Setup without cache" to pick up newer
+  # commits. Once ex_tempo 2.0 is on Hex, pin it with {:ex_tempo, "~> 2.0"}.
+  {:ex_tempo, github: "elixir-tempo/tempo"},
+  {:kino, "~> 0.14"},
+  {:tz, "~> 0.28"}
 ])
 
+Calendar.put_time_zone_database(Tz.TimeZoneDatabase)
+```
+
+## Setup
+
+Run this cell next: every example below depends on it. It imports `Tempo.Sigils`, which provides the `~o` sigil the examples use to write a Tempo value as ISO 8601 text — `~o"2026-06-15"` is the whole day of 15 June 2026. The import brings in only `sigil_o/2` and `sigil_TEMPO/2`, no other functions.
+
+It needs a cell of its own because Livebook compiles a whole cell before running it, so the setup cell above can't import a module that its own `Mix.install/2` has yet to fetch.
+
+```elixir
 import Tempo.Sigils
 ```
 
@@ -215,7 +226,7 @@ Each example reads a rule with `Tempo.RRule.parse/2`, starting at its `DTSTART`,
 ```elixir
 start_date = fn interval ->
   start = Tempo.Interval.from(interval)
-  {Tempo.year(start), Tempo.month(start), Tempo.day(start)}
+  Date.new!(Tempo.year(start), Tempo.month(start), Tempo.day(start))
 end
 
 {:ok, mondays} = Tempo.RRule.parse("FREQ=WEEKLY;BYDAY=MO;COUNT=10", from: ~o"2026-06-01")
@@ -223,7 +234,7 @@ end
 
 occurrences
 |> Tempo.IntervalSet.members()
-|> Enum.map(start_date)
+|> Enum.map(&%{date: start_date.(&1)})
 |> Kino.DataTable.new()
 ```
 
@@ -295,7 +306,7 @@ Tempo.overlaps?(paris, utc_window)
 
 Both values are *zoned* — the Paris time by its zone, the window by `Z`. Comparing a zoned value with a floating one (no zone or offset) raises `Tempo.FloatingTempoError` rather than silently assuming UTC; place the floating side in a zone first with `Tempo.in_zone/2`.
 
-Paris 10:00 CEST is UTC 08:00 — inside the UTC 07:00-09:00 window. Tempo projects to UTC via `Tzdata` per-call; the wall-clock representation is preserved on the struct.
+Paris 10:00 CEST is UTC 08:00 — inside the UTC 07:00-09:00 window. Tempo projects to UTC per-call via the configured time zone database (`Tz` here); the wall-clock representation is preserved on the struct.
 
 ## Archaeological and approximate dates
 
@@ -315,7 +326,7 @@ value = ~o"2022~"
 
 %{
   value: inspect(value),
-  qualification: value.qualification,
+  qualification: Tempo.qualification(value),
   span: Tempo.Interval.endpoints(iv)
 }
 ```
@@ -381,7 +392,7 @@ Five predicates cover the interval-length comparison lattice:
 iv = ~o"2026-06-15T09/2026-06-15T10"
 
 %{
-  "duration":     Tempo.duration(iv),
+  duration:       Tempo.duration(iv),
   "≥ 1h":         Tempo.at_least?(iv, ~o"PT1H"),
   "≤ 1h":         Tempo.at_most?(iv, ~o"PT1H"),
   "exactly 1h":   Tempo.exactly?(iv, ~o"PT1H"),
