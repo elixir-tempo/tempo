@@ -31,7 +31,7 @@ defmodule Tempo.RRule.Rule do
 
   * `:rscale` — the calendar module the rule is counted in, where RFC 7529's `RSCALE` or JSCalendar's `rscale` names one (`calendar_from_rscale/1`), and `nil` where the rule names none and is counted in the calendar of its start. A start in another calendar is brought into it (`start_in_rscale/2`), and a `:bymonth` is then the month RFC 7529 numbers: Nisan is the seventh month of every Hebrew year, where it is the eighth in order in a year with a leap month.
 
-  * `:bymonth` — list of integers 1–12. Limit.
+  * `:bymonth` — list of integers 1–12, and under an `:rscale` whose calendar has them, leap months, each as the month it follows: `{5, :leap}` is RFC 7529's `5L`, Adar I of a Hebrew year (`month_from_text/1`). Limit. In a year that has no such month it is passed over, or with `:skip` is the month before it (`:backward`) or after it (`:forward`).
 
   * `:bymonthday` — list of integers -31..31 (negatives count from
     the end of the month). Limit or expand per FREQ.
@@ -77,9 +77,15 @@ defmodule Tempo.RRule.Rule do
 
   alias Tempo.Iso8601.Parser
   alias Tempo.UnitValues
+  alias Tempo.Validation
 
   @type frequency :: :second | :minute | :hour | :day | :week | :month | :year
   @type weekday :: 1..7
+
+  @typedoc """
+  A month a rule names: its number, or a leap month as the month it follows (`{5, :leap}`, RFC 7529's `5L`).
+  """
+  @type month :: integer() | {pos_integer(), :leap}
   @type byday_entry :: {integer() | nil, weekday()}
 
   @type t :: %__MODULE__{
@@ -90,7 +96,7 @@ defmodule Tempo.RRule.Rule do
           wkst: weekday(),
           skip: :omit | :backward | :forward,
           rscale: module() | nil,
-          bymonth: [integer()] | nil,
+          bymonth: [month()] | nil,
           bymonthday: [integer()] | nil,
           byyearday: [integer()] | nil,
           byweekno: [integer()] | nil,
@@ -123,6 +129,116 @@ defmodule Tempo.RRule.Rule do
             byyear: nil,
             bymonthday_nearest: nil,
             bymonthday_or_byday: nil
+
+  @doc """
+  Reads a month as a rule writes it.
+
+  RFC 7529 writes a leap month as the number of the month it follows and an `L`, and RFC 8984 as the same in a string: `5L` is the leap month after the fifth, Adar I of a Hebrew year.
+
+  ### Arguments
+
+  * `text` is the month as it is written, `"5"` or `"5L"`.
+
+  ### Returns
+
+  * `{:ok, month}`, the month's number, or `{number, :leap}` for a leap month.
+
+  * `:error` for what is no month.
+
+  ### Examples
+
+      iex> Tempo.RRule.Rule.month_from_text("5")
+      {:ok, 5}
+
+      iex> Tempo.RRule.Rule.month_from_text("5L")
+      {:ok, {5, :leap}}
+
+      iex> Tempo.RRule.Rule.month_from_text("L5")
+      :error
+
+  """
+  @spec month_from_text(String.t()) :: {:ok, month()} | :error
+  def month_from_text(text) when is_binary(text) do
+    case Integer.parse(text) do
+      {number, ""} -> {:ok, number}
+      {number, leap} when leap in ["L", "l"] and number > 0 -> {:ok, {number, :leap}}
+      _no_month -> :error
+    end
+  end
+
+  def month_from_text(_other), do: :error
+
+  @doc """
+  Returns whether the leap months a rule names are ones its calendar can have.
+
+  A leap month is a month of the calendar an `RSCALE` names, so one in a rule that names no calendar, or a calendar whose years all have the same months, is reported and not read as a month it is not. With `:skip` `:forward` a leap month a year lacks is the month after it, and after a year's last month that is a month of the next year, which is not built.
+
+  ### Arguments
+
+  * `rule` is a `t:t/0`.
+
+  ### Returns
+
+  * `:ok` for a rule that names no leap month, and for one whose calendar has leap months.
+
+  * `{:error, {:leap_month_without_rscale, month}}` for a leap month in a rule that names no calendar.
+
+  * `{:error, {:calendar_has_no_leap_month, {month, calendar}}}` for one in a calendar whose years all have the same months.
+
+  * `{:error, {:unsupported_skip, {:forward, [bymonth: months]}}}` for a leap month after the last month of a year, in a rule whose `:skip` is `:forward`.
+
+  ### Examples
+
+      iex> rule = %Tempo.RRule.Rule{freq: :year, rscale: Calendrical.Hebrew, bymonth: [{5, :leap}]}
+      iex> Tempo.RRule.Rule.leap_months_built(rule)
+      :ok
+
+      iex> Tempo.RRule.Rule.leap_months_built(%Tempo.RRule.Rule{freq: :year, bymonth: [{5, :leap}]})
+      {:error, {:leap_month_without_rscale, {5, :leap}}}
+
+      iex> rule = %Tempo.RRule.Rule{freq: :year, rscale: Calendrical.Persian, bymonth: [{5, :leap}]}
+      iex> Tempo.RRule.Rule.leap_months_built(rule)
+      {:error, {:calendar_has_no_leap_month, {{5, :leap}, Calendrical.Persian}}}
+
+  """
+  @spec leap_months_built(t()) ::
+          :ok
+          | {:error, {:leap_month_without_rscale, month()}}
+          | {:error, {:calendar_has_no_leap_month, {month(), module()}}}
+          | {:error, {:unsupported_skip, {:forward, keyword()}}}
+  def leap_months_built(%__MODULE__{bymonth: months, rscale: calendar, skip: skip}) do
+    case Enum.filter(List.wrap(months), &leap_month?/1) do
+      [] -> :ok
+      [leap | _rest] = leap_months -> leap_months_in(calendar, leap, leap_months, skip)
+    end
+  end
+
+  defp leap_month?({_month, :leap}), do: true
+  defp leap_month?(_month), do: false
+
+  defp leap_months_in(nil, leap, _leap_months, _skip),
+    do: {:error, {:leap_month_without_rscale, leap}}
+
+  defp leap_months_in(calendar, leap, leap_months, skip) do
+    case UnitValues.in_any_year(:month, [], calendar) do
+      {:ok, %Range{last: every_year}, %Range{last: most}} when most > every_year ->
+        moved_within_the_year(leap_months, every_year, skip)
+
+      _the_same_months_every_year ->
+        {:error, {:calendar_has_no_leap_month, {leap, calendar}}}
+    end
+  end
+
+  # The month after a leap month that follows a year's last is the first of
+  # the next year, where the rule's period for the year has no month to give.
+  defp moved_within_the_year(leap_months, last_month, :forward) do
+    case Enum.filter(leap_months, fn {month, :leap} -> month >= last_month end) do
+      [] -> :ok
+      after_the_last -> {:error, {:unsupported_skip, {:forward, [bymonth: after_the_last]}}}
+    end
+  end
+
+  defp moved_within_the_year(_leap_months, _last_month, _skip), do: :ok
 
   @doc """
   Returns whether a rule's `:skip` is one Tempo builds for the parts the rule holds.
@@ -451,15 +567,41 @@ defmodule Tempo.RRule.Rule do
   # to year keeps the start's month as the calendar does, and a BYMONTH,
   # which numbers a month by its place in the year, would not: Nisan is the
   # seventh month of a Hebrew year and the eighth of one with a leap month.
+  #
+  # A rule that names its calendar (RFC 7529's `RSCALE`) takes its start's
+  # month as that calendar names it, and where the start is in a leap month
+  # the month is the leap month (`5L`, Adar I): a year that has none has no
+  # such date, and is passed over or takes the month the rule's `SKIP` moves
+  # it to. The step from year to year gave that year the month in the leap
+  # month's place, as `SKIP=FORWARD` does, whatever the rule's `SKIP`.
   defp with_month_of_start(rule, written, month, %Tempo{calendar: calendar})
        when calendar in [Calendrical.Gregorian, Calendar.ISO, nil] do
-    if empty?(written.bymonth) and empty?(written.byweekno) and not keeps_last_day?(written) and
-         (names_day_of_month?(written) or not names_weekday?(written)),
-       do: %{rule | bymonth: [month]},
-       else: rule
+    if takes_month_of_start?(written) and not keeps_last_day?(written),
+      do: %{rule | bymonth: [month]},
+      else: rule
+  end
+
+  defp with_month_of_start(
+         %__MODULE__{rscale: calendar} = rule,
+         written,
+         month,
+         %Tempo{calendar: calendar, time: time}
+       ) do
+    with true <- takes_month_of_start?(written),
+         {:ok, {_follows, :leap} = leap_month} <-
+           Validation.traditional_month_from_ordinal(calendar, Keyword.get(time, :year), month) do
+      %{rule | bymonth: [leap_month]}
+    else
+      _a_month_of_every_year_or_one_the_rule_states -> rule
+    end
   end
 
   defp with_month_of_start(rule, _written, _month, _dtstart), do: rule
+
+  defp takes_month_of_start?(written) do
+    empty?(written.bymonth) and empty?(written.byweekno) and
+      (names_day_of_month?(written) or not names_weekday?(written))
+  end
 
   # "If no BYMONTHDAY, BYWEEKNO or BYDAY parameter is set, the BYMONTHDAY
   # selection is inherited from the calendar day of month of the initial start
@@ -599,12 +741,21 @@ defmodule Tempo.RRule.Rule do
   # lacks. Anywhere else it changes nothing, and the rule is the one without
   # it. `:backward` with no day stated keeps a month's last day by the step
   # from its start (`keeps_last_day?/1`), and holds no day here to move.
-  defp push_skip(acc, %__MODULE__{skip: skip, freq: freq, bymonthday: days})
-       when skip in [:backward, :forward] and freq in [:month, :year] do
-    if Enum.any?(List.wrap(days), &(&1 > 28)), do: [{:skip, skip} | acc], else: acc
+  #
+  # It is written too where the rule names a leap month, which a year that
+  # has none moves to the month before it or after it (RFC 7529 §4.1).
+  defp push_skip(acc, %__MODULE__{skip: skip} = rule) when skip in [:backward, :forward] do
+    if moves_a_day?(rule) or Enum.any?(List.wrap(rule.bymonth), &leap_month?/1),
+      do: [{:skip, skip} | acc],
+      else: acc
   end
 
   defp push_skip(acc, _rule), do: acc
+
+  defp moves_a_day?(%__MODULE__{freq: freq, bymonthday: days}) when freq in [:month, :year],
+    do: Enum.any?(List.wrap(days), &(&1 > 28))
+
+  defp moves_a_day?(_rule), do: false
 
   # Only emit `{:wkst, n}` for a non-default week start (WKST=MO is 1); the
   # common case keeps the AST identical and the token signals intent.

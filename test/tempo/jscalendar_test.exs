@@ -289,15 +289,39 @@ defmodule Tempo.JSCalendarTest do
                  )))
     end
 
-    test "a lunisolar leap month is reported rather than rounded" do
-      # RFC 8984 writes byMonth as strings so `"3L"` can name a leap
-      # month. There is no honest ordinal for it, so it is refused.
-      assert {:error, {:unsupported_month, "3L"}} =
-               Tempo.JSCalendar.parse(event(~s(
-                   "start":"2026-06-01T09:00:00",
-                   "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"yearly",
-                     "byMonth":["3L"],"count":1}]
-                 )))
+    test "a lunisolar leap month is a month of the calendar the rule names" do
+      # RFC 8984 writes byMonth as strings so `"5L"` can name a leap month:
+      # Adar I of a Hebrew year. With `skip` it is the month after it in a
+      # year that has none, and RFC 7529 §4.3.3 lists the dates.
+      yearly = fn rule ->
+        Tempo.JSCalendar.parse(event(~s(
+          "start":"2014-02-08T09:00:00","duration":"PT1H",
+          "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"yearly","count":5#{rule}}]
+        )))
+      end
+
+      assert {:ok, set} =
+               yearly.(~s(,"rscale":"hebrew","byMonth":["5L"],"byMonthDay":[8],"skip":"forward"))
+
+      dates =
+        for occurrence <- Tempo.IntervalSet.members(set) do
+          {:ok, start} = Tempo.to_calendar(Tempo.Interval.from(occurrence), Calendrical.Gregorian)
+          Date.new!(Tempo.year(start), Tempo.month(start), Tempo.day(start))
+        end
+
+      assert dates ==
+               [~D[2014-02-08], ~D[2015-02-27], ~D[2016-02-17], ~D[2017-03-06], ~D[2018-02-23]]
+
+      # It is a month of a calendar that has leap months, which the
+      # Gregorian, a rule's calendar where it names none (RFC 8984 §4.3.3),
+      # has not.
+      for rscale <- ["", ~s(,"rscale":"gregorian")] do
+        assert yearly.(rscale <> ~s(,"byMonth":["3L"])) ==
+                 {:error, {:calendar_has_no_leap_month, {{3, :leap}, Calendrical.Gregorian}}}
+      end
+
+      assert yearly.(~s(,"rscale":"hebrew","byMonth":["L3"])) ==
+               {:error, {:unsupported_month, "L3"}}
     end
   end
 

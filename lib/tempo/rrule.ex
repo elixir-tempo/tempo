@@ -106,7 +106,7 @@ defmodule Tempo.RRule do
 
   * `{:ok, %Tempo.Interval{}}` on success.
 
-  * `{:error, reason}` on a malformed rule or unknown keyword, and for what RFC 7529's `RSCALE` and `SKIP` say that Tempo does not read: `{:unsupported_rscale, name}` for a name that is no calendar's, `{:rscale_without_a_start, calendar}` for a rule of another calendar than the Gregorian that has no `:from` and no part that selects, which nothing would say the calendar of, `{:from_is_no_date, value}` for a `:from` beside an `RSCALE` that is no date and so has no place in another calendar, `{:unsupported_skip, {skip, part}}` for `BACKWARD` or `FORWARD` beside a day counted from the end of a month that a month can lack (`BYMONTHDAY=-31`), `{:unsupported_skip, value}` for a `SKIP` that is none of the three, and `{:skip_without_rscale, skip}`. A `:from` that is not one value (an interval, a set) is `{:invalid_from, value}`, an `INTERVAL` that is not one or more is `{:invalid_interval, value}` and a `COUNT` below none is `{:invalid_count, value}`. A `BYWEEKNO` beside a `BYMONTH`, or in a rule that steps by months, with no `:from` that is a date is `{:byweekno_without_a_date, weeks}`: it counts the weeks of a year, which such a rule is asked of each day it starts from.
+  * `{:error, reason}` on a malformed rule or unknown keyword, and for what RFC 7529's `RSCALE` and `SKIP` say that Tempo does not read: `{:unsupported_rscale, name}` for a name that is no calendar's, `{:rscale_without_a_start, calendar}` for a rule of another calendar than the Gregorian that has no `:from` and no part that selects, which nothing would say the calendar of, `{:from_is_no_date, value}` for a `:from` beside an `RSCALE` that is no date and so has no place in another calendar, `{:unsupported_skip, {skip, part}}` for `BACKWARD` or `FORWARD` beside a day counted from the end of a month that a month can lack (`BYMONTHDAY=-31`), `{:unsupported_skip, value}` for a `SKIP` that is none of the three, and `{:skip_without_rscale, skip}`. A leap month (`BYMONTH=5L`, the leap month after the fifth) is a month of the calendar an `RSCALE` names: with none it is `{:leap_month_without_rscale, month}`, in a calendar whose years all have the same months `{:calendar_has_no_leap_month, {month, calendar}}`, and after a year's last month beside `SKIP=FORWARD` `{:unsupported_skip, {:forward, part}}`. A `:from` that is not one value (an interval, a set) is `{:invalid_from, value}`, an `INTERVAL` that is not one or more is `{:invalid_interval, value}` and a `COUNT` below none is `{:invalid_count, value}`. A `BYWEEKNO` beside a `BYMONTH`, or in a rule that steps by months, with no `:from` that is a date is `{:byweekno_without_a_date, weeks}`: it counts the weeks of a year, which such a rule is asked of each day it starts from.
 
   ### Examples
 
@@ -304,7 +304,7 @@ defmodule Tempo.RRule do
 
   defp parse_kv("UNTIL", value), do: parse_until(value)
 
-  defp parse_kv("BYMONTH", value), do: with_int_list(value, :bymonth)
+  defp parse_kv("BYMONTH", value), do: with_month_list(value)
   defp parse_kv("BYMONTHDAY", value), do: with_int_list(value, :bymonthday)
   defp parse_kv("BYYEARDAY", value), do: with_int_list(value, :byyearday)
   defp parse_kv("BYWEEKNO", value), do: with_int_list(value, :byweekno)
@@ -408,6 +408,23 @@ defmodule Tempo.RRule do
     end
   end
 
+  # RFC 7529 §4.2: a month is its number, and a leap month the number of the
+  # month it follows and an `L` (`5L`, Adar I of a Hebrew year).
+  defp with_month_list(value) do
+    value
+    |> String.split(",", trim: true)
+    |> Enum.reduce_while({:ok, []}, fn item, {:ok, months} ->
+      case Rule.month_from_text(item) do
+        {:ok, month} -> {:cont, {:ok, [month | months]}}
+        :error -> {:halt, {:error, {:invalid_integer_in_list, item, :bymonth}}}
+      end
+    end)
+    |> months_read()
+  end
+
+  defp months_read({:ok, months}), do: {:ok, {:bymonth, Enum.reverse(months)}}
+  defp months_read({:error, _reason} = error), do: error
+
   # UNTIL is basic-format ISO 8601: YYYYMMDD or YYYYMMDDTHHMMSSZ.
   # We round-trip it through `Tempo.from_iso8601/1` to get a proper
   # `%Tempo{}` struct.
@@ -426,6 +443,7 @@ defmodule Tempo.RRule do
         rule = struct(Rule, parts)
 
         with :ok <- Rule.skip_built(rule),
+             :ok <- Rule.leap_months_built(rule),
              {:ok, options} <- in_rscale(rule, options),
              recurrence = do_build(freq_unit, parts, options),
              :ok <- Selection.week_number_of_a_year(recurrence),

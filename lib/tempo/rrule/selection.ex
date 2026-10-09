@@ -1798,10 +1798,16 @@ defmodule Tempo.RRule.Selection do
   # ordinary BYMONTH. The traditional→ordinal step is Calendrical's, via
   # `Tempo.Validation.ordinal_month_from_traditional/3`. A leap month the candidate's
   # year does not carry resolves to nothing, so that year yields no occurrence.
+  #
+  # RFC 7529 §4.1: with a `SKIP` the leap month is not passed over there. It
+  # is the month before it (`BACKWARD`), the month it follows, or the month
+  # after it (`FORWARD`), and a month so reached twice is selected once.
   defp apply_role(_role, {:traditional_month, months}, candidates, scope, selection, wkst) do
+    skip = Keyword.get(selection, :skip)
+
     Enum.flat_map(candidates, fn candidate ->
       months = months |> List.wrap() |> Enum.flat_map(&expand_range_element/1)
-      ordinals = traditional_months_to_ordinals(candidate, months)
+      ordinals = traditional_months_to_ordinals(candidate, months, skip)
       apply_entry({:month, ordinals}, [candidate], scope, selection, wkst)
     end)
   end
@@ -2728,17 +2734,34 @@ defmodule Tempo.RRule.Selection do
   # year against which the traditional numbering resolves.
   defp traditional_months_to_ordinals(
          %Interval{from: %Tempo{calendar: calendar, time: time}},
-         months
+         months,
+         skip
        ) do
     year = Keyword.get(time, :year)
 
-    Enum.flat_map(months, fn month ->
-      case Validation.ordinal_month_from_traditional(calendar, year, month) do
-        {:ok, ordinal} when is_integer(ordinal) -> [ordinal]
-        _other -> []
-      end
-    end)
+    months
+    |> Enum.flat_map(&ordinal_or_where_moved(&1, calendar, year, skip))
+    |> Enum.uniq()
   end
+
+  defp ordinal_or_where_moved(month, calendar, year, skip) do
+    case Validation.ordinal_month_from_traditional(calendar, year, month) do
+      {:ok, ordinal} when is_integer(ordinal) -> [ordinal]
+      _the_year_lacks_it -> month_moved(month, calendar, year, skip)
+    end
+  end
+
+  # A leap month the year lacks, moved by the rule's `SKIP`: to the month it
+  # follows, or to the one after that. The numbers are the notation's, a
+  # leap month being written by the month before it, and their places in the
+  # year are the calendar's.
+  defp month_moved({month, :leap}, calendar, year, :backward),
+    do: ordinal_or_where_moved(month, calendar, year, nil)
+
+  defp month_moved({month, :leap}, calendar, year, :forward),
+    do: ordinal_or_where_moved(month + 1, calendar, year, nil)
+
+  defp month_moved(_month, _calendar, _year, _omit), do: []
 
   # BYMONTHDAY with FREQ=MONTHLY or YEARLY: for each candidate,
   # produce one occurrence per listed day (signed: -1 = last day

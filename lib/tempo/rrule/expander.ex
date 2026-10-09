@@ -158,12 +158,19 @@ defmodule Tempo.RRule.Expander do
   @spec to_ast(Rule.t(), Tempo.t(), keyword()) ::
           {:ok, Interval.t()}
           | {:error,
-             {:invalid_interval | :invalid_count | :byweekno_without_a_date | :from_is_no_date,
-              term()}}
+             {:invalid_interval
+              | :invalid_count
+              | :byweekno_without_a_date
+              | :from_is_no_date
+              | :unsupported_skip
+              | :leap_month_without_rscale
+              | :calendar_has_no_leap_month, term()}}
   def to_ast(%Rule{} = rule, dtstart, options \\ [])
       when is_nil(dtstart) or is_struct(dtstart, Tempo) do
     with {:ok, interval} <- steps_by(rule.interval),
          {:ok, recurrence} <- counted(rule.count),
+         :ok <- Rule.skip_built(rule),
+         :ok <- Rule.leap_months_built(rule),
          {:ok, dtstart} <- Rule.start_in_rscale(rule, dtstart),
          {:ok, options} <- base_to_in_rscale(rule, options),
          ast = recurring(rule, dtstart, interval, recurrence, options),

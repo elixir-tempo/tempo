@@ -273,6 +273,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.AbstractSeasonError` — what needs the dates of a season with no hemisphere says so: a walk, `Tempo.shift/3` by anything but years, `Tempo.at/2`, `Tempo.extend/2` and `Tempo.round/2`. It is also the answer for a territory the equator runs through, such as Brazil.
 
+* `Tempo.RRule.parse/2` and `Tempo.JSCalendar.parse/2` read a leap month, RFC 7529's `BYMONTH=5L` and RFC 8984's `"5L"` (Adar I of a Hebrew year), and a year without one passes over it or takes the month before or after it by the rule's `SKIP`: `RSCALE=HEBREW;FREQ=YEARLY;BYMONTH=5L;BYMONTHDAY=8;SKIP=FORWARD` from 8 February 2014 is the dates RFC 7529 §4.3.3 lists. A yearly rule that starts in a leap month takes that month from its start.
+
 * `Tempo.RRule.parse/2` and `Tempo.JSCalendar.parse/2` read a rule counted in another calendar, RFC 7529's `RSCALE` and RFC 8984's `rscale`: `RSCALE=HEBREW;FREQ=YEARLY` from 2 April 2026 recurs on 15 Nisan, and its `BYMONTH` is the month RFC 7529 numbers. It was `{:error, {:unsupported_rscale, "HEBREW"}}`, which is now a name that is no calendar's.
 
 * `config :ex_tempo, max_values_at_once: 100_000` — the most values Tempo gives at once, 10,000 unless it is set: the values listed, the spans converted to, the occurrences and the periods of a recurrence's walk, and the candidates a position picks among. It is read when Tempo is compiled.
@@ -366,6 +368,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * `Tempo.RecurrenceSet.filter/2` keeps the members a function keeps, as `IntervalSet.filter/2` does.
 
 ### Changed
+
+* A rule built as a `Tempo.RRule.Rule` struct is held to what a rule that is read is: `Tempo.RRule.Expander.to_ast/3` returns `{:error, {:unsupported_skip, {skip, part}}}` for a `:skip` beside a day counted from the end that a month can lack, where the `:skip` was not applied.
 
 * `Tempo.to_calendar/2` converts a date with a time of day, which it refused: `~o"2026-06-15T09:30[Europe/Paris]"` in `Calendrical.Hebrew` is 30 Sivan 5786 at 09:30 in the same zone, the day its own clock is on. An interval of such values converts too.
 

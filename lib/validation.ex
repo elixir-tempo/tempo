@@ -1526,6 +1526,28 @@ defmodule Tempo.Validation do
     end
   end
 
+  @doc """
+  Names the month at a place in a year as its calendar names it.
+
+  The inverse of `ordinal_month_from_traditional/3`. `month` is the month's
+  place in `year`, and the answer its traditional number, or `{n, :leap}` for
+  the intercalary month that follows traditional `n`: the sixth month of a
+  Hebrew year with a leap month is `{5, :leap}`, Adar I. In a calendar whose
+  months are numbered in order the place is the name. The naming is
+  Calendrical's (`lunar_month_of_year/2`). Returns `{:ok, month}`, or `:error`
+  where the year has no month at that place.
+  """
+  def traditional_month_from_ordinal(calendar, year, month) do
+    if Code.ensure_loaded?(calendar) and function_exported?(calendar, :lunar_month_of_year, 2) do
+      case calendar.lunar_month_of_year(year, month) do
+        {:error, _no_such_month} -> :error
+        traditional -> {:ok, traditional}
+      end
+    else
+      {:ok, month}
+    end
+  end
+
   # The maximum day number a month can hold across all years — the
   # bound for validating a yearless partial: the last day of the year the
   # month is longest in (February's 29th), which `Tempo.UnitValues` asks the

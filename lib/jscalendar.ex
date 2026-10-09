@@ -78,7 +78,7 @@ if Code.ensure_loaded?(JSCalendar) do
 
     A rule's `skip` is read. `omit`, the default, passes over a month or a year that lacks the start's day, so a rule on the 31st lists the months of 31 days; `backward` keeps the last day of such a month, and `forward` the first day of the month after.
 
-    Three things a rule can say are reported, each as `{:error, {reason, value}}`, rather than read as something they are not: a `skip` beside a day counted from the end of a month that a month can lack, such as `-31` (`:unsupported_skip`); an `rscale` that names no calendar (`:unsupported_rscale`), where one that names a calendar, such as `hebrew`, is a rule counted in it from its start's date there; a leap month such as `"3L"` (`:unsupported_month`); and a day of the week that is none of `mo` to `su` (`:unsupported_day`). An `interval` of `0` is `{:error, {:invalid_interval, 0}}`, and a `count` of `0` is a rule with no occurrences.
+    Four things a rule can say are reported, each as `{:error, {reason, value}}`, rather than read as something they are not: a `skip` beside a day counted from the end of a month that a month can lack, such as `-31` (`:unsupported_skip`); an `rscale` that names no calendar (`:unsupported_rscale`), where one that names a calendar, such as `hebrew`, is a rule counted in it from its start's date there; a month that is none (`:unsupported_month`), and a leap month such as `"5L"` in a calendar that has no leap months, as the Gregorian, a rule's calendar where it names none, has not (`:calendar_has_no_leap_month`), where under `"rscale": "hebrew"` it is Adar I; and a day of the week that is none of `mo` to `su` (`:unsupported_day`). An `interval` of `0` is `{:error, {:invalid_interval, 0}}`, and a `count` of `0` is a rule with no occurrences.
 
     """
 
@@ -515,16 +515,15 @@ if Code.ensure_loaded?(JSCalendar) do
     end
 
     # RFC 8984 writes months as strings so that a lunisolar leap month
-    # can be `"3L"`. Tempo's rule takes ordinals, and there is no
-    # honest ordinal for a leap month, so that is reported rather than
-    # rounded to the month it is not.
+    # can be `"3L"`, the leap month after the third, which a rule holds as
+    # `{3, :leap}` (`Tempo.RRule.Rule.month_from_text/1`).
     defp months(nil), do: {:ok, nil}
 
     defp months(values) when is_list(values) do
       Enum.reduce_while(values, {:ok, []}, fn value, {:ok, acc} ->
-        case Integer.parse(value) do
-          {number, ""} -> {:cont, {:ok, acc ++ [number]}}
-          _leap_or_junk -> {:halt, {:error, {:unsupported_month, value}}}
+        case Rule.month_from_text(value) do
+          {:ok, month} -> {:cont, {:ok, acc ++ [month]}}
+          :error -> {:halt, {:error, {:unsupported_month, value}}}
         end
       end)
     end

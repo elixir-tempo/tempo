@@ -210,8 +210,9 @@ defmodule Tempo.RRule.RscaleTest do
       end
     end
 
-    test "a leap month is not read yet" do
-      assert {:error, _reason} =
+    test "a leap month is read, where it was an error" do
+      # `test/tempo/rrule/leap_month_test.exs` measures it.
+      assert {:ok, _rule} =
                RRule.parse("RSCALE=HEBREW;FREQ=YEARLY;BYMONTH=5L", from: ~o"2026-04-02")
     end
   end
