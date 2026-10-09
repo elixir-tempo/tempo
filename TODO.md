@@ -22,7 +22,7 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Release and housekeeping
 
-* [ ] **Two implementations of a constraint remain** — `Tempo.select/2` still places a fraction of a second (`~o"T10H30M15.5S"`), a group (`~o"2G3MU"`) and the two ends of a span (`~o"T09/T17"`) on its period by the merge (`merge_constraint/2` in `lib/tempo/select.ex`), none of which a selection can be written with, and a time under a week is on the week's first date by a constraint and on each of its days by a selection. To do, for the merge to go: each through the resolver.
+* [ ] **Two implementations of a constraint remain** — `Tempo.select/2` still places a fraction of a second (`~o"T10H30M15.5S"`), a group (`~o"2G3MU"`), the two ends of a span (`~o"T09/T17"`) and a week of a month with a day or a time of it (`~o"2W3K"`) on its period by the merge (`merge_constraint/2` in `lib/tempo/select.ex`). None of the first three can be written as a selection, so no shape is answered by both and the two cannot disagree. A time under a week, which this item said the two read differently, is the week's first date at that time by a constraint and by a selection alike (checked 2026-10-09). To do, for the merge to go: each through the resolver, which counts no fraction and no group today. Whether that is worth doing before 2.0 is put to the user (2026-10-09, with a recommendation to defer it).
 
 * [ ] **Livebooks install 2.0 at the release** — `getting-started`, `tempo_tour`, `scheduling-workbook` and `uncertain-dates-workbook` install `{:ex_tempo, "~> 1.6"}` and the Melbourne deck `~> 1.6.3`, while their code uses the 2.0 names: at the 2.0.0 release each installs `~> 2.0`, as `everyday-holidays` already does.
 
