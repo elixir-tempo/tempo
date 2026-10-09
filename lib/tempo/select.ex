@@ -633,12 +633,26 @@ defmodule Tempo.Select do
       {:ok,
        days
        |> IntervalSet.walk()
-       |> Stream.reject(&holiday?(&1, except))
+       |> Stream.transform(0, &kept_or_passed(&1, &2, except))
        |> IntervalSet.from_stream()}
     else
       nil -> {:ok, days}
       {:error, _reason} = error -> error
     end
+  end
+
+  # A day no holiday falls on is kept, and one a holiday falls on is passed.
+  # The walk ends where more days in a row are passed than a step to the
+  # next workday passes (`Tempo.next_workday/2` is an error there): holidays
+  # that hold every day from some day on, as a span with no end does, were
+  # walked for ever, and what asked for the next workday was never answered.
+  @most_days_off_in_a_row Tempo.Limit.days_off_in_a_row()
+
+  defp kept_or_passed(_day, passed, _except) when passed > @most_days_off_in_a_row,
+    do: {:halt, passed}
+
+  defp kept_or_passed(day, passed, except) do
+    if holiday?(day, except), do: {[], passed + 1}, else: {[day], 0}
   end
 
   defp holiday?(day, except) do

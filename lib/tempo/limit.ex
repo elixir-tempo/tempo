@@ -32,4 +32,13 @@ defmodule Tempo.Limit do
   @doc false
   @spec values_at_once() :: unquote(@values_at_once)
   def values_at_once, do: @values_at_once
+
+  # The most days off in a row that a search for a workday passes before it
+  # gives up, so that holidays with no end cannot hold it for ever: a step
+  # to the next workday is an error past them, and a walk of workdays ends.
+  @days_off_in_a_row 1_000
+
+  @doc false
+  @spec days_off_in_a_row() :: unquote(@days_off_in_a_row)
+  def days_off_in_a_row, do: @days_off_in_a_row
 end

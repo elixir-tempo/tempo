@@ -124,5 +124,56 @@ defmodule Tempo.WorkdaysTest do
       assert set |> IntervalSet.walk() |> Enum.take(3) |> Enum.map(&Tempo.to_iso8601!/1) ==
                ["2027Y4M23D/24D", "2027Y4M27D/28D", "2027Y4M28D/29D"]
     end
+
+    # The weekdays, Monday to Friday, from one date up to another, as `Date`
+    # has them.
+    defp weekdays(%Date{} = from, %Date{} = before) do
+      from
+      |> Date.range(Date.add(before, -1))
+      |> Enum.filter(&(Date.day_of_week(&1) in 1..5))
+      |> Enum.map(&Tempo.to_iso8601!(Tempo.to_interval!(Tempo.from_elixir(&1))))
+    end
+
+    defp walked(base, workdays, count) do
+      {:ok, set} = Tempo.select(base, workdays)
+      set |> IntervalSet.walk() |> Enum.take(count) |> Enum.map(&Tempo.to_iso8601!/1)
+    end
+
+    test "an open-ended span with holidays that have no end is the error the next workday is" do
+      closed = Tempo.workdays(:AU, except: ~o"2027-04-28/..")
+
+      assert {:error, %Tempo.IntervalEndpointsError{}} =
+               Tempo.next_workday(~o"2027-04-27", closed)
+
+      assert {:error, %Tempo.IntervalEndpointsError{}} = Tempo.select(~o"2027-04-23/..", closed)
+    end
+
+    test "an open-ended span ends where a recurrence's spans leave no day between them" do
+      # An ISO 8601 recurrence's occurrences are each a cadence long: a year
+      # from 25 December, and then the next. The walk was asked each day
+      # after it for ever, so nothing that took more days than the four
+      # before it was answered.
+      every_day = Tempo.workdays(:US, except: ~o"R/2026-12-25/P1Y")
+
+      assert walked(~o"2026-12-21/..", every_day, 10) == weekdays(~D[2026-12-21], ~D[2026-12-25])
+    end
+
+    test "an open-ended span goes on after holidays of fewer days than a step passes" do
+      # A year of holidays is 261 working days: the walk passes them.
+      year_off = Tempo.workdays(:AU, except: ~o"2027-04-28/2028-04-28")
+
+      assert walked(~o"2027-04-23/..", year_off, 6) ==
+               weekdays(~D[2027-04-23], ~D[2027-04-28]) ++
+                 weekdays(~D[2028-04-28], ~D[2028-05-03])
+    end
+
+    test "an open-ended span ends at holidays of more days than a step passes" do
+      # As `Tempo.next_workday/2` is an error for more than a thousand days
+      # off in a row, the walk ends at them.
+      years_off = Tempo.workdays(:AU, except: ~o"2027-04-28/2032-01-01")
+
+      assert {:error, %ArgumentError{}} = Tempo.next_workday(~o"2027-04-27", years_off)
+      assert walked(~o"2027-04-23/..", years_off, 6) == weekdays(~D[2027-04-23], ~D[2027-04-28])
+    end
   end
 end

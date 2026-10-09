@@ -14928,7 +14928,7 @@ defmodule Tempo do
 
   # The most days off in a row a step passes before it gives up, so a
   # holiday set that never ends cannot hold it forever.
-  @most_days_off_in_a_row 1_000
+  @most_days_off_in_a_row Tempo.Limit.days_off_in_a_row()
 
   # The first workday `step` days on from `tempo` (a step of -1 goes back).
   defp workday_after(tempo, _step, _days_off, _function, run)
