@@ -51,18 +51,20 @@ defimpl Enumerable, for: Tempo.Interval do
                    elem(hd(tl(endpoint.time)), 0) == :season
 
   @impl Enumerable
-  def count(%Tempo.Interval{from: from, to: to} = interval) when season?(from) or season?(to),
+  def count(%Tempo.Interval{} = interval), do: interval |> as_it_spans() |> count_of()
+
+  defp count_of(%Tempo.Interval{from: from, to: to} = interval) when season?(from) or season?(to),
     do: raise(season_error(interval))
 
-  def count(%Tempo.Interval{recurrence: recurrence}) when recurrence != 1 do
+  defp count_of(%Tempo.Interval{recurrence: recurrence}) when recurrence != 1 do
     {:error, __MODULE__}
   end
 
   # One occurrence that has a rule is a recurrence still: the occurrence is
   # the one its rule selects, and not the span from its start.
-  def count(%Tempo.Interval{repeat_rule: %Tempo{}}), do: {:error, __MODULE__}
+  defp count_of(%Tempo.Interval{repeat_rule: %Tempo{}}), do: {:error, __MODULE__}
 
-  def count(%Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to} = interval) do
+  defp count_of(%Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to} = interval) do
     case stepped_count(interval, from, to) do
       {n, _from, _unit} when is_integer(n) -> {:ok, max(n, 0)}
       :not_supported -> {:error, __MODULE__}
@@ -71,28 +73,31 @@ defimpl Enumerable, for: Tempo.Interval do
 
   # An interval with no end has no count, and the walk `Enum.count/1` falls
   # back to would never end.
-  def count(%Tempo.Interval{from: %Tempo{}, to: to, duration: nil} = interval)
-      when to in [nil, :undefined] do
+  defp count_of(%Tempo.Interval{from: %Tempo{}, to: to, duration: nil} = interval)
+       when to in [nil, :undefined] do
     raise endless_error(interval, "Enum.count/1")
   end
 
-  def count(_interval), do: {:error, __MODULE__}
+  defp count_of(_interval), do: {:error, __MODULE__}
 
   @impl Enumerable
-  def member?(%Tempo.Interval{from: from, to: to} = interval, _element)
-      when season?(from) or season?(to),
-      do: raise(season_error(interval))
+  def member?(%Tempo.Interval{} = interval, element),
+    do: interval |> as_it_spans() |> member_of?(element)
 
-  def member?(%Tempo.Interval{recurrence: recurrence}, _element) when recurrence != 1 do
+  defp member_of?(%Tempo.Interval{from: from, to: to} = interval, _element)
+       when season?(from) or season?(to),
+       do: raise(season_error(interval))
+
+  defp member_of?(%Tempo.Interval{recurrence: recurrence}, _element) when recurrence != 1 do
     {:error, __MODULE__}
   end
 
-  def member?(%Tempo.Interval{repeat_rule: %Tempo{}}, _element), do: {:error, __MODULE__}
+  defp member_of?(%Tempo.Interval{repeat_rule: %Tempo{}}, _element), do: {:error, __MODULE__}
 
-  def member?(
-        %Tempo.Interval{from: %Tempo{calendar: calendar} = from, to: %Tempo{} = to} = interval,
-        %Tempo{} = element
-      ) do
+  defp member_of?(
+         %Tempo.Interval{from: %Tempo{calendar: calendar} = from, to: %Tempo{} = to} = interval,
+         %Tempo{} = element
+       ) do
     unit = iteration_unit(interval, from)
     from = Steps.counted_from(from, unit, calendar)
 
@@ -107,12 +112,15 @@ defimpl Enumerable, for: Tempo.Interval do
 
   # The walk `Enum.member?/2` falls back to ends only when it finds the
   # element, and an interval with no end is walked for ever.
-  def member?(%Tempo.Interval{from: %Tempo{} = from, to: to, duration: nil} = interval, element)
-      when to in [nil, :undefined] do
+  defp member_of?(
+         %Tempo.Interval{from: %Tempo{} = from, to: to, duration: nil} = interval,
+         element
+       )
+       when to in [nil, :undefined] do
     endless_member?(interval, from, element)
   end
 
-  def member?(_interval, _element), do: {:error, __MODULE__}
+  defp member_of?(_interval, _element), do: {:error, __MODULE__}
 
   # A walk yields dated values from a dated start, one after another in
   # time. So what is no such value is no member, and one that is has its
@@ -194,18 +202,20 @@ defimpl Enumerable, for: Tempo.Interval do
     do: Steps.whole_units?(time) and Keyword.has_key?(time, :year)
 
   @impl Enumerable
-  def slice(%Tempo.Interval{from: from, to: to} = interval) when season?(from) or season?(to),
+  def slice(%Tempo.Interval{} = interval), do: interval |> as_it_spans() |> slice_of()
+
+  defp slice_of(%Tempo.Interval{from: from, to: to} = interval) when season?(from) or season?(to),
     do: raise(season_error(interval))
 
-  def slice(%Tempo.Interval{recurrence: recurrence}) when recurrence != 1 do
+  defp slice_of(%Tempo.Interval{recurrence: recurrence}) when recurrence != 1 do
     {:error, __MODULE__}
   end
 
-  def slice(%Tempo.Interval{repeat_rule: %Tempo{}}), do: {:error, __MODULE__}
+  defp slice_of(%Tempo.Interval{repeat_rule: %Tempo{}}), do: {:error, __MODULE__}
 
-  def slice(
-        %Tempo.Interval{from: %Tempo{calendar: calendar} = from, to: %Tempo{} = to} = interval
-      ) do
+  defp slice_of(
+         %Tempo.Interval{from: %Tempo{calendar: calendar} = from, to: %Tempo{} = to} = interval
+       ) do
     case stepped_count(interval, from, to) do
       {n, from, unit} when is_integer(n) and n >= 0 -> {:ok, n, slicer(from, unit, calendar)}
       _not_counted -> {:error, __MODULE__}
@@ -217,12 +227,12 @@ defimpl Enumerable, for: Tempo.Interval do
   # needs the start from one that needs the last value, which an interval
   # with no end never reaches. So it is refused, as a lazy interval set
   # refuses it, where the walk they fall back to would never end.
-  def slice(%Tempo.Interval{from: %Tempo{}, to: to, duration: nil} = interval)
-      when to in [nil, :undefined] do
+  defp slice_of(%Tempo.Interval{from: %Tempo{}, to: to, duration: nil} = interval)
+       when to in [nil, :undefined] do
     raise endless_slice_error(interval)
   end
 
-  def slice(_interval), do: {:error, __MODULE__}
+  defp slice_of(_interval), do: {:error, __MODULE__}
 
   # The steps in `[from, to)` in closed form, with the start filled to the
   # unit they are counted in. Ends that are not in the order of their units
@@ -268,11 +278,14 @@ defimpl Enumerable, for: Tempo.Interval do
   end
 
   @impl Enumerable
-  def reduce(%Tempo.Interval{from: from, to: to} = interval, _acc, _fun)
-      when season?(from) or season?(to),
-      do: raise(season_error(interval))
+  def reduce(%Tempo.Interval{} = interval, acc, fun),
+    do: interval |> as_it_spans() |> reduce_as_written(acc, fun)
 
-  def reduce(%Tempo.Interval{} = interval, acc, fun) do
+  defp reduce_as_written(%Tempo.Interval{from: from, to: to} = interval, _acc, _fun)
+       when season?(from) or season?(to),
+       do: raise(season_error(interval))
+
+  defp reduce_as_written(%Tempo.Interval{} = interval, acc, fun) do
     if occurrences?(interval),
       do: reduce_occurrences(interval, acc, fun),
       else: reduce_span(interval, acc, fun)
@@ -280,6 +293,28 @@ defimpl Enumerable, for: Tempo.Interval do
 
   defp season_error(interval),
     do: Tempo.AbstractSeasonError.exception(value: interval, operation: "walk")
+
+  # An end that holds a group (`2026Y1Q/2026Y2Q`, a quarter at each end)
+  # names several months where a walk has one to start from and one to end
+  # at. At an end of an interval a group is where its span starts, as
+  # `Tempo.to_interval/1` reads it, so the interval is counted, sliced and
+  # walked as the span it converts to: January to April. It raised, a step
+  # having no one value to count from.
+  defp as_it_spans(%Tempo.Interval{from: from, to: to} = interval) do
+    if group?(from) or group?(to), do: converted(interval), else: interval
+  end
+
+  defp converted(interval) do
+    case Tempo.to_interval(interval) do
+      {:ok, %Tempo.Interval{} = span} -> span
+      _several_spans_or_an_error -> interval
+    end
+  end
+
+  defp group?(%Tempo{time: time}) when is_list(time),
+    do: Enum.any?(time, &match?({_unit, {:group, _values}}, &1))
+
+  defp group?(_open_or_none), do: false
 
   # A recurring interval, or one with an end that holds a selection
   # (`2026Y6ML2KN/P1D`, a day from each Tuesday of June), names several spans

@@ -447,6 +447,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Enum` walks, counts and slices an interval with a quarter, a half or another group at an end (`~o"2026Y1Q/2026Y2Q"`) as the span it converts to, January to April. It raised a `Tempo.ConversionError`, where every other operation read it as that span.
+
 * `Tempo.explain/1` tells an end of an interval that holds a quarter, a half or another group by the months it names: `~o"2026Y1Q/2026Y2Q"` is "From: January to March 2026. To: April to June 2026", where it was "From: 2026. To: 2026".
 
 * `Tempo.from_elixir/2` returns a `Tempo.ConversionError` for a value that is none of the types it converts (a `nil`, a string, a map), where it raised a `FunctionClauseError`.
