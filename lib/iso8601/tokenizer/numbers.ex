@@ -473,6 +473,13 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
     form_number([-integer | rest])
   end
 
+  # A sign before a number formed with its fraction already (`-1985.5Y`).
+  # It was left beside the number, as the code of its character, and the two
+  # were read as a set of two values: `-0.5Y` was `{45, 0.5}Y`.
+  def form_number([?-, number | rest]) when is_float(number) do
+    form_number([-number | rest])
+  end
+
   # Leading `+` of an ISO 8601-2 expanded year: positive, so drop the
   # sign and keep the integer as-is.
   def form_number([?+, integer | rest]) when is_integer(integer) do

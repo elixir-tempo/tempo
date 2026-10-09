@@ -872,8 +872,7 @@ defmodule Tempo.Validation do
              (is_number(day) or is_struct(day, Range) or is_list(day)) do
     with [{:year, year}, {:month, month}] <- resolve([{:year, year}, {:month, month}], calendar),
          {:ok, days} <- days_of_month(calendar, year, month),
-         {:ok, day} <-
-           conform(day, days, unit: :day, year: year, month: month, calendar: calendar) do
+         {:ok, day} <- conform_day(day, days, year, month, calendar) do
       prepend_year_month(year, month, resolve([{:day, day} | rest], calendar))
     end
   end
@@ -973,9 +972,12 @@ defmodule Tempo.Validation do
   # 2 July, and the day it lands on is one more than the days elapsed.
   # TODO Support negative time fractions
 
-  def resolve([{:year, year}], calendar) when is_float(year) and year > 0 do
+  # A year before 0 is the year of its whole number, and its fraction so
+  # much of that year elapsed, as a later year's is: `-1985.5Y` is half way
+  # through the year -1985.
+  def resolve([{:year, year}], calendar) when is_float(year) do
     int_year = trunc(year)
-    fraction_of_year = year - int_year
+    fraction_of_year = abs(year - int_year)
     days_in_year = calendar.days_in_year(int_year)
 
     if fraction_of_year == 0 do
@@ -1016,12 +1018,12 @@ defmodule Tempo.Validation do
     end
   end
 
-  def resolve([{:day, day}], calendar) when is_float(day) and day > 0 do
+  def resolve([{:day, day}], calendar) when is_float(day) and day >= 0 do
     int_day = trunc(day)
     fraction_of_day = day - int_day
 
     if fraction_of_day == 0 do
-      [{:day, int_day}]
+      resolve([{:day, int_day}], calendar)
     else
       hours = Math.round(@hours_per_day * fraction_of_day, @rounding_precision)
       hours = if trunc(hours) == hours, do: trunc(hours), else: hours
@@ -1040,7 +1042,7 @@ defmodule Tempo.Validation do
   # The whole hour and the whole minute are asked of their units as one
   # written with no fraction is: `T25.5H` was read as 25:30 and `T10H61.5M`
   # as 10:61:30, where `T25H` and `T10H61M` are refused.
-  def resolve([{:hour, hour}], calendar) when is_float(hour) and hour > 0 do
+  def resolve([{:hour, hour}], calendar) when is_float(hour) and hour >= 0 do
     int_hour = trunc(hour)
     fraction_of_hour = hour - int_hour
 
@@ -1052,7 +1054,7 @@ defmodule Tempo.Validation do
     end
   end
 
-  def resolve([{:minute, minute}], calendar) when is_float(minute) do
+  def resolve([{:minute, minute}], calendar) when is_float(minute) and minute >= 0 do
     int_minute = trunc(minute)
     fraction_of_minute = minute - int_minute
 
@@ -1238,6 +1240,14 @@ defmodule Tempo.Validation do
   # year to count it in, is none of those, and was left in the value as a
   # number with a fraction, which no operation reads and its own text does
   # not read back.
+  # A unit below zero is counted back from the end of what holds it (`-1M`
+  # is the last month), and a fraction of one is no reading of that. A year
+  # below zero is a year, and is read above.
+  def resolve([{unit, fraction}], _calendar)
+      when is_float(fraction) and fraction < 0 and unit != :year do
+    {:error, negative_fraction_error(unit, fraction)}
+  end
+
   def resolve([{unit, fraction}], _calendar)
       when is_float(fraction) and
              unit in [:month, :week, :calendar_week, :day_of_week, :day_of_year] do
@@ -1594,6 +1604,36 @@ defmodule Tempo.Validation do
   # counts it there (`~o"2M-1D"` on 2027 is 28 February). It is still
   # checked against the longest the month can be: February has no thirtieth
   # day from its end.
+  # A fraction of a day is so much of that day elapsed (`30.5D` is noon on
+  # the 30th), so the day held to its month is its whole part. The number
+  # with its fraction was held to the month's days, so a fraction of the
+  # month's last day was refused as past it, and so was a fraction of a
+  # month that lands on its last day (`1985Y12.99M`).
+  defp conform_day(day, _days, _year, _month, _calendar) when is_float(day) and day < 0,
+    do: {:error, negative_fraction_error(:day, day)}
+
+  defp conform_day(day, days, year, month, calendar) when is_float(day) do
+    options = [unit: :day, year: year, month: month, calendar: calendar]
+    with {:ok, _whole_day} <- conform(trunc(day), days, options), do: {:ok, day}
+  end
+
+  defp conform_day(day, days, year, month, calendar),
+    do: conform(day, days, unit: :day, year: year, month: month, calendar: calendar)
+
+  defp negative_fraction_error(unit, fraction) do
+    ParseError.exception(
+      reason:
+        "A fraction of #{counted_back(unit)} counted from the end is not read: " <>
+          "#{inspect(fraction)}. A unit below zero is counted back from the end of what holds " <>
+          "it, and a fraction is so much of a unit elapsed"
+    )
+  end
+
+  defp counted_back(:hour), do: "an hour"
+  defp counted_back(:day_of_year), do: "a day of the year"
+  defp counted_back(:day_of_week), do: "a day of the week"
+  defp counted_back(unit), do: "a #{unit}"
+
   defp yearless_month_and_day(month, day, rest, calendar) do
     case {max_day_in_month(calendar, month), counted_in_any_year?(day, month, calendar)} do
       {{:ok, max_day}, true} ->

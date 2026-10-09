@@ -447,6 +447,10 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A fraction of the last day of a month is read (`1985Y6M30.5D` is noon on 30 June), and so is a fraction of a month that lands on it (`1985Y12.99M`), where each was a `Tempo.InvalidDateError`.
+
+* A fraction of a year before 0 is read (`-1985.5Y` is half way through the year -1985), and a fraction of any other unit below zero is a `Tempo.ParseError`. A sign before a fraction was read as a set of its character and the number (`-0.5Y` was `{45, 0.5}Y`), and `T10H-30.5M` as 10:30:30.
+
 * `Tempo.select/2` by a list of indices that holds what is no index (`[1, ~o"T9H/T12H"]`, `[1, 3..5]`) is an `ArgumentError`. What was no index was passed over, so the list selected by its indices alone.
 
 * `Enum` walks, counts and slices an interval with a quarter, a half or another group at an end (`~o"2026Y1Q/2026Y2Q"`) as the span it converts to, January to April. It raised a `Tempo.ConversionError`, where every other operation read it as that span.
