@@ -174,6 +174,123 @@ defmodule Tempo.Network.SolverTest do
       assert trace.prose =~ "immediately precedes"
     end
 
+    # The measure is the years each relation's definition gives, worked out
+    # by hand: `a` is 1200 to 1300, `b` lasts at least ten years and has no
+    # date of its own, so each of its bounds comes from `a` through the
+    # relation. A trace tells that derivation, and the last of its steps is
+    # the boundary asked for.
+    defp related(relation) do
+      Network.new()
+      |> Network.add_period(:a, from: 1200, to: 1300)
+      |> Network.add_period(:b, duration: {:at_least, 10})
+      |> Network.add_relation(relation, :a, :b)
+    end
+
+    defp traced_year(network, boundary, bound) do
+      case Solver.trace(network, boundary, bound: bound) do
+        {:ok, trace} -> TimePeriod.year(trace.value)
+        {:error, :unbounded} -> :unbounded
+      end
+    end
+
+    test "tells a latest bound in the order it is derived, back from the bound that gives it" do
+      # It was told as an earliest one is: each constraint beside the
+      # boundary it starts from, the bound `a` gives left out, and the
+      # boundary asked for never reached.
+      {:ok, trace} = Solver.trace(related(:includes), {:start, :b}, bound: :latest)
+
+      assert Enum.map(trace.steps, &{&1.boundary, TimePeriod.year(&1.value)}) ==
+               [{{:end, :a}, 1300}, {{:end, :b}, 1300}, {{:start, :b}, 1290}]
+
+      assert trace.prose ==
+               "a ends no later than 1300 ⇒ the end of a ≤ 1300; " <>
+                 "a includes b ⇒ the end of b ≤ 1300; " <>
+                 "b lasts at least 10 years ⇒ the start of b ≤ 1290"
+
+      {:ok, earliest} = Solver.trace(related(:includes), {:end, :b})
+
+      assert Enum.map(earliest.steps, &{&1.boundary, TimePeriod.year(&1.value)}) ==
+               [{{:start, :a}, 1200}, {{:start, :b}, 1200}, {{:end, :b}, 1210}]
+    end
+
+    test "gives each bound the year the relation's definition gives" do
+      # {earliest start, latest start, earliest end, latest end} of `b`.
+      for {relation, expected} <- [
+            includes: {1200, 1290, 1210, 1300},
+            equals: {1200, 1200, 1300, 1300},
+            immediately_precedes: {1300, 1300, 1310, :unbounded},
+            immediately_follows: {:unbounded, 1190, 1200, 1200},
+            before: {1301, :unbounded, 1311, :unbounded},
+            after: {:unbounded, 1189, :unbounded, 1199},
+            synchronous_start: {1200, 1200, 1210, :unbounded},
+            synchronous_end: {:unbounded, 1290, 1300, 1300}
+          ] do
+        network = related(relation)
+
+        assert {relation,
+                {traced_year(network, {:start, :b}, :earliest),
+                 traced_year(network, {:start, :b}, :latest),
+                 traced_year(network, {:end, :b}, :earliest),
+                 traced_year(network, {:end, :b}, :latest)}} == {relation, expected}
+      end
+    end
+
+    test "words every relation, and ends at the boundary it traces with the bound it gives" do
+      # Five relations had no wording, and a trace through one raised.
+      relations = [
+        :contemporary,
+        :includes,
+        :included_in,
+        :overlaps,
+        :overlapped_by,
+        :starts_during,
+        :includes_start,
+        :ends_during,
+        :includes_end,
+        :before,
+        :after,
+        :immediately_precedes,
+        :immediately_follows,
+        :synchronous_start,
+        :synchronous_end,
+        :starts,
+        :started_by,
+        :finishes,
+        :finished_by,
+        :strictly_contemporary,
+        :equals,
+        {:boundary, :end, :at_or_before, :start},
+        {:boundary, :start, :after, :end},
+        {:delay, :end, :start, :at_least, ~o"P5Y"}
+      ]
+
+      traces =
+        for relation <- relations,
+            boundary <- [{:start, :b}, {:end, :b}],
+            bound <- [:earliest, :latest],
+            {:ok, trace} <- [Solver.trace(related(relation), boundary, bound: bound)] do
+          assert {relation, List.last(trace.steps).boundary} == {relation, boundary}
+          assert {relation, List.last(trace.steps).value} == {relation, trace.value}
+
+          # The derivation starts at a bound `a` is given, and each of its
+          # steps bounds another boundary.
+          assert {relation, elem(hd(trace.steps).boundary, 1)} == {relation, :a}
+          assert Enum.uniq_by(trace.steps, & &1.boundary) == trace.steps
+
+          assert trace.prose =~ " a "
+          assert trace.prose =~ " b"
+          {relation, trace}
+        end
+
+      # Every relation bounds `b` at one end at least.
+      assert traces |> Enum.map(&elem(&1, 0)) |> Enum.uniq() == relations
+
+      {:ok, boundary} =
+        Solver.trace(related({:boundary, :end, :at_or_before, :start}), {:start, :b})
+
+      assert boundary.prose =~ "a ends before or at the start of b"
+    end
+
     test "an unbounded boundary returns {:error, :unbounded}" do
       assert {:error, :unbounded} =
                Network.new()

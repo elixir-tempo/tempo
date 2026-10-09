@@ -724,21 +724,42 @@ defmodule Tempo.Network.Solver do
   end
 
   # Each path hop becomes a step naming the constraint that justifies it
-  # and the bound derived at the reached boundary. The origin carries no
+  # and the bound derived at the boundary it bounds. The origin carries no
   # bound of its own, so it never appears as a step.
+  #
+  # An earliest bound is derived out from the origin, each hop bounding the
+  # boundary it reaches. A latest bound is the path from the boundary to the
+  # origin, and is derived back along it: each hop bounds the boundary it
+  # leaves, from the one it reaches, starting with the hop that reaches the
+  # origin. It was told as an earliest one is, so each constraint was beside
+  # the boundary it starts from, the bound the origin gives was left out and
+  # the traced boundary itself was not reached.
   defp build_steps(path, distances, provenance, bound, normalized) do
     path
     |> Enum.chunk_every(2, 1, :discard)
-    |> Enum.reject(fn [_prev, node] -> node == :origin end)
-    |> Enum.reduce_while({:ok, []}, fn [prev, node], {:ok, steps} ->
-      {_weight, source} = Map.fetch!(provenance, {prev, node})
+    |> derived_in_order(bound)
+    |> Enum.reduce_while({:ok, []}, fn {hop, bounded}, {:ok, steps} ->
+      {_weight, source} = Map.fetch!(provenance, hop)
 
-      case bound_value(distances, node, bound, normalized) do
-        {:ok, value} -> {:cont, {:ok, [%{boundary: node, value: value, source: source} | steps]}}
-        {:error, _reason} = error -> {:halt, error}
+      case bound_value(distances, bounded, bound, normalized) do
+        {:ok, value} ->
+          {:cont, {:ok, [%{boundary: bounded, value: value, source: source} | steps]}}
+
+        {:error, _reason} = error ->
+          {:halt, error}
       end
     end)
     |> in_order()
+  end
+
+  # Each hop of a path with the boundary it bounds, in the order the bounds
+  # are derived.
+  defp derived_in_order(hops, :earliest) do
+    for [prev, node] <- hops, node != :origin, do: {{prev, node}, node}
+  end
+
+  defp derived_in_order(hops, :latest) do
+    for [prev, node] <- Enum.reverse(hops), prev != :origin, do: {{prev, node}, prev}
   end
 
   defp in_order({:ok, steps}), do: {:ok, Enum.reverse(steps)}
@@ -804,8 +825,26 @@ defmodule Tempo.Network.Solver do
   defp relation_phrase(:immediately_follows), do: "immediately follows"
   defp relation_phrase(:synchronous_start), do: "shares a start with"
   defp relation_phrase(:synchronous_end), do: "shares an end with"
+  defp relation_phrase(:starts), do: "starts with, and ends no later than,"
+  defp relation_phrase(:started_by), do: "starts with, and ends no earlier than,"
+  defp relation_phrase(:finishes), do: "ends with, and starts no earlier than,"
+  defp relation_phrase(:finished_by), do: "ends with, and starts no later than,"
+  defp relation_phrase(:strictly_contemporary), do: "shares more than a boundary with"
   defp relation_phrase(:equals), do: "equals"
   defp relation_phrase({:delay, _, _, _, _}), do: "is offset from"
+
+  # One boundary of each period compared: "ends before or at the start of".
+  defp relation_phrase({:boundary, edge, comparison, other_edge}),
+    do: "#{edge_verb(edge)} #{boundary_words(comparison)} the #{other_edge} of"
+
+  defp edge_verb(:start), do: "starts"
+  defp edge_verb(:end), do: "ends"
+
+  defp boundary_words(:before), do: "before"
+  defp boundary_words(:at_or_before), do: "before or at"
+  defp boundary_words(:coincident), do: "at"
+  defp boundary_words(:at_or_after), do: "at or after"
+  defp boundary_words(:after), do: "after"
 
   defp boundary_phrase({:start, id}, network), do: "the start of #{label(network, id)}"
   defp boundary_phrase({:end, id}, network), do: "the end of #{label(network, id)}"
