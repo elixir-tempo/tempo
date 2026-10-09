@@ -55,7 +55,7 @@ RFC 5545 defines each BY-rule as either **EXPAND** (generates additional candida
 
 * `BYDAY`'s role depends on `FREQ` and whether `BYWEEKNO` or `BYMONTH` is also present — Tempo follows the RFC's §3.3.10 decision table.
 
-* `BYHOUR`/`BYMINUTE`/`BYSECOND` expand when `FREQ` is coarser than the unit; limit when finer.
+* `BYHOUR`/`BYMINUTE`/`BYSECOND` expand when `FREQ` is coarser than the unit; limit when finer. §3.3.10 has them ignored where DTSTART is a `DATE`, so `Tempo.ICal.parse/2` reads an all-day event's `FREQ=DAILY;BYHOUR=9` as `FREQ=DAILY`, each occurrence the whole day. `Tempo.RRule.parse/2` is given a Tempo value and no `DATE`, and from a date it picks the hour of each day.
 
 * `BYSETPOS` is always applied last as a LIMIT across the candidate set.
 

@@ -445,6 +445,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.ICal.parse/2` ignores `BYHOUR`, `BYMINUTE` and `BYSECOND` in the rule of an all-day event, as RFC 5545 §3.3.10 has it. `FREQ=DAILY;BYHOUR=9` from a `DATE` was the day from 09:00 to 09:00 of the next, and two hours named made two occurrences of each day.
+
 * `Tempo.select/2` of an open-ended span by workdays ends where more than a thousand working days in a row are holidays, as `Tempo.next_workday/2` is an error there. Holidays that leave no day between them (`Tempo.workdays(:US, except: ~o"R/2026-12-25/P1Y")`, each occurrence a year long) were walked for ever, so taking more days than there were never returned.
 
 * A reader handed what is no string (a `nil`, a number, a map) returns an error, where it raised a `FunctionClauseError`: `Tempo.from_iso8601/2`, `Tempo.parse/2` and the `Tempo.parse_*` functions return a `Tempo.ParseError`, `Tempo.Cron.parse/2` a `Tempo.CronError`, and `Tempo.RRule.parse/2`, `Tempo.ICal.parse/2` and `Tempo.JSCalendar.parse/2` `{:error, {:not_a_string, value}}`. The raising form of each raises that error.

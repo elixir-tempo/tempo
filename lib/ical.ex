@@ -45,7 +45,10 @@ if Code.ensure_loaded?(ICal) do
     | Property  | Status                                            |
     | --------- | ------------------------------------------------- |
     | `RRULE`   | Fully supported — every `BY*` part, `WKST`, and   |
-    |           | `BYSETPOS` flow through the interpreter.          |
+    |           | `BYSETPOS` flow through the interpreter. On an    |
+    |           | all-day event (`DTSTART` a `DATE`) `BYHOUR`,      |
+    |           | `BYMINUTE` and `BYSECOND` are ignored, as         |
+    |           | §3.3.10 has it: the event recurs on its days.     |
     | `RDATE`   | Supported — extra occurrences with the event's    |
     |           | own span.                                         |
     | `EXDATE`  | Supported — start-moment match removes the        |
@@ -566,12 +569,24 @@ if Code.ensure_loaded?(ICal) do
                "window whose occurrences you want."
          )}
       else
+        rule = on_the_days_of_an_all_day_event(rule, event.dtstart)
+
         with {:ok, base} <- single_event_to_interval(event),
              {:ok, occurrences} <- Expander.expand(rule, base.from, expander_opts(opts, base)) do
           {:ok, combine_occurrences(occurrences, event, base)}
         end
       end
     end
+
+    # RFC 5545 §3.3.10 has a rule's BYSECOND, BYMINUTE and BYHOUR not given
+    # where DTSTART is a DATE, and ignored where they are: an event of whole
+    # days recurs on days. They were read, so `FREQ=DAILY;BYHOUR=9` from a
+    # date was the day from 09:00 to 09:00 of the next, and two hours named
+    # made two occurrences of each day.
+    defp on_the_days_of_an_all_day_event(%ICal.Recurrence{} = rule, %Date{}),
+      do: %{rule | by_hour: nil, by_minute: nil, by_second: nil}
+
+    defp on_the_days_of_an_all_day_event(%ICal.Recurrence{} = rule, _a_date_and_time), do: rule
 
     defp expander_opts(opts, base) do
       []

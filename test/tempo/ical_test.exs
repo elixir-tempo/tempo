@@ -6,6 +6,7 @@ defmodule Tempo.ICal.Test do
   alias Tempo.ICal
   alias Tempo.Interval
   alias Tempo.IntervalSet
+  alias Tempo.Matrix.Extent
 
   doctest Tempo.ICal
 
@@ -571,10 +572,112 @@ defmodule Tempo.ICal.Test do
     end
   end
 
+  describe "parse/2 — an all-day event's rule" do
+    # RFC 5545 §3.3.10 has BYSECOND, BYMINUTE and BYHOUR ignored where
+    # DTSTART is a DATE, and §3.6.1 has such an event a day long where it
+    # states no end. The measure is `Date` alone: each day the rule lists,
+    # from its midnight to the next.
+    @epoch ~N[0000-01-01 00:00:00]
+
+    defp all_day(lines) do
+      Enum.join(
+        [
+          "BEGIN:VCALENDAR",
+          "VERSION:2.0",
+          "PRODID:-//Test//EN",
+          "BEGIN:VEVENT",
+          "UID:all-day",
+          "DTSTAMP:20260101T000000Z"
+        ] ++ lines ++ ["END:VEVENT", "END:VCALENDAR", ""],
+        "\r\n"
+      )
+    end
+
+    defp spans(ics) do
+      {:ok, set} = ICal.parse(ics)
+      {:ok, members} = Extent.members(set)
+      Enum.map(members, fn %{spans: [span]} -> span end)
+    end
+
+    defp microseconds(%NaiveDateTime{} = moment),
+      do: NaiveDateTime.diff(moment, @epoch, :microsecond)
+
+    defp days(dates) do
+      for date <- dates do
+        {microseconds(NaiveDateTime.new!(date, ~T[00:00:00])),
+         microseconds(NaiveDateTime.new!(Date.add(date, 1), ~T[00:00:00]))}
+      end
+    end
+
+    test "recurs on its days, whatever times of day the rule names" do
+      for {rule, dates} <- [
+            {"FREQ=DAILY;BYHOUR=9", [~D[2026-01-31], ~D[2026-02-01], ~D[2026-02-02]]},
+            {"FREQ=DAILY;BYHOUR=9,15", [~D[2026-01-31], ~D[2026-02-01], ~D[2026-02-02]]},
+            {"FREQ=DAILY;BYMINUTE=30", [~D[2026-01-31], ~D[2026-02-01], ~D[2026-02-02]]},
+            {"FREQ=DAILY;BYSECOND=15", [~D[2026-01-31], ~D[2026-02-01], ~D[2026-02-02]]},
+            {"FREQ=DAILY;BYHOUR=9;BYMINUTE=30;BYSECOND=15",
+             [~D[2026-01-31], ~D[2026-02-01], ~D[2026-02-02]]},
+            # 31 January 2026 is a Saturday: the weekday is kept, and the hour is not.
+            {"FREQ=WEEKLY;BYDAY=SA;BYHOUR=9", [~D[2026-01-31], ~D[2026-02-07], ~D[2026-02-14]]},
+            {"FREQ=MONTHLY;BYMONTHDAY=31;BYHOUR=9",
+             [~D[2026-01-31], ~D[2026-03-31], ~D[2026-05-31]]}
+          ] do
+        ics = all_day(["DTSTART;VALUE=DATE:20260131", "RRULE:#{rule};COUNT=3"])
+
+        assert {rule, spans(ics)} == {rule, days(dates)}
+      end
+
+      assert Date.day_of_week(~D[2026-01-31]) == 6
+    end
+
+    test "is the rule without them" do
+      with_times =
+        all_day(["DTSTART;VALUE=DATE:20260131", "RRULE:FREQ=DAILY;BYHOUR=9,15;COUNT=5"])
+
+      without = all_day(["DTSTART;VALUE=DATE:20260131", "RRULE:FREQ=DAILY;COUNT=5"])
+
+      assert spans(with_times) == spans(without)
+    end
+
+    test "keeps the event's own end on each day" do
+      ics =
+        all_day([
+          "DTSTART;VALUE=DATE:20260131",
+          "DTEND;VALUE=DATE:20260202",
+          "RRULE:FREQ=WEEKLY;BYHOUR=9;COUNT=2"
+        ])
+
+      two_days = fn date ->
+        {microseconds(NaiveDateTime.new!(date, ~T[00:00:00])),
+         microseconds(NaiveDateTime.new!(Date.add(date, 2), ~T[00:00:00]))}
+      end
+
+      assert spans(ics) == [two_days.(~D[2026-01-31]), two_days.(~D[2026-02-07])]
+    end
+
+    test "leaves the times of day of an event that has one" do
+      # The hours named are after the start at 08:00, so each day has two.
+      ics = all_day(["DTSTART:20260131T080000", "RRULE:FREQ=DAILY;BYHOUR=9,15;COUNT=4"])
+
+      at = fn date, hour ->
+        from = NaiveDateTime.new!(date, Time.new!(hour, 0, 0))
+        {microseconds(from), microseconds(NaiveDateTime.add(from, 1, :second))}
+      end
+
+      assert spans(ics) ==
+               [
+                 at.(~D[2026-01-31], 9),
+                 at.(~D[2026-01-31], 15),
+                 at.(~D[2026-02-01], 9),
+                 at.(~D[2026-02-01], 15)
+               ]
+    end
+  end
+
   describe "parse/2 — edge cases" do
-    test "events with nil DTSTART are skipped silently" do
-      # Technically malformed per RFC 5545, but some exports
-      # include them. Skipping is less disruptive than erroring.
+    test "an event with no DTSTART is passed over, and the others are read" do
+      # RFC 5545 requires DTSTART of an event in a calendar with no METHOD,
+      # and some exports hold events without one: it has no place in time.
       ics = """
       BEGIN:VCALENDAR
       VERSION:2.0
@@ -586,11 +689,18 @@ defmodule Tempo.ICal.Test do
       DTEND:20220615T110000Z
       SUMMARY:Normal event
       END:VEVENT
+      BEGIN:VEVENT
+      UID:has-no-start
+      DTSTAMP:20220101T000000Z
+      SUMMARY:An event with no start
+      END:VEVENT
       END:VCALENDAR
       """
 
       {:ok, set} = ICal.parse(ics)
-      assert IntervalSet.count(set) == 1
+
+      assert [interval] = IntervalSet.members(set)
+      assert Interval.metadata(interval).summary == "Normal event"
     end
 
     test "malformed ics returns an empty result without raising" do
