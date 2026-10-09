@@ -209,6 +209,7 @@ defmodule Tempo.Matrix.Operations do
     [
       {"year/1", :parts, :deliberate, &Tempo.year/1},
       {"month/1", :parts, :deliberate, &Tempo.month/1},
+      {"season/1", :parts, :deliberate, &Tempo.season/1},
       {"week/1", :parts, :deliberate, &Tempo.week/1},
       {"day/1", :parts, :deliberate, &Tempo.day/1},
       {"hour/1", :parts, :deliberate, &Tempo.hour/1},

@@ -116,6 +116,20 @@ defmodule Tempo.SeasonTest do
       assert Tempo.trunc(~o"2026-21", :month) == ~o"2026-21"
     end
 
+    test "is read by Tempo.season/1, which is nil for what holds none" do
+      for season <- 21..24 do
+        assert Tempo.season(season(2026, season)) == season
+      end
+
+      assert Tempo.season(~o"2026-22?") == 22
+      assert Tempo.season(~o"2026-06") == nil
+      assert Tempo.season(~o"2026-25") == nil
+      assert Tempo.season(~o"2026-21/2026-23") == nil
+      assert Tempo.season(dated(~o"2026-21", :AU)) == nil
+      assert_raise ArgumentError, fn -> Tempo.season(~o"{2026-21,2026-23}") end
+      assert_raise ArgumentError, fn -> Tempo.season(:spring) end
+    end
+
     test "is not expanded where the sigil is compiled" do
       assert %Tempo{time: [year: 2026, season: 23]} = ~o"2026-23"
       assert %Interval{from: %Tempo{time: [year: 2026, season: 21]}} = ~o"2026-21/2026-23"

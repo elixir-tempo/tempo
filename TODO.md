@@ -62,6 +62,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Done
 
+* [x] **`Tempo.season/1`** — accepted 2026-10-09 (user): the season a value holds with no hemisphere, 21 to 24, beside `Tempo.month/1`, so nothing reaches into the struct to ask. 2026-10-09.
+
 * [x] **A leap month in a rule (`BYMONTH=5L`)** — RFC 7529 writes a leap month as the number of the month it follows and an `L`, and RFC 8984 as `"5L"`: `Tempo.RRule.parse/2`, `Tempo.JSCalendar` and a rule built as a struct read it (`{5, :leap}`), where it was an error. A year without the month is passed over, or with `SKIP` takes the month before it or after it, a day that month lacks being moved in its turn, and a yearly rule that starts in a leap month takes the leap month from its start. Measured by the dates RFC 7529 §4.3.3 lists and the Hebrew and Chinese calendars' own (`test/tempo/rrule/leap_month_test.exs`). Reported and not read: a leap month with no `RSCALE`, one in a calendar that has none, and `FORWARD` from one after a year's last month. 2026-10-09.
 
 * [x] **A location-independent season by the locale's hemisphere** — decided 2026-10-08 and 2026-10-09 (user, [plans/seasons-by-locale.md](plans/seasons-by-locale.md)). A season of 21 to 24 is kept as it is written (`~o"2026-21"` is `~o"2026Y21M"`), where it was the northern months wherever it was read, and is given its dates by `Tempo.in_territory/2`, by a `:territory` or a `:locale` where it is read, and by `Tempo.to_interval/2` and what is built on it, which ask the application's default territory and then the current locale. What else needs its dates is a `Tempo.AbstractSeasonError`, and the season rows of the matrix hold north of the equator, south of it and on both sides. 2026-10-09.

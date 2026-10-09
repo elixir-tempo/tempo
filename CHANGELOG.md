@@ -269,6 +269,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Added
 
+* `Tempo.season/1` returns the season a value holds with no hemisphere, 21 to 24, beside `Tempo.month/1`, and `nil` for a value that holds none.
+
 * `Tempo.in_territory/2` gives a season of 21 to 24 its dates on a territory's side of the equator (`Tempo.in_territory(~o"2026-21", :AU)` is `~o"2026Y9M/12M"`), and so do the `:territory` and `:locale` options of `Tempo.from_iso8601/2` and `Tempo.to_interval/2`. With neither, `Tempo.to_interval/2` and what is built on it (the comparisons, the set operations, `Tempo.select/2`, `Tempo.to_string/2`) ask the application's `:default_territory` and then the current locale.
 
 * `Tempo.AbstractSeasonError` — what needs the dates of a season with no hemisphere says so: a walk, `Tempo.shift/3` by anything but years, `Tempo.at/2`, `Tempo.extend/2` and `Tempo.round/2`. It is also the answer for a territory the equator runs through, such as Brazil.

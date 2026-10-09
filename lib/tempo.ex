@@ -2838,6 +2838,53 @@ defmodule Tempo do
   end
 
   @doc """
+  Return the season a Tempo value holds, or `nil` if it holds none.
+
+  Completes the component accessors for a season with no hemisphere:
+  ISO 8601-2's 21 (spring), 22 (summer), 23 (autumn) and 24 (winter),
+  which a value keeps as it is written until `in_territory/2` gives it
+  its dates. Callers never reach into struct fields to ask which.
+
+  ### Arguments
+
+  * `value` is a `t:t/0` or `t:Tempo.Interval.t/0`.
+
+  ### Returns
+
+  * The season's number, `21`, `22`, `23` or `24`.
+
+  * `nil` when the value holds no such season: a date, an interval,
+    a season that has been given its dates, and a season of a
+    hemisphere (25 to 32), which is its dates as it is read.
+
+  * Raises `ArgumentError` for what is neither a date or time value
+    nor an interval.
+
+  ### Examples
+
+      iex> Tempo.season(~o"2026-21")
+      21
+
+      iex> Tempo.season(~o"2026-06")
+      nil
+
+      iex> {:ok, spring} = Tempo.in_territory(~o"2026-21", :AU)
+      iex> Tempo.season(spring)
+      nil
+
+  """
+  @spec season(t() | Tempo.Interval.t()) :: 21..24 | nil
+  def season(%__MODULE__{time: time}) when is_list(time) do
+    case List.keyfind(time, :season, 0) do
+      {:season, season} -> season
+      nil -> nil
+    end
+  end
+
+  def season(%Tempo.Interval{}), do: nil
+  def season(value), do: raise(no_component_error(:season, value))
+
+  @doc """
   Return the `week` component of a Tempo value, or `nil` if the
   value doesn't specify one.
 
