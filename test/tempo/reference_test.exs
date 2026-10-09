@@ -549,7 +549,7 @@ defmodule Tempo.Reference.Test do
           Generators.other_calendar_day()
         ])
 
-      check all(point <- generators) do
+      check all(point <- generators, placed?(day_of(point))) do
         value = reading(point)
         {date, time} = Tempo.split(value)
 
@@ -571,11 +571,21 @@ defmodule Tempo.Reference.Test do
   end
 
   defp assert_parts(point, date, time) do
-    assert covered(date) == Reference.span(%{point | time: [], fraction: nil})
+    assert covered(date) == Reference.span(day_of(point))
 
     assert {Tempo.hour(time), Tempo.minute(time), Tempo.second(time)} ==
              {point.time[:hour], point.time[:minute], point.time[:second]}
   end
+
+  # The day a point is on, its time of day left out.
+  defp day_of(point), do: %{point | time: [], fraction: nil}
+
+  # The reference places no day that starts or ends at a midnight its zone's
+  # clock skips or shows twice: 31 August 1942 in Asia/Kolkata ends where the
+  # clocks went from midnight to 01:00. A time on such a day is generated,
+  # the reference placing the time, and the day is then asked of it. Those
+  # days are measured, minute by minute, in `Tempo.ChangeOfTheClock`.
+  defp placed?(point), do: Reference.span(point) != :none
 
   describe "an interval" do
     property "is one value in every spelling, and covers from its start to its end" do
