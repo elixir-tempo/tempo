@@ -198,4 +198,55 @@ defmodule Tempo.ExplainWordsTest do
                "The domain's members are the window"
     end
   end
+
+  describe "an interval with a group at an end" do
+    # A group is told as the value alone is, by the months or the weeks it
+    # names. Each end was told as its year, the group left out: "From: 2026.
+    # To: 2026" of the interval from one quarter to the next. The measure is
+    # the names `Calendar.strftime/2` gives the months.
+    defp month(number), do: Calendar.strftime(Date.new!(2026, number, 1), "%B")
+
+    test "names the months of each end" do
+      for {interval, {from_first, from_last}, {to_first, to_last}} <- [
+            {"2026Y1Q/2026Y2Q", {1, 3}, {4, 6}},
+            {"2026Y3Q/2026Y4Q", {7, 9}, {10, 12}},
+            {"2026Y1H/2026Y2H", {1, 6}, {7, 12}},
+            {"2026Y1G2MU/2026Y3G2MU", {1, 2}, {5, 6}}
+          ] do
+        explained = explain(interval)
+
+        assert {interval, explained} ==
+                 {interval,
+                  "A closed interval.\n" <>
+                    "From: #{month(from_first)} to #{month(from_last)} 2026.\n" <>
+                    "To:   #{month(to_first)} to #{month(to_last)} 2026 " <>
+                    "(exclusive — half-open `[from, to)`)."}
+      end
+    end
+
+    test "names them at the one end that holds a group" do
+      assert explain("2026-01/2026Y2Q") ==
+               "A closed interval.\nFrom: 2026-01.\n" <>
+                 "To:   April to June 2026 (exclusive — half-open `[from, to)`)."
+
+      assert explain("2026Y1Q/P2M") =~ "Starts: January to March 2026."
+      assert explain("R3/2026Y1Q/P1Y") =~ "Starting: January to March 2026."
+      assert explain("2026Y2G13WU/2026Y3G13WU") =~ "From: weeks 14 to 26 of 2026."
+    end
+
+    test "quotes an interval with no end, or no start, as it is written" do
+      assert explain("2026Y1H/..") =~ "An open-upper interval (`2026Y1G6MU/..`)."
+      assert explain("2026Y1H/..") =~ "Lower bound: January to June 2026."
+      assert explain("../2026Y2Q") =~ "An open-lower interval (`../2026Y2G3MU`)."
+      assert explain("../2026Y2Q") =~ "Upper bound: April to June 2026."
+    end
+
+    test "leaves an end that holds no group as it was told" do
+      assert explain("2026-01/2026-04") ==
+               "A closed interval.\nFrom: 2026-01.\n" <>
+                 "To:   2026-04 (exclusive — half-open `[from, to)`)."
+
+      assert explain("2026-01/..") =~ "An open-upper interval (`2026-01/..`)."
+    end
+  end
 end

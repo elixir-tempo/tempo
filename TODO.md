@@ -8,7 +8,7 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Conformance and completeness
 
-* [ ] **An interval with a group at an end, explained and walked** — found 2026-10-09 beside the selection from one, fixed. `Tempo.explain(~o"2026Y1Q/2026Y2Q")` says "From: 2026. To: 2026", the quarter of each end left out, where the value alone is "January to March 2026". `Enum` over such an interval raises a `Tempo.ConversionError` ("Cannot step ~o\"2026Y1G3MU\""), where `Tempo.to_interval/1`, `Tempo.duration/1`, `Tempo.relation/2`, the set operations and now `Tempo.select/2` read it as the months it spans (`2026-01/2026-04`), which are walked. The first is wrong and the second a refusal; each wants the end read as where its span starts.
+* [ ] **An interval with a group at an end is not walked** — found 2026-10-09 beside the selection from one. `Enum` over `~o"2026Y1Q/2026Y2Q"` raises a `Tempo.ConversionError` ("Cannot step ~o\"2026Y1G3MU\""), where `Tempo.to_interval/1`, `Tempo.duration/1`, `Tempo.relation/2`, the set operations, `Tempo.select/2` and `Tempo.explain/1` read it as the months it spans (`2026-01/2026-04`), which are walked. A refusal and no wrong answer; the walk wants the end read as where its span starts.
 
 * [ ] **Whether an interval written to a date holds its end** — a decision for the user, asked 2026-10-08. `~o"2024Y/2026Y"` is 2024 and 2025, where `~o"{2024..2026}Y"` is three years and ISO 8601-2 Annex A.4.4 has an interval of dates end in its end. The proposal, an end written to a day or coarser included and one written to a time of day as it is, with the struct left half-open, is in [plans/interval-end-inclusive.md](plans/interval-end-inclusive.md) with what follows from it and a census: 1,425 written intervals in this repository would change.
 
@@ -71,6 +71,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **An interval with a group at an end, explained** — `Tempo.explain(~o"2026Y1Q/2026Y2Q")` said "From: 2026. To: 2026", the quarter of each end left out. An end that holds a group is told as the value alone is, by the months or the weeks it names (`group_phrase/1` in `lib/explain.ex`), and the headline of an interval with no end quotes it as it is written (`2026Y1G6MU/..`). Tests in `test/tempo/explain_words_test.exs`. 2026-10-09.
 
 * [x] **A holiday written as a plain yearly recurrence is a year long** — decided 2026-10-09 (user, as recommended). The thirteen rows of `guides/holiday-cookbook.md` under "Other calendars" were a start and a `P1Y` cadence (`R/5787Y1M1D/P1Y[u-ca=hebrew]`), whose occurrences are each a year long, so as holidays one left no working day after it. Each is now the selection in its calendar (`R/../P1Y/FL1M1DN[u-ca=hebrew]`), the form `tempo_holidays` compiles a calendar holiday to; every row was converted and is one day on the Gregorian date the table states, and the guide says why. The "every N years" line beside them (`R/2024-07-04/P4Y`, four years long each) is `R/2024/P4Y/FL7M4DN`. 2026-10-09.
 

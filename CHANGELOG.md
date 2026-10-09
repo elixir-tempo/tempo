@@ -445,6 +445,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.explain/1` tells an end of an interval that holds a quarter, a half or another group by the months it names: `~o"2026Y1Q/2026Y2Q"` is "From: January to March 2026. To: April to June 2026", where it was "From: 2026. To: 2026".
+
 * `Tempo.from_elixir/2` returns a `Tempo.ConversionError` for a value that is none of the types it converts (a `nil`, a string, a map), where it raised a `FunctionClauseError`.
 
 * `Tempo.select/2` from an interval with a quarter, a half or another group at an end (`2026Y1Q/2026Y2Q`) selects from the months it spans, as from `2026-01/2026-04`. It gave no weekday of them and the 15th of one, and `Tempo.count_workdays/2` of such an interval with no end was 0.

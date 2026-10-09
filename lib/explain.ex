@@ -1169,7 +1169,7 @@ defmodule Tempo.Explain do
 
   defp interval_parts(%Tempo.Interval{from: :undefined, to: %Tempo{} = to}) do
     [
-      {:headline, "An open-lower interval (`../#{render_endpoint(to)}`)."},
+      {:headline, "An open-lower interval (`../#{quoted_endpoint(to)}`)."},
       {:span, "Upper bound: #{told_endpoint(to)}."},
       {:hint, "Enumeration requires a lower bound; set operations need a `:within` window."}
     ]
@@ -1177,7 +1177,7 @@ defmodule Tempo.Explain do
 
   defp interval_parts(%Tempo.Interval{from: %Tempo{} = from, to: :undefined}) do
     [
-      {:headline, "An open-upper interval (`#{render_endpoint(from)}/..`)."},
+      {:headline, "An open-upper interval (`#{quoted_endpoint(from)}/..`)."},
       {:span, "Lower bound: #{told_endpoint(from)}."},
       {:hint, "Enumerates forward forever — use `Enum.take/2` to halt."}
     ]
@@ -1733,12 +1733,40 @@ defmodule Tempo.Explain do
     do: season_phrase(season)
 
   defp render_endpoint(%Tempo{time: time} = tempo) do
-    if names_each_value?(tempo),
-      do: inspect(tempo),
-      else: render_moment(tempo, time)
+    cond do
+      holds_a_group?(time) -> group_phrase(tempo)
+      names_each_value?(tempo) -> inspect(tempo)
+      true -> render_moment(tempo, time)
+    end
   end
 
   defp render_endpoint(other), do: inspect(other)
+
+  # An end that holds a group (`2026Y1Q`, a quarter) is told as the value
+  # alone is, by the months it names: "January to March 2026". It was shown
+  # as its year, the group left out, so the interval from one quarter to the
+  # next was "From: 2026. To: 2026".
+  defp holds_a_group?(time), do: Enum.any?(time, &match?({_unit, {:group, _values}}, &1))
+
+  defp group_phrase(%Tempo{time: time} = tempo) do
+    with true <- Enum.all?(time, &writable_unit?/1),
+         {:ok, phrase} <- shape_phrase(date_shape(time), tempo) do
+      phrase
+    else
+      _no_words_for_it -> inspect(tempo)
+    end
+  end
+
+  # An end as it is quoted in an interval's own writing: one that holds a
+  # group is written as it is (`2026Y1G6MU`), its words being no writing.
+  defp quoted_endpoint(%Tempo{time: time} = tempo) do
+    with true <- holds_a_group?(time),
+         {:ok, written} <- Tempo.to_iso8601(tempo) do
+      written
+    else
+      _a_plain_end_or_one_not_written -> render_endpoint(tempo)
+    end
+  end
 
   # A season of 21 to 24 by its name, which is the same north and south of
   # the equator where its dates are not.
