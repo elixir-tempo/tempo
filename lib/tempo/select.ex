@@ -123,6 +123,12 @@ defmodule Tempo.Select do
   writes it. Use the duration form (`~o"T21/PT8H"`) to say the same
   thing explicitly.
 
+  A window whose start names a day of the week is the window on each
+  such day: `~o"1KT9H/T17H"` is Monday's nine to five, and
+  `~o"{1..5}KT9H/T17H"` the working week's. It starts and ends on the one
+  weekday, so an end that names another (`~o"1KT9H/5KT17H"`) is an
+  error: select the days, and then the times within them.
+
   A window written with a duration from a start that holds a set is
   the window from each of its values: `~o"T{9,14}H/PT1H"` is the hour
   from 09:00 and the hour from 14:00. Written with two ends, one of
@@ -1629,6 +1635,16 @@ defmodule Tempo.Select do
   defp project_onto_base(%Interval{} = base, %Interval{from: %Tempo{} = c_from} = constraint) do
     c_from = %{c_from | time: read_in(c_from.time, base)}
 
+    case weekdays_of_span(c_from, constraint.to) do
+      {:ok, weekdays} -> span_on_each_weekday(base, weekdays, constraint)
+      :none -> project_span_onto_base(base, c_from, constraint)
+      :at_its_end_alone -> {:error, weekday_span_error(constraint)}
+    end
+  end
+
+  defp project_onto_base(_base, constraint), do: {:error, unrecognised_selector(constraint)}
+
+  defp project_span_onto_base(base, c_from, constraint) do
     case span_endpoint(constraint) do
       {:to, %Tempo{} = c_to} ->
         c_to = %{c_to | time: read_in(c_to.time, base)}
@@ -1648,7 +1664,64 @@ defmodule Tempo.Select do
     end
   end
 
-  defp project_onto_base(_base, constraint), do: {:error, unrecognised_selector(constraint)}
+  # A span whose start names a day of the week (`1KT9H/T17H`, Monday's nine
+  # to five) is the span of the rest of each end, on each such day of the
+  # base, as a value that names one is the rest of it on each (`1KT10H`).
+  # The ends were merged as they stood onto every day of the base, so each
+  # day was given the span, in a value that held its date and the weekday
+  # both: 16 June 2026, a Tuesday, and Monday. A span that does not start
+  # and end on the one weekday is no span within a day, and is refused: an
+  # end that names another (`1KT9H/5KT17H`), or a weekday and no time after
+  # it (`1K/1K`), or a weekday the start does not name (`T9H/1KT17H`).
+  defp weekdays_of_span(%Tempo{time: time, calendar: calendar}, c_to) do
+    case {day_of_week_only(time, calendar), weekday_alone?(c_to)} do
+      {{:ok, weekdays}, _at_its_end} -> {:ok, weekdays}
+      {:no, true} -> :at_its_end_alone
+      {:no, false} -> :none
+    end
+  end
+
+  defp weekday_alone?(%Tempo{time: time, calendar: calendar}),
+    do: day_of_week_only(time, calendar) != :no
+
+  defp weekday_alone?(_open_or_none), do: false
+
+  defp span_on_each_weekday(base, weekdays, %Interval{from: c_from, to: c_to} = constraint) do
+    case end_on_the_same_day(c_from, c_to) do
+      {:ok, c_to} ->
+        on_the_day = %{constraint | from: without_day_of_week(c_from), to: c_to}
+        base |> weekdays_in(weekdays) |> gathered(&project_onto_base(&1, on_the_day))
+
+      :another_day ->
+        {:error, weekday_span_error(constraint)}
+    end
+  end
+
+  defp end_on_the_same_day(%Tempo{time: from_time}, %Tempo{time: to_time} = c_to) do
+    weekday = Keyword.get(from_time, :day_of_week)
+
+    case Keyword.pop(to_time, :day_of_week) do
+      {nil, _to_time} -> {:ok, c_to}
+      {^weekday, [_ | _] = time_of_day} -> {:ok, %{c_to | time: time_of_day}}
+      {_another_or_alone, _rest} -> :another_day
+    end
+  end
+
+  defp end_on_the_same_day(_c_from, open_or_none), do: {:ok, open_or_none}
+
+  defp without_day_of_week(%Tempo{time: time} = value),
+    do: %{value | time: Keyword.delete(time, :day_of_week)}
+
+  defp weekday_span_error(selector) do
+    IntervalEndpointsError.exception(
+      interval: selector,
+      operation: :select,
+      reason:
+        "#{inspect(selector)} does not run within one day of the week: a span selected by a " <>
+          "weekday starts on that day and ends by a time of day (`1KT9H/T17H`). Select the " <>
+          "days, and then the times within them."
+    )
+  end
 
   # The span from each value of a start that holds a set, or to each value
   # of an end that does, each projected as the span of that one value is.

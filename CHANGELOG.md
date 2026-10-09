@@ -445,6 +445,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.select/2` by a span whose start names a day of the week is the span on each such day: `Tempo.select(~o"2026-06", ~o"1KT9H/T17H")` is nine to five on the five Mondays of June. It was the span on every day of the base, each in a value that held its date and the weekday both, and a span from one weekday to another (`~o"1KT9H/5KT17H"`) is now a `Tempo.IntervalEndpointsError`.
+
 * `Tempo.ICal.parse/2` ignores `BYHOUR`, `BYMINUTE` and `BYSECOND` in the rule of an all-day event, as RFC 5545 §3.3.10 has it. `FREQ=DAILY;BYHOUR=9` from a `DATE` was the day from 09:00 to 09:00 of the next, and two hours named made two occurrences of each day.
 
 * `Tempo.select/2` of an open-ended span by workdays ends where more than a thousand working days in a row are holidays, as `Tempo.next_workday/2` is an error there. Holidays that leave no day between them (`Tempo.workdays(:US, except: ~o"R/2026-12-25/P1Y")`, each occurrence a year long) were walked for ever, so taking more days than there were never returned.
