@@ -134,7 +134,8 @@ if Code.ensure_loaded?(ICal) do
       the events.
     * `{:error, reason}` when parsing fails, a recurring event
       needs a `:within` window that wasn't supplied, or a leftover
-      `:bound` is given.
+      `:bound` is given. A value that is no string is
+      `{:error, {:not_a_string, value}}`.
 
     ### Examples
 
@@ -163,7 +164,9 @@ if Code.ensure_loaded?(ICal) do
 
     """
     @spec parse(binary(), keyword()) :: {:ok, IntervalSet.t()} | {:error, term()}
-    def parse(ics, options \\ []) when is_binary(ics) do
+    def parse(ics, options \\ [])
+
+    def parse(ics, options) when is_binary(ics) do
       with :ok <- Tempo.check_within_option(options, "Tempo.ICal.parse/2") do
         calendar = ICal.from_ics(ics)
         build_interval_set(calendar, options)
@@ -172,6 +175,9 @@ if Code.ensure_loaded?(ICal) do
       e in [ArgumentError, MatchError, FunctionClauseError] ->
         {:error, Exception.message(e)}
     end
+
+    # What is read is a string: any other value is an error and no raise.
+    def parse(not_a_string, _options), do: {:error, {:not_a_string, not_a_string}}
 
     @doc """
     Parse an iCalendar file and return a `%Tempo.IntervalSet{}`.

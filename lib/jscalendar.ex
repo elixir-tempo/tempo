@@ -122,7 +122,9 @@ if Code.ensure_loaded?(JSCalendar) do
 
     * `{:error, reason}` when the document cannot be parsed, a zone is
       unknown, a recurrence needs a `:within` window that was not
-      supplied, or a leftover `:bound` is given.
+      supplied, or a leftover `:bound` is given. A value that is no
+      string is `{:error, {:not_a_string, value}}`: an object decoded
+      already is `to_interval_set/2`'s.
 
     ### Examples
 
@@ -143,12 +145,18 @@ if Code.ensure_loaded?(JSCalendar) do
 
     """
     @spec parse(binary(), keyword()) :: {:ok, IntervalSet.t()} | {:error, term()}
-    def parse(json, options \\ []) when is_binary(json) do
+    def parse(json, options \\ [])
+
+    def parse(json, options) when is_binary(json) do
       with :ok <- Tempo.check_within_option(options, "Tempo.JSCalendar.parse/2"),
            {:ok, object} <- JSCalendar.decode(json) do
         to_interval_set(object, options)
       end
     end
+
+    # What is read is a string: any other value is an error and no raise. An
+    # object decoded already is `to_interval_set/2`'s.
+    def parse(not_a_string, _options), do: {:error, {:not_a_string, not_a_string}}
 
     @doc """
     Place an already-parsed JSCalendar object on a timeline.

@@ -445,6 +445,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A reader handed what is no string (a `nil`, a number, a map) returns an error, where it raised a `FunctionClauseError`: `Tempo.from_iso8601/2`, `Tempo.parse/2` and the `Tempo.parse_*` functions return a `Tempo.ParseError`, `Tempo.Cron.parse/2` a `Tempo.CronError`, and `Tempo.RRule.parse/2`, `Tempo.ICal.parse/2` and `Tempo.JSCalendar.parse/2` `{:error, {:not_a_string, value}}`. The raising form of each raises that error.
+
 * `Tempo.Network.Solver.trace/3` tells a latest bound in the order it is derived, ending at the boundary asked for: with `bound: :latest` each constraint was beside the boundary it starts from, and the bound that gives the answer was left out. A trace through `:starts`, `:started_by`, `:finishes`, `:finished_by`, `:strictly_contemporary` or a `{:boundary, …}` relation is worded, where it raised a `FunctionClauseError`.
 
 * A rule of days or less with a `BYWEEKNO` goes on from one week it names to the next, where each day between was asked its week: `FREQ=DAILY;BYWEEKNO=20;BYDAY=MO;COUNT=90` is its ninety Mondays and `FREQ=HOURLY;BYWEEKNO=20;BYHOUR=9;COUNT=50` its fifty hours, where each was a `Tempo.UnboundedRecurrenceError`. `FREQ=DAILY;BYWEEKNO=20;COUNT=100` takes 19 ms where it took 1.1 s.

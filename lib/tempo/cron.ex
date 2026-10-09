@@ -174,7 +174,7 @@ defmodule Tempo.Cron do
 
   """
   @spec parse(String.t(), keyword()) :: {:ok, Tempo.Interval.t()} | {:error, Exception.t()}
-  def parse(expression, options \\ []) when is_binary(expression) do
+  def parse(expression, options \\ []) do
     with {:ok, rule} <- to_rule(expression),
          {:ok, from} <- firing_start(Keyword.get(options, :from), rule, expression) do
       Expander.to_ast(rule, from)
@@ -211,6 +211,13 @@ defmodule Tempo.Cron do
       nil -> parse_fields(trimmed, expression)
       expanded -> parse_fields(expanded, expression)
     end
+  end
+
+  # What is read is a string: any other value is an error and no raise.
+  def to_rule(not_a_string) do
+    written = inspect(not_a_string, limit: 5, printable_limit: 60)
+
+    {:error, CronError.exception(reason: "A cron expression is a string, and #{written} is none")}
   end
 
   # A cron fires on whole minutes, or whole seconds with six or seven

@@ -106,7 +106,7 @@ defmodule Tempo.RRule do
 
   * `{:ok, %Tempo.Interval{}}` on success.
 
-  * `{:error, reason}` on a malformed rule or unknown keyword, and for what RFC 7529's `RSCALE` and `SKIP` say that Tempo does not read: `{:unsupported_rscale, name}` for a name that is no calendar's, `{:rscale_without_a_start, calendar}` for a rule of another calendar than the Gregorian that has no `:from` and no part that selects, which nothing would say the calendar of, `{:from_is_no_date, value}` for a `:from` beside an `RSCALE` that is no date and so has no place in another calendar, `{:unsupported_skip, value}` for a `SKIP` that is none of the three, and `{:skip_without_rscale, skip}`. A leap month (`BYMONTH=5L`, the leap month after the fifth) is a month of the calendar an `RSCALE` names: with none it is `{:leap_month_without_rscale, month}`, in a calendar whose years all have the same months `{:calendar_has_no_leap_month, {month, calendar}}`, and after a year's last month beside `SKIP=FORWARD` `{:unsupported_skip, {:forward, part}}`. A `:from` that is not one value (an interval, a set) is `{:invalid_from, value}`, an `INTERVAL` that is not one or more is `{:invalid_interval, value}` and a `COUNT` below none is `{:invalid_count, value}`. A `BYWEEKNO` beside a `BYMONTH`, or in a rule that steps by months, with no `:from` that is a date is `{:byweekno_without_a_date, weeks}`: it counts the weeks of a year, which such a rule is asked of each day it starts from.
+  * `{:error, reason}` on a malformed rule or unknown keyword, and for what RFC 7529's `RSCALE` and `SKIP` say that Tempo does not read: `{:unsupported_rscale, name}` for a name that is no calendar's, `{:rscale_without_a_start, calendar}` for a rule of another calendar than the Gregorian that has no `:from` and no part that selects, which nothing would say the calendar of, `{:from_is_no_date, value}` for a `:from` beside an `RSCALE` that is no date and so has no place in another calendar, `{:unsupported_skip, value}` for a `SKIP` that is none of the three, and `{:skip_without_rscale, skip}`. A leap month (`BYMONTH=5L`, the leap month after the fifth) is a month of the calendar an `RSCALE` names: with none it is `{:leap_month_without_rscale, month}`, in a calendar whose years all have the same months `{:calendar_has_no_leap_month, {month, calendar}}`, and after a year's last month beside `SKIP=FORWARD` `{:unsupported_skip, {:forward, part}}`. A `:from` that is not one value (an interval, a set) is `{:invalid_from, value}`, an `INTERVAL` that is not one or more is `{:invalid_interval, value}` and a `COUNT` below none is `{:invalid_count, value}`. A `BYWEEKNO` beside a `BYMONTH`, or in a rule that steps by months, with no `:from` that is a date is `{:byweekno_without_a_date, weeks}`: it counts the weeks of a year, which such a rule is asked of each day it starts from. A value that is no string (a `nil`, a number, a map) is `{:not_a_string, value}`.
 
   ### Examples
 
@@ -146,6 +146,9 @@ defmodule Tempo.RRule do
       build_interval(parts, options)
     end
   end
+
+  # What is read is a string: any other value is an error and no raise.
+  def parse(not_a_string, _options), do: {:error, {:not_a_string, not_a_string}}
 
   # A rule's start is one value, or none. An interval was taken for one, and
   # the recurrence built from it was one nothing expands:

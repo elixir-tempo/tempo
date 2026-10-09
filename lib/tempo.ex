@@ -943,7 +943,9 @@ defmodule Tempo do
     what a value is written with, so that the time taken to read or
     to refuse a string is in proportion to its length: 8,192 bytes,
     sets or groups six deep, selections sixteen deep, and a number of
-    128 digits.
+    128 digits. A value that is no string (a `nil`, a number, a map)
+    is a `Tempo.ParseError` too, where it was a `FunctionClauseError`:
+    a reader returns an error for whatever it is handed.
 
   ### Examples
 
@@ -1005,6 +1007,18 @@ defmodule Tempo do
     # `Tempo.from_iso8601(string, Calendrical.Hebrew)` idiom
     # working unchanged.
     do_from_iso8601(string, calendar, false)
+  end
+
+  def from_iso8601(not_a_string, _calendar_or_options) do
+    {:error, not_a_string(not_a_string)}
+  end
+
+  # What is read is a string. A value that is none (the `nil` of a field left
+  # empty, a number, a map) is an error and no raise, as a string that is no
+  # date is: a reader sits where what a caller was sent arrives.
+  defp not_a_string(value) do
+    written = inspect(value, limit: 5, printable_limit: 60)
+    ParseError.exception(reason: "Could not parse #{written}: it is not a string")
   end
 
   defp strict?(options), do: Keyword.get(options, :strict, false) == true
@@ -1340,7 +1354,7 @@ defmodule Tempo do
   """
   @spec from_iso8601!(String.t(), Calendar.calendar() | keyword()) ::
           t() | Tempo.Interval.t() | Tempo.Duration.t() | Tempo.Set.t() | no_return()
-  def from_iso8601!(string, calendar_or_options \\ []) when is_binary(string) do
+  def from_iso8601!(string, calendar_or_options \\ []) do
     case from_iso8601(string, calendar_or_options) do
       {:ok, value} -> value
       {:error, exception} -> raise exception
@@ -1404,6 +1418,8 @@ defmodule Tempo do
     end
   end
 
+  def parse_duration(not_a_string), do: {:error, not_a_string(not_a_string)}
+
   @doc """
   Raising version of `parse_duration/1`.
 
@@ -1422,7 +1438,7 @@ defmodule Tempo do
 
   """
   @spec parse_duration!(String.t()) :: Duration.t() | no_return()
-  def parse_duration!(string) when is_binary(string) do
+  def parse_duration!(string) do
     case parse_duration(string) do
       {:ok, duration} -> duration
       {:error, exception} when is_exception(exception) -> raise exception
@@ -1489,8 +1505,14 @@ defmodule Tempo do
 
   """
   @spec parse_date(String.t(), keyword()) :: {:ok, t()} | {:error, error_reason()}
-  def parse_date(string, options \\ []) when is_binary(string) and is_list(options) do
+  def parse_date(string, options \\ [])
+
+  def parse_date(string, options) when is_binary(string) and is_list(options) do
     parse_kind(string, :date, options)
+  end
+
+  def parse_date(not_a_string, options) when not is_binary(not_a_string) and is_list(options) do
+    {:error, not_a_string(not_a_string)}
   end
 
   @doc """
@@ -1515,7 +1537,7 @@ defmodule Tempo do
 
   """
   @spec parse_date!(String.t(), keyword()) :: t() | no_return()
-  def parse_date!(string, options \\ []) when is_binary(string) and is_list(options) do
+  def parse_date!(string, options \\ []) when is_list(options) do
     raise_on_error(parse_date(string, options))
   end
 
@@ -1558,8 +1580,15 @@ defmodule Tempo do
 
   """
   @spec parse_datetime(String.t(), keyword()) :: {:ok, t()} | {:error, error_reason()}
-  def parse_datetime(string, options \\ []) when is_binary(string) and is_list(options) do
+  def parse_datetime(string, options \\ [])
+
+  def parse_datetime(string, options) when is_binary(string) and is_list(options) do
     parse_kind(string, :datetime, options)
+  end
+
+  def parse_datetime(not_a_string, options)
+      when not is_binary(not_a_string) and is_list(options) do
+    {:error, not_a_string(not_a_string)}
   end
 
   @doc """
@@ -1584,7 +1613,7 @@ defmodule Tempo do
 
   """
   @spec parse_datetime!(String.t(), keyword()) :: t() | no_return()
-  def parse_datetime!(string, options \\ []) when is_binary(string) and is_list(options) do
+  def parse_datetime!(string, options \\ []) when is_list(options) do
     raise_on_error(parse_datetime(string, options))
   end
 
@@ -1646,8 +1675,14 @@ defmodule Tempo do
 
   """
   @spec parse_time(String.t(), keyword()) :: {:ok, t()} | {:error, error_reason()}
-  def parse_time(string, options \\ []) when is_binary(string) and is_list(options) do
+  def parse_time(string, options \\ [])
+
+  def parse_time(string, options) when is_binary(string) and is_list(options) do
     parse_kind(string, :time, options)
+  end
+
+  def parse_time(not_a_string, options) when not is_binary(not_a_string) and is_list(options) do
+    {:error, not_a_string(not_a_string)}
   end
 
   @doc """
@@ -1672,7 +1707,7 @@ defmodule Tempo do
 
   """
   @spec parse_time!(String.t(), keyword()) :: t() | no_return()
-  def parse_time!(string, options \\ []) when is_binary(string) and is_list(options) do
+  def parse_time!(string, options \\ []) when is_list(options) do
     raise_on_error(parse_time(string, options))
   end
 
@@ -1722,8 +1757,15 @@ defmodule Tempo do
   """
   @spec parse_interval(String.t(), keyword()) ::
           {:ok, Tempo.Interval.t()} | {:error, error_reason()}
-  def parse_interval(string, options \\ []) when is_binary(string) and is_list(options) do
+  def parse_interval(string, options \\ [])
+
+  def parse_interval(string, options) when is_binary(string) and is_list(options) do
     parse_kind(string, :interval, options)
+  end
+
+  def parse_interval(not_a_string, options)
+      when not is_binary(not_a_string) and is_list(options) do
+    {:error, not_a_string(not_a_string)}
   end
 
   @doc """
@@ -1748,7 +1790,7 @@ defmodule Tempo do
 
   """
   @spec parse_interval!(String.t(), keyword()) :: Tempo.Interval.t() | no_return()
-  def parse_interval!(string, options \\ []) when is_binary(string) and is_list(options) do
+  def parse_interval!(string, options \\ []) when is_list(options) do
     raise_on_error(parse_interval(string, options))
   end
 
@@ -2072,12 +2114,16 @@ defmodule Tempo do
   @spec parse(String.t(), Keyword.t()) ::
           {:ok, t() | Tempo.Interval.t() | Duration.t() | Tempo.Set.t()}
           | {:error, error_reason()}
-  def parse(input, options \\ []) when is_binary(input) do
+  def parse(input, options \\ [])
+
+  def parse(input, options) when is_binary(input) do
     case from_iso8601(input, options) do
       {:error, %ParseError{}} -> parse_text(input, options)
       result -> result
     end
   end
+
+  def parse(not_a_string, _options), do: {:error, not_a_string(not_a_string)}
 
   @doc """
   Bang variant of `parse/2`: the parsed value, or a raised exception.
@@ -2100,7 +2146,7 @@ defmodule Tempo do
   """
   @spec parse!(String.t(), Keyword.t()) ::
           t() | Tempo.Interval.t() | Duration.t() | Tempo.Set.t()
-  def parse!(input, options \\ []) when is_binary(input) do
+  def parse!(input, options \\ []) do
     case parse(input, options) do
       {:ok, value} -> value
       {:error, exception} when is_exception(exception) -> raise exception
