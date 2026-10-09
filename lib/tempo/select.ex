@@ -1774,10 +1774,30 @@ defmodule Tempo.Select do
   # `Tempo.to_interval_set/2` gives them within a window.
   defp occurrences_within(%Interval{} = period, %Interval{} = recurrence) do
     case Tempo.to_interval_set(recurrence, within: period) do
-      {:ok, %IntervalSet{} = occurrences} -> IntervalSet.members(occurrences)
-      {:error, _reason} = error -> error
+      {:ok, %IntervalSet{} = occurrences} ->
+        occurrences |> IntervalSet.members() |> Enum.map(&as_the_value_it_is/1)
+
+      {:error, _reason} = error ->
+        error
     end
   end
+
+  # An occurrence that is one value (the day a rule selects, the hour) is
+  # that value's own span, as a selection gives it, and is walked as the
+  # value is: a day by its hours. It was the span from the value to the
+  # next, walked as one step, so the same day selected by `L7M4DN` and by
+  # the recurrence that holds it were not one value. An occurrence that runs
+  # a cadence (`R3/T9H/PT2H`, two hours) is the span it is.
+  defp as_the_value_it_is(%Interval{from: %Tempo{} = from, to: %Tempo{} = to} = occurrence) do
+    with {:ok, %Interval{to: %Tempo{} = own_end} = own} <- Tempo.to_interval(from),
+         :same <- Compare.compare_endpoints(own_end, to) do
+      %{own | metadata: occurrence.metadata}
+    else
+      _a_span_of_its_own -> occurrence
+    end
+  end
+
+  defp as_the_value_it_is(occurrence), do: occurrence
 
   # An end of a period written as finely as the end it is paired with, so a
   # span from 09:00 to the end of a day ends at the hour the next day starts.

@@ -194,10 +194,30 @@ defmodule Tempo.SelectByARecurrenceTest do
     end
 
     test "is the selection it holds" do
-      assert selected(~o"2026", ~o"R/../P1Y/FL7M4DN") == selected(~o"2026", ~o"L7M4DN")
-
       assert selected(~o"2026", ~o"R/../P1Y/FL7M4DN") ==
                [span(at(~D[2026-07-04], ~T[00:00:00]), at(~D[2026-07-05], ~T[00:00:00]))]
+
+      # The day a rule selects is the day's own value, walked by its hours,
+      # whichever way it is selected: it was a span walked as one step.
+      assert Tempo.select(~o"2026", ~o"R/../P1Y/FL7M4DN") == Tempo.select(~o"2026", ~o"L7M4DN")
+
+      assert Tempo.select(~o"2026-06-15", ~o"R/../P1D/FLT9HN") ==
+               Tempo.select(~o"2026-06-15", ~o"LT9HN")
+
+      {:ok, set} = Tempo.select(~o"2026", ~o"R/../P1Y/FL7M4DN")
+      [independence_day] = IntervalSet.members(set)
+
+      assert Enum.count(independence_day) == 24
+    end
+
+    test "leaves an occurrence that runs a cadence as the span it is" do
+      {:ok, set} = Tempo.select(~o"2026-06-15", ~o"R3/T9H/PT2H")
+
+      assert IntervalSet.members(set) == [
+               ~o"2026-06-15T09/2026-06-15T11",
+               ~o"2026-06-15T11/2026-06-15T13",
+               ~o"2026-06-15T13/2026-06-15T15"
+             ]
     end
   end
 end
