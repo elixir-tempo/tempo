@@ -9,7 +9,6 @@ defmodule Tempo.Enumeration do
   alias Tempo.Iso8601.Parser
   alias Tempo.Iso8601.Unit
   alias Tempo.Mask
-  alias Tempo.NotBuilt
   alias Tempo.UnanchoredError
   alias Tempo.UnitValues
   alias Tempo.Validation
@@ -278,19 +277,7 @@ defmodule Tempo.Enumeration do
   defp yielded(tempo, [{:year, _year}, {:day_of_year, _day} | _rest] = time),
     do: Validation.calendar_date_from_ordinal_date(%{tempo | time: time})
 
-  # A month the walk of a year yields is one its calendar counts from the
-  # day the year begins, or the walk is refused: it has no error to return.
-  defp yielded(tempo, [{:year, _year}, {:month, _month}] = time),
-    do: built_month!(%{tempo | time: time})
-
   defp yielded(tempo, time), do: %{tempo | time: time}
-
-  defp built_month!(%Tempo{} = month) do
-    case NotBuilt.month(month) do
-      :ok -> month
-      {:error, not_built} -> raise not_built
-    end
-  end
 
   # With no component left to read, the components read are a value of the
   # walk; a value with no components has no values.

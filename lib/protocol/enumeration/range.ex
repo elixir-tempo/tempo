@@ -4,7 +4,6 @@ defimpl Enumerable, for: Tempo.Interval do
   alias Tempo.Enumeration.Zone
   alias Tempo.Interval.Steps
   alias Tempo.Math
-  alias Tempo.NotBuilt
   alias Tempo.TimeZoneDatabase
   alias Tempo.Validation
 
@@ -641,15 +640,6 @@ defimpl Enumerable, for: Tempo.Interval do
   # The value a step gives. A week of a calendar of months is stepped by its
   # own days, a week and a day of it, and each is given as the date it names,
   # as the walk of the week gives it and a value read is held.
-  # A month the walk yields is one its calendar counts from the day the
-  # year begins, or the walk is refused: it has no error to return.
-  defp yielded(%Tempo{time: [{:year, _year}, {:month, _month}]} = month) do
-    case NotBuilt.month(month) do
-      :ok -> month
-      {:error, not_built} -> raise not_built
-    end
-  end
-
   defp yielded(%Tempo{time: [{:year, _year}, {:day_of_year, _day} | _rest]} = value),
     do: Validation.calendar_date_from_ordinal_date(value)
 

@@ -9,37 +9,23 @@ defmodule Tempo.NotBuilt do
   # is the removal of its function and of the calls to it.
   # `guides/operation-matrix.md` lists the areas.
   #
-  # Three of them are in a calendar whose year does not begin with its first
-  # month (Calendrical's Julian `March25`, `March1`, `Sept1` and `Dec25`, and
-  # `Calendrical.Reform.England` until 1751): a selection that counts days
-  # within a month or a year, which the resolver counts as `1..n` of the
-  # month a date names; a season, which is placed by the year it starts in;
-  # and a step from several months of a year whose months the calendar does
-  # not count, which the walk cannot list. The
-  # fourth is a month of a year whose months the calendar numbers as its
-  # dates do, and not from the day the year begins (a year of
-  # `Calendrical.Reform.England` before 1751): no one span of the year. The
-  # fifth is in every calendar but the Gregorian: an RRULE that steps or
-  # selects by a month, a year, a week of the year or a day of one, which
-  # RFC 5545 counts in the Gregorian calendar. The sixth is what is left of a
-  # week of a month, which the calendar numbers and is otherwise answered: one
-  # in a year that does not begin with its first month. A week of
-  # the calendar's own numbering
-  # (`w`) under a month is no such area: it is refused for good
-  # (`Tempo.RRule.Selection.calendar_week_in_its_year/2`). The seventh is in
+  # Two are left. The first is in every calendar but the Gregorian: an RRULE
+  # that steps or selects by a month, a year, a week of the year or a day of
+  # one, which RFC 5545 counts in the Gregorian calendar. The second is in
   # every calendar: a rule that holds a §12.10 window, on a recurrence
   # written to its end, whose occurrences run back from it.
+  #
+  # Five were of a year that does not begin with its first month (a month, a
+  # selection, a season, a step and a week of a month in Calendrical's Julian
+  # `March25`, `March1`, `Sept1` and `Dec25`, and in
+  # `Calendrical.Reform.England` to 1750). Those calendars count their months
+  # from the day the year begins since 2026-10-10, and each area is answered.
+  # A week of a month that the merge of a selector cannot place is refused by
+  # the same name (`week_of_month/2`), and a week of the calendar's own
+  # numbering (`w`) under a month for good
+  # (`Tempo.RRule.Selection.calendar_week_in_its_year/2`).
 
-  alias Tempo.{Compare, ConversionError, Duration, Interval, UnitValues}
-
-  # The units a selection is resolved within when the period it is given is
-  # finer than a month.
-  @finer_than_a_month [:week, :day, :day_of_year, :day_of_week, :hour, :minute, :second]
-
-  # The calendars nearly every value is in, whose years begin with their
-  # first month: a value in one is answered before anything is asked of it,
-  # since these functions are called for every value read and every step.
-  @first_month_first [Calendrical.Gregorian, Calendar.ISO]
+  alias Tempo.{Compare, ConversionError, Duration, Interval}
 
   # The calendar RFC 5545 writes a rule in, as a value holds it.
   @gregorian [Calendrical.Gregorian, Calendar.ISO, nil]
@@ -60,55 +46,6 @@ defmodule Tempo.NotBuilt do
       reason: :not_built,
       calendar: calendar
     )
-  end
-
-  @doc false
-  # A value that holds a month and no day of it, in a year whose months its
-  # calendar does not count from the day the year begins. A value being read
-  # is asked in the calendar it is read in, as it is written: a time of day
-  # under a month is placed on a day of it once it is read.
-  @spec month(term(), module() | nil) :: :ok | {:error, ConversionError.t()}
-  def month(value, calendar \\ nil)
-
-  def month(_value, calendar) when calendar in @first_month_first, do: :ok
-
-  def month(%Tempo{calendar: calendar}, nil) when calendar in [nil | @first_month_first],
-    do: :ok
-
-  def month(%Tempo{time: time} = tempo, calendar) when is_list(time) do
-    calendar = Compare.effective_calendar(calendar || tempo.calendar)
-
-    if month_alone?(time) and not months_counted?(year_of(time), calendar),
-      do: {:error, error(tempo, :month, calendar)},
-      else: :ok
-  end
-
-  def month(_no_one_value, _calendar), do: :ok
-
-  @doc false
-  # An answer as it is, or the refusal of the month it is.
-  @spec result(answer) :: answer | {:error, ConversionError.t()} when answer: term()
-  def result(%Tempo{calendar: calendar} = tempo) when calendar in [nil | @first_month_first],
-    do: tempo
-
-  def result(%Tempo{} = tempo), do: refused(month(tempo), tempo)
-  def result({:ok, %Tempo{} = tempo} = answer), do: refused(month(tempo), answer)
-  def result(answer), do: answer
-
-  defp refused(:ok, answer), do: answer
-  defp refused({:error, _not_built} = error, _answer), do: error
-
-  @doc false
-  # A season of a year that does not begin with its first month. A season is
-  # placed by the year it starts in, and in such a year that is another
-  # season than the one of the same number in the calendar its months are
-  # taken from: the spring that starts in a `March25` year 1750 is the
-  # Julian spring of 1751.
-  @spec season(integer(), pos_integer(), module()) :: :ok | {:error, ConversionError.t()}
-  def season(year, code, calendar) do
-    if UnitValues.year_begins_with_first_month?(year, calendar),
-      do: :ok,
-      else: {:error, error("season #{code} of the year #{year}", :season, calendar)}
   end
 
   @doc false
@@ -164,81 +101,13 @@ defmodule Tempo.NotBuilt do
   defp selected_by_rrule_calendar?(_no_rule), do: false
 
   @doc false
-  # A selection (ISO 8601-2 §12.11), in a value or as the rule of a
-  # recurrence, in a year that does not begin with its first month. `value`
-  # is the value that holds the selection, or the recurrence the selection
-  # is the rule of.
-  #
-  # A day of a month selected without its month, a weekday and an ordinal
-  # are counted within the period the selection is given, and where that is
-  # a month or a year the count is of the month a date names. A month alone
-  # is the month the calendar counts, a month with a day is the date they
-  # name, and a day of the year, a week and the units of a time of day are
-  # counted from the year's or the day's own start: each is answered. A day
-  # with no month, selected in a year, is a day of the year by the time it is
-  # asked here (`Tempo.RRule.Selection.read_in_its_period/1`).
-  @spec selection(list(), Tempo.t() | Interval.t(), module()) ::
-          :ok | {:error, ConversionError.t()}
-  def selection(selection, value, calendar) when is_list(selection) do
-    years = years_of(value)
-
-    cond do
-      UnitValues.years_begin_with_first_month?(years, calendar) ->
-        :ok
-
-      counts_days?(selection) and within_a_month_or_year?(value) ->
-        {:error, error(value, :selection, calendar)}
-
-      month_alone?(selection) and not months_counted?(years, calendar) ->
-        {:error, error(value, :month, calendar)}
-
-      true ->
-        :ok
-    end
-  end
-
-  @doc false
-  # A selector of `Tempo.select/2`, or the unit and the numbers of one given
-  # as numbers, that is merged onto `from`, the start of the span it selects
-  # from, in a year that does not begin with its first month: a day of a
-  # month without its month, selected from a month, and a month alone in a
-  # year whose months are not counted from its start. A weekday is selected
-  # among the span's own days, and is answered; so is a day with no month
-  # selected from a year, which is merged as the day of the year it is.
-  @spec selector(list(), Tempo.t()) :: :ok | {:error, ConversionError.t()}
-  def selector(selector, %Tempo{time: time, calendar: calendar} = from)
-      when is_list(selector) and is_list(time) do
-    calendar = Compare.effective_calendar(calendar)
-    years = year_of(time)
-    asked = "the selection of #{inspect(selector)} from #{inspect(from)}"
-
-    cond do
-      UnitValues.years_begin_with_first_month?(years, calendar) ->
-        :ok
-
-      day_alone?(selector) and not finer_than_a_month?(time) ->
-        {:error, error(asked, :selection, calendar)}
-
-      month_alone?(selector) and not months_counted?(years, calendar) ->
-        {:error, error(asked, :month, calendar)}
-
-      true ->
-        :ok
-    end
-  end
-
-  def selector(_selector, _base), do: :ok
-
-  @doc false
-  # A week selected from a month that is not built. A week after a month is
-  # a week of the month, which `Tempo.select/2` gives as the span of its
-  # dates where it is a whole number selected from a month, each of a set
-  # of them or each a mask matches, with a day or a time under it or none.
-  # What is refused here is a week the merge cannot place, in a year that
-  # does not begin with its first month.
-  # `selector` is what was to be merged onto `from`. A week selected from a
-  # day or a time of day is as coarse as its period or coarser, and is a
-  # filter by the week of the year.
+  # A week selected from a month that the merge cannot place. A week after a
+  # month is a week of the month, which `Tempo.select/2` gives as the span of
+  # its dates where it is a whole number selected from a month, each of a
+  # set of them or each a mask matches, with a day or a time under it or
+  # none. `selector` is what was to be merged onto `from`. A week selected
+  # from a day or a time of day is as coarse as its period or coarser, and
+  # is a filter by the week of its month.
   @spec week_of_month(list(), Tempo.t()) :: {:error, ConversionError.t()}
   def week_of_month(selector, %Tempo{calendar: calendar} = from) when is_list(selector) do
     asked = "the selection of #{inspect(selector)} from #{inspect(from)}"
@@ -256,101 +125,4 @@ defmodule Tempo.NotBuilt do
   @spec rule_to_an_end(Interval.t()) :: ConversionError.t()
   def rule_to_an_end(%Interval{to: %Tempo{calendar: calendar}} = recurrence),
     do: error(recurrence, :rule_to_an_end, Compare.effective_calendar(calendar))
-
-  @doc false
-  # A step from a value that holds several months (a set, a range, a mask or
-  # an unspecified one) in a year whose months its calendar does not count
-  # from the day the year begins: a year of `Calendrical.Reform.England`
-  # before 1751. The values such a unit stands for are listed by the
-  # calendar's count of its months, which that year has none of, so the step
-  # has no values to reach. Every other step in a calendar whose year does
-  # not begin with its first month is each value stepped by its calendar.
-  @spec shift(Tempo.t(), list()) :: :ok | {:error, ConversionError.t()}
-  def shift(%Tempo{calendar: calendar}, _duration_time)
-      when calendar in [nil | @first_month_first],
-      do: :ok
-
-  def shift(%Tempo{time: time, calendar: calendar} = tempo, duration_time)
-      when is_list(time) and is_list(duration_time) do
-    calendar = Compare.effective_calendar(calendar)
-
-    if months_not_listed?(time, year_of(time), calendar),
-      do: {:error, error(tempo, :shift, calendar)},
-      else: :ok
-  end
-
-  def shift(_value, _duration_time), do: :ok
-
-  defp months_not_listed?(time, years, calendar) do
-    several_months?(value_of(time, :month)) and
-      not UnitValues.years_begin_with_first_month?(years, calendar) and
-      not months_counted?(years, calendar)
-  end
-
-  defp several_months?(nil), do: false
-  defp several_months?(month) when is_integer(month), do: false
-  defp several_months?(_a_set_a_mask_or_any), do: true
-
-  # The years a value, or the start of a recurrence, names.
-  defp years_of(%Tempo{time: time}) when is_list(time), do: year_of(time)
-  defp years_of(%Interval{from: %Tempo{time: time}}) when is_list(time), do: year_of(time)
-  defp years_of(_no_one_start), do: nil
-
-  defp year_of(time), do: value_of(time, :year)
-
-  # A unit's value in a time list, whose entries are not all pairs: a group
-  # of a set is a 3-tuple.
-  defp value_of(time, unit) do
-    case List.keyfind(time, unit, 0) do
-      nil -> nil
-      entry -> elem(entry, 1)
-    end
-  end
-
-  defp months_counted?(year, calendar) when is_integer(year),
-    do: UnitValues.months_counted_from_year_start?(year, calendar)
-
-  defp months_counted?(years, calendar) do
-    years
-    |> UnitValues.whole_years()
-    |> Enum.all?(&UnitValues.months_counted_from_year_start?(&1, calendar))
-  end
-
-  defp month_alone?(time),
-    do: List.keymember?(time, :month, 0) and not List.keymember?(time, :day, 0)
-
-  defp day_alone?(time),
-    do: List.keymember?(time, :day, 0) and not List.keymember?(time, :month, 0)
-
-  # Whether a selection counts days within the period it is given: a day of
-  # a month with no month beside it, a weekday with no week beside it, or an
-  # ordinal. A selection within the selection is counted as it is.
-  defp counts_days?(selection) do
-    units = selected_units(selection)
-
-    (:day in units and :month not in units) or
-      (:day_of_week in units and :week not in units) or
-      :instance in units
-  end
-
-  defp selected_units(selection) when is_list(selection),
-    do: Enum.flat_map(selection, &selected_unit/1)
-
-  defp selected_unit({:selection, nested}), do: selected_units(nested)
-  defp selected_unit(entry) when is_tuple(entry), do: [elem(entry, 0)]
-  defp selected_unit(_other), do: []
-
-  # Whether the period a selection is resolved in is a month, a year or
-  # longer: the units a value holds beside its selection, or the unit a
-  # recurrence steps by. A recurrence written with no cadence resolves its
-  # rule in the span it names, which is taken to be one.
-  defp within_a_month_or_year?(%Tempo{time: time}), do: not finer_than_a_month?(time)
-
-  defp within_a_month_or_year?(%Interval{duration: %Duration{time: [{unit, _amount} | _rest]}}),
-    do: unit not in @finer_than_a_month
-
-  defp within_a_month_or_year?(_no_cadence), do: true
-
-  defp finer_than_a_month?(time),
-    do: Enum.any?(time, &(is_tuple(&1) and elem(&1, 0) in @finer_than_a_month))
 end

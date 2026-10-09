@@ -67,7 +67,6 @@ defmodule Tempo.RRule.Selection do
   alias Tempo.Interval
   alias Tempo.Mask
   alias Tempo.Math
-  alias Tempo.NotBuilt
   alias Tempo.UnitValues
   alias Tempo.Validation
 
@@ -3199,18 +3198,9 @@ defmodule Tempo.RRule.Selection do
       named = weeks |> List.wrap() |> UnitValues.named(1..Enum.count(in_month)//1)
       {:ok, Enum.map(named, &Enum.at(in_month, &1 - 1))}
     else
-      {:error, :no_period} -> no_weeks_of_month(candidate, calendar)
-      _no_one_month -> {:ok, []}
+      # A month the calendar numbers no weeks in selects none.
+      _no_weeks_or_no_one_month -> {:ok, []}
     end
-  end
-
-  # A month the calendar numbers no weeks in selects none. In a year that
-  # does not begin with its first month the calendar counts its months
-  # otherwise than its dates name them, and the weeks of one are not built.
-  defp no_weeks_of_month(%Interval{from: from} = candidate, calendar) do
-    if UnitValues.year_begins_with_first_month?(year_of(candidate), calendar),
-      do: {:ok, []},
-      else: {:error, NotBuilt.error(from, :week_of_month, calendar)}
   end
 
   # The parts that go with a week of a month and pick nothing within it:

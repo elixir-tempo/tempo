@@ -14,7 +14,6 @@ defmodule Tempo.Math do
   alias Tempo.Iso8601.Parser
   alias Tempo.Iso8601.Unit
   alias Tempo.Mask
-  alias Tempo.NotBuilt
   alias Tempo.Qualification
   alias Tempo.ResolutionError
   alias Tempo.TimeZoneDatabase
@@ -950,24 +949,8 @@ defmodule Tempo.Math do
          %Tempo.Duration{time: duration_time} = duration
        ) do
     case unit_the_rule_lacks(time, duration_time) do
-      nil -> add_where_built(tempo, duration)
+      nil -> stepped_value(tempo, duration)
       unit -> {:error, rule_unit_error(tempo, unit)}
-    end
-  end
-
-  # A step Tempo counts where its calendar would have to be asked is refused,
-  # and so is an answer that is a month its calendar does not count.
-  defp add_where_built(%Tempo{} = tempo, %Tempo.Duration{time: duration_time} = duration) do
-    case NotBuilt.shift(tempo, duration_time) do
-      :ok ->
-        tempo
-        |> add_to_value(duration)
-        |> Validation.calendar_date_from_week_date()
-        |> Validation.calendar_date_from_ordinal_date()
-        |> NotBuilt.result()
-
-      {:error, _not_built} = error ->
-        error
     end
   end
 
@@ -2220,7 +2203,6 @@ defmodule Tempo.Math do
     |> add_to_value(duration)
     |> Validation.calendar_date_from_week_date()
     |> Validation.calendar_date_from_ordinal_date()
-    |> NotBuilt.result()
   end
 
   # The values a step landed on, as one value where the product of what each

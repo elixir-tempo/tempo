@@ -3289,7 +3289,6 @@ defmodule Tempo do
       |> truncate(day_unit(truncate_to, tempo))
       |> qualified_as_it_stands()
       |> at_its_offset()
-      |> NotBuilt.result()
     end
   end
 
@@ -3606,7 +3605,6 @@ defmodule Tempo do
       |> Rounding.round(round_to)
       |> qualified_as_it_stands()
       |> at_its_offset()
-      |> NotBuilt.result()
     end
   end
 
@@ -4345,7 +4343,7 @@ defmodule Tempo do
           do: extend_group(tempo),
           else: extend_by_finer_unit(tempo)
 
-      extended |> as_the_clock_shows_it(tempo) |> at_its_offset() |> NotBuilt.result()
+      extended |> as_the_clock_shows_it(tempo) |> at_its_offset()
     end
   end
 
@@ -4762,7 +4760,7 @@ defmodule Tempo do
          %Tempo{} = extended <- extend_resolution_as_written(tempo, target_unit),
          %Tempo{} = shown <- extended |> as_calendar_date() |> Zone.shown_by_the_clock(),
          :ok <- Validation.validate_zone_existence(shown) do
-      NotBuilt.result(shown)
+      shown
     end
   end
 
@@ -8280,10 +8278,7 @@ defmodule Tempo do
              "#{inspect(interval)} cannot select by a month, a day of one or a day of the year."
        )}
     else
-      calendar = Compare.effective_calendar(calendar_of(rule))
-
-      with :ok <- NotBuilt.selection(time, interval, calendar),
-           do: Selection.calendar_week_in_its_year(time, interval)
+      Selection.calendar_week_in_its_year(time, interval)
     end
   end
 

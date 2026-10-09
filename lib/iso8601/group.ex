@@ -8,7 +8,6 @@ defmodule Tempo.Iso8601.Group do
   alias Tempo.Iso8601.Group
   alias Tempo.Iso8601.Parser
   alias Tempo.Math
-  alias Tempo.NotBuilt
   alias Tempo.ParseError
   alias Tempo.Qualification
   alias Tempo.UnitValues
@@ -122,12 +121,8 @@ defmodule Tempo.Iso8601.Group do
   # (`resolve_seasons/2`): it was read as the northern season everywhere.
   # Nothing follows it, the standard writing a season as a year and its
   # season alone; a day after one was read as a day of its first month.
-  #
-  # Where a season is not built, in a year that does not begin with its
-  # first month (`Tempo.NotBuilt`), it is refused as it is read, as the
-  # season of a hemisphere is.
-  def expand_groups([{:year, year}, {:month, season}], calendar) when season in 21..24 do
-    with :ok <- season_built(year, season, calendar), do: [{:year, year}, {:season, season}]
+  def expand_groups([{:year, year}, {:month, season}], _calendar) when season in 21..24 do
+    [{:year, year}, {:season, season}]
   end
 
   def expand_groups([{:year, _year}, {:month, season}, {unit, _value} | _rest], _calendar)
@@ -315,11 +310,6 @@ defmodule Tempo.Iso8601.Group do
           "come before its spring and summer south of the equator, and after them north of it."
     )
   end
-
-  defp season_built(year, season, calendar) when is_integer(year) and calendar != Gregorian,
-    do: NotBuilt.season(year, season, calendar)
-
-  defp season_built(_year, _season, _calendar), do: :ok
 
   @doc false
   # Whether a value holds a season of 21 to 24 that has no hemisphere yet.
@@ -1036,8 +1026,7 @@ defmodule Tempo.Iso8601.Group do
   # the Gregorian, found among the Gregorian seasons of the years it
   # overlaps: its span, or its nth day, in that calendar.
   defp calendar_season(year, code, rest, calendar) do
-    with :ok <- NotBuilt.season(year, code, calendar),
-         {:ok, first, last} <- gregorian_year_bounds(year, calendar),
+    with {:ok, first, last} <- gregorian_year_bounds(year, calendar),
          {:ok, start_date, end_date} <- season_starting_within(code, first, last, year, calendar) do
       calendar_season_span(start_date, end_date, rest, calendar)
     end
@@ -1136,23 +1125,16 @@ defmodule Tempo.Iso8601.Group do
     end
   end
 
-  # A month has the weeks its calendar numbers in it, and no other. In a
-  # year that does not begin with its first month the calendar counts the
-  # year's months otherwise than its dates name them, and the weeks of one
-  # are not yet worked out (`Tempo.NotBuilt`).
+  # A month has the weeks its calendar numbers in it, and no other.
   defp no_week_of_month(year, month, week, calendar) do
-    if UnitValues.year_begins_with_first_month?(year, calendar) do
-      InvalidDateError.exception(
-        unit: :week,
-        value: week,
-        year: year,
-        month: month,
-        calendar: calendar,
-        reason: "#{inspect(calendar)} numbers no week #{week} in month #{month} of #{year}"
-      )
-    else
-      NotBuilt.error("week #{week} of month #{month} of #{year}", :week_of_month, calendar)
-    end
+    InvalidDateError.exception(
+      unit: :week,
+      value: week,
+      year: year,
+      month: month,
+      calendar: calendar,
+      reason: "#{inspect(calendar)} numbers no week #{week} in month #{month} of #{year}"
+    )
   end
 
   # A day of the week is the date among the week's with that weekday, so a

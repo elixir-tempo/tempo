@@ -1325,7 +1325,7 @@ defmodule Tempo.Select do
          %Tempo{time: [selection: selection]} = rule,
          freq
        ) do
-    with :ok <- filters_in(selection, from, calendar) do
+    with :ok <- filters_in(selection, calendar) do
       case Selection.apply(period, read_in_its_period(rule, from), freq) do
         {:error, _reason} = error -> error
         [] -> IntervalSet.new([], coalesce: false)
@@ -1349,12 +1349,11 @@ defmodule Tempo.Select do
 
   # What a merged constraint is asked before it is merged
   # (`merged_constraint_tempo/2`): a calendar of weeks has no month to
-  # filter by, and a selector Tempo does not yet answer for in the period's
-  # calendar is refused, and named.
-  defp filters_in(selection, from, calendar) do
+  # filter by.
+  defp filters_in(selection, calendar) do
     if Validation.written_in_another_calendar?(selection, calendar),
       do: {:error, selects_by_month_error(calendar, selection)},
-      else: NotBuilt.selector(selection, from)
+      else: :ok
   end
 
   # A week selected from a month is a week of the month, which the resolver
@@ -1598,19 +1597,12 @@ defmodule Tempo.Select do
   end
 
   # An index is a value of the unit below the base's: a day of a month, a
-  # month of a year. One Tempo does not yet answer for in the base's
-  # calendar is refused, and named.
+  # month of a year.
   defp select_built_indices(source, base_time, next_unit, indices) do
-    case NotBuilt.selector([{next_unit, indices}], %{source | time: base_time}) do
-      :ok ->
-        indices
-        |> Enum.map(fn idx -> project_index(source, base_time, next_unit, idx) end)
-        |> Enum.reject(&is_nil/1)
-        |> IntervalSet.new(coalesce: false)
-
-      {:error, _not_built} = error ->
-        error
-    end
+    indices
+    |> Enum.map(fn idx -> project_index(source, base_time, next_unit, idx) end)
+    |> Enum.reject(&is_nil/1)
+    |> IntervalSet.new(coalesce: false)
   end
 
   # An index names a component nothing has checked, so one the period
@@ -2170,19 +2162,13 @@ defmodule Tempo.Select do
   # year a month and a day belong to (the NRF year 2026 holds January 2027),
   # so a month, a day of one or a day of the year selects nothing it could be
   # held to: it is an error, as it is in a recurrence's selection.
-  defp merged_constraint_tempo(%Interval{from: %Tempo{calendar: calendar}} = base, c_time) do
+  defp merged_constraint_tempo(
+         %Interval{from: %Tempo{calendar: calendar} = from} = base,
+         c_time
+       ) do
     if Validation.written_in_another_calendar?(c_time, calendar),
       do: {:error, selects_by_month_error(calendar, c_time)},
-      else: merge_built_constraint(base, c_time)
-  end
-
-  # A selector Tempo answers for in the base's calendar is merged onto the
-  # base; one it does not yet is refused, and named.
-  defp merge_built_constraint(%Interval{from: from} = base, c_time) do
-    case NotBuilt.selector(c_time, from) do
-      :ok -> merged_onto(base, from, c_time)
-      {:error, _not_built} = error -> error
-    end
+      else: merged_onto(base, from, c_time)
   end
 
   defp merged_onto(base, from, c_time) do
