@@ -475,11 +475,17 @@ defmodule Tempo.Select do
   # ---- Interval base: select period by period ----
 
   # An end that is a season of 21 to 24 has no dates as it is written, and
-  # the interval is selected from as the span it converts to.
+  # the interval is selected from as the span it converts to. So is one with
+  # an end that is a group (`2026Y1Q/2026Y2Q`, a quarter, a half, or any
+  # `nGnMU`), which names several months where a span has one to start from
+  # and one to end at: it was walked as it stood, and gave no weekday of its
+  # six months and the 15th of one of them.
   def select(%Interval{} = interval, selector) do
-    if Group.abstract_season?(interval),
-      do: select_converted(interval, selector),
-      else: select_interval(interval, selector)
+    cond do
+      Group.abstract_season?(interval) -> select_converted(interval, selector)
+      group_at_an_end?(interval) -> select_from_its_span(interval, selector)
+      true -> select_interval(interval, selector)
+    end
   end
 
   # ---- Catch-all: clearer error ----
@@ -490,6 +496,25 @@ defmodule Tempo.Select do
        "Tempo.select/2 cannot select from #{inspect(base)}: the base is a Tempo value, " <>
          "an interval or an interval set."
      )}
+  end
+
+  defp group_at_an_end?(%Interval{from: from, to: to}),
+    do: holds_a_group?(from) or holds_a_group?(to)
+
+  defp holds_a_group?(%Tempo{time: time}) when is_list(time),
+    do: Enum.any?(time, &match?({_unit, {:group, _values}}, &1))
+
+  defp holds_a_group?(_open_or_none), do: false
+
+  # The span is selected from as it is converted, and is not asked again
+  # whether an end holds a group: one that still did would be selected from
+  # as it stood, where asking again would never end.
+  defp select_from_its_span(%Interval{} = interval, selector) do
+    case Tempo.to_interval(interval) do
+      {:ok, %Interval{} = span} -> select_interval(span, selector)
+      {:ok, %IntervalSet{} = set} -> select(set, selector)
+      {:error, _reason} = error -> error
+    end
   end
 
   defp select_members(set, selector) do
