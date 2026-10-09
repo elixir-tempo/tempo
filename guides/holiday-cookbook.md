@@ -101,25 +101,27 @@ The equinoxes and solstices come from `Astro`; the 24 East Asian solar terms and
 
 ## Other calendars — Islamic, Hebrew, and the lunisolar new years
 
-A holiday defined in another calendar starts on a date **in that calendar** and is given a `P1Y` cadence — one *calendar* year — so successive occurrences **recur on that calendar's own year** and drift against the Gregorian year exactly as the holiday does. The `[u-ca=…]` tag is a single **trailing suffix** on the whole recurrence (`R/5787Y3M25D/P1Y[u-ca=hebrew]`), qualifying the start and the cadence together, not embedded mid-string on the date. RRULE is Gregorian-only, so every row is a dash; the **Converts to** column is the Gregorian date each recurrence resolves to in 2026.
+A holiday defined in another calendar is the same per-year selection, made **in that calendar**: the `[u-ca=…]` tag is a single **trailing suffix** on the whole recurrence (`R/../P1Y/FL3M25DN[u-ca=hebrew]`), so the `P1Y` cadence is one of *that calendar's* years and the month and day are its own. Successive occurrences **recur on the calendar's own year** and drift against the Gregorian year exactly as the holiday does. RRULE is Gregorian-only, so every row is a dash; the **Converts to** column is the Gregorian date each recurrence resolves to in 2026.
 
 | Rule type | Holiday (rule in English) | Tempo | Converts to (2026) | RRULE |
 |---|---|---|---|---|
-| Islamic (Umm al-Qura) | Islamic New Year — 1 Muḥarram | `~o"R/1447Y1M1D/P1Y[u-ca=islamic-umalqura]"` | 2026-06-16 | — |
-| Islamic | Mawlid — 12 Rabīʿ al-awwal | `~o"R/1447Y3M12D/P1Y[u-ca=islamic-umalqura]"` | 2026-08-25 | — |
-| Islamic | Eid al-Fitr — 1 Shawwāl | `~o"R/1447Y10M1D/P1Y[u-ca=islamic-umalqura]"` | 2026-03-20 | — |
-| Islamic | Eid al-Adha — 10 Dhū al-Ḥijja | `~o"R/1447Y12M10D/P1Y[u-ca=islamic-umalqura]"` | 2026-05-27 | — |
-| Hebrew | Rosh Hashanah — 1 Tishrei | `~o"R/5787Y1M1D/P1Y[u-ca=hebrew]"` | 2026-09-12 | — |
-| Hebrew | Yom Kippur — 10 Tishrei | `~o"R/5787Y1M10D/P1Y[u-ca=hebrew]"` | 2026-09-21 | — |
-| Hebrew | Hanukkah — 25 Kislev | `~o"R/5787Y3M25D/P1Y[u-ca=hebrew]"` | 2026-12-05 | — |
-| Hebrew (leap-aware) | Passover — 15 Nisan | `~o"R/5786Y7m15D/P1Y[u-ca=hebrew]"` | 2026-04-02 | — |
-| Chinese lunisolar | Chinese New Year — 1st day of the 1st month | `~o"R/4663Y1M1D/P1Y[u-ca=chinese]"` | 2026-02-17 | — |
-| Persian (Solar Hijri) | Nowruz — 1 Farvardin | `~o"R/1405Y1M1D/P1Y[u-ca=persian]"` | 2026-03-21 | — |
-| Coptic | Coptic / Orthodox Christmas — 29 Koiak | `~o"R/1742Y4M29D/P1Y[u-ca=coptic]"` | 2026-01-07 | — |
-| Julian | Orthodox Christmas (Julian reckoning) — 25 December Julian (Gregorian 7 January) | `~o"R/2025Y12M25D/P1Y[u-ca=julian]"` | 2026-01-07 | — |
-| Julian | Old New Year — 1 January Julian (Gregorian 14 January) | `~o"R/2026Y1M1D/P1Y[u-ca=julian]"` | 2026-01-14 | — |
+| Islamic (Umm al-Qura) | Islamic New Year — 1 Muḥarram | `~o"R/../P1Y/FL1M1DN[u-ca=islamic-umalqura]"` | 2026-06-16 | — |
+| Islamic | Mawlid — 12 Rabīʿ al-awwal | `~o"R/../P1Y/FL3M12DN[u-ca=islamic-umalqura]"` | 2026-08-25 | — |
+| Islamic | Eid al-Fitr — 1 Shawwāl | `~o"R/../P1Y/FL10M1DN[u-ca=islamic-umalqura]"` | 2026-03-20 | — |
+| Islamic | Eid al-Adha — 10 Dhū al-Ḥijja | `~o"R/../P1Y/FL12M10DN[u-ca=islamic-umalqura]"` | 2026-05-27 | — |
+| Hebrew | Rosh Hashanah — 1 Tishrei | `~o"R/../P1Y/FL1M1DN[u-ca=hebrew]"` | 2026-09-12 | — |
+| Hebrew | Yom Kippur — 10 Tishrei | `~o"R/../P1Y/FL1M10DN[u-ca=hebrew]"` | 2026-09-21 | — |
+| Hebrew | Hanukkah — 25 Kislev | `~o"R/../P1Y/FL3M25DN[u-ca=hebrew]"` | 2026-12-05 | — |
+| Hebrew (leap-aware) | Passover — 15 Nisan | `~o"R/../P1Y/FL7m15DN[u-ca=hebrew]"` | 2026-04-02 | — |
+| Chinese lunisolar | Chinese New Year — 1st day of the 1st month | `~o"R/../P1Y/FL1M1DN[u-ca=chinese]"` | 2026-02-17 | — |
+| Persian (Solar Hijri) | Nowruz — 1 Farvardin | `~o"R/../P1Y/FL1M1DN[u-ca=persian]"` | 2026-03-21 | — |
+| Coptic | Coptic / Orthodox Christmas — 29 Koiak | `~o"R/../P1Y/FL4M29DN[u-ca=coptic]"` | 2026-01-07 | — |
+| Julian | Orthodox Christmas (Julian reckoning) — 25 December Julian (Gregorian 7 January) | `~o"R/../P1Y/FL12M25DN[u-ca=julian]"` | 2026-01-07 | — |
+| Julian | Old New Year — 1 January Julian (Gregorian 14 January) | `~o"R/../P1Y/FL1M1DN[u-ca=julian]"` | 2026-01-14 | — |
 
-> **Hebrew month numbers shift in leap years.** A Hebrew leap year inserts Adar I before Adar II, so Nisan is month 7 of an ordinary year like 5786 but month **8** of a leap year like 5787. Write a month after Adar with the traditional `m` marker — Passover's `7m` above is 15 Nisan in any year — and a `P1Y` cadence keeps it on Nisan in every later year.
+> **Hebrew month numbers shift in leap years.** A Hebrew leap year inserts Adar I before Adar II, so Nisan is month 7 of an ordinary year like 5786 but month **8** of a leap year like 5787. Write a month after Adar with the traditional `m` marker — Passover's `7m` above is 15 Nisan in any year.
+
+> **A holiday is a selection, not a start and a cadence.** A recurrence with no selection is as long as it steps: `~o"R/5787Y1M1D/P1Y[u-ca=hebrew]"` is the whole year from 1 Tishrei, and then the next, where the selection `FL1M1DN` is the one day of each. Left out of the workdays (`Tempo.workdays(:US, except: holiday)`), the first leaves no working day after it starts and the second leaves out Rosh Hashanah.
 
 ## Observed-date substitution (a transform over a holiday)
 
@@ -176,7 +178,7 @@ end)
 Tempo.within?(~o"2026-05-14", holidays)                          # => true
 ```
 
-And *"every N years"* is a plain cadence, not a filter — `~o"R/2024-07-04/P4Y"` fires on the 4th of July only every fourth year (2024, 2028, 2032, …).
+And *"every N years"* is a longer cadence, not a filter — `~o"R/2024/P4Y/FL7M4DN"` is the 4th of July of every fourth year from 2024 (2024, 2028, 2032, …).
 
 `union/2` gives the enable family; `IntervalSet.filter/2` the weekday gates; and `within?/2`, `contains?/2` are the predicates the bridge and "if it is a holiday then…" cascades test against the year's holiday set. This is the point of modelling holidays as interval sets: they compose with each other, and with anyone's free-time set, through the same algebra.
 
