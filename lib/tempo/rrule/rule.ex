@@ -76,6 +76,7 @@ defmodule Tempo.RRule.Rule do
   """
 
   alias Tempo.Iso8601.Parser
+  alias Tempo.Iso8601.Unit
   alias Tempo.UnitValues
   alias Tempo.Validation
 
@@ -129,6 +130,45 @@ defmodule Tempo.RRule.Rule do
             byyear: nil,
             bymonthday_nearest: nil,
             bymonthday_or_byday: nil
+
+  @doc false
+  # An occurrence of a rule is as long as its start is precise: a day for a
+  # date, an hour for a time written to the hour. A rule that makes points in
+  # its period (a day it states, a time of day) is given their length where
+  # it is resolved (`Tempo.RRule.Selection`). One that makes none, having no
+  # part or only parts that keep or drop its periods, would run a whole
+  # cadence, as an ISO 8601 recurrence's occurrences do. So where its start
+  # is written finer than it steps, it is given the length here: a daily rule
+  # from 10:00 is the hour from 10:00 each day (decided 2026-10-09, user). It
+  # was a day long, where a weekly or a monthly rule from the same start,
+  # which takes a part from it, was an hour.
+  #
+  # A start as coarse as the step, or coarser, is the step's own length: an
+  # hourly rule from a date is an hour of it. One given a length by its
+  # caller (`:duration`, `:base_to`) keeps that.
+  @spec as_long_as_its_start(map(), frequency(), Tempo.t() | nil, boolean()) :: map()
+  def as_long_as_its_start(metadata, frequency, %Tempo{} = start, false = _makes_points?)
+      when not is_map_key(metadata, :occurrence_duration) and
+             not is_map_key(metadata, :occurrence_base_to) do
+    with {unit, _span} <- Tempo.resolution(start),
+         {:ok, unit} <- unit_of_a_length(unit),
+         :lt <- Unit.compare(unit, frequency) do
+      Map.put(metadata, :occurrence_duration, %Tempo.Duration{time: [{unit, 1}]})
+    else
+      _as_long_as_it_steps -> metadata
+    end
+  end
+
+  def as_long_as_its_start(metadata, _frequency, _start, _makes_points?), do: metadata
+
+  # The unit a start is precise to, as the unit of a length: a day however
+  # it is counted. A start precise to a fraction of a second, or to no unit
+  # a length is counted in, leaves its rule's occurrences as long as it steps.
+  defp unit_of_a_length(unit) when unit in [:year, :month, :week, :day, :hour, :minute, :second],
+    do: {:ok, unit}
+
+  defp unit_of_a_length(unit) when unit in [:day_of_week, :day_of_year], do: {:ok, :day}
+  defp unit_of_a_length(_other), do: :error
 
   @doc """
   Reads a month as a rule writes it.

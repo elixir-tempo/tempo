@@ -209,6 +209,8 @@ defmodule Tempo.RRule.Expander do
 
     base_metadata = Keyword.get(options, :metadata, %{})
 
+    repeat_rule = repeat_rule(rule, dtstart)
+
     metadata =
       base_metadata
       |> put_if_given(
@@ -217,13 +219,14 @@ defmodule Tempo.RRule.Expander do
         &match?(%Tempo.Duration{}, &1)
       )
       |> put_if_given(:occurrence_base_to, Keyword.get(options, :base_to), &match?(%Tempo{}, &1))
+      |> Rule.as_long_as_its_start(rule.freq, dtstart, Selection.expands?(repeat_rule, rule.freq))
 
     %Interval{
       from: dtstart,
       to: rule.until,
       duration: cadence,
       recurrence: recurrence,
-      repeat_rule: repeat_rule(rule, dtstart),
+      repeat_rule: repeat_rule,
       metadata: metadata
     }
   end

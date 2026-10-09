@@ -499,35 +499,9 @@ defmodule Tempo.RRule do
       metadata:
         options
         |> occurrence_metadata()
-        |> as_long_as_its_start(parts, from, Selection.expands?(repeat_rule, freq_unit))
+        |> Rule.as_long_as_its_start(freq_unit, from, Selection.expands?(repeat_rule, freq_unit))
     }
   end
-
-  # An occurrence of a rule is as long as its start is precise, a day for a
-  # date. A rule that makes points in its period (a day it states, a time of
-  # day) is given their length where it is resolved. One whose `SKIP` is
-  # `BACKWARD` states no day, so that the step from its start keeps the last
-  # day of a short month, and where it makes no points it is given the length
-  # here: without it each occurrence would run a whole cadence, as an ISO
-  # 8601 recurrence's does.
-  #
-  # That is a rule that steps by months or years, the only ones a `SKIP`
-  # moves a day in. In any other the skip changes nothing and the rule is
-  # the one without it: an hourly rule from a date was given occurrences a
-  # day long, an hour apart.
-  defp as_long_as_its_start(metadata, parts, %Tempo{} = from, false)
-       when not is_map_key(metadata, :occurrence_duration) and
-              not is_map_key(metadata, :occurrence_base_to) do
-    with :backward <- Keyword.get(parts, :skip),
-         frequency when frequency in [:month, :year] <- Keyword.get(parts, :freq),
-         {unit, _span} when is_atom(unit) <- Tempo.resolution(from) do
-      Map.put(metadata, :occurrence_duration, %Tempo.Duration{time: [{unit, 1}]})
-    else
-      _as_it_is -> metadata
-    end
-  end
-
-  defp as_long_as_its_start(metadata, _parts, _from, _makes_points?), do: metadata
 
   # Build the recurring interval's metadata from the parse options,
   # mirroring `Tempo.RRule.Expander.to_ast/3` so the string-parsing
