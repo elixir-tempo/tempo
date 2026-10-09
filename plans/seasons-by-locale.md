@@ -1,8 +1,8 @@
 # Seasons by locale
 
-**Status:** planning, 2026-10-09
+**Status:** in progress, 2026-10-09
 
-Localize gives a territory's hemisphere since 2026-10-09 (`Localize.Territory.Hemisphere`), so nothing blocks the work but its open questions, which were put to the user on 2026-10-09. The decisions below are the user's, taken on 2026-10-08 in three rounds.
+Localize gives a territory's hemisphere since 2026-10-09 (`Localize.Territory.Hemisphere`). The decisions below are the user's, taken on 2026-10-08 in three rounds and, for the four questions that were open, on 2026-10-09.
 
 ## The problem
 
@@ -52,15 +52,15 @@ Localize.Territory.Hemisphere.hemisphere(:ZZ)     # {:error, %Localize.UnknownTe
 
 * A region that lies on one side is answered from its territories, and a territory it does not know is an error.
 
-## Open questions
+## The four questions, answered 2026-10-09 (user, each as recommended)
 
-* **Where the current locale is asked** — my reading of the two answers together, to be confirmed: a reader resolves a season only with an explicit `:locale` or `:territory`, since the sigil reads at compile time and a reader that asked the current locale would expand it there; a season is composed later, by the option or the function, and it is there that the application's default and the current locale are asked where none is named. So `~o"2026-21"` is abstract, and `Tempo.to_interval(~o"2026-21")` with no option is the season of the current locale's hemisphere.
+* **Where the current locale is asked** — a reader resolves a season only with an explicit `:locale` or `:territory`, so `~o"2026-21"` and `Tempo.from_iso8601("2026-21")` are abstract and `Tempo.from_iso8601("2026-21", territory: :AU)` is `~o"2026Y9M/12M"`. A season is composed later, by `Tempo.to_interval/2` and the functions built on it or by the function below, and it is there that the application's default and the current locale are asked where none is named: `Tempo.to_interval(~o"2026-21")` is the spring of the current locale's territory.
 
-* **How the value holds it** — a unit of its own in the value's units (`[year: 2026, season: 21]`), and what a range of seasons (`2026-21/2026-23`), a season in a set, and a season with a day after it (`2026-21-15`, its fifteenth day) become.
+* **How the value holds it** — a unit of its own in the value's units (`[year: 2026, season: 21]`), written back as `2026Y21M`. A range and a set of seasons stay abstract until they are composed. A day or a time of day after a season is refused, where `2026-21-15` read as 15 March.
 
-* **The name of the function** — `Tempo.in_territory/2`, `Tempo.localize/2` or another.
+* **The name of the function** — `Tempo.in_territory/2`, beside `Tempo.in_zone/2`.
 
-* **A territory with no one hemisphere** — Localize answers `:ambiguous` for a territory the equator runs through and for the world. A season of 21 to 24 composed with one is either a named error, which says to write the season of a hemisphere (25 to 32) or to give a territory on one side, or the northern season, as every such season is read today.
+* **A territory with no one hemisphere** — a named error, which says to write the season of a hemisphere (25 to 32) or to give a territory on one side of the equator.
 
 ## The shape of the work
 
@@ -70,8 +70,6 @@ Every function that takes a value takes the new shape, which is the cost of this
 
 ## Tasks
 
-* [ ] **The open questions** — put to the user on 2026-10-09, four of them, before any of the work below.
-
 * [ ] **A season kept in the value** — the parser, the value's units, `inspect` and `Tempo.to_iso8601/1`.
 
 * [ ] **A season resolved** — the readers' options, the hemisphere's months, and whatever the answers to the open questions name.
@@ -79,5 +77,7 @@ Every function that takes a value takes the new shape, which is the cost of this
 * [ ] **Every operation on an abstract season** — the named error or the answer, the matrix's cells, the guides.
 
 ### Done
+
+* [x] **The open questions** — put to the user and answered, each as recommended. 2026-10-09.
 
 * [x] **The hemisphere from Localize** — `Localize.Territory.Hemisphere.hemisphere/1`, in Tempo's lock since `117932d`. 2026-10-09.
