@@ -20,6 +20,7 @@ defmodule Tempo.SelectByARecurrenceTest do
 
   import Tempo.Sigils
 
+  alias Tempo.ConversionError
   alias Tempo.IntervalEndpointsError
   alias Tempo.IntervalSet
   alias Tempo.Matrix.Extent
@@ -138,6 +139,36 @@ defmodule Tempo.SelectByARecurrenceTest do
 
     test "that has more occurrences in a period than are given at once is that error" do
       assert {:error, %UnboundedRecurrenceError{}} = Tempo.select(~o"2026-06", ~o"R/T0H0M0S/PT1S")
+    end
+  end
+
+  describe "a recurrence of another calendar than the span's" do
+    defp hebrew(text), do: Tempo.from_iso8601!(text, Calendrical.Hebrew)
+
+    test "is refused, as a selection of another calendar is" do
+      # A rule is counted in its calendar, and its occurrences are that
+      # calendar's values: the 15th of a Hebrew month is no day of June.
+      for rule <- ["R/../P1M/FL15DN", "R/../P1D/FLT9HN", "R/../P1W/FL1KN", "R2/15D/P1W"] do
+        assert {^rule, {:error, %ConversionError{} = error}} =
+                 {rule, Tempo.select(~o"2026-06", hebrew(rule))}
+
+        assert Exception.message(error) =~ "written in Calendrical.Hebrew"
+      end
+
+      assert {:error, %ConversionError{}} = Tempo.select(~o"2026-06", hebrew("L15DN"))
+    end
+
+    test "selects from a span of its own calendar" do
+      {:ok, set} = Tempo.select(hebrew("5786Y9M"), hebrew("R/../P1M/FL15DN"))
+
+      assert Enum.map(IntervalSet.members(set), &Tempo.to_iso8601!/1) ==
+               ["5786Y9M15D/16D[u-ca=hebrew]"]
+    end
+
+    test "selects where it names no unit a calendar numbers, and has a start" do
+      # Hours are the same in every calendar, and the start is placed on the span.
+      assert selected(~o"2026-06-15", hebrew("R3/T9H/PT2H")) ==
+               occurrences(at(~D[2026-06-15], ~T[09:00:00]), 3, hour: 2)
     end
   end
 

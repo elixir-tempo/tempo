@@ -20,6 +20,7 @@ defmodule Tempo.SelectFromGroupsTest do
 
   import Tempo.Sigils
 
+  alias Tempo.IntervalEndpointsError
   alias Tempo.IntervalSet
   alias Tempo.Matrix.Extent
 
@@ -61,6 +62,49 @@ defmodule Tempo.SelectFromGroupsTest do
       # The first quarter of 2026 has thirteen Mondays.
       assert [_ | _] = mondays = days(@first_quarter, &(Date.day_of_week(&1) == 1))
       assert Enum.count(mondays) == 13
+    end
+  end
+
+  describe "an interval with an end that names several values" do
+    # A set or a range at an end is the span from each of its values, and
+    # unspecified digits the span of all they stand for, as
+    # `Tempo.to_interval/1` converts each. Such an interval was walked as it
+    # stood: `2026-XX/2027` gave no Monday of its year.
+    test "is selected from as what it converts to" do
+      for base <- [
+            "2026Y{1,3}M/2026-06",
+            "2026-01/2026Y{3,6}M",
+            "2026Y{1..2}M/2026-04",
+            "2026-XX/2027",
+            "2026Y6M{1,15}D/P1D"
+          ],
+          selector <- [~o"1K", ~o"15D", [1, 2], Tempo.workdays(:US)] do
+        {:ok, converted} = Tempo.to_interval(read(base))
+
+        assert {base, selector, Tempo.select(read(base), selector)} ==
+                 {base, selector, Tempo.select(converted, selector)}
+      end
+    end
+
+    test "gives the Mondays of the year unspecified months stand for" do
+      year = Date.range(~D[2026-01-01], ~D[2026-12-31])
+
+      assert selected(read("2026-XX/2027"), ~o"1K") == days(year, &(Date.day_of_week(&1) == 1))
+    end
+
+    test "gives the Mondays of the span from each month of a set" do
+      # From January to June and from March to June, each span's Mondays.
+      from_january =
+        days(Date.range(~D[2026-01-01], ~D[2026-05-31]), &(Date.day_of_week(&1) == 1))
+
+      from_march = days(Date.range(~D[2026-03-01], ~D[2026-05-31]), &(Date.day_of_week(&1) == 1))
+
+      assert Enum.sort(selected(read("2026Y{1,3}M/2026-06"), ~o"1K")) ==
+               Enum.sort(from_january ++ from_march)
+    end
+
+    test "is the error of an interval that converts to none" do
+      assert {:error, %IntervalEndpointsError{}} = Tempo.select(read("2026Y{1,3}M/.."), ~o"1K")
     end
   end
 

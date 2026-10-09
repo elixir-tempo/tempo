@@ -134,7 +134,9 @@ defmodule Tempo.Select do
   09:00, from 11:00 and from 13:00 of each day, and one with no count
   (`~o"R/T09/PT2H"`) those that start within the day. A recurrence with
   no start is what its rule selects in each period, so an RRULE selects
-  as it is read:
+  as it is read. A recurrence written in another calendar than the base's
+  is an error where its rule is counted in that calendar, as a selection
+  of another calendar is: it selects from a span of its own.
 
   ```elixir
   {:ok, standup}  = Tempo.RRule.parse("FREQ=WEEKLY;BYDAY=MO,WE,FR;BYHOUR=9")
@@ -520,12 +522,17 @@ defmodule Tempo.Select do
   end
 
   defp group_at_an_end?(%Interval{from: from, to: to}),
-    do: holds_a_group?(from) or holds_a_group?(to)
+    do: no_one_value?(from) or no_one_value?(to)
 
-  defp holds_a_group?(%Tempo{time: time}) when is_list(time),
-    do: Enum.any?(time, &match?({_unit, {:group, _values}}, &1))
+  # An end that holds a set, a range or unspecified digits names several
+  # values too (`2026Y{1,3}M/2026-06` is the span from each of two months,
+  # `2026-XX/2027` the year), and the interval is what it converts to: it
+  # was walked as it stood, and gave nothing. An end is one value where each
+  # of its units is one number.
+  defp no_one_value?(%Tempo{time: time}) when is_list(time),
+    do: Enum.any?(time, fn {_unit, value} -> not is_integer(value) end)
 
-  defp holds_a_group?(_open_or_none), do: false
+  defp no_one_value?(_open_or_none), do: false
 
   # The span is selected from as it is converted, and is not asked again
   # whether an end holds a group: one that still did would be selected from
@@ -1133,8 +1140,15 @@ defmodule Tempo.Select do
   defp select_period(period, %Range{} = range), do: select_period(period, Enum.to_list(range))
   defp select_period(_period, []), do: IntervalSet.new([], coalesce: false)
 
-  defp select_period(period, [head | _] = indices) when is_integer(head),
-    do: select_indices(period, indices)
+  # A list that starts with an index is a list of indices. What is none in
+  # it (`[1, ~o"T9H/T12H"]`) was passed over, so the list selected by its
+  # indices alone, where the same list in another order was an error.
+  defp select_period(period, [head | _] = indices) when is_integer(head) do
+    case Enum.reject(indices, &is_integer/1) do
+      [] -> select_indices(period, indices)
+      [no_index | _rest] -> {:error, unrecognised_selector(no_index)}
+    end
+  end
 
   # A season of 21 to 24 has no dates as it is written, and selects as the
   # span it converts to (`select_projections/2`).
@@ -2170,10 +2184,27 @@ defmodule Tempo.Select do
       do: {:error, another_calendar_error(selector, written, span_calendar)}
   end
 
-  defp of_another_calendar(%Interval{from: from, to: to}, span_calendar),
-    do: Enum.find_value([from, to], &of_another_calendar(&1, span_calendar))
+  # A recurrence's rule is a selection, and is held to the span's calendar
+  # as one is. One with no start is counted in its rule's calendar whatever
+  # the rule selects (a week or a month of that calendar from one to the
+  # next), and its occurrences are that calendar's values: it selects only
+  # from a span of its calendar.
+  defp of_another_calendar(%Interval{from: from, to: to, repeat_rule: rule}, span_calendar) do
+    Enum.find_value([from, to, rule], &of_another_calendar(&1, span_calendar)) ||
+      counted_in_another_calendar(from, rule, span_calendar)
+  end
 
   defp of_another_calendar(_selector, _span_calendar), do: nil
+
+  defp counted_in_another_calendar(from, %Tempo{calendar: written} = rule, span_calendar)
+       when from in [nil, :undefined] do
+    written = Compare.effective_calendar(written)
+
+    if written != span_calendar,
+      do: {:error, another_calendar_error(rule, written, span_calendar)}
+  end
+
+  defp counted_in_another_calendar(_from, _rule_or_none, _span_calendar), do: nil
 
   @numbered_by_calendar [
     :year,

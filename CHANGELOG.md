@@ -447,13 +447,15 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* `Tempo.select/2` by a list of indices that holds what is no index (`[1, ~o"T9H/T12H"]`, `[1, 3..5]`) is an `ArgumentError`. What was no index was passed over, so the list selected by its indices alone.
+
 * `Enum` walks, counts and slices an interval with a quarter, a half or another group at an end (`~o"2026Y1Q/2026Y2Q"`) as the span it converts to, January to April. It raised a `Tempo.ConversionError`, where every other operation read it as that span.
 
 * `Tempo.explain/1` tells an end of an interval that holds a quarter, a half or another group by the months it names: `~o"2026Y1Q/2026Y2Q"` is "From: January to March 2026. To: April to June 2026", where it was "From: 2026. To: 2026".
 
 * `Tempo.from_elixir/2` returns a `Tempo.ConversionError` for a value that is none of the types it converts (a `nil`, a string, a map), where it raised a `FunctionClauseError`.
 
-* `Tempo.select/2` from an interval with a quarter, a half or another group at an end (`2026Y1Q/2026Y2Q`) selects from the months it spans, as from `2026-01/2026-04`. It gave no weekday of them and the 15th of one, and `Tempo.count_workdays/2` of such an interval with no end was 0.
+* `Tempo.select/2` from an interval with a quarter, a half or another group at an end (`2026Y1Q/2026Y2Q`), or a set, a range or unspecified digits (`2026-XX/2027`), selects from what the interval converts to, as from `2026-01/2026-04`. It gave no weekday of the span and the 15th of one month, and `Tempo.count_workdays/2` of such an interval with no end was 0.
 
 * `Tempo.select/2` by a span whose start names a day of the week is the span on each such day: `Tempo.select(~o"2026-06", ~o"1KT9H/T17H")` is nine to five on the five Mondays of June. It was the span on every day of the base, each in a value that held its date and the weekday both, and a span from one weekday to another (`~o"1KT9H/5KT17H"`) is now a `Tempo.IntervalEndpointsError`.
 

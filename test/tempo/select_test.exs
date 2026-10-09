@@ -591,6 +591,26 @@ defmodule Tempo.Select.Test do
       assert Exception.message(error) =~ "does not recognise selector 5"
     end
 
+    test "a list of indices that holds what is no index returns an error tuple" do
+      # What was no index was passed over, so `[1, ~o"T9H/T12H"]` selected the
+      # hour from 01:00 and no span, where the same list the other way round
+      # was this error.
+      for {list, no_index} <- [
+            {[1, ~o"T9H/T12H"], ~o"T9H/T12H"},
+            {[1, 3..5], 3..5},
+            {[1, nil], nil},
+            {[1, 2.5], 2.5},
+            {[1, :last], :last}
+          ] do
+        assert {^list, {:error, %ArgumentError{} = error}} =
+                 {list, Tempo.select(~o"2026-06-15", list)}
+
+        assert Exception.message(error) =~ "does not recognise selector #{inspect(no_index)}"
+      end
+
+      assert {:ok, _hours} = Tempo.select(~o"2026-06-15", [1, 3, -1])
+    end
+
     test "a base select/2 cannot select from returns an error tuple" do
       for base <- [nil, "", :"", "2026-06", 42, %{}, [1, 2]] do
         assert {:error, %ArgumentError{} = error} = Tempo.select(base, Tempo.workdays(:US))
