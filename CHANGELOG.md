@@ -375,6 +375,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Changed
 
+* `Tempo.parse/2` and the typed parsers refuse text in a locale's words that is longer than 1,024 bytes, with Localize's `Localize.DateTimeParseLengthError`. Eight thousand bytes took half a second to find no date in.
+
 * A month or a day out of range, in a date written with hyphens or designators, is refused by the value's calendar: `2026-14` and `2026Y6M32D` are a `Tempo.InvalidDateError` that names the valid values, where the reader refused a month past the 13th and a day past the 31st with a `Tempo.ParseError` before the calendar was asked. A calendar with more months or days is read as any other is.
 
 * `Tempo.to_calendar/2` converts a date with a time of day, which it refused: `~o"2026-06-15T09:30[Europe/Paris]"` in `Calendrical.Hebrew` is 30 Sivan 5786 at 09:30 in the same zone, the day its own clock is on. An interval of such values converts too.

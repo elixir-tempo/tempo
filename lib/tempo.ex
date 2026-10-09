@@ -2091,7 +2091,8 @@ defmodule Tempo do
 
   * `{:error, exception}` when the string is neither ISO 8601 nor text
     the locale reads, or is ISO 8601 that names no real date
-    (`"2026-02-30"`).
+    (`"2026-02-30"`). Text in a locale's words is read to 1,024 bytes,
+    which is Localize's bound, and refused past it.
 
   ### Examples
 

@@ -580,6 +580,19 @@ defmodule Tempo.YearStartTest do
     end
   end
 
+  describe "a date written in words" do
+    test "is read as the date it names, and written as it was" do
+      # 25 March 1750 is the first day of its year, and 10 April the tenth of
+      # the second month the calendar counts.
+      for {text, fields} <- [{"March 25, 1750", "1750Y1M1D"}, {"April 10, 1750", "1750Y2M10D"}] do
+        assert {text, Tempo.parse(text, locale: :en, calendar: March25)} ==
+                 {text, {:ok, value(fields, March25)}}
+
+        assert Tempo.to_string(value(fields, March25), format: :long) == {:ok, text}
+      end
+    end
+  end
+
   describe "a date rounded" do
     test "to the month is the nearer of the month it is in and the next" do
       # The first month of a March25 year is the seven days from 25 March,

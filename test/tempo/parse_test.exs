@@ -56,5 +56,20 @@ defmodule Tempo.ParseTest do
     test "text that names nothing keeps the locale's error" do
       assert {:error, %Localize.DateTimeParseError{}} = Tempo.parse("tomorrow", locale: :en)
     end
+
+    test "text longer than a date and time is written with is refused, and not read" do
+      # Localize reads at most 1,024 bytes of a locale's words: eight thousand
+      # took half a second to find no date in.
+      at_the_bound = String.duplicate("June ", 204) <> "June"
+      past_it = at_the_bound <> " "
+
+      assert byte_size(at_the_bound) == 1_024
+      assert {:error, %Localize.DateTimeParseError{}} = Tempo.parse(at_the_bound, locale: :en)
+      assert {:error, %Localize.DateTimeParseLengthError{}} = Tempo.parse(past_it, locale: :en)
+
+      for reader <- [&Tempo.parse_date/2, &Tempo.parse_datetime/2, &Tempo.parse_time/2] do
+        assert {:error, _refused} = reader.(String.duplicate("June ", 1_000), locale: :en)
+      end
+    end
   end
 end
