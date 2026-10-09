@@ -78,6 +78,22 @@ defmodule Tempo.Select do
   selected twice or outside the span. A day-of-week selector keeps the
   matching days of the whole span.
 
+  A unit the selector does not name, between the period and its own,
+  takes its first value. `Tempo.select(~o"2026-06", ~o"T09/T17")` is nine
+  to five of 1 June, the month being one period, where the same month
+  written as days (`~o"2026-06-01/2026-07-01"`) gives nine to five of
+  each. A value (`~o"T09"`) and a selection (`~o"LT9HN"`) are placed the
+  same way, which is how RFC 5545 reads `FREQ=MONTHLY;BYHOUR=9` from the
+  1st. To select a time of day on each day of a month or a year, select
+  the days first:
+
+  ```elixir
+  {:ok, days}  = Tempo.select(~o"2026-06", ~o"X*D")
+  {:ok, hours} = Tempo.select(days, ~o"T09/T17")
+  ```
+
+  > *"The days of June, nine to five on each."*
+
   A week selected from a year is kept whole. It is a week of that year's
   ISO 8601 week-year, which runs from the Monday of its week 1 and so
   starts up to three days before 1 January, or after it:

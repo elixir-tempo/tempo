@@ -689,6 +689,35 @@ defmodule Tempo.Select.Test do
       assert IntervalSet.count(set) == 3
     end
 
+    test "a unit the selector does not name takes its first value in the period" do
+      # Decided 2026-10-10 (user): a month is one period, so nine to five
+      # selected from it is nine to five of its first day, as the value and
+      # the selection of the same hour are placed.
+      for selector <- [~o"T09/T17", ~o"T9H", ~o"LT9HN"] do
+        {:ok, placed} = Tempo.select(~o"2026-06", selector)
+
+        assert {selector, Enum.map(IntervalSet.members(placed), &Interval.from/1)} ==
+                 {selector, [~o"2026-06-01T09"]}
+      end
+
+      {:ok, in_the_year} = Tempo.select(~o"2026", ~o"T09/T17")
+
+      assert Enum.map(IntervalSet.members(in_the_year), &Interval.from/1) == [~o"2026-01-01T09"]
+    end
+
+    test "a time of day is selected on each day where the days are selected first" do
+      nine_each_day =
+        for date <- Date.range(~D[2026-06-01], ~D[2026-06-30]),
+            do: Tempo.from_iso8601!("#{Date.to_iso8601(date)}T09")
+
+      {:ok, days} = Tempo.select(~o"2026-06", ~o"X*D")
+      {:ok, of_the_days} = Tempo.select(days, ~o"T09/T17")
+      {:ok, written_as_days} = Tempo.select(~o"2026-06-01/2026-07-01", ~o"T09/T17")
+
+      assert Enum.map(IntervalSet.members(of_the_days), &Interval.from/1) == nine_each_day
+      assert Enum.map(IntervalSet.members(written_as_days), &Interval.from/1) == nine_each_day
+    end
+
     test "the last day of each month" do
       {:ok, set} = Tempo.select(~o"2026-06/2026-09", ~o"-1D")
 
