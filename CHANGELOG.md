@@ -373,6 +373,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Changed
 
+* A month or a day out of range, in a date written with hyphens or designators, is refused by the value's calendar: `2026-14` and `2026Y6M32D` are a `Tempo.InvalidDateError` that names the valid values, where the reader refused a month past the 13th and a day past the 31st with a `Tempo.ParseError` before the calendar was asked. A calendar with more months or days is read as any other is.
+
 * `Tempo.to_calendar/2` converts a date with a time of day, which it refused: `~o"2026-06-15T09:30[Europe/Paris]"` in `Calendrical.Hebrew` is 30 Sivan 5786 at 09:30 in the same zone, the day its own clock is on. An interval of such values converts too.
 
 * `Tempo.explain/1` writes and words a value as far as it is written, and no further: `~o"1984/1986"` is "From: 1984." where each end was written out to its first day, and an hour is "at hour 10" where it was "at 10:00". Where an end does not say the day it starts on, a week and a year of a calendar that turns on another day, the day is told beside it (`2026-W25 (starts on 2026-06-15)`).

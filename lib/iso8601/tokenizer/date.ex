@@ -165,20 +165,24 @@ defmodule Tempo.Iso8601.Tokenizer.Date do
 
   # Finish an explicit date parsed once by `datetime_or_date_or_time`: with a time
   # of day it is tagged `:datetime` exactly as `datetime_parser` does; without,
-  # it takes `date_parser`'s path — fold any fraction, validate the month and
-  # day, tag `:date`. The accumulator arrives reversed, the marker first.
+  # it takes `date_parser`'s path — fold any fraction and tag `:date`. The
+  # accumulator arrives reversed, the marker first.
+  #
+  # No month and no day is refused here. A month past the 13th and a day past
+  # the 31st were, as none of any calendar Calendrical has, before the value's
+  # calendar was asked: the calendar says which months a year has and which
+  # days a month has where the value is validated, and one of a caller's own
+  # with more is asked as any other is. A run of digits alone is still told
+  # from a time of day by them (`a_date_and_no_time_of_day/5`).
   @doc false
   def classify_explicit_date(rest, [:__explicit_datetime__ | tokens], context, _line, _offset) do
     {rest, [{:datetime, Enum.reverse(tokens)}], context}
   end
 
-  def classify_explicit_date(rest, [:__explicit_date__ | tokens], context, line, offset) do
+  def classify_explicit_date(rest, [:__explicit_date__ | tokens], context, _line, _offset) do
     date = tokens |> Enum.reverse() |> apply_fraction()
 
-    case check_valid_date(rest, [date], context, line, offset) do
-      {rest, [date], context} -> {rest, [{:date, date}], context}
-      {:error, _reason} = error -> error
-    end
+    {rest, [{:date, date}], context}
   end
 
   # Date combinators
@@ -241,11 +245,11 @@ defmodule Tempo.Iso8601.Tokenizer.Date do
                   |> optional(parsec({Tempo.Iso8601.Tokenizer.Time, :extended_time_shift_p})),
                   parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_date_p})
                   |> optional(fraction())
-                  |> optional(parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_time_shift_p})),
+                  |> optional(parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_time_shift_p}))
+                  |> post_traverse({:a_date_and_no_time_of_day, []}),
                   explicit_time_shift()
                 ])
                 |> reduce(:apply_fraction)
-                |> post_traverse({:check_valid_date, []})
                 |> unwrap_and_tag(:date)
                 |> label("date"),
                 export_combinator: true

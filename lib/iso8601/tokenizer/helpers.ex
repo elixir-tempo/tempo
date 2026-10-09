@@ -364,61 +364,37 @@ defmodule Tempo.Iso8601.Tokenizer.Helpers do
     end
   end
 
-  # Some calendars have 13 months
-  # Seasons are recognised as months 21..32 so we have to allow them
-  # Quarters are recognised as months 33..36 so we have to allow them
-  # Quadrimesters are recognised as months 36..39 so we have to allow them
-  # Semestrals are recognised as momths 40..41 so we have to allow them
+  @doc false
+  # A run of digits with no designator and no hyphen is read as a date before
+  # it is read as a time of day, and the same digits can be either:
+  # `093455.8` is 09:34:55.8, and read as a date is the fifty-fifth month of
+  # the year 934 and a fraction of it. So such a run is no date where its
+  # month is past the thirteenth or its day past the thirty-first, and the
+  # reader goes on to the time.
+  #
+  # This is the reader's choice between two notations, and not a check of the
+  # date. A date written with hyphens or designators can be nothing else, and
+  # its own calendar says which months and days it has where the value is
+  # validated: these bounds were on every form (decided 2026-10-09, user:
+  # "drop them"), so `2026Y14M` was refused before its calendar was asked.
+  # Here they stay until the reader knows the value's calendar and the
+  # calendar can say how many months and days it ever has. A month from 21 to
+  # 41 is a division of the year, whose day is counted within it.
+  def a_date_and_no_time_of_day(rest, args, context, _line, _offset) do
+    month = whole_number(args, :month)
+    day = whole_number(args, :day)
 
-  def check_valid_date(
-        _rest,
-        [[{:year, _year}, {:month, month} | _remaining]],
-        _context,
-        _line,
-        _offset
-      )
-      when is_number(month) and month > 13 and month not in 21..41 do
-    {:error, "invalid month"}
+    cond do
+      is_integer(month) and month > 13 and month not in 21..41 -> {:error, "invalid month"}
+      is_integer(day) and day > 31 and month not in 21..41 -> {:error, "invalid day"}
+      true -> {rest, args, context}
+    end
   end
 
-  def check_valid_date(_rest, [[{:month, month}, _remaining]], _context, _line, _offset)
-      when is_number(month) and month > 13 and month not in 21..41 do
-    {:error, "invalid month"}
-  end
-
-  # No supported calendars have more than 31 days in a month. A day after a
-  # division of a year (a season, a quarter, a quadrimester or a semester,
-  # the months 21 to 41) is a day of that division, which has more: the
-  # forty-fifth day of the second quarter is 15 May, as `2G3MU45D` is, and
-  # the division's own length holds it where it is expanded.
-  def check_valid_date(
-        _rest,
-        [[{:year, _year}, {:month, month}, {:day, day} | _remaining]],
-        _context,
-        _line,
-        _offset
-      )
-      when is_number(day) and day > 31 and not (is_number(month) and month in 21..41) do
-    {:error, "invalid day"}
-  end
-
-  def check_valid_date(
-        _rest,
-        [[{:month, month}, {:day, day} | _remaining]],
-        _context,
-        _line,
-        _offset
-      )
-      when is_number(day) and day > 31 and not (is_number(month) and month in 21..41) do
-    {:error, "invalid day"}
-  end
-
-  def check_valid_date(_rest, [[{:day, day}, _remaining]], _context, _line, _offset)
-      when is_number(day) and day > 31 do
-    {:error, "invalid day"}
-  end
-
-  def check_valid_date(rest, args, context, _line, _offset) do
-    {rest, args, context}
+  defp whole_number(tokens, unit) do
+    case List.keyfind(tokens, unit, 0) do
+      {^unit, number} when is_integer(number) -> number
+      _absent_or_no_one_number -> nil
+    end
   end
 end

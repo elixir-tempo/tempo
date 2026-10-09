@@ -84,9 +84,11 @@ defmodule Tempo.DayOfDivisionTest do
   end
 
   describe "a day after a month" do
-    test "is still held to thirty-one where it is read" do
-      for text <- ["2026Y6M45D", "2026Y13M45D", "2026Y6M32D", "6M32D"] do
-        assert {^text, {:error, %Tempo.ParseError{}}} = {text, Tempo.from_iso8601(text)}
+    test "is held to the days its calendar gives the month" do
+      # It was held to thirty-one where it was read, before the calendar
+      # was asked.
+      for text <- ["2026Y6M45D", "2026Y13M45D", "2026Y6M32D", "6M32D", "2026Y6M31D"] do
+        assert {^text, {:error, %InvalidDateError{}}} = {text, Tempo.from_iso8601(text)}
       end
     end
   end

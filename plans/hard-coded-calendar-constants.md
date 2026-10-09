@@ -32,7 +32,9 @@ These are right today. Each is a fact Calendrical could give, and is held in Tem
 
 ## Bounds on what is read before a calendar is asked
 
-* **A month past 13 and a day past 31** in `Tempo.Iso8601.Tokenizer.Helpers` (`check_valid_date/5`) — refused as no month and no day of any calendar Calendrical has. A calendar of a caller's own with a fourteenth month or a thirty-second day would be refused before it is asked. The value's own calendar checks every month and day afterwards, so the bound could go; it changes which error such a text gives, and tests pin that.
+* **A month past 13 and a day past 31** in `Tempo.Iso8601.Tokenizer.Helpers` — refused as no month and no day of any calendar Calendrical has, before the value's calendar was asked. Dropped 2026-10-09 (user: "drop them") for a date written with hyphens or designators: `2026-14` and `2026Y6M32D` are now the calendar's own `Tempo.InvalidDateError`, and a calendar with a fourteenth month or a thirty-second day is read as any other.
+
+* **The same two numbers, for a bare run of digits** (`a_date_and_no_time_of_day/5`) — kept, because there they are no check of a date. Such a run is read as a date before a time of day, and `093455.8` is 09:34:55.8 only because its fifty-fifth month is none. With the bounds gone from this form too, twenty-four basic times with a fraction in `test/support/data/iso8601_test_data.txt` were read as dates and refused. To ask the calendar here the reader must know the value's calendar, which a suffix gives after the digits, and the calendar must say the most months a year has and the most days a month has.
 
 * **1 to 12 and 1 to 31** in `Tempo.Iso8601.Tokenizer.Plain` — the dates the fast reader takes. Any other goes to the general reader, so nothing is refused by it. The same two ranges in `Tempo` (`month_and_day/1`) choose the wording of an error's advice.
 
@@ -60,9 +62,11 @@ The user offered, on 2026-10-09, a list of the lengths of a year's months: its l
 
 * [ ] **The 28 goes** — blocked on Calendrical giving the lengths a calendar's months have in any year.
 
-* [ ] **The tokenizer's bounds on a month and a day** — a decision: drop them and let the value's calendar answer, which changes the error a text such as `2026-14` gives.
+* [ ] **The reader's bounds for a bare run of digits** — blocked on the same list (its count and its most), and on the reader knowing the value's calendar before it reads the digits.
 
 ### Done
+
+* [x] **The tokenizer's bounds on a month and a day, in a date written with hyphens or designators** — dropped. 2026-10-09.
 
 * [x] **`Tempo.Event` asks Calendrical for a solar term** — its name, its day and the meridian of the value's own calendar. 2026-10-09.
 
