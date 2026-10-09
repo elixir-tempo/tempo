@@ -78,6 +78,54 @@ defmodule Tempo.Interval.StepsTest do
     end
   end
 
+  describe "months_apart/3" do
+    # The measure is the calendar's own count of each year's months. The
+    # count was twelve a year wherever the two end years had twelve, so a
+    # Hebrew year of thirteen between them was a month short.
+    defp months_counted(from_year, to_year, calendar),
+      do: from_year..(to_year - 1)//1 |> Enum.map(&calendar.months_in_year/1) |> Enum.sum()
+
+    test "counts a year of thirteen months between two years of twelve" do
+      hebrew = Calendrical.Hebrew
+      assert Enum.map(5785..5788, &hebrew.months_in_year/1) == [12, 12, 13, 12]
+
+      from = Tempo.from_iso8601!("5785-01", hebrew)
+      to = Tempo.from_iso8601!("5788-01", hebrew)
+
+      assert Steps.months_apart(from, to, hebrew) == months_counted(5785, 5788, hebrew)
+      assert Steps.months_apart(from, to, hebrew) == 37
+    end
+
+    test "counts back from a later year, where it raised for a calendar of differing years" do
+      hebrew = Calendrical.Hebrew
+      early = Tempo.from_iso8601!("5785-01", hebrew)
+      late = Tempo.from_iso8601!("5788-01", hebrew)
+
+      assert Steps.count_steps(late, early, :month, hebrew) ==
+               -months_counted(5785, 5788, hebrew)
+
+      # A value of another calendar is on no step of a year's walk.
+      refute Enum.member?(Tempo.from_iso8601!("5786Y[u-ca=hebrew]"), ~o"2026-06-15")
+    end
+
+    test "counts by the months the calendar says every year has" do
+      for {calendar, from_year, to_year} <- [
+            {Calendrical.Gregorian, 2020, 2031},
+            {Calendrical.Ethiopic, 2010, 2021},
+            {Calendrical.Hebrew, 5770, 5800},
+            {Calendrical.Persian, 1400, 1410}
+          ],
+          {from_month, to_month} <- [{1, 1}, {3, 11}, {11, 3}] do
+        from = Tempo.new!(year: from_year, month: from_month, calendar: calendar)
+        to = Tempo.new!(year: to_year, month: to_month, calendar: calendar)
+
+        assert {calendar, from_month, to_month, Steps.months_apart(from, to, calendar)} ==
+                 {calendar, from_month, to_month,
+                  months_counted(from_year, to_year, calendar) + to_month - from_month}
+      end
+    end
+  end
+
   describe "nth_step/4" do
     test "nth year is the year plus n" do
       from = Tempo.from_iso8601!("2026Y")

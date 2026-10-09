@@ -600,26 +600,34 @@ defmodule Tempo.Interval.Steps do
 
   def months_apart(%Tempo{}, %Tempo{}, _calendar), do: :not_supported
 
-  # Calendar-aware month difference. For calendars with constant 12
-  # months per year (Gregorian, Julian, Coptic, Ethiopic, Persian),
-  # this is the pure modular formula. For varying-month calendars
-  # (Hebrew/Metonic), we sum across the spanned years — bounded by
-  # the 19-year Metonic cycle in practice.
+  # Calendar-aware month difference. Where the calendar says every year has
+  # the same months (the Gregorian's twelve, the Ethiopic's thirteen), it is
+  # the years between times that many. Where its years differ (a Hebrew year
+  # has twelve months or thirteen), the months of each year between are
+  # added up.
+  #
+  # The count was twelve a year wherever the two end years had twelve
+  # months, so a year of thirteen between them was a month short: Tishri
+  # 5785 to Tishri 5788 was 36 months, where 5787 has thirteen and they are
+  # 37.
   @spec months_between(integer(), integer(), integer(), integer(), module()) :: integer()
   defp months_between(from_y, from_m, to_y, to_m, calendar) do
-    if constant_twelve_months?(calendar, from_y, to_y) do
-      UnitValues.years_between(from_y, to_y, calendar) * 12 + (to_m - from_m)
-    else
-      months_in_years_between(from_y, to_y, calendar) + (to_m - from_m)
+    case UnitValues.in_any_year(:month, [], calendar) do
+      {:ok, %Range{last: months}, %Range{last: months}} ->
+        UnitValues.years_between(from_y, to_y, calendar) * months + (to_m - from_m)
+
+      _its_years_differ_in_their_months ->
+        months_in_years_between(from_y, to_y, calendar) + (to_m - from_m)
     end
   end
 
-  defp constant_twelve_months?(calendar, from_y, to_y) do
-    calendar.months_in_year(from_y) == 12 and calendar.months_in_year(to_y) == 12
-  end
-
-  @spec months_in_years_between(integer(), integer(), module()) :: non_neg_integer()
+  @spec months_in_years_between(integer(), integer(), module()) :: integer()
   defp months_in_years_between(from_y, to_y, _calendar) when from_y == to_y, do: 0
+
+  # Back from a later year the count is below none: a walk asks it of a
+  # value before its start, which is on no step of it.
+  defp months_in_years_between(from_y, to_y, calendar) when from_y > to_y,
+    do: -months_in_years_between(to_y, from_y, calendar)
 
   defp months_in_years_between(from_y, to_y, calendar) when from_y < to_y do
     # `calendar.months_in_year/1` is a dynamic dispatch, so Dialyzer

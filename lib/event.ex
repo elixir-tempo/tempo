@@ -40,41 +40,21 @@ defmodule Tempo.Event do
 
   alias Calendrical.Chinese
   alias Calendrical.Ecclesiastical
-  alias Calendrical.Korean
-  alias Calendrical.LunarJapanese
   alias Calendrical.Lunisolar
-  alias Calendrical.Vietnamese
   alias Tempo.TimeZoneDatabase
 
-  # The 24 solar terms (jié-qì) keyed by name, each at its solar ecliptic
-  # longitude in degrees. The four cardinal terms coincide with the equinoxes
-  # and solstices (`chunfen` = March equinox, `xiazhi` = June solstice, …).
-  @solar_terms %{
-    "lichun" => 315,
-    "yushui" => 330,
-    "jingzhe" => 345,
-    "chunfen" => 0,
-    "qingming" => 15,
-    "guyu" => 30,
-    "lixia" => 45,
-    "xiaoman" => 60,
-    "mangzhong" => 75,
-    "xiazhi" => 90,
-    "xiaoshu" => 105,
-    "dashu" => 120,
-    "liqiu" => 135,
-    "chushu" => 150,
-    "bailu" => 165,
-    "qiufen" => 180,
-    "hanlu" => 195,
-    "shuangjiang" => 210,
-    "lidong" => 225,
-    "xiaoxue" => 240,
-    "daxue" => 255,
-    "dongzhi" => 270,
-    "xiaohan" => 285,
-    "dahan" => 300
-  }
+  # The solar terms (jié-qì) by name, each with the number Calendrical counts
+  # it by, from `lichun`. The names, their order and the longitude the sun is
+  # at on each are Calendrical's (`Calendrical.Lunisolar.solar_term_name/1`
+  # and `solar_term/3`): Tempo holds the names to select by, and asks for
+  # every one until Calendrical has no more. The four cardinal terms coincide
+  # with the equinoxes and solstices (`chunfen` is the March equinox,
+  # `xiazhi` the June solstice).
+  @solar_terms 1
+               |> Stream.iterate(&(&1 + 1))
+               |> Stream.map(&{Lunisolar.solar_term_name(&1), &1})
+               |> Enum.take_while(&match?({{:ok, _name}, _number}, &1))
+               |> Map.new(fn {{:ok, name}, number} -> {name, number} end)
 
   @events Map.merge(
             %{
@@ -86,7 +66,7 @@ defmodule Tempo.Event do
               "december-solstice" => {:solstice, :december},
               "new-moon" => :new_moon
             },
-            Map.new(@solar_terms, fn {name, longitude} -> {name, {:solar_term, longitude}} end)
+            Map.new(@solar_terms, fn {name, number} -> {name, {:solar_term, number}} end)
           )
 
   @doc """
@@ -269,8 +249,8 @@ defmodule Tempo.Event do
 
   defp resolve(:new_moon, year, _calendar), do: new_moon_date(year)
 
-  defp resolve({:solar_term, longitude}, year, calendar),
-    do: solar_term_date(longitude, year, calendar)
+  defp resolve({:solar_term, number}, year, calendar),
+    do: solar_term_date(number, year, calendar)
 
   defp from_datetime({:ok, %DateTime{} = datetime}), do: {:ok, DateTime.to_date(datetime)}
   defp from_datetime({:error, _reason} = error), do: error
@@ -294,32 +274,30 @@ defmodule Tempo.Event do
     end
   end
 
-  # The day the sun first reaches `longitude` on or after the year's start, at
-  # the meridian of the given calendar (via `Calendrical`), as a `Calendar.ISO`
-  # date.
-  defp solar_term_date(longitude, year, calendar) do
-    with {:ok, %Date{} = start} <- Date.new(year, 1, 1, Calendrical.Gregorian),
-         moment when is_number(moment) <-
-           Lunisolar.solar_longitude_on_or_after(
-             longitude,
-             Calendrical.date_to_iso_days(start),
-             solar_term_location(calendar)
-           ),
-         %Date{} = date <- Calendrical.date_from_iso_days(floor(moment), Calendrical.Gregorian),
+  # The day of a solar term in a Gregorian year, at the meridian of the given
+  # calendar, as a `Calendar.ISO` date. The day is Calendrical's to work out.
+  defp solar_term_date(number, year, calendar) do
+    with {:ok, %Date{} = date} <-
+           Lunisolar.solar_term(number, year, solar_term_location(calendar)),
          {:ok, %Date{} = iso} <- Date.convert(date, Calendar.ISO) do
       {:ok, iso}
     else
-      _other -> {:error, {:uncomputable_event, {:solar_term, longitude}}}
+      _other -> {:error, {:uncomputable_event, {:solar_term, number}}}
     end
   end
 
-  # The location function that fixes the meridian a solar term is measured at.
-  # Anything other than the three named lunisolar calendars uses the Chinese
-  # meridian, the traditional reference for the jié-qì.
-  defp solar_term_location(Vietnamese), do: &Vietnamese.location/1
-  defp solar_term_location(Korean), do: &Korean.location/1
-  defp solar_term_location(LunarJapanese), do: &LunarJapanese.location/1
-  defp solar_term_location(_calendar), do: &Chinese.location/1
+  # The meridian a solar term is observed at is the calendar's own to say. A
+  # lunisolar calendar is reckoned at a place (`location/1`: the Chinese, the
+  # Korean, the Vietnamese and the Japanese each at its own), and the day of
+  # a term differs between them: the seventh of 2002 is 6 May in three of
+  # them and 5 May in the Vietnamese. So the calendar of the value is asked,
+  # whichever it is. One that is reckoned at no place (the Gregorian) takes
+  # the Chinese meridian, the traditional reference for the jié-qì.
+  defp solar_term_location(calendar) do
+    if Code.ensure_loaded?(calendar) and function_exported?(calendar, :location, 1),
+      do: &calendar.location/1,
+      else: &Chinese.location/1
+  end
 
   # A name that is not built in is offered to each registered resolver
   # (`config :ex_tempo, :event_resolvers`) in turn; the first whose `known/0`

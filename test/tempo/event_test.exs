@@ -2,6 +2,7 @@ defmodule Tempo.EventTest do
   use ExUnit.Case, async: true
   import Tempo.Sigils
 
+  alias Calendrical.Lunisolar
   alias Tempo.Event
   alias Tempo.EventError
   alias Tempo.Interval
@@ -25,6 +26,44 @@ defmodule Tempo.EventTest do
       # The cardinal terms coincide with the equinoxes and solstices.
       assert Event.date("chunfen", 2026) == {:ok, ~D[2026-03-20]}
       assert Event.date("chunfen", 2026) == Event.date("march-equinox", 2026)
+    end
+
+    # A solar term is the day the sun reaches a longitude, at a meridian, so
+    # its day differs between the calendars that observe it. The measure is
+    # Calendrical's own answer for each calendar's own place: Tempo holds
+    # neither the longitudes nor the meridians (it held a table of the
+    # first, and named three of the calendars).
+    test "a solar term is the day the value's own calendar observes it on" do
+      calendars =
+        [Calendrical.Chinese, Calendrical.Korean, Calendrical.Vietnamese] ++
+          [Calendrical.LunarJapanese]
+
+      names =
+        for number <- 1..24,
+            {:ok, name} = Lunisolar.solar_term_name(number),
+            do: {name, number}
+
+      for calendar <- calendars, year <- [1999, 2002, 2026], {name, number} <- names do
+        {:ok, observed} = Lunisolar.solar_term(number, year, &calendar.location/1)
+
+        assert {calendar, year, name, Event.date(name, year, calendar)} ==
+                 {calendar, year, name, Date.convert(observed, Calendar.ISO)}
+      end
+
+      # The seventh term of 2002 is a day earlier at the Vietnamese meridian.
+      {:ok, lixia} = Lunisolar.solar_term_name(7)
+
+      assert Enum.map(calendars, &Event.date(lixia, 2002, &1)) ==
+               [{:ok, ~D[2002-05-06]}, {:ok, ~D[2002-05-06]}, {:ok, ~D[2002-05-05]}] ++
+                 [{:ok, ~D[2002-05-06]}]
+    end
+
+    test "the solar terms Tempo knows are the ones Calendrical names" do
+      names =
+        for number <- 1..24, {:ok, name} = Lunisolar.solar_term_name(number), do: name
+
+      assert Enum.filter(Event.known(), &Event.solar_term?/1) == Enum.sort(names)
+      assert Lunisolar.solar_term_name(25) == {:error, {:invalid_solar_term, 25}}
     end
 
     test "a solar term can be computed for another lunisolar meridian" do
