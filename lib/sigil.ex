@@ -361,6 +361,7 @@ defmodule Tempo.Sigils do
   @gregorian_axis [:year, :month, :day, :hour, :minute, :second]
   @iso_week_axis [:year, :week, :day_of_week, :hour, :minute, :second]
   @ordinal_axis [:year, :day_of_year, :hour, :minute, :second]
+  @season_axis [:year, :season]
 
   defp do_sigil(:match, {:<<>>, _meta, [string]}, opts) do
     # Match-context modifiers are always binding letters — a
@@ -562,23 +563,29 @@ defmodule Tempo.Sigils do
   # that every requested unit has to belong to. Axis mixing is
   # an expansion-time error — a user can't meaningfully match
   # `:month` and `:week` on the same value.
+  #
+  # A season of 21 to 24 (`~o"2026-21"`) is written in the month's place
+  # and nothing follows it, so it is an axis of its own: a year and its
+  # season.
   defp axis_for(units) do
     week? = Enum.any?(units, &(&1 in [:week, :day_of_week]))
     ordinal? = Enum.any?(units, &(&1 == :day_of_year))
     gregorian? = Enum.any?(units, &(&1 in [:month, :day]))
+    season? = Enum.any?(units, &(&1 == :season))
 
-    if Enum.count([week?, ordinal?, gregorian?], & &1) > 1 do
+    if Enum.count([week?, ordinal?, gregorian?, season?], & &1) > 1 do
       raise ArgumentError,
             "~o sigil in a match context cannot mix calendar axes: " <>
               "#{inspect(units)}"
     end
 
-    cond do
-      week? -> @iso_week_axis
-      ordinal? -> @ordinal_axis
-      true -> @gregorian_axis
-    end
+    axis_of(week?, ordinal?, season?)
   end
+
+  defp axis_of(true = _week?, _ordinal?, _season?), do: @iso_week_axis
+  defp axis_of(_week?, true = _ordinal?, _season?), do: @ordinal_axis
+  defp axis_of(_week?, _ordinal?, true = _season?), do: @season_axis
+  defp axis_of(_week?, _ordinal?, _season?), do: @gregorian_axis
 
   defp index_in_axis!(unit, axis) do
     case Enum.find_index(axis, &(&1 == unit)) do

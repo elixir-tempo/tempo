@@ -1141,6 +1141,10 @@ defmodule Tempo.Inspect do
   defp inspect_value({:traditional_month, {month, :leap}}), do: [inspect_list(month), ?+, ?m]
   defp inspect_value({:traditional_month, month}), do: [inspect_list(month), ?m]
 
+  # A season of 21 to 24 with no hemisphere is written as ISO 8601-2 writes
+  # it, in the month's place.
+  defp inspect_value({:season, season}), do: [inspect_list(season), ?M]
+
   defp inspect_value({:day, day}), do: [inspect_list(day), ?D]
   defp inspect_value({:day_of_year, day}), do: [inspect_list(day), ?O]
   defp inspect_value({:hour, hour}), do: [inspect_list(hour), ?H]
@@ -1296,6 +1300,7 @@ defmodule Tempo.Inspect do
 
   defp unit_designator(:year), do: ?Y
   defp unit_designator(:month), do: ?M
+  defp unit_designator(:season), do: ?M
   defp unit_designator(:day), do: ?D
   defp unit_designator(:day_of_year), do: ?O
   defp unit_designator(:hour), do: ?H

@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A season of 21 to 24 is kept as it is written, spring wherever it is read (`~o"2026-21"` is `~o"2026Y21M"`), and is given its dates by a territory or a locale: it was read as the northern months everywhere. A day or a time of day after one (`2026-21-15`) is a `Tempo.ParseError`, and an interval of seasons is read whatever their order (`2026-24/2026-21`, June to September south of the equator).
+
 * A period of a rule gives at most 10,000 occurrences, and a rule whose period gives more is refused with a `Tempo.ConversionError` (`:too_many_values`), whatever its count or its window. `FREQ=YEARLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=9,…,17;BYMINUTE=0,…,59;COUNT=10` made the 140,940 minutes of a year's working hours for its ten, and is written with `FREQ=MINUTELY`.
 
 * A value written with a margin of error (`±`), significant digits (`S`) or a fraction is one its unit takes, as a whole number is: `T99S2H`, `2026Y13±1M` and `T25.5H` are refused with what `T25H` says, where each was read. A fraction of a week, of a day of the week, or of a month or a day of the year with no year (`30.5W`, `3.5K`, `6.5M`, `166.5O`) is a `Tempo.ParseError`, where it was left in the value as a number no operation reads.
@@ -40,7 +42,7 @@
 
 * A shift of nothing is held in two ways: `Z`, and a zero written with a minus (`-00:00`), is `shift: [hour: 0]`, and a zero written as a shift (`+00`, `+00:00`, `Z0H`) is `shift: [hour: 0, minute: 0]`, where `+00` and `Z0H` were the first and `-00:00` the second. They are one time with no zone beside them, as ISO 8601-1 §4.3.13 has `Z` and `+00:00`.
 
-* A winter written as the season `24` is the one that starts in its year, as the astronomical winter `28` is: `~o"2026Y24M"` is `2026Y12M/2027Y3M`, where it was `2025Y12M/2026Y3M`. A year's four seasons run in the order of their numbers, so `{2026-21..2026-24}` is the four of them and `2026-24/2026-21` is refused as an interval whose end is before its start.
+* A winter written as the season `24` is the one that starts in its year, as the astronomical winter `28` is: north of the equator `2026-24` is `2026Y12M/2027Y3M`, where it was `2025Y12M/2026Y3M`. A year's four seasons are numbered in order, so `{2026-21..2026-24}` is the four of them.
 
 * `Tempo.split/1` of a value that holds a selection of days gives the value and no time of day: `Tempo.split(~o"2026Y6ML1KN")` is `{~o"2026Y6ML1KN", nil}`, where it was `{~o"2026Y6M", ~o"L1KN"}`. A selection of times (`2018Y9MTLT8H20M3IN`) is still the time-of-day part.
 
@@ -266,6 +268,10 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * `1950S0` is a `Tempo.ParseError`, since the count of significant digits is a positive integer (ISO 8601-2 §4.4.3). Its walk yielded the year 1950 and its conversion was an error.
 
 ### Added
+
+* `Tempo.in_territory/2` gives a season of 21 to 24 its dates on a territory's side of the equator (`Tempo.in_territory(~o"2026-21", :AU)` is `~o"2026Y9M/12M"`), and so do the `:territory` and `:locale` options of `Tempo.from_iso8601/2` and `Tempo.to_interval/2`. With neither, `Tempo.to_interval/2` and what is built on it (the comparisons, the set operations, `Tempo.select/2`, `Tempo.to_string/2`) ask the application's `:default_territory` and then the current locale.
+
+* `Tempo.AbstractSeasonError` — what needs the dates of a season with no hemisphere says so: a walk, `Tempo.shift/3` by anything but years, `Tempo.at/2`, `Tempo.extend/2` and `Tempo.round/2`. It is also the answer for a territory the equator runs through, such as Brazil.
 
 * `Tempo.RRule.parse/2` and `Tempo.JSCalendar.parse/2` read a rule counted in another calendar, RFC 7529's `RSCALE` and RFC 8984's `rscale`: `RSCALE=HEBREW;FREQ=YEARLY` from 2 April 2026 recurs on 15 Nisan, and its `BYMONTH` is the month RFC 7529 numbers. It was `{:error, {:unsupported_rscale, "HEBREW"}}`, which is now a name that is no calendar's.
 
@@ -553,7 +559,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * An end of an interval that is a group of a unit takes its higher order components from the start, as an end written with a month does: `2026Y1G3MU/3G3MU` ends at the third quarter of 2026. It took none, so an interval of two quarters (`2026-33/2026-35`), which is written with its end's year left out, was read back as another value.
 
-* A season keeps what its value holds beside its units: `2026-21?` is the spring of 2026 with each end uncertain (`2026Y3M?/6M?`), where the qualifier was dropped, and a season written with a suffix of its own as a member of a set keeps its zone. At an end of an interval a season is where its span starts, as a month is: `2026-21/2026-23` is March to the start of September, where it was an interval of two intervals that nothing read.
+* A season keeps what its value holds beside its units: `2026-21?` is the spring of 2026 with each end uncertain (`2026Y3M?/6M?` north of the equator), where the qualifier was dropped, and a season written with a suffix of its own as a member of a set keeps its zone. At an end of an interval a season is where its span starts, as a month is: `2026-21/2026-23` is March to the start of September there, where it was an interval of two intervals that nothing read.
 
 * A zone the time zone database does not have, which RFC 9557 has passed over unless it is marked critical, is written as it was written and in the zone's place (`2026Y6M15D[Made/Up_Zone]`), and reads back as the same value. It was written `[unknown_zone=Made/Up_Zone]`, which no suffix reads.
 
@@ -921,7 +927,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * A negative UTC offset with minutes carries its sign on its first non-zero component throughout: a `DateTime` in America/St_Johns becomes −03:30, where its shift read as −02:30, and `-00:30` keeps its sign.
 
-* A day after a season is the season's nth day, as a day after a quarter is: `2026-25-10` is March 29, where it produced a value with two day components.
+* A day after a season of a hemisphere is the season's nth day, as a day after a quarter is: `2026-25-10` is March 29, where it produced a value with two day components.
 
 * `Tempo.from_iso8601/1` returns a `Tempo.ParseError` for an out-of-range day in the explicit form (`2026Y1M40D`), where it raised `FunctionClauseError`.
 
@@ -929,7 +935,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * A season in a non-Gregorian year is the Gregorian season that starts within it, with endpoints in that calendar: `5787-25[u-ca=hebrew]` is 11 Adar II to 16 Sivan, where it asked Astro for the equinox of the year 5787. A year that holds none, such as Islamic 1422, returns a `Tempo.InvalidDateError`.
 
-* A meteorological season holds all three of its months, `2026-21` being `2026Y3M/6M` where it ended on 1 May. A season a year with unspecified digits cannot place (`20XX-24`, `20XX-21-10`) returns a `Tempo.InvalidDateError`, where it raised.
+* A meteorological season holds all three of its months, the northern spring of 2026 being `2026Y3M/6M` where it ended on 1 May. A season a year with unspecified digits cannot place (`20XX-25`, a northern `20XX-24`) returns a `Tempo.InvalidDateError`, where it raised.
 
 * `Tempo.parse/2` keeps a UTC offset as the value's shift, as `from_iso8601/1` does, so `"2026-05-23T14:30:00+05:00"` is 14:30 at +05:00; since Calendrical 1.4 keeps the offset's wall time, it had become 14:30 UTC.
 

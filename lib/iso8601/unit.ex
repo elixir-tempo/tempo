@@ -15,6 +15,11 @@ defmodule Tempo.Iso8601.Unit do
     # A traditional (lunisolar) month sorts at the same scale as an ordinal
     # month; a value carries one or the other, never both.
     traditional_month: 25,
+    # A season of 21 to 24 that has no hemisphere yet is written in the
+    # month's place, and is coarser than a month and finer than a year. It
+    # has no entry in `@unit_after`: nothing is walked in it until it has
+    # dates.
+    season: 27,
     # A calendar week (`w`) sorts at the same scale as an ISO 8601 week (`W`).
     week: 22,
     calendar_week: 22,

@@ -28,7 +28,7 @@ The three tables are three levels of guarantee.
 
 * **Extended** — masks, unspecified units, qualification, margins of error, significant digits, groups, counts from the end and selections. Their meaning is the values their walk yields: every one converts and can be walked, and every other function is held to that.
 
-* **Open** — shapes the walk or the conversion has no answer for yet. Their rows are the list of what remains to be defined.
+* **Open** — shapes the walk or the conversion has no answer for. Most are yet to be defined, and their rows are the list of what remains. A season with no hemisphere (`2026-21`) is here by design: it has no dates to walk until it is given one.
 
 ## The matrix
 
@@ -118,7 +118,8 @@ The three tables are three levels of guarantee.
 | Group `2026Y1G3MU` | 4 of 11 | all | all | all | all | 9 of 11 | 2 of 9 | all | 14 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.ResolutionError`, `Tempo.RoundingError` |
 | Count from the end `2026Y6M-1D` | 7 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
 | Selection `2026Y4ML1K1IN` | 4 of 11 | all | all | all | all | 7 of 11 | 2 of 9 | all | all | `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.ResolutionError`, `Tempo.RoundingError` |
-| Season `2026-21` | 3 of 11 | all | 8 of 9 | all | all | 7 of 11 | 2 of 9 | all | 5 of 18 | `ArgumentError`, `Tempo.ConversionError` |
+| Season `2026-25` | 4 of 11 | all | 8 of 9 | all | all | 7 of 11 | 2 of 9 | all | 5 of 18 | `ArgumentError`, `Tempo.ConversionError` |
+| Season set `{2026-21,2026-23}` | 3 of 11 | all | 8 of 9 | 5 of 21 | all | none | 2 of 9 | 4 of 5 | none | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
 | Week of a month `2026Y6M2W` | 4 of 11 | all | 8 of 9 | all | all | 7 of 11 | 2 of 9 | all | 6 of 18 | `ArgumentError`, `Tempo.ConversionError` |
 | Zone transition `2026-10-25T02:30[Europe/Paris]` | 5 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.ZonedTempoError` |
 | Mask from the end `2026Y-XM` | 4 of 11 | all | all | all | all | 9 of 11 | 2 of 9 | all | 14 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.ResolutionError`, `Tempo.RoundingError` |
@@ -132,6 +133,8 @@ The three tables are three levels of guarantee.
 
 | Class | Convert | Walk | Measure | Compare | Combine | Shift and round | Select | Format | Read parts | Errors |
 |---|---|---|---|---|---|---|---|---|---|---|
+| Season with no hemisphere `2026-21` | 4 of 11 | none | all | all | all | 5 of 11 | 2 of 9 | all | 14 of 18 | `ArgumentError`, `Tempo.AbstractSeasonError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.ResolutionError` |
+| Season interval `2026-21/2026-23` | 3 of 11 | none | 8 of 9 | all | all | 1 of 11 | 2 of 9 | all | 5 of 18 | `ArgumentError`, `Tempo.AbstractSeasonError`, `Tempo.ConversionError` |
 | Unspecified year `X*Y` | 1 of 11 | none | none | 1 of 21 | none | 9 of 11 | none | 3 of 5 | 13 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.RoundingError`, `Tempo.UnanchoredError` |
 | Interval from a masked day `2026Y6MXXD/P1M` | 3 of 11 | none | 8 of 9 | all | all | 7 of 11 | 2 of 9 | all | 5 of 18 | `ArgumentError`, `Tempo.ConversionError` |
 | Masked day, no year `2MXXD` | 4 of 11 | none | 2 of 9 | all | all | 8 of 11 | 2 of 9 | 4 of 5 | 13 of 18 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.RoundingError`, `Tempo.UnanchoredError` |
@@ -161,6 +164,8 @@ Each error in the table is an exception module, returned in an `{:error, excepti
 * **`Tempo.EventError`** — a computed event (`(easter)e`) has no date where a recurrence or a selection asks for it: a year the event is not computed for, or a name no resolver knows. It names the event and the year.
 
 * **`Tempo.UnboundedSetError`** — the days of a span with no end, which cannot be counted or listed.
+
+* **`Tempo.AbstractSeasonError`** — the function needs the dates of a season that has no hemisphere (`2026-21`, spring wherever it is read), or the season was given a territory the equator runs through. Give it a hemisphere with `Tempo.in_territory/2`, or convert it with `Tempo.to_interval/2`, which takes `:territory` and `:locale`.
 
 * **`ArgumentError`** — the value is of another kind than the function takes: a duration given to a function of a date, an interval or a set to a function of one value.
 

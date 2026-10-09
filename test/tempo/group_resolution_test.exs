@@ -42,14 +42,20 @@ defmodule Tempo.GroupResolution.Test do
     assert ~o"2022Y28M" == ~o"2022Y12M21D/2023Y3M20D"
   end
 
-  test "a day after a season is the season's nth day, as it is after a quarter" do
+  test "a day after a season of a hemisphere is the season's nth day, as it is after a quarter" do
     assert ~o"2026-34-10" == ~o"2026-04-10"
     assert ~o"2026-25-10" == ~o"2026-03-29"
     assert ~o"2026-28-15" == ~o"2027-01-04"
-    assert ~o"2026-21-10" == ~o"2026-03-10"
-    assert ~o"2026-24-10" == ~o"2026-12-10"
-    assert ~o"2026-24-31" == ~o"2026-12-31"
     assert ~o"2026-25-10T10" == ~o"2026-03-29T10"
+  end
+
+  test "nothing follows a season of 21 to 24, which has no dates to count a day in" do
+    # A day after one was read as a day of the northern season's first
+    # month: `2026-21-10` as 10 March.
+    for text <- ["2026-21-10", "2026-24-10", "2026-24-31", "2026-21T10", "2026-22-10T10"] do
+      assert {^text, {:error, %Tempo.ParseError{} = error}} = {text, Tempo.from_iso8601(text)}
+      assert Exception.message(error) =~ "A season is written as a year and the season alone"
+    end
   end
 
   test "an astronomical season beyond the years Astro computes is an error" do
@@ -62,21 +68,35 @@ defmodule Tempo.GroupResolution.Test do
     assert {:ok, _winter} = Tempo.from_iso8601("2999-28")
   end
 
-  test "Meteorological seasons (21-24) expand to calendar months" do
-    # Codes 21-24 are hemisphere-unspecified; we default to Northern
-    # meteorological boundaries as a conventional interpretation.
-    assert ~o"2022Y21M" == ~o"2022Y3M/6M"
-    assert ~o"2022Y22M" == ~o"2022Y6M/9M"
-    assert ~o"2022Y23M" == ~o"2022Y9M/12M"
-    assert ~o"2022Y24M" == ~o"2022Y12M/2023Y3M"
+  # A season of 21 to 24 is "independent of location" (ISO 8601-2 §4.8.1),
+  # and was read as the northern season everywhere. It is kept as it is
+  # written, and is whole months once it has a hemisphere: those the season
+  # has north of the equator, and the months of the opposite season south
+  # of it (`test/tempo/season_test.exs` measures them).
+  test "a season of 21 to 24 is kept as it is written, and is whole months in a hemisphere" do
+    for {season, north, south} <- [
+          {"2022Y21M", "2022Y3M/6M", "2022Y9M/12M"},
+          {"2022Y22M", "2022Y6M/9M", "2022Y12M/2023Y3M"},
+          {"2022Y23M", "2022Y9M/12M", "2022Y3M/6M"},
+          {"2022Y24M", "2022Y12M/2023Y3M", "2022Y6M/9M"}
+        ] do
+      value = Tempo.from_iso8601!(season)
+
+      assert Tempo.to_iso8601!(value) == season
+      assert {season, Tempo.in_territory(value, :GB)} == {season, Tempo.from_iso8601(north)}
+      assert {season, Tempo.in_territory(value, :AU)} == {season, Tempo.from_iso8601(south)}
+    end
   end
 
   test "a meteorological season holds all three of its months" do
-    assert Tempo.contains?(~o"2022-21", ~o"2022-05-31")
-    refute Tempo.contains?(~o"2022-21", ~o"2022-06-01")
-    assert Tempo.contains?(~o"2022-24", ~o"2022-12-01")
-    assert Tempo.contains?(~o"2022-24", ~o"2023-02-28")
-    refute Tempo.contains?(~o"2022-24", ~o"2023-03-01")
+    {:ok, spring} = Tempo.in_territory(~o"2022-21", :GB)
+    {:ok, winter} = Tempo.in_territory(~o"2022-24", :GB)
+
+    assert Tempo.contains?(spring, ~o"2022-05-31")
+    refute Tempo.contains?(spring, ~o"2022-06-01")
+    assert Tempo.contains?(winter, ~o"2022-12-01")
+    assert Tempo.contains?(winter, ~o"2023-02-28")
+    refute Tempo.contains?(winter, ~o"2023-03-01")
   end
 
   test "a winter is of the year it starts in, the last of its year's four seasons" do
@@ -85,7 +105,7 @@ defmodule Tempo.GroupResolution.Test do
     # months written out: December of the year to the end of the February
     # after it, the months the winter numbered 28 starts and ends in.
     for year <- [1, 1582, 1999, 2000, 2026, 9998] do
-      winter = Tempo.from_iso8601!("#{four_digits(year)}-24")
+      {:ok, winter} = Tempo.in_territory(Tempo.from_iso8601!("#{four_digits(year)}-24"), :GB)
       months = Tempo.from_iso8601!("#{four_digits(year)}-12/#{four_digits(year + 1)}-03")
 
       assert {year, winter} == {year, months}
@@ -98,12 +118,18 @@ defmodule Tempo.GroupResolution.Test do
     end
 
     # Each season of a year begins where the one before it ends, and the
-    # spring of the next year where the winter ends.
-    seasons =
-      for year <- 2025..2027, season <- 21..24, do: Tempo.from_iso8601!("#{year}-#{season}")
+    # spring of the next year where the winter ends. South of the equator a
+    # year's seasons run autumn, winter, spring, summer.
+    for {territory, order} <- [GB: [21, 22, 23, 24], AU: [23, 24, 21, 22]] do
+      seasons =
+        for year <- 2025..2027, season <- order do
+          {:ok, dated} = Tempo.in_territory(Tempo.from_iso8601!("#{year}-#{season}"), territory)
+          dated
+        end
 
-    for {earlier, later} <- Enum.zip(seasons, Enum.drop(seasons, 1)) do
-      assert {earlier, later, Tempo.relation(earlier, later)} == {earlier, later, :meets}
+      for {earlier, later} <- Enum.zip(seasons, Enum.drop(seasons, 1)) do
+        assert {earlier, later, Tempo.relation(earlier, later)} == {earlier, later, :meets}
+      end
     end
   end
 
@@ -114,9 +140,14 @@ defmodule Tempo.GroupResolution.Test do
       # Hebrew 5787 runs from September 2026 to October 2027.
       assert Tempo.relation(~o"5787-25[u-ca=hebrew]", ~o"2027-25") == :equals
       # Its winter starts in December 2026, the winter of 2026.
-      assert Tempo.relation(~o"5787-24[u-ca=hebrew]", ~o"2026-24") == :equals
+      {:ok, hebrew_winter} = Tempo.in_territory(~o"5787-24[u-ca=hebrew]", :GB)
+      {:ok, winter} = Tempo.in_territory(~o"2026-24", :GB)
+      assert Tempo.relation(hebrew_winter, winter) == :equals
       assert Tempo.relation(~o"2026-25[u-ca=julian]", ~o"2026-25") == :equals
-      assert Tempo.relation(~o"2569-21[u-ca=buddhist]", ~o"2026-21") == :equals
+
+      {:ok, buddhist} = Tempo.in_territory(~o"2569-21[u-ca=buddhist]", :GB)
+      {:ok, gregorian} = Tempo.in_territory(~o"2026-21", :GB)
+      assert Tempo.relation(buddhist, gregorian) == :equals
     end
 
     test "has its endpoints in that calendar" do
@@ -139,11 +170,19 @@ defmodule Tempo.GroupResolution.Test do
   end
 
   test "a season in a year with unspecified digits" do
-    assert ~o"20XX-21" == ~o"20XXY3M/20XXY6M"
+    assert Tempo.in_territory(~o"20XX-21", :GB) == {:ok, ~o"20XXY3M/20XXY6M"}
+    assert Tempo.in_territory(~o"20XX-21", :AU) == {:ok, ~o"20XXY9M/20XXY12M"}
 
-    for iso <- ["20XX-24", "20XX-25", "20XX-21-10", "20XX-21[u-ca=hebrew]"] do
-      assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601(iso)
-    end
+    # The season that runs into the next year needs the year itself, a
+    # winter in the north and a summer in the south, and so does a season
+    # in another calendar. One of a hemisphere is refused as it is read.
+    assert {:error, %Tempo.InvalidDateError{}} = Tempo.in_territory(~o"20XX-24", :GB)
+    assert {:error, %Tempo.InvalidDateError{}} = Tempo.in_territory(~o"20XX-22", :AU)
+    assert {:ok, _winter_in_one_year} = Tempo.in_territory(~o"20XX-24", :AU)
+    assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("20XX-25")
+
+    {:ok, hebrew} = Tempo.from_iso8601("20XX-21[u-ca=hebrew]")
+    assert {:error, %Tempo.InvalidDateError{}} = Tempo.in_territory(hebrew, :GB)
   end
 
   describe "a value after a group of its own unit" do

@@ -78,7 +78,9 @@ defmodule Tempo.Format do
   def to_string(value, options) do
     if Keyword.keyword?(options) do
       {window, options} = Keyword.split(options, [:within])
-      render(value, options, window)
+
+      with {:ok, value} <- with_its_seasons_dated(value, options),
+           do: render(value, options, window)
     else
       {:error, options_error("to_string/2", options)}
     end
@@ -102,6 +104,12 @@ defmodule Tempo.Format do
       {:error, _reason} -> iso8601_or_inspect(value)
     end
   end
+
+  # A season of 21 to 24 is rendered as the dates it has in the territory of
+  # the locale it is rendered in, and with no `:locale` in the application's
+  # default territory and then the current locale's.
+  defp with_its_seasons_dated(value, options),
+    do: Tempo.with_seasons_dated(value, Keyword.take(options, [:locale]))
 
   defp iso8601_or_inspect(value) do
     case Tempo.to_iso8601(value) do
@@ -399,10 +407,12 @@ defmodule Tempo.Format do
       else: {:error, options_error("to_relative_string/2", options)}
   end
 
-  defp relative_string(%Tempo{} = tempo, options), do: render_relative(tempo, options)
-
-  defp relative_string(%Tempo.Interval{} = interval, options) do
-    with {:ok, start} <- interval_start(interval), do: render_relative(start, options)
+  # A season of 21 to 24 is the span it has in the locale's territory, and
+  # is told from where that starts.
+  defp relative_string(value, options)
+       when is_struct(value, Tempo) or is_struct(value, Tempo.Interval) do
+    with {:ok, dated} <- with_its_seasons_dated(value, options),
+         do: relative_dated(dated, options)
   end
 
   defp relative_string(value, _options) do
@@ -410,6 +420,12 @@ defmodule Tempo.Format do
      ArgumentError.exception(
        "Tempo.to_relative_string/2 formats a Tempo or Tempo.Interval, got #{inspect(value)}."
      )}
+  end
+
+  defp relative_dated(%Tempo{} = tempo, options), do: render_relative(tempo, options)
+
+  defp relative_dated(%Tempo.Interval{} = interval, options) do
+    with {:ok, start} <- interval_start(interval), do: render_relative(start, options)
   end
 
   defp options_error(function, options) do

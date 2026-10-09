@@ -43,7 +43,17 @@ defimpl Enumerable, for: Tempo.Interval do
   # `Tempo.UnboundedRecurrenceError` directing the caller to
   # `Tempo.to_interval/2` with a `:within` window.
 
+  # An end that is a season of 21 to 24 (`[year: 2026, season: 21]`) has no
+  # dates until it has a hemisphere, so nothing is walked from it or up to
+  # it: the walk raises, as the walk of the season alone does.
+  defguardp season?(endpoint)
+            when is_struct(endpoint, Tempo) and is_list(endpoint.time) and
+                   elem(hd(tl(endpoint.time)), 0) == :season
+
   @impl Enumerable
+  def count(%Tempo.Interval{from: from, to: to} = interval) when season?(from) or season?(to),
+    do: raise(season_error(interval))
+
   def count(%Tempo.Interval{recurrence: recurrence}) when recurrence != 1 do
     {:error, __MODULE__}
   end
@@ -69,6 +79,10 @@ defimpl Enumerable, for: Tempo.Interval do
   def count(_interval), do: {:error, __MODULE__}
 
   @impl Enumerable
+  def member?(%Tempo.Interval{from: from, to: to} = interval, _element)
+      when season?(from) or season?(to),
+      do: raise(season_error(interval))
+
   def member?(%Tempo.Interval{recurrence: recurrence}, _element) when recurrence != 1 do
     {:error, __MODULE__}
   end
@@ -180,6 +194,9 @@ defimpl Enumerable, for: Tempo.Interval do
     do: Steps.whole_units?(time) and Keyword.has_key?(time, :year)
 
   @impl Enumerable
+  def slice(%Tempo.Interval{from: from, to: to} = interval) when season?(from) or season?(to),
+    do: raise(season_error(interval))
+
   def slice(%Tempo.Interval{recurrence: recurrence}) when recurrence != 1 do
     {:error, __MODULE__}
   end
@@ -251,11 +268,18 @@ defimpl Enumerable, for: Tempo.Interval do
   end
 
   @impl Enumerable
+  def reduce(%Tempo.Interval{from: from, to: to} = interval, _acc, _fun)
+      when season?(from) or season?(to),
+      do: raise(season_error(interval))
+
   def reduce(%Tempo.Interval{} = interval, acc, fun) do
     if occurrences?(interval),
       do: reduce_occurrences(interval, acc, fun),
       else: reduce_span(interval, acc, fun)
   end
+
+  defp season_error(interval),
+    do: Tempo.AbstractSeasonError.exception(value: interval, operation: "walk")
 
   # A recurring interval, or one with an end that holds a selection
   # (`2026Y6ML2KN/P1D`, a day from each Tuesday of June), names several spans

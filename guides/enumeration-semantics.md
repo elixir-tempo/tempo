@@ -237,13 +237,27 @@ IntervalSet is the form used by set operations — `Tempo.union/2`, `Tempo.inter
 
 ### 2.12. Seasons
 
-The parser expands season codes into intervals before enumeration sees them.
+The parser expands the season of a hemisphere into an interval before enumeration sees it.
 
 | Code | Example | Expands to |
 |---|---|---|
 | Astronomical (25–32) | `2022-25` | March equinox to June solstice (computed via `Astro`) |
-| Meteorological (21–24) | `2022-21` | March 1 to May 31 (calendar approximation) |
-| Meteorological winter | `2022-24` | December 1 2022 to the end of February 2023, the winter that starts in its year |
+
+A season of 21 to 24 is "independent of location": spring, summer, autumn or winter wherever it is read. It is kept as it is written and has no dates to walk, so its walk raises a `Tempo.AbstractSeasonError`. Give it a hemisphere first, and it is walked by its months.
+
+```elixir
+{:ok, spring} = Tempo.in_territory(~o"2026-21", :AU)
+
+Enum.to_list(spring)
+#=> [~o"2026Y9M", ~o"2026Y10M", ~o"2026Y11M"]
+```
+
+| In | `2026-21` | `2026-24` |
+|---|---|---|
+| A territory north of the equator | March to May | December 2026 to February 2027 |
+| A territory south of it | September to November | June to August |
+
+A winter in the north and a summer in the south are of the year they start in.
 
 ## 3. Not enumerable by design
 
@@ -421,7 +435,7 @@ Known divergences:
 
 | Category | Examples |
 |---|---|
-| **Enumerable** | every standard ISO 8601 / EDTF value with a concrete start — single values, ranges, sets, masks, long years, qualified values, IXDTF-tagged values, closed intervals, open-upper intervals, seasons, mixed-resolution intervals |
+| **Enumerable** | every standard ISO 8601 / EDTF value with a concrete start — single values, ranges, sets, masks, long years, qualified values, IXDTF-tagged values, closed intervals, open-upper intervals, seasons of a hemisphere, mixed-resolution intervals |
 | **Not enumerable by design** | bare `%Tempo.Duration{}`, fully open intervals `../..`, open-lower intervals `../to`, microsecond values at precision 6 (the finest resolution), significant-digits blocks > 10 000 candidates, values with nothing to walk (§3.6) |
 | **O(1) fast paths** | `count/1`, `member?/2`, `slice/1` on `%Tempo{}` and `%Tempo.Interval{}` (calendar- and DST-aware) |
 | **Deferred** | `count/1` / `member?/2` on `%Tempo.Set{}` (falls back to `reduce/3`) |

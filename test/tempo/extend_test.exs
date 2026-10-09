@@ -258,7 +258,7 @@ defmodule Tempo.Extend.Test do
     test "is an error" do
       for value <- [
             ~o"2026-06-15/2026-06-20",
-            ~o"2026Y21M",
+            ~o"2026Y25M",
             ~o"R3/2026-06-15/P1D",
             ~o"{2026Y,2027Y}",
             ~o"P1M",
@@ -271,6 +271,13 @@ defmodule Tempo.Extend.Test do
         assert {:error, %ArgumentError{}} = Tempo.extend(value)
         assert_raise ArgumentError, fn -> Tempo.extend!(value) end
       end
+    end
+
+    test "a season with no hemisphere has no months to be written by" do
+      # It was the interval of the northern season, and no one value.
+      assert {:error, %Tempo.AbstractSeasonError{} = error} = Tempo.extend(~o"2026Y21M")
+      assert Exception.message(error) =~ "Tempo.in_territory/2"
+      assert_raise Tempo.AbstractSeasonError, fn -> Tempo.extend!(~o"2026Y21M") end
     end
 
     test "names the value" do

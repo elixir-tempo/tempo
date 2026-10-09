@@ -117,20 +117,25 @@ defmodule Tempo.Iso8601.EdtfCorpus.Test do
 
   describe "invalid intervals" do
     # The edtf-validate "invalid" intervals that Tempo reads, each for one
-    # of two reasons. EDTF has no time of day at an end of an interval,
-    # which ISO 8601 has. And it has no year written with a `Y` there, which
-    # Tempo reads as it does anywhere.
+    # of three reasons. EDTF has no time of day at an end of an interval,
+    # which ISO 8601 has. It has no year written with a `Y` there, which
+    # Tempo reads as it does anywhere. And it orders the seasons of 21 to 24
+    # as the northern hemisphere has them, where they are "independent of
+    # location": `2012-24/2012-21`, a year's winter to its spring, is June
+    # to September south of the equator, and is read and held to the order
+    # of its ends where it is given a hemisphere (`Tempo.in_territory/2`).
     #
     # An interval whose end starts before its start does is refused, as the
-    # corpus has it: `0800/-0999`, `2012-24/2012-21`, the winter of 2012
-    # being the one that starts in its December, and an end that is coarser
-    # than its start and holds it (`0000-01-03/0000-01`, a day of January
-    # to January, and three like it).
+    # corpus has it: `0800/-0999`, and an end that is coarser than its start
+    # and holds it (`0000-01-03/0000-01`, a day of January to January, and
+    # three like it).
     @invalid_intervals_tempo_reads MapSet.new([
                                      "Y-61000/-2000",
                                      "2005-07-25T10:10:10Z/2006-01-01T10:10:10Z",
                                      "2005-07-25T10:10:10Z/2006-01",
-                                     "2005-07-25/2006-01-01T10:10:10Z"
+                                     "2005-07-25/2006-01-01T10:10:10Z",
+                                     "2012-24/2012-21",
+                                     "2012-23/2012-22"
                                    ])
 
     for str <- Corpus.invalid_intervals() do
@@ -149,6 +154,17 @@ defmodule Tempo.Iso8601.EdtfCorpus.Test do
             do: str
 
       assert read == @invalid_intervals_tempo_reads
+    end
+
+    test "refuses an interval of seasons north of the equator, as the corpus has it" do
+      for text <- ["2012-24/2012-21", "2012-23/2012-22"] do
+        {:ok, written} = Tempo.from_iso8601(text)
+
+        assert {^text, {:error, %Tempo.IntervalEndpointsError{}}} =
+                 {text, Tempo.in_territory(written, :GB)}
+
+        assert {^text, {:ok, %Tempo.Interval{}}} = {text, Tempo.in_territory(written, :AU)}
+      end
     end
   end
 

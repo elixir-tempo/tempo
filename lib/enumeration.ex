@@ -1021,6 +1021,10 @@ defmodule Tempo.Enumeration do
               "Cannot enumerate a Tempo at microsecond precision 6 " <>
                 "— that is the finest representable ulp. Got: #{inspect(tempo)}"
 
+      # A season of 21 to 24 has no dates to walk until it has a hemisphere.
+      {:finest, :season} ->
+        raise Tempo.AbstractSeasonError, value: tempo, operation: "walk"
+
       {:finest, unit} ->
         raise ArgumentError,
               "Cannot enumerate a Tempo at #{inspect(unit)} resolution " <>

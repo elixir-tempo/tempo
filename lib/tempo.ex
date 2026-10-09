@@ -105,6 +105,8 @@ defmodule Tempo do
 
   alias Calendrical.Gregorian
   alias Calendrical.Kday
+  alias Localize.Territory.Hemisphere
+  alias Tempo.AbstractSeasonError
   alias Tempo.Clock
   alias Tempo.Compare
   alias Tempo.ConversionError
@@ -185,9 +187,12 @@ defmodule Tempo do
 
   A month is counted from the year's first (`:month`) or named as a lunisolar calendar names it (`:traditional_month`); a week is ISO 8601's (`:week`) or the calendar's own (`:calendar_week`); a day is of its month (`:day`), of its year (`:day_of_year`) or of its week (`:day_of_week`). A century, a decade, a half and a quarter are groups of years or of months. A `:selection` holds the parts of a rule (`L1K1IN`, the first Monday), a keyword list of its own.
 
+  A `:season` is one of ISO 8601-2's four seasons "independent of location", 21 to 24, written where a month is and kept as it is written: it has no dates until `in_territory/2` or `to_interval/2` gives it a hemisphere. A season of a hemisphere (25 to 32) is read as the interval of dates it is.
+
   """
   @type token_list :: [
           {:year, token}
+          | {:season, 21..24}
           | {:month, token}
           | {:traditional_month, token}
           | {:week, token}
@@ -920,6 +925,10 @@ defmodule Tempo do
     the value stands alone, is an end of an interval or is a member
     of a set. Defaults to `false`.
 
+  * `:territory` is the territory a season of 21 to 24 is read in, as `in_territory/2` takes it: `"2026-21"` is September to November with `territory: :AU`. With neither this nor `:locale` such a season is read as it is written, a season with no dates yet.
+
+  * `:locale` is a locale whose territory a season of 21 to 24 is read in. A `:territory` wins over it.
+
   ### Returns
 
   * `{:ok, value}` — a `t:t/0`, `t:Tempo.Interval.t/0`,
@@ -963,6 +972,9 @@ defmodule Tempo do
       iex> Tempo.from_iso8601("2026-06-15", Calendrical.ISOWeek)
       {:ok, ~o"2026Y25W1K"W}
 
+      iex> Tempo.from_iso8601("2026-21", territory: :AU)
+      {:ok, ~o"2026Y9M/12M"}
+
   """
   @spec from_iso8601(String.t(), Calendar.calendar() | keyword()) ::
           {:ok,
@@ -981,7 +993,10 @@ defmodule Tempo do
     # (`on_the_clock_of_its_zone/2`): a value alone, each end of an
     # interval and each member of a set.
     calendar = Keyword.get(options, :calendar, :from_ixdtf_or_default)
-    do_from_iso8601(string, calendar, strict?(options))
+
+    with {:ok, value} <- do_from_iso8601(string, calendar, strict?(options)) do
+      in_territory_given(value, options)
+    end
   end
 
   def from_iso8601(string, calendar) when is_binary(string) do
@@ -993,6 +1008,20 @@ defmodule Tempo do
   end
 
   defp strict?(options), do: Keyword.get(options, :strict, false) == true
+
+  # A season of 21 to 24 is given a hemisphere where it is read with a
+  # territory or a locale, and is left as it is written where it is read
+  # with neither: the current locale is not asked here, since the sigil
+  # reads when it is compiled. A territory wins over a locale.
+  defp in_territory_given(value, options) do
+    if Group.abstract_season?(value),
+      do: options |> Territory.named() |> season_in_territory_given(value),
+      else: {:ok, value}
+  end
+
+  defp season_in_territory_given({:ok, nil}, value), do: {:ok, value}
+  defp season_in_territory_given({:ok, territory}, value), do: in_territory(value, territory)
+  defp season_in_territory_given({:error, _reason} = error, _value), do: error
 
   defp do_from_iso8601(string, requested_calendar, strict?) do
     with {:ok, {tokens, extended}} <- Tokenizer.tokenize(string) do
@@ -3199,8 +3228,15 @@ defmodule Tempo do
   # An interval as its two ends: one written with a duration is counted to
   # them, and an end that is open stays open. A recurrence is not one
   # interval, and nor is one whose start or end holds a set.
-  defp with_its_ends(%Interval{recurrence: 1, duration: nil} = interval, _function),
-    do: {:ok, interval}
+  #
+  # An end that is a season of 21 to 24 has no dates to be moved from until
+  # it has a hemisphere, and the interval is refused as the season alone is.
+  defp with_its_ends(%Interval{recurrence: 1, duration: nil} = interval, _function) do
+    with :ok <- has_its_dates(interval.from, "truncate or round"),
+         :ok <- has_its_dates(interval.to, "truncate or round") do
+      {:ok, interval}
+    end
+  end
 
   defp with_its_ends(%Interval{recurrence: 1} = interval, function) do
     case to_interval(interval) do
@@ -3251,6 +3287,16 @@ defmodule Tempo do
   end
 
   defp one_value(_value), do: :ok
+
+  # A season of 21 to 24 has no dates until it has a hemisphere, so what
+  # needs its months or its days is refused, and says how it is given one.
+  defp has_its_dates(%__MODULE__{time: time} = value, operation) when is_list(time) do
+    if List.keymember?(time, :season, 0),
+      do: {:error, AbstractSeasonError.exception(value: value, operation: operation)},
+      else: :ok
+  end
+
+  defp has_its_dates(_value, _operation), do: :ok
 
   # A value already on the week axis holds `:week` as a component, so
   # the ordinary rule applies.
@@ -3417,7 +3463,9 @@ defmodule Tempo do
     written to (`t:Tempo.RoundingError.t/0`), is a unit the value's
     axis does not have (`t:Tempo.ResolutionError.t/0`), or is a month
     whose length depends on a year the value does not have
-    (`t:Tempo.UnanchoredError.t/0`), and when the value holds several
+    (`t:Tempo.UnanchoredError.t/0`), when the value is a season with no
+    hemisphere, which has no dates to be nearer one unit than another
+    (`t:Tempo.AbstractSeasonError.t/0`), and when the value holds several
     values or is not a date or time value.
 
   ### Examples
@@ -3458,6 +3506,7 @@ defmodule Tempo do
 
   def round(%__MODULE__{} = tempo, round_to) do
     with {:ok, round_to} <- validate_unit(round_to),
+         :ok <- has_its_dates(tempo, "round"),
          :ok <- one_to_round(tempo, round_to) do
       tempo
       |> Rounding.round(round_to)
@@ -3720,8 +3769,10 @@ defmodule Tempo do
   * `{:error, reason}` when both values have a year, when the two hold
     date units of different calendars, when the result is not a date in
     its calendar, is a time the clock skips in its zone or is an
-    interval whose start is not before its end, or when either argument
-    is not a Tempo value or interval.
+    interval whose start is not before its end, when either is a season
+    with no hemisphere, which has no dates to place a time on
+    (`t:Tempo.AbstractSeasonError.t/0`), or when either argument is not a
+    Tempo value or interval.
 
   ### Examples
 
@@ -3774,6 +3825,8 @@ defmodule Tempo do
   defp place_on(%__MODULE__{} = value, %__MODULE__{} = other) do
     with :ok <- one_value(value),
          :ok <- one_value(other),
+         :ok <- has_its_dates(value, "place a value on"),
+         :ok <- has_its_dates(other, "place a value on"),
          :ok <- one_calendar(value, other) do
       value = without_unspecified_year(value)
       other = without_unspecified_year(other)
@@ -4192,12 +4245,14 @@ defmodule Tempo do
   def extend(tempo, unit \\ nil)
 
   def extend(%Tempo{time: time} = tempo, nil) when is_list(time) do
-    extended =
-      if Enumeration.ends_in_group?(tempo),
-        do: extend_group(tempo),
-        else: extend_by_finer_unit(tempo)
+    with :ok <- has_its_dates(tempo, "extend") do
+      extended =
+        if Enumeration.ends_in_group?(tempo),
+          do: extend_group(tempo),
+          else: extend_by_finer_unit(tempo)
 
-    extended |> as_the_clock_shows_it(tempo) |> at_its_offset() |> NotBuilt.result()
+      extended |> as_the_clock_shows_it(tempo) |> at_its_offset() |> NotBuilt.result()
+    end
   end
 
   def extend(%Tempo{time: time}, unit) when is_list(time) do
@@ -4592,7 +4647,8 @@ defmodule Tempo do
   # the one reading a value written with the set would name: it is refused
   # as that value is when it is read.
   def extend_resolution(%Tempo{} = tempo, target_unit) do
-    with %Tempo{} = extended <- extend_resolution_as_written(tempo, target_unit),
+    with :ok <- has_its_dates(tempo, "extend"),
+         %Tempo{} = extended <- extend_resolution_as_written(tempo, target_unit),
          %Tempo{} = shown <- extended |> as_calendar_date() |> Zone.shown_by_the_clock(),
          :ok <- Validation.validate_zone_existence(shown) do
       NotBuilt.result(shown)
@@ -5793,6 +5849,116 @@ defmodule Tempo do
   defp put_zone_id(%{} = extended, zone), do: %{extended | zone_id: zone}
 
   ## ---------------------------------------------------------
+  ## A season in a territory
+  ## ---------------------------------------------------------
+
+  @doc """
+  Give a season its dates in a territory.
+
+  ISO 8601-2 numbers four seasons "independent of location": 21 is
+  spring, 22 summer, 23 autumn and 24 winter, wherever they are read.
+  Spring is March to May north of the equator and September to November
+  south of it, so `~o"2026-21"` names a season and no dates.
+  `in_territory/2` reads it in the hemisphere a territory lies in, as
+  whole months: the meteorological season. A winter in the north and a
+  summer in the south are of the year they start in, and run into the
+  next.
+
+  A season written with the number of its hemisphere (25 to 28 in the
+  north, 29 to 32 in the south) has its dates when it is read, and a
+  value that holds no season of 21 to 24 is returned as it is.
+
+  Until it has its dates a season is kept as it is written. It is given
+  them where it is read with a `:territory` or a `:locale`
+  (`from_iso8601/2`), and by `to_interval/2` and what is built on it, the
+  comparisons, the relations, the set operations, `select/2` and
+  `to_string/2`: these ask the application's `:default_territory` and
+  then the current locale where no territory is named. What else needs
+  its dates returns or raises a `Tempo.AbstractSeasonError`: a walk, a
+  time of day placed on it (`at/2`), a step of anything but years
+  (`shift/3`), a finer unit (`extend/2`) or a rounding (`round/2`).
+
+  ### Arguments
+
+  * `value` is a `t:t/0`, a `t:Tempo.Interval.t/0` or a `t:Tempo.Set.t/0`.
+    An interval from one season to another runs from where the first
+    starts to where the second does, and each season of a set is given
+    its dates.
+
+  * `territory` is a territory (`:AU`, `"GB"`), a locale (`"en-AU"`, a
+    `t:Localize.LanguageTag.t/0`) whose territory is taken, or `nil` for
+    the application's `:default_territory` and then the current locale's.
+    Two letters are a territory before they are a language: `"ar"` is
+    Argentina here, and Arabic as the `:locale` of `to_interval/2`.
+
+  ### Returns
+
+  * `{:ok, value}` with each season of 21 to 24 as the interval of dates
+    it is in the territory's hemisphere.
+
+  * `{:error, %Tempo.AbstractSeasonError{}}` for a territory the equator
+    runs through, or a region that lies on both sides of it, which has no
+    one hemisphere.
+
+  * `{:error, exception}` for what is no territory and no locale.
+
+  ### Examples
+
+      iex> Tempo.in_territory(~o"2026-21", :AU)
+      {:ok, ~o"2026Y9M/12M"}
+
+      iex> Tempo.in_territory(~o"2026-21", "en-GB")
+      {:ok, ~o"2026Y3M/6M"}
+
+      iex> {:ok, summer} = Tempo.in_territory(~o"2026-22", :NZ)
+      iex> summer
+      ~o"2026Y12M/2027Y3M"
+
+      iex> {:error, %Tempo.AbstractSeasonError{territory: :BR}} = Tempo.in_territory(~o"2026-21", :BR)
+
+  """
+  @spec in_territory(value, Tempo.Territory.input()) :: {:ok, term()} | {:error, error_reason()}
+        when value: t() | Interval.t() | Tempo.Set.t()
+  def in_territory(value, territory) do
+    if Group.abstract_season?(value) do
+      with {:ok, hemisphere} <- hemisphere_of_territory(territory, value) do
+        Group.resolve_seasons(value, hemisphere)
+      end
+    else
+      {:ok, value}
+    end
+  end
+
+  @doc false
+  # A value with each season of 21 to 24 it holds given its dates in the
+  # territory an option list names: its `:territory`, or else its
+  # `:locale`'s, and with neither the application's default territory and
+  # then the current locale's. A value that holds no such season is returned
+  # as it is, and the options are not read.
+  @spec with_seasons_dated(term(), keyword()) :: {:ok, term()} | {:error, error_reason()}
+  def with_seasons_dated(value, options) do
+    if Group.abstract_season?(value) do
+      with {:ok, territory} <- Territory.named(options), do: in_territory(value, territory)
+    else
+      {:ok, value}
+    end
+  end
+
+  defp hemisphere_of_territory(territory, value) do
+    with {:ok, territory} <- Territory.resolve(territory),
+         {:ok, hemisphere} <- Hemisphere.hemisphere(territory) do
+      one_hemisphere(hemisphere, territory, value)
+    end
+  end
+
+  # A territory the equator runs through has summer in both halves of the
+  # year, by where in it one stands, and a season has no one span there.
+  defp one_hemisphere(:ambiguous, territory, value),
+    do: {:error, AbstractSeasonError.exception(value: value, territory: territory)}
+
+  defp one_hemisphere(hemisphere, _territory, _value), do: {:ok, hemisphere}
+
+  ## ---------------------------------------------------------
   ## Zone shifting — project a zoned Tempo into another zone
   ## ---------------------------------------------------------
 
@@ -6520,6 +6686,10 @@ defmodule Tempo do
     year = whole!(tempo, :year, function)
 
     cond do
+      # A season of 21 to 24 has no date to read until it has a hemisphere.
+      List.keymember?(time, :season, 0) ->
+        raise AbstractSeasonError, value: tempo, operation: "read a date from"
+
       List.keymember?(time, :week, 0) ->
         week = whole!(tempo, :week, function)
         week_date_ymd!(tempo, function, {year, week, whole!(tempo, :day_of_week, function, 1)})
@@ -6795,6 +6965,20 @@ defmodule Tempo do
       iex> meeting = ~o"2026-06-15T10:00/2026-06-15T11:00"
       iex> Tempo.shift(~o"2026-06-15T10:30", ~o"PT0S", skipping: meeting)
       ~o"2026Y6M15DT11H0M"
+
+  A season with no hemisphere steps by whole years, a year on being a
+  season as this one is. A month or a day on is counted from dates it does
+  not have until `in_territory/2` gives it them:
+
+      iex> Tempo.shift(~o"2026-21", year: 1)
+      ~o"2027Y21M"
+
+      iex> match?({:error, %Tempo.AbstractSeasonError{}}, Tempo.shift(~o"2026-21", month: 1))
+      true
+
+      iex> {:ok, spring} = Tempo.in_territory(~o"2026-21", :AU)
+      iex> Tempo.shift(spring, month: 1)
+      ~o"2026Y10M/2027Y1M"
 
   A booking a day on is at the same times the day after, and two days at
   the end of January are two days a month on:
@@ -7121,6 +7305,11 @@ defmodule Tempo do
       iex> Tempo.to_string(~o"[2026-06-15,2026-07-04]")
       {:ok, "Jun 15, 2026 or Jul 4, 2026"}
 
+  A season with no hemisphere is shown as the dates it has in the territory of the locale it is rendered in: the spring of 2026 is March to May in Britain, and September to November in Australia.
+
+      iex> Tempo.to_string(~o"2026-21", locale: "en-GB")
+      {:ok, "Mar\u2009\u2013\u2009May 2026"}
+
   An open interval has no last day to show, so it is an error, and interpolation writes it in ISO 8601:
 
       iex> {:error, %Tempo.IntervalEndpointsError{}} = Tempo.to_string(~o"2026-06-15/..")
@@ -7316,6 +7505,10 @@ defmodule Tempo do
 
   ### Options
 
+  * `:territory` is the territory a season of 21 to 24 is given its dates in, as `in_territory/2` takes it. With neither this nor `:locale` it is the application's `:default_territory`, and then the current locale's.
+
+  * `:locale` is a locale whose territory such a season is given its dates in. A `:territory` wins over it.
+
   * `:within` is the window whose occurrences you want — a Tempo
     value such as `~o"2026"`. Every recurrence keeps the occurrences
     that overlap the window: one already in progress when the
@@ -7492,6 +7685,27 @@ defmodule Tempo do
     do: to_interval(with_a_calendar(value), opts)
 
   def to_interval(value, opts) do
+    if Group.abstract_season?(value) or Group.abstract_season?(Keyword.get(opts, :within)),
+      do: season_to_interval(value, opts),
+      else: value_to_interval(value, opts)
+  end
+
+  # A season of 21 to 24 is given its dates where it is converted, and so
+  # is one that is the window: in the territory or the locale the caller
+  # names, a territory winning over a locale, and with neither in the
+  # application's default territory and then the current locale's
+  # (`Tempo.Territory.resolve/1`).
+  defp season_to_interval(value, opts) do
+    with {:ok, value} <- with_seasons_dated(value, opts),
+         {:ok, within} <- with_seasons_dated(Keyword.get(opts, :within), opts) do
+      value_to_interval(value, window_with_dates(opts, within))
+    end
+  end
+
+  defp window_with_dates(opts, nil), do: opts
+  defp window_with_dates(opts, within), do: Keyword.put(opts, :within, within)
+
+  defp value_to_interval(value, opts) do
     with :ok <- check_bound_option(opts, "Tempo.to_interval/2"),
          opts = window_in_value_frame(value, opts),
          :ok <- ends_expand(value),

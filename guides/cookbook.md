@@ -690,6 +690,30 @@ iex> Tempo.IntervalSet.count(workdays)
 
 Fiscal values compose with Gregorian ones directly — `Tempo.relation(Tempo.Interval.from(quarter), ~o"2026-07-01")` is `:equals` — so nothing needs converting before the set algebra. A stepped or descending `Date.Range` is refused rather than guessed: it enumerates a set of days, not a span.
 
+### How do I say "the spring of 2026" in Sydney and in London?
+
+ISO 8601-2 numbers four seasons "independent of location": 21 is spring, 22 summer, 23 autumn and 24 winter, wherever they are read. A season has no dates until it is in a territory, which says which side of the equator it is on.
+
+```elixir
+spring = ~o"2026-21"
+
+{:ok, in_sydney} = Tempo.in_territory(spring, :AU)
+{:ok, in_london} = Tempo.in_territory(spring, :GB)
+
+Tempo.contains?(in_sydney, ~o"2026-10-15")
+#=> true
+
+Tempo.contains?(in_london, ~o"2026-10-15")
+#=> false
+
+Tempo.overlaps?(in_sydney, in_london)
+#=> false
+```
+
+> *"**Spring 2026 in Sydney** **contains** the 15th of October, and **spring 2026 in London** does not: the two springs do **not overlap**."*
+
+A season is the meteorological one, whole months: September to November south of the equator, March to May north of it. `Tempo.from_iso8601/2` and `Tempo.to_interval/2` take the territory as `:territory`, or a `:locale` whose territory it is, and with neither `Tempo.to_interval/2` asks the application's `:default_territory` and then the current locale. A territory the equator runs through, such as Brazil, has no one answer, and says so: write the season of a hemisphere there (`~o"2026-29"`, the southern spring).
+
 ---
 
 ## 10. Archaeological / approximate dates

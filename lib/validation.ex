@@ -555,6 +555,14 @@ defmodule Tempo.Validation do
     do: List.keymember?(time, :year, 0) and Enum.all?(time, &concrete?/1)
 
   # A group of a set is an entry of three elements, and no one number.
+  #
+  # A season of 21 to 24 has no dates until it has a hemisphere, and so no
+  # order beside another end: the autumn of a year comes before its spring
+  # south of the equator and after it north of it. An interval is held to
+  # the order of its seasons where they are given one
+  # (`Tempo.Iso8601.Group.resolve_seasons/2`), and is read here whatever the
+  # territory in force.
+  defp concrete?({:season, _season}), do: false
   defp concrete?({_unit, value}) when is_integer(value), do: true
 
   defp concrete?({_unit, {value, precision}}) when is_integer(value) and is_integer(precision),

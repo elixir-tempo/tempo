@@ -242,6 +242,24 @@ defmodule Tempo.Explain do
   # extent. `selection_prose/1` already renders exactly this for
   # recurrences, so reuse it rather than asking for a span that does not
   # exist.
+  #
+  # A season of 21 to 24 is spring, summer, autumn or winter wherever it is
+  # read, and is told as that: it has no span to give until it is read in a
+  # hemisphere, and the explanation does not choose one.
+  defp scalar_parts(%Tempo{time: [{:year, _year}, {:season, _season}]} = tempo) do
+    [
+      {:headline, capitalised("#{season_phrase(tempo)}.")},
+      {:span, "It has no dates until it is read in a hemisphere."},
+      {:qualification, qualification_text(tempo)},
+      {:extended, extended_text(tempo)},
+      {:calendar, calendar_text(tempo)},
+      {:hint,
+       "Give it a territory or a locale with `Tempo.in_territory/2`, or convert it with " <>
+         "`Tempo.to_interval/2`, which takes `:territory` and `:locale`."}
+    ]
+    |> Enum.reject(fn {_, v} -> v in [nil, ""] end)
+  end
+
   defp scalar_parts(%Tempo{time: time} = tempo) do
     case find_unit(time, :selection) do
       nil -> scalar_value_parts(tempo)
@@ -1711,6 +1729,9 @@ defmodule Tempo.Explain do
   # An end that holds a set names several values and no one moment, and is
   # shown as it is written: `2026Y6M{20,25}D` was shown as the first day of
   # its month.
+  defp render_endpoint(%Tempo{time: [{:year, _year}, {:season, _season}]} = season),
+    do: season_phrase(season)
+
   defp render_endpoint(%Tempo{time: time} = tempo) do
     if names_each_value?(tempo),
       do: inspect(tempo),
@@ -1718,6 +1739,16 @@ defmodule Tempo.Explain do
   end
 
   defp render_endpoint(other), do: inspect(other)
+
+  # A season of 21 to 24 by its name, which is the same north and south of
+  # the equator where its dates are not.
+  @season_names %{21 => "spring", 22 => "summer", 23 => "autumn", 24 => "winter"}
+
+  defp season_phrase(%Tempo{time: [{:year, year}, {:season, season}]}) when is_integer(year),
+    do: "the #{Map.fetch!(@season_names, season)} of #{year}, in no hemisphere"
+
+  defp season_phrase(%Tempo{time: [{:year, _several}, {:season, season}]} = tempo),
+    do: "the #{Map.fetch!(@season_names, season)} of #{inspect(tempo)}, in no hemisphere"
 
   # An end as it is written, with the day it starts on where its writing
   # does not say (`starts_on/1`), and with what else is to be said of it:

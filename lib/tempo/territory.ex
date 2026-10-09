@@ -121,6 +121,21 @@ defmodule Tempo.Territory do
      )}
   end
 
+  @doc false
+  # The territory an option list names: its `:territory`, or else the
+  # territory of its `:locale`, which is read as a locale (`"ar"` is Arabic,
+  # and its territory Egypt, where the territory written `"ar"` is
+  # Argentina). `nil` where it names neither, which `resolve/1` reads as the
+  # application's default territory and then the current locale's.
+  @spec named(keyword()) :: {:ok, atom() | nil} | {:error, Exception.t()}
+  def named(options) when is_list(options) do
+    case {Keyword.get(options, :territory), Keyword.get(options, :locale)} do
+      {nil, nil} -> {:ok, nil}
+      {nil, locale} -> Territory.territory_from_locale(locale)
+      {territory, _locale} -> resolve(territory)
+    end
+  end
+
   ## ----------------------------------------------------------
   ## Private helpers
   ## ----------------------------------------------------------

@@ -3,6 +3,7 @@ defmodule Tempo.Iso8601.Group do
 
   alias Calendrical.Gregorian
   alias Tempo.Compare
+  alias Tempo.IntervalEndpointsError
   alias Tempo.InvalidDateError
   alias Tempo.Iso8601.Group
   alias Tempo.Iso8601.Parser
@@ -114,8 +115,34 @@ defmodule Tempo.Iso8601.Group do
   # hold two), with its endpoints in that calendar; a year that holds
   # none, as a 354-day Islamic year can, is an error.
 
+  # A season of 21 to 24 is "independent of location" (ISO 8601-2 §4.8.1):
+  # spring, summer, autumn or winter wherever it is read, and so on other
+  # dates either side of the equator. It is kept as it is written, a unit of
+  # its own in the month's place, until it is given a hemisphere
+  # (`resolve_seasons/2`): it was read as the northern season everywhere.
+  # Nothing follows it, the standard writing a season as a year and its
+  # season alone; a day after one was read as a day of its first month.
+  #
+  # Where a season is not built, in a year that does not begin with its
+  # first month (`Tempo.NotBuilt`), it is refused as it is read, as the
+  # season of a hemisphere is.
+  def expand_groups([{:year, year}, {:month, season}], calendar) when season in 21..24 do
+    with :ok <- season_built(year, season, calendar), do: [{:year, year}, {:season, season}]
+  end
+
+  def expand_groups([{:year, _year}, {:month, season}, {unit, _value} | _rest], _calendar)
+      when season in 21..24 do
+    {:error,
+     ParseError.exception(
+       reason:
+         "A season is written as a year and the season alone (ISO 8601-2 §4.8), and " <>
+           "#{inspect(unit)} follows season #{season}. A season of 21 to 24 has no dates until " <>
+           "it is given a hemisphere (`Tempo.in_territory/2`); write a date of it as a date."
+     )}
+  end
+
   def expand_groups([{:year, year}, {:month, month} | rest], calendar)
-      when is_integer(year) and month in 21..32 and calendar != Gregorian do
+      when is_integer(year) and month in 25..32 and calendar != Gregorian do
     calendar_season(year, month, rest, calendar)
   end
 
@@ -126,19 +153,7 @@ defmodule Tempo.Iso8601.Group do
     end
   end
 
-  # Meteorological seasons 21-24 (hemisphere-unspecified — we default to
-  # Northern hemisphere meteorological boundaries as a conventional
-  # interpretation): whole months, spring from March to the start of
-  # June, and winter from December to the start of the next year's March.
-
-  def expand_groups([{:year, year}, {:month, month} | rest], calendar)
-      when is_integer(year) and month in 21..24 do
-    with {:ok, start_date, end_date} <- gregorian_season(month, year) do
-      meteorological_span(start_date, end_date, rest, calendar)
-    end
-  end
-
-  def expand_groups([{:year, year}, {:month, month} | rest], calendar) when month in 21..32 do
+  def expand_groups([{:year, year}, {:month, month} | rest], calendar) when month in 25..32 do
     unspecified_year_season(year, month, rest, calendar)
   end
 
@@ -225,6 +240,153 @@ defmodule Tempo.Iso8601.Group do
     other
   end
 
+  ## A season given a hemisphere
+
+  @doc false
+  # Gives each season of 21 to 24 a value holds the dates it has in a
+  # hemisphere: the value's own span, each end of an interval where the
+  # season starts, and each member of a set.
+  #
+  # A meteorological season is whole months: in the north spring from March
+  # to the start of June and winter from December to the start of the next
+  # March, and in the south the months of the opposite season, spring from
+  # September and summer from December. A winter in the north and a summer
+  # in the south are of the year they start in. In a calendar other than the
+  # Gregorian it is the season of that kind that starts within the year.
+  @spec resolve_seasons(value, :northern | :southern) :: {:ok, term()} | {:error, Exception.t()}
+        when value: term()
+  def resolve_seasons(%Tempo{time: [{:year, year}, {:season, season}]} = tempo, hemisphere) do
+    case season_span(year, {season, hemisphere}, tempo.calendar || Gregorian) do
+      %Tempo.Interval{} = interval -> {:ok, as_the_value_is(interval, tempo)}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  # An interval from one season to another runs from where the first starts
+  # to where the second does, and is an interval where the hemisphere has
+  # them in that order: south of the equator the autumn of a year comes
+  # before its spring.
+  def resolve_seasons(%Tempo.Interval{} = interval, hemisphere) do
+    with {:ok, from} <- resolve_seasons(interval.from, hemisphere),
+         {:ok, to} <- resolve_seasons(interval.to, hemisphere),
+         resolved = %{interval | from: start_of(from), to: start_of(to)},
+         :ok <- in_order(resolved, interval, hemisphere) do
+      {:ok, resolved}
+    end
+  end
+
+  def resolve_seasons(%Tempo.Set{set: set, except: except} = tempo, hemisphere) do
+    with {:ok, set} <- resolve_each_season(set, hemisphere),
+         {:ok, except} <- resolve_each_season(except, hemisphere) do
+      {:ok, %{tempo | set: set, except: except}}
+    end
+  end
+
+  def resolve_seasons(%Tempo.Range{first: first, last: last} = range, hemisphere) do
+    with {:ok, first} <- resolve_seasons(first, hemisphere),
+         {:ok, last} <- resolve_seasons(last, hemisphere) do
+      {:ok, %{range | first: first, last: last}}
+    end
+  end
+
+  def resolve_seasons(other, _hemisphere), do: {:ok, other}
+
+  defp resolve_each_season(members, hemisphere) when is_list(members) do
+    members
+    |> Enum.reduce_while({:ok, []}, fn member, {:ok, resolved} ->
+      case resolve_seasons(member, hemisphere) do
+        {:ok, member} -> {:cont, {:ok, [member | resolved]}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+    |> reversed()
+  end
+
+  defp resolve_each_season(none, _hemisphere), do: {:ok, none}
+
+  defp in_order(%Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to}, written, hemisphere) do
+    if Compare.compare_endpoints(to, from) == :earlier,
+      do: {:error, season_order_error(written, from, to, hemisphere)},
+      else: :ok
+  end
+
+  defp in_order(_an_open_end, _written, _hemisphere), do: :ok
+
+  defp season_order_error(written, from, to, hemisphere) do
+    IntervalEndpointsError.exception(
+      interval: written,
+      operation: :in_territory,
+      reason:
+        "#{inspect(written)} is no interval in the #{hemisphere} hemisphere, where it " <>
+          "would run from #{inspect(from)} to #{inspect(to)}: a year's autumn and winter " <>
+          "come before its spring and summer south of the equator, and after them north of it."
+    )
+  end
+
+  defp season_built(year, season, calendar) when is_integer(year) and calendar != Gregorian,
+    do: NotBuilt.season(year, season, calendar)
+
+  defp season_built(_year, _season, _calendar), do: :ok
+
+  @doc false
+  # Whether a value holds a season of 21 to 24 that has no hemisphere yet.
+  @spec abstract_season?(term()) :: boolean()
+  def abstract_season?(%Tempo{time: time}) when is_list(time),
+    do: List.keymember?(time, :season, 0)
+
+  def abstract_season?(%Tempo.Interval{from: from, to: to}),
+    do: abstract_season?(from) or abstract_season?(to)
+
+  def abstract_season?(%Tempo.Set{set: set, except: except}),
+    do:
+      Enum.any?(List.wrap(set), &abstract_season?/1) or
+        Enum.any?(List.wrap(except), &abstract_season?/1)
+
+  def abstract_season?(%Tempo.Range{first: first, last: last}),
+    do: abstract_season?(first) or abstract_season?(last)
+
+  def abstract_season?(_other), do: false
+
+  # The northern season that has the months a season has in a hemisphere:
+  # a southern spring has a northern autumn's.
+  defp northern_months(season, :northern), do: season
+  defp northern_months(21, :southern), do: 23
+  defp northern_months(22, :southern), do: 24
+  defp northern_months(23, :southern), do: 21
+  defp northern_months(24, :southern), do: 22
+
+  defp season_span(year, {season, hemisphere}, Gregorian) when is_integer(year) do
+    with {:ok, start_date, end_date} <-
+           gregorian_season(northern_months(season, hemisphere), year) do
+      meteorological_span(start_date, end_date, Gregorian)
+    end
+  end
+
+  defp season_span(year, {season, hemisphere}, calendar) when is_integer(year),
+    do: calendar_season(year, northern_months(season, hemisphere), [], calendar)
+
+  # A year with unspecified digits keeps them in both ends of a season that
+  # is within one year. The season that runs into the next, a northern
+  # winter and a southern summer, needs the year itself, and so does a
+  # season in another calendar.
+  defp season_span(year, {season, hemisphere}, calendar) do
+    case unspecified_year_season(year, northern_months(season, hemisphere), [], calendar) do
+      {:error, _reason} ->
+        written = %Tempo{time: [year: year, season: season], calendar: calendar}
+
+        {:error,
+         InvalidDateError.exception(
+           reason:
+             "#{inspect(written)} cannot be placed in the #{hemisphere} hemisphere: with " <>
+               "unspecified digits in its year a season is placed where it lies within one " <>
+               "Gregorian year."
+         )}
+
+      interval ->
+        interval
+    end
+  end
+
   # A season is a span of dates, and each end of it is as the value that
   # named the season is: qualified by what qualified it, and with the zone,
   # the calendar and the tags of its own suffix. `2026-21?` was the spring of
@@ -286,9 +448,10 @@ defmodule Tempo.Iso8601.Group do
   # They are a run in time as well, each beginning where the one before it
   # ends, or the range is an error: the southern seasons of one year (29 to
   # 32) are no run, its autumn and winter coming before its spring. The
-  # seasons numbered 21 to 24 are one, a winter being of the year it starts
-  # in (decided 2026-10-07; it was read as beginning in the December before
-  # its year, ahead of that year's spring).
+  # seasons numbered 21 to 24 are one in either hemisphere, the last of a
+  # year being of the year it starts in (decided 2026-10-07; it was read as
+  # beginning in the December before its year, ahead of that year's spring),
+  # and are not asked: they have no dates until they are given a hemisphere.
   @divisions [21..24, 25..28, 29..32, 33..36, 37..39, 40..41]
 
   # The most divisions a range names: a range of seasons across every year
@@ -329,7 +492,7 @@ defmodule Tempo.Iso8601.Group do
   defp expand_divisions({kind, from}, {kind, to}, range, calendar) when from <= to do
     with {:ok, divisions} <- divisions_between(from, to, kind),
          {:ok, expanded} <- expand_each_division(divisions, range, calendar) do
-      if run_in_time?(expanded),
+      if kind == 21..24 or run_in_time?(expanded),
         do: {:ok, expanded},
         else: {:error, division_run_error(from, to)}
     else
@@ -827,16 +990,11 @@ defmodule Tempo.Iso8601.Group do
   defp meteorological_months(22), do: {6, 9}
   defp meteorological_months(23), do: {9, 12}
 
-  # A meteorological season runs over whole months; a day of the season is
-  # its nth day, reached as after an astronomical season.
-  defp meteorological_span(start_date, end_date, [{:day, day} | rest], _calendar) do
-    season_day(start_date, end_date, day, rest)
-  end
-
-  defp meteorological_span(start_date, end_date, rest, calendar) do
+  # A meteorological season runs over whole months.
+  defp meteorological_span(start_date, end_date, calendar) do
     season_interval(
-      [{:year, start_date.year}, {:month, start_date.month} | rest],
-      [{:year, end_date.year}, {:month, end_date.month} | rest],
+      [{:year, start_date.year}, {:month, start_date.month}],
+      [{:year, end_date.year}, {:month, end_date.month}],
       calendar
     )
   end

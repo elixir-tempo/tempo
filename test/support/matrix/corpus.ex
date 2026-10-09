@@ -123,7 +123,10 @@ defmodule Tempo.Matrix.Corpus do
     count_from_end: ["2026Y6M-1D", "2026Y-1M", "2026Y{1..12}M-1D"],
     # The last two count from the end of the period they are selected in.
     value_selection: ["2026Y4ML1K1IN", "2026Y6ML2KN", "2026YL-1M-1DN", "2026Y6M15DLT-1HN"],
-    season: ["2026-21", "2026Y24M"],
+    # A season of a hemisphere (25 to 32) is its dates. A set of seasons
+    # that have none is walked by its members, as any set is.
+    season: ["2026-25", "2026-30", "2026Y27M"],
+    season_set: ["{2026-21,2026-23}", "{2026-21..2026-24}"],
     # A week after a month is a week of the month, read as the span of the
     # dates the calendar numbers in it, and with a day of the week as a date.
     week_of_month: ["2026Y6M2W", "2026Y7M1W", "2026Y6M-1W", "2026Y6M2W3K"],
@@ -151,7 +154,14 @@ defmodule Tempo.Matrix.Corpus do
   # Shapes the walk or the conversion has no answer for yet, in at least one
   # of their values: a named error is their answer until the walk defines
   # one, and the matrix test holds the list to that.
+  #
+  # A season of 21 to 24 is here by design and not for the time being: it
+  # has no dates until it is given a hemisphere, so it is converted in the
+  # hemisphere of the territory in force and is not walked, and whatever
+  # else needs its dates says so by name (`Tempo.AbstractSeasonError`).
   @open [
+    season_with_no_hemisphere: ["2026-21", "2026Y22M", "2026Y24M", "2026-21?"],
+    season_interval: ["2026-21/2026-23", "2026-22/2027-21", "2026-21/2026-10-15"],
     unspecified_year: ["X*Y", "X*Y12M31D", "X*Y6MX*D"],
     interval_exotic_end: ["2026Y6MXXD/P1M", "2026Y6MX*D/2026Y8M", "20C/21C", "202X/2040"],
     no_year_masked: ["2MXXD", "XXM", "X*K", "6MX*D"]

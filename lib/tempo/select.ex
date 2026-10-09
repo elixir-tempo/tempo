@@ -468,11 +468,12 @@ defmodule Tempo.Select do
 
   # ---- Interval base: select period by period ----
 
-  def select(%Interval{metadata: metadata} = interval, selector) do
-    interval
-    |> select_span(selector)
-    |> as_the_clock_shows(interval)
-    |> with_base_metadata(metadata)
+  # An end that is a season of 21 to 24 has no dates as it is written, and
+  # the interval is selected from as the span it converts to.
+  def select(%Interval{} = interval, selector) do
+    if Group.abstract_season?(interval),
+      do: select_converted(interval, selector),
+      else: select_interval(interval, selector)
   end
 
   # ---- Catch-all: clearer error ----
@@ -647,6 +648,13 @@ defmodule Tempo.Select do
     else
       _no_holidays -> false
     end
+  end
+
+  defp select_interval(%Interval{metadata: metadata} = interval, selector) do
+    interval
+    |> select_span(selector)
+    |> as_the_clock_shows(interval)
+    |> with_base_metadata(metadata)
   end
 
   defp select_converted(value, selector) do
@@ -1061,6 +1069,11 @@ defmodule Tempo.Select do
 
   defp select_period(period, [head | _] = indices) when is_integer(head),
     do: select_indices(period, indices)
+
+  # A season of 21 to 24 has no dates as it is written, and selects as the
+  # span it converts to (`select_projections/2`).
+  defp select_period(period, %Tempo{time: [{:year, _year}, {:season, _season}]} = season),
+    do: select_projections(period, [season])
 
   defp select_period(period, %Tempo{time: time} = constraint) do
     with :ok <- one_calendar(period, constraint) do
@@ -1537,8 +1550,14 @@ defmodule Tempo.Select do
   ## -----------------------------------------------------------
 
   defp select_projections(%Interval{} = base, constraints) do
-    constraints
-    |> Enum.reduce_while({:ok, []}, fn c, {:ok, acc} ->
+    with {:ok, constraints} <- collect(constraints, &with_its_seasons_dated/1),
+         {:ok, intervals} <- project_each(base, constraints) do
+      IntervalSet.new(intervals, coalesce: false)
+    end
+  end
+
+  defp project_each(base, constraints) do
+    Enum.reduce_while(constraints, {:ok, []}, fn c, {:ok, acc} ->
       case project_onto_base(base, c) do
         {:error, _} = err -> {:halt, err}
         list when is_list(list) -> {:cont, {:ok, acc ++ Enum.reject(list, &is_nil/1)}}
@@ -1546,11 +1565,21 @@ defmodule Tempo.Select do
         other -> {:cont, {:ok, acc ++ List.wrap(other)}}
       end
     end)
-    |> case do
-      {:ok, intervals} -> IntervalSet.new(intervals, coalesce: false)
-      {:error, _} = err -> err
-    end
   end
+
+  # A selector that holds a season of 21 to 24, the season alone or an
+  # interval with one at an end, has no dates as it is written: it selects
+  # as the span it converts to, in the hemisphere of the territory in force,
+  # as a base that holds one is selected from.
+  defp with_its_seasons_dated(constraint) do
+    if Group.abstract_season?(constraint),
+      do: constraint |> Tempo.to_interval() |> dated_spans(),
+      else: {:ok, [constraint]}
+  end
+
+  defp dated_spans({:ok, %Interval{} = span}), do: {:ok, [span]}
+  defp dated_spans({:ok, %IntervalSet{} = set}), do: {:ok, IntervalSet.members(set)}
+  defp dated_spans({:error, _reason} = error), do: error
 
   # Merge a constraint Tempo's time units onto base's from-endpoint
   # — units specified on the constraint take precedence; others

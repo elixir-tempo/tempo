@@ -1512,9 +1512,17 @@ defmodule Tempo.Interval do
   # end that names several spans (a set, a selection, a mask whose values do
   # not run together) is no one point. One whose span starts at no point it
   # can name (`X*Y12M31D`, the 31 December of any year) is left as it is.
+  #
+  # An end that is a season of 21 to 24 is given its dates first, in the
+  # hemisphere of the territory in force, as the interval and not end by
+  # end: where the hemisphere has its seasons in another order, or the
+  # territory lies on both sides of the equator, it is no interval there
+  # and that is the error.
   @spec endpoints_as_points(t()) :: {:ok, t()} | {:error, Exception.t()}
-  def endpoints_as_points(%__MODULE__{from: from, to: to} = interval) do
-    with {:ok, from} <- endpoint_point(from, "start", interval),
+  def endpoints_as_points(%__MODULE__{} = interval) do
+    with {:ok, %__MODULE__{from: from, to: to} = interval} <-
+           Tempo.with_seasons_dated(interval, []),
+         {:ok, from} <- endpoint_point(from, "start", interval),
          {:ok, to} <- endpoint_point(to, "end", interval),
          :ok <- one_line(from, to) do
       {:ok, %{interval | from: from, to: to}}
@@ -1679,8 +1687,14 @@ defmodule Tempo.Interval do
   # The interval a measurement or a comparison reads: both endpoints, each
   # the point it names (`20C/2150` is `2000Y/2150Y`). An interval written
   # with a duration resolves to its endpoints first, and one whose end names
-  # several spans is left as it is.
-  defp measured_form(interval), do: interval |> resolve_duration_form() |> as_points()
+  # several spans is left as it is. A season of 21 to 24 is given its dates
+  # first (`endpoints_as_points/1`), and where it has none in the hemisphere
+  # in force that is the error.
+  defp measured_form(value) do
+    with {:ok, dated} <- Tempo.with_seasons_dated(value, []) do
+      {:ok, dated |> resolve_duration_form() |> as_points()}
+    end
+  end
 
   defp as_points(%__MODULE__{from: %Tempo{}, to: %Tempo{}} = interval) do
     case endpoints_as_points(interval) do
@@ -2107,10 +2121,9 @@ defmodule Tempo.Interval do
   def duration(interval, options \\ [])
 
   def duration(%__MODULE__{} = interval, options) do
-    with {:ok, leap_seconds?} <- leap_seconds_option(options) do
-      interval
-      |> measured_form()
-      |> resolved_duration(leap_seconds?)
+    with {:ok, leap_seconds?} <- leap_seconds_option(options),
+         {:ok, measured} <- measured_form(interval) do
+      resolved_duration(measured, leap_seconds?)
     end
   end
 
@@ -2772,14 +2785,17 @@ defmodule Tempo.Interval do
 
   defp measurable!(%__MODULE__{} = interval) do
     case measured_form(interval) do
-      %__MODULE__{from: :undefined} = measured ->
+      {:ok, %__MODULE__{from: :undefined} = measured} ->
         measured
 
-      %__MODULE__{to: :undefined} = measured ->
+      {:ok, %__MODULE__{to: :undefined} = measured} ->
         measured
 
-      %__MODULE__{from: %Tempo{}, to: %Tempo{}} = measured ->
+      {:ok, %__MODULE__{from: %Tempo{}, to: %Tempo{}} = measured} ->
         measured
+
+      {:error, exception} ->
+        raise exception
 
       _no_length ->
         raise IntervalEndpointsError.exception(interval: interval, operation: :measure)
@@ -3378,9 +3394,10 @@ defmodule Tempo.Interval do
   # Each operand is classified once, and the pair dispatches on whichever
   # class dominates (earliest in the priority order below).
   defp possible_relations(a, b) do
-    a = measured_form(a)
-    b = measured_form(b)
-    relations_for(dominant_class(operand_class(a), operand_class(b)), a, b)
+    with {:ok, a} <- measured_form(a),
+         {:ok, b} <- measured_form(b) do
+      relations_for(dominant_class(operand_class(a), operand_class(b)), a, b)
+    end
   end
 
   defp operand_class(operand) do

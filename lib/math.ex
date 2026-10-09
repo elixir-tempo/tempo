@@ -1,6 +1,7 @@
 defmodule Tempo.Math do
   @moduledoc false
 
+  alias Tempo.AbstractSeasonError
   alias Tempo.Compare
   alias Tempo.ConversionError
   alias Tempo.Duration
@@ -919,6 +920,19 @@ defmodule Tempo.Math do
     if Enum.any?(duration_time, &month_or_year_step?/1),
       do: {:error, UnanchoredError.exception(value: tempo, duration: duration)},
       else: add_rule_or_value(tempo, duration)
+  end
+
+  # A season of 21 to 24 has no dates until it has a hemisphere, so it steps
+  # by whole years and by nothing else: the spring of the year after is a
+  # season as this one is, where a month or a day on is counted from dates
+  # it does not have.
+  def add(
+        %Tempo{time: [{:year, _year}, {:season, _season} | _units]} = tempo,
+        %Tempo.Duration{time: duration_time} = duration
+      ) do
+    if Enum.all?(duration_time, &match?({:year, _years}, &1)),
+      do: add_rule_or_value(tempo, duration),
+      else: {:error, AbstractSeasonError.exception(value: tempo, operation: "shift")}
   end
 
   def add(%Tempo{} = tempo, %Tempo.Duration{} = duration), do: add_rule_or_value(tempo, duration)

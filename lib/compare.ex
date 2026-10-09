@@ -374,6 +374,11 @@ defmodule Tempo.Compare do
 
   defp point_units?([{:year, year} | rest]) when is_integer(year), do: point_units?(rest)
 
+  # A season of 21 to 24 has no dates until it has a hemisphere, so it is no
+  # point: it is read as the start of the span `Tempo.to_interval/1` gives
+  # it, in the hemisphere of the territory in force.
+  defp point_units?([{:season, _season} | _rest]), do: false
+
   defp point_units?([{_unit, value} | rest]) when is_integer(value) and value >= 0,
     do: point_units?(rest)
 
@@ -405,6 +410,9 @@ defmodule Tempo.Compare do
   # unit that may be below zero.
   defp whole?([{:year, year} | rest]) when is_integer(year), do: whole_units?(rest)
   defp whole?(time), do: whole_units?(time)
+
+  # A season's number is no place in the year (`point?/1`).
+  defp whole_units?([{:season, _season} | _rest]), do: false
 
   defp whole_units?([{_unit, value} | rest]) when is_integer(value) and value >= 0,
     do: whole_units?(rest)
@@ -1024,6 +1032,11 @@ defmodule Tempo.Compare do
   # point, and otherwise the start of each span it names (`2026-{01,07}-15`
   # at 10:00 in Paris is one offset in January and another in July). A value
   # with spans without number, or with none, has no moment to check.
+  #
+  # A season of 21 to 24 has no moment until it has a hemisphere, and is not
+  # given one to be read.
+  defp span_starts(%Tempo{time: [{:year, _year}, {:season, _season} | _rest]}), do: []
+
   defp span_starts(%Tempo{time: time} = tempo) do
     if point?(time), do: [tempo], else: tempo |> Tempo.to_interval() |> starts_of()
   end

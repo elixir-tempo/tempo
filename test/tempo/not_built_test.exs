@@ -222,7 +222,11 @@ defmodule Tempo.NotBuiltTest do
 
     test "is refused in a year of England that began on 25 March, and answered in one that did not" do
       assert refused?(Tempo.from_iso8601("1750Y21M", England), :season, England)
-      assert {:ok, %Interval{}} = Tempo.from_iso8601("1760Y21M", England)
+
+      assert {:ok, %Interval{}} =
+               Tempo.from_iso8601("1760Y21M", calendar: England, territory: :GB)
+
+      assert {:ok, %Interval{}} = Tempo.from_iso8601("1760Y25M", England)
     end
 
     test "names the season and the calendar" do
@@ -243,7 +247,8 @@ defmodule Tempo.NotBuiltTest do
     end
 
     test "is answered where the year begins with its first month" do
-      assert {:ok, %Interval{}} = Tempo.from_iso8601("1750Y21M", Julian)
+      assert {:ok, %Interval{}} = Tempo.from_iso8601("1750Y21M", calendar: Julian, territory: :GB)
+      assert {:ok, %Interval{}} = Tempo.from_iso8601("1750Y25M", Julian)
     end
   end
 

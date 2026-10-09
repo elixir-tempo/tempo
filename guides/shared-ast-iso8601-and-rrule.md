@@ -78,7 +78,7 @@ RRULE has no set concept. You can't say "these three specific dates" as an RRULE
 
 ### Seasons, quarters, halves
 
-ISO 8601-2 reserves month codes 21–41 for seasons (meteorological and astronomical), quarters, quadrimesters and halves. Tempo expands these to concrete intervals at parse time — e.g. `2022-25` becomes the interval `[2022-03-20, 2022-06-21)` (the Northern astronomical spring).
+ISO 8601-2 reserves month codes 21–41 for seasons (meteorological and astronomical), quarters, quadrimesters and halves. Tempo expands these to concrete intervals at parse time — e.g. `2022-25` becomes the interval `[2022-03-20, 2022-06-21)` (the Northern astronomical spring). The one exception is a season of 21 to 24, which is "independent of location": `2022-21` is spring wherever it is read, and is kept as it is written until `Tempo.in_territory/2` or `Tempo.to_interval/2` gives it the months it has in a hemisphere.
 
 RRULE has no native vocabulary for any of these. The closest approximations are `BYMONTH=3,4,5` (a three-month set), but the astronomical seasons won't land on month boundaries, so the approximation is inaccurate.
 

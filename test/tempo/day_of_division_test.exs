@@ -3,11 +3,15 @@ defmodule Tempo.DayOfDivisionTest do
   A day written after a division of a year.
 
   ISO 8601-2 numbers a year's divisions as months: a season is month 21 to
-  24, a quarter 33 to 36, a quadrimester 37 to 39 and a semester 40 or 41.
+  32, a quarter 33 to 36, a quadrimester 37 to 39 and a semester 40 or 41.
   A day after one is a day of the division, Tempo's own form, as a day
   after a group is (`2026Y2G3MU45D`). The reader held a day after any
   month to thirty-one, so the forty-fifth day of the second quarter
   (`2026Y34M45D`) was refused as no day.
+
+  A season of 21 to 24 is no such division: it is "independent of
+  location", and has no dates to count a day in until it is given a
+  hemisphere. A day after one is refused.
 
   The measure is Elixir's own `Date`: the day so many on from the
   division's first.
@@ -17,12 +21,8 @@ defmodule Tempo.DayOfDivisionTest do
   alias Tempo.InvalidDateError
 
   # Each division of 2026 by its number, with its first day and the first
-  # day after it. A winter is of the year it starts in.
+  # day after it.
   @divisions %{
-    21 => {~D[2026-03-01], ~D[2026-06-01]},
-    22 => {~D[2026-06-01], ~D[2026-09-01]},
-    23 => {~D[2026-09-01], ~D[2026-12-01]},
-    24 => {~D[2026-12-01], ~D[2027-03-01]},
     33 => {~D[2026-01-01], ~D[2026-04-01]},
     34 => {~D[2026-04-01], ~D[2026-07-01]},
     35 => {~D[2026-07-01], ~D[2026-10-01]},
@@ -54,6 +54,13 @@ defmodule Tempo.DayOfDivisionTest do
 
         assert {^code, {:error, %InvalidDateError{}}} =
                  {code, Tempo.from_iso8601("2026Y#{code}M#{past}D")}
+      end
+    end
+
+    test "is refused after a season of 21 to 24, which has no dates until it has a hemisphere" do
+      for code <- 21..24, day <- [1, 15, 92] do
+        assert {^code, ^day, {:error, %Tempo.ParseError{}}} =
+                 {code, day, Tempo.from_iso8601("2026Y#{code}M#{day}D")}
       end
     end
 
