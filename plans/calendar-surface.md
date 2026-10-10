@@ -162,6 +162,10 @@ Taken by the user on 2026-10-10.
 
 * **`nil` for a calendar** — "Keep it, in one accessor": a value built by hand with `calendar: nil` still reads as the Gregorian, and every place that settles it calls one function.
 
+* **The names of months and of weekdays** — "Month and weekday names should come from Localize": `Tempo.explain/1` holds none.
+
+* **The cycle a calendar's years come round in** — asked with what each choice would answer, and chosen: a Calendrical callback. Tempo neither keeps 400 as a fact of the notation's calendar nor gives the cycle up, which would have made 30 February every year an error after 10,000 periods where it is an empty set in 20 ms, and refused a month with no fixed start where it is 28 to 31 days. Measured for the choice: a year's layout repeats after 400 years in the Gregorian and the Indian calendars, 28 in the Julian, Coptic and Ethiopic, 210 in the tabular Islamic, and not within 1,200 in the Hebrew, Persian and Umm al-Qura.
+
 * **The rest as recommended** — "Implement the plan until completion", so each is taken as it was recommended: a calendar of weeks stays a second shape of date, known in one function; no fast path is keyed on a calendar's name, each being removed and measured; a period's values are two new callbacks; and what only the Gregorian has is decided case by case (`SKIP` asks `days_in_month/1`, the seasons are the notation's, and the cycle of 400 years is still to decide).
 
 ## What this plan has not done
@@ -184,9 +188,9 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 
 ## Tasks
 
-* [ ] **What only the Gregorian has: the cycle its years come round in** — to decide. A rule that names no date of any year is known so after 400 years (`@years_of_a_cycle`, `kind_of_year/1` and `no_date_in_year?/1` in `lib/tempo.ex`), and the network solver keeps the lengths of 400 years and counts a month as twelve to a year on its axis (`lib/tempo/network/normalize.ex`): 9 lines and 6 constants. Either a calendar is asked for its cycle by a new callback, or each is given a bound that needs none.
-
 ### Blocked
+
+* [ ] **The cycle a calendar's years come round in** — blocked on a callback that gives it (Calendrical's `TODO.md`), decided by the user on 2026-10-10. Tempo holds 400 for the Gregorian by name: a rule that names no date of any year is known so after one year of each of the 14 kinds a cycle has (`@years_of_a_cycle`, `@kinds_of_year`, `kind_of_year/1` and `no_date_in_year?/3` in `lib/tempo.ex`), and the network solver keeps the lengths of 400 years and counts a month as twelve to a year on its axis (`lib/tempo/network/normalize.ex`): 10 lines that name the calendar and 6 constants. With the callback each asks the calendar, the kinds of year are found by asking a cycle's years for their months and first weekday, and the Julian, Coptic, Ethiopic, Indian and tabular Islamic calendars are answered as the Gregorian is.
 
 * [ ] **`Tempo.UnitValues` asks for values** — blocked on the two callbacks that give a period's values (Calendrical's `TODO.md`).
 
