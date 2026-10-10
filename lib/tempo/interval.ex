@@ -2376,8 +2376,11 @@ defmodule Tempo.Interval do
   # fitted on the time line and what is left is counted in days.
   defp calendar_parts(from, to, unit) do
     case units_as_counted(from, to, unit) do
-      count when is_integer(count) -> {:ok, [{unit, count}], to}
-      :by_dates -> calendar_parts_by_dates(from, to, unit)
+      count when is_integer(count) ->
+        counted_parts(from, to, unit, count, frame(from) == frame(to))
+
+      :by_dates ->
+        calendar_parts_by_dates(from, to, unit)
     end
   end
 
@@ -2391,25 +2394,19 @@ defmodule Tempo.Interval do
   end
 
   # Two ends written to the month or the year are a number of months or of
-  # years apart, counted in the units themselves where the calendar steps a
-  # date itself (`Tempo.UnitValues.stepped_by_calendar?/2`). In a year that
-  # does not begin with its first month the calendar counts the months from
-  # the day the year begins, so the first days of two that follow one
-  # another are not a month of days apart (25 March and 1 April, in a year
-  # that begins on 25 March); and a composite calendar's year can be short
-  # of a year of days (1751 in `Calendrical.Reform.England`, from 25 March).
+  # years apart, counted in the units themselves in every calendar. Their
+  # first days need not be that far apart: where a year begins on another
+  # day than the first of its first month, the first days of two months
+  # that follow one another are not a month of days apart (25 March and 1
+  # April, in a year that begins on 25 March), and a year can be short of a
+  # year of days (1751 in `Calendrical.Reform.England`, from 25 March).
   defp units_as_counted(
          %Tempo{time: [{:year, from_year} | _], calendar: calendar} = from,
          %Tempo{time: [{:year, to_year} | _]} = to,
          unit
        )
        when is_integer(from_year) and is_integer(to_year) and unit in [:year, :month] do
-    calendar = Calendars.effective(calendar)
-
-    if UnitValues.stepped_by_calendar?(from_year, calendar) or
-         UnitValues.stepped_by_calendar?(to_year, calendar),
-       do: units_between(from, to, unit, calendar),
-       else: :by_dates
+    units_between(from, to, unit, Calendars.effective(calendar))
   end
 
   defp units_as_counted(_from, _to, _unit), do: :by_dates

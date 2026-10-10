@@ -191,18 +191,16 @@ defmodule Tempo.Math do
 
   # ── A day's step ──────────────────────────────────────────────
   #
-  # The day after a day is the next of its month's days, and the first of
-  # the next month after the last, which `Tempo.UnitValues` counts. In a
-  # year that does not begin with its first month the days do not run in
-  # the order of their numbers (1 January follows 31 December of the same
-  # year, and the year turns within a month), and in a composite calendar a
-  # month or a year is cut short where its calendars change, so the day
-  # after a date there, and the day before, are the calendar's to say.
+  # The day after a date, and the day before, are the calendar's to say
+  # (`plus/6`), in every calendar alike. A value that is no one date (it
+  # holds no year, or a set, a mask or a day its month has not) has no date
+  # to ask of: its day after is the next of its month's days, and the first
+  # of the next month after the last, as the calendar numbers them
+  # (`Tempo.UnitValues`).
 
   defp day_by_the_calendar([{:year, year}, {:month, month}, {:day, day} | rest], by, calendar)
        when is_integer(year) and is_integer(month) and month > 0 and is_integer(day) and day > 0 do
-    with true <- UnitValues.stepped_by_calendar?(year, calendar),
-         true <- calendar.valid_date?(year, month, day),
+    with true <- calendar.valid_date?(year, month, day),
          {year, month, day} <- calendar.plus(year, month, day, :days, by, []) do
       {:ok, [{:year, year}, {:month, month}, {:day, day} | rest]}
     else
@@ -1265,14 +1263,14 @@ defmodule Tempo.Math do
 
   # A whole number of months or of years added to a plain date is as common,
   # the step of every rule of months and of years, and its prelude is as
-  # empty: the value holds no mask and no annotation, is no week date and
-  # no day of the year, and its calendar does not step its own dates, so the
+  # empty: the value holds no mask and no annotation and is no week date and
+  # no day of the year, so the
   # general path comes down to the months counted on and the day brought
   # into the month they land in (`apply_duration/2`). It took four times a
   # step of days.
   defp fast_add(%Tempo{time: time} = tempo, [{unit, n}] = duration_time)
        when unit in [:month, :year] and is_integer(n) do
-    if plain_datetime?(time) and not stepped_by_its_calendar?(tempo),
+    if plain_datetime?(time),
       do: fast_stepped(apply_duration(tempo, duration_time)),
       else: :fallback
   end
@@ -1339,15 +1337,14 @@ defmodule Tempo.Math do
   #
   # That holds where the values a mask stands for take the step alike. They
   # do not in a named zone, where a step of hours, minutes or seconds is
-  # time on the time line and differs across a change of the clock; in a
-  # calendar whose dates are stepped by the calendar and not by counting on
-  # through their numbers; or where a week and a day of it, which are the
+  # time on the time line and differs across a change of the clock; or
+  # where a week and a day of it, which are the
   # date they name in a calendar of months, are stepped by months or years,
   # which that date takes and its week does not. There every mask is on the
   # mask path, and each value it stands for is stepped as the one value it
   # is.
   defp route_general(%Tempo{} = tempo, %Tempo.Duration{time: duration_time} = duration) do
-    if elapsed_in_a_zone?(tempo, duration_time) or stepped_by_its_calendar?(tempo) or
+    if elapsed_in_a_zone?(tempo, duration_time) or
          week_date_stepped_as_a_date?(tempo, duration_time),
        do: route_value_by_value(tempo, duration),
        else: route_on_wall_clock(tempo, duration)
@@ -1611,19 +1608,6 @@ defmodule Tempo.Math do
     List.keymember?(time, :week, 0) and List.keymember?(time, :day_of_week, 0) and
       Enum.any?(duration_time, &month_or_year_step?/1) and
       not Tempo.week_based_calendar?(Calendars.effective(calendar))
-  end
-
-  # Whether a date of the value's calendar is stepped by the calendar: a
-  # composite calendar, and one whose year does not begin with its first
-  # month (`Tempo.UnitValues.stepped_by_calendar?/2`).
-  defp stepped_by_its_calendar?(%Tempo{time: time, calendar: calendar}) do
-    years =
-      case List.keyfind(time, :year, 0) do
-        {:year, held} -> held
-        _no_year -> nil
-      end
-
-    UnitValues.stepped_by_calendar?(years, Calendars.effective(calendar))
   end
 
   # Whether a step counts elapsed time for a value in a zone whose offset
@@ -2045,17 +2029,10 @@ defmodule Tempo.Math do
   # the 31st of October a month on is the 30th of November, and no day lands
   # on the 31st of December. The days of one month are kept, and the weeks
   # of one year (`of_one_period?/2`).
-  #
-  # In a calendar that steps its own dates a run of days by their numbers
-  # need not be a run in time (the days of the month a year begins within
-  # are not), so there each day is stepped; its years and its months are a
-  # run as they are counted.
-  defp block_stays_whole?(%Tempo{time: time, calendar: calendar} = masked, %Tempo.Duration{
+  defp block_stays_whole?(%Tempo{time: time, calendar: calendar}, %Tempo.Duration{
          time: duration_time
-       }) do
-    (finest_unit(time) in [:year, :month] or not stepped_by_its_calendar?(masked)) and
-      one_run?(time, duration_time, calendar)
-  end
+       }),
+       do: one_run?(time, duration_time, calendar)
 
   defp one_run?(time, duration_time, calendar) do
     case Enum.split_while(time, &(not masked?(&1))) do
@@ -2761,53 +2738,22 @@ defmodule Tempo.Math do
   # month, as the calendar's own `plus/6` does it: Nisan stays Nisan, and a
   # leap month the new year lacks becomes the month it follows or precedes.
   #
-  # A date in a composite calendar, or in a year that does not begin with
-  # its first month, is a year on where its calendar says: 10 March 1750 in
+  # A month of any calendar is a year on where its calendar says
+  # (`shift_years_by_calendar/3`): 10 March 1750 in
   # `Calendrical.Reform.England` is in the year that ends on 24 March, and a
   # year after it is 10 March 1752.
-  defp apply_n_units(time, :year, n, calendar) do
-    case date_by_the_calendar(time, :years, n, calendar) do
-      {:ok, new_time} -> {:ok, new_time}
-      :by_count -> years_by_count(time, n, calendar)
-    end
-  end
+  defp apply_n_units(time, :year, n, calendar), do: years_by_count(time, n, calendar)
 
-  # A date's months are stepped in the order of their numbers, the last of
-  # a year followed by the first of the next. In a year that does not begin
-  # with its first month they are not in that order (the January after a
-  # December is in the same year), and a composite calendar's years and
-  # months are cut short where its calendars change, so the calendar steps
-  # a date there.
-  defp apply_n_units(time, :month, n, calendar) do
-    case date_by_the_calendar(time, :months, n, calendar) do
-      {:ok, new_time} -> {:ok, new_time}
-      :by_count -> months_by_count(time, n, calendar)
-    end
-  end
+  # A month of any calendar is so many months on where its calendar says
+  # (`months_by_count/3`).
+  defp apply_n_units(time, :month, n, calendar), do: months_by_count(time, n, calendar)
 
   defp apply_n_units(time, unit, n, calendar), do: step_n_units(time, unit, n, calendar)
 
-  defp date_by_the_calendar(
-         [{:year, year}, {:month, month}, {:day, day} | rest],
-         date_part,
-         n,
-         calendar
-       )
-       when is_integer(year) and is_integer(month) and month > 0 and is_integer(day) and day > 0 do
-    with true <- UnitValues.stepped_by_calendar?(year, calendar),
-         true <- calendar.valid_date?(year, month, day),
-         {year, month, day} <- calendar.plus(year, month, day, date_part, n, []) do
-      {:ok, [{:year, year}, {:month, month}, {:day, day} | rest]}
-    else
-      _by_count -> :by_count
-    end
-  end
-
-  defp date_by_the_calendar(_time, _date_part, _n, _calendar), do: :by_count
-
-  # A year counted on is its number and so many more, whatever else the
-  # value holds (`step_year/2`, which a step of one year is too): the day is
-  # clamped once, after every unit is applied.
+  # A year counted on is asked of the calendar where the value holds one
+  # month (`shift_years_by_calendar/3`), and is its number and so many more
+  # whatever else it holds (`step_year/2`): the day is clamped once, after
+  # every unit is applied.
   defp years_by_count(time, n, calendar) do
     case shift_years_by_calendar(time, n, calendar) do
       {:ok, new_time} -> {:ok, new_time}
@@ -2820,20 +2766,18 @@ defmodule Tempo.Math do
   # (`plus/6`), which says in one step what a month at a time says in as
   # many as the count: it took time in proportion to the count, and a
   # recurrence that steps to its nth candidate by one shift the square of
-  # it. Only the year and the month are taken from the answer, and the day
-  # is clamped once every unit is applied. A value with no one year or no
-  # one month, a month its year lacks, and a year whose months are not in
-  # the order of their numbers (`Tempo.UnitValues.stepped_by_calendar?/2`,
-  # where a value that is no date counts the months the calendar numbers)
-  # are stepped a month at a time still, and so is a calendar of weeks,
-  # which has no months.
+  # it. It is asked of the first day the month has, as the calendar numbers
+  # its days. Only the year and the month are taken from the answer, and the
+  # day is clamped once every unit is applied. A value with no one year or
+  # no one month and a month its year lacks are stepped a month at a time
+  # still, and so is a calendar of weeks, which has no months.
   defp months_by_count(time, n, calendar) do
     with {:ok, year} <- year_of(time),
          {:ok, month} <- component(time, :month),
-         false <- UnitValues.stepped_by_calendar?(year, calendar),
          false <- Tempo.week_based_calendar?(calendar),
-         true <- calendar.valid_date?(year, month, 1),
-         {new_year, new_month, _day} <- calendar.plus(year, month, 1, :months, n, []) do
+         {:ok, first} <- UnitValues.first(:day, [year: year, month: month], calendar),
+         true <- calendar.valid_date?(year, month, first),
+         {new_year, new_month, _day} <- calendar.plus(year, month, first, :months, n, []) do
       {:ok, time |> put_component(:year, new_year) |> put_component(:month, new_month)}
     else
       _a_month_at_a_time -> step_n_units(time, :month, n, calendar)
@@ -2843,17 +2787,26 @@ defmodule Tempo.Math do
   # Only the year and month change; the day is clamped to the new month
   # once every unit has been applied (`maybe_clamp/3`).
   defp shift_years_by_calendar(time, n, calendar) do
-    with true <- months_numbered_by_the_year?(calendar),
-         {:ok, year} <- year_of(time),
+    with {:ok, year} <- year_of(time),
          {:ok, month} <- component(time, :month),
-         {new_year, new_month, _day} <- calendar.plus(year, month, 1, :years, n, []) do
+         {:ok, first} <- UnitValues.first(:day, [year: year, month: month], calendar),
+         true <- calendar.valid_date?(year, month, first),
+         {new_year, new_month, _day} <- calendar.plus(year, month, first, :years, n, []) do
       {:ok, time |> put_component(:year, new_year) |> put_component(:month, new_month)}
     else
-      # A month's number depends on its year in these calendars, so a unit
-      # that holds several months has no one numbering in the new year.
-      :several -> {:error, :grouped_component}
+      :several -> several_months_a_year_on(calendar)
       _other -> :fallback
     end
+  end
+
+  # A unit that holds several months is a year on with the same numbers,
+  # where a month keeps its number from year to year. Where the calendar
+  # numbers a month by its year, the months have no one numbering in the
+  # new year.
+  defp several_months_a_year_on(calendar) do
+    if months_numbered_by_the_year?(calendar),
+      do: {:error, :grouped_component},
+      else: :fallback
   end
 
   # A calendar whose years have not all as many months numbers a month by
@@ -3076,12 +3029,14 @@ defmodule Tempo.Math do
     end
   end
 
-  # A day past the last of its month is the month's last. With no year a day
-  # that every year's month has is kept, one past a month of one length is
-  # that month's last, and one whose place depends on the missing year (a
-  # 29th or a 30th of February) is `{:error, :unanchored}`.
+  # A day past the last of its month is the month's last, and a day the
+  # calendar left out of its month is the first day after it
+  # (`Tempo.UnitValues.at_or_next/4`). With no year a day that every year's
+  # month has is kept, one past a month of one length is that month's last,
+  # and one whose place depends on the missing year (a 29th or a 30th of
+  # February) is `{:error, :unanchored}`.
   defp clamp_integer_day(time, day, calendar) do
-    case UnitValues.at_or_before(:day, day, time, calendar) do
+    case UnitValues.at_or_next(:day, day, time, calendar) do
       {:ok, ^day} -> {:ok, time}
       {:ok, last} -> {:ok, put_component(time, :day, last)}
       {:error, _reason} -> {:error, :unanchored}

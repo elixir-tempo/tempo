@@ -178,23 +178,6 @@ defmodule Tempo.UnitValues do
 
   defp runs_of_numbers([], first, last), do: [first..last//1]
 
-  @doc false
-  # Whether a date of a year is stepped by its calendar, and not by counting
-  # on through the values of its units: in a calendar whose years are not
-  # counted from 1 (`counted_from_one?/0`), whose years and months change
-  # where its calendars do, and in a year that does not begin with its first
-  # month, whose first days are no first.
-  #
-  # `year` is a whole number, or what a time list holds for its year where
-  # that is no one number (a set, a mask, nothing): `years_begin_with_first_month?/2`
-  # says which years are then asked.
-  @spec stepped_by_calendar?(term(), module()) :: boolean()
-  def stepped_by_calendar?(year, calendar) when is_integer(year),
-    do: not calendar.counted_from_one?() or not year_begins_with_first_month?(year, calendar)
-
-  def stepped_by_calendar?(years, calendar),
-    do: not calendar.counted_from_one?() or not years_begin_with_first_month?(years, calendar)
-
   ## Years
 
   # A calendar counts its years on through 0 unless it has no such year: the
@@ -836,6 +819,26 @@ defmodule Tempo.UnitValues do
     end
   end
 
+  @doc false
+  # The value a unit takes for one it may lack, after the units before it:
+  # the value itself where the unit has it, the next it has where it is one
+  # the calendar left out, and its last where none follows. So a day past
+  # the end of its month is the month's last (the 31st of a month of 30
+  # days), and a day a change of calendar left out is the first day after
+  # it, as the calendar itself steps to one (5 September 1752 in
+  # `Calendrical.Reform.England`, which has no 3rd to 13th, is the 14th).
+  @spec at_or_next(atom(), integer(), keyword(), module()) ::
+          {:ok, integer()} | {:error, :unanchored | :uncounted | :no_period}
+  def at_or_next(unit, value, context, calendar) when is_integer(value) do
+    case listed(unit, context, calendar) do
+      {:ok, values} -> {:ok, at_or_next_among(numbers(values), value)}
+      _counted_or_no_period -> at_or_before(unit, value, context, calendar)
+    end
+  end
+
+  defp at_or_next_among(numbers, value),
+    do: Enum.find(numbers, List.last(numbers), &(&1 >= value))
+
   # The last of the values a calendar lists that is not after a value, and
   # the first of them where every one is.
   defp at_or_before_among(values, value) do
@@ -1473,27 +1476,6 @@ defmodule Tempo.UnitValues do
     case calendar.month(year, month) do
       %Date.Range{} = dates -> {:ok, dates}
       _no_such_month -> {:error, :no_period}
-    end
-  end
-
-  @doc false
-  # Whether every year a value names begins with its first month, where
-  # `years` is what a time list holds for its year: a whole number, a set of
-  # whole numbers and ranges, a mask, or nothing. Each whole number is
-  # asked of the calendar, and the ends of each range and of what a mask
-  # stands for, and no year at all is taken to begin with its first month.
-  @spec years_begin_with_first_month?(term(), module()) :: boolean()
-  def years_begin_with_first_month?(years, calendar),
-    do: years |> whole_years() |> Enum.all?(&(not begins_on_another_day?(&1, calendar)))
-
-  # Whether a year begins on another day than the first of its first month.
-  # A year the calendar does not have begins on none, and says nothing of
-  # the years a range or a mask stands for (the lowest year a mask of four
-  # digits stands for is 0, which many calendars have not).
-  defp begins_on_another_day?(year, calendar) do
-    case first_of(year, nil, calendar) do
-      {^year, 1, 1} -> false
-      {^year, month, day} -> calendar.valid_date?(year, month, day)
     end
   end
 

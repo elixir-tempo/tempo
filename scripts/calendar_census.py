@@ -45,7 +45,7 @@ CALENDRICAL_REQUIRED = {
     ("month_of_year", 3), ("month_week", 3), ("months_in_year", 0), ("named_month", 2),
     ("numeric_month", 3), ("ordinal_month_from_traditional", 2), ("parsing_calendar", 0),
     ("plus", 6), ("quadrimester", 2), ("quarter", 2), ("related_gregorian_year", 3),
-    ("semester", 2), ("solar_term", 2), ("traditional_leap_month", 1), ("counted_from_one?", 0),
+    ("semester", 2), ("solar_term", 2), ("traditional_leap_month", 1),
     ("traditional_months", 1), ("week", 2), ("week_of_month", 3), ("week_of_year", 3),
     ("weeks_in_month", 2), ("weeks_in_year", 1), ("year", 1), ("years_in_cycle", 0),
 }
@@ -458,13 +458,8 @@ DECIDERS = collections.OrderedDict([
         ("lib/tempo/unit_values.ex", "iso_weeks_in_year", "UnitValues"),
         ("lib/tempo/unit_values.ex", "date_from_iso_week", "UnitValues"),
     ]),
-    ("A composite calendar, and one that steps its own dates", [
-        ("lib/tempo/unit_values.ex", "stepped_by_calendar?", "UnitValues"),
-        ("lib/math.ex", "stepped_by_its_calendar?", None),
-    ]),
     ("A year that begins on another day than the first of its first month", [
         ("lib/tempo/unit_values.ex", "year_begins_with_first_month?", "UnitValues"),
-        ("lib/tempo/unit_values.ex", "years_begin_with_first_month?", "UnitValues"),
         ("lib/compare.ex", "fields_in_day_order?", None),
         ("lib/tempo/unit_values.ex", "first_date", "UnitValues"),
         ("lib/tempo/unit_values.ex", "start_date", "UnitValues"),
@@ -875,7 +870,7 @@ def write(census):
 
     emit("## 3. Calls on a calendar")
     emit("")
-    emit(f"{len(dynamic)} calls, of {len(functions)} functions at the arities shown. \"Declared\" is where the function is a callback: of Elixir's `Calendar` behaviour (1.20.4, 28 callbacks, all required) or of the `Calendrical` behaviour at Calendrical `d461f5a` (49 callbacks, 4 of them optional).")
+    emit(f"{len(dynamic)} calls, of {len(functions)} functions at the arities shown. \"Declared\" is where the function is a callback: of Elixir's `Calendar` behaviour (1.20.4, 28 callbacks, all required) or of the `Calendrical` behaviour at Calendrical `d461f5a`, less `counted_from_one?/0`, which is removed (48 callbacks, 4 of them optional).")
     emit("")
     emit(table(["Function", "Declared", "Calls", "Lines"], [
         [f"`{name}/{count}`", status(name, count), total,

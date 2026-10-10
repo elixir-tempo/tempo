@@ -247,6 +247,37 @@ defmodule Tempo.CompositeCalendarTest do
     end
   end
 
+  describe "a step, in a composite calendar as in any other" do
+    # Albania took the Gregorian calendar on 14 December 1912, the day after
+    # 30 November, so a year on from 1 December 1911 is in a December that
+    # has no 1st. The day is brought into its month once, after every unit
+    # is applied: it is not moved to the 14th before the month is added.
+    test "of several units brings the day into its month once" do
+      {:ok, albania} = Reform.calendar_for(:AL)
+
+      assert day_numbers(albania, 1912, 12) == Enum.to_list(14..31)
+
+      assert Tempo.shift(value("1911Y12M1D", albania), year: 1, month: 1) ==
+               value("1913Y1M1D", albania)
+
+      assert Tempo.shift(~o"2023Y12M1D", year: 1, month: 1) == ~o"2025Y1M1D"
+    end
+
+    # The first month of England's 1750 is the seven days from 25 March, and
+    # so is the first of its 1751, which numbers its months as they are
+    # named: March is its third.
+    test "of a month by a year is the month its calendar says" do
+      assert Tempo.shift(month(1750, 1, England), year: 1) == month(1751, 3, England)
+    end
+
+    test "of a mask keeps the mask" do
+      {:ok, russia} = Reform.calendar_for(:RU)
+
+      assert Tempo.shift(value("1930YXXM15D", russia), day: -1) == value("1930YXXM14D", russia)
+      assert Tempo.shift(~o"1930YXXM15D", day: -1) == ~o"1930YXXM14D"
+    end
+  end
+
   describe "a span" do
     test "of a day ends on the next day the calendar has" do
       {:ok, interval} = Tempo.to_interval(value("1752Y9M2D", England))
