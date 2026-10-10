@@ -992,7 +992,7 @@ defmodule Tempo.Interval do
   # The date of a day of the year, or the date and hour of an hour of the
   # year (counted from 0), as the calendar numbers them.
   defp year_counted_time(year, :day, day_of_year, calendar) do
-    date = Calendrical.date_from_day_of_year(year, day_of_year, calendar)
+    date = calendar.date_from_day_of_year(year, day_of_year)
     [year: date.year, month: date.month, day: date.day]
   end
 

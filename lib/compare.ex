@@ -1144,14 +1144,14 @@ defmodule Tempo.Compare do
 
       not Keyword.has_key?(time, :month) and Keyword.has_key?(time, :day) ->
         year
-        |> Calendrical.date_from_day_of_year(Keyword.get(time, :day), calendar)
+        |> calendar.date_from_day_of_year(Keyword.get(time, :day))
         |> day_of(year, calendar)
 
       # A day of the year left as one: under a year with a margin of error,
       # which validation does not restate as a month and a day.
       Keyword.has_key?(time, :day_of_year) ->
         year
-        |> Calendrical.date_from_day_of_year(Keyword.get(time, :day_of_year), calendar)
+        |> calendar.date_from_day_of_year(Keyword.get(time, :day_of_year))
         |> day_of(year, calendar)
 
       true ->

@@ -780,8 +780,7 @@ defmodule Tempo do
 
   defp ordinal_date(components, day_of_year, calendar) do
     with {:ok, year} <- Keyword.fetch(components, :year),
-         %{month: month, day: day} <-
-           Calendrical.date_from_day_of_year(year, day_of_year, calendar) do
+         %{month: month, day: day} <- calendar.date_from_day_of_year(year, day_of_year) do
       {:ok, components ++ [month: month, day: day]}
     else
       :error ->
@@ -4882,7 +4881,9 @@ defmodule Tempo do
   # `:month` is the disambiguator.
   def to_date(%Tempo{time: [year: year, day: day_of_year]} = tempo)
       when is_integer(year) and is_integer(day_of_year) do
-    case Calendrical.date_from_day_of_year(year, day_of_year, calendar_of(tempo)) do
+    calendar = calendar_of(tempo)
+
+    case calendar.date_from_day_of_year(year, day_of_year) do
       %Date{} = date ->
         Date.convert(date, native_calendar(tempo))
 
@@ -6683,8 +6684,7 @@ defmodule Tempo do
   end
 
   defp ordinal_date_ymd(year, day_of_year, calendar) do
-    %{year: year, month: month, day: day} =
-      Calendrical.date_from_day_of_year(year, day_of_year, calendar)
+    %{year: year, month: month, day: day} = calendar.date_from_day_of_year(year, day_of_year)
 
     {year, month, day}
   end

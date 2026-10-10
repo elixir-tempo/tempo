@@ -3178,7 +3178,7 @@ defmodule Tempo.RRule.Selection do
   defp year_day_to_month_day(calendar, year, doy) when is_integer(doy) and doy >= 1 do
     case UnitValues.last(:day_of_year, [year: year], calendar) do
       {:ok, last} when doy <= last ->
-        %{month: month, day: day} = Calendrical.date_from_day_of_year(year, doy, calendar)
+        %{month: month, day: day} = calendar.date_from_day_of_year(year, doy)
         {month, day}
 
       _past_the_year ->

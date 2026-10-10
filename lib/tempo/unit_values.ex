@@ -1872,7 +1872,7 @@ defmodule Tempo.UnitValues do
   end
 
   defp first_week_start(calendar, year, first_day) do
-    case Calendrical.date_from_day_of_year(year, 4, calendar) do
+    case calendar.date_from_day_of_year(year, 4) do
       %Date{} = fourth_day -> {:ok, Kday.kday_on_or_before(fourth_day, first_day)}
       {:error, _reason} -> :error
     end

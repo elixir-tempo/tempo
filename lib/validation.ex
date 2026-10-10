@@ -695,8 +695,7 @@ defmodule Tempo.Validation do
     with {:ok, days} <- values_in(:day_of_year, [year: year], calendar),
          {:ok, day_of_year} <-
            conform(day_of_year, days, unit: :day_of_year, year: year, calendar: calendar) do
-      %{year: year, month: month, day: day} =
-        Calendrical.date_from_day_of_year(year, day_of_year, calendar)
+      %{year: year, month: month, day: day} = calendar.date_from_day_of_year(year, day_of_year)
 
       resolve([{:year, year}, {:month, month}, {:day, day} | rest], calendar)
     end
@@ -729,8 +728,7 @@ defmodule Tempo.Validation do
     day = if day < 0, do: last + day + 1, else: first + day - 1
 
     if first in 1..days_in_year//1 and day <= last do
-      %{year: year, month: month, day: day} =
-        Calendrical.date_from_day_of_year(year, day, calendar)
+      %{year: year, month: month, day: day} = calendar.date_from_day_of_year(year, day)
 
       resolve([{:year, year}, {:month, month}, {:day, day} | rest], calendar)
     else
@@ -761,8 +759,7 @@ defmodule Tempo.Validation do
     with {:ok, hour_of_year} <- conform(hour_of_year, first..last//1) do
       day_of_year = div(hour_of_year, @hours_per_day) + 1
 
-      %{year: year, month: month, day: day} =
-        Calendrical.date_from_day_of_year(year, day_of_year, calendar)
+      %{year: year, month: month, day: day} = calendar.date_from_day_of_year(year, day_of_year)
 
       resolve(
         [

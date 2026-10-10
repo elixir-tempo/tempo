@@ -241,9 +241,7 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 
 ## Tasks
 
-* [ ] **Calendrical's callbacks, then Tempo's calls of them** — the second table. Calendrical answers every one at `06aa274`, each a required callback of every calendar (Tempo takes it from its local checkout until both are pushed). Tempo's calls of the first group are switched: a year's traditional months, the place of a traditional month, a month's weeks, the quadrimester, the semester and the quarter, a named month, the day a date is written with, the months every year has and a solar term. Left of it: `Calendrical.date_from_day_of_year/3` (11 calls), which becomes `calendar.date_from_day_of_year/2`.
-
-* [ ] **Ask the calendar where a callback exists** — the 25 calls of the first table of "Every call a callback", a function at a time, each compared before and after: nothing in Calendrical changes for them. Two are done with the first group above (`Calendrical.Interval.year/2` and `quarter/3`).
+* [ ] **Ask the calendar where a callback exists** — the 25 calls of the first table of "Every call a callback", a function at a time, each compared before and after: nothing in Calendrical changes for them. Two are done (`Calendrical.Interval.year/2` and `quarter/3`).
 
 * [ ] **The period after or before a date, asked of its calendar** — the 16 calls of `Calendrical.next/3` and `previous/3` become `calendar.plus/6` and the callbacks that give a period, each compared before and after; nothing in Calendrical changes for them. The 6 calls of `Calendrical.Kday` stay.
 
@@ -256,6 +254,8 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 * [ ] **Week dates through Calendrical** — parked by the user on 2026-10-10 ("We will go back and discuss week dates (iso or calendar) later"): whether a week date is counted over the Gregorian year or the calendar's own is theirs to settle, and Calendrical's `plans/week-dates.md` holds the draft. The 7 lines that name a calendar for it compute with the pair of the Gregorian and `Calendrical.ISOWeek`: 5 in `lib/tempo/unit_values.ex`, 1 in `lib/math.ex` and 1 in `lib/enumeration/zone.ex`, which reads a date back as a week date for those two alone, since `iso_week_of_year/3` is the week of the Gregorian year in every calendar (`Calendrical.Hebrew.iso_week_of_year(5786, 3, 4)` is `{2025, 48}`, the Monday of Tempo's `5786W10`).
 
 ### Done
+
+* [x] **Calendrical's callbacks, then Tempo's calls of them** — the second table of "Every call a callback". Calendrical answers every one at `06aa274`, each a required callback of every calendar, and Tempo calls each on the calendar it holds: the last were the 11 calls of `Calendrical.date_from_day_of_year/3`, each `calendar.date_from_day_of_year/2`, which is what that function calls. Calls into Calendrical's own modules 60. 2026-10-10.
 
 * [x] **Names, traditional months, a month's weeks and solar terms, asked of the calendar** — 13 calls into Calendrical's own modules are calls of the calendar (`traditional_months/1`, `ordinal_month_from_traditional/2`, `weeks_in_month/2`, `month_week/3`, `quadrimester/2`, `semester/2`, `quarter/2`, `year/1`, `named_month/2`, `solar_term/2`), and the last 7 probes are gone with `exported?/3`: `cardinal_day/3` and `months_in_year/0` are asked of every calendar. Probes 0, lines that name a calendar 17, calls into Calendrical's own modules 71. 2026-10-10.
 
