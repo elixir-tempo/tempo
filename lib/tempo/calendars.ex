@@ -12,6 +12,12 @@ defmodule Tempo.Calendars do
   #   built with no calendar is in it (`default/0`), and so is one given
   #   `nil` or Elixir's `Calendar.ISO` for its calendar (`effective/1`).
   #
+  # * What lies outside Tempo has a calendar of its own, which is the
+  #   Gregorian for each: the zone database keeps its clocks in it
+  #   (`zone/0`), and an RRULE, a cron expression and a JSCalendar rule count
+  #   their months and years in it (`rule/0`). Elixir's own name for it is
+  #   `Calendar.ISO` (`native/0`).
+  #
   # Whether a module is a calendar is asked once, where one is given
   # (`validated/1`), and is Calendrical's to say: that the module then keeps
   # the two behaviours is its author's to see to.
@@ -20,9 +26,34 @@ defmodule Tempo.Calendars do
   @notation Calendrical.Gregorian
 
   @doc false
-  # The calendar a value is in where none is given: the notation's.
+  # The calendar a value is in where none is given: the notation's. ISO
+  # 8601-2's seasons are the seasons of its months, and an event of the sky
+  # or of the church is dated in it.
   @spec default() :: module()
   def default, do: @notation
+
+  @doc false
+  # The calendar the zone database keeps its clocks in. A value of another
+  # calendar is read on a zone's clock as the date of the same day in it.
+  @spec zone() :: module()
+  def zone, do: @notation
+
+  @doc false
+  # The calendar a rule of RFC 5545, of cron or of JSCalendar counts its
+  # months and its years in.
+  @spec rule() :: module()
+  def rule, do: @notation
+
+  @doc false
+  # Elixir's own module for the notation's calendar, which the dates Astro
+  # and Calendrical's events answer with are handed back in.
+  @spec native() :: module()
+  def native, do: Calendar.ISO
+
+  @doc false
+  # Whether a value's `:calendar` stands for the notation's calendar, for a
+  # guard: the calendar itself, `Calendar.ISO`, or `nil` (`effective/1`).
+  defguard is_notation(calendar) when calendar in [@notation, Calendar.ISO, nil]
 
   @doc false
   # The calendar a value's `:calendar` stands for, as a module that keeps
@@ -62,7 +93,7 @@ defmodule Tempo.Calendars do
   @spec native(module() | nil) :: module()
   def native(calendar) do
     case effective(calendar) do
-      @notation -> Calendar.ISO
+      @notation -> native()
       calendar -> calendar
     end
   end

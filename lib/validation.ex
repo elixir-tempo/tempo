@@ -19,6 +19,8 @@ defmodule Tempo.Validation do
   alias Tempo.UnitValues
   alias Tempo.ZoneGapError
 
+  import Tempo.Calendars, only: [is_notation: 1]
+
   # This function performs two roles (and maybe should be split):
   #
   # 1. Expand groups into basic time units where there is enough information to do so and
@@ -1923,8 +1925,7 @@ defmodule Tempo.Validation do
 
   defp period_text(_unit, _year, _month), do: ""
 
-  defp calendar_text(calendar) when calendar in [nil, Calendrical.Gregorian, Calendar.ISO],
-    do: ""
+  defp calendar_text(calendar) when is_notation(calendar), do: ""
 
   defp calendar_text(calendar), do: " in #{inspect(calendar)}"
 
@@ -2343,7 +2344,7 @@ defmodule Tempo.Validation do
   # 02:30 on 29 March 2026, which Paris's clock skips. One still in another
   # calendar has no such date, and is asked nothing.
   defp check_wall_time_in_zone(%Tempo{time: time, calendar: calendar}, zone)
-       when calendar in [nil, Calendrical.Gregorian, Calendar.ISO] do
+       when is_notation(calendar) do
     case wall_readings(time) do
       # Pre-common-era wall times cannot fall into a zone-transition
       # gap — standardised time (and every IANA rule) begins many

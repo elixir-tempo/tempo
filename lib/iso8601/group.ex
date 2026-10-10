@@ -1023,8 +1023,8 @@ defmodule Tempo.Iso8601.Group do
   defp gregorian_year_bounds(year, calendar) do
     with true <- Code.ensure_loaded?(calendar) and function_exported?(calendar, :year, 1),
          %Date.Range{first: first, last: last} <- Calendrical.Interval.year(year, calendar),
-         {:ok, first} <- Date.convert(first, Gregorian),
-         {:ok, last} <- Date.convert(last, Gregorian) do
+         {:ok, first} <- Date.convert(first, Calendars.default()),
+         {:ok, last} <- Date.convert(last, Calendars.default()) do
       {:ok, first, last}
     else
       _other ->

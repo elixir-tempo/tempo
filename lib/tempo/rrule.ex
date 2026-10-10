@@ -55,6 +55,8 @@ defmodule Tempo.RRule do
   alias Tempo.RRule.Rule
   alias Tempo.RRule.Selection
 
+  import Tempo.Calendars, only: [is_notation: 1]
+
   @weekdays %{
     "MO" => 1,
     "TU" => 2,
@@ -473,7 +475,7 @@ defmodule Tempo.RRule do
   # and days are in by the parts that select them. One with no such part has
   # nothing to say it with, and would be counted in the Gregorian.
   defp carries_its_calendar(%Rule{rscale: calendar} = rule, nil)
-       when calendar not in [nil, Calendrical.Gregorian] do
+       when not is_notation(calendar) do
     if is_nil(Rule.to_selection(rule, nil)),
       do: {:error, {:rscale_without_a_start, calendar}},
       else: :ok

@@ -3,7 +3,6 @@ defmodule Tempo.Inspect do
 
   import Kernel, except: [inspect: 1]
 
-  alias Calendrical.Gregorian
   alias Localize.Validity.U
   alias Tempo.Calendars
   alias Tempo.Compare
@@ -13,6 +12,8 @@ defmodule Tempo.Inspect do
   alias Tempo.Math
   alias Tempo.Microsecond
   alias Tempo.Qualification
+
+  import Tempo.Calendars, only: [is_notation: 1]
 
   @from_iso8601 "Tempo.from_iso8601!(\""
   @sigil_o "~o\""
@@ -144,7 +145,7 @@ defmodule Tempo.Inspect do
     with %Tempo{time: time} = start <- Interval.from(tempo),
          true <- gregorian_date?(time) do
       Compare.to_wall_seconds(start) ==
-        Compare.to_wall_seconds(%{start | calendar: Calendrical.Gregorian})
+        Compare.to_wall_seconds(%{start | calendar: Calendars.default()})
     else
       _other -> false
     end
@@ -153,7 +154,7 @@ defmodule Tempo.Inspect do
   defp gregorian_date?(time) do
     case {Keyword.get(time, :year), Keyword.get(time, :month, 1), Keyword.get(time, :day, 1)} do
       {year, month, day} when is_integer(year) and is_integer(month) and is_integer(day) ->
-        Gregorian.valid_date?(year, month, day)
+        Calendars.default().valid_date?(year, month, day)
 
       _not_a_date ->
         false
@@ -265,10 +266,10 @@ defmodule Tempo.Inspect do
   # this calendar, since several calendars share a CLDR type. It is worked
   # out from the calendar module, the one record a value keeps of its
   # calendar, and carried in the `extended` of the copy being written.
-  defp calendar_name(%Tempo{calendar: calendar}, implied \\ Gregorian) do
+  defp calendar_name(%Tempo{calendar: calendar}, implied \\ Calendars.default()) do
     calendar = Calendars.effective(calendar)
 
-    if calendar in [Gregorian, implied], do: nil, else: faithful_name(calendar)
+    if calendar in [Calendars.default(), implied], do: nil, else: faithful_name(calendar)
   end
 
   defp week_based?(calendar) do
@@ -362,13 +363,10 @@ defmodule Tempo.Inspect do
   # A struct given no calendar is read in the default one, and is written so.
   # It was written as a call with `nil` for its calendar, which is read as
   # another value's.
-  def inspect(%Tempo{calendar: nil} = tempo),
-    do: inspect(Calendars.settled(tempo))
-
-  def inspect(%Tempo{calendar: Calendrical.Gregorian} = tempo) do
+  def inspect(%Tempo{calendar: calendar} = tempo) when is_notation(calendar) do
     # `to_iso8601/1` (via `inspect_value/1`) already appends the
     # IXDTF extended trailer; don't add it again here.
-    encoded(tempo, "Tempo", &(@sigil_o <> &1 <> "\""))
+    encoded(Calendars.settled(tempo), "Tempo", &(@sigil_o <> &1 <> "\""))
   end
 
   def inspect(%Tempo{calendar: Calendrical.ISOWeek} = tempo) do
@@ -407,7 +405,7 @@ defmodule Tempo.Inspect do
   # rendered as a sigil that parses back, so it shows as a labelled struct view.
   # A calendar ISO 8601 cannot name is no obstacle here: the rendering names
   # its module.
-  defp encoded(value, tag, render, implied \\ Gregorian) do
+  defp encoded(value, tag, render, implied \\ Calendars.default()) do
     case unencodable(value) do
       nil -> value |> to_iodata(implied) |> IO.iodata_to_binary() |> render.()
       _construct -> "#" <> tag <> "<not ISO 8601 expressible>"
@@ -538,7 +536,9 @@ defmodule Tempo.Inspect do
   # IXDTF identifier: a non-CLDR calendar (`Calendrical.Julian`) through
   # Calendrical's additional-calendar registry, a CLDR one through its calendar
   # type. Gregorian and the ISO week calendar are the defaults and add nothing.
-  defp repeat_rule_calendar_trailer(%Tempo{calendar: Calendrical.Gregorian}), do: []
+  defp repeat_rule_calendar_trailer(%Tempo{calendar: calendar}) when is_notation(calendar),
+    do: []
+
   defp repeat_rule_calendar_trailer(%Tempo{calendar: Calendrical.ISOWeek}), do: []
 
   defp repeat_rule_calendar_trailer(%Tempo{calendar: calendar}) when is_atom(calendar) do

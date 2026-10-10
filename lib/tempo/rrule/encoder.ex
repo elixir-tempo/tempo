@@ -8,6 +8,8 @@ defmodule Tempo.RRule.Encoder do
   alias Tempo.RRule.Selection
   alias Tempo.UnitValues
 
+  import Tempo.Calendars, only: [is_notation: 1]
+
   # Converts a `%Tempo.Interval{}` back into an RFC 5545 RRULE
   # string. Pure AST → text; no parsing. Called via
   # `Tempo.RRule.to_string/1`.
@@ -185,7 +187,7 @@ defmodule Tempo.RRule.Encoder do
          duration: %Tempo.Duration{time: [{unit, _count}]},
          repeat_rule: rule
        })
-       when unit in [:month, :year] and calendar in [Calendrical.Gregorian, Calendar.ISO, nil] do
+       when unit in [:month, :year] and is_notation(calendar) do
     calendar = Calendars.effective(calendar)
 
     with {:ok, selection} <- selection_of(rule),
@@ -315,7 +317,7 @@ defmodule Tempo.RRule.Encoder do
       interval
       | repeat_rule: %Tempo{
           time: [{:selection, stated} | units],
-          calendar: Calendrical.Gregorian
+          calendar: Calendars.rule()
         }
     }
   end
@@ -419,8 +421,8 @@ defmodule Tempo.RRule.Encoder do
   # of the Gregorian calendar, so an end in another calendar is written as
   # the Gregorian date it is.
   defp encode_until(%Tempo{calendar: calendar} = value)
-       when calendar not in [Calendrical.Gregorian, Calendar.ISO, nil] do
-    with {:ok, %Tempo{} = gregorian} <- Tempo.to_calendar(value, Calendrical.Gregorian),
+       when not is_notation(calendar) do
+    with {:ok, %Tempo{} = gregorian} <- Tempo.to_calendar(value, Calendars.rule()),
          do: encode_until(gregorian)
   end
 

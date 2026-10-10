@@ -269,7 +269,7 @@ defmodule Tempo.Event do
   # `Calendrical.Ecclesiastical` returns a `Calendrical.Gregorian` (Western) or
   # `Calendrical.Julian` (Orthodox) date; normalise both to `Calendar.ISO`.
   defp ecclesiastical_date(%Date{} = date) do
-    case Date.convert(date, Calendar.ISO) do
+    case Date.convert(date, Calendars.native()) do
       {:ok, %Date{} = iso} -> {:ok, iso}
       _error -> {:error, {:uncomputable_event, :easter}}
     end
@@ -280,7 +280,7 @@ defmodule Tempo.Event do
   defp solar_term_date(number, year, calendar) do
     with {:ok, %Date{} = date} <-
            Lunisolar.solar_term(number, year, solar_term_location(calendar)),
-         {:ok, %Date{} = iso} <- Date.convert(date, Calendar.ISO) do
+         {:ok, %Date{} = iso} <- Date.convert(date, Calendars.native()) do
       {:ok, iso}
     else
       _other -> {:error, {:uncomputable_event, {:solar_term, number}}}

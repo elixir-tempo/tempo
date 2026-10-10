@@ -19,7 +19,6 @@ defmodule Tempo.Enumeration.SkippedReadings do
   # and its time of day. A date is skipped whole only where its zone leaves
   # the day out, and those days are kept.
 
-  alias Calendrical.Gregorian
   alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.Enumeration.Zone
@@ -201,7 +200,7 @@ defmodule Tempo.Enumeration.SkippedReadings do
 
   # A Gregorian date as the value writes one, in its calendar.
   defp date_named?({year, month, day}, %{shape: shape, date: date}, value) do
-    gregorian = %Tempo{time: [year: year, month: month, day: day], calendar: Gregorian}
+    gregorian = %Tempo{time: [year: year, month: month, day: day], calendar: Calendars.zone()}
 
     case Zone.in_calendar_of(gregorian, value) do
       {:ok, %Tempo{time: units}} -> units_named?(shape, Keyword.values(units), date, value)

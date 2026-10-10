@@ -8,6 +8,8 @@ defmodule Tempo.Enumeration.Zone do
   alias Tempo.TimeZoneDatabase
   alias Tempo.UnitValues
   alias Tempo.Validation
+
+  import Tempo.Calendars, only: [is_notation: 1]
   @seconds_in_an_hour 3_600
 
   # Shared DST classification for enumeration. Both `Enumerable.Tempo`
@@ -48,7 +50,7 @@ defmodule Tempo.Enumeration.Zone do
   # A zone's clock is asked by the Gregorian date of a value. One whose date
   # could not be given as one (`in_gregorian/1`) is asked nothing.
   defp status_in(%Tempo{calendar: calendar} = tempo, zone)
-       when calendar in [Gregorian, Calendar.ISO, nil] do
+       when is_notation(calendar) do
     with %NaiveDateTime{} = naive <- naive_from_tempo(tempo),
          db when is_atom(db) <- TimeZoneDatabase.database() do
       naive |> DateTime.from_naive(zone, db) |> status(tempo, naive)
@@ -88,15 +90,14 @@ defmodule Tempo.Enumeration.Zone do
 
     with {:ok, %Date{} = date} <- UnitValues.date_from_iso_week(year, week, day, calendar),
          {:ok, date} <- gregorian_units(date) do
-      %{value | time: date ++ clock, calendar: Gregorian}
+      %{value | time: date ++ clock, calendar: Calendars.zone()}
     else
       _no_such_day -> value
     end
   end
 
-  def in_gregorian(%Tempo{calendar: calendar} = value)
-      when calendar in [Gregorian, Calendar.ISO, nil],
-      do: value
+  def in_gregorian(%Tempo{calendar: calendar} = value) when is_notation(calendar),
+    do: value
 
   def in_gregorian(
         %Tempo{
@@ -107,7 +108,7 @@ defmodule Tempo.Enumeration.Zone do
       when is_integer(year) and is_integer(month) and is_integer(day) do
     with {:ok, %Date{} = date} <- Date.new(year, month, day, calendar),
          {:ok, date} <- gregorian_units(date) do
-      %{value | time: date ++ clock, calendar: Gregorian}
+      %{value | time: date ++ clock, calendar: Calendars.zone()}
     else
       _no_such_date -> value
     end
@@ -116,7 +117,7 @@ defmodule Tempo.Enumeration.Zone do
   def in_gregorian(%Tempo{} = value), do: value
 
   defp gregorian_units(%Date{} = date) do
-    with {:ok, %Date{year: year, month: month, day: day}} <- Date.convert(date, Gregorian),
+    with {:ok, %Date{year: year, month: month, day: day}} <- Date.convert(date, Calendars.zone()),
          do: {:ok, [year: year, month: month, day: day]}
   end
 
@@ -131,7 +132,7 @@ defmodule Tempo.Enumeration.Zone do
         %Tempo{time: [{:year, _year}, {:week, _week}, {:day_of_week, _day} | _clock]} = written
       ) do
     with {:ok, weeks} <- calendar_of_weeks(Calendars.effective(written.calendar)),
-         {:ok, %Date{} = date} <- Date.new(year, month, day, Gregorian),
+         {:ok, %Date{} = date} <- Date.new(year, month, day, Calendars.zone()),
          {:ok, %Date{year: year, month: week, day: day}} <- Date.convert(date, weeks) do
       {:ok,
        %{
@@ -145,14 +146,14 @@ defmodule Tempo.Enumeration.Zone do
   end
 
   def in_calendar_of(%Tempo{} = gregorian, %Tempo{calendar: calendar})
-      when calendar in [Gregorian, Calendar.ISO, nil],
+      when is_notation(calendar),
       do: {:ok, gregorian}
 
   def in_calendar_of(
         %Tempo{time: [{:year, year}, {:month, month}, {:day, day} | clock]} = gregorian,
         %Tempo{calendar: calendar}
       ) do
-    with {:ok, %Date{} = date} <- Date.new(year, month, day, Gregorian),
+    with {:ok, %Date{} = date} <- Date.new(year, month, day, Calendars.zone()),
          {:ok, %Date{year: year, month: month, day: day}} <- Date.convert(date, calendar) do
       {:ok,
        %{gregorian | time: [year: year, month: month, day: day] ++ clock, calendar: calendar}}
@@ -220,8 +221,7 @@ defmodule Tempo.Enumeration.Zone do
          },
          days
        )
-       when is_integer(year) and is_integer(month) and is_integer(day) and
-              calendar in [Gregorian, Calendar.ISO, nil],
+       when is_integer(year) and is_integer(month) and is_integer(day) and is_notation(calendar),
        do: {year, month, day} in days
 
   defp on_one_of?(%Tempo{}, _days), do: false
@@ -461,8 +461,7 @@ defmodule Tempo.Enumeration.Zone do
          } = value
        )
        when is_binary(zone) and is_integer(year) and year >= 1 and is_integer(month) and
-              is_integer(day) and hour in 0..23 and
-              calendar in [Gregorian, Calendar.ISO] do
+              is_integer(day) and hour in 0..23 and is_notation(calendar) do
     starts = :calendar.datetime_to_gregorian_seconds({{year, month, day}, {hour, 0, 0}})
 
     with {:ok, ending} <-
@@ -630,9 +629,11 @@ defmodule Tempo.Enumeration.Zone do
          calendar: calendar
        })
        when is_integer(year) and year >= 1 and is_integer(month) and is_integer(day) and
-              calendar in [Gregorian, Calendar.ISO, nil] do
-    with {:ok, seconds} <- seconds_into_the_day(clock),
-         do: {:ok, Gregorian.date_to_iso_days(year, month, day) * @seconds_in_a_day + seconds}
+              is_notation(calendar) do
+    with {:ok, seconds} <- seconds_into_the_day(clock) do
+      days = Calendars.zone().date_to_iso_days(year, month, day)
+      {:ok, days * @seconds_in_a_day + seconds}
+    end
   end
 
   # A coarser value, a month or a year, starts on its first day, and a

@@ -79,6 +79,8 @@ defmodule Tempo.Explain do
   alias Tempo.RRule.Selection
   alias Tempo.UnitValues
 
+  import Tempo.Calendars, only: [is_notation: 1]
+
   @doc """
   Return a structured `t:Tempo.Explanation.t/0` for any Tempo
   value. Unknown shapes produce a generic fallback rather than
@@ -1093,7 +1095,7 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp calendar_text(%Tempo{calendar: Calendrical.Gregorian}), do: nil
+  defp calendar_text(%Tempo{calendar: calendar}) when is_notation(calendar), do: nil
   defp calendar_text(%Tempo{calendar: cal}), do: "Calendar: #{inspect(cal)}."
 
   # A value with no components has no resolution to report — `resolution/1`

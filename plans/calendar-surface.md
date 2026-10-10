@@ -187,11 +187,7 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 
 ## Tasks
 
-* [ ] **The guards that take `nil` for the Gregorian** — the lines that test `calendar in [Gregorian, Calendar.ISO, nil]` ask the accessor first, with the tasks for what is outside and for fast paths.
-
 * [ ] **No probe of a required callback** — needs nothing upstream.
-
-* [ ] **What is outside, in one module** — needs nothing upstream.
 
 * [ ] **Weeks or months, asked once** — needs nothing upstream.
 
@@ -212,6 +208,8 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 * [ ] **Names, traditional months and solar terms** — blocked on `cardinal_day/3` and the four callbacks of traditional months being required, and on a solar term asked of a calendar (Calendrical's `TODO.md`).
 
 ### Done
+
+* [x] **What is outside, in one module** — the zone database's calendar (`Tempo.Calendars.zone/0`), a rule's (`rule/0`), Elixir's own (`native/0`) and the notation's are named in the one module, and a guard there (`is_notation/1`) is what the lines that left the Gregorian's name out of text or took `nil` for it now ask: the 26 outside lines and the 9 of text name no calendar, and the lines that do are 54 of the 128. 2026-10-10.
 
 * [x] **A value's calendar is read through one accessor** — `Tempo.Calendars` is the one module that names a calendar: `effective/1`, `of/1`, `settled/1`, `default/0`, `native/1` and `validated/1`, which asks `Calendrical.validate_calendar/1`. No line outside it defaults to the Gregorian or maps `Calendar.ISO`, where 38 did, and the lines that name a calendar are 89 of the 128. 2026-10-10.
 

@@ -78,43 +78,18 @@ NAMED = {
         ('to_gregorian_ymd', 'Gregorian', 'F'),
         ('gregorian_seconds', 'Gregorian', 'G'),
     ],
-    "lib/enumeration/skipped_readings.ex": [
-        ('date_named?', 'Gregorian', 'X'),
-    ],
     "lib/enumeration/zone.ex": [
-        ('status_in', 'Gregorian, ISO', 'X'),
-        ('in_gregorian', 'Gregorian', 'X'),
-        ('in_gregorian', 'Gregorian, ISO', 'X'),
-        ('in_gregorian', 'Gregorian', 'X'),
-        ('gregorian_units', 'Gregorian', 'X'),
-        ('in_calendar_of', 'Gregorian', 'X'),
-        ('in_calendar_of', 'Gregorian, ISO', 'X'),
-        ('in_calendar_of', 'Gregorian', 'X'),
         ('calendar_of_weeks', 'Gregorian, ISOWeek', 'W'),
-        ('on_one_of?', 'Gregorian, ISO', 'X'),
-        ('end_of_gregorian_hour', 'Gregorian, ISO', 'X'),
-        ('first_reading', 'Gregorian, ISO', 'X'),
-        ('first_reading', 'Gregorian', 'X'),
     ],
     "lib/event.ex": [
-        ('ecclesiastical_date', 'ISO', 'X'),
-        ('solar_term_date', 'ISO', 'X'),
         ('solar_term_location', 'Chinese', 'S'),
     ],
     "lib/explain.ex": [
-        ('calendar_text', 'Gregorian', 'T'),
         ('gregorian_names?', 'Gregorian', 'S'),
     ],
     "lib/inspect.ex": [
-        ('same_start_in_gregorian?', 'Gregorian', 'T'),
-        ('gregorian_date?', 'Gregorian', 'T'),
-        ('calendar_name', 'Gregorian', 'T'),
-        ('calendar_name', 'Gregorian', 'T'),
-        ('inspect', 'Gregorian', 'T'),
         ('inspect', 'ISOWeek', 'W'),
         ('inspect', 'ISOWeek', 'W'),
-        ('encoded', 'Gregorian', 'T'),
-        ('repeat_rule_calendar_trailer', 'Gregorian', 'T'),
         ('repeat_rule_calendar_trailer', 'ISOWeek', 'W'),
     ],
     "lib/iso8601/group.ex": [
@@ -124,8 +99,6 @@ NAMED = {
         ('nth_day_of_season', 'Gregorian', 'G'),
         ('unspecified_year_season', 'Gregorian', 'S'),
         ('unspecified_year_season', 'Gregorian', 'S'),
-        ('gregorian_year_bounds', 'Gregorian', 'X'),
-        ('gregorian_year_bounds', 'Gregorian', 'X'),
     ],
     "lib/math.ex": [
         ('fast_add', 'Gregorian, ISO', 'F'),
@@ -136,11 +109,7 @@ NAMED = {
         ('calendar_from', 'ISOWeek', 'W'),
     ],
     "lib/tempo.ex": [
-        ('from_date', 'ISO', 'I'),
-        ('from_date', 'Gregorian', 'F'),
         ('date_units', 'Gregorian', 'F'),
-        ('from_naive_datetime', 'ISO', 'I'),
-        ('from_naive_datetime', 'Gregorian', 'I'),
         ('day_in_calendar', 'Gregorian', 'F'),
         ('day_in_calendar', 'Gregorian', 'F'),
         ('start_in_repeat_calendar', 'Gregorian, ISOWeek', 'S'),
@@ -149,9 +118,6 @@ NAMED = {
         ('no_date_in_year?', 'Gregorian', 'G'),
         ('no_date_in_year?', 'Gregorian', 'G'),
         ('iso_day_of_week', 'ISO', 'G'),
-    ],
-    "lib/tempo/cron.ex": [
-        ('apply_year_limit', 'Gregorian', 'X'),
     ],
     "lib/tempo/network/normalize.ex": [
         ('date_at', 'Gregorian', 'S'),
@@ -162,18 +128,6 @@ NAMED = {
         ('gregorian_cycle', 'Gregorian', 'G'),
         ('gregorian_cycle', 'Gregorian', 'G'),
     ],
-    "lib/tempo/not_built.ex": [
-        ('', 'Gregorian, ISO', 'X'),
-    ],
-    "lib/tempo/rrule.ex": [
-        ('carries_its_calendar', 'Gregorian', 'X'),
-    ],
-    "lib/tempo/rrule/encoder.ex": [
-        ('day_left_to_start', 'Gregorian, ISO', 'X'),
-        ('with_days', 'Gregorian', 'X'),
-        ('encode_until', 'Gregorian, ISO', 'X'),
-        ('encode_until', 'Gregorian', 'X'),
-    ],
     "lib/tempo/rrule/rule.ex": [
         ('with_month_of_start', 'Gregorian, ISO', 'S'),
         ('moves_a_day?', 'Gregorian, ISO', 'S'),
@@ -182,7 +136,6 @@ NAMED = {
         ('event_dates_in_year', 'Gregorian', 'F'),
         ('event_dates_in_year', 'Gregorian', 'F'),
         ('gregorian_year_of', 'Gregorian', 'F'),
-        ('gregorian_year_of', 'Gregorian', 'X'),
     ],
     "lib/tempo/select.ex": [
         ('counted_in_another_calendar', 'Gregorian, ISOWeek', 'W'),
@@ -199,10 +152,6 @@ NAMED = {
         ('date_from_iso_week', 'Gregorian', 'W'),
         ('iso_weeks_in_year', 'Gregorian', 'W'),
         ('iso_weeks_in_year', 'ISOWeek', 'W'),
-    ],
-    "lib/validation.ex": [
-        ('calendar_text', 'Gregorian, ISO', 'T'),
-        ('check_wall_time_in_zone', 'Gregorian, ISO', 'X'),
     ],
 }
 
@@ -506,7 +455,7 @@ CONSTANTS = {
         ('options', 'options'), ('renamed', 'options'),
     ],
     "lib/tempo/not_built.ex": [
-        ('gregorian', 'calendar'), ('stepped_by_rrule_calendar', 'units'),
+        ('stepped_by_rrule_calendar', 'units'),
         ('selected_by_rrule_calendar', 'units'),
     ],
     "lib/tempo/qualification.ex": [

@@ -3051,7 +3051,7 @@ defmodule Tempo.RRule.Selection do
 
   defp gregorian_year_of(year, month, day, calendar) do
     with {:ok, %Date{} = date} <- Date.new(year, month, day, calendar),
-         {:ok, %Date{year: gregorian_year}} <- Date.convert(date, Calendrical.Gregorian) do
+         {:ok, %Date{year: gregorian_year}} <- Date.convert(date, Calendars.default()) do
       {:ok, gregorian_year}
     end
   end

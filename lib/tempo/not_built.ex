@@ -27,8 +27,7 @@ defmodule Tempo.NotBuilt do
 
   alias Tempo.{Calendars, ConversionError, Duration, Interval}
 
-  # The calendar RFC 5545 writes a rule in, as a value holds it.
-  @gregorian [Calendrical.Gregorian, Calendar.ISO, nil]
+  import Tempo.Calendars, only: [is_notation: 1]
 
   # The units of a cadence that an RRULE counts in its calendar,
   # `FREQ=YEARLY` and `FREQ=MONTHLY`, and the tokens of a selection that it
@@ -76,7 +75,7 @@ defmodule Tempo.NotBuilt do
   defp rule_calendar(%Interval{from: from, repeat_rule: rule}) do
     [rule, from]
     |> Enum.flat_map(fn
-      %Tempo{calendar: calendar} when calendar not in @gregorian -> [calendar]
+      %Tempo{calendar: calendar} when not is_notation(calendar) -> [calendar]
       _gregorian_or_absent -> []
     end)
     |> List.first()

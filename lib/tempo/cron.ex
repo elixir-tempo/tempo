@@ -96,6 +96,7 @@ defmodule Tempo.Cron do
 
   """
 
+  alias Tempo.Calendars
   alias Tempo.CronError
   alias Tempo.RRule.Expander
   alias Tempo.RRule.Rule
@@ -482,7 +483,7 @@ defmodule Tempo.Cron do
     %{
       rule
       | byyear: years,
-        until: %Tempo{calendar: Calendrical.Gregorian, time: [year: Enum.max(years) + 1]}
+        until: %Tempo{calendar: Calendars.rule(), time: [year: Enum.max(years) + 1]}
     }
   end
 
