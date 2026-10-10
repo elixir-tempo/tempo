@@ -2841,7 +2841,7 @@ defmodule Tempo.Math do
   # Only the year and month change; the day is clamped to the new month
   # once every unit has been applied (`maybe_clamp/3`).
   defp shift_years_by_calendar(time, n, calendar) do
-    with true <- traditional_months?(calendar),
+    with true <- months_numbered_by_the_year?(calendar),
          {:ok, year} <- year_of(time),
          {:ok, month} <- component(time, :month),
          {new_year, new_month, _day} <- calendar.plus(year, month, 1, :years, n, []) do
@@ -2854,10 +2854,11 @@ defmodule Tempo.Math do
     end
   end
 
-  defp traditional_months?(calendar) do
-    Code.ensure_loaded?(calendar) and
-      function_exported?(calendar, :ordinal_month_from_traditional, 2)
-  end
+  # A calendar whose years have not all as many months numbers a month by
+  # its year: the month after a leap month is one further on than it is in
+  # a year without. The calendar says so with no year (`months_in_year/0`).
+  defp months_numbered_by_the_year?(calendar),
+    do: match?({:ambiguous, _counts}, calendar.months_in_year())
 
   # A valid date moves by the calendar's own `plus/6`; one that is not a
   # date (a day a month step has not yet clamped) steps instead.

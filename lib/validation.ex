@@ -1655,28 +1655,16 @@ defmodule Tempo.Validation do
   (e.g. a leap month it does not have). Shared by concrete-date validation
   and per-year selection materialisation.
   """
-  def ordinal_month_from_traditional(calendar, year, month) do
-    if Code.ensure_loaded?(calendar) and
-         function_exported?(calendar, :ordinal_month_from_traditional, 2) do
-      case calendar.ordinal_month_from_traditional(year, month) do
-        {:ok, ordinal} -> {:ok, ordinal}
-        {:error, _reason} -> {:error, :invalid_date}
-      end
-    else
-      place_in_year(calendar, year, month)
+  def ordinal_month_from_traditional(calendar, year, month) when is_integer(year) do
+    case calendar.ordinal_month_from_traditional(year, month) do
+      {:ok, ordinal} -> {:ok, ordinal}
+      {:error, _reason} -> {:error, :invalid_date}
     end
   end
 
-  defp place_in_year(calendar, year, month) when is_integer(year) do
-    case Enum.find_index(Calendrical.traditional_months(year, calendar), &(&1 == month)) do
-      nil -> {:error, :invalid_date}
-      index -> {:ok, index + 1}
-    end
-  end
-
-  # With no one year there is no list of months to look in, and a month is
+  # With no one year there is no year to place a month in, and a month is
   # the number it is written with.
-  defp place_in_year(_calendar, _no_one_year, month), do: {:ok, month}
+  def ordinal_month_from_traditional(_calendar, _no_one_year, month), do: {:ok, month}
 
   @doc """
   Names the month at a place in a year as its calendar names it.
@@ -1691,7 +1679,7 @@ defmodule Tempo.Validation do
   """
   def traditional_month_from_ordinal(calendar, year, month)
       when is_integer(year) and is_integer(month) and month > 0 do
-    case Enum.at(Calendrical.traditional_months(year, calendar), month - 1) do
+    case Enum.at(calendar.traditional_months(year), month - 1) do
       nil -> :error
       traditional -> {:ok, traditional}
     end

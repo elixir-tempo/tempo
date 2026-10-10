@@ -621,18 +621,13 @@ defmodule Tempo.Iso8601.Group do
 
   # Calendrical gives each division of a year of a calendar as its dates.
   defp year_division_date_range(calendar, year, :quarter, number),
-    do:
-      year |> Calendrical.Interval.quarter(number, calendar) |> year_division_date_range_result()
+    do: year |> calendar.quarter(number) |> year_division_date_range_result()
 
-  defp year_division_date_range(calendar, year, :quadrimester, number) do
-    year
-    |> Calendrical.Interval.quadrimester(number, calendar)
-    |> year_division_date_range_result()
-  end
+  defp year_division_date_range(calendar, year, :quadrimester, number),
+    do: year |> calendar.quadrimester(number) |> year_division_date_range_result()
 
   defp year_division_date_range(calendar, year, :semester, number),
-    do:
-      year |> Calendrical.Interval.semester(number, calendar) |> year_division_date_range_result()
+    do: year |> calendar.semester(number) |> year_division_date_range_result()
 
   defp year_division_date_range_result(%Date.Range{} = range), do: {:ok, range}
   defp year_division_date_range_result({:error, reason}), do: {:error, reason}
@@ -1033,7 +1028,7 @@ defmodule Tempo.Iso8601.Group do
 
   # The first and last days of `year` of `calendar`, as Gregorian dates.
   defp gregorian_year_bounds(year, calendar) do
-    with %Date.Range{first: first, last: last} <- Calendrical.Interval.year(year, calendar),
+    with %Date.Range{first: first, last: last} <- calendar.year(year),
          {:ok, first} <- Date.convert(first, Calendars.default()),
          {:ok, last} <- Date.convert(last, Calendars.default()) do
       {:ok, first, last}

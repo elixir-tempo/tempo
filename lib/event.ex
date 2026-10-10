@@ -38,7 +38,6 @@ defmodule Tempo.Event do
 
   """
 
-  alias Calendrical.Chinese
   alias Calendrical.Ecclesiastical
   alias Calendrical.Lunisolar
   alias Tempo.Calendars
@@ -275,29 +274,20 @@ defmodule Tempo.Event do
     end
   end
 
-  # The day of a solar term in a Gregorian year, at the meridian of the given
-  # calendar, as a `Calendar.ISO` date. The day is Calendrical's to work out.
+  # The day of a solar term in a Gregorian year, as a `Calendar.ISO` date.
+  # The day is the calendar's to say (`solar_term/2`): a lunisolar calendar
+  # is reckoned at a place of its own (the Chinese, the Korean, the
+  # Vietnamese and the Japanese each at theirs), and the day of a term can
+  # differ between them, so the calendar of the value is asked, whichever
+  # it is. One that is reckoned at no place answers at the traditional
+  # reference for the jié-qì.
   defp solar_term_date(number, year, calendar) do
-    with {:ok, %Date{} = date} <-
-           Lunisolar.solar_term(number, year, solar_term_location(calendar)),
+    with {:ok, %Date{} = date} <- calendar.solar_term(number, year),
          {:ok, %Date{} = iso} <- Date.convert(date, Calendars.native()) do
       {:ok, iso}
     else
       _other -> {:error, {:uncomputable_event, {:solar_term, number}}}
     end
-  end
-
-  # The meridian a solar term is observed at is the calendar's own to say. A
-  # lunisolar calendar is reckoned at a place (`location/1`: the Chinese, the
-  # Korean, the Vietnamese and the Japanese each at its own), and the day of
-  # a term differs between them: the seventh of 2002 is 6 May in three of
-  # them and 5 May in the Vietnamese. So the calendar of the value is asked,
-  # whichever it is. One that is reckoned at no place (the Gregorian) takes
-  # the Chinese meridian, the traditional reference for the jié-qì.
-  defp solar_term_location(calendar) do
-    if Code.ensure_loaded?(calendar) and function_exported?(calendar, :location, 1),
-      do: &calendar.location/1,
-      else: &Chinese.location/1
   end
 
   # A name that is not built in is offered to each registered resolver

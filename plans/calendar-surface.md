@@ -171,20 +171,20 @@ These need no change in Calendrical: Tempo asks the calendar it already holds.
 
 ### A callback is to be added, or made required (25 calls, and the 7 probes)
 
-Each is in Calendrical's `TODO.md`, or is added to it by this section.
+Each is a required callback of every calendar at Calendrical `06aa274`.
 
 | Tempo calls | Calls | Becomes |
 |---|---|---|
 | `Calendrical.traditional_months(year, calendar)` | 3 | `calendar.traditional_months(year)`, new |
 | `calendar.ordinal_month_from_traditional/2` behind a probe | 2 probes | the same call with no probe, the callback required of every calendar |
-| `Calendrical.Interval.weeks_in_month(year, month, calendar)`, `Calendrical.Interval.week(year, month, nth, calendar)` | 3 | `calendar.weeks_in_month(year, month)` and the dates of a month's nth week, new |
+| `Calendrical.Interval.weeks_in_month(year, month, calendar)`, `Calendrical.Interval.week(year, month, nth, calendar)` | 3 | `calendar.weeks_in_month(year, month)` and `calendar.month_week(year, month, nth)`, new |
 | `Calendrical.Interval.quadrimester/3`, `Calendrical.Interval.semester/3` | 2 | `calendar.quadrimester(year, n)`, `calendar.semester(year, n)`: back on the behaviour, decided 2026-10-10 |
 | `Calendrical.named_month(year, month, calendar)` | 1 | `calendar.named_month(year, month)`, new |
 | `Calendrical.date_from_day_of_year(year, day, calendar)` | 11 | `calendar.date_from_day_of_year(year, day)`, new: the inverse of `day_of_year/3` |
-| `Calendrical.Base.Common.composite?(calendar)`, and Tempo's own deciders of a year's start | 1 | the months a year has and the days a month has, new |
+| `Calendrical.Base.Common.composite?(calendar)`, and Tempo's own deciders of a year's start | 1 | `calendar.month_numbers(year)` and `calendar.day_numbers(year, month)`, new |
 | `calendar.cardinal_day/3` and `calendar.months_in_year/0` behind probes | 4 probes | the same calls with no probe, each required |
-| `Calendrical.Gregorian.leap_year?/1`, `Calendrical.Gregorian.day_of_week/4` | 2 | the cycle a calendar's years come round in, new, and then the calendar's own `leap_year?/1` and `day_of_week/4` |
-| `Calendrical.Lunisolar.solar_term/3`, `Calendrical.Chinese.location/1`, and `calendar.location/1` behind a probe | 2, and 1 probe | a solar term asked of the calendar, which every calendar answers, decided 2026-10-10 |
+| `Calendrical.Gregorian.leap_year?/1`, `Calendrical.Gregorian.day_of_week/4` | 2 | `calendar.years_in_cycle()`, new, and then the calendar's own `leap_year?/1` and `day_of_week/4` |
+| `Calendrical.Lunisolar.solar_term/3`, `Calendrical.Chinese.location/1`, and `calendar.location/1` behind a probe | 2, and 1 probe | `calendar.solar_term(index, gregorian_year)`, which every calendar answers, decided 2026-10-10 |
 
 ### A function of dates, which takes no calendar (22 calls)
 
@@ -241,23 +241,23 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 
 ## Tasks
 
-* [ ] **Ask the calendar where a callback exists** — the 25 calls of the first table of "Every call a callback", a function at a time, each compared before and after: nothing in Calendrical changes for them.
+* [ ] **Calendrical's callbacks, then Tempo's calls of them** — the second table. Calendrical answers every one at `06aa274`, each a required callback of every calendar (Tempo takes it from its local checkout until both are pushed). Tempo's calls of the first group are switched: a year's traditional months, the place of a traditional month, a month's weeks, the quadrimester, the semester and the quarter, a named month, the day a date is written with, the months every year has and a solar term. Left of it: `Calendrical.date_from_day_of_year/3` (11 calls), which becomes `calendar.date_from_day_of_year/2`.
 
-* [ ] **Calendrical's callbacks, then Tempo's calls of them** — the second table: each callback is added to `Calendrical.Behaviour` for every calendar, with leave from the user of 2026-10-10 to make the change there, and Tempo's call follows when its lock moves to it.
+* [ ] **Ask the calendar where a callback exists** — the 25 calls of the first table of "Every call a callback", a function at a time, each compared before and after: nothing in Calendrical changes for them. Two are done with the first group above (`Calendrical.Interval.year/2` and `quarter/3`).
 
 * [ ] **The period after or before a date, asked of its calendar** — the 16 calls of `Calendrical.next/3` and `previous/3` become `calendar.plus/6` and the callbacks that give a period, each compared before and after; nothing in Calendrical changes for them. The 6 calls of `Calendrical.Kday` stay.
 
-### Blocked
+* [ ] **The cycle a calendar's years come round in** — `calendar.years_in_cycle/0` answers it (400 by the Gregorian rule, 28 for the Julian, the Coptic and the Ethiopic, 210 for a tabular Islamic calendar, and `{:error, :undefined}` for a calendar whose years come round in none). Tempo holds 400 for the Gregorian by name: a rule that names no date of any year is known so after one year of each of the 14 kinds a cycle has (`@years_of_a_cycle`, `@kinds_of_year`, `kind_of_year/1` and `no_date_in_year?/3` in `lib/tempo.ex`), and the network solver keeps the lengths of 400 years and counts a month as twelve to a year on its axis (`lib/tempo/network/normalize.ex`): 10 lines that name the calendar and 6 constants. Each is to ask the calendar, the kinds of year found by asking a cycle's years for their months and first weekday.
 
-* [ ] **The cycle a calendar's years come round in** — blocked on a callback that gives it (Calendrical's `TODO.md`), decided by the user on 2026-10-10. Tempo holds 400 for the Gregorian by name: a rule that names no date of any year is known so after one year of each of the 14 kinds a cycle has (`@years_of_a_cycle`, `@kinds_of_year`, `kind_of_year/1` and `no_date_in_year?/3` in `lib/tempo.ex`), and the network solver keeps the lengths of 400 years and counts a month as twelve to a year on its axis (`lib/tempo/network/normalize.ex`): 10 lines that name the calendar and 6 constants. With the callback each asks the calendar, the kinds of year are found by asking a cycle's years for their months and first weekday, and the Julian, Coptic, Ethiopic, Indian and tabular Islamic calendars are answered as the Gregorian is.
+* [ ] **`Tempo.UnitValues` asks for values** — `calendar.month_numbers/1` and `calendar.day_numbers/2` give the months a year has and the days a month has, as runs of numbers (`[3..12]` for England's 1751). Tempo's deciders of a year's start, `composite?/1` and the bounds held for any year are to ask them, and the three defects under "Found on the way" go with it.
 
-* [ ] **`Tempo.UnitValues` asks for values** — blocked on the two callbacks that give a period's values (Calendrical's `TODO.md`).
+### Deferred
 
-* [ ] **Week dates through Calendrical** — blocked on the date of an ISO week date, the ISO weeks of a year and the week date of a date, each by ISO 8601's rule over a calendar's own year (Calendrical's `TODO.md`). The 7 lines that name a calendar for it compute with the pair of the Gregorian and `Calendrical.ISOWeek`: 5 in `lib/tempo/unit_values.ex`, 1 in `lib/math.ex` and 1 in `lib/enumeration/zone.ex`, which reads a date back as a week date for those two alone, since `iso_week_of_year/3` is the week of the Gregorian year in every calendar (`Calendrical.Hebrew.iso_week_of_year(5786, 3, 4)` is `{2025, 48}`, the Monday of Tempo's `5786W10`).
-
-* [ ] **Names, traditional months and solar terms** — blocked on `cardinal_day/3` and the four callbacks of traditional months being required, and on a solar term asked of a calendar (Calendrical's `TODO.md`).
+* [ ] **Week dates through Calendrical** — parked by the user on 2026-10-10 ("We will go back and discuss week dates (iso or calendar) later"): whether a week date is counted over the Gregorian year or the calendar's own is theirs to settle, and Calendrical's `plans/week-dates.md` holds the draft. The 7 lines that name a calendar for it compute with the pair of the Gregorian and `Calendrical.ISOWeek`: 5 in `lib/tempo/unit_values.ex`, 1 in `lib/math.ex` and 1 in `lib/enumeration/zone.ex`, which reads a date back as a week date for those two alone, since `iso_week_of_year/3` is the week of the Gregorian year in every calendar (`Calendrical.Hebrew.iso_week_of_year(5786, 3, 4)` is `{2025, 48}`, the Monday of Tempo's `5786W10`).
 
 ### Done
+
+* [x] **Names, traditional months, a month's weeks and solar terms, asked of the calendar** — 13 calls into Calendrical's own modules are calls of the calendar (`traditional_months/1`, `ordinal_month_from_traditional/2`, `weeks_in_month/2`, `month_week/3`, `quadrimester/2`, `semester/2`, `quarter/2`, `year/1`, `named_month/2`, `solar_term/2`), and the last 7 probes are gone with `exported?/3`: `cardinal_day/3` and `months_in_year/0` are asked of every calendar. Probes 0, lines that name a calendar 17, calls into Calendrical's own modules 71. 2026-10-10.
 
 * [x] **Traditional months from the year's list of them** — the place of a leap month, the name of a month at a place and a set or a mask of traditional months are read from the year's months as Calendrical names them (`Calendrical.traditional_months/2`), where the calendar was probed for `leap_month/1`, `traditional_leap_month/1`, `lunar_month_of_year/2` and `new/3`: the probes are 7 of the 37, and `location/1` is the one function called that no behaviour declares. One month by its number still asks `ordinal_month_from_traditional/2` behind a probe, since the list takes 4.5 ms in the Chinese calendar where that takes 0.2. Each of the three calls is `Calendrical.traditional_months(year, calendar)`, a function beside the behaviour, and becomes `calendar.traditional_months(year)` when it is a callback. 2026-10-10.
 

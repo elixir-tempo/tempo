@@ -404,10 +404,10 @@ defmodule Tempo.WeekOfMonthTest do
   end
 
   # The nth week of a month of `Calendrical.Julian.March25`, as
-  # `Calendrical.Interval.week/4` gives its dates: from its first day up to
+  # the calendar's `month_week/3` gives its dates: from its first day up to
   # the day after its last.
   defp march25_week(year, month, week) do
-    %Date.Range{first: first, last: last} = Calendrical.Interval.week(year, month, week, March25)
+    %Date.Range{first: first, last: last} = March25.month_week(year, month, week)
 
     %Interval{from: Tempo.from_elixir(first), to: Tempo.from_elixir(Date.add(last, 1))}
   end
@@ -702,7 +702,7 @@ defmodule Tempo.WeekOfMonthTest do
 
       expected =
         for month <- [6, 7],
-            date <- Calendrical.Interval.week(1750, month, 2, March25),
+            date <- March25.month_week(1750, month, 2),
             Date.day_of_week(date) == 3,
             do: Tempo.from_elixir(date)
 
@@ -759,10 +759,10 @@ defmodule Tempo.WeekOfMonthTest do
     end
 
     test "are the weeks Calendrical gives of a month in a year that begins within a month" do
-      weeks = Calendrical.Interval.weeks_in_month(1750, 6, March25)
+      weeks = March25.weeks_in_month(1750, 6)
 
       assert UnitValues.weeks_of_month(1750, 6, March25) ==
-               {:ok, for(week <- 1..weeks, do: Calendrical.Interval.week(1750, 6, week, March25))}
+               {:ok, for(week <- 1..weeks, do: March25.month_week(1750, 6, week))}
     end
 
     test "are none for a month the calendar does not have" do

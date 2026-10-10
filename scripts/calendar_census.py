@@ -34,20 +34,24 @@ CALENDAR = {
     ("year_of_era", 3),
 }
 
-# The callbacks of the `Calendrical` behaviour at Calendrical `43006d7`.
+# The callbacks of the `Calendrical` behaviour at Calendrical `06aa274`.
 CALENDRICAL_REQUIRED = {
-    ("month_of_year", 3), ("cardinal_month", 1), ("week_of_year", 3), ("iso_week_of_year", 3),
-    ("week_of_month", 3), ("cldr_calendar_type", 0), ("calendar_base", 0), ("days_in_week", 0),
-    ("weeks_in_year", 1), ("days_in_year", 1), ("days_in_month", 1), ("dates_in_gregorian_year", 3),
-    ("era_calendar_type", 0), ("parsing_calendar", 0), ("calendar_year", 3), ("extended_year", 3),
-    ("related_gregorian_year", 3), ("cyclic_year", 3), ("year", 1), ("quarter", 2), ("month", 2),
-    ("week", 2), ("plus", 6), ("diff", 3), ("date_to_iso_days", 3), ("date_from_iso_days", 1),
+    ("calendar_base", 0), ("calendar_year", 3), ("cardinal_day", 3), ("cardinal_month", 1),
+    ("cldr_calendar_type", 0), ("cyclic_year", 3), ("date_from_day_of_year", 2),
+    ("date_from_iso_days", 1), ("date_to_iso_days", 3), ("dates_in_gregorian_year", 3),
+    ("day_numbers", 2), ("days_in_month", 1), ("days_in_week", 0), ("days_in_year", 1),
+    ("diff", 3), ("era_calendar_type", 0), ("extended_year", 3), ("iso_week_of_year", 3),
+    ("leap_month", 1), ("lunar_month_of_year", 2), ("month", 2), ("month_numbers", 1),
+    ("month_of_year", 3), ("month_week", 3), ("months_in_year", 0), ("named_month", 2),
+    ("numeric_month", 3), ("ordinal_month_from_traditional", 2), ("parsing_calendar", 0),
+    ("plus", 6), ("quadrimester", 2), ("quarter", 2), ("related_gregorian_year", 3),
+    ("semester", 2), ("solar_term", 2), ("traditional_leap_month", 1),
+    ("traditional_months", 1), ("week", 2), ("week_of_month", 3), ("week_of_year", 3),
+    ("weeks_in_month", 2), ("weeks_in_year", 1), ("year", 1), ("years_in_cycle", 0),
 }
 CALENDRICAL_OPTIONAL = {
-    ("cardinal_day", 3), ("months_in_year", 0), ("months_in_leap_year", 0),
-    ("lunar_month_of_year", 2), ("ordinal_month_from_traditional", 2), ("leap_month", 1),
-    ("traditional_leap_month", 1), ("cldr_calendar_type", 3),
-    ("calendar_from_cldr_calendar_type", 1), ("parsing_calendars", 0),
+    ("calendar_from_cldr_calendar_type", 1), ("cldr_calendar_type", 3),
+    ("months_in_leap_year", 0), ("parsing_calendars", 0),
 }
 
 # The one module that may name a calendar (`plans/calendar-surface.md`).
@@ -73,9 +77,6 @@ NAMED_CLASSES = collections.OrderedDict([
 NAMED = {
     "lib/enumeration/zone.ex": [
         ('calendar_of_weeks', 'Gregorian, ISOWeek', 'W'),
-    ],
-    "lib/event.ex": [
-        ('solar_term_location', 'Chinese', 'S'),
     ],
     "lib/math.ex": [
         ('weeks_by_the_calendar', 'Gregorian', 'W'),
@@ -509,8 +510,8 @@ DECIDERS = collections.OrderedDict([
         ("lib/explain.ex", "named_day", None),
         ("lib/explain.ex", "named_once?", None),
     ]),
-    ("A calendar with traditional (lunisolar) months", [
-        ("lib/math.ex", "traditional_months?", None),
+    ("A calendar that numbers its months by the year (a year of twelve or of thirteen)", [
+        ("lib/math.ex", "months_numbered_by_the_year?", None),
     ]),
     ("The Gregorian calendar, by its name or its CLDR type", [
         ("lib/tempo/format.ex", "worded_as_gregorian?", None),
@@ -542,9 +543,6 @@ DECIDERS = collections.OrderedDict([
     ("ISO 8601's week dates: the notation's calendar of weeks, in the one module", [
         ("lib/tempo/calendars.ex", "weeks", "Calendars"),
         ("lib/tempo/calendars.ex", "is_notation_weeks", "*"),
-    ]),
-    ("What a calendar exports", [
-        ("lib/tempo/unit_values.ex", "exported?", None),
     ]),
 ])
 
@@ -721,9 +719,10 @@ def read():
                 current = definition.group(2)
             code = without_strings(line)
             rest = lambda match: text[offsets[number - 1] + match.end():offsets[number - 1] + match.end() + 2000]
+            piped = lambda match: 1 if code[:match.start()].rstrip().endswith("|>") else 0
             for match in DYNAMIC.finditer(code):
                 if match.group(1) == "calendar":
-                    census["dynamic"].append((relative, number, current, match.group(2), arity(rest(match))))
+                    census["dynamic"].append((relative, number, current, match.group(2), arity(rest(match)) + piped(match)))
                 else:
                     census["other receivers"].append((relative, number, match.group(1), match.group(2)))
             for match in ON_RESULT.finditer(code):
@@ -835,7 +834,7 @@ def write(census):
     emit("")
     emit("* **A calendar named** — every module name in a line of code, with the file's aliases resolved, that is one of `Calendar.ISO`, `Calendrical.Gregorian`, `Calendrical.ISOWeek` and `Calendrical.Chinese`. No other calendar module is named in code.")
     emit("")
-    emit("* **A probe** — every `function_exported?/3`, and every call of `Tempo.UnitValues`' private `exported?/3`, which is the same question.")
+    emit("* **A probe** — every `function_exported?/3`, and every call of a private `exported?/3`, which is the same question (`Tempo.UnitValues` had one until its last call became a callback).")
     emit("")
     emit("* **A decider** — a function that answers by what kind of calendar it is given. They were found by reading every predicate whose head names a calendar (64), every line that names a calendar and every probe, and each is listed with where it is defined and every call of it.")
     emit("")
@@ -906,7 +905,7 @@ def write(census):
 
     emit("## 3. Calls on a calendar")
     emit("")
-    emit(f"{len(dynamic)} calls, of {len(functions)} functions at the arities shown. \"Declared\" is where the function is a callback: of Elixir's `Calendar` behaviour (1.20.4, 28 callbacks, all required) or of the `Calendrical` behaviour at Calendrical `43006d7` (36 callbacks, 10 of them optional).")
+    emit(f"{len(dynamic)} calls, of {len(functions)} functions at the arities shown. \"Declared\" is where the function is a callback: of Elixir's `Calendar` behaviour (1.20.4, 28 callbacks, all required) or of the `Calendrical` behaviour at Calendrical `06aa274` (48 callbacks, 4 of them optional).")
     emit("")
     emit(table(["Function", "Declared", "Calls", "Lines"], [
         [f"`{name}/{count}`", status(name, count), total,

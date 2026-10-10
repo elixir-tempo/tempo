@@ -11,7 +11,6 @@ defmodule Tempo.UnitValues do
   """
 
   alias Calendrical.Base.Common
-  alias Calendrical.Interval
   alias Calendrical.Kday
   alias Tempo.Calendars
   alias Tempo.Compare
@@ -189,7 +188,7 @@ defmodule Tempo.UnitValues do
           [{number :: integer(), place :: pos_integer()}]
   def traditional_months(year, calendar, kind) when is_integer(year) do
     year
-    |> Calendrical.traditional_months(calendar)
+    |> calendar.traditional_months()
     |> Enum.with_index(1)
     |> Enum.flat_map(&numbered_as(&1, kind))
   end
@@ -468,12 +467,8 @@ defmodule Tempo.UnitValues do
   # The last value a unit takes in every year, and in the year that has the
   # most: what a calendar answers with no year, read in this one place. A
   # step asks it of the value it steps from, so no range is built here.
-  defp last_in_any_year(:month, _context, calendar) do
-    # `months_in_year/0` is an optional callback of a calendar.
-    if exported?(calendar, :months_in_year, 0),
-      do: counted_in_any_year(calendar.months_in_year()),
-      else: {:error, :unanchored}
-  end
+  defp last_in_any_year(:month, _context, calendar),
+    do: counted_in_any_year(calendar.months_in_year())
 
   defp last_in_any_year(:day, context, calendar) do
     month = whole(context, :month)
@@ -518,11 +513,7 @@ defmodule Tempo.UnitValues do
 
   """
   @spec named_day(integer(), pos_integer(), pos_integer(), module()) :: pos_integer()
-  def named_day(year, month, day, calendar) do
-    if exported?(calendar, :cardinal_day, 3),
-      do: calendar.cardinal_day(year, month, day),
-      else: day
-  end
+  def named_day(year, month, day, calendar), do: calendar.cardinal_day(year, month, day)
 
   @doc """
   The year, month and day a date is named by.
@@ -585,13 +576,14 @@ defmodule Tempo.UnitValues do
   """
   @spec month_named_once?(integer(), pos_integer(), module()) :: boolean()
   def month_named_once?(year, month, calendar) when is_integer(year) and is_integer(month) do
-    if exported?(calendar, :cardinal_day, 3),
-      do:
-        match?(
-          [_one_span],
-          Calendrical.named_month(year, month_named(year, month, 1, calendar), calendar)
-        ),
-      else: true
+    case calendar.month(year, month) do
+      %Date.Range{first: first} ->
+        named = month_named(first.year, first.month, first.day, calendar)
+        match?([_one_span], calendar.named_month(year, named))
+
+      _no_such_month ->
+        true
+    end
   end
 
   def month_named_once?(_year, _month, _calendar), do: true
@@ -625,12 +617,13 @@ defmodule Tempo.UnitValues do
   """
   @spec year_named_by_its_months?(integer(), module()) :: boolean()
   def year_named_by_its_months?(year, calendar) when is_integer(year) do
-    with true <- exported?(calendar, :cardinal_day, 3),
-         %Date.Range{first: first, last: last} <- calendar.year(year) do
-      month_named(first.year, first.month, first.day, calendar) !=
-        month_named(last.year, last.month, last.day, calendar)
-    else
-      _named_by_its_numbers -> true
+    case calendar.year(year) do
+      %Date.Range{first: first, last: last} ->
+        month_named(first.year, first.month, first.day, calendar) !=
+          month_named(last.year, last.month, last.day, calendar)
+
+      _no_such_year ->
+        true
     end
   end
 
@@ -645,13 +638,6 @@ defmodule Tempo.UnitValues do
       named when is_integer(named) -> calendar.cardinal_month(named)
       _named_by_its_number -> month
     end
-  end
-
-  # `function_exported?/3` is false for a module that is not yet loaded, so
-  # one that seems not to export the function is loaded and asked again.
-  defp exported?(calendar, function, arity) do
-    function_exported?(calendar, function, arity) or
-      (Code.ensure_loaded?(calendar) and function_exported?(calendar, function, arity))
   end
 
   # What a calendar answers with no year: a count, the counts its years run
@@ -1486,7 +1472,7 @@ defmodule Tempo.UnitValues do
   @doc """
   Returns the weeks of a month of a year, each as the dates the calendar numbers in it.
 
-  A week of a month is the calendar's to number, and Calendrical gives a month's weeks as the calendar's `week_of_month/3` numbers its dates (`Calendrical.Interval.weeks_in_month/3` and `Calendrical.Interval.week/4`). So a week is whatever the calendar holds it to be. In `Calendrical.Gregorian` it is a whole week that starts on a Monday, the first of a month the one that holds its first day: a month's first week may start in the month before, and its last days may be in the first week of the next. A calendar that numbers a month's weeks from its first day to its last cuts the first and the last of them short.
+  A week of a month is the calendar's to number, and Calendrical gives a month's weeks as the calendar's `week_of_month/3` numbers its dates (its `weeks_in_month/2` and `month_week/3`). So a week is whatever the calendar holds it to be. In `Calendrical.Gregorian` it is a whole week that starts on a Monday, the first of a month the one that holds its first day: a month's first week may start in the month before, and its last days may be in the first week of the next. A calendar that numbers a month's weeks from its first day to its last cuts the first and the last of them short.
 
   ### Arguments
 
@@ -1521,8 +1507,8 @@ defmodule Tempo.UnitValues do
           {:ok, [Date.Range.t(), ...]} | {:error, :no_period}
   def weeks_of_month(year, month, calendar)
       when is_integer(year) and is_integer(month) and is_atom(calendar) do
-    with weeks when is_integer(weeks) <- Interval.weeks_in_month(year, month, calendar),
-         dates = Enum.map(1..weeks//1, &Interval.week(year, month, &1, calendar)),
+    with weeks when is_integer(weeks) <- calendar.weeks_in_month(year, month),
+         dates = Enum.map(1..weeks//1, &calendar.month_week(year, month, &1)),
          true <- Enum.all?(dates, &is_struct(&1, Date.Range)) do
       {:ok, dates}
     else
@@ -1772,7 +1758,7 @@ defmodule Tempo.UnitValues do
   # The date of day `day` of week `week` of `year` in the calendar's own
   # weeks (`w`): a week-based calendar's native date or, in a month-based
   # one, the day of the week with ISO 8601's number `day` (`1`, Monday, to
-  # `7`, Sunday) among the days `Calendrical.Interval.week/3` gives the week,
+  # `7`, Sunday) among the days the calendar's `week/2` gives the week,
   # so a week cut short at the start or end of its year has fewer.
   def date_from_calendar_week(year, week, day, calendar) do
     if Tempo.week_based_calendar?(calendar),
@@ -1782,11 +1768,11 @@ defmodule Tempo.UnitValues do
 
   @doc false
   # The days of week `week` of `year` in the calendar's own weeks (`w`), as
-  # `Calendrical.Interval.week/3` gives them: a `Date.Range`, which is cut
+  # the calendar's `week/2` gives them: a `Date.Range`, which is cut
   # short at the start or end of the year in a calendar whose weeks number
   # within their own year, or an error for a week the calendar does not
   # number.
-  def calendar_week_range(year, week, calendar), do: Interval.week(year, week, calendar)
+  def calendar_week_range(year, week, calendar), do: calendar.week(year, week)
 
   @doc false
   # How many ISO 8601 weeks (`W`) `year` has: a week-based calendar's own

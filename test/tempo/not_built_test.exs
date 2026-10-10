@@ -660,7 +660,7 @@ defmodule Tempo.NotBuiltTest do
 
       # The first week of the sixth month `March25` counts, as Calendrical
       # gives its dates.
-      %Date.Range{first: first} = Calendrical.Interval.week(1750, 6, 1, March25)
+      %Date.Range{first: first} = March25.month_week(1750, 6, 1)
 
       assert first_days(Tempo.select(read("1750Y6M", March25), read("1W", March25)), March25) ==
                [first]
