@@ -209,6 +209,8 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 
 ### Done
 
+* [x] **A value placed on the time line by its own calendar** — `Tempo.Compare` asks a value's calendar for the count of its day (`date_to_iso_days/3`, and `Calendrical.iso_days/4` for a year, a month and a day), where it converted to Gregorian fields and counted in the Gregorian by name, with a fast path for it. Measured before and after: a comparison of two Gregorian days 962 and 998 ns, a relation 17.5 and 17.4 µs, a Hebrew day with a Gregorian one 7.6 and 6.6 µs. 2026-10-10.
+
 * [x] **What is outside, in one module** — the zone database's calendar (`Tempo.Calendars.zone/0`), a rule's (`rule/0`), Elixir's own (`native/0`) and the notation's are named in the one module, and a guard there (`is_notation/1`) is what the lines that left the Gregorian's name out of text or took `nil` for it now ask: the 26 outside lines and the 9 of text name no calendar, and the lines that do are 54 of the 128. 2026-10-10.
 
 * [x] **A value's calendar is read through one accessor** — `Tempo.Calendars` is the one module that names a calendar: `effective/1`, `of/1`, `settled/1`, `default/0`, `native/1` and `validated/1`, which asks `Calendrical.validate_calendar/1`. No line outside it defaults to the Gregorian or maps `Calendar.ISO`, where 38 did, and the lines that name a calendar are 89 of the 128. 2026-10-10.

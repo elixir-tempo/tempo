@@ -71,13 +71,6 @@ NAMED_CLASSES = collections.OrderedDict([
 ])
 
 NAMED = {
-    "lib/compare.ex": [
-        ('fields_in_day_order?', 'Gregorian, ISO', 'F'),
-        ('wall_seconds', 'Gregorian', 'G'),
-        ('gregorian_ymd', 'Gregorian', 'G'),
-        ('to_gregorian_ymd', 'Gregorian', 'F'),
-        ('gregorian_seconds', 'Gregorian', 'G'),
-    ],
     "lib/enumeration/zone.ex": [
         ('calendar_of_weeks', 'Gregorian, ISOWeek', 'W'),
     ],

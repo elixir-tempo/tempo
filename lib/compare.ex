@@ -27,7 +27,6 @@ defmodule Tempo.Compare do
 
   """
 
-  alias Calendrical.Gregorian
   alias Tempo.Calendars
   alias Tempo.ConversionError
   alias Tempo.Duration
@@ -530,19 +529,18 @@ defmodule Tempo.Compare do
     )
   end
 
-  # Whether a value's fields run in the order of its days: whether its year
-  # begins on its first month's first day. A Julian calendar whose year turns
-  # on 25 March numbers 1 January after 31 December of the same year, so its
-  # values are compared by their days. A value with no year has no days to
-  # count and is compared by its fields.
-  defp fields_in_day_order?(%Tempo{calendar: calendar})
-       when calendar in [Gregorian, Calendar.ISO],
-       do: true
-
+  # Whether a value's fields say where it starts: whether its year begins on
+  # its first month's first day, as the calendar answers. In a year that
+  # begins on another day (the year a composite calendar changes its new
+  # year's day in), a year and its first day are compared by their days. A
+  # value with no year has no days to count and is compared by its fields.
   defp fields_in_day_order?(%Tempo{calendar: calendar, time: time}) do
     case Keyword.get(time, :year) do
-      year when is_integer(year) -> UnitValues.year_begins_with_first_month?(year, calendar)
-      _no_year -> true
+      year when is_integer(year) ->
+        UnitValues.year_begins_with_first_month?(year, Calendars.effective(calendar))
+
+      _no_year ->
+        true
     end
   end
 
@@ -911,25 +909,19 @@ defmodule Tempo.Compare do
     end
   end
 
-  # The wall-clock instant as gregorian seconds (before any offset is
-  # applied). Shared by `to_utc_seconds/1` and `validate_zone_offset/1`.
-  # A non-Gregorian value's calendar components are converted to the
-  # proleptic Gregorian frame first, so the projection lands on a true
-  # absolute instant (and cross-calendar comparisons and durations are
-  # correct); Gregorian values take the fast path unchanged.
+  # The wall-clock instant as seconds from the day every calendar counts
+  # its days from (before any offset is applied). Shared by
+  # `to_utc_seconds/1` and `validate_zone_offset/1`. A value's own calendar
+  # is asked for the count of its day, so the projection lands on a true
+  # absolute instant in every calendar, and cross-calendar comparisons and
+  # durations are correct. The count takes a year before 0, which OTP ≤
+  # 28's `:calendar.datetime_to_gregorian_seconds/1` does not.
   defp wall_seconds(time, year, calendar) do
-    {year, month, day} = resolve_ymd(time, year, calendar)
     hour = Keyword.get(time, :hour, 0)
     minute = Keyword.get(time, :minute, 0)
     second = Keyword.get(time, :second, 0)
 
-    # `Calendrical.Gregorian.date_to_iso_days/3` counts from 0000-01-01
-    # (day 0) and, unlike OTP ≤ 28's
-    # `:calendar.datetime_to_gregorian_seconds/1`, accepts negative
-    # (pre-common-era) years on every OTP — e.g. a value whose units
-    # read as Hebrew year 2022 resolves to proleptic Gregorian −1738.
-    Gregorian.date_to_iso_days(year, month, day) * 86_400 +
-      hour * 3_600 + minute * 60 + second
+    start_day(time, year, calendar) * 86_400 + hour * 3_600 + minute * 60 + second
   end
 
   @doc """
@@ -1124,21 +1116,22 @@ defmodule Tempo.Compare do
     |> IO.iodata_to_binary()
   end
 
-  # Resolve the proleptic Gregorian `{year, month, day}` from the time
-  # list, handling the three date representations Tempo stores:
+  # The count of the day a time list starts on, handling the three date
+  # representations Tempo stores:
   #
   #   * Week date — `[year, week, day_of_week]`, in ISO 8601 weeks or a
   #     week-based calendar's own (`Tempo.UnitValues.date_from_iso_week/4`).
   #   * Ordinal date — `[year, day]` with `:day` holding the
   #     day-of-year and no `:month` (the absence of `:month` is the
   #     disambiguator, matching `Tempo.to_date/1`).
-  #   * Standard date — `[year, month, day]` (month/day default to 1).
+  #   * Standard date — `[year, month, day]`, which starts on its day, on
+  #     its month's first or on its year's (`Tempo.UnitValues.start_date/2`).
   #
   # Without this, week and ordinal dates projected via the
   # month/day defaults (1, 1) and collapsed to Jan 1 — making every
-  # week interval report a zero-second duration. The dates come from
-  # Calendrical, never from arithmetic here.
-  defp resolve_ymd(time, year, calendar) do
+  # week interval report a zero-second duration. The dates and their
+  # counts come from Calendrical, never from arithmetic here.
+  defp start_day(time, year, calendar) do
     calendar = Calendars.effective(calendar)
 
     cond do
@@ -1147,30 +1140,28 @@ defmodule Tempo.Compare do
 
         year
         |> UnitValues.date_from_iso_week(Keyword.get(time, :week), day, calendar)
-        |> gregorian_ymd(year)
+        |> day_of(year, calendar)
 
       not Keyword.has_key?(time, :month) and Keyword.has_key?(time, :day) ->
         year
         |> Calendrical.date_from_day_of_year(Keyword.get(time, :day), calendar)
-        |> gregorian_ymd(year)
+        |> day_of(year, calendar)
 
       # A day of the year left as one: under a year with a margin of error,
       # which validation does not restate as a month and a day.
       Keyword.has_key?(time, :day_of_year) ->
         year
         |> Calendrical.date_from_day_of_year(Keyword.get(time, :day_of_year), calendar)
-        |> gregorian_ymd(year)
+        |> day_of(year, calendar)
 
       true ->
-        time |> start_ymd(year, calendar) |> to_gregorian_ymd(calendar)
+        time |> start_ymd(year, calendar) |> day_of(year, calendar)
     end
   end
 
   # The date a year, a month or a day of one starts on: the day itself, the
-  # month's first, or the first of the year's first month. Where the year
-  # does not begin with its first month the calendar is asked for the first
-  # date of the year or of the month (`Tempo.UnitValues.start_date/2`): the
-  # first month of a `Calendrical.Julian.March25` year begins on 25 March.
+  # month's first, or the first of the year's first month, as the calendar
+  # gives them (`Tempo.UnitValues.start_date/2`).
   defp start_ymd(time, year, calendar) do
     case UnitValues.start_date(time, calendar) do
       {:ok, ymd} -> ymd
@@ -1178,39 +1169,24 @@ defmodule Tempo.Compare do
     end
   end
 
-  # A date Calendrical computed, in the proleptic Gregorian frame, or the
-  # year's start when it could compute none — the start-of-unit default
-  # the standard-date branch uses.
-  defp gregorian_ymd({:ok, %Date{} = date}, year), do: gregorian_ymd(date, year)
+  # The count of a day: of a date Calendrical computed, which its own
+  # calendar counts, or of a year, a month and a day, which the value's
+  # calendar says is a date and counts in one step (`Calendrical.iso_days/4`).
+  # What is no date is counted as its numbers stand, and a date that could
+  # not be computed as the year's first: neither is raised for.
+  defp day_of({:ok, %Date{} = date}, year, calendar), do: day_of(date, year, calendar)
 
-  defp gregorian_ymd(%Date{} = date, _year) do
-    case Date.convert(date, Calendrical.Gregorian) do
-      {:ok, iso} -> {iso.year, iso.month, iso.day}
-      _error -> {date.year, date.month, date.day}
-    end
-  end
+  defp day_of(%Date{year: year, month: month, day: day, calendar: calendar}, _year, _calendar),
+    do: calendar.date_to_iso_days(year, month, day)
 
-  defp gregorian_ymd(_error, year), do: {year, 1, 1}
-
-  # Convert calendar-native `{year, month, day}` to the proleptic Gregorian
-  # frame the projection assumes. Gregorian passes through untouched (fast
-  # path); any other calendar is validated and located in one step by
-  # `Calendrical.iso_days/4`. Falls back to the raw components rather
-  # than raising if the date is not valid (a defensive best-effort). The
-  # `nil` default is resolved to `Calendrical.Gregorian` at the boundary
-  # (`to_utc_seconds/1`), so it never reaches here.
-  defp to_gregorian_ymd(ymd, Calendrical.Gregorian), do: ymd
-
-  defp to_gregorian_ymd({year, month, day}, calendar) do
+  defp day_of({year, month, day}, _year, calendar) do
     case Calendrical.iso_days(year, month, day, calendar) do
-      {:ok, iso_days} ->
-        %Date{year: year, month: month, day: day} = Date.from_gregorian_days(iso_days)
-        {year, month, day}
-
-      _error ->
-        {year, month, day}
+      {:ok, days} -> days
+      _no_such_date -> Calendars.default().date_to_iso_days(year, month, day)
     end
   end
+
+  defp day_of(_no_date, year, _calendar), do: Calendars.default().date_to_iso_days(year, 1, 1)
 
   # The offset to subtract from wall-clock to get UTC. Priority:
   #
@@ -1294,8 +1270,10 @@ defmodule Tempo.Compare do
   defp comes_out_within?(gap_ends, wall_seconds, spanned),
     do: gregorian_seconds(gap_ends) < wall_seconds + spanned
 
+  # A change of a zone's clock, which the zone database dates in its own
+  # calendar, in the same seconds.
   defp gregorian_seconds(%{year: year, month: month, day: day} = limit) do
-    Gregorian.date_to_iso_days(year, month, day) * 86_400 +
+    Calendars.zone().date_to_iso_days(year, month, day) * 86_400 +
       limit.hour * 3_600 + limit.minute * 60 + limit.second
   end
 
