@@ -13,7 +13,7 @@ defmodule Tempo.Inspect do
   alias Tempo.Microsecond
   alias Tempo.Qualification
 
-  import Tempo.Calendars, only: [is_notation: 1]
+  import Tempo.Calendars, only: [is_notation: 1, is_notation_weeks: 1]
 
   @from_iso8601 "Tempo.from_iso8601!(\""
   @sigil_o "~o\""
@@ -362,8 +362,8 @@ defmodule Tempo.Inspect do
     encoded(Calendars.settled(tempo), "Tempo", &(@sigil_o <> &1 <> "\""))
   end
 
-  def inspect(%Tempo{calendar: Calendrical.ISOWeek} = tempo) do
-    encoded(tempo, "Tempo", &(@sigil_o <> &1 <> "\"W"), Calendrical.ISOWeek)
+  def inspect(%Tempo{calendar: calendar} = tempo) when is_notation_weeks(calendar) do
+    encoded(tempo, "Tempo", &(@sigil_o <> &1 <> "\"W"), calendar)
   end
 
   def inspect(%Tempo{calendar: calendar} = tempo) do
@@ -529,10 +529,9 @@ defmodule Tempo.Inspect do
   # IXDTF identifier: a non-CLDR calendar (`Calendrical.Julian`) through
   # Calendrical's additional-calendar registry, a CLDR one through its calendar
   # type. Gregorian and the ISO week calendar are the defaults and add nothing.
-  defp repeat_rule_calendar_trailer(%Tempo{calendar: calendar}) when is_notation(calendar),
-    do: []
-
-  defp repeat_rule_calendar_trailer(%Tempo{calendar: Calendrical.ISOWeek}), do: []
+  defp repeat_rule_calendar_trailer(%Tempo{calendar: calendar})
+       when is_notation(calendar) or is_notation_weeks(calendar),
+       do: []
 
   defp repeat_rule_calendar_trailer(%Tempo{calendar: calendar}) when is_atom(calendar) do
     case calendar_module_identifier(calendar) do

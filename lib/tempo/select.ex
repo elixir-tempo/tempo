@@ -357,6 +357,8 @@ defmodule Tempo.Select do
   alias Tempo.UnitValues
   alias Tempo.Validation
 
+  import Tempo.Calendars, only: [is_notation: 1, is_notation_weeks: 1]
+
   @type selector ::
           [integer()]
           | Range.t()
@@ -2240,12 +2242,14 @@ defmodule Tempo.Select do
     :or_day
   ]
 
-  @iso_week_calendars [Calendrical.Gregorian, Calendrical.ISOWeek]
-
   defp numbered_by_calendar?(time, written, span_calendar) do
-    same_weeks? = written in @iso_week_calendars and span_calendar in @iso_week_calendars
+    same_weeks? = iso_weeks?(written) and iso_weeks?(span_calendar)
     Enum.any?(time, &unit_numbered_by_calendar?(&1, same_weeks?))
   end
+
+  # ISO 8601's weeks are those of the notation's two calendars, of its dates
+  # and of its week dates.
+  defp iso_weeks?(calendar), do: is_notation(calendar) or is_notation_weeks(calendar)
 
   # A selection's tokens are a rule's units, and a window in one holds dates.
   defp unit_numbered_by_calendar?({:selection, selection}, same_weeks?),

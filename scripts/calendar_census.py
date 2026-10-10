@@ -80,19 +80,10 @@ NAMED = {
     "lib/explain.ex": [
         ('gregorian_names?', 'Gregorian', 'S'),
     ],
-    "lib/inspect.ex": [
-        ('inspect', 'ISOWeek', 'W'),
-        ('inspect', 'ISOWeek', 'W'),
-        ('repeat_rule_calendar_trailer', 'ISOWeek', 'W'),
-    ],
     "lib/math.ex": [
         ('weeks_by_the_calendar', 'Gregorian', 'W'),
     ],
-    "lib/sigils/options.ex": [
-        ('calendar_from', 'ISOWeek', 'W'),
-    ],
     "lib/tempo.ex": [
-        ('start_in_repeat_calendar', 'Gregorian, ISOWeek', 'S'),
         ('names_no_date_of_any_year?', 'Gregorian', 'S'),
         ('kind_of_year', 'Gregorian', 'G'),
         ('no_date_in_year?', 'Gregorian', 'G'),
@@ -106,9 +97,6 @@ NAMED = {
         ('cyclic?', 'Gregorian', 'S'),
         ('gregorian_cycle', 'Gregorian', 'G'),
         ('gregorian_cycle', 'Gregorian', 'G'),
-    ],
-    "lib/tempo/select.ex": [
-        ('counted_in_another_calendar', 'Gregorian, ISOWeek', 'W'),
     ],
     "lib/tempo/unit_values.ex": [
         ('date_from_iso_week', 'Gregorian', 'W'),
@@ -354,7 +342,7 @@ CONSTANTS = {
         ('inverses', 'relations'), ('relations', 'relations'),
     ],
     "lib/tempo/calendars.ex": [
-        ('notation', 'the one module'),
+        ('notation', 'the one module'), ('weeks', 'the one module'),
     ],
     "lib/tempo/clock/test.ex": [
         ('process_key', 'key'),
@@ -445,7 +433,7 @@ CONSTANTS = {
     "lib/tempo/select.ex": [
         ('unit_order_coarse_to_fine', 'units'), ('most_days_off_in_a_row', 'limit'),
         ('horizon', 'limit'), ('coarseness', 'units'), ('numbered_by_calendar', 'units'),
-        ('iso_week_calendars', 'calendar'), ('by_month', 'units'), ('gregorian_axis', 'units'),
+        ('by_month', 'units'), ('gregorian_axis', 'units'),
         ('week_axis', 'units'), ('ordinal_axis', 'units'), ('date_units', 'units'),
     ],
     "lib/tempo/time_zone_database.ex": [
@@ -547,6 +535,7 @@ DECIDERS = collections.OrderedDict([
         ("lib/tempo/calendars.ex", "default", "Calendars"),
         ("lib/tempo/calendars.ex", "native", "Calendars"),
         ("lib/tempo/calendars.ex", "validated", "Calendars"),
+        ("lib/tempo/calendars.ex", "is_notation", "*"),
         ("lib/tempo.ex", "with_a_calendar", "Tempo"),
         ("lib/tempo.ex", "calendar_of", None),
         ("lib/explain.ex", "calendar_of", None),
@@ -554,6 +543,10 @@ DECIDERS = collections.OrderedDict([
         ("lib/validation.ex", "written_calendar", None),
         ("lib/tempo.ex", "native_calendar", None),
         ("lib/tempo.ex", "placing_calendar", None),
+    ]),
+    ("ISO 8601's week dates: the notation's calendar of weeks, in the one module", [
+        ("lib/tempo/calendars.ex", "weeks", "Calendars"),
+        ("lib/tempo/calendars.ex", "is_notation_weeks", "*"),
     ]),
     ("What a calendar exports", [
         ("lib/tempo/unit_values.ex", "exported?", None),
@@ -783,9 +776,9 @@ def read():
                         defined = relative == home and definition is not None and definition.group(2) == name
                         if defined:
                             census["defined"].append((relative, number, key))
-                        elif relative == home and bare:
+                        elif (relative == home or qualifier == "*") and bare:
                             census["called"].append((relative, number, key))
-                        elif qualifier and re.search(r"(?<![\w.])" + qualifier + r"\." + re.escape(name) + r"(?=\(|/\d)", code):
+                        elif qualifier and qualifier != "*" and re.search(r"(?<![\w.])" + qualifier + r"\." + re.escape(name) + r"(?=\(|/\d)", code):
                             census["called"].append((relative, number, key))
     census["lines"] = lines_of
     census["files"] = len(source_files())

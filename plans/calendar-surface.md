@@ -188,23 +188,23 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 
 ## Tasks
 
-* [ ] **Every constant Tempo defines, read** — a section of the census for each module attribute that holds a number, and each one a calendar would answer asked of it.
-
 * [ ] **What only the Gregorian has: the cycle its years come round in** — to decide. A rule that names no date of any year is known so after 400 years (`@years_of_a_cycle`, `kind_of_year/1` and `no_date_in_year?/1` in `lib/tempo.ex`), and the network solver keeps the lengths of 400 years and counts a month as twelve to a year on its axis (`lib/tempo/network/normalize.ex`): 9 lines and 6 constants. Either a calendar is asked for its cycle by a new callback, or each is given a bound that needs none.
 
 * [ ] **The names of months and of weekdays** — `Tempo.explain/1` holds the Gregorian calendar's month names and the weekdays' in English (`@months`, `@weekdays`, `gregorian_names?/1`), where Localize names them for any calendar.
-
-* [ ] **A rule's start in the calendar it counts in** — `start_in_repeat_calendar/1` in `lib/tempo.ex` names the Gregorian and `Calendrical.ISOWeek` as the two a start needs no converting from.
 
 ### Blocked
 
 * [ ] **`Tempo.UnitValues` asks for values** — blocked on the two callbacks that give a period's values (Calendrical's `TODO.md`).
 
-* [ ] **Week dates through Calendrical** — blocked on the date of an ISO week date and the ISO weeks of a year (Calendrical's `TODO.md`).
+* [ ] **Week dates through Calendrical** — blocked on the date of an ISO week date, the ISO weeks of a year and the week date of a date, each by ISO 8601's rule over a calendar's own year (Calendrical's `TODO.md`). The 7 lines that name a calendar for it compute with the pair of the Gregorian and `Calendrical.ISOWeek`: 5 in `lib/tempo/unit_values.ex`, 1 in `lib/math.ex` and 1 in `lib/enumeration/zone.ex`, which reads a date back as a week date for those two alone, since `iso_week_of_year/3` is the week of the Gregorian year in every calendar (`Calendrical.Hebrew.iso_week_of_year(5786, 3, 4)` is `{2025, 48}`, the Monday of Tempo's `5786W10`).
 
 * [ ] **Names, traditional months and solar terms** — blocked on `cardinal_day/3` and the four callbacks of traditional months being required, and on a solar term asked of a calendar (Calendrical's `TODO.md`).
 
 ### Done
+
+* [x] **ISO 8601's week dates, in the one module** — `Calendrical.ISOWeek` is the calendar of the notation's week dates and is named where the Gregorian is (`Tempo.Calendars.weeks/0`, and the guard `is_notation_weeks/1`). What asks is a question of the notation and of no calendar's making: the sigil's `W`, how a value in it is written, a rule that names no calendar of its own (`start_in_repeat_calendar/2`), and a selector's weeks, which the notation's two calendars number alike. The census counts each use of the two guards, 21 and 4, where it counted none. The lines that name a calendar are 20 of the 128. 2026-10-10.
+
+* [x] **Every constant Tempo defines, read** — section 8 of the census reads each of the 252 module attributes with its class. Nine are a calendar's to answer, and each is under a task: six with the cycle, two with the names, and `@any_year` with the values a period has. 2026-10-10.
 
 * [x] **`SKIP`, the seasons and two computations asked of the calendar** — a rule's `SKIP` is written beside a day past the fewest days any month of its calendar has, which the calendar says with no year (28, 29 and 5 for the Gregorian, the Hebrew and the Ethiopic), where 28 was held for the Gregorian and any day taken for another; ISO 8601-2's seasons ask the one module whether a value is in the notation's calendar; a weekday is asked of the date's own calendar, and a season's nth day of the calendar its first day is in. The lines that name a calendar are 26 of the 128. 2026-10-10.
 

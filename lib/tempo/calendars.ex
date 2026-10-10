@@ -12,6 +12,10 @@ defmodule Tempo.Calendars do
   #   built with no calendar is in it (`default/0`), and so is one given
   #   `nil` or Elixir's `Calendar.ISO` for its calendar (`effective/1`).
   #
+  # * ISO 8601 writes week dates too, which are dates of the calendar of its
+  #   weeks (`weeks/0`): the calendar the sigil's `W` names, and the second
+  #   a value is written in with no calendar named beside it.
+  #
   # * What lies outside Tempo has a calendar of its own, which is the
   #   Gregorian for each: the zone database keeps its clocks in it
   #   (`zone/0`), and an RRULE, a cron expression and a JSCalendar rule count
@@ -24,6 +28,9 @@ defmodule Tempo.Calendars do
 
   # The calendar of ISO 8601's notation.
   @notation Calendrical.Gregorian
+
+  # The calendar of ISO 8601's week dates.
+  @weeks Calendrical.ISOWeek
 
   # What holds a calendar: a value, an interval's end, a duration, or any
   # other struct or map with a `:calendar` among its keys.
@@ -55,9 +62,22 @@ defmodule Tempo.Calendars do
   def native, do: Calendar.ISO
 
   @doc false
+  # The calendar of the notation's week dates (`2026-W10-1`), which a value
+  # is in where the sigil's `W` says so.
+  @spec weeks() :: Calendrical.ISOWeek
+  def weeks, do: @weeks
+
+  @doc false
   # Whether a value's `:calendar` stands for the notation's calendar, for a
   # guard: the calendar itself, `Calendar.ISO`, or `nil` (`effective/1`).
   defguard is_notation(calendar) when calendar in [@notation, Calendar.ISO, nil]
+
+  @doc false
+  # Whether a calendar is the calendar of the notation's week dates, for a
+  # guard. With `is_notation/1` it says a value is written in a calendar of
+  # the notation's own: no calendar is named beside it, and its weeks are
+  # ISO 8601's in either.
+  defguard is_notation_weeks(calendar) when calendar == @weeks
 
   @doc false
   # The calendar a value's `:calendar` stands for, as a module that keeps

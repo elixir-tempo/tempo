@@ -151,6 +151,8 @@ defmodule Tempo do
   alias Tempo.Validation
   alias Tempo.ZonedTempoError
 
+  import Tempo.Calendars, only: [is_notation: 1, is_notation_weeks: 1]
+
   # A value is in a calendar, and one built with none is in the default: a
   # struct written by hand (`%Tempo{time: [year: 2026]}`) had `nil` there,
   # which some operations read as the default calendar and others called as
@@ -9123,6 +9125,8 @@ defmodule Tempo do
   # calendar's and the selection resolves in-calendar, with the window
   # intersection converting back. This makes `R/../P1Y/FL1M1DN[u-ca=persian]`
   # behave like the form with a calendared start, `R/<persian new year>/P1Y[u-ca=persian]`.
+  # A rule in a calendar of the notation's own, of its dates or of its week
+  # dates, names no calendar, and its start is left in the one it has.
   defp start_in_repeat_calendar(
          %Tempo{} = start,
          %Tempo.Interval{
@@ -9130,7 +9134,7 @@ defmodule Tempo do
            duration: %Tempo.Duration{} = cadence
          }
        )
-       when calendar not in [nil, Calendrical.Gregorian, Calendrical.ISOWeek] do
+       when not (is_notation(calendar) or is_notation_weeks(calendar)) do
     with {:ok, %Tempo{} = converted} <- to_calendar(start, calendar),
          %Tempo{} = aligned <- aligned_to_cadence(converted, cadence) do
       aligned

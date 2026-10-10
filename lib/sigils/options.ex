@@ -9,6 +9,8 @@ defmodule Tempo.Sigils.Options do
   # Kept out of `Tempo.Sigils` so `import Tempo.Sigils` does not
   # bring `calendar_from/1` into the caller's scope.
 
-  def calendar_from([?W]), do: Calendrical.ISOWeek
+  alias Tempo.Calendars
+
+  def calendar_from([?W]), do: Calendars.weeks()
   def calendar_from([]), do: nil
 end
