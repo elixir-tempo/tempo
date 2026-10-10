@@ -6550,7 +6550,7 @@ defmodule Tempo do
       2
 
   """
-  @spec day_of_week(t(), atom()) :: 1..7
+  @spec day_of_week(t(), atom()) :: Calendar.day_of_week()
   def day_of_week(tempo, starting_on \\ :default)
 
   def day_of_week(%Tempo{} = tempo, starting_on) do
@@ -12368,7 +12368,7 @@ defmodule Tempo do
     end
   end
 
-  defp selection_search_span(%Tempo{time: [day_of_week: _]}), do: %Tempo.Duration{time: [day: 7]}
+  defp selection_search_span(%Tempo{time: [day_of_week: _]}), do: %Tempo.Duration{time: [week: 1]}
   defp selection_search_span(_selector), do: %Tempo.Duration{time: [year: 1]}
 
   # One recurrence-set member's occurrences: an interval member (a recurrence, or

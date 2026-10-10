@@ -1471,7 +1471,7 @@ defmodule Tempo.UnitValues do
   @doc """
   Returns the weeks of a month of a year, each as the dates the calendar numbers in it.
 
-  A week of a month is the calendar's to number: each date around the month is asked which week of which month it is in (`week_of_month/3` of a Calendrical calendar), and a month's weeks are the dates that answer with it. So a week is whatever the calendar holds it to be. In `Calendrical.Gregorian` it is a whole week that starts on a Monday, the first of a month the one that holds its first day: a month's first week may start in the month before, and its last days may be in the first week of the next. A calendar that numbers a month's weeks from its first day to its last cuts the first and the last of them short.
+  A week of a month is the calendar's to number, and Calendrical gives a month's weeks as the calendar's `week_of_month/3` numbers its dates (`Calendrical.Interval.weeks_in_month/3` and `Calendrical.Interval.week/4`). So a week is whatever the calendar holds it to be. In `Calendrical.Gregorian` it is a whole week that starts on a Monday, the first of a month the one that holds its first day: a month's first week may start in the month before, and its last days may be in the first week of the next. A calendar that numbers a month's weeks from its first day to its last cuts the first and the last of them short.
 
   ### Arguments
 
@@ -1485,7 +1485,7 @@ defmodule Tempo.UnitValues do
 
   * `{:ok, weeks}`, a list of `t:Date.Range.t/0` in order, the first the dates of week 1.
 
-  * `{:error, :no_period}` when the calendar has no such month or numbers no weeks in it: a calendar of weeks, which has no months, and one whose year does not begin with its first month, whose months it counts otherwise than its dates name them.
+  * `{:error, :no_period}` when the calendar has no such month, or gives it no weeks.
 
   ### Examples
 
@@ -1506,12 +1506,10 @@ defmodule Tempo.UnitValues do
           {:ok, [Date.Range.t(), ...]} | {:error, :no_period}
   def weeks_of_month(year, month, calendar)
       when is_integer(year) and is_integer(month) and is_atom(calendar) do
-    with true <- numbers_weeks_of_months?(year, calendar),
-         {:ok, %Date.Range{first: first}} <- month_range(year, month, calendar),
-         first_day = calendar.date_to_iso_days(first.year, first.month, first.day),
-         {:ok, start} <- first_day_of_first_week(first_day, month, calendar),
-         [_week | _weeks] = weeks <- weeks_from(start, 1, month, calendar) do
-      {:ok, Enum.map(weeks, &dates_of_week(&1, calendar))}
+    with weeks when is_integer(weeks) <- Interval.weeks_in_month(year, month, calendar),
+         dates = Enum.map(1..weeks//1, &Interval.week(year, month, &1, calendar)),
+         true <- Enum.all?(dates, &is_struct(&1, Date.Range)) do
+      {:ok, dates}
     else
       _no_weeks -> {:error, :no_period}
     end
@@ -1564,95 +1562,6 @@ defmodule Tempo.UnitValues do
   end
 
   def week_of_month(_year, _month, _week, _calendar), do: {:error, :no_period}
-
-  # A calendar of months that says which week of a month a date is in, in a
-  # year whose months it counts as its dates name them.
-  defp numbers_weeks_of_months?(year, calendar) do
-    exported?(calendar, :week_of_month, 3) and calendar.calendar_base() == :month and
-      year_begins_with_first_month?(year, calendar)
-  end
-
-  # A week is seven days at most, and a month has no more weeks than this.
-  @days_of_a_week 7
-  @most_weeks_of_a_month 7
-
-  # The week of a month the calendar numbers a day in, the day given as the
-  # count of days the calendar gives its date. Nothing is worked out of a
-  # date here: a day is asked, and the days asked are next to one another.
-  defp week_asked(day, calendar) do
-    {year, month, day_of_month} = calendar.date_from_iso_days(day)
-    calendar.week_of_month(year, month, day_of_month)
-  end
-
-  # The first day of a month's first week. Where the month's first day is in
-  # it, it starts on that day or on one of the six before it; where the
-  # calendar gives the month's first days to the last week of the month
-  # before, it starts on one of the six after.
-  defp first_day_of_first_week(first_day, month, calendar) do
-    case week_asked(first_day, calendar) do
-      {^month, 1} ->
-        earlier =
-          Enum.take_while(
-            1..(@days_of_a_week - 1)//1,
-            &(week_asked(first_day - &1, calendar) == {month, 1})
-          )
-
-        {:ok, first_day - Enum.count(earlier)}
-
-      {_the_month_before, _its_last_week} ->
-        1..(@days_of_a_week - 1)//1
-        |> Enum.find(&(week_asked(first_day + &1, calendar) == {month, 1}))
-        |> day_found(first_day)
-
-      _no_week ->
-        :error
-    end
-  end
-
-  defp day_found(nil, _first_day), do: :error
-  defp day_found(days_on, first_day), do: {:ok, first_day + days_on}
-
-  # Each week of the month from the first day of week `week`, as its first
-  # day and its last: the week ends where the day after is of another week,
-  # and the month's weeks where that day is of another month's.
-  defp weeks_from(_day, week, _month, _calendar) when week > @most_weeks_of_a_month, do: []
-
-  defp weeks_from(day, week, month, calendar) do
-    last = last_day_of_week(day, {month, week}, calendar)
-
-    case week_asked(last + 1, calendar) do
-      {^month, next} when next == week + 1 ->
-        [{day, last} | weeks_from(last + 1, week + 1, month, calendar)]
-
-      _another_month ->
-        [{day, last}]
-    end
-  end
-
-  # The last day of a week from its first. The days of a week are next to
-  # one another and seven at most, so a whole week is asked once, six days
-  # on; a week the calendar cuts short is asked a day at a time.
-  defp last_day_of_week(first, named, calendar) do
-    if week_asked(first + @days_of_a_week - 1, calendar) == named do
-      first + @days_of_a_week - 1
-    else
-      later =
-        Enum.take_while(
-          1..(@days_of_a_week - 2)//1,
-          &(week_asked(first + &1, calendar) == named)
-        )
-
-      first + Enum.count(later)
-    end
-  end
-
-  defp dates_of_week({first, last}, calendar),
-    do: Date.range(date_of_day(first, calendar), date_of_day(last, calendar))
-
-  defp date_of_day(day, calendar) do
-    {year, month, day_of_month} = calendar.date_from_iso_days(day)
-    Date.new!(year, month, day_of_month, calendar)
-  end
 
   # The days the calendar gives a month of a year: its `month/2`, a callback
   # of the `Calendrical` behaviour.
@@ -1749,8 +1658,8 @@ defmodule Tempo.UnitValues do
 
   """
   @spec iso_weekday_from_day_of_week(integer(), module()) :: integer()
-  def iso_weekday_from_day_of_week(day_of_week, calendar) when day_of_week in 1..7 do
-    if Tempo.week_based_calendar?(calendar),
+  def iso_weekday_from_day_of_week(day_of_week, calendar) when is_integer(day_of_week) do
+    if day_of_week in days_of_a_week(calendar) and Tempo.week_based_calendar?(calendar),
       do: weekday_of_week_day(calendar, day_of_week),
       else: day_of_week
   end
@@ -1782,10 +1691,14 @@ defmodule Tempo.UnitValues do
 
   """
   @spec day_of_week_from_iso_weekday(integer(), module()) :: integer()
-  def day_of_week_from_iso_weekday(iso_weekday, calendar) when iso_weekday in 1..7 do
-    if Tempo.week_based_calendar?(calendar),
-      do: Enum.find(1..7, &(weekday_of_week_day(calendar, &1) == iso_weekday)),
-      else: iso_weekday
+  def day_of_week_from_iso_weekday(iso_weekday, calendar) when is_integer(iso_weekday) do
+    if Tempo.week_based_calendar?(calendar) do
+      calendar
+      |> days_of_a_week()
+      |> Enum.find(iso_weekday, &(weekday_of_week_day(calendar, &1) == iso_weekday))
+    else
+      iso_weekday
+    end
   end
 
   def day_of_week_from_iso_weekday(no_weekday, _calendar), do: no_weekday
@@ -1797,6 +1710,10 @@ defmodule Tempo.UnitValues do
   @spec week_counted_from(module()) :: :default | :monday
   def week_counted_from(calendar),
     do: if(Tempo.week_based_calendar?(calendar), do: :default, else: :monday)
+
+  # The days of a week as a calendar numbers them, from the first to as
+  # many as it says a week has.
+  defp days_of_a_week(calendar), do: 1..calendar.days_in_week()//1
 
   # Every week of a calendar of weeks starts on the same weekday, so the
   # first week of any year answers for them all.
@@ -1978,10 +1895,13 @@ defmodule Tempo.UnitValues do
 
   # The `day`th day of the week that starts on `week_start`, from
   # Calendrical's arithmetic.
-  defp date_in_week(%Date{} = week_start, day, calendar) when is_integer(day) and day in 1..7 do
-    case calendar.plus(week_start.year, week_start.month, week_start.day, :days, day - 1) do
-      {year, month, day_of_month} -> Date.new(year, month, day_of_month, calendar)
-      _error -> {:error, :invalid_date}
+  defp date_in_week(%Date{} = week_start, day, calendar) when is_integer(day) do
+    with true <- day in days_of_a_week(calendar),
+         {year, month, day_of_month} <-
+           calendar.plus(week_start.year, week_start.month, week_start.day, :days, day - 1) do
+      Date.new(year, month, day_of_month, calendar)
+    else
+      _no_such_day -> {:error, :invalid_date}
     end
   end
 
@@ -1996,8 +1916,7 @@ defmodule Tempo.UnitValues do
 
   # The day of `week_days` with ISO 8601's weekday number `weekday`, from
   # the calendar's own day of the week.
-  defp weekday_in_week(%Date.Range{} = week_days, weekday)
-       when is_integer(weekday) and weekday in 1..7 do
+  defp weekday_in_week(%Date.Range{} = week_days, weekday) when is_integer(weekday) do
     case Enum.find(week_days, &(Date.day_of_week(&1, :monday) == weekday)) do
       %Date{} = date -> {:ok, date}
       nil -> {:error, :invalid_date}

@@ -1,8 +1,8 @@
 # One calendar surface
 
-**Status:** planning, 2026-10-10
+**Status:** in progress, 2026-10-10
 
-Tempo is to know nothing of how a calendar is implemented (the user, 2026-10-10: "Tempo, by design, should not know anything about a calendars implementation", and no special cases for a calendar are acceptable). Today it knows a great deal, and this plan is to take that knowledge out and leave one surface that every calendar answers alike. It rests on a census of the whole implementation, [calendar-surface-census.md](calendar-surface-census.md): 109 files and 36,162 lines of code read by a script, every match written, nothing sampled. Nothing here is built yet, and nothing is to be built until the decisions at the foot are taken.
+Tempo is to know nothing of how a calendar is implemented (the user, 2026-10-10: "Tempo, by design, should not know anything about a calendars implementation", and no special cases for a calendar are acceptable). Today it knows a great deal, and this plan is to take that knowledge out and leave one surface that every calendar answers alike. It rests on a census of the whole implementation, [calendar-surface-census.md](calendar-surface-census.md): 109 files and 36,162 lines of code read by a script, every match written, nothing sampled. The decisions at the foot were taken on 2026-10-10 and the work is under way: the tasks at the end say what is done, and what waits on Calendrical is in its `TODO.md`.
 
 ## The rule
 
@@ -28,7 +28,7 @@ It may not know any fact of how a calendar counts: which module it is, what it e
 
 ## What the census found
 
-At commit `254923c`, with Calendrical at `43006d7`:
+At the first census, of commit `254923c` with Calendrical at `43006d7` (the census file holds the counts of the tree as it now stands):
 
 * **107 calls on a calendar, of 34 functions** — 36 calls are of required callbacks of Elixir's `Calendar` and 44 of required callbacks of `Calendrical`. 6 calls are of 6 callbacks `Calendrical` declares optional. 21 calls are of 4 functions that neither behaviour declares: `plus/5` (18 calls), `location/1`, `new/3` and `year_of_era/1`.
 
@@ -58,11 +58,11 @@ Four causes account for nearly all of it, and each task below removes one.
 
 ## The surface
 
-One contract: a calendar is a module that keeps the whole of Elixir's `Calendar` behaviour and the required callbacks of `Calendrical`, checked once where the module enters Tempo, and Tempo calls nothing else on it and probes nothing. Each question Tempo asks is then asked one way.
+One contract: a calendar is a module that implements Elixir's `Calendar` behaviour and `Calendrical`'s. Whether it does is asked once, where the module enters Tempo, and is no more than whether it declares the two; that it then keeps them is its author's to see to, and Tempo calls their required callbacks alone and probes nothing. Each question Tempo asks is then asked one way.
 
 | Question | Asked today | To be asked | Calendrical today |
 |---|---|---|---|
-| Is this module a calendar? | `calendar_module?/1`, and a probe at each call | `Calendrical.validate_calendar/1`, once | Checks one callback |
+| Is this module a calendar? | `calendar_module?/1`, and a probe at each call | `Calendrical.validate_calendar/1`, once | Checks one callback, not the two behaviours |
 | Which values does a unit take in a period? | 3 counts, `valid_date?/3`, 13 deciders | 2 callbacks that give values | Missing |
 | The same, with no year | `months_in_year/0`, `days_in_month/1`, both probed | The same, unprobed | One is optional |
 | The dates of a period | `year/1`, `month/2`, probed | `year/1`, `month/2`, `week/2`, `quarter/2` | Required |
@@ -89,7 +89,7 @@ Three kinds of knowledge stay in Tempo and are no calendar's to answer. Each goe
 
 Each is proposed, and its name and shape are Calendrical's to choose. Every calendar Calendrical has would answer each by a default where it is built (`Calendrical.Behaviour`, the month and week compilers, the composite and the Julian variants), so no calendar's author writes more.
 
-* **The whole contract checked at once** — `Calendrical.validate_calendar/1` checks every required callback of both behaviours, where it checks `cldr_calendar_type/0` alone, so that Tempo, Localize and Calendrical hold a calendar to one list.
+* **`validate_calendar/1` asks whether a module implements the two behaviours** — it checks that `cldr_calendar_type/0` is exported. All 34 calendar modules Calendrical has declare both behaviours, and `Calendar.ISO` declares one and is answered as the Gregorian. No list of callbacks is checked, there or in Tempo (the user, 2026-10-10).
 
 * **A period's values, as values** — two required callbacks: the months a year has, and the days a month of a year has, each as ranges in the order of time (`[3..12]` for England's 1751, `[25..31]` for its March, `[1..2, 14..30]` for September 1752). `months_in_year/1` and `days_in_month/2` stay, as Elixir requires them.
 
@@ -97,7 +97,9 @@ Each is proposed, and its name and shape are Calendrical's to choose. Every cale
 
 * **`plus/6` for every unit** — declared for `:years`, `:quarters`, `:months`, `:weeks` and `:days`. `Calendrical.Behaviour`, the month and week compilers and the composite each define all five today, at both arities.
 
-* **The date of an ISO 8601 week date, for a calendar** — and the ISO weeks a year has. Tempo names `Calendrical.ISOWeek` for the Gregorian and works the date out itself for any other, by `plus` and `Calendrical.Kday`.
+* **The weeks of a month as callbacks** — `Calendrical.Interval.weeks_in_month/3` and `week/4` are functions that walk the days about a month, and are to be callbacks beside `weeks_in_year/1` (the user, 2026-10-10). Tempo calls the two until then.
+
+* **The date of an ISO 8601 week date, for a calendar** — and the ISO weeks a year has, as callbacks. Tempo names `Calendrical.ISOWeek` for the Gregorian and works the date out itself for any other, by `plus` and `Calendrical.Kday`.
 
 * **`cardinal_day/3` required** — with the day itself as its default.
 
@@ -111,7 +113,7 @@ In the order they can be done. The first three need nothing of Calendrical.
 
 * **A value always holds a calendar** — the default and `Calendar.ISO` are settled once, where a value is made, and nothing downstream asks again: 38 lines and the 8 deciders of that group, at 83 calls. Its first step is to read whether `nil` means anything today that a module could not say.
 
-* **No probe of a required callback** — 19 probes go, and the calendar is validated where it enters.
+* **No probe of a required callback** — 19 probes go, and whether the module is a calendar is asked once, where it enters, of `Calendrical.validate_calendar/1`.
 
 * **What is outside, in one module** — the notation's calendar, the zone database's and a standard's are each named once: the 26 outside lines and the 9 of text come to that module.
 
@@ -135,7 +137,7 @@ In the order they can be done. The first three need nothing of Calendrical.
 
 `python3 scripts/calendar_census.py` counts each. A task is done when its count is at its target and the suite passes.
 
-| Count | Today | Target |
+| Count | First census | Target |
 |---|---|---|
 | Lines that name a calendar, outside the one module | 128 | 0 |
 | Probes of what a calendar exports | 37 | 0 |
@@ -146,21 +148,23 @@ In the order they can be done. The first three need nothing of Calendrical.
 | Lines that hold a fact of the Gregorian calendar | 15 | 0, or in the one module |
 | Lines that hold the reader's bounds | 6 | 0 |
 
-## Decisions for the user
+## Decisions
 
-* **What a calendar is** — recommended: a module that keeps the required callbacks of `Calendrical` and of `Calendar`, so a calendar that keeps Elixir's behaviour alone is refused where it enters, and `Calendar.ISO` is the one exception, read as the Gregorian there. The other course is to keep answering for such a calendar, which is what the 19 probes of required callbacks are for.
+Taken by the user on 2026-10-10.
 
-* **A calendar of weeks** — recommended: it stays a second shape of date (a week and a day of the week where a month and a day are), known in one function. The other course is for Calendrical to give every calendar's dates one shape, which is a larger change to it than any above.
+* **What a calendar is** — a module that implements the `Calendar` and `Calendrical` behaviours, and `Calendrical.validate_calendar/1` "needs only to check" that, which is cheap. The whole contract is checked nowhere: "The contract for Tempo is that calendars adhere to these behaviours and therefore breaking the contract is on the user - not us."
 
-* **Speed** — recommended: no fast path keyed on a calendar's name. Each is removed and measured, and where the general path is too slow the speed is Calendrical's to give (it keeps what a calendar is asked often), with a number agreed first for what too slow is.
+* **No constant for what a calendar answers** — "All calendars should implement `days_in_week/0` so that should NEVER be a constant in Tempo. Indeed any time we define a constant in Tempo is probably a bad smell and need to be carefully checked." Every constant Tempo defines is to be read, which is a task of its own below.
 
-* **What only the Gregorian has** — 16 lines (one of them the Chinese calendar's, for a solar term) and 15 numbers give a named calendar behaviour of its own: ISO 8601-2's seasons by its months, the 400 years its dates come round in (a rule that names no date of any year, and the lengths the network solver keeps), a month counted as twelve to a year on the network's axis and in a recurrence's domain, and the 28 days of its shortest month in a rule's `SKIP`. Recommended: each is decided on its own. `SKIP` asks `days_in_month/1`; the seasons are the notation's and go to the one module; the cycle is either asked of the calendar by a new callback or dropped for a bound that needs none.
+* **Callbacks, not functions beside the behaviour** — `weeks_in_month` "should be a straight up `Calendrical.Behaviour` callback", where it is a function of `Calendrical.Interval`. What Tempo asks of a calendar is to be a callback wherever it is the calendar's own to answer.
 
-* **The two callbacks that give values** — whether they are callbacks, as proposed, or generic functions of Calendrical built on `year/1` and `month/2`, which need no change to the behaviour and cost a walk of the period's days.
+* **The rest as recommended** — "Implement the plan until completion", so each is taken as it was recommended: a calendar of weeks stays a second shape of date, known in one function; no fast path is keyed on a calendar's name, each being removed and measured; a period's values are two new callbacks; and what only the Gregorian has is decided case by case (`SKIP` asks `days_in_month/1`, the seasons are the notation's, and the cycle of 400 years is still to decide).
 
 ## What this plan has not done
 
 * **It names what each class of place becomes, and not yet each place** — the census lists every one. Three tasks begin by reading their places one at a time, and say so: `nil` as a calendar, the 96 places that ask weeks or months, and the 9 fast paths.
+
+* **It has read the numbers a calendar would be asked for, and not every constant** — a module attribute that holds any other number, or a list or a map of them, is not yet in the census.
 
 * **It has measured no speed** — no fast path is known to be needed, and none is known not to be.
 
@@ -180,28 +184,36 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 
 ## Tasks
 
-* [ ] **The decisions** — the five above, the user's.
-
-* [ ] **Calendrical's changes** — the eight above, for the user to take to Calendrical; Tempo's tasks that need one wait on it.
-
 * [ ] **A value always holds a calendar** — needs nothing upstream.
 
-* [ ] **No probe of a required callback** — needs the first decision.
+* [ ] **No probe of a required callback** — needs nothing upstream.
 
 * [ ] **What is outside, in one module** — needs nothing upstream.
 
-* [ ] **`plus/6` alone** — needs it declared for every unit.
+* [ ] **`plus/6` alone** — every calendar Calendrical has answers it for every unit today; the declaration is in Calendrical's `TODO.md`.
 
-* [ ] **`Tempo.UnitValues` asks for values** — needs the two callbacks.
+* [ ] **Weeks or months, asked once** — needs nothing upstream.
 
-* [ ] **Week dates through Calendrical** — needs the ISO week functions.
+* [ ] **No fast path by name** — each measured as it goes.
 
-* [ ] **Names, traditional months and solar terms** — needs the three changes.
+* [ ] **The Gregorian asked, not named** — needs nothing upstream.
 
-* [ ] **Weeks or months, asked once** — needs the second decision.
+* [ ] **Every constant Tempo defines, read** — a section of the census for each module attribute that holds a number, and each one a calendar would answer asked of it.
 
-* [ ] **No fast path by name** — needs the third decision.
+* [ ] **What only the Gregorian has** — `SKIP` and the seasons first; the cycle is to decide.
 
-* [ ] **The Gregorian asked, not named, and the week's seven days** — needs nothing upstream.
+### Blocked
 
-* [ ] **What only the Gregorian has** — needs the fourth decision.
+* [ ] **`Tempo.UnitValues` asks for values** — blocked on the two callbacks that give a period's values (Calendrical's `TODO.md`).
+
+* [ ] **Week dates through Calendrical** — blocked on the date of an ISO week date and the ISO weeks of a year (Calendrical's `TODO.md`).
+
+* [ ] **Names, traditional months and solar terms** — blocked on `cardinal_day/3` and the four callbacks of traditional months being required, and on a solar term asked of a calendar (Calendrical's `TODO.md`).
+
+### Done
+
+* [x] **The week's seven days** — the 16 lines are none: 12 ask `days_in_week/0`, 2 were cron's own weekdays, and 2 went with Tempo's own working-out of a month's weeks, which is Calendrical's (`Calendrical.Interval.weeks_in_month/3` and `week/4`). 2026-10-10.
+
+* [x] **Calendrical's changes written up** — nine items in Calendrical's `TODO.md`, for the pass on its behaviour. 2026-10-10.
+
+* [x] **The decisions** — taken by the user. 2026-10-10.

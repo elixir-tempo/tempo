@@ -2649,7 +2649,9 @@ defmodule Tempo.Explain do
 
   @weekdays ~w(Monday Tuesday Wednesday Thursday Friday Saturday Sunday)
 
-  defp weekday_name(n) when is_integer(n) and n in 1..7, do: Enum.at(@weekdays, n - 1)
+  defp weekday_name(n) when is_integer(n) and n >= 1,
+    do: Enum.at(@weekdays, n - 1, "weekday #{n}")
+
   defp weekday_name(other), do: "weekday #{inspect(other)}"
 
   defp or_join([]), do: "nothing"

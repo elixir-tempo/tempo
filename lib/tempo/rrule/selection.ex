@@ -2381,9 +2381,9 @@ defmodule Tempo.RRule.Selection do
     do: calendar.day_of_week(year, month, day, counted_from) |> normalise_day_of_week()
 
   # `Calendar.day_of_week/4` can return `:undefined` or a tuple
-  # depending on the calendar implementation; coerce to a 1..7
-  # integer or `nil` when the calendar refuses.
-  defp normalise_day_of_week(dow) when is_integer(dow) and dow in 1..7, do: dow
+  # depending on the calendar implementation; coerce to the day's
+  # number or `nil` when the calendar refuses.
+  defp normalise_day_of_week(dow) when is_integer(dow) and dow >= 1, do: dow
   defp normalise_day_of_week({dow, _first, _last}) when is_integer(dow), do: dow
   defp normalise_day_of_week(_), do: nil
 
@@ -2554,7 +2554,7 @@ defmodule Tempo.RRule.Selection do
          %Date{} = week_start <- Kday.kday_on_or_before(date, wkst) do
       counted_from = UnitValues.week_counted_from(calendar)
 
-      for d <- seven_days_from(week_start) do
+      for d <- week_of_days_from(week_start) do
         {d.year, d.month, d.day, day_of_week(calendar, d.year, d.month, d.day, counted_from)}
       end
     else
@@ -2562,10 +2562,10 @@ defmodule Tempo.RRule.Selection do
     end
   end
 
-  defp seven_days_from(date) do
+  defp week_of_days_from(%Date{calendar: calendar} = date) do
     date
     |> Stream.iterate(&Calendrical.next(&1, :day))
-    |> Enum.take(7)
+    |> Enum.take(calendar.days_in_week())
   end
 
   # Rebuild a candidate with a new date, preserving the existing
@@ -3131,7 +3131,7 @@ defmodule Tempo.RRule.Selection do
   # when every day of the week is kept.
   defp week_candidate_dates(week, candidate, week_starts, month) do
     dates =
-      for d <- seven_days_from(Enum.at(week_starts, week - 1)),
+      for d <- week_of_days_from(Enum.at(week_starts, week - 1)),
           is_nil(month) or d.month == month,
           do: {d.year, d.month, d.day, d}
 

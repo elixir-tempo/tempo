@@ -765,11 +765,30 @@ defmodule Tempo.WeekOfMonthTest do
                {:ok, for(week <- 1..weeks, do: Calendrical.Interval.week(1750, 6, week, March25))}
     end
 
-    test "are none for a month the calendar does not have, and in a calendar of weeks" do
+    test "are none for a month the calendar does not have" do
       assert UnitValues.weeks_of_month(2026, 13, Gregorian) == {:error, :no_period}
-      assert UnitValues.weeks_of_month(2026, 6, Calendrical.ISOWeek) == {:error, :no_period}
       assert UnitValues.week_of_month(2026, 6, 0, Gregorian) == {:error, :no_period}
       assert UnitValues.week_of_month(2026, 6, "2", Gregorian) == {:error, :no_period}
+    end
+
+    # A calendar of weeks is asked as any other is: its months are runs of
+    # whole weeks, and a month's weeks are those. `month/2` and
+    # `days_in_week/0` are the measure, apart from the functions asked.
+    test "are a calendar of weeks' own, each as long as its week" do
+      calendar = Calendrical.ISOWeek
+
+      expected =
+        calendar.month(2026, 6)
+        |> Enum.chunk_every(calendar.days_in_week())
+        |> Enum.map(&{hd(&1), List.last(&1)})
+
+      assert {:ok, weeks} = UnitValues.weeks_of_month(2026, 6, calendar)
+      assert Enum.map(weeks, &{&1.first, &1.last}) == expected
+    end
+
+    test "are not a value's to name in a calendar that reads its months in another" do
+      assert {:error, %Tempo.InvalidDateError{unit: :week, value: 2, year: 2026, month: 6}} =
+               Tempo.from_iso8601("2026Y6M2W", Calendrical.ISOWeek)
     end
   end
 end

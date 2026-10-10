@@ -48,8 +48,6 @@ defmodule Tempo.Iso8601.Unit do
     year: {:month, 1..-1//1},
     month: {:day, 1..-1//1},
     traditional_month: {:day, 1..-1//1},
-    week: {:day_of_week, 1..7},
-    calendar_week: {:day_of_week, 1..7},
     day: {:hour, 0..23},
     day_of_week: {:hour, 0..23},
     day_of_year: {:hour, 0..23},
@@ -91,6 +89,11 @@ defmodule Tempo.Iso8601.Unit do
     else
       {:week, 1..-1//1}
     end
+  end
+
+  # A week is walked by its days, which the calendar counts.
+  def implicit_enumerator(unit, calendar) when unit in [:week, :calendar_week] do
+    {:day_of_week, 1..calendar.days_in_week()//1}
   end
 
   def implicit_enumerator(unit, _calendar) when unit in @units do

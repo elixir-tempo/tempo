@@ -1100,14 +1100,15 @@ defmodule Tempo.Iso8601.Group do
   ## Weeks of a month
 
   # A negative week counts back from the month's last, as `-1W` does in a
-  # year.
+  # year. A month the calendar reads in another calendar than its own (a
+  # calendar of weeks answers so, by `parsing_calendar/0`) is no month of
+  # its own to number a week in.
   defp week_of_month(year, month, week, rest, calendar) do
-    case UnitValues.week_of_month(year, month, week, calendar) do
-      {:ok, %Date.Range{} = dates} ->
-        week_of_month_days(dates, rest, calendar, {year, month, week})
-
-      {:error, :no_period} ->
-        {:error, no_week_of_month(year, month, week, calendar)}
+    with false <- Validation.written_in_another_calendar?([month: month], calendar),
+         {:ok, %Date.Range{} = dates} <- UnitValues.week_of_month(year, month, week, calendar) do
+      week_of_month_days(dates, rest, calendar, {year, month, week})
+    else
+      _no_such_week -> {:error, no_week_of_month(year, month, week, calendar)}
     end
   end
 
