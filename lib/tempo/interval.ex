@@ -2830,11 +2830,15 @@ defmodule Tempo.Interval do
   end
 
   # A duration's microseconds where each of its units has one length on a
-  # clock with no date: a week, a day, and the units of a time of day.
+  # clock with no date: a week, a day, and the units of a time of day. A
+  # week is as many days as Calendrical counts in one.
+  @microseconds_in_a_day 86_400_000_000
+  @microseconds_in_a_week Calendrical.weeks_to_days(1) * @microseconds_in_a_day
+
   defp fixed_microseconds(time) do
     Enum.reduce_while(time, 0, fn
-      {:week, weeks}, total -> {:cont, total + weeks * 604_800_000_000}
-      {:day, days}, total -> {:cont, total + days * 86_400_000_000}
+      {:week, weeks}, total -> {:cont, total + weeks * @microseconds_in_a_week}
+      {:day, days}, total -> {:cont, total + days * @microseconds_in_a_day}
       {:hour, hours}, total -> {:cont, total + hours * 3_600_000_000}
       {:minute, minutes}, total -> {:cont, total + minutes * 60_000_000}
       {:second, seconds}, total -> {:cont, total + round(seconds * 1_000_000)}

@@ -372,7 +372,7 @@ CONSTANTS = {
         ('hours_per_day', 'clock'), ('divisions', 'standard'), ('most_divisions', 'limit'),
     ],
     "lib/iso8601/parser.ex": [
-        ('most_durations_in_a_range', 'limit'), ('measured_seconds', 'calendar'),
+        ('most_durations_in_a_range', 'limit'), ('measured_seconds', 'clock'),
         ('selected_by', 'units'), ('resolution_order', 'units'), ('qualifiers', 'standard'),
     ],
     "lib/iso8601/tokenizer.ex": [
@@ -453,7 +453,7 @@ CONSTANTS = {
     ],
     "lib/tempo/duration.ex": [
         ('valid_units', 'units'), ('canonical_unit_order', 'units'),
-        ('microsecond_seconds', 'clock'), ('fixed_unit_seconds', 'calendar'),
+        ('microsecond_seconds', 'clock'), ('day_seconds', 'clock'), ('fixed_unit_seconds', 'clock'),
         ('fixed_units', 'units'),
     ],
     "lib/tempo/exception/interval_endpoints_error.ex": [
@@ -468,7 +468,7 @@ CONSTANTS = {
         ('hours_per_day', 'clock'), ('seconds_in_a_day', 'clock'), ('calendar_units', 'units'),
         ('clock_units', 'units'), ('before_relations', 'relations'),
         ('after_relations', 'relations'), ('intersecting_relations', 'relations'),
-        ('within_relations', 'relations'), ('max_placement_pairs', 'limit'),
+        ('within_relations', 'relations'), ('microseconds_in_a_day', 'clock'), ('microseconds_in_a_week', 'clock'), ('max_placement_pairs', 'limit'),
     ],
     "lib/tempo/interval/composition.ex": [
         ('composition', 'relations'), ('order', 'relations'),

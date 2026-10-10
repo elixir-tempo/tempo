@@ -228,7 +228,14 @@ defmodule Tempo.Iso8601.Parser do
 
   defp window_shortfall(_no_duration, _within), do: nil
 
-  @measured_seconds %{week: 604_800, day: 86_400, hour: 3_600, minute: 60, second: 1}
+  # A week is as many days as Calendrical counts in one.
+  @measured_seconds %{
+    week: Calendrical.weeks_to_days(1) * 86_400,
+    day: 86_400,
+    hour: 3_600,
+    minute: 60,
+    second: 1
+  }
 
   # The units a selector within a window picks by, as the unit one of them
   # is as long as.

@@ -6,7 +6,7 @@ Every place Tempo's implementation touches a calendar, in the tree this file is 
 
 ## What was read, and how
 
-* **110 files of `lib/`** — 71,021 lines: 36,110 of code, 15,360 of documentation (`@doc`, `@moduledoc` and `@typedoc`, doctests among them), 10,810 of comment and 8,741 blank. Only code is counted below: a calendar named in a doctest or a comment is no code path.
+* **110 files of `lib/`** — 71,033 lines: 36,119 of code, 15,360 of documentation (`@doc`, `@moduledoc` and `@typedoc`, doctests among them), 10,812 of comment and 8,742 blank. Only code is counted below: a calendar named in a doctest or a comment is no code path.
 
 * **A call on a calendar** — every `receiver.function(` whose receiver is a variable, every `&receiver.function/arity` and every call on the result of a call. The receiver of every one is `calendar`, `backend`, `resolver`, `clock()` or `database()`; the first is a calendar, and the others are not.
 
@@ -29,12 +29,12 @@ Every place Tempo's implementation touches a calendar, in the tree this file is 
 | Lines of code that name a calendar | 89 lines, 114 names |
 | Calendars named | Gregorian 79, ISO 25, ISOWeek 9, Chinese 1 |
 | Deciders by a calendar's kind | 59 functions defined, called at 331 places |
-| Calls into Calendrical's own modules | 81 |
+| Calls into Calendrical's own modules | 84 |
 | Calls into Elixir's `Date`, `NaiveDateTime`, `DateTime` and `Time` | 99 |
 | Calls into Erlang's `:calendar` | 20 |
 | Lines that hold a number a calendar would be asked for | 91 |
-| Lines that hold only a number of the clock (24, 60, 3,600, 86,400) | 150 |
-| Constants Tempo defines | 250, of which 13 are a calendar's to answer |
+| Lines that hold only a number of the clock (24, 60, 3,600, 86,400) | 153 |
+| Constants Tempo defines | 253, of which 11 are a calendar's to answer |
 
 ## 1. Calendars named in code
 
@@ -354,7 +354,7 @@ Calls of a function of a named module, which take the calendar as an argument or
 | `Calendrical.parse` | 1 | `tempo.ex:2164` |
 | `Calendrical.previous` | 1 | `tempo/rrule/selection.ex:2840` |
 | `Calendrical.validate_calendar` | 1 | `tempo/calendars.ex:76` |
-| `Calendrical.weeks_to_days` | 5 | `explain.ex:2260`, `math.ex:1847`, `math.ex:2507`, `tempo/format.ex:375`, `tempo/network/normalize.ex:701` |
+| `Calendrical.weeks_to_days` | 8 | `explain.ex:2260`, `iso8601/parser.ex:233`, `math.ex:1847`, `math.ex:2507`, `tempo/duration.ex:168`, `tempo/format.ex:375`, `tempo/interval.ex:2836`, `tempo/network/normalize.ex:701` |
 | `Calendrical.Base.Common.composite?` | 1 | `tempo/unit_values.ex:180` |
 | `Calendrical.Chinese.location` | 1 | `event.ex:300` |
 | `Calendrical.Ecclesiastical.easter_sunday` | 1 | `event.ex:241` |
@@ -452,7 +452,7 @@ A `Date` is of the calendar it is given, so `Date.new/4`, `Date.convert/2` and `
 
 ## 7. Numbers a calendar would be asked for
 
-91 lines of code hold one of 7, 12, 13, 28 to 31, 52, 53, 354, 355, 365, 366, 400, 1,461, 36,524 or 146,097. 150 more hold only a number of the clock, which no calendar Tempo is given counts otherwise, and are not listed. Each line has one class:
+91 lines of code hold one of 7, 12, 13, 28 to 31, 52, 53, 354, 355, 365, 366, 400, 1,461, 36,524 or 146,097. 153 more hold only a number of the clock, which no calendar Tempo is given counts otherwise, and are not listed. Each line has one class:
 
 * **standard** (29) — A number of a notation or a standard Tempo reads or writes: a cron field, an RRULE weekday, an ISO 8601-2 code, a type.
 
@@ -536,13 +536,13 @@ The 30 lines of `lib/tempo/leap_seconds.ex` are its table, lines 27 to 157.
 
 ## 8. Every constant Tempo defines
 
-250 module attributes are constants: every one that is not a doc, a spec or a directive. Each was read, with its whole value, and has one class. A constant is a sign that Tempo holds what it could ask, so each class says why its constants are Tempo's own to hold, but for the first, whose constants are not.
+253 module attributes are constants: every one that is not a doc, a spec or a directive. Each was read, with its whole value, and has one class. A constant is a sign that Tempo holds what it could ask, so each class says why its constants are Tempo's own to hold, but for the first, whose constants are not.
 
-* **calendar** (13) — What a calendar would answer, or a calendar named. To go.
+* **calendar** (11) — What a calendar would answer, or a calendar named. To go.
 
 * **units** (93) — Tempo's own units, their order and the places they are written in.
 
-* **clock** (29) — ISO 8601's time of day: the hours of a day, the minutes of an hour, the seconds of a minute and their fractions.
+* **clock** (34) — ISO 8601's time of day: the hours of a day, the minutes of an hour, the seconds of a minute and their fractions.
 
 * **standard** (25) — A table or a number of a notation or a standard Tempo reads or writes.
 
@@ -570,12 +570,10 @@ The 30 lines of `lib/tempo/leap_seconds.ex` are its table, lines 27 to 157.
 |---|---|---|
 | `explain.ex:2054` | `@months` | calendar |
 | `explain.ex:2650` | `@weekdays` | calendar |
-| `iso8601/parser.ex:231` | `@measured_seconds` | calendar |
 | `tempo.ex:9638` | `@years_of_a_cycle` | calendar |
 | `tempo.ex:9639` | `@periods_before_asking` | calendar |
 | `tempo.ex:9640` | `@months_of_a_cycle` | calendar |
 | `tempo.ex:9960` | `@kinds_of_year` | calendar |
-| `tempo/duration.ex:161` | `@fixed_unit_seconds` | calendar |
 | `tempo/network/normalize.ex:65` | `@gregorian_cycle_start` | calendar |
 | `tempo/network/normalize.ex:66` | `@gregorian_cycle_years` | calendar |
 | `tempo/not_built.ex:31` | `@gregorian` | calendar |
@@ -596,7 +594,7 @@ The 30 lines of `lib/tempo/leap_seconds.ex` are its table, lines 27 to 157.
 | `inspect.ex` | `@from_iso8601` text, `@sigil_o` text |
 | `iso8601/ast.ex` | `@date_resolution_order` units |
 | `iso8601/group.ex` | `@hours_per_day` clock, `@divisions` standard, `@most_divisions` limit |
-| `iso8601/parser.ex` | `@most_durations_in_a_range` limit, `@selected_by` units, `@resolution_order` units, `@qualifiers` standard |
+| `iso8601/parser.ex` | `@most_durations_in_a_range` limit, `@measured_seconds` clock, `@selected_by` units, `@resolution_order` units, `@qualifiers` standard |
 | `iso8601/tokenizer.ex` | `@max_input_bytes` limit, `@max_nesting_depth` limit, `@max_selection_depth` limit, `@max_digits` limit, `@profiles` standard |
 | `iso8601/tokenizer/extended.ex` | `@empty_extended` standard, `@u_ca` text |
 | `iso8601/tokenizer/grammar.ex` | `@endpoint_tags` standard, `@endpoint_units` units, `@bare_numbers` standard, `@two_digit_units` units, `@time_units` units |
@@ -614,10 +612,10 @@ The 30 lines of `lib/tempo/leap_seconds.ex` are its table, lines 27 to 157.
 | `tempo/calendars.ex` | `@notation` the one module |
 | `tempo/clock/test.ex` | `@process_key` key |
 | `tempo/cron.ex` | `@aliases` standard, `@month_names` standard, `@dow_names` standard, `@cascade_order` units |
-| `tempo/duration.ex` | `@valid_units` units, `@canonical_unit_order` units, `@microsecond_seconds` clock, `@fixed_units` units |
+| `tempo/duration.ex` | `@valid_units` units, `@canonical_unit_order` units, `@microsecond_seconds` clock, `@day_seconds` clock, `@fixed_unit_seconds` clock, `@fixed_units` units |
 | `tempo/exception/interval_endpoints_error.ex` | `@convert` text |
 | `tempo/format.ex` | `@time_units` units, `@relative_units` units, `@one_value_units` units, `@unit_order_ctf` units |
-| `tempo/interval.ex` | `@public_new_options` options, `@iteration_units` units, `@hours_per_day` clock, `@seconds_in_a_day` clock, `@calendar_units` units, `@clock_units` units, `@before_relations` relations, `@after_relations` relations, `@intersecting_relations` relations, `@within_relations` relations, `@max_placement_pairs` limit |
+| `tempo/interval.ex` | `@public_new_options` options, `@iteration_units` units, `@hours_per_day` clock, `@seconds_in_a_day` clock, `@calendar_units` units, `@clock_units` units, `@microseconds_in_a_day` clock, `@microseconds_in_a_week` clock, `@before_relations` relations, `@after_relations` relations, `@intersecting_relations` relations, `@within_relations` relations, `@max_placement_pairs` limit |
 | `tempo/interval/composition.ex` | `@composition` relations, `@order` relations |
 | `tempo/interval/cycle.ex` | `@microseconds` clock, `@seconds_per_day` clock |
 | `tempo/interval/steps.ex` | `@seconds_per_minute` clock, `@seconds_per_hour` clock, `@seconds_per_day` clock, `@microseconds_per_second` clock, `@max_precision` clock, `@a_day_or_so` zone |

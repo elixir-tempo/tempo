@@ -154,17 +154,18 @@ defmodule Tempo.Duration do
   end
 
   # Seconds per fixed-length unit. `:month` and `:year` are
-  # deliberately absent — they have no fixed length (28–31 days,
-  # 365–366 days), so they can only be converted against a reference
-  # date.
+  # deliberately absent — they have no fixed length, so they can only be
+  # converted against a reference date. A week is as many days as
+  # Calendrical counts in one (`Calendrical.weeks_to_days/1`).
   @microsecond_seconds 1.0e-6
+  @day_seconds 86_400.0
   @fixed_unit_seconds %{
     microsecond: @microsecond_seconds,
     second: 1.0,
     minute: 60.0,
     hour: 3_600.0,
-    day: 86_400.0,
-    week: 604_800.0
+    day: @day_seconds,
+    week: Calendrical.weeks_to_days(1) * @day_seconds
   }
   @fixed_units Map.keys(@fixed_unit_seconds)
 
