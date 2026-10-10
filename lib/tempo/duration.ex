@@ -6,8 +6,8 @@ defmodule Tempo.Duration do
   cadence), and the arithmetic behind `Tempo.shift/2`.
 
   A fractional amount (ISO 8601-2 §11.4) becomes whole units of the next
-  smaller unit, truncated toward zero: `P1.5W` is 10 days (as
-  `Calendrical.weeks_to_days/1` counts them), `P1.3D` is one day and
+  smaller unit, truncated toward zero: `P1.5W` is 10 days (of the
+  days a calendar counts in a week), `P1.3D` is one day and
   seven hours, `PT1.5H` an hour and thirty minutes and `P1.5Y` a year
   and six months. A fraction of a month depends on the date it is
   applied to: it is that fraction of the days from the date to one month
@@ -15,6 +15,7 @@ defmodule Tempo.Duration do
 
   """
 
+  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.Microsecond
 
@@ -155,8 +156,8 @@ defmodule Tempo.Duration do
 
   # Seconds per fixed-length unit. `:month` and `:year` are
   # deliberately absent — they have no fixed length, so they can only be
-  # converted against a reference date. A week is as many days as
-  # Calendrical counts in one (`Calendrical.weeks_to_days/1`).
+  # converted against a reference date. A week with no calendar to ask is
+  # the notation's, of as many days as that calendar counts in one.
   @microsecond_seconds 1.0e-6
   @day_seconds 86_400.0
   @fixed_unit_seconds %{
@@ -165,7 +166,7 @@ defmodule Tempo.Duration do
     minute: 60.0,
     hour: 3_600.0,
     day: @day_seconds,
-    week: Calendrical.weeks_to_days(1) * @day_seconds
+    week: Calendars.default().days_in_week() * @day_seconds
   }
   @fixed_units Map.keys(@fixed_unit_seconds)
 

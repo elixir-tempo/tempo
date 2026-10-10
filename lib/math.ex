@@ -1788,11 +1788,13 @@ defmodule Tempo.Math do
     # converting them to days would demand month/day keys the axis lacks.
     # A day of the week of no week (`7K`) is on that axis too: the day after
     # it is the next day of the week, and a week after it is the same one.
+    calendar = Calendars.effective(tempo.calendar)
+
     duration_time =
       if week_axis?(crisp_time, tempo.calendar) do
-        translate_week_axis_duration(duration_time)
+        translate_week_axis_duration(duration_time, calendar)
       else
-        normalise_duration(duration_time)
+        normalise_duration(duration_time, calendar)
       end
       |> exact_fractions_to_next_unit()
 
@@ -1820,9 +1822,9 @@ defmodule Tempo.Math do
   # into `:week` (and the week into the year) exactly as day-arithmetic
   # requires. `2026Y32W + P2D` is `2026Y32W3K`, and seven days later is
   # the next week's Monday.
-  defp translate_week_axis_duration(duration_time) do
+  defp translate_week_axis_duration(duration_time, calendar) do
     duration_time
-    |> week_fraction_to_days()
+    |> week_fraction_to_days(calendar)
     |> Keyword.pop(:day, 0)
     |> case do
       {0, rest} -> rest
@@ -1831,15 +1833,15 @@ defmodule Tempo.Math do
   end
 
   # A fractional week keeps its whole weeks on the week axis and adds the
-  # days `Calendrical.weeks_to_days/1` makes of its fraction.
-  defp week_fraction_to_days(duration_time) do
+  # whole days its fraction makes of the days the calendar's week has.
+  defp week_fraction_to_days(duration_time, calendar) do
     case Keyword.get(duration_time, :week) do
       weeks when is_float(weeks) ->
         whole = trunc(weeks)
 
         duration_time
         |> Keyword.replace!(:week, whole)
-        |> add_duration_amount(:day, Calendrical.weeks_to_days(weeks - whole))
+        |> add_duration_amount(:day, trunc((weeks - whole) * calendar.days_in_week()))
 
       _integer_or_absent ->
         duration_time
@@ -2488,10 +2490,10 @@ defmodule Tempo.Math do
      )}
   end
 
-  # Weeks in a duration are whole days, as `Calendrical.weeks_to_days/1`
-  # counts them (a fractional week truncates). Normalise to days so the
-  # apply-duration loop doesn't need a `:week` clause.
-  defp normalise_duration(duration_time) do
+  # Weeks in a duration are whole days, as many as the calendar's week has
+  # (a fractional week truncates). Normalise to days so the apply-duration
+  # loop doesn't need a `:week` clause.
+  defp normalise_duration(duration_time, calendar) do
     {weeks, rest} = Keyword.pop(duration_time, :week, 0)
 
     case weeks do
@@ -2499,7 +2501,7 @@ defmodule Tempo.Math do
         rest
 
       _ ->
-        days = Calendrical.weeks_to_days(weeks)
+        days = trunc(weeks * calendar.days_in_week())
         Keyword.update(rest, :day, days, &(&1 + days))
     end
   end
@@ -2707,8 +2709,8 @@ defmodule Tempo.Math do
   # arithmetic if profiling demands it.
   defp apply_n_units(time, _unit, 0, _calendar), do: {:ok, time}
 
-  # Fast path: adding N days to a concrete date is O(1) via its
-  # Calendrical day number (`Calendrical.iso_days/4`), versus O(N) single-day
+  # Fast path: adding N days to a concrete date is O(1) by the calendar's
+  # own count of days (`plus/6`), versus O(N) single-day
   # stepping. This is what keeps a large recurrence (`R10000/…/P1D`)
   # from being quadratic to materialise. Falls back to stepping for
   # anything that isn't a plain integer `[year, month, day]` prefix
@@ -3232,11 +3234,11 @@ defmodule Tempo.Math do
     end
   end
 
-  # A day shifted by days, or by weeks of the days `Calendrical.weeks_to_days/1`
-  # counts, steps from free day to free day, a calendar day at a time, and
-  # lands on a day. Anything finer walks free time.
+  # A day shifted by days, or by weeks of the days its calendar's week has,
+  # steps from free day to free day, a calendar day at a time, and lands on
+  # a day. Anything finer walks free time.
   defp free_days(origin, %Tempo.Duration{time: time}) do
-    case normalise_duration(time) do
+    case normalise_duration(time, Calendars.of(origin)) do
       [day: days] when is_integer(days) ->
         if day_resolution?(origin), do: {:ok, days}, else: :error
 

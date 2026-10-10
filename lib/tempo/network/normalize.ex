@@ -299,10 +299,7 @@ defmodule Tempo.Network.Normalize do
     do: Tempo.from_iso8601("#{Integer.floor_div(position, 12)}Y#{Integer.mod(position, 12) + 1}M")
 
   def date_at(position, %{unit: :day, calendar: calendar}) do
-    case Calendrical.date_from_iso_days(position, calendar) do
-      %Date{} = date -> {:ok, Tempo.from_elixir(date)}
-      {:error, _reason} = error -> error
-    end
+    with {:ok, date} <- date_of_day(position, calendar), do: {:ok, Tempo.from_elixir(date)}
   end
 
   def date_at(position, %{unit: :second, display: display, calendar: calendar, zone: zone}) do
@@ -452,7 +449,7 @@ defmodule Tempo.Network.Normalize do
   # when the duration counts whole axis units, a measure when it names a
   # coarser unit, and an error when it names a fraction of one.
   defp duration_constraint(from, to, duration, bound, context, source) do
-    case duration_count(duration, context.unit) do
+    case duration_count(duration, context.unit, context.calendar) do
       {:ok, count} ->
         {:ok, count_edge(from, to, count, bound, source)}
 
@@ -587,7 +584,7 @@ defmodule Tempo.Network.Normalize do
   defp position(%Tempo{} = value, %{unit: :day}) do
     with %Tempo{} = day <- Tempo.at_resolution(value, :day),
          {:ok, date} <- Tempo.to_date(day) do
-      {:ok, Calendrical.date_to_iso_days(date)}
+      {:ok, day_of_date(date)}
     else
       _unplaceable -> {:error, unplaceable_error(value)}
     end
@@ -624,8 +621,8 @@ defmodule Tempo.Network.Normalize do
     days = Integer.floor_div(seconds, 86_400)
     time_of_day = Integer.mod(seconds, 86_400)
 
-    case Calendrical.date_from_iso_days(days, calendar) do
-      %Date{year: year, month: month, day: day} ->
+    case date_of_day(days, calendar) do
+      {:ok, %Date{year: year, month: month, day: day}} ->
         year
         |> Tempo.date_units(month, day, calendar)
         |> Kernel.++(
@@ -668,14 +665,26 @@ defmodule Tempo.Network.Normalize do
   defp time_designator(:minute), do: "M"
   defp time_designator(:second), do: "S"
 
+  # The date a count of days is in `calendar`, and the count of a date's
+  # day, each as the calendar answers it.
+  defp date_of_day(days, calendar) do
+    {year, month, day} = calendar.date_from_iso_days(days)
+    Date.new(year, month, day, calendar)
+  end
+
+  defp day_of_date(%Date{year: year, month: month, day: day, calendar: calendar}),
+    do: calendar.date_to_iso_days(year, month, day)
+
   # --- durations -------------------------------------------------
 
   # A duration's count of the axis unit, when it names no coarser unit (a
-  # week counting in days, and hours and minutes in seconds on the time
-  # line); `:measured` when it does.
-  defp duration_count(%Tempo.Duration{time: time}, unit) do
+  # week counting in the days the axis calendar's week has, and hours and
+  # minutes in seconds on the time line); `:measured` when it does.
+  defp duration_count(%Tempo.Duration{time: time}, unit, calendar) do
     counts =
-      Enum.map(time, fn {component, amount} -> component_count(component, amount, unit) end)
+      Enum.map(time, fn {component, amount} ->
+        component_count(component, amount, unit, calendar)
+      end)
 
     cond do
       :fractional in counts -> :fractional
@@ -684,24 +693,25 @@ defmodule Tempo.Network.Normalize do
     end
   end
 
-  defp component_count(component, amount, :second)
+  defp component_count(component, amount, :second, _calendar)
        when component in @time_units and is_integer(amount),
        do: {:ok, amount * unit_seconds(component)}
 
-  defp component_count(component, amount, :second)
+  defp component_count(component, amount, :second, _calendar)
        when component in @calendar_units and is_integer(amount),
        do: :measured
 
-  defp component_count(unit, amount, unit) when is_integer(amount), do: {:ok, amount}
+  defp component_count(unit, amount, unit, _calendar) when is_integer(amount), do: {:ok, amount}
 
-  defp component_count(:week, weeks, :day) when is_integer(weeks),
-    do: {:ok, Calendrical.weeks_to_days(weeks)}
+  defp component_count(:week, weeks, :day, calendar) when is_integer(weeks),
+    do: {:ok, weeks * calendar.days_in_week()}
 
-  defp component_count(:year, years, unit) when is_integer(years) and unit in [:month, :day],
-    do: :measured
+  defp component_count(:year, years, unit, _calendar)
+       when is_integer(years) and unit in [:month, :day],
+       do: :measured
 
-  defp component_count(:month, months, :day) when is_integer(months), do: :measured
-  defp component_count(_component, _amount, _unit), do: :fractional
+  defp component_count(:month, months, :day, _calendar) when is_integer(months), do: :measured
+  defp component_count(_component, _amount, _unit, _calendar), do: :fractional
 
   # A measure's edges from its runs: the length between its boundaries, the
   # earliest (`:min`) or latest (`:max`) its end can fall, and the latest
@@ -987,10 +997,10 @@ defmodule Tempo.Network.Normalize do
   # How many axis units `duration` runs from `position`, by calendar
   # arithmetic in the measure's calendar and, on the time line, its zone.
   defp length_from(position, %{duration: duration, calendar: calendar}, :day) do
-    with %Date{} = date <- Calendrical.date_from_iso_days(position, calendar),
+    with {:ok, date} <- date_of_day(position, calendar),
          %Tempo{} = later <- date |> Tempo.from_elixir() |> Math.add(duration),
          {:ok, later_date} <- Tempo.to_date(later) do
-      {:ok, Calendrical.date_to_iso_days(later_date) - position}
+      {:ok, day_of_date(later_date) - position}
     else
       _unmeasurable -> {:error, unmeasurable_error(duration, calendar)}
     end

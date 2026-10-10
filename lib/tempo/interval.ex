@@ -2027,8 +2027,8 @@ defmodule Tempo.Interval do
   an hour a number of hours. A week against a month or a year is
   counted in days, since weeks do not divide them.
 
-  Years, months, weeks and days are counted on the calendar with
-  `Calendrical.diff/3`, so a month is one month however many days it
+  Years, months, weeks and days are counted by the calendar itself
+  (its `diff/3`), so a month is one month however many days it
   has, and the day a daylight-saving change shortens is still one day.
   Hours, minutes and seconds are elapsed time on the UTC time line
   (`Tempo.Compare.to_utc_seconds/1`), so the same day measured in hours
@@ -2359,8 +2359,9 @@ defmodule Tempo.Interval do
   end
 
   # Calendar units are counted on the calendar, and whatever the count
-  # leaves is kept in clock time. A calendar that cannot count them — a
-  # caller's own without `diff/3` — is measured in elapsed seconds.
+  # leaves is kept in clock time. Ends it cannot count between — one with
+  # no date to read, or dates of two calendars — are measured in elapsed
+  # seconds.
   defp measure(from, to, unit, leap) do
     case calendar_parts(from, to, unit) do
       {:ok, parts, reached} -> parts ++ remainder_parts(seconds_between(reached, to) + leap)
@@ -2383,7 +2384,8 @@ defmodule Tempo.Interval do
   defp calendar_parts_by_dates(from, to, unit) do
     with {:ok, from_date} <- first_date(from),
          {:ok, to_date} <- first_date(to),
-         count when is_integer(count) <- Calendrical.diff(from_date, to_date, date_part(unit)) do
+         count when is_integer(count) <-
+           UnitValues.counted_between(from_date, to_date, date_part(unit)) do
       counted_parts(from, to, unit, count, frame(from) == frame(to))
     end
   end
@@ -2831,9 +2833,10 @@ defmodule Tempo.Interval do
 
   # A duration's microseconds where each of its units has one length on a
   # clock with no date: a week, a day, and the units of a time of day. A
-  # week is as many days as Calendrical counts in one.
+  # week with no calendar to ask is the notation's, of as many days as that
+  # calendar counts in one.
   @microseconds_in_a_day 86_400_000_000
-  @microseconds_in_a_week Calendrical.weeks_to_days(1) * @microseconds_in_a_day
+  @microseconds_in_a_week Calendars.default().days_in_week() * @microseconds_in_a_day
 
   defp fixed_microseconds(time) do
     Enum.reduce_while(time, 0, fn

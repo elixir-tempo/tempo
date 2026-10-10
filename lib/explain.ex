@@ -2248,7 +2248,7 @@ defmodule Tempo.Explain do
   defp offset_in_days(time) do
     Enum.reduce(time, 0, fn
       {:day, n}, acc when is_integer(n) -> acc + n
-      {:week, n}, acc when is_integer(n) -> acc + Calendrical.weeks_to_days(n)
+      {:week, n}, acc when is_integer(n) -> acc + n * Calendars.default().days_in_week()
       _entry, acc -> acc
     end)
   end

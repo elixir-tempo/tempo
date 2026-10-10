@@ -156,7 +156,7 @@ The end state the user set on 2026-10-10: "Basically, all calendar calls in Temp
 
 ### A callback exists today, and Tempo calls a wrapper of it (25 calls)
 
-These need no change in Calendrical: Tempo asks the calendar it already holds.
+These need no change in Calendrical: Tempo asks the calendar it already holds. Done, but for one call of `Calendrical.iso_days/4` and the two of the Gregorian days of a year, each a decision under Tasks, and the two calls of `iso_days/4` that go with the cycle.
 
 | Tempo calls | Calls | Becomes |
 |---|---|---|
@@ -241,7 +241,9 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 
 ## Tasks
 
-* [ ] **Ask the calendar where a callback exists** — the 25 calls of the first table of "Every call a callback", a function at a time, each compared before and after: nothing in Calendrical changes for them. Two are done (`Calendrical.Interval.year/2` and `quarter/3`).
+* [ ] **A validated day count in one step** — for the user to decide. `Calendrical.iso_days/4` stays at one call (`lib/compare.ex`): the Chinese, Korean, Vietnamese and lunar Japanese calendars answer it in one step through an `iso_days/3` that no behaviour declares, 112 µs for the Chinese calendar where `valid_date?/3` then `date_to_iso_days/3` is 208 µs (the Gregorian is 1.0 µs and 0.7 µs). Either `iso_days/3` becomes a callback of every calendar, or Tempo takes the two steps at twice the time for those four.
+
+* [ ] **The Gregorian years a calendar's year runs through** — for the user to decide. `Calendrical.first_gregorian_day_of_year/2` and `last_gregorian_day_of_year/2` stay (2 calls in `lib/tempo/rrule/selection.ex`): an event is asked by Gregorian year (`solar_term/2`, Easter), and no callback says which Gregorian years a year of a calendar runs through.
 
 * [ ] **The period after or before a date, asked of its calendar** — the 16 calls of `Calendrical.next/3` and `previous/3` become `calendar.plus/6` and the callbacks that give a period, each compared before and after; nothing in Calendrical changes for them. The 6 calls of `Calendrical.Kday` stay.
 
@@ -254,6 +256,8 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 * [ ] **Week dates through Calendrical** — parked by the user on 2026-10-10 ("We will go back and discuss week dates (iso or calendar) later"): whether a week date is counted over the Gregorian year or the calendar's own is theirs to settle, and Calendrical's `plans/week-dates.md` holds the draft. The 7 lines that name a calendar for it compute with the pair of the Gregorian and `Calendrical.ISOWeek`: 5 in `lib/tempo/unit_values.ex`, 1 in `lib/math.ex` and 1 in `lib/enumeration/zone.ex`, which reads a date back as a week date for those two alone, since `iso_week_of_year/3` is the week of the Gregorian year in every calendar (`Calendrical.Hebrew.iso_week_of_year(5786, 3, 4)` is `{2025, 48}`, the Monday of Tempo's `5786W10`).
 
 ### Done
+
+* [x] **Ask the calendar where a callback exists** — the first table of "Every call a callback": `calendar.diff/3` for the count between two dates of one calendar (4), `calendar.date_from_iso_days/1` and `date_to_iso_days/3` (5), `calendar.year/1` for a year's first day (1), and `calendar.days_in_week/0` for the days of a week (8), asked of the value's calendar where one is in hand and of the notation's for a duration that names none. Compared before and after in every calendar Calendrical ships, the 35 reform calendars among them: a year's first day in 41,097 years and the date of a day count at 27,001 counts, none differing. Calls into Calendrical's own modules 42. 2026-10-10.
 
 * [x] **Calendrical's callbacks, then Tempo's calls of them** — the second table of "Every call a callback". Calendrical answers every one at `06aa274`, each a required callback of every calendar, and Tempo calls each on the calendar it holds: the last were the 11 calls of `Calendrical.date_from_day_of_year/3`, each `calendar.date_from_day_of_year/2`, which is what that function calls. Calls into Calendrical's own modules 60. 2026-10-10.
 

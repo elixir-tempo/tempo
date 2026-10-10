@@ -1382,8 +1382,8 @@ defmodule Tempo.UnitValues do
   @spec first_date(keyword(), module()) ::
           {:ok, {integer(), pos_integer(), pos_integer()}} | {:error, :no_period}
   def first_date([{:year, year}], calendar) when is_integer(year) do
-    case Calendrical.first_day_of_year(year, calendar) do
-      %Date{year: year, month: month, day: day} -> {:ok, {year, month, day}}
+    case calendar.year(year) do
+      %Date.Range{first: %Date{year: year, month: month, day: day}} -> {:ok, {year, month, day}}
       _no_such_year -> {:error, :no_period}
     end
   end
@@ -1793,7 +1793,7 @@ defmodule Tempo.UnitValues do
   defp iso_week_count(calendar, year) do
     with {:ok, first} <- first_week_start(calendar, year, @monday),
          {:ok, next_first} <- first_week_start(calendar, year + 1, @monday),
-         weeks when is_integer(weeks) <- Calendrical.diff(first, next_first, :weeks) do
+         weeks when is_integer(weeks) <- counted_between(first, next_first, :weeks) do
       weeks
     else
       _no_first_week -> 0
@@ -1863,12 +1863,24 @@ defmodule Tempo.UnitValues do
          {:ok, next_first} <- first_week_start(calendar, year + 1, first_day),
          :lt <- Compare.compare_days(week_start, next_first),
          before when is_integer(before) and before >= 0 <-
-           Calendrical.diff(first, week_start, :weeks),
-         weeks when is_integer(weeks) <- Calendrical.diff(first, next_first, :weeks) do
+           counted_between(first, week_start, :weeks),
+         weeks when is_integer(weeks) <- counted_between(first, next_first, :weeks) do
       {:ok, before + 1, weeks}
     else
       _not_a_week_of_the_year -> :error
     end
+  end
+
+  @doc false
+  # The whole units (`:years`, `:months`, `:weeks` or `:days`) from one date
+  # to another, as their calendar counts them, and `:two_calendars` for
+  # dates that are not of one calendar.
+  def counted_between(%Date{} = from, %Date{} = to, part) do
+    calendar = Calendars.effective(from.calendar)
+
+    if Calendars.effective(to.calendar) == calendar,
+      do: calendar.diff({from.year, from.month, from.day}, {to.year, to.month, to.day}, part),
+      else: :two_calendars
   end
 
   defp first_week_start(calendar, year, first_day) do

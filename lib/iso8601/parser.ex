@@ -1,6 +1,7 @@
 defmodule Tempo.Iso8601.Parser do
   @moduledoc false
 
+  alias Tempo.Calendars
   alias Tempo.Duration
   alias Tempo.Iso8601.AST
   alias Tempo.Iso8601.Unit
@@ -228,9 +229,10 @@ defmodule Tempo.Iso8601.Parser do
 
   defp window_shortfall(_no_duration, _within), do: nil
 
-  # A week is as many days as Calendrical counts in one.
+  # A week with no calendar to ask is the notation's, of as many days as
+  # that calendar counts in one.
   @measured_seconds %{
-    week: Calendrical.weeks_to_days(1) * 86_400,
+    week: Calendars.default().days_in_week() * 86_400,
     day: 86_400,
     hour: 3_600,
     minute: 60,
