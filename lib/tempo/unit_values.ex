@@ -220,7 +220,7 @@ defmodule Tempo.UnitValues do
   @doc false
   # The year so many years on from a year, back where the count is
   # negative, as the calendar counts its years. The count across a year the
-  # calendar lacks is Calendrical's (`plus/5`): two years on from the Julian
+  # calendar lacks is Calendrical's (`plus/6`): two years on from the Julian
   # calendar's -1 is 2.
   @spec years_on(integer(), integer(), module()) :: integer()
   def years_on(year, count, calendar) when is_integer(year) and is_integer(count) do
@@ -246,8 +246,8 @@ defmodule Tempo.UnitValues do
   # A year the calendar lacks (the Julian calendar's 0, should one be held)
   # has no date to count from, and is counted on as a number.
   defp counted_by_calendar(year, count, calendar) do
-    with true <- exported?(calendar, :plus, 5) and calendar.valid_date?(year, 1, 1),
-         {on, _month, _day} <- calendar.plus(year, 1, 1, :years, count) do
+    with true <- calendar.valid_date?(year, 1, 1),
+         {on, _month, _day} <- calendar.plus(year, 1, 1, :years, count, []) do
       on
     else
       _as_a_number -> year + count
@@ -1822,7 +1822,7 @@ defmodule Tempo.UnitValues do
     with {:ok, first} <- first_week_start(calendar, year, @monday),
          {:ok, next_first} <- first_week_start(calendar, year + 1, @monday),
          {start_year, month, day} <-
-           calendar.plus(first.year, first.month, first.day, :weeks, week - 1),
+           calendar.plus(first.year, first.month, first.day, :weeks, week - 1, []),
          {:ok, start} <- Date.new(start_year, month, day, calendar),
          :lt <- Compare.compare_days(start, next_first) do
       start
@@ -1898,7 +1898,7 @@ defmodule Tempo.UnitValues do
   defp date_in_week(%Date{} = week_start, day, calendar) when is_integer(day) do
     with true <- day in days_of_a_week(calendar),
          {year, month, day_of_month} <-
-           calendar.plus(week_start.year, week_start.month, week_start.day, :days, day - 1) do
+           calendar.plus(week_start.year, week_start.month, week_start.day, :days, day - 1, []) do
       Date.new(year, month, day_of_month, calendar)
     else
       _no_such_day -> {:error, :invalid_date}

@@ -306,7 +306,7 @@ defmodule Tempo.Interval.Steps do
   defp nth_date_step(%Tempo{time: time} = tempo, n, :month, calendar) do
     year = Keyword.fetch!(time, :year)
     month = Keyword.fetch!(time, :month)
-    {new_year, new_month, _day} = calendar.plus(year, month, 1, :months, n)
+    {new_year, new_month, _day} = calendar.plus(year, month, 1, :months, n, [])
 
     %{
       tempo
@@ -319,7 +319,7 @@ defmodule Tempo.Interval.Steps do
 
   defp nth_date_step(%Tempo{time: time, calendar: calendar} = tempo, n, :day, calendar) do
     date = date_of!(time, calendar)
-    {y, m, d} = calendar.plus(date.year, date.month, date.day, :days, n)
+    {y, m, d} = calendar.plus(date.year, date.month, date.day, :days, n, [])
 
     %{
       tempo

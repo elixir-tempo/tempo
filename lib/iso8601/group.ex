@@ -878,7 +878,7 @@ defmodule Tempo.Iso8601.Group do
   defp nth_day_of_season(%Date{} = start_date, %Date{} = end_date, day)
        when is_integer(day) and day >= 1 do
     {year, month, day_of_month} =
-      Gregorian.plus(start_date.year, start_date.month, start_date.day, :days, day - 1)
+      Gregorian.plus(start_date.year, start_date.month, start_date.day, :days, day - 1, [])
 
     season_date_before(Date.new(year, month, day_of_month), end_date, day)
   end

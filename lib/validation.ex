@@ -1807,7 +1807,7 @@ defmodule Tempo.Validation do
   def year_and_month(%Range{first: first_year, last: last_year}, month, calendar) do
     with {:ok, {start_year, start_month, start_day}} <- first_day_of_year(first_year, calendar),
          {year, month_of_year, _day} when year >= first_year and year <= last_year <-
-           calendar.plus(start_year, start_month, start_day, :months, month - 1) do
+           calendar.plus(start_year, start_month, start_day, :months, month - 1, []) do
       {:ok, year, month_of_year}
     else
       _beyond_the_group ->
@@ -1833,7 +1833,7 @@ defmodule Tempo.Validation do
     with {:ok, {start_year, start_month, start_day}} <-
            UnitValues.start_date([year: year, month: first_month], calendar),
          {^year, month, day_of_month} <-
-           calendar.plus(start_year, start_month, start_day, :days, day - 1),
+           calendar.plus(start_year, start_month, start_day, :days, day - 1, []),
          true <- month >= first_month and month <= last_month do
       {:ok, month, day_of_month}
     else

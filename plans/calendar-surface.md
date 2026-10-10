@@ -117,7 +117,7 @@ In the order they can be done. The first three need nothing of Calendrical.
 
 * **What is outside, in one module** — the notation's calendar, the zone database's and a standard's are each named once: the 26 outside lines and the 9 of text come to that module.
 
-* **`plus/6` alone** — 18 calls change arity, and the 5 probes of `plus` and the 7 `valid_date?/3` guards beside them go. Needs `plus/6` declared for every unit.
+* **`plus/6` alone** — 18 calls change arity and the 5 probes of `plus` go. The 7 calls of `valid_date?/3` beside them stay: each asks a required callback whether what is stepped from is a date, which is no probe. Calendrical's declaration of every unit is in its `TODO.md`.
 
 * **`Tempo.UnitValues` asks for values** — `in_period/3` and `in_any_year/3` ask the two new callbacks, and the deciders of a composite (3 functions, 14 calls) and of a year's first day (10, 32) go with 5 of the fast paths, as does the one that asks whether a calendar has a year 0 (11 calls), which becomes whether the year has any month. Needs the two callbacks.
 
@@ -190,8 +190,6 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 
 * [ ] **What is outside, in one module** — needs nothing upstream.
 
-* [ ] **`plus/6` alone** — every calendar Calendrical has answers it for every unit today; the declaration is in Calendrical's `TODO.md`.
-
 * [ ] **Weeks or months, asked once** — needs nothing upstream.
 
 * [ ] **No fast path by name** — each measured as it goes.
@@ -211,6 +209,8 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 * [ ] **Names, traditional months and solar terms** — blocked on `cardinal_day/3` and the four callbacks of traditional months being required, and on a solar term asked of a calendar (Calendrical's `TODO.md`).
 
 ### Done
+
+* [x] **`plus/6` alone** — all 19 calls are at the arity the behaviour declares and the 5 probes of `plus` are gone; the declaration of every unit is in Calendrical's `TODO.md`. 2026-10-10.
 
 * [x] **The week's seven days** — the 16 lines are none: 12 ask `days_in_week/0`, 2 were cron's own weekdays, and 2 went with Tempo's own working-out of a month's weeks, which is Calendrical's (`Calendrical.Interval.weeks_in_month/3` and `week/4`). 2026-10-10.
 

@@ -2339,7 +2339,7 @@ defmodule Tempo.RRule.Selection do
   defp week_and_its_year(date, calendar, wkst) do
     %Date{year: year, month: month, day: day} = week_start = Kday.kday_on_or_before(date, wkst)
 
-    case calendar.plus(year, month, day, :days, 3) do
+    case calendar.plus(year, month, day, :days, 3, []) do
       {week_year, _month, _day} -> {week_start, week_year}
       _no_fourth_day -> :error
     end
@@ -2634,7 +2634,7 @@ defmodule Tempo.RRule.Selection do
     case new_from_date(date, calendar) do
       {:ok, new_from} ->
         {year, month, day} =
-          calendar.plus(new_from.year, new_from.month, new_from.day, :days, days_to_end)
+          calendar.plus(new_from.year, new_from.month, new_from.day, :days, days_to_end, [])
 
         %{to | time: replace_unit_values(to_time, year: year, month: month, day: day)}
 

@@ -202,7 +202,7 @@ defmodule Tempo.Math do
        when is_integer(year) and is_integer(month) and month > 0 and is_integer(day) and day > 0 do
     with true <- UnitValues.stepped_by_calendar?(year, calendar),
          true <- calendar.valid_date?(year, month, day),
-         {year, month, day} <- calendar.plus(year, month, day, :days, by) do
+         {year, month, day} <- calendar.plus(year, month, day, :days, by, []) do
       {:ok, [{:year, year}, {:month, month}, {:day, day} | rest]}
     else
       _by_count -> :by_count
@@ -2635,7 +2635,7 @@ defmodule Tempo.Math do
          {:ok, month} <- component(time, :month),
          {:ok, day} <- component(time, :day),
          {:ok, date} <- Date.new(year, month, day, calendar),
-         {next_year, next_month, next_day} <- calendar.plus(year, month, day, :months, 1),
+         {next_year, next_month, next_day} <- calendar.plus(year, month, day, :months, 1, []),
          {:ok, month_later} <- Date.new(next_year, next_month, next_day, calendar) do
       {:ok, :day, whole_units(fraction, Date.diff(month_later, date))}
     else
@@ -2726,7 +2726,7 @@ defmodule Tempo.Math do
 
   # Fast path: adding N of a fixed-length sub-day unit (hour, minute,
   # second) to a concrete datetime is O(1) via seconds-of-day
-  # arithmetic with a whole-day carry through Calendrical's `plus/5`, versus the
+  # arithmetic with a whole-day carry through Calendrical's `plus/6`, versus the
   # O(N) single-unit stepping below. Without it a high-frequency
   # recurrence (`FREQ=MINUTELY;COUNT=1440`) is quadratic to
   # materialise — occurrence i adds an i-unit duration. Falls back to
@@ -2798,7 +2798,7 @@ defmodule Tempo.Math do
        when is_integer(year) and is_integer(month) and month > 0 and is_integer(day) and day > 0 do
     with true <- UnitValues.stepped_by_calendar?(year, calendar),
          true <- calendar.valid_date?(year, month, day),
-         {year, month, day} <- calendar.plus(year, month, day, date_part, n) do
+         {year, month, day} <- calendar.plus(year, month, day, date_part, n, []) do
       {:ok, [{:year, year}, {:month, month}, {:day, day} | rest]}
     else
       _by_count -> :by_count
@@ -2819,7 +2819,7 @@ defmodule Tempo.Math do
   end
 
   # Months counted on through the years are the calendar's to count
-  # (`plus/5`), which says in one step what a month at a time says in as
+  # (`plus/6`), which says in one step what a month at a time says in as
   # many as the count: it took time in proportion to the count, and a
   # recurrence that steps to its nth candidate by one shift the square of
   # it. Only the year and the month are taken from the answer, and the day
@@ -2834,8 +2834,8 @@ defmodule Tempo.Math do
          {:ok, month} <- component(time, :month),
          false <- UnitValues.stepped_by_calendar?(year, calendar),
          false <- Tempo.week_based_calendar?(calendar),
-         true <- function_exported?(calendar, :plus, 5) and calendar.valid_date?(year, month, 1),
-         {new_year, new_month, _day} <- calendar.plus(year, month, 1, :months, n) do
+         true <- calendar.valid_date?(year, month, 1),
+         {new_year, new_month, _day} <- calendar.plus(year, month, 1, :months, n, []) do
       {:ok, time |> put_component(:year, new_year) |> put_component(:month, new_month)}
     else
       _a_month_at_a_time -> step_n_units(time, :month, n, calendar)
@@ -2860,18 +2860,17 @@ defmodule Tempo.Math do
 
   defp traditional_months?(calendar) do
     Code.ensure_loaded?(calendar) and
-      function_exported?(calendar, :ordinal_month_from_traditional, 2) and
-      function_exported?(calendar, :plus, 6)
+      function_exported?(calendar, :ordinal_month_from_traditional, 2)
   end
 
-  # A valid date moves by the calendar's own `plus/5`; one that is not a
+  # A valid date moves by the calendar's own `plus/6`; one that is not a
   # date (a day a month step has not yet clamped) steps instead.
   defp fast_add_days(time, n, calendar) do
     with {:ok, year} <- year_of(time),
          {:ok, month} <- component(time, :month),
          {:ok, day} <- component(time, :day),
          true <- calendar.valid_date?(year, month, day) do
-      {year, month, day} = calendar.plus(year, month, day, :days, n)
+      {year, month, day} = calendar.plus(year, month, day, :days, n, [])
 
       new_time =
         time
@@ -2894,13 +2893,13 @@ defmodule Tempo.Math do
   # is a resolution prefix (`hour` present, `minute`/`second` optional
   # and already extended by `ensure_resolution_for_duration/2`), so its
   # seconds are exact; whole days overflow through Calendrical's
-  # `plus/5` (which rolls month/year in-calendar) and only the components
+  # `plus/6` (which rolls month/year in-calendar) and only the components
   # that were present are written back, preserving the value's
   # resolution. Wall clock, like the stepper — the zone rides on `shift`,
   # untouched.
   #
   # A date of a calendar of weeks is its year, its week and its day of the
-  # week, which the calendar's `plus/5` takes as a month calendar's takes a
+  # week, which the calendar's `plus/6` takes as a month calendar's takes a
   # year, a month and a day.
   defp fast_add_time_of_day(time, unit, n, calendar) do
     {middle, day_unit} = units_of_a_date(time, calendar)
@@ -2916,7 +2915,7 @@ defmodule Tempo.Math do
       day_carry = Integer.floor_div(total, @seconds_in_day)
 
       {year, month, day} =
-        calendar.plus(year, month, day, :days, day_carry)
+        calendar.plus(year, month, day, :days, day_carry, [])
 
       new_time =
         time
@@ -2964,7 +2963,7 @@ defmodule Tempo.Math do
   defp fast_add_on_the_clock(_time, _unit, _n), do: :fallback
 
   # A week of a calendar of weeks so many weeks on is the calendar's own
-  # `plus/5`. A week of a Gregorian year is one of ISO 8601's, counted on
+  # `plus/6`. A week of a Gregorian year is one of ISO 8601's, counted on
   # from its first day by the calendar and named again by its week
   # (`iso_week_of_year/3`). Any other value is counted a week at a time.
   defp weeks_by_the_calendar([{:year, year}, {:week, week} | rest], n, calendar)
@@ -2984,8 +2983,8 @@ defmodule Tempo.Math do
   defp weeks_by_the_calendar(_time, _n, _calendar), do: :by_count
 
   defp week_of_a_calendar_of_weeks(year, week, rest, n, calendar) do
-    with true <- function_exported?(calendar, :plus, 5) and calendar.valid_date?(year, week, 1),
-         {year, week, _day} <- calendar.plus(year, week, 1, :weeks, n) do
+    with true <- calendar.valid_date?(year, week, 1),
+         {year, week, _day} <- calendar.plus(year, week, 1, :weeks, n, []) do
       {:ok, [{:year, year}, {:week, week} | rest]}
     else
       _by_count -> :by_count
@@ -2994,7 +2993,7 @@ defmodule Tempo.Math do
 
   defp iso_week_on(year, week, rest, n, calendar) do
     with {:ok, %Date{} = first} <- UnitValues.date_from_iso_week(year, week, 1, calendar),
-         {year, month, day} <- calendar.plus(first.year, first.month, first.day, :weeks, n),
+         {year, month, day} <- calendar.plus(first.year, first.month, first.day, :weeks, n, []),
          {week_year, week} when is_integer(week_year) and is_integer(week) <-
            calendar.iso_week_of_year(year, month, day) do
       {:ok, [{:year, week_year}, {:week, week} | rest]}
@@ -3004,7 +3003,7 @@ defmodule Tempo.Math do
   end
 
   # A day of a week of a calendar of weeks so many days on is the calendar's
-  # own `plus/5` too.
+  # own `plus/6` too.
   defp days_of_week_by_the_calendar(
          [{:year, year}, {:week, week}, {:day_of_week, day} | rest],
          n,
@@ -3012,8 +3011,8 @@ defmodule Tempo.Math do
        )
        when is_integer(year) and is_integer(week) and is_integer(day) do
     with true <- Tempo.week_based_calendar?(calendar),
-         true <- function_exported?(calendar, :plus, 5) and calendar.valid_date?(year, week, day),
-         {year, week, day} <- calendar.plus(year, week, day, :days, n) do
+         true <- calendar.valid_date?(year, week, day),
+         {year, week, day} <- calendar.plus(year, week, day, :days, n, []) do
       {:ok, [{:year, year}, {:week, week}, {:day_of_week, day} | rest]}
     else
       _by_count -> :by_count
