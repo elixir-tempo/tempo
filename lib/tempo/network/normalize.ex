@@ -13,9 +13,9 @@ defmodule Tempo.Network.Normalize do
   Every value is placed by its actual length, never a mean one:
 
   * **The axis** counts the years of the network's calendar when all its
-    bounds share one, Gregorian months at month resolution, and days
-    otherwise, whose positions (Calendrical's iso days) are the same in
-    every calendar. A network in hours, minutes or seconds counts seconds
+    bounds share one, its months at month resolution where every year of
+    it has as many, and days otherwise, whose positions (Calendrical's iso
+    days) are the same in every calendar. A network in hours, minutes or seconds counts seconds
     on the time line: the wall clock when its bounds are floating, UTC
     when they are zoned. Its results are shown in its own unit.
 
@@ -34,9 +34,10 @@ defmodule Tempo.Network.Normalize do
     hours. `Tempo.Network.Solver` measures again as it narrows the starts,
     until nothing changes, so a period whose start is known takes the
     exact length of its days, months and years. A start with no bound
-    takes the Gregorian calendar's shortest and longest over its 400-year
-    cycle, on a wall clock, and is an error in a zone or any other
-    calendar.
+    takes its calendar's shortest and longest over the cycle its years
+    come round in (400 years, in the Gregorian calendar), on a wall clock,
+    and is an error in a zone or in a calendar whose years come round in
+    no cycle.
 
   """
 
@@ -59,11 +60,11 @@ defmodule Tempo.Network.Normalize do
   # Units a duration names that are measured on the time line.
   @calendar_units [:day, :week, :month, :year]
 
-  # The Gregorian calendar repeats its lengths every 400 years, so its
-  # shortest and longest over one cycle are those over any span. The cycle
-  # measured starts in this year.
-  @gregorian_cycle_start 2000
-  @gregorian_cycle_years 400
+  # A calendar whose years come round repeats its lengths with them
+  # (`years_in_cycle/0`: every 400 years, in the Gregorian), so its shortest
+  # and longest over one cycle are those over any span. The cycle measured
+  # starts in this year: any year would do.
+  @cycle_start 2000
 
   @type boundary :: Relation.boundary()
 
@@ -254,8 +255,8 @@ defmodule Tempo.Network.Normalize do
   # Measure every duration from the positions its start can take under
   # `distances` (the solved all-pairs weights), keeping a length whose
   # start range has not changed since `lengths` was found. While `mode` is
-  # `:deferring`, a start that is unbounded or free across a whole
-  # Gregorian cycle waits, pending, for the narrower measures to settle;
+  # `:deferring`, a start that is unbounded or free across a whole cycle
+  # of its calendar waits, pending, for the narrower measures to settle;
   # at `:final` it is measured, as the calendar allows.
   @spec measure(t(), map(), lengths(), :deferring | :final) ::
           {:ok, lengths()} | {:error, Exception.t()}
@@ -295,8 +296,10 @@ defmodule Tempo.Network.Normalize do
   def date_at(position, %{unit: :year, calendar: calendar}),
     do: Tempo.new(year: position, calendar: calendar)
 
-  def date_at(position, %{unit: :month}),
-    do: Tempo.from_iso8601("#{Integer.floor_div(position, 12)}Y#{Integer.mod(position, 12) + 1}M")
+  def date_at(position, %{unit: :month, calendar: calendar}) do
+    {year, month} = year_and_month(position, calendar)
+    Tempo.new(year: year, month: month, calendar: calendar)
+  end
 
   def date_at(position, %{unit: :day, calendar: calendar}) do
     with {:ok, date} <- date_of_day(position, calendar), do: {:ok, Tempo.from_elixir(date)}
@@ -325,10 +328,10 @@ defmodule Tempo.Network.Normalize do
 
   # The axis: the unit positions count in, the unit results are shown in,
   # the calendar and, on the time line, the zone. Years count in the
-  # network's calendar when all its bounds share one, months only in the
-  # Gregorian calendar, whose months are numbered year by year, days in
-  # any calendar, and hours, minutes and seconds as seconds on the time
-  # line of the network's bounds.
+  # network's calendar when all its bounds share one, months in a calendar
+  # every year of which has as many (`months_in_year/0`), so that they are
+  # numbered year by year, days in any calendar, and hours, minutes and
+  # seconds as seconds on the time line of the network's bounds.
   defp axis(%Network{} = network) do
     bounds = network.periods |> Map.values() |> Enum.flat_map(&date_bounds/1)
     calendars = bounds |> Enum.map(&Calendars.effective(&1.calendar)) |> Enum.uniq()
@@ -353,8 +356,13 @@ defmodule Tempo.Network.Normalize do
   defp axis(:year, [], _zones), do: {:ok, calendar_axis(:year, single_calendar([]))}
   defp axis(:year, [calendar], _zones), do: {:ok, calendar_axis(:year, calendar)}
 
-  defp axis(:month, calendars, _zones) when calendars in [[], [Calendrical.Gregorian]],
-    do: {:ok, calendar_axis(:month, Calendrical.Gregorian)}
+  defp axis(:month, [], zones), do: axis(:month, [single_calendar([])], zones)
+
+  defp axis(:month, [calendar] = calendars, zones) do
+    if is_integer(calendar.months_in_year()),
+      do: {:ok, calendar_axis(:month, calendar)},
+      else: axis(:day, calendars, zones)
+  end
 
   defp axis(_unit, calendars, _zones), do: {:ok, calendar_axis(:day, single_calendar(calendars))}
 
@@ -565,8 +573,8 @@ defmodule Tempo.Network.Normalize do
   defp step(%{unit: :second, display: display}), do: unit_seconds(display)
   defp step(_axis), do: 1
 
-  # A value's position on the axis: its year, its Gregorian month numbered
-  # year by year, its first day's iso days, or its seconds on the time line.
+  # A value's position on the axis: its year, its month numbered year by
+  # year, its first day's iso days, or its seconds on the time line.
   defp position(%Tempo{time: time} = value, %{unit: :year}) do
     case Keyword.get(time, :year) do
       year when is_integer(year) -> {:ok, year}
@@ -574,10 +582,13 @@ defmodule Tempo.Network.Normalize do
     end
   end
 
-  defp position(%Tempo{time: time} = value, %{unit: :month}) do
+  defp position(%Tempo{time: time} = value, %{unit: :month, calendar: calendar}) do
     case {Keyword.get(time, :year), Keyword.get(time, :month, 1)} do
-      {year, month} when is_integer(year) and is_integer(month) -> {:ok, year * 12 + month - 1}
-      _other -> {:error, unplaceable_error(value)}
+      {year, month} when is_integer(year) and is_integer(month) ->
+        {:ok, year * calendar.months_in_year() + month - 1}
+
+      _other ->
+        {:error, unplaceable_error(value)}
     end
   end
 
@@ -664,6 +675,13 @@ defmodule Tempo.Network.Normalize do
   defp time_designator(:hour), do: "H"
   defp time_designator(:minute), do: "M"
   defp time_designator(:second), do: "S"
+
+  # The year and the month a position on an axis of months is, in a
+  # calendar every year of which has as many months.
+  defp year_and_month(position, calendar) do
+    months = calendar.months_in_year()
+    {Integer.floor_div(position, months), Integer.mod(position, months) + 1}
+  end
 
   # The date a count of days is in `calendar`, and the count of a date's
   # day, each as the calendar answers it.
@@ -787,10 +805,10 @@ defmodule Tempo.Network.Normalize do
   end
 
   # The runs of a duration from the positions its start can take. A wide
-  # start (unbounded, or free across a whole Gregorian cycle) waits while
-  # the narrower measures still move the bounds; once they settle, one
-  # whose lengths repeat with the Gregorian cycle takes the cycle's, and
-  # any other stays pending while it is unbounded.
+  # start (unbounded, or free across a whole cycle of its calendar) waits
+  # while the narrower measures still move the bounds; once they settle,
+  # one whose lengths repeat with its calendar's cycle takes the cycle's,
+  # and any other stays pending while it is unbounded.
   defp lengths_over(measure, {from_range, to_range}, unit, :deferring) do
     if wide?(measure, from_range, unit),
       do: {:ok, :pending},
@@ -799,46 +817,62 @@ defmodule Tempo.Network.Normalize do
 
   defp lengths_over(measure, {from_range, to_range}, unit, :final) do
     cond do
-      cyclic?(measure, unit) and spans_cycle?(from_range, unit) -> cycle_runs(measure, unit)
-      unbounded?(from_range) -> {:ok, :pending}
-      true -> runs_over(measure, from_range, to_range, unit)
+      cyclic?(measure, unit) and spans_cycle?(from_range, measure, unit) ->
+        cycle_runs(measure, unit)
+
+      unbounded?(from_range) ->
+        {:ok, :pending}
+
+      true ->
+        runs_over(measure, from_range, to_range, unit)
     end
   end
 
   defp wide?(measure, range, unit),
-    do: unbounded?(range) or (cyclic?(measure, unit) and spans_cycle?(range, unit))
+    do: unbounded?(range) or (cyclic?(measure, unit) and spans_cycle?(range, measure, unit))
 
   defp unbounded?({first, last}), do: :unbounded in [first, last]
 
-  # The Gregorian calendar's lengths repeat every cycle, on a wall clock; a
-  # zone's do not.
-  defp cyclic?(%{calendar: Calendrical.Gregorian, zone: zone}, :second), do: zone == :floating
-  defp cyclic?(%{calendar: Calendrical.Gregorian}, _unit), do: true
-  defp cyclic?(_measure, _unit), do: false
+  # The lengths of a calendar whose years come round repeat every cycle, on
+  # a wall clock; a zone's do not, nor those of a calendar whose years come
+  # round in no cycle.
+  defp cyclic?(%{zone: zone}, :second) when zone != :floating, do: false
+  defp cyclic?(%{calendar: calendar}, unit), do: match?({:ok, _positions}, cycle(unit, calendar))
 
-  defp spans_cycle?({first, last}, _unit) when :unbounded in [first, last], do: true
+  defp spans_cycle?({first, last}, _measure, _unit) when :unbounded in [first, last], do: true
 
-  defp spans_cycle?({first, last}, unit) do
-    {cycle_first, cycle_last} = gregorian_cycle(unit)
+  defp spans_cycle?({first, last}, %{calendar: calendar}, unit) do
+    {:ok, {cycle_first, cycle_last}} = cycle(unit, calendar)
     last - first >= cycle_last - cycle_first
   end
 
-  # One whole Gregorian cycle of positions on the axis.
-  defp gregorian_cycle(:month) do
-    first = @gregorian_cycle_start * 12
-    {first, first + @gregorian_cycle_years * 12 - 1}
+  # One whole cycle of a calendar's years as positions on the axis, from
+  # the first day or month of `@cycle_start` to the last before the year
+  # that many years on. A calendar whose years come round in no cycle has
+  # none.
+  defp cycle(:month, calendar) do
+    with years when is_integer(years) <- calendar.years_in_cycle(),
+         months when is_integer(months) <- calendar.months_in_year() do
+      first = @cycle_start * months
+      {:ok, {first, first + years * months - 1}}
+    else
+      _comes_round_in_none -> :error
+    end
   end
 
-  defp gregorian_cycle(:day) do
-    {:ok, first} = Calendrical.iso_days(@gregorian_cycle_start, 1, 1, Calendrical.Gregorian)
-    last_year = @gregorian_cycle_start + @gregorian_cycle_years
-    {:ok, next} = Calendrical.iso_days(last_year, 1, 1, Calendrical.Gregorian)
-    {first, next - 1}
+  defp cycle(:day, calendar) do
+    with years when is_integer(years) <- calendar.years_in_cycle(),
+         %Date.Range{first: first} <- calendar.year(@cycle_start),
+         %Date.Range{first: next} <- calendar.year(@cycle_start + years) do
+      {:ok, {day_of_date(first), day_of_date(next) - 1}}
+    else
+      _comes_round_in_none -> :error
+    end
   end
 
-  defp gregorian_cycle(:second) do
-    {first_day, last_day} = gregorian_cycle(:day)
-    {first_day * 86_400, (last_day + 1) * 86_400 - 1}
+  defp cycle(:second, calendar) do
+    with {:ok, {first_day, last_day}} <- cycle(:day, calendar),
+         do: {:ok, {first_day * 86_400, (last_day + 1) * 86_400 - 1}}
   end
 
   # The runs from every start in `first..last`, summarised against the range
@@ -861,10 +895,9 @@ defmodule Tempo.Network.Normalize do
 
   # A start free across a whole cycle takes the cycle's shortest and longest
   # runs; where it ends, and which starts fit, stay open.
-  defp cycle_runs(measure, unit) do
-    {first, last} = gregorian_cycle(unit)
-
-    with {:ok, segments} <- segments(measure, first, last, unit) do
+  defp cycle_runs(%{calendar: calendar} = measure, unit) do
+    with {:ok, {first, last}} <- cycle(unit, calendar),
+         {:ok, segments} <- segments(measure, first, last, unit) do
       {:ok,
        %{
          shortest: segments |> Enum.map(&segment_length/1) |> Enum.min(),
@@ -1007,12 +1040,11 @@ defmodule Tempo.Network.Normalize do
   end
 
   defp length_from(position, %{duration: duration, calendar: calendar}, :month) do
-    month = Integer.mod(position, 12) + 1
+    {year, month} = year_and_month(position, calendar)
 
-    with {:ok, value} <-
-           Tempo.new(year: Integer.floor_div(position, 12), month: month, calendar: calendar),
+    with {:ok, value} <- Tempo.new(year: year, month: month, calendar: calendar),
          %Tempo{} = later <- Math.add(value, duration),
-         {:ok, later_position} <- position(later, %{unit: :month}) do
+         {:ok, later_position} <- position(later, %{unit: :month, calendar: calendar}) do
       {:ok, later_position - position}
     else
       _unmeasurable -> {:error, unmeasurable_error(duration, calendar)}

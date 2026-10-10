@@ -81,20 +81,6 @@ NAMED = {
     "lib/math.ex": [
         ('weeks_by_the_calendar', 'Gregorian', 'W'),
     ],
-    "lib/tempo.ex": [
-        ('names_no_date_of_any_year?', 'Gregorian', 'S'),
-        ('kind_of_year', 'Gregorian', 'G'),
-        ('no_date_in_year?', 'Gregorian', 'G'),
-        ('no_date_in_year?', 'Gregorian', 'G'),
-    ],
-    "lib/tempo/network/normalize.ex": [
-        ('axis', 'Gregorian', 'S'),
-        ('axis', 'Gregorian', 'S'),
-        ('cyclic?', 'Gregorian', 'S'),
-        ('cyclic?', 'Gregorian', 'S'),
-        ('gregorian_cycle', 'Gregorian', 'G'),
-        ('gregorian_cycle', 'Gregorian', 'G'),
-    ],
     "lib/tempo/unit_values.ex": [
         ('date_from_iso_week', 'Gregorian', 'W'),
         ('date_from_iso_week', 'ISOWeek', 'W'),
@@ -150,11 +136,9 @@ NUMBERS = {
     ],
     "lib/tempo.ex": [
         ('month_and_day', '12, 31', 'reader'),
-        ('walk_too_long_error', '400', 'gregorian'),
-        ('walk_too_long_error', '12', 'gregorian'),
+        ('walk_too_long_error', '400', 'prose'),
         ('moved_by_its_zone', '30', 'zone'),
         ('moved_by_its_zone', '366', 'zone'),
-        ('no_date_in_year?', '12, 31', 'gregorian'),
         ('cadence_index', '12', 'gregorian'),
     ],
     "lib/tempo/cron.ex": [
@@ -176,15 +160,6 @@ NUMBERS = {
     ],
     "lib/tempo/interval.ex": [
         ('spans_leap_second?', '12, 31', 'standard'),
-    ],
-    "lib/tempo/network/normalize.ex": [
-        ('', '400', 'gregorian'),
-        ('date_at', '12', 'gregorian'),
-        ('position', '12', 'gregorian'),
-        ('gregorian_cycle', '12', 'gregorian'),
-        ('gregorian_cycle', '12', 'gregorian'),
-        ('length_from', '12', 'gregorian'),
-        ('length_from', '12', 'gregorian'),
     ],
     "lib/tempo/rrule.ex": [
         ('', '7', 'standard'),
@@ -219,6 +194,7 @@ CONSTANT_CLASSES = collections.OrderedDict([
     ("clock", "ISO 8601's time of day: the hours of a day, the minutes of an hour, the seconds of a minute and their fractions."),
     ("standard", "A table or a number of a notation or a standard Tempo reads or writes."),
     ("limit", "A bound Tempo sets on its own work: how much it reads, lists or walks before it stops or asks."),
+    ("choice", "A value Tempo picks where any would do, and no fact of a calendar: the year a calendar's cycle is measured from."),
     ("zone", "A bound or a margin on what the zone database is asked, whose dates are Gregorian."),
     ("relations", "Allen's relations and the network's, and the tables that compose them."),
     ("options", "The names of options a function takes."),
@@ -325,11 +301,10 @@ CONSTANTS = {
         ('shift_units', 'units'), ('spans_at_once', 'limit'), ('occurrence_horizon', 'limit'),
         ('most_periods_passed_over', 'limit'), ('most_periods_reaching', 'limit'),
         ('recurrence_safety_cap', 'limit'), ('names_a_date', 'units'), ('names_no_date', 'units'),
-        ('time_of_day', 'units'), ('years_of_a_cycle', 'calendar'),
-        ('periods_before_asking', 'calendar'), ('months_of_a_cycle', 'calendar'),
+        ('time_of_day', 'units'), ('periods_before_asking', 'limit'),
         ('places_in_a_week', 'units'), ('places_finer_than', 'units'), ('seconds_in', 'clock'),
         ('years_of_changes_asked', 'zone'), ('seconds_of_changes_asked', 'zone'),
-        ('kinds_of_year', 'calendar'), ('longest_run_before_asking', 'limit'),
+        ('longest_run_before_asking', 'limit'),
         ('seconds_in', 'clock'), ('periods_worth_passing_over', 'limit'),
         ('steps_put_right', 'limit'), ('no_step', 'units'), ('rolls', 'standard'),
         ('most_days_off_in_a_row', 'limit'), ('valid_units', 'units'),
@@ -388,8 +363,7 @@ CONSTANTS = {
     ],
     "lib/tempo/network/normalize.ex": [
         ('unit_order', 'units'), ('duration_units', 'units'), ('time_units', 'units'),
-        ('calendar_units', 'units'), ('gregorian_cycle_start', 'calendar'),
-        ('gregorian_cycle_years', 'calendar'),
+        ('calendar_units', 'units'), ('cycle_start', 'choice'),
     ],
     "lib/tempo/network/relation.ex": [
         ('qualitative', 'relations'), ('edges', 'relations'), ('comparisons', 'relations'),

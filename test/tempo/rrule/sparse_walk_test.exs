@@ -14,8 +14,9 @@ defmodule Tempo.RRule.SparseWalkTest do
 
   A rule that selects no date, the 31st of April, has no occurrences: it was
   a walk that never ended until it was cut short, and is now told from its
-  parts, and a rule of years or months from the periods of four hundred
-  years, in which the Gregorian calendar comes round.
+  parts, and a rule of years or months from the periods of the years its
+  calendar comes round in: four hundred in the Gregorian calendar,
+  twenty-eight in the Coptic, two hundred and ten in a tabular Islamic one.
 
   The measure is a rule worked out by brute force with Elixir's own
   `NaiveDateTime`, `DateTime` and `Date`: every instant of the rule's
@@ -575,6 +576,57 @@ defmodule Tempo.RRule.SparseWalkTest do
       assert Date.day_of_week(~D[2026-06-02]) == 2
       assert {:ok, %IntervalSet{} = set} = Tempo.to_interval(recurrence)
       assert IntervalSet.members(set) == []
+    end
+  end
+
+  describe "a rule that selects no date, in a calendar that comes round in another cycle" do
+    # A month and a day of it, by the calendar's identifier and a year to
+    # start from. Whether any year has the date is asked of the calendar
+    # itself, a year at a time for more years than any of these comes round
+    # in: 28 for the Coptic, the Ethiopic and the Julian, 210 for the tabular
+    # Islamic, 400 for the Indian.
+    @other_calendars [
+      {"coptic", Calendrical.Coptic, 1742, [{13, 5}, {13, 6}, {13, 7}, {1, 30}, {1, 31}]},
+      {"ethiopic", Calendrical.Ethiopic, 2018, [{13, 6}, {13, 7}]},
+      {"islamic-civil", Calendrical.Islamic.Civil, 1447, [{2, 29}, {2, 30}, {12, 30}, {12, 31}]},
+      {"indian", Calendrical.Indian, 1947, [{1, 31}, {7, 30}, {7, 31}]},
+      {"julian", Calendrical.Julian, 1700, [{2, 29}, {2, 30}]}
+    ]
+
+    test "has no occurrences, at any frequency" do
+      for {identifier, calendar, year, dates} <- @other_calendars,
+          {month, day} <- dates,
+          cadence <- ["P1Y", "P1M", "P1D"] do
+        text = "R2/#{year}-01-01/#{cadence}/FL#{month}M#{day}DN[u-ca=#{identifier}]"
+        any_year? = Enum.any?(year..(year + 420), &calendar.valid_date?(&1, month, day))
+
+        found =
+          case Tempo.to_interval(Tempo.from_iso8601!(text)) do
+            {:ok, %IntervalSet{} = set} -> IntervalSet.count(set) > 0
+            {:error, %Tempo.UnboundedRecurrenceError{}} -> :cut_short
+          end
+
+        assert {text, found} == {text, any_year?}
+      end
+    end
+
+    # No year of weeks has a week 54, and 2026 has 53.
+    test "is told so in a calendar of weeks" do
+      {:ok, from} = Tempo.new(year: 2026, week: 1, day_of_week: 1, calendar: Calendrical.ISOWeek)
+
+      for {week, any_year?} <- [{53, true}, {54, false}] do
+        {:ok, recurrence} = RRule.parse("FREQ=YEARLY;BYWEEKNO=#{week};COUNT=2", from: from)
+        {:ok, %IntervalSet{} = set} = Tempo.to_interval(recurrence)
+
+        assert {week, IntervalSet.count(set) > 0} == {week, any_year?}
+      end
+    end
+
+    # Heshvan, the second month, has 29 days or 30.
+    test "is cut short in a calendar whose years come round in no cycle" do
+      rule = Tempo.from_iso8601!("R2/5786-01-01/P1Y/FL2M31DN[u-ca=hebrew]")
+
+      assert {:error, %Tempo.UnboundedRecurrenceError{}} = Tempo.to_interval(rule)
     end
   end
 end

@@ -21,6 +21,18 @@ defmodule Tempo.Network.ActualLengthsTest do
     Tempo.from_elixir(date)
   end
 
+  # The shortest and the longest an undated period of `duration` runs, in a
+  # network whose calendar is that of the date `start` is written in.
+  defp extremes(start, duration) do
+    period =
+      Network.new()
+      |> Network.add_period(:a, from: Tempo.from_iso8601!(start))
+      |> Network.add_period(:b, duration: duration)
+      |> solved(:b)
+
+    {period.min_duration, period.max_duration}
+  end
+
   describe "a duration coarser than the axis is measured" do
     test "a year from the first day of a leap year is 366 days" do
       period =
@@ -90,6 +102,39 @@ defmodule Tempo.Network.ActualLengthsTest do
         solved(Network.add_period(Network.new(), :a, from: ~o"2026-01", duration: ~o"P1Y"), :a)
 
       assert period.earliest_end == ~o"2027-01"
+    end
+
+    # A year of the tabular Islamic calendar has 354 days, or 355 in a leap
+    # year, and its months 29 or 30. A Coptic year has 365 or 366, and its
+    # thirteenth month 5 or 6 where the others have 30.
+    test "an undated year or month runs the extremes of a calendar whose years come round" do
+      for {start, year, month} <- [
+            {"1447-01-01[u-ca=islamic-civil]", {~o"P354D", ~o"P355D"}, {~o"P29D", ~o"P30D"}},
+            {"1742-01-01[u-ca=coptic]", {~o"P365D", ~o"P366D"}, {~o"P5D", ~o"P30D"}}
+          ] do
+        assert {start, extremes(start, ~o"P1Y")} == {start, year}
+        assert {start, extremes(start, ~o"P1M")} == {start, month}
+      end
+    end
+
+    test "a year on a month axis is the months its calendar's year has" do
+      coptic = &Tempo.from_iso8601!(&1 <> "[u-ca=coptic]")
+
+      a_year =
+        solved(
+          Network.add_period(Network.new(), :a, from: coptic.("1742-01"), duration: ~o"P1Y"),
+          :a
+        )
+
+      a_month =
+        solved(
+          Network.add_period(Network.new(), :a, from: coptic.("1742-13"), duration: ~o"P1M"),
+          :a
+        )
+
+      assert a_year.earliest_end == coptic.("1743-01")
+      assert a_year.min_duration == ~o"P13M"
+      assert a_month.earliest_end == coptic.("1743-01")
     end
   end
 

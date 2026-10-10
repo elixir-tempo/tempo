@@ -375,6 +375,10 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Changed
 
+* `Tempo.Network` measures a year or a month with no date in any calendar that says the years its own come round in, and counts months on its axis in any calendar every year of which has as many, where each was the Gregorian calendar's alone: an undated year of the tabular Islamic calendar runs 354 or 355 days, where it was an `ArgumentError`, and a year from the first month of a Coptic year ends thirteen months on. A calendar whose years come round in no cycle (the Hebrew) is refused as before.
+
+* A rule that names no date has no occurrences in every calendar that says the years its own come round in (the Coptic, the Ethiopic, the Julian, the Indian, a tabular Islamic calendar and a calendar of weeks), where only the Gregorian was told so: `R2/1742-01-01/P1Y/FL13M7DN[u-ca=coptic]`, the seventh day of a month of five or six, is the empty set, where it was a `Tempo.UnboundedRecurrenceError` after 10,000 periods. A calendar whose years come round in no cycle (the Hebrew, the Chinese, the Persian) is still walked until it is cut short.
+
 * `Tempo.parse/2` and the typed parsers refuse text in a locale's words that is longer than 1,024 bytes, with Localize's `Localize.DateTimeParseLengthError`. Eight thousand bytes took half a second to find no date in.
 
 * A month or a day out of range, in a date written with hyphens or designators, is refused by the value's calendar: `2026-14` and `2026Y6M32D` are a `Tempo.InvalidDateError` that names the valid values, where the reader refused a month past the 13th and a day past the 31st with a `Tempo.ParseError` before the calendar was asked. A calendar with more months or days is read as any other is.

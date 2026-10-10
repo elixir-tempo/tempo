@@ -103,7 +103,6 @@ defmodule Tempo do
 
   """
 
-  alias Calendrical.Gregorian
   alias Calendrical.Kday
   alias Localize.Territory.Hemisphere
   alias Tempo.AbstractSeasonError
@@ -9575,25 +9574,27 @@ defmodule Tempo do
   # nothing (`selected_within_the_cap/3`): a rule with occurrences nearly
   # always has one by then, and is never asked. It is told of a rule whose
   # parts are counted in a date or a time of day: in two ways from its
-  # dates, each in the Gregorian calendar, and in one from its steps. One
-  # whose dates are worked out in another way (an event, a window, a listed
-  # year), or that names no date in another calendar, is not told so, and
-  # its walk goes on until it is cut short.
+  # dates, each in a calendar whose years come round, and in one from its
+  # steps. One whose dates are worked out in another way (an event, a
+  # window, a listed year), or that names no date in a calendar whose years
+  # come round in no cycle, is not told so, and its walk goes on until it is
+  # cut short.
   #
-  # The Gregorian calendar comes round every four hundred years, in its
-  # dates and in their days of the week. So a rule of years that has
-  # selected nothing in four hundred of its periods never will, whatever it
-  # starts on and however many years it steps by, and nor will a rule of
-  # months in the months of four hundred years: the periods after them are
-  # those again, and the walk has shown it.
+  # A calendar says the years its own come round in, in their dates and in
+  # their days of the week (`years_in_cycle/0`): four hundred for the
+  # Gregorian. So a rule of years that has selected nothing in that many of
+  # its periods never will, whatever it starts on and however many years it
+  # steps by, and nor will a rule of months in the months of those years:
+  # the periods after them are those again, and the walk has shown it.
   #
-  # A rule of a finer frequency has more periods in four hundred years than
-  # a walk makes, and is told from its parts. A Gregorian year is one of
-  # fourteen kinds, a leap year or not that begins on one of the seven days
-  # of the week, and a year's kind settles every date in it: its months'
-  # lengths, its weekdays, its weeks. So the parts of a rule that name a
-  # date, asked of one year of each kind, select a date in some year or in
-  # none. They are asked as the walk asks them (`Tempo.RRule.Selection`), of
+  # A rule of a finer frequency has more periods in a cycle than a walk
+  # makes, and is told from its parts. A year is one of a few kinds, by the
+  # days and the months it has and the day of the week it begins on
+  # (fourteen, in the Gregorian calendar), and a year's kind settles every
+  # date in it: its months' lengths, its weekdays, its weeks. So the parts
+  # of a rule that name a date, asked of one year of each kind, select a
+  # date in some year or in none. They are asked as the walk asks them
+  # (`Tempo.RRule.Selection`), of
   # every period of the year, which is as many periods as the rule has or
   # more. The parts that do not name a date are left out there: a time of
   # day, and a position among what a period selects, each of which only
@@ -9617,12 +9618,11 @@ defmodule Tempo do
   @names_no_date [:hour, :minute, :second, :instance]
   @time_of_day [:hour, :minute, :second, :microsecond]
 
-  # The periods a walk has made, having found nothing, when it asks whether
-  # its rule has any occurrence: early, and again where a rule of months has
-  # made the months of the years the calendar comes round in.
-  @years_of_a_cycle 400
-  @periods_before_asking @years_of_a_cycle
-  @months_of_a_cycle 12 * @years_of_a_cycle
+  # The periods a walk has made, having found nothing, when it first asks
+  # whether its rule has any occurrence. A rule of years or of months is
+  # asked again where it has made the periods its calendar's years come
+  # round in (`asked_at/2`).
+  @periods_before_asking 400
 
   defp has_no_occurrence?(
          %Tempo.Interval{
@@ -9662,16 +9662,24 @@ defmodule Tempo do
     end
   end
 
-  # The Gregorian calendar's question: of the periods it comes round in, and
-  # of one year of each kind.
+  # The question of a calendar whose years come round: of the periods it
+  # comes round in, and of one year of each kind it has.
   defp names_no_date_of_any_year?(
          %Tempo.Interval{from: %Tempo{calendar: calendar}} = interval,
          cadence,
          periods
        ) do
-    Calendars.effective(calendar) == Gregorian and
-      (come_round?(cadence, periods) or
-         (periods == @periods_before_asking and selects_no_date?(interval, cadence)))
+    calendar = Calendars.effective(calendar)
+
+    case calendar.years_in_cycle() do
+      years when is_integer(years) ->
+        come_round?(cadence, periods, calendar) or
+          (periods == @periods_before_asking and
+             selects_no_date?(interval, cadence, calendar, years))
+
+      _comes_round_in_none ->
+        false
+    end
   end
 
   # A walk that steps by a whole number of days, hours, minutes or seconds
@@ -9907,32 +9915,70 @@ defmodule Tempo do
   end
 
   # Whether a walk has made every period its rule ever has, the calendar
-  # having come round: a rule of every fourth year makes four hundred
-  # periods in sixteen hundred years, which are four hundred years' kinds
-  # again.
-  defp come_round?(%Tempo.Duration{time: [year: years]}, periods)
-       when is_integer(years) and years > 0,
-       do: periods >= @years_of_a_cycle
+  # having come round: in the Gregorian calendar a rule of every fourth year
+  # makes four hundred periods in sixteen hundred years, which are four
+  # hundred years' kinds again.
+  defp come_round?(%Tempo.Duration{time: [{unit, amount}]}, periods, calendar)
+       when unit in [:year, :month] and is_integer(amount) and amount > 0 do
+    case periods_of_a_cycle(unit, calendar) do
+      {:ok, count} -> periods >= count
+      :error -> false
+    end
+  end
 
-  defp come_round?(%Tempo.Duration{time: [month: months]}, periods)
-       when is_integer(months) and months > 0,
-       do: periods >= @months_of_a_cycle
+  defp come_round?(_cadence, _periods, _calendar), do: false
 
-  defp come_round?(_cadence, _periods), do: false
+  # The periods of years or of months a calendar's years come round in: the
+  # years of its cycle, and the months of them where every year has as
+  # many. A calendar whose years come round in no cycle has neither.
+  defp periods_of_a_cycle(:year, calendar) do
+    case calendar.years_in_cycle() do
+      years when is_integer(years) -> {:ok, years}
+      _comes_round_in_none -> :error
+    end
+  end
+
+  defp periods_of_a_cycle(:month, calendar) do
+    with {:ok, years} <- periods_of_a_cycle(:year, calendar),
+         months when is_integer(months) <- calendar.months_in_year() do
+      {:ok, years * months}
+    else
+      _no_one_count -> :error
+    end
+  end
+
+  # The counts of periods at which a walk that has found nothing asks
+  # whether its rule has any occurrence: early, and where a rule of years or
+  # of months has made the periods its calendar's years come round in.
+  defp asked_at(
+         %Tempo.Interval{from: %Tempo{calendar: calendar}},
+         %Tempo.Duration{time: [{unit, _amount}]}
+       )
+       when unit in [:year, :month] do
+    case periods_of_a_cycle(unit, Calendars.effective(calendar)) do
+      {:ok, count} -> Enum.uniq([@periods_before_asking, count])
+      :error -> [@periods_before_asking]
+    end
+  end
+
+  defp asked_at(_interval, _cadence), do: [@periods_before_asking]
 
   defp selects_no_date?(
          %Tempo.Interval{
            from: %Tempo{time: [{:year, year} | _rest]},
            repeat_rule: %Tempo{time: [{:selection, selection} | _units]} = rule
          },
-         %Tempo.Duration{time: [{unit, _amount} | _]}
+         %Tempo.Duration{time: [{unit, _amount} | _]},
+         calendar,
+         years_in_cycle
        ) do
     dates = Enum.reject(selection, fn {token, _value} -> token in @names_no_date end)
+    rule_of_dates = %{rule | time: [selection: dates]}
 
     dates != [] and
       year
-      |> one_year_of_each_kind()
-      |> Enum.all?(&no_date_in_year?(&1, %{rule | time: [selection: dates]}, each(unit)))
+      |> one_year_of_each_kind(calendar, years_in_cycle)
+      |> Enum.all?(&no_date_in_year?(&1, rule_of_dates, each(unit), calendar))
   end
 
   # Every period of a year: each of the rule's own, or each day where its
@@ -9942,35 +9988,53 @@ defmodule Tempo do
 
   defp each(_shorter_than_a_day), do: %Tempo.Duration{time: [day: 1]}
 
-  @kinds_of_year 14
+  # One year of each kind a calendar has, from `year` on: the kinds are
+  # those of the years of one cycle, since the years after them are those
+  # again.
+  defp one_year_of_each_kind(year, calendar, years_in_cycle),
+    do: Enum.uniq_by(year..(year + years_in_cycle - 1)//1, &kind_of_year(&1, calendar))
 
-  defp one_year_of_each_kind(year) do
-    year
-    |> Stream.iterate(&(&1 + 1))
-    |> Stream.uniq_by(&kind_of_year/1)
-    |> Enum.take(@kinds_of_year)
+  # A year's kind: the days and the months it has, and the day of the week
+  # it begins on, each as the calendar answers it.
+  defp kind_of_year(year, calendar) do
+    case calendar.year(year) do
+      %Date.Range{first: first} ->
+        {calendar.days_in_year(year), calendar.months_in_year(year),
+         calendar.day_of_week(first.year, first.month, first.day, :monday)}
+
+      no_such_year ->
+        {year, no_such_year}
+    end
   end
 
-  defp kind_of_year(year),
-    do: {Gregorian.leap_year?(year), Gregorian.day_of_week(year, 1, 1, :monday)}
+  # Whether a rule selects no date of a year, walked from the year's first
+  # day to its last. A year the calendar does not have tells nothing, and
+  # the walk that asked goes on.
+  defp no_date_in_year?(year, rule, cadence, calendar) do
+    case calendar.year(year) do
+      %Date.Range{first: first, last: last} ->
+        start = day_of_calendar(first, calendar)
+        rule_of_dates = %Tempo.Interval{from: start, duration: cadence, repeat_rule: rule}
 
-  defp no_date_in_year?(year, rule, cadence) do
-    start = %Tempo{time: [year: year, month: 1, day: 1], calendar: Gregorian}
-    last = %Tempo{time: [year: year, month: 12, day: 31], calendar: Gregorian}
-    rule_of_dates = %Tempo.Interval{from: start, duration: cadence, repeat_rule: rule}
+        walk =
+          iterate_recurrence(
+            {start, start, 0},
+            cadence,
+            fn period_start, _period -> Math.add(period_start, cadence) end,
+            &under_until?(&1, day_of_calendar(last, calendar)),
+            selected_by_the_rule(rule_of_dates, cadence),
+            %{}
+          )
 
-    walk =
-      iterate_recurrence(
-        {start, start, 0},
-        cadence,
-        fn period_start, _period -> Math.add(period_start, cadence) end,
-        &under_until?(&1, last),
-        selected_by_the_rule(rule_of_dates, cadence),
-        %{}
-      )
+        walk == {:ok, []}
 
-    walk == {:ok, []}
+      _no_such_year ->
+        false
+    end
   end
+
+  defp day_of_calendar(%Date{year: year, month: month, day: day}, calendar),
+    do: %Tempo{time: date_units(year, month, day, calendar), calendar: calendar}
 
   # The occurrences a walk gave. A step its cadence could not take ends the
   # walk as its last element, and is the walk's error: the second month after
@@ -10208,9 +10272,9 @@ defmodule Tempo do
 
   # What each period selects, for at most `@recurrence_safety_cap` periods
   # (`no_more_than_the_cap/2`). A walk that has found nothing in its first
-  # `@periods_before_asking`, or in the months of a cycle, asks whether its
-  # rule has any occurrence (`has_no_occurrence?/3`), and ends there with
-  # nothing where it has none.
+  # `@periods_before_asking`, or in the periods its calendar's years come
+  # round in, asks whether its rule has any occurrence
+  # (`has_no_occurrence?/3`), and ends there with nothing where it has none.
   defp selected_within_the_cap(periods, select, nothing?) do
     Stream.transform(periods, {0, false}, fn
       _period, :past ->
@@ -10219,14 +10283,22 @@ defmodule Tempo do
       _period, {@recurrence_safety_cap, _found?} ->
         {[{:error, walk_too_long_error(:periods)}], :past}
 
-      period, {count, false} = made
-      when count in [@periods_before_asking, @months_of_a_cycle] and is_function(nothing?, 1) ->
-        if nothing?.(count), do: {:halt, :past}, else: selected_in(period, select, made)
+      period, {count, false} = made ->
+        if nothing_at?(nothing?, count),
+          do: {:halt, :past},
+          else: selected_in(period, select, made)
 
       period, made ->
         selected_in(period, select, made)
     end)
   end
+
+  # Whether a walk that has found nothing in `count` periods is at one of
+  # the counts its rule is asked at, and the rule has no occurrence.
+  defp nothing_at?({asked_at, nothing?}, count) when is_function(nothing?, 1),
+    do: count in asked_at and nothing?.(count)
+
+  defp nothing_at?(_no_question, _count), do: false
 
   defp selected_in(period, select, {count, found?}) do
     occurrences = selected(period, select)
@@ -10717,7 +10789,7 @@ defmodule Tempo do
   # A rule's selection, with the question a walk that finds nothing asks of
   # it (`has_no_occurrence?/3`).
   defp selection_fn(%Tempo.Interval{repeat_rule: %Tempo{}} = interval, cadence) do
-    {:nothing_where, &has_no_occurrence?(interval, cadence, &1),
+    {:nothing_where, {asked_at(interval, cadence), &has_no_occurrence?(interval, cadence, &1)},
      selected_by_the_rule(interval, cadence)}
   end
 
