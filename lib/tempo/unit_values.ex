@@ -89,30 +89,26 @@ defmodule Tempo.UnitValues do
     end
   end
 
-  # The values a calendar lists for a unit, where they are not the count from
-  # the unit's first value that most calendars' are: where a calendar says
-  # its years are not counted from 1 (`counted_from_one?/0`). A composite
-  # calendar changes from one calendar to another on a day, and the month and
-  # the year that day is in have the days and the months that are left: no
-  # 3 to 13 September 1752 in `Calendrical.Reform.England`, and no January or
-  # February 1751. So its days and its months are those the calendar numbers
-  # (`day_numbers/2`, `month_numbers/1`).
+  # The values a calendar lists for a unit of a year or of a month of one:
+  # its days and its months are those the calendar numbers (`day_numbers/2`,
+  # `month_numbers/1`), which every calendar is asked alike. Most answer the
+  # count from 1. A composite calendar changes from one calendar to another
+  # on a day, and the month and the year that day is in have the days and
+  # the months that are left: no 3 to 13 September 1752 in
+  # `Calendrical.Reform.England`, and no January or February 1751.
   defp listed(:day, context, calendar) do
-    with false <- calendar.counted_from_one?(),
-         year when is_integer(year) <- whole(context, :year),
+    with year when is_integer(year) <- whole(context, :year),
          month when is_integer(month) <- whole(context, :month) do
       numbered(calendar.day_numbers(year, month))
     else
-      _counted -> :counted
+      _no_one_month -> :counted
     end
   end
 
   defp listed(:month, context, calendar) do
-    with false <- calendar.counted_from_one?(),
-         year when is_integer(year) <- whole(context, :year) do
-      numbered(calendar.month_numbers(year))
-    else
-      _counted -> :counted
+    case whole(context, :year) do
+      year when is_integer(year) -> numbered(calendar.month_numbers(year))
+      _no_one_year -> :counted
     end
   end
 
@@ -1238,7 +1234,7 @@ defmodule Tempo.UnitValues do
 
   ### Returns
 
-  * `true` or `false`. A calendar that says its years are counted from 1 (`counted_from_one?/0`) begins every year so, and any other is asked of the year: a year a composite calendar does not have begins on no day.
+  * `true` or `false`, as the calendar numbers the year's months and its first month's days (`month_numbers/1`, `day_numbers/2`). A year the calendar does not have begins on no day.
 
   ### Examples
 
@@ -1257,7 +1253,7 @@ defmodule Tempo.UnitValues do
   """
   @spec year_begins_with_first_month?(integer(), module()) :: boolean()
   def year_begins_with_first_month?(year, calendar) when is_integer(year) and is_atom(calendar),
-    do: calendar.counted_from_one?() or calendar.day_of_year(year, 1, 1) == 1
+    do: first_of(year, nil, calendar) == {year, 1, 1} and calendar.valid_date?(year, 1, 1)
 
   def year_begins_with_first_month?(_year, _calendar), do: true
 
@@ -1337,48 +1333,41 @@ defmodule Tempo.UnitValues do
     end
   end
 
-  defp first_of(year, month, calendar) do
-    context = if month, do: [year: year, month: month], else: [year: year]
+  # The first date of a year, or of a month of one: its first month and
+  # that month's first day, as the calendar numbers them (`first/3`).
+  defp first_of(year, nil, calendar) do
+    {:ok, month} = first(:month, [year: year], calendar)
+    first_of(year, month, calendar)
+  end
 
-    with false <- year_begins_with_first_month?(year, calendar),
-         {:ok, first} <- first_date(context, calendar) do
-      first
-    else
-      _first_of_the_month -> {year, month || 1, 1}
-    end
+  defp first_of(year, month, calendar) do
+    {:ok, day} = first(:day, [year: year, month: month], calendar)
+    {year, month, day}
   end
 
   @doc false
-  # A time list written to its year, with the year's first month: the first,
-  # or where the year begins on another day the month of the first date the
-  # calendar gives it (1751 in `Calendrical.Reform.England` begins in
-  # March). It is what a year is extended to when it is written to the month.
+  # A time list written to its year, with the year's first month, as the
+  # calendar numbers its months (1751 in `Calendrical.Reform.England` begins
+  # in March). It is what a year is extended to when it is written to the
+  # month.
   @spec with_first_month(list(), module()) :: list()
   def with_first_month([{:year, year}] = time, calendar) when is_integer(year) do
-    with false <- year_begins_with_first_month?(year, calendar),
-         {:ok, {year, month, _day}} <- first_date(time, calendar) do
-      [year: year, month: month]
-    else
-      _its_first_month -> time ++ [month: 1]
-    end
+    {:ok, month} = first(:month, time, calendar)
+    [year: year, month: month]
   end
 
   def with_first_month(time, _calendar), do: time ++ [month: 1]
 
   @doc false
-  # A time list written to its month, with the month's first day: the first
-  # of the month, or where the year does not begin with its first month the
-  # first date the calendar gives the month. It is what a month is extended
-  # to when it is written to the day.
+  # A time list written to its month, with the month's first day, as the
+  # calendar numbers its days (March 1751 in `Calendrical.Reform.England`
+  # begins on the 25th). It is what a month is extended to when it is
+  # written to the day.
   @spec with_first_day(list(), module()) :: list()
   def with_first_day([{:year, year}, {:month, month}] = time, calendar)
       when is_integer(year) and is_integer(month) do
-    with false <- year_begins_with_first_month?(year, calendar),
-         {:ok, {year, month, day}} <- first_date(time, calendar) do
-      [year: year, month: month, day: day]
-    else
-      _counted_from_one -> time ++ [day: 1]
-    end
+    {:ok, day} = first(:day, time, calendar)
+    [year: year, month: month, day: day]
   end
 
   def with_first_day(time, _calendar), do: time ++ [day: 1]
@@ -1491,14 +1480,22 @@ defmodule Tempo.UnitValues do
   # Whether every year a value names begins with its first month, where
   # `years` is what a time list holds for its year: a whole number, a set of
   # whole numbers and ranges, a mask, or nothing. Each whole number is
-  # asked, and the ends of each range, and a mask or no year at all is taken
-  # to begin with its first month.
+  # asked of the calendar, and the ends of each range and of what a mask
+  # stands for, and no year at all is taken to begin with its first month.
   @spec years_begin_with_first_month?(term(), module()) :: boolean()
-  def years_begin_with_first_month?(year, calendar) when is_integer(year),
-    do: year_begins_with_first_month?(year, calendar)
-
   def years_begin_with_first_month?(years, calendar),
-    do: years |> whole_years() |> Enum.all?(&year_begins_with_first_month?(&1, calendar))
+    do: years |> whole_years() |> Enum.all?(&(not begins_on_another_day?(&1, calendar)))
+
+  # Whether a year begins on another day than the first of its first month.
+  # A year the calendar does not have begins on none, and says nothing of
+  # the years a range or a mask stands for (the lowest year a mask of four
+  # digits stands for is 0, which many calendars have not).
+  defp begins_on_another_day?(year, calendar) do
+    case first_of(year, nil, calendar) do
+      {^year, 1, 1} -> false
+      {^year, month, day} -> calendar.valid_date?(year, month, day)
+    end
+  end
 
   @doc false
   # The whole numbers a time list's year is asked by: itself, the members of

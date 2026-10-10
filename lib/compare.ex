@@ -509,7 +509,7 @@ defmodule Tempo.Compare do
   @spec structural?(Tempo.t(), Tempo.t()) :: boolean()
   def structural?(%Tempo{} = a, %Tempo{} = b) do
     a.calendar == b.calendar and zones_compatible?(a, b) and
-      comparable_axes?(a.time, b.time, a.calendar) and fields_in_day_order?(a)
+      comparable_axes?(a.time, b.time, a.calendar) and fields_in_day_order?(a, b)
   end
 
   # Two values with no year are ordered by their fields, and by nothing else:
@@ -529,20 +529,38 @@ defmodule Tempo.Compare do
     )
   end
 
-  # Whether a value's fields say where it starts: whether its year begins on
-  # its first month's first day, as the calendar answers. In a year that
-  # begins on another day (the year a composite calendar changes its new
-  # year's day in), a year and its first day are compared by their days. A
-  # value with no year has no days to count and is compared by its fields.
-  defp fields_in_day_order?(%Tempo{calendar: calendar, time: time}) do
-    case Keyword.get(time, :year) do
-      year when is_integer(year) ->
-        UnitValues.year_begins_with_first_month?(year, Calendars.effective(calendar))
+  # Whether two values' fields say how they are ordered. They do where both
+  # are written to the same units, since a calendar's dates run in the order
+  # of their numbers. One written to fewer units is ordered by where it
+  # starts, and its fields say that only where it starts on the first of
+  # each unit it leaves out, which its calendar is asked
+  # (`Tempo.UnitValues.start_date/2`): the year a composite calendar changes
+  # its new year's day in does not, and it and its first day are compared by
+  # their days. A value with no year has no days to count and is compared by
+  # its fields.
+  defp fields_in_day_order?(%Tempo{time: a_time} = a, %Tempo{time: b_time} = b) do
+    Keyword.keys(a_time) == Keyword.keys(b_time) or
+      (starts_on_its_firsts?(a) and starts_on_its_firsts?(b))
+  end
 
-      _no_year ->
-        true
+  defp starts_on_its_firsts?(%Tempo{calendar: calendar, time: time}) do
+    calendar = Calendars.effective(calendar)
+
+    case UnitValues.start_date(time, calendar) do
+      {:ok, {_year, month, day}} ->
+        month == Keyword.get(time, :month, 1) and day == Keyword.get(time, :day, 1)
+
+      :error ->
+        year_begins_with_its_firsts?(Keyword.get(time, :year), calendar)
     end
   end
+
+  # A value with no one start to ask about (a set or a mask of months or of
+  # days) is asked of its year, and one with no one year of nothing.
+  defp year_begins_with_its_firsts?(year, calendar) when is_integer(year),
+    do: UnitValues.year_begins_with_first_month?(year, calendar)
+
+  defp year_begins_with_its_firsts?(_no_one_year, _calendar), do: true
 
   # Two anchored time lists on different sub-year axes (week vs month vs
   # ordinal day) cannot be compared structurally — route them through the

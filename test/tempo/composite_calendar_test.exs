@@ -4,6 +4,7 @@ defmodule Tempo.CompositeCalendarTest do
   import Tempo.Sigils
 
   alias Calendrical.Hebrew
+  alias Calendrical.Reform
   alias Calendrical.Reform.England
   alias Calendrical.Reform.Japan
   alias Calendrical.Reform.Sweden
@@ -416,6 +417,34 @@ defmodule Tempo.CompositeCalendarTest do
 
       {:ok, of_every_day} = Tempo.to_interval(~o"2026Y3MX*D")
       assert Interval.endpoints(of_every_day) == {~o"2026Y3M", ~o"2026Y4M"}
+    end
+  end
+
+  describe "a month that begins after its first day, in a year that begins on its first" do
+    # Russia took the Gregorian calendar on 14 February 1918, the day after
+    # 31 January, so its February 1918 has the days 14 to 28, in a year that
+    # began on 1 January as any other does.
+    setup do
+      {:ok, russia} = Reform.calendar_for(:RU)
+      %{russia: russia}
+    end
+
+    test "starts on the first day it has", %{russia: russia} do
+      assert day_numbers(russia, 1918, 2) == Enum.to_list(14..28)
+      assert UnitValues.start_date([year: 1918, month: 2], russia) == {:ok, {1918, 2, 14}}
+
+      assert UnitValues.with_first_day([year: 1918, month: 2], russia) ==
+               [year: 1918, month: 2, day: 14]
+
+      assert UnitValues.start_date([year: 1918], russia) == {:ok, {1918, 1, 1}}
+    end
+
+    test "is ordered as its first day is", %{russia: russia} do
+      february = month(1918, 2, russia)
+
+      assert Tempo.compare(february, value("1918Y2M14D", russia)) == :eq
+      assert Tempo.compare(february, value("1918Y2M15D", russia)) == :lt
+      assert Tempo.compare(value("1918Y1M31D", russia), february) == :lt
     end
   end
 

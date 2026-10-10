@@ -1962,14 +1962,11 @@ defmodule Tempo.Validation do
     end
   end
 
-  # A year's first day is the first of its first month, or the day the
-  # calendar gives where the year begins on another: a composite calendar's
-  # year of change (1751 in `Calendrical.Reform.England`, from 25 March).
-  defp first_day_of_year(year, calendar) do
-    if UnitValues.year_begins_with_first_month?(year, calendar),
-      do: {:ok, {year, 1, 1}},
-      else: UnitValues.first_date([year: year], calendar)
-  end
+  # A year's first day is the first of the days its calendar gives it: the
+  # first of its first month in most years, and 25 March in 1751 in
+  # `Calendrical.Reform.England`, the year that calendar changes its new
+  # year's day in.
+  defp first_day_of_year(year, calendar), do: UnitValues.first_date([year: year], calendar)
 
   # The `day`th day of a group of months, counted on from the group's
   # first day by Calendrical: the first of its first month, or the first

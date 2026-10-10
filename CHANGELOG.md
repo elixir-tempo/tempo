@@ -453,6 +453,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A month that a change of calendar begins after its first day starts on the first day it has, and is ordered as that day is: February 1918 in Russia's reform calendar (`Calendrical.Reform.calendar_for(:RU)`) starts on the 14th, where it started on a 1 February the calendar does not have. A calendar is asked the months of a year and the days of a month wherever a value is extended, compared or stepped.
+
 * A set or a mask of traditional months names the months its calendar numbers so, in a value, in a walk and in a rule: `5787Y{5,6}m[u-ca=hebrew]` is Shevat and Adar II and `5787Y1Xm` Tamuz to Elul, where each was a `Tempo.ConversionError` and a set of months of two digits (`{10,11}m`) named none. A traditional month its year lacks is a `Tempo.InvalidDateError` that names those it has, where one number was the bare `{:error, :invalid_date}`, and a walk of several years yields each month in its place in its year (`5787Y7M` for `6m`).
 
 * A fraction of the last day of a month is read (`1985Y6M30.5D` is noon on 30 June), and so is a fraction of a month that lands on it (`1985Y12.99M`), where each was a `Tempo.InvalidDateError`.
