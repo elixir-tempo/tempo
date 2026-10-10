@@ -213,10 +213,7 @@ defmodule Tempo.MixProject do
     [
       {:nimble_parsec, "~> 1.0"},
       {:localize, github: "elixir-localize/localize", branch: "main", override: true},
-      # A path dependency for now (2026-10-10), while Calendrical's callbacks
-      # and Tempo's calls of them are built together: back to
-      # `github: "elixir-localize/calendrical", branch: "main"` before a push.
-      {:calendrical, path: "../../localize/calendrical", override: true},
+      {:calendrical, github: "elixir-localize/calendrical", branch: "main", override: true},
       {:astro, "~> 2.7"},
       {:ical, "~> 3.2", optional: true},
       {:jscalendar, "~> 0.1", optional: true},

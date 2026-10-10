@@ -26,8 +26,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Release and housekeeping
 
-* [ ] **Calendrical is a path dependency for now** — the user, 2026-10-10: "Configure tempo to use a path dependency for now", while Calendrical's callbacks and Tempo's calls of them are built together. `mix.exs` names `../../localize/calendrical`, and `mix.lock` still holds the git entry at `43006d7`. Before a push: back to `github: "elixir-localize/calendrical", branch: "main"`, with the lock moved to the commit that has the callbacks, once Calendrical's commits are pushed.
-
 * [ ] **Livebooks install 2.0 at the release** — `getting-started`, `tempo_tour`, `scheduling-workbook` and `uncertain-dates-workbook` install `{:ex_tempo, "~> 1.6"}` and the Melbourne deck `~> 1.6.3`, while their code uses the 2.0 names: at the 2.0.0 release each installs `~> 2.0`, as `everyday-holidays` already does.
 
 * [ ] **`rescue` in the library** — three sites rescue an exception where the rest of Tempo passes tagged tuples. A raise in a NimbleParsec combinator, rescued at the parser's boundary, is an acceptable escape hatch where there is no other (user, 2026-10-08). The one rescue of `lib/iso8601/parser.ex` is not in a combinator: it is around `parse_date/1`, which builds a value from the tokens once the combinators have run, and raises a `Tempo.ParseError` at fourteen places (the order of a group or a selection beside a unit, a century that is no one whole number). To confirm with the user whether it stands under the same allowance; the other way is to make each check where `Tempo.Iso8601.Parser.refused/1` scans the tokens before they are built. `lib/ical.ex` (`parse/2`, `available/2`) rescues what `ICal.from_ics/1` raises for text it cannot read, the `ical` library having no form that returns an error; to report. `lib/inspect.ex` no longer does (2026-10-08).
@@ -61,6 +59,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **Calendrical from GitHub again** — the path dependency of the callback work is gone: `mix.exs` names `github: "elixir-localize/calendrical", branch: "main"`, and the locks are at Calendrical `06aa274` and Localize `d01dead0`, the heads pushed on 2026-10-10. 2026-10-11.
 
 * [x] **Traditional months that are sets or masks** — `5787Y{5,6}m`, `1Xm`, `{-1}m`, `X+m` and `{5}+m` name the months their calendar numbers so, in a value with one year, in a walk of several and in a rule's selection, from the year's months as Calendrical names them (`Calendrical.traditional_months/2`); a number names no leap month, so a range passes over the one between its ends. Found beside it and fixed: a set of traditional months alone was read as a digit of a mask, one number its year lacks was the bare `:invalid_date`, a walked traditional month could not be converted, and a calendar not yet loaded was answered for as one with no leap months. Four probes of optional callbacks and the call of `new/3` went with it. 2026-10-10.
 
