@@ -2053,8 +2053,6 @@ defmodule Tempo.Explain do
   defp pluralise(unit, one) when one in [1, -1], do: Atom.to_string(unit)
   defp pluralise(unit, _), do: Atom.to_string(unit) <> "s"
 
-  @months ~w(January February March April May June July August September October November December)
-
   # A month by its name where it has one, and by its number where it has not.
   defp month_name(month, naming) do
     case fetch_month_name(month, naming) do
@@ -2064,34 +2062,25 @@ defmodule Tempo.Explain do
   end
 
   # A month's name in English, for the calendar and the year, if any, that name
-  # it. The Gregorian calendar's are listed here; another calendar's are asked
-  # of Localize, with the year when there is one, since a lunisolar calendar's
-  # sixth month is Adar in one year and Adar I in the next. Such a month has no
-  # one name without a year.
+  # it: Localize's to give, for every calendar. It is asked with the year when
+  # there is one, since a lunisolar calendar's sixth month is Adar in one year
+  # and Adar I in the next. Such a month has no one name without a year, where
+  # a month of a calendar whose months are the same every year has.
   defp fetch_month_name(month, {calendar, year}) when is_integer(month) do
-    if gregorian_names?(calendar),
-      do: gregorian_month_name(month),
-      else: localized_month_name(month, calendar, year)
-  end
-
-  defp fetch_month_name(_set_or_group, _naming), do: :error
-
-  defp gregorian_month_name(month) when month in 1..12, do: {:ok, Enum.at(@months, month - 1)}
-  defp gregorian_month_name(_month), do: :error
-
-  # A calendar of weeks has no named months of its own, so a month written in
-  # one keeps the name it was written with.
-  defp gregorian_names?(Calendrical.Gregorian), do: true
-  defp gregorian_names?(calendar), do: Tempo.week_based_calendar?(calendar)
-
-  defp localized_month_name(month, calendar, year) do
-    with %{} = fields <- month_fields(month, calendar, year),
+    with %{} = fields <- month_fields(month, calendar_of_months(calendar), year),
          {:ok, name} <- Localize.Date.to_string(fields, format: "MMMM", locale: :en) do
       {:ok, name}
     else
       _no_one_name -> :error
     end
   end
+
+  defp fetch_month_name(_set_or_group, _naming), do: :error
+
+  # A calendar of weeks has no named months of its own, so a month written in
+  # one keeps the name it was written with, which is the notation's.
+  defp calendar_of_months(calendar),
+    do: if(Tempo.week_based_calendar?(calendar), do: Calendars.default(), else: calendar)
 
   defp month_fields(month, calendar, year) when is_integer(year),
     do: %{year: year, month: month, calendar: calendar}
@@ -2649,10 +2638,15 @@ defmodule Tempo.Explain do
     "#{n}#{suffix}"
   end
 
-  @weekdays ~w(Monday Tuesday Wednesday Thursday Friday Saturday Sunday)
-
-  defp weekday_name(n) when is_integer(n) and n >= 1,
-    do: Enum.at(@weekdays, n - 1, "weekday #{n}")
+  # A weekday's name in English, by the number ISO 8601 gives it (1, Monday,
+  # to 7, Sunday): Localize's to give, and a number past the seven is written
+  # as it is.
+  defp weekday_name(n) when is_integer(n) and n >= 1 do
+    case Localize.Calendar.display_name(:day_of_week, n, locale: :en) do
+      {:ok, name} -> name
+      {:error, _no_such_weekday} -> "weekday #{n}"
+    end
+  end
 
   defp weekday_name(other), do: "weekday #{inspect(other)}"
 

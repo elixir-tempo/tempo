@@ -14,6 +14,8 @@ defmodule Tempo.ExplainWordsTest do
   """
   use ExUnit.Case, async: true
 
+  alias Tempo.RRule
+
   import Tempo.Sigils
 
   @seconds [
@@ -247,6 +249,50 @@ defmodule Tempo.ExplainWordsTest do
                  "To:   2026-04 (exclusive — half-open `[from, to)`)."
 
       assert explain("2026-01/..") =~ "An open-upper interval (`2026-01/..`)."
+    end
+  end
+
+  describe "the name of a month and of a day of the week" do
+    # The measure is ISO 8601-1 itself, which names the months of its
+    # calendar by their numbers (table 1) and the days of a week by theirs,
+    # from Monday (table 2). Tempo holds neither list: each name is asked for.
+    @months_of_iso_8601 ~w(January February March April May June July August September October November December)
+    @days_of_iso_8601 ~w(Monday Tuesday Wednesday Thursday Friday Saturday Sunday)
+
+    test "is the one ISO 8601 gives each month" do
+      for {name, month} <- Enum.with_index(@months_of_iso_8601, 1) do
+        assert explain("R/2026-01-01/P1Y/FL#{month}MN") =~ "Selects: in #{name}."
+        assert explain("2026Y#{month}M") =~ "#{name} 2026."
+      end
+    end
+
+    test "is the one ISO 8601 gives each day of the week" do
+      for {name, day} <- Enum.with_index(@days_of_iso_8601, 1) do
+        assert explain("R/2026-01-01/P1W/FL#{day}KN") =~ "Selects: on a #{name}."
+      end
+    end
+
+    test "is the calendar's own for a month, by its year where its months change" do
+      assert explain("1405-01[u-ca=persian]") =~ "Farvardin 1405."
+      assert explain("R/1405-01-01/P1Y/FL1MN[u-ca=persian]") =~ "Selects: in Farvardin."
+
+      # The sixth month of a Hebrew year is Adar, and Adar I in a year with
+      # a leap month, so it has no one name in a rule, which names no year.
+      assert explain("5786-06[u-ca=hebrew]") =~ "Adar 5786."
+      assert explain("5787-06[u-ca=hebrew]") =~ "Adar I 5787."
+      assert explain("R/5786-01-01/P1Y/FL6MN[u-ca=hebrew]") =~ "Selects: in month 6."
+    end
+
+    test "is the notation's for a month of a rule in a calendar of weeks" do
+      rule = Tempo.from_iso8601!("R/2026-W01-1/P1Y/FL3MN", calendar: Calendrical.ISOWeek)
+      assert Tempo.explain(rule) =~ "Selects: in March."
+    end
+
+    test "is its number for a month past those its calendar has" do
+      {:ok, rule} =
+        RRule.parse("FREQ=YEARLY;BYMONTH=1,2,13;BYMONTHDAY=1", from: ~o"2026-01-01")
+
+      assert Tempo.explain(rule) =~ "Selects: in January, February or month 13, on the 1st."
     end
   end
 end

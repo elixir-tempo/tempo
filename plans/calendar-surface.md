@@ -166,15 +166,11 @@ Taken by the user on 2026-10-10.
 
 ## What this plan has not done
 
-* **It names what each class of place becomes, and not yet each place** — the census lists every one. Three tasks begin by reading their places one at a time, and say so: `nil` as a calendar, the 96 places that ask weeks or months, and the 9 fast paths.
-
-* **It has read the numbers a calendar would be asked for, and not every constant** — a module attribute that holds any other number, or a list or a map of them, is not yet in the census.
-
-* **It has measured no speed** — no fast path is known to be needed, and none is known not to be.
-
 * **It has read `lib/` alone** — the tests' own support code holds calendar knowledge too (`test/support/matrix/calendar_census.ex` names calendars to choose its dates), and `tempo_holidays` and `tempo_sql` are not read.
 
 * **It has not read Localize** — what Localize asks of a calendar is its own list, and one contract for the three libraries is the first change proposed for Calendrical.
+
+* **It has measured what it removed, and nothing else** — each fast path and each held name that went was timed before and after, and the timings are with its task under Done. No path that was not changed has been timed.
 
 ## Found on the way
 
@@ -190,8 +186,6 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 
 * [ ] **What only the Gregorian has: the cycle its years come round in** — to decide. A rule that names no date of any year is known so after 400 years (`@years_of_a_cycle`, `kind_of_year/1` and `no_date_in_year?/1` in `lib/tempo.ex`), and the network solver keeps the lengths of 400 years and counts a month as twelve to a year on its axis (`lib/tempo/network/normalize.ex`): 9 lines and 6 constants. Either a calendar is asked for its cycle by a new callback, or each is given a bound that needs none.
 
-* [ ] **The names of months and of weekdays** — `Tempo.explain/1` holds the Gregorian calendar's month names and the weekdays' in English (`@months`, `@weekdays`, `gregorian_names?/1`), where Localize names them for any calendar.
-
 ### Blocked
 
 * [ ] **`Tempo.UnitValues` asks for values** — blocked on the two callbacks that give a period's values (Calendrical's `TODO.md`).
@@ -201,6 +195,8 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 * [ ] **Names, traditional months and solar terms** — blocked on `cardinal_day/3` and the four callbacks of traditional months being required, and on a solar term asked of a calendar (Calendrical's `TODO.md`).
 
 ### Done
+
+* [x] **The names of months and of weekdays, from Localize** — the user, 2026-10-10: "Month and weekday names should come from Localize". `Tempo.explain/1` held the Gregorian calendar's twelve and the seven weekdays and asked Localize for another calendar's; it holds neither now and asks for both in every calendar (`Localize.Date.to_string/2` for a month, by the calendar module and the year, and `Localize.Calendar.display_name/3` for a weekday by ISO 8601's number). What it writes is the same for the 44 values and rules compared before and after, and the tests measure the names against ISO 8601-1's own tables. Measured before and after, in microseconds: a day 44 and 83, a month 45 and 81, a yearly rule on the 2nd Monday of March 21 and 63, a weekly rule on three weekdays 21 and 41, a monthly rule that names five months 25 and 192: a month's name is 30 µs from Localize and a weekday's 3. The lines that name a calendar are 19 of the 128, and the constants a calendar would answer 7. 2026-10-10.
 
 * [x] **ISO 8601's week dates, in the one module** — `Calendrical.ISOWeek` is the calendar of the notation's week dates and is named where the Gregorian is (`Tempo.Calendars.weeks/0`, and the guard `is_notation_weeks/1`). What asks is a question of the notation and of no calendar's making: the sigil's `W`, how a value in it is written, a rule that names no calendar of its own (`start_in_repeat_calendar/2`), and a selector's weeks, which the notation's two calendars number alike. The census counts each use of the two guards, 21 and 4, where it counted none. The lines that name a calendar are 20 of the 128. 2026-10-10.
 

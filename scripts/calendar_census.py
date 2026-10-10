@@ -77,9 +77,6 @@ NAMED = {
     "lib/event.ex": [
         ('solar_term_location', 'Chinese', 'S'),
     ],
-    "lib/explain.ex": [
-        ('gregorian_names?', 'Gregorian', 'S'),
-    ],
     "lib/math.ex": [
         ('weeks_by_the_calendar', 'Gregorian', 'W'),
     ],
@@ -256,8 +253,7 @@ CONSTANTS = {
     "lib/explain.ex": [
         ('times_named', 'limit'), ('half_open', 'text'), ('headline_units', 'units'),
         ('headline_date_units', 'units'), ('precisions', 'units'), ('written_order', 'units'),
-        ('date_units', 'units'), ('season_names', 'names'), ('months', 'calendar'),
-        ('weekdays', 'calendar'),
+        ('date_units', 'units'), ('season_names', 'names'),
     ],
     "lib/ical.ex": [
         ('safety_cap', 'limit'),
@@ -482,6 +478,7 @@ DECIDERS = collections.OrderedDict([
         ("lib/compare.ex", "same_axis?", None),
         ("lib/tempo/unit_values.ex", "month_of_year?", None),
         ("lib/enumeration/zone.ex", "calendar_of_weeks", None),
+        ("lib/explain.ex", "calendar_of_months", None),
         ("lib/tempo.ex", "date_units", "Tempo"),
         ("lib/iso8601/group.ex", "calendar_week", None),
         ("lib/tempo/unit_values.ex", "calendar_weeks_in_year", None),
@@ -518,7 +515,6 @@ DECIDERS = collections.OrderedDict([
     ]),
     ("The Gregorian calendar, by its name or its CLDR type", [
         ("lib/tempo/format.ex", "worded_as_gregorian?", None),
-        ("lib/explain.ex", "gregorian_names?", None),
         ("lib/inspect.ex", "reads_as_gregorian?", None),
         ("lib/inspect.ex", "names?", None),
         ("lib/tempo.ex", "kind_of_year", None),
