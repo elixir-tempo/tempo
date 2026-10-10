@@ -1018,7 +1018,7 @@ defmodule Tempo.Select do
          {:ok, [%Date.Range{first: first} | _weeks] = weeks} <-
            UnitValues.weeks_of_month(year, month, Calendars.effective(calendar)),
          %Date.Range{last: last} <- List.last(weeks),
-         %Date{} = next <- Calendrical.next(last, :day) do
+         %Date{} = next <- UnitValues.day_after(last) do
       %Interval{
         from: build_day_tempo(from, first.year, first.month, first.day, calendar),
         to: build_day_tempo(from, next.year, next.month, next.day, calendar)
@@ -1478,11 +1478,11 @@ defmodule Tempo.Select do
   defp end_date(to, calendar), do: tempo_to_date(to, calendar)
 
   defp next_day(%Date{} = date, :undefined),
-    do: {{date.year, date.month, date.day}, Calendrical.next(date, :day)}
+    do: {{date.year, date.month, date.day}, UnitValues.day_after(date)}
 
   defp next_day(%Date{} = date, end_date) do
     case Compare.compare_days(date, end_date) do
-      :lt -> {{date.year, date.month, date.day}, Calendrical.next(date, :day)}
+      :lt -> {{date.year, date.month, date.day}, UnitValues.day_after(date)}
       _on_or_after_the_end -> nil
     end
   end
@@ -1549,7 +1549,7 @@ defmodule Tempo.Select do
 
   defp day_after(y, m, d, calendar) do
     {:ok, date} = Date.new(y, m, d, calendar)
-    Calendrical.next(date, :day)
+    UnitValues.day_after(date)
   end
 
   # A day in the units its calendar holds a date in: a month and a day, or a

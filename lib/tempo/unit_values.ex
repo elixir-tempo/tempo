@@ -1845,7 +1845,7 @@ defmodule Tempo.UnitValues do
   # year's week 1, each the day Calendrical gives a week after the last.
   defp consecutive_week_starts({:ok, first}, {:ok, next_first}) do
     first
-    |> Stream.iterate(&Calendrical.next(&1, :week))
+    |> Stream.iterate(&week_after/1)
     |> Enum.take_while(&(Compare.compare_days(&1, next_first) == :lt))
   end
 
@@ -1881,6 +1881,23 @@ defmodule Tempo.UnitValues do
     if Calendars.effective(to.calendar) == calendar,
       do: calendar.diff({from.year, from.month, from.day}, {to.year, to.month, to.day}, part),
       else: :two_calendars
+  end
+
+  @doc false
+  # The day after a date, the day before it and the same day a week on, each
+  # as the date's calendar counts it.
+  def day_after(%Date{} = date), do: stepped(date, :days, 1)
+
+  @doc false
+  def day_before(%Date{} = date), do: stepped(date, :days, -1)
+
+  @doc false
+  def week_after(%Date{} = date), do: stepped(date, :weeks, 1)
+
+  defp stepped(%Date{year: year, month: month, day: day} = date, unit, count) do
+    calendar = Calendars.effective(date.calendar)
+    {year, month, day} = calendar.plus(year, month, day, unit, count, [])
+    %{date | year: year, month: month, day: day}
   end
 
   defp first_week_start(calendar, year, first_day) do

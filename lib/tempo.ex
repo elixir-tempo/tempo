@@ -2497,7 +2497,7 @@ defmodule Tempo do
       resolution = Keyword.get_lazy(options, :resolution, fn -> day_unit(first.calendar) end)
 
       with %Tempo{} = from <- at_resolution(from_date(first), resolution),
-           %Tempo{} = to <- at_resolution(from_date(Calendrical.next(last, :day)), resolution) do
+           %Tempo{} = to <- at_resolution(from_date(UnitValues.day_after(last)), resolution) do
         Interval.new(from: from, to: to)
       end
     end

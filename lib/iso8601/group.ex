@@ -1157,7 +1157,7 @@ defmodule Tempo.Iso8601.Group do
 
   # The week's dates, from its first to the day after its last.
   defp week_of_month_days(%Date.Range{first: first, last: last}, [], calendar, _named) do
-    next = Calendrical.next(last, :day)
+    next = UnitValues.day_after(last)
 
     [
       interval: [
@@ -1248,7 +1248,7 @@ defmodule Tempo.Iso8601.Group do
   defp calendar_week_days(year, week, rest, calendar) do
     case UnitValues.calendar_week_range(year, week, calendar) do
       %Date.Range{first: first, last: last} ->
-        next = Calendrical.next(last, :day)
+        next = UnitValues.day_after(last)
 
         [
           interval: [

@@ -1305,7 +1305,7 @@ defmodule Tempo.RRule.Selection do
     end
   end
 
-  defp each_day_from(date), do: Stream.iterate(date, &Calendrical.next(&1, :day))
+  defp each_day_from(date), do: Stream.iterate(date, &UnitValues.day_after/1)
 
   # The days a part picks among in a weekly or a monthly candidate. A
   # candidate that is a whole week or month (a selection made in one, a
@@ -2479,7 +2479,7 @@ defmodule Tempo.RRule.Selection do
 
       first_day
       |> Kday.kday_on_or_after(weekday)
-      |> Stream.iterate(&Calendrical.next(&1, :week))
+      |> Stream.iterate(&UnitValues.week_after/1)
       |> Enum.take_while(&(Compare.compare_days(&1, last_day) != :gt))
     end)
     |> Enum.sort(&(Compare.compare_days(&1, &2) != :gt))
@@ -2560,7 +2560,7 @@ defmodule Tempo.RRule.Selection do
 
   defp week_of_days_from(%Date{calendar: calendar} = date) do
     date
-    |> Stream.iterate(&Calendrical.next(&1, :day))
+    |> Stream.iterate(&UnitValues.day_after/1)
     |> Enum.take(calendar.days_in_week())
   end
 
@@ -2837,7 +2837,7 @@ defmodule Tempo.RRule.Selection do
   defp day_or_where_moved(day, {year, month}, last, calendar, :forward) when day > last do
     case Date.new(year, month, last, calendar) do
       {:ok, last_day} ->
-        %Date{year: year, month: month, day: day} = Calendrical.next(last_day, :day)
+        %Date{year: year, month: month, day: day} = UnitValues.day_after(last_day)
         [{year, month, day}]
 
       {:error, _no_such_date} ->
@@ -2858,7 +2858,7 @@ defmodule Tempo.RRule.Selection do
        when day < 0 and last + 1 + day < 1 do
     case Date.new(year, month, 1, calendar) do
       {:ok, first_day} ->
-        %Date{year: year, month: month, day: day} = Calendrical.previous(first_day, :day)
+        %Date{year: year, month: month, day: day} = UnitValues.day_before(first_day)
         [{year, month, day}]
 
       {:error, _no_such_date} ->
@@ -3246,7 +3246,7 @@ defmodule Tempo.RRule.Selection do
   end
 
   defp day_of_week_of_month(%Date{} = date, %Interval{from: %Tempo{} = from} = candidate) do
-    next = Calendrical.next(date, :day)
+    next = UnitValues.day_after(date)
 
     %{
       candidate
@@ -3261,7 +3261,7 @@ defmodule Tempo.RRule.Selection do
          %Date.Range{first: first, last: last},
          %Interval{from: %Tempo{} = from, metadata: metadata} = candidate
        ) do
-    next = Calendrical.next(last, :day)
+    next = UnitValues.day_after(last)
 
     %{
       candidate
@@ -3283,7 +3283,7 @@ defmodule Tempo.RRule.Selection do
        ) do
     case UnitValues.calendar_week_range(year, week, calendar) do
       %Date.Range{first: first, last: last} ->
-        next = Calendrical.next(last, :day)
+        next = UnitValues.day_after(last)
 
         [
           %{
