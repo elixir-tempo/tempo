@@ -366,6 +366,24 @@ Adding years to such a date keeps its traditional month, as the calendar's own a
 
 In a **selection** — a recurrence, which has no year — there is nothing to resolve against, so `m`/`+m` survive the round-trip and the traditional→ordinal step happens per year at conversion. This is what makes a lunisolar holiday a recurrence that converts afresh in every year: `R/../P1Y/FL8m15DN[u-ca=chinese]` ("the 15th of traditional month 8, every year") lands on ordinal month 8 in a common year and ordinal 9 in a leap year, tracking the true traditional month rather than a fixed ordinal. A `<n>+m` selection yields an occurrence only in the years that actually carry that leap month.
 
+A **set or a mask** of traditional months names each month of the year the calendar numbers so, and each is then the month it is in that year. A number names a month that is no leap month, as RFC 7529's `BYMONTH` does, so a range passes over the leap month between its ends; a set or a mask with `+` after it names the leap month:
+
+```elixir
+# Shevat and Adar II of the leap year 5787, its fifth and seventh months
+Tempo.from_iso8601!("5787Y{5,6}m[u-ca=hebrew]")
+#=> Tempo.from_iso8601!("5787Y{5,7}M[u-ca=hebrew]", Calendrical.Hebrew)
+
+# Tamuz, Av and Elul, the traditional months numbered 10 to 12
+Tempo.from_iso8601!("5787Y1Xm[u-ca=hebrew]")
+#=> Tempo.from_iso8601!("5787Y{11..13}M[u-ca=hebrew]", Calendrical.Hebrew)
+
+# Whichever leap month the year has: Adar I
+Tempo.from_iso8601!("5787YX+m[u-ca=hebrew]")
+#=> Tempo.from_iso8601!("5787Y6M[u-ca=hebrew]", Calendrical.Hebrew)
+```
+
+A value is held to the months its year has (`5787Y13m` is refused with the twelve it numbers), and a value of several years (`{5786,5787}Y1Xm`) or a rule (`FL1XmN`) takes in each year the months that year has.
+
 A bare `<n>M` is always the ordinal month, unchanged, so existing values keep their meaning. `<n>+m` on a calendar without leap months, or in a year with no leap month at that position, is a parse error (concrete) or simply no occurrence (selection) rather than a silent misreading. It lowers to the `{n, :leap}` construct `Calendrical.Chinese.new/3` already accepts.
 
 ### Calendar week — the `w` designator

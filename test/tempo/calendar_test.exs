@@ -276,7 +276,9 @@ defmodule Tempo.CalendarTest do
 
     test "a leap month on a non-lunisolar calendar is rejected" do
       assert {:error, message} = Tempo.from_iso8601("2026Y6+m1D")
-      assert Exception.message(message) =~ "no leap months"
+
+      assert Exception.message(message) ==
+               "Calendrical.Gregorian year 2026 has no leap month following traditional month 6"
     end
 
     test "a leap-year calendar without leap months (Islamic) is rejected" do
@@ -289,7 +291,7 @@ defmodule Tempo.CalendarTest do
             "1447Y99+m1D[u-ca=islamic-civil]"
           ] do
         assert {:error, message} = Tempo.from_iso8601(iso)
-        assert Exception.message(message) =~ "no leap months"
+        assert Exception.message(message) =~ "year 1447 has no leap month following"
       end
     end
   end

@@ -259,6 +259,12 @@ defmodule Tempo.Enumeration do
   defp yielded(tempo, [{:year, _year}, {:day_of_year, _day} | _rest] = time),
     do: Validation.calendar_date_from_ordinal_date(%{tempo | time: time})
 
+  # A traditional month of a year is the month it names in that year, as it
+  # is when a value with one year is read, so each value walked holds the
+  # month in its place in its year and is a value to convert as any other.
+  defp yielded(tempo, [{:year, _year}, {:traditional_month, _month} | _rest] = time),
+    do: Validation.month_from_traditional_month(%{tempo | time: time})
+
   defp yielded(tempo, time), do: %{tempo | time: time}
 
   # With no component left to read, the components read are a value of the

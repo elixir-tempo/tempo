@@ -801,14 +801,25 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # year. The same combinator serves both frames.
   def traditional_month do
     choice([
-      positive_integer(min: 1)
+      traditional_month_number()
       |> ignore(string("+"))
       |> ignore(string("m"))
       |> reduce({__MODULE__, :as_leap_month, []}),
-      positive_integer(min: 1)
+      traditional_month_number()
       |> ignore(string("m"))
     ])
     |> unwrap_and_tag(:traditional_month)
+  end
+
+  # A set alone is a set of months (`{10,11}m`), as it is before `M`, where
+  # a set among digits is a set of digits (`1{0,1}m`). It was read as a
+  # digit of a mask either way, so a set of months of two digits named none.
+  defp traditional_month_number do
+    choice([
+      parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all})
+      |> lookahead(choice([string("+m"), string("m")])),
+      positive_integer(min: 1)
+    ])
   end
 
   def as_leap_month([month]), do: {month, :leap}

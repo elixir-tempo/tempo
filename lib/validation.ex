@@ -12,6 +12,7 @@ defmodule Tempo.Validation do
   alias Tempo.InvalidTimeError
   alias Tempo.Iso8601.Group
   alias Tempo.Iso8601.Parser
+  alias Tempo.Mask
   alias Tempo.Microsecond
   alias Tempo.ParseError
   alias Tempo.Qualification
@@ -862,8 +863,26 @@ defmodule Tempo.Validation do
       when is_integer(year) and is_integer(month) do
     case ordinal_month_from_traditional(calendar, year, month) do
       {:ok, ordinal} -> resolve([{:year, year}, {:month, ordinal} | rest], calendar)
-      {:error, _} = error -> error
+      {:error, _the_year_has_none} -> refused_traditional_month(month, year, rest, calendar)
     end
+  end
+
+  # A set or a mask of traditional months (`{1,2}m`, `1Xm`) names each month
+  # of the year the calendar numbers so, and with `+` after it each
+  # intercalary month (`X+m`, `{5..6}+m`). A number names a month that is no
+  # intercalary one, as a `BYMONTH` of RFC 7529 does, so a range passes over
+  # the intercalary month between its ends. The months are then their places
+  # in the year, as one traditional month is.
+  def resolve([{:year, year}, {:traditional_month, {written, :leap}} | rest], calendar)
+      when is_integer(year) do
+    with {:ok, months} <- traditional_months_named(written, :leap, year, calendar),
+         do: resolve([{:year, year}, {:month, months} | rest], calendar)
+  end
+
+  def resolve([{:year, year}, {:traditional_month, written} | rest], calendar)
+      when is_integer(year) and (is_list(written) or is_tuple(written)) do
+    with {:ok, months} <- traditional_months_named(written, :numbered, year, calendar),
+         do: resolve([{:year, year}, {:month, months} | rest], calendar)
   end
 
   def resolve([{:year, year}, {:month, month}, {:day, day} | rest], calendar)
@@ -1467,31 +1486,150 @@ defmodule Tempo.Validation do
     end
   end
 
-  # The ordinal position of the intercalary month following traditional month
-  # `month` in `year`. Only a calendar with leap months (Hebrew, lunisolar) has
-  # one — it exposes `leap_month/1` (the ordinal of the leap month, or a
-  # non-integer when the year has none) and `traditional_leap_month/1` (its
-  # traditional number).
-  defp leap_month_ordinal(calendar, year, month) do
-    if function_exported?(calendar, :leap_month, 1) and
-         function_exported?(calendar, :traditional_leap_month, 1) do
-      resolve_leap_month_ordinal(calendar, year, month)
-    else
-      {:error,
-       InvalidDateError.exception(
-         year: year,
-         month: month,
-         reason: "#{inspect(calendar)} has no leap months, so `#{month}+m` is invalid"
-       )}
+  # A traditional month the calendar has no place for in the year is refused
+  # with those the year has, where it was the bare `:invalid_date`.
+  defp refused_traditional_month(month, year, rest, calendar) do
+    with {:ok, place} <- traditional_months_named(month, :numbered, year, calendar),
+         do: resolve([{:year, year}, {:month, place} | rest], calendar)
+  end
+
+  # The places in `year` of the traditional months a number, a set or a mask
+  # names: those the calendar numbers so, or with `kind` `:leap` the
+  # intercalary months that follow them. The year's months as they are named,
+  # in order, are Calendrical's (`traditional_months/2`), and the place of a
+  # name among them is the month a date of the year carries. A number the
+  # year has no month for is refused with those it has.
+  defp traditional_months_named(written, kind, year, calendar) do
+    with {:ok, _months_the_year_has} <- values_in(:month, [year: year], calendar) do
+      places = UnitValues.traditional_months(year, calendar, kind)
+
+      places
+      |> Enum.map(&elem(&1, 0))
+      |> UnitValues.as_values()
+      |> traditional_numbers(written, read_as(kind, year, calendar))
+      |> places_or_refusal(places)
     end
   end
 
-  defp resolve_leap_month_ordinal(calendar, year, month) do
-    with ordinal when is_integer(ordinal) <- calendar.leap_month(year),
-         ^month <- calendar.traditional_leap_month(year) do
-      {:ok, ordinal}
-    else
-      _no_such_leap_month ->
+  # The numbers among a year's that a written traditional month names. A
+  # year with no intercalary month has none to name, and every one of a year
+  # that has is named by `X*+m`.
+  defp traditional_numbers({:error, :no_period}, _written, read_as) do
+    calendar = read_as[:calendar]
+    year = read_as[:year]
+
+    {:error,
+     InvalidDateError.exception(
+       year: year,
+       calendar: calendar,
+       reason: "#{inspect(calendar)} year #{year} has no #{kind_of_month(read_as[:unit])}"
+     )}
+  end
+
+  defp traditional_numbers({:ok, valid}, :any, _read_as),
+    do: {:ok, UnitValues.named(1..-1//1, valid)}
+
+  defp traditional_numbers({:ok, valid}, {:mask, digits}, read_as) do
+    case Mask.matching(UnitValues.named(1..-1//1, valid), digits) do
+      [] -> no_month_matches_error(digits, valid, read_as)
+      named -> {:ok, named}
+    end
+  end
+
+  defp traditional_numbers({:ok, valid}, written, read_as) do
+    with {:ok, resolved} <- conform(written, valid, read_as),
+         do: {:ok, UnitValues.named(resolved, valid)}
+  end
+
+  defp kind_of_month(:leap_month), do: "leap month"
+  defp kind_of_month(:traditional_month), do: "traditional month"
+
+  # What an error says the month was read as: a traditional month, or the
+  # intercalary one that follows it.
+  defp read_as(:numbered, year, calendar),
+    do: [unit: :traditional_month, year: year, calendar: calendar]
+
+  defp read_as(:leap, year, calendar), do: [unit: :leap_month, year: year, calendar: calendar]
+
+  defp no_month_matches_error(digits, valid, read_as) do
+    written = Enum.map_join(digits, &mask_digit/1)
+
+    named(
+      {:error,
+       InvalidDateError.exception(
+         value: {:mask, digits},
+         valid_range: valid,
+         reason: "#{written} is not valid#{read_as_text(read_as)}. " <> valid_values_text(valid)
+       )},
+      read_as
+    )
+  end
+
+  @doc false
+  # The places in `year` of the traditional months a rule's selection names:
+  # those of the year's months the written form matches, with any the year
+  # lacks passed over, as a selection passes over the 31st of a month of
+  # thirty days. A value is held to the months its year has
+  # (`traditional_months_named/4`); a rule selects in each year what it has.
+  @spec traditional_month_places(module(), term(), term()) :: [pos_integer()]
+  def traditional_month_places(calendar, year, {written, :leap}) when is_integer(year),
+    do: places_matched(written, UnitValues.traditional_months(year, calendar, :leap))
+
+  def traditional_month_places(calendar, year, written) when is_integer(year),
+    do: places_matched(written, UnitValues.traditional_months(year, calendar, :numbered))
+
+  def traditional_month_places(_calendar, _no_one_year, _written), do: []
+
+  defp places_matched(written, places) do
+    case places |> Enum.map(&elem(&1, 0)) |> UnitValues.as_values() do
+      {:ok, valid} -> written |> numbers_matched(valid) |> Enum.map(&place_of(&1, places))
+      {:error, :no_period} -> []
+    end
+  end
+
+  defp numbers_matched(:any, valid), do: UnitValues.named(1..-1//1, valid)
+
+  defp numbers_matched({:mask, digits}, valid),
+    do: Mask.matching(UnitValues.named(1..-1//1, valid), digits)
+
+  defp numbers_matched(written, valid)
+       when is_integer(written) or is_list(written) or is_struct(written, Range),
+       do: UnitValues.named(written, valid)
+
+  defp numbers_matched(_what_names_no_month, _valid), do: []
+
+  # An intercalary month is a traditional month to the value that holds it,
+  # whatever its error calls it.
+  defp places_or_refusal({:ok, numbers}, places), do: {:ok, places_named(numbers, places)}
+
+  defp places_or_refusal({:error, %InvalidDateError{unit: :leap_month} = error}, _places),
+    do: {:error, %{error | unit: :traditional_month}}
+
+  defp places_or_refusal({:error, %InvalidDateError{}} = refusal, _places), do: refusal
+
+  # One month is the month it is, and several are a set as the parser reads
+  # one.
+  defp places_named([number], places), do: place_of(number, places)
+
+  defp places_named(numbers, places),
+    do: Parser.reduce_list(Enum.map(numbers, &place_of(&1, places)))
+
+  defp place_of(number, places) do
+    {^number, place} = List.keyfind(places, number, 0)
+    place
+  end
+
+  # The ordinal position of the intercalary month following traditional month
+  # `month` in `year`: its place among the year's months as the calendar names
+  # them, which Calendrical lists (`traditional_months/2`). A year with no
+  # such month, in a calendar that has leap months or in one that has none,
+  # is refused alike.
+  defp leap_month_ordinal(calendar, year, month) do
+    case List.keyfind(UnitValues.traditional_months(year, calendar, :leap), month, 0) do
+      {^month, place} ->
+        {:ok, place}
+
+      nil ->
         {:error,
          InvalidDateError.exception(
            year: year,
@@ -1506,34 +1644,39 @@ defmodule Tempo.Validation do
   Resolves a traditional month to its ordinal position in a year.
 
   `month` is a traditional month number, or the `{n, :leap}` tuple for the
-  intercalary month following traditional `n`. On a calendar with leap months
-  (Hebrew, lunisolar) a leap month shifts the numbering, so the traditional→ordinal step is Calendrical's:
-  the calendar's `ordinal_month_from_traditional/2`, or, for a lunisolar calendar without it,
-  `new/3` at day 1 (always valid), which builds the date and reports its
-  ordinal `month`. On any other calendar the two numberings coincide and an
-  integer `month` is returned unchanged. Returns `{:ok, ordinal}`, or
-  `{:error, :invalid_date}` when the calendar's year carries no such month (e.g.
-  a leap month it does not have). Shared by concrete-date validation and
-  per-year selection materialisation.
+  intercalary month following traditional `n`. A leap month shifts the
+  numbering of the months after it, so the traditional→ordinal step is
+  Calendrical's: the calendar's own `ordinal_month_from_traditional/2` where
+  it has one, which says it in one step, and otherwise the month's place
+  among the year's months as the calendar names them
+  (`Calendrical.traditional_months/2`), which is the month's own number in a
+  calendar whose months are numbered in order. Returns `{:ok, ordinal}`, or
+  `{:error, :invalid_date}` when the calendar's year carries no such month
+  (e.g. a leap month it does not have). Shared by concrete-date validation
+  and per-year selection materialisation.
   """
   def ordinal_month_from_traditional(calendar, year, month) do
-    cond do
-      function_exported?(calendar, :ordinal_month_from_traditional, 2) ->
-        case calendar.ordinal_month_from_traditional(year, month) do
-          {:ok, ordinal} -> {:ok, ordinal}
-          {:error, _reason} -> {:error, :invalid_date}
-        end
-
-      function_exported?(calendar, :leap_month, 1) and function_exported?(calendar, :new, 3) ->
-        case calendar.new(year, month, 1) do
-          {:ok, %{month: ordinal}} -> {:ok, ordinal}
-          {:error, _} = error -> error
-        end
-
-      true ->
-        {:ok, month}
+    if Code.ensure_loaded?(calendar) and
+         function_exported?(calendar, :ordinal_month_from_traditional, 2) do
+      case calendar.ordinal_month_from_traditional(year, month) do
+        {:ok, ordinal} -> {:ok, ordinal}
+        {:error, _reason} -> {:error, :invalid_date}
+      end
+    else
+      place_in_year(calendar, year, month)
     end
   end
+
+  defp place_in_year(calendar, year, month) when is_integer(year) do
+    case Enum.find_index(Calendrical.traditional_months(year, calendar), &(&1 == month)) do
+      nil -> {:error, :invalid_date}
+      index -> {:ok, index + 1}
+    end
+  end
+
+  # With no one year there is no list of months to look in, and a month is
+  # the number it is written with.
+  defp place_in_year(_calendar, _no_one_year, month), do: {:ok, month}
 
   @doc """
   Names the month at a place in a year as its calendar names it.
@@ -1543,19 +1686,18 @@ defmodule Tempo.Validation do
   the intercalary month that follows traditional `n`: the sixth month of a
   Hebrew year with a leap month is `{5, :leap}`, Adar I. In a calendar whose
   months are numbered in order the place is the name. The naming is
-  Calendrical's (`lunar_month_of_year/2`). Returns `{:ok, month}`, or `:error`
+  Calendrical's (`traditional_months/2`). Returns `{:ok, month}`, or `:error`
   where the year has no month at that place.
   """
-  def traditional_month_from_ordinal(calendar, year, month) do
-    if Code.ensure_loaded?(calendar) and function_exported?(calendar, :lunar_month_of_year, 2) do
-      case calendar.lunar_month_of_year(year, month) do
-        {:error, _no_such_month} -> :error
-        traditional -> {:ok, traditional}
-      end
-    else
-      {:ok, month}
+  def traditional_month_from_ordinal(calendar, year, month)
+      when is_integer(year) and is_integer(month) and month > 0 do
+    case Enum.at(Calendrical.traditional_months(year, calendar), month - 1) do
+      nil -> :error
+      traditional -> {:ok, traditional}
     end
   end
+
+  def traditional_month_from_ordinal(_calendar, _year, _month), do: :error
 
   # The maximum day number a month can hold across all years — the
   # bound for validating a yearless partial: the last day of the year the
@@ -1799,6 +1941,24 @@ defmodule Tempo.Validation do
 
   def calendar_date_from_ordinal_date(value), do: value
 
+  @doc false
+  # A value that names a year and a traditional month of it, as the month it
+  # names there: what reading it gives (`resolve/2`), for a value the walk
+  # of several years or of a mask builds. A value with no one year, and one
+  # that names a month its year does not have, are kept as they are.
+  @spec month_from_traditional_month(value) :: value when value: term()
+  def month_from_traditional_month(
+        %Tempo{time: [{:year, year}, {:traditional_month, _month} | _rest] = time} = tempo
+      )
+      when is_integer(year) do
+    case resolve(time, Calendars.effective(tempo.calendar)) do
+      [{:year, _year} | _units] = placed -> %{tempo | time: placed}
+      _no_such_month -> tempo
+    end
+  end
+
+  def month_from_traditional_month(value), do: value
+
   defp prepend_year(_year, {:error, reason}), do: {:error, reason}
   defp prepend_year(year, resolved), do: [{:year, year} | resolved]
 
@@ -1909,6 +2069,8 @@ defmodule Tempo.Validation do
 
   defp unit_name(:day), do: "a day"
   defp unit_name(:month), do: "a month"
+  defp unit_name(:traditional_month), do: "a traditional month"
+  defp unit_name(:leap_month), do: "a leap month"
   defp unit_name(:week), do: "a week"
   defp unit_name(:day_of_year), do: "a day of the year"
   defp unit_name(:day_of_week), do: "a day of the week"
@@ -1922,8 +2084,9 @@ defmodule Tempo.Validation do
 
   defp period_text(:day, nil, month) when is_integer(month), do: " of month #{month}"
 
-  defp period_text(unit, year, _month) when unit in [:month, :week] and is_integer(year),
-    do: " of #{year}"
+  defp period_text(unit, year, _month)
+       when unit in [:month, :traditional_month, :leap_month, :week] and is_integer(year),
+       do: " of #{year}"
 
   defp period_text(_unit, _year, _month), do: ""
 

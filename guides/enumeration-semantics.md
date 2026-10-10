@@ -334,7 +334,6 @@ A value can parse and still name nothing a walk could yield. `Enumerable.reduce/
 | A mask no value matches | `1985-02-3X` | `Tempo.InvalidDateError` |
 | A group that starts beyond what holds it | `{2026,2027}Y5G3MU` | `Tempo.InvalidDateError` |
 | A group of a set counted from the end of no year | `{1..-1}G3MU` | `Tempo.UnanchoredError` |
-| A masked traditional month | `2026Y1Xm` | `Tempo.ConversionError` |
 | An interval start with several values | `{2026,2027}Y/2030Y` | `Tempo.ConversionError` |
 | An interval end that is no one point | `2026Y/202XY`, `1M/-1M` | `Tempo.IntervalEndpointsError` |
 | A step that depends on a missing year | `2M28D/P1D` | `Tempo.UnanchoredError` |

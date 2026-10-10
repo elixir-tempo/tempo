@@ -166,6 +166,8 @@ Taken by the user on 2026-10-10.
 
 * **The cycle a calendar's years come round in** — asked with what each choice would answer, and chosen: a Calendrical callback. Tempo neither keeps 400 as a fact of the notation's calendar nor gives the cycle up, which would have made 30 February every year an error after 10,000 periods where it is an empty set in 20 ms, and refused a month with no fixed start where it is 28 to 31 days. Measured for the choice: a year's layout repeats after 400 years in the Gregorian and the Indian calendars, 28 in the Julian, Coptic and Ethiopic, 210 in the tabular Islamic, and not within 1,200 in the Hebrew, Persian and Umm al-Qura.
 
+* **Every call is a callback** — "Basically, all calendar calls in Tempo should be `calendar.some_callback` It really should be as simple as that." And of Calendrical: "We need the Calendrical API to be primarily standard and consistent across all calendars, added to the Calendrical.Behaviour to enforce that. We do not want Tempo - or any other consumer - to have to know anything at all about a specific individual calendar. We may tolerate some exceptions for certain classes of calendars - like lunisolar - but only after consultation." So the target for the 84 calls Tempo makes into Calendrical's own modules with a calendar in hand, and for its 7 probes, is none: each is a required callback every calendar answers. The user gave leave on the same day to make the changes in Calendrical that its `TODO.md` lists.
+
 * **The rest as recommended** — "Implement the plan until completion", so each is taken as it was recommended: a calendar of weeks stays a second shape of date, known in one function; no fast path is keyed on a calendar's name, each being removed and measured; a period's values are two new callbacks; and what only the Gregorian has is decided case by case (`SKIP` asks `days_in_month/1`, the seasons are the notation's, and the cycle of 400 years is still to decide).
 
 ## What this plan has not done
@@ -199,6 +201,8 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 * [ ] **Names, traditional months and solar terms** — blocked on `cardinal_day/3` and the four callbacks of traditional months being required, and on a solar term asked of a calendar (Calendrical's `TODO.md`).
 
 ### Done
+
+* [x] **Traditional months from the year's list of them** — the place of a leap month, the name of a month at a place and a set or a mask of traditional months are read from the year's months as Calendrical names them (`Calendrical.traditional_months/2`), where the calendar was probed for `leap_month/1`, `traditional_leap_month/1`, `lunar_month_of_year/2` and `new/3`: the probes are 7 of the 37, and `location/1` is the one function called that no behaviour declares. One month by its number still asks `ordinal_month_from_traditional/2` behind a probe, since the list takes 4.5 ms in the Chinese calendar where that takes 0.2. Each of the three calls is `Calendrical.traditional_months(year, calendar)`, a function beside the behaviour, and becomes `calendar.traditional_months(year)` when it is a callback. 2026-10-10.
 
 * [x] **A year on the solver's axis, built one way** — `Tempo.Network.Normalize.date_at/2` read a year's position as ISO 8601 text for the Gregorian calendar and built it with `Tempo.new/1` for another; both give the same value for the 15 years compared, from 100,000 before the year 0 to 9,999,999 after, so the clause by name is gone. The lines that name a calendar are 18 of the 128. 2026-10-10.
 

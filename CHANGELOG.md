@@ -449,6 +449,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A set or a mask of traditional months names the months its calendar numbers so, in a value, in a walk and in a rule: `5787Y{5,6}m[u-ca=hebrew]` is Shevat and Adar II and `5787Y1Xm` Tamuz to Elul, where each was a `Tempo.ConversionError` and a set of months of two digits (`{10,11}m`) named none. A traditional month its year lacks is a `Tempo.InvalidDateError` that names those it has, where one number was the bare `{:error, :invalid_date}`, and a walk of several years yields each month in its place in its year (`5787Y7M` for `6m`).
+
 * A fraction of the last day of a month is read (`1985Y6M30.5D` is noon on 30 June), and so is a fraction of a month that lands on it (`1985Y12.99M`), where each was a `Tempo.InvalidDateError`.
 
 * A fraction of a year before 0 is read (`-1985.5Y` is half way through the year -1985), and a fraction of any other unit below zero is a `Tempo.ParseError`. A sign before a fraction was read as a set of its character and the number (`-0.5Y` was `{45, 0.5}Y`), and `T10H-30.5M` as 10:30:30.

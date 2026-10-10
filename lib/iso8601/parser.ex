@@ -803,6 +803,13 @@ defmodule Tempo.Iso8601.Parser do
     [{:fractions, fractions} | parse_date(rest)]
   end
 
+  # An intercalary month (`{5,6}+m`, `X+m`) holds what a month does, with
+  # the mark that it is one.
+  def parse_date([{:traditional_month, {written, :leap}} | rest]) when not is_integer(written) do
+    [{:traditional_month, month}] = parse_date(traditional_month: written)
+    [{:traditional_month, {month, :leap}} | parse_date(rest)]
+  end
+
   def parse_date([{component, {:all_of, list}} | rest]) do
     [{component, reduce_members(component, list)} | parse_date(rest)]
   end

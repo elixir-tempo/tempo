@@ -1803,8 +1803,7 @@ defmodule Tempo.RRule.Selection do
     skip = Keyword.get(selection, :skip)
 
     Enum.flat_map(candidates, fn candidate ->
-      months = months |> List.wrap() |> Enum.flat_map(&expand_range_element/1)
-      ordinals = traditional_months_to_ordinals(candidate, months, skip)
+      ordinals = traditional_months_to_ordinals(candidate, List.wrap(months), skip)
       apply_entry({:month, ordinals}, [candidate], scope, selection, wkst)
     end)
   end
@@ -2740,7 +2739,33 @@ defmodule Tempo.RRule.Selection do
     |> Enum.uniq()
   end
 
-  defp ordinal_or_where_moved(month, calendar, year, skip) do
+  # A month by its number, and the intercalary month after one, has one place
+  # in the year or none, and is asked for alone, as each month of a range of
+  # numbers is. A count from the end and a mask (`{-1}m`, `1Xm`), and a set
+  # or a mask of intercalary months (`X+m`), name those of the year's months
+  # they match, which are found among all the year has; a `SKIP` moves none
+  # of them.
+  defp ordinal_or_where_moved(month, calendar, year, skip)
+       when is_integer(month) and month >= 0,
+       do: one_ordinal_or_where_moved(month, calendar, year, skip)
+
+  defp ordinal_or_where_moved(
+         %Range{first: first, last: last, step: 1} = range,
+         calendar,
+         year,
+         skip
+       )
+       when first >= 0 and last >= first,
+       do: Enum.flat_map(range, &one_ordinal_or_where_moved(&1, calendar, year, skip))
+
+  defp ordinal_or_where_moved({follows, :leap} = month, calendar, year, skip)
+       when is_integer(follows),
+       do: one_ordinal_or_where_moved(month, calendar, year, skip)
+
+  defp ordinal_or_where_moved(written, calendar, year, _skip),
+    do: Validation.traditional_month_places(calendar, year, written)
+
+  defp one_ordinal_or_where_moved(month, calendar, year, skip) do
     case Validation.ordinal_month_from_traditional(calendar, year, month) do
       {:ok, ordinal} when is_integer(ordinal) -> [ordinal]
       _the_year_lacks_it -> month_moved(month, calendar, year, skip)

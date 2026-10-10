@@ -258,6 +258,15 @@ defmodule Tempo.Mask do
     end
   end
 
+  # A traditional month is one of those its year's calendar numbers, and no
+  # calendar numbers them without a year.
+  defp valid_range(:traditional_month, previous, calendar) do
+    case unit_value(previous, :year) do
+      year when is_integer(year) -> range_in_period(:traditional_month, [year: year], calendar)
+      _no_concrete_year -> {:error, :unanchored}
+    end
+  end
+
   # A day of the year and a week are counted in their year, and no calendar
   # counts them without one.
   defp valid_range(unit, previous, calendar) when unit in [:day_of_year, :week] do

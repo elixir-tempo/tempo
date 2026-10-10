@@ -127,8 +127,25 @@ defmodule Tempo.MaskTest do
     end
 
     test "a unit with no range of values to narrow to" do
+      assert Mask.valid_values(:season, [2, :X], [year: 2026], @cal) ==
+               {:error, {:unmaskable, :season}}
+    end
+
+    test "a traditional month is one of those its year numbers" do
       assert Mask.valid_values(:traditional_month, [:X, :X], [year: 2026], @cal) ==
-               {:error, {:unmaskable, :traditional_month}}
+               {:ok, Enum.to_list(1..12)}
+
+      # A Hebrew year numbers twelve months, the leap month apart, in a year
+      # of thirteen as in one of twelve.
+      assert Mask.valid_values(:traditional_month, [1, :X], [year: 5787], Calendrical.Hebrew) ==
+               {:ok, [10, 11, 12]}
+
+      assert Mask.valid_values(:traditional_month, [:X, :X], [year: 5786], Calendrical.Hebrew) ==
+               {:ok, Enum.to_list(1..12)}
+    end
+
+    test "a traditional month with no one year has no months to be one of" do
+      assert Mask.valid_values(:traditional_month, [:X, :X], [], @cal) == {:error, :unanchored}
     end
   end
 

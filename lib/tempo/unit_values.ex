@@ -117,6 +117,18 @@ defmodule Tempo.UnitValues do
     end
   end
 
+  # The traditional months of a year are those its calendar numbers, the
+  # intercalary one apart, and are counted in a year alone.
+  defp listed(:traditional_month, context, calendar) do
+    case whole(context, :year) do
+      nil ->
+        {:error, :unanchored}
+
+      year ->
+        year |> traditional_months(calendar, :numbered) |> Enum.map(&elem(&1, 0)) |> as_values()
+    end
+  end
+
   defp listed(_unit, _context, _calendar), do: :counted
 
   defp listed_days(year, month, calendar) do
@@ -151,14 +163,40 @@ defmodule Tempo.UnitValues do
 
   # Whole numbers in order, as the values they are: one range where they run
   # on from one another, and the ranges of them where they do not.
-  defp as_values([]), do: {:error, :no_period}
+  @doc false
+  # Whole numbers in order as the values they are: the range they run
+  # through, or the ranges where some are missing between them. None is no
+  # period to hold a value.
+  @spec as_values([integer()]) :: {:ok, values()} | {:error, :no_period}
+  def as_values([]), do: {:error, :no_period}
 
-  defp as_values([first | rest]) do
+  def as_values([first | rest]) do
     case runs_of_numbers(rest, first, first) do
       [range] -> {:ok, range}
       ranges -> {:ok, ranges}
     end
   end
+
+  @doc false
+  # The traditional months of a year of one kind, each with its place in the
+  # year: those the calendar numbers (`:numbered`), or the intercalary months
+  # (`:leap`), each by the number of the month it follows. The year's months
+  # as they are named, in order, are Calendrical's (`traditional_months/2`),
+  # and the place of a name among them is the month a date of the year
+  # carries: the Hebrew year 5787 numbers twelve months, the sixth of them in
+  # the seventh place, and has one intercalary month, after the fifth.
+  @spec traditional_months(integer(), module(), :numbered | :leap) ::
+          [{number :: integer(), place :: pos_integer()}]
+  def traditional_months(year, calendar, kind) when is_integer(year) do
+    year
+    |> Calendrical.traditional_months(calendar)
+    |> Enum.with_index(1)
+    |> Enum.flat_map(&numbered_as(&1, kind))
+  end
+
+  defp numbered_as({number, place}, :numbered) when is_integer(number), do: [{number, place}]
+  defp numbered_as({{number, :leap}, place}, :leap), do: [{number, place}]
+  defp numbered_as(_another_kind, _kind), do: []
 
   defp runs_of_numbers([number | rest], first, last) when number == last + 1,
     do: runs_of_numbers(rest, first, number)

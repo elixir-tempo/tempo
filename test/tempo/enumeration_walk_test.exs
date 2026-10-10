@@ -373,10 +373,12 @@ defmodule Tempo.EnumerationWalk.Test do
       assert_raise Tempo.UnanchoredError, fn -> Enum.take(~o"{1..-1}G3MU", 1) end
     end
 
-    test "a masked traditional month" do
-      assert_raise Tempo.ConversionError, ~r/masks its traditional_month/, fn ->
-        Enum.take(~o"2026Y1Xm", 1)
-      end
+    test "a masked unit that takes no run of values" do
+      # No written value holds one: the reader refuses each. A value built
+      # by hand is told what it masks.
+      masked = %Tempo{time: [year: 2026, season: {:mask, [2, :X]}]}
+
+      assert_raise Tempo.ConversionError, ~r/masks its season/, fn -> Enum.take(masked, 1) end
     end
   end
 
