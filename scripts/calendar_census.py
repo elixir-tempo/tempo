@@ -34,7 +34,7 @@ CALENDAR = {
     ("year_of_era", 3),
 }
 
-# The callbacks of the `Calendrical` behaviour at Calendrical `06aa274`.
+# The callbacks of the `Calendrical` behaviour at Calendrical `d461f5a`.
 CALENDRICAL_REQUIRED = {
     ("calendar_base", 0), ("calendar_year", 3), ("cardinal_day", 3), ("cardinal_month", 1),
     ("cldr_calendar_type", 0), ("cyclic_year", 3), ("date_from_day_of_year", 2),
@@ -45,7 +45,7 @@ CALENDRICAL_REQUIRED = {
     ("month_of_year", 3), ("month_week", 3), ("months_in_year", 0), ("named_month", 2),
     ("numeric_month", 3), ("ordinal_month_from_traditional", 2), ("parsing_calendar", 0),
     ("plus", 6), ("quadrimester", 2), ("quarter", 2), ("related_gregorian_year", 3),
-    ("semester", 2), ("solar_term", 2), ("traditional_leap_month", 1),
+    ("semester", 2), ("solar_term", 2), ("traditional_leap_month", 1), ("counted_from_one?", 0),
     ("traditional_months", 1), ("week", 2), ("week_of_month", 3), ("week_of_year", 3),
     ("weeks_in_month", 2), ("weeks_in_year", 1), ("year", 1), ("years_in_cycle", 0),
 }
@@ -194,7 +194,7 @@ CONSTANT_CLASSES = collections.OrderedDict([
     ("clock", "ISO 8601's time of day: the hours of a day, the minutes of an hour, the seconds of a minute and their fractions."),
     ("standard", "A table or a number of a notation or a standard Tempo reads or writes."),
     ("limit", "A bound Tempo sets on its own work: how much it reads, lists or walks before it stops or asks."),
-    ("choice", "A value Tempo picks where any would do, and no fact of a calendar: the year a calendar's cycle is measured from."),
+    ("choice", "A value Tempo picks where any would do, and no fact of a calendar: the year a calendar's cycle is measured from, and the year a calendar of weeks is asked which weekday a day of its week is."),
     ("zone", "A bound or a margin on what the zone database is asked, whose dates are Gregorian."),
     ("relations", "Allen's relations and the network's, and the tables that compose them."),
     ("options", "The names of options a function takes."),
@@ -416,8 +416,7 @@ CONSTANTS = {
         ('first_year_of_changes', 'zone'),
     ],
     "lib/tempo/unit_values.ex": [
-        ('composite_key', 'key'), ('counted', 'units'), ('year_start_key', 'key'),
-        ('any_year', 'calendar'), ('monday', 'standard'),
+        ('counted', 'units'), ('any_year', 'choice'), ('monday', 'standard'),
     ],
     "lib/validation.ex": [
         ('hours_per_day', 'clock'), ('minutes_per_hour', 'clock'), ('rounding_precision', 'limit'),
@@ -460,15 +459,12 @@ DECIDERS = collections.OrderedDict([
         ("lib/tempo/unit_values.ex", "date_from_iso_week", "UnitValues"),
     ]),
     ("A composite calendar, and one that steps its own dates", [
-        ("lib/tempo/unit_values.ex", "composite?", None),
         ("lib/tempo/unit_values.ex", "stepped_by_calendar?", "UnitValues"),
         ("lib/math.ex", "stepped_by_its_calendar?", None),
     ]),
     ("A year that begins on another day than the first of its first month", [
         ("lib/tempo/unit_values.ex", "year_begins_with_first_month?", "UnitValues"),
         ("lib/tempo/unit_values.ex", "years_begin_with_first_month?", "UnitValues"),
-        ("lib/tempo/unit_values.ex", "year_start", None),
-        ("lib/tempo/unit_values.ex", "first_day_of_first_month?", None),
         ("lib/compare.ex", "fields_in_day_order?", None),
         ("lib/tempo/unit_values.ex", "first_date", "UnitValues"),
         ("lib/tempo/unit_values.ex", "start_date", "UnitValues"),
@@ -879,7 +875,7 @@ def write(census):
 
     emit("## 3. Calls on a calendar")
     emit("")
-    emit(f"{len(dynamic)} calls, of {len(functions)} functions at the arities shown. \"Declared\" is where the function is a callback: of Elixir's `Calendar` behaviour (1.20.4, 28 callbacks, all required) or of the `Calendrical` behaviour at Calendrical `06aa274` (48 callbacks, 4 of them optional).")
+    emit(f"{len(dynamic)} calls, of {len(functions)} functions at the arities shown. \"Declared\" is where the function is a callback: of Elixir's `Calendar` behaviour (1.20.4, 28 callbacks, all required) or of the `Calendrical` behaviour at Calendrical `d461f5a` (49 callbacks, 4 of them optional).")
     emit("")
     emit(table(["Function", "Declared", "Calls", "Lines"], [
         [f"`{name}/{count}`", status(name, count), total,

@@ -10,7 +10,6 @@ defmodule Tempo.UnitValues do
 
   """
 
-  alias Calendrical.Base.Common
   alias Calendrical.Kday
   alias Tempo.Calendars
   alias Tempo.Compare
@@ -91,26 +90,27 @@ defmodule Tempo.UnitValues do
   end
 
   # The values a calendar lists for a unit, where they are not the count from
-  # the unit's first value that every other calendar's are. A composite
+  # the unit's first value that most calendars' are: where a calendar says
+  # its years are not counted from 1 (`counted_from_one?/0`). A composite
   # calendar changes from one calendar to another on a day, and the month and
   # the year that day is in have the days and the months that are left: no
   # 3 to 13 September 1752 in `Calendrical.Reform.England`, and no January or
-  # February 1751. So its days are those that are dates (`valid_date?/3`),
-  # and its months those that have days.
+  # February 1751. So its days and its months are those the calendar numbers
+  # (`day_numbers/2`, `month_numbers/1`).
   defp listed(:day, context, calendar) do
-    with true <- composite?(calendar),
+    with false <- calendar.counted_from_one?(),
          year when is_integer(year) <- whole(context, :year),
          month when is_integer(month) <- whole(context, :month) do
-      listed_days(year, month, calendar)
+      numbered(calendar.day_numbers(year, month))
     else
       _counted -> :counted
     end
   end
 
   defp listed(:month, context, calendar) do
-    with true <- composite?(calendar),
+    with false <- calendar.counted_from_one?(),
          year when is_integer(year) <- whole(context, :year) do
-      listed_months(year, calendar)
+      numbered(calendar.month_numbers(year))
     else
       _counted -> :counted
     end
@@ -130,35 +130,12 @@ defmodule Tempo.UnitValues do
 
   defp listed(_unit, _context, _calendar), do: :counted
 
-  defp listed_days(year, month, calendar) do
-    if month_of_year?(month, year, calendar) do
-      1..last_day_number(year, month, calendar)//1
-      |> Enum.filter(&calendar.valid_date?(year, month, &1))
-      |> as_values()
-    else
-      {:error, :no_period}
-    end
-  end
-
-  # The greatest number a day of the month can have: how many days it has,
-  # or the day its last date is where days are missing before it.
-  defp last_day_number(year, month, calendar) do
-    count = last_month_day(calendar.days_in_month(year, month))
-
-    case month_range(year, month, calendar) do
-      {:ok, %Date.Range{last: %Date{day: day}}} -> max(count, day)
-      {:error, :no_period} -> count
-    end
-  end
-
-  defp last_month_day(count) when is_integer(count), do: count
-  defp last_month_day(_cannot_say), do: 0
-
-  defp listed_months(year, calendar) do
-    1..last_month(year, calendar)//1
-    |> Enum.filter(&(last_month_day(calendar.days_in_month(year, &1)) > 0))
-    |> as_values()
-  end
+  # The runs of numbers a calendar gives, as the values they are: the range
+  # they run through, or the ranges where some are missing between them.
+  # None is no period to hold a value.
+  defp numbered([]), do: {:error, :no_period}
+  defp numbered([range]), do: {:ok, range}
+  defp numbered(ranges), do: {:ok, ranges}
 
   # Whole numbers in order, as the values they are: one range where they run
   # on from one another, and the ranges of them where they do not.
@@ -205,38 +182,22 @@ defmodule Tempo.UnitValues do
 
   defp runs_of_numbers([], first, last), do: [first..last//1]
 
-  # Whether a calendar is a composite of others, which Calendrical says, and
-  # which is asked of each calendar once and kept: every count of a month's
-  # days asks it.
-  @composite_key {__MODULE__, :composite}
-
-  defp composite?(calendar) do
-    case :persistent_term.get({@composite_key, calendar}, nil) do
-      nil ->
-        composite? = Common.composite?(calendar)
-        :persistent_term.put({@composite_key, calendar}, composite?)
-        composite?
-
-      composite? ->
-        composite?
-    end
-  end
-
   @doc false
   # Whether a date of a year is stepped by its calendar, and not by counting
-  # on through the values of its units: in a year that does not begin with
-  # its first month, whose first days are no first, and in a composite
-  # calendar, whose years and months change where its calendars do.
+  # on through the values of its units: in a calendar whose years are not
+  # counted from 1 (`counted_from_one?/0`), whose years and months change
+  # where its calendars do, and in a year that does not begin with its first
+  # month, whose first days are no first.
   #
   # `year` is a whole number, or what a time list holds for its year where
   # that is no one number (a set, a mask, nothing): `years_begin_with_first_month?/2`
   # says which years are then asked.
   @spec stepped_by_calendar?(term(), module()) :: boolean()
   def stepped_by_calendar?(year, calendar) when is_integer(year),
-    do: composite?(calendar) or not year_begins_with_first_month?(year, calendar)
+    do: not calendar.counted_from_one?() or not year_begins_with_first_month?(year, calendar)
 
   def stepped_by_calendar?(years, calendar),
-    do: composite?(calendar) or not years_begin_with_first_month?(years, calendar)
+    do: not calendar.counted_from_one?() or not years_begin_with_first_month?(years, calendar)
 
   ## Years
 
@@ -1277,7 +1238,7 @@ defmodule Tempo.UnitValues do
 
   ### Returns
 
-  * `true` or `false`. A calendar with no `day_of_year/3` is taken to begin its years with their first month, and a year a composite calendar does not have begins on no day.
+  * `true` or `false`. A calendar that says its years are counted from 1 (`counted_from_one?/0`) begins every year so, and any other is asked of the year: a year a composite calendar does not have begins on no day.
 
   ### Examples
 
@@ -1295,57 +1256,10 @@ defmodule Tempo.UnitValues do
 
   """
   @spec year_begins_with_first_month?(integer(), module()) :: boolean()
-  def year_begins_with_first_month?(year, calendar) when is_integer(year) and is_atom(calendar) do
-    case year_start(calendar, year) do
-      :every_year -> true
-      :no_year -> false
-      # A year with no first day of a first month does not begin on one.
-      :by_year -> first_day_of_first_month?(calendar, year) == true
-    end
-  end
+  def year_begins_with_first_month?(year, calendar) when is_integer(year) and is_atom(calendar),
+    do: calendar.counted_from_one?() or calendar.day_of_year(year, 1, 1) == 1
 
   def year_begins_with_first_month?(_year, _calendar), do: true
-
-  # How a calendar begins its years is asked once of each calendar and kept:
-  # the question is asked wherever two values are compared, and the first
-  # day of a year takes an astronomical calendar hundreds of microseconds to
-  # find. A calendar of one rule begins every year alike, so one year
-  # answers for them all. A composite calendar begins a year as the calendar
-  # in effect then does, so each of its years is asked.
-  @year_start_key {__MODULE__, :year_start}
-
-  defp year_start(calendar, year) do
-    case :persistent_term.get({@year_start_key, calendar}, nil) do
-      nil -> calendar |> year_start_of(year) |> kept_year_start(calendar)
-      year_start -> year_start
-    end
-  end
-
-  defp year_start_of(calendar, year) do
-    if composite?(calendar),
-      do: :by_year,
-      else: calendar |> first_day_of_first_month?(year) |> year_start_from()
-  end
-
-  defp year_start_from(true), do: :every_year
-  defp year_start_from(false), do: :no_year
-  # A year the calendar does not have answers for no other.
-  defp year_start_from(:unknown), do: :unknown
-
-  defp kept_year_start(:unknown, _calendar), do: :every_year
-
-  defp kept_year_start(year_start, calendar) do
-    :persistent_term.put({@year_start_key, calendar}, year_start)
-    year_start
-  end
-
-  defp first_day_of_first_month?(calendar, year) do
-    case calendar.day_of_year(year, 1, 1) do
-      1 -> true
-      day when is_integer(day) -> false
-      _no_such_day -> :unknown
-    end
-  end
 
   @doc """
   Returns the first date of a year, or of a month of a year, as the calendar counts them.
@@ -1573,28 +1487,18 @@ defmodule Tempo.UnitValues do
     end
   end
 
-  # A year to ask a calendar of one rule about, where the value names none.
-  @any_year 2000
-
   @doc false
   # Whether every year a value names begins with its first month, where
   # `years` is what a time list holds for its year: a whole number, a set of
-  # whole numbers and ranges, a mask, or nothing. A calendar of one rule
-  # begins every year alike, so it answers for a year that is no one number
-  # as it does for any. A composite calendar begins each year as the
-  # calendar in effect then does: it is asked of each whole number, and of
-  # the ends of each range, and a mask or no year at all is taken to begin
-  # with its first month.
+  # whole numbers and ranges, a mask, or nothing. Each whole number is
+  # asked, and the ends of each range, and a mask or no year at all is taken
+  # to begin with its first month.
   @spec years_begin_with_first_month?(term(), module()) :: boolean()
   def years_begin_with_first_month?(year, calendar) when is_integer(year),
     do: year_begins_with_first_month?(year, calendar)
 
-  def years_begin_with_first_month?(years, calendar) do
-    case whole_years(years) do
-      [] -> composite?(calendar) or year_begins_with_first_month?(@any_year, calendar)
-      whole -> Enum.all?(whole, &year_begins_with_first_month?(&1, calendar))
-    end
-  end
+  def years_begin_with_first_month?(years, calendar),
+    do: years |> whole_years() |> Enum.all?(&year_begins_with_first_month?(&1, calendar))
 
   @doc false
   # The whole numbers a time list's year is asked by: itself, the members of
@@ -1711,7 +1615,10 @@ defmodule Tempo.UnitValues do
   defp days_of_a_week(calendar), do: 1..calendar.days_in_week()//1
 
   # Every week of a calendar of weeks starts on the same weekday, so the
-  # first week of any year answers for them all.
+  # first week of any year answers for them all: of this one, where any
+  # would do.
+  @any_year 2000
+
   defp weekday_of_week_day(calendar, day_of_week) do
     {iso_weekday, _first, _last} = calendar.day_of_week(@any_year, 1, day_of_week, :monday)
     iso_weekday
