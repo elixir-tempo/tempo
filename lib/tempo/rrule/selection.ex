@@ -3013,11 +3013,16 @@ defmodule Tempo.RRule.Selection do
   end
 
   # The Gregorian years a year of `calendar` runs through, none for a year
-  # the calendar does not have.
+  # the calendar does not have: the years its first day and its last fall
+  # in, as the calendar gives the year (`year/1`), in the calendar an event
+  # is dated in.
   defp gregorian_years(year, calendar) do
-    with %Date{year: first} <- Calendrical.first_gregorian_day_of_year(year, calendar),
-         %Date{year: last} <- Calendrical.last_gregorian_day_of_year(year, calendar) do
-      first..last//1
+    calendar = Calendars.effective(calendar)
+
+    with %Date.Range{first: first, last: last} <- calendar.year(year),
+         {:ok, %Date{year: first_year}} <- Date.convert(first, Calendars.default()),
+         {:ok, %Date{year: last_year}} <- Date.convert(last, Calendars.default()) do
+      first_year..last_year//1
     else
       _no_such_year -> []
     end

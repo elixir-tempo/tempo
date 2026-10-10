@@ -156,7 +156,7 @@ The end state the user set on 2026-10-10: "Basically, all calendar calls in Temp
 
 ### A callback exists today, and Tempo calls a wrapper of it (25 calls)
 
-These need no change in Calendrical: Tempo asks the calendar it already holds. Done, but for the two calls of the Gregorian days of a year, a decision under Tasks. `Calendrical.iso_days/4` went another way: the user decided on 2026-10-11 that a date's validity and its day count stay two questions, and Calendrical removes the function.
+These need no change in Calendrical: Tempo asks the calendar it already holds. Done. The two calls of the Gregorian days of a year are the calendar's own `year/1` and a conversion, and `Calendrical.iso_days/4` went another way: the user decided on 2026-10-11 that a date's validity and its day count stay two questions, and Calendrical removes the function.
 
 | Tempo calls | Calls | Becomes |
 |---|---|---|
@@ -243,8 +243,6 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 
 ## Tasks
 
-* [ ] **The Gregorian years a calendar's year runs through** — for the user to decide. `Calendrical.first_gregorian_day_of_year/2` and `last_gregorian_day_of_year/2` stay (2 calls in `lib/tempo/rrule/selection.ex`): an event is asked by Gregorian year (`solar_term/2`, Easter), and no callback says which Gregorian years a year of a calendar runs through.
-
 * [ ] **`Tempo.UnitValues` asks for values** — for the user to decide, since it trades speed in the calendars reckoned from the sky. `calendar.month_numbers/1` and `calendar.day_numbers/2` give the months a year has and the days a month has, as runs of numbers (`[3..12]` for England's 1751), and would replace `composite?/1`, the deciders of a year's start and `@any_year`, the last constant that is a calendar's to answer; the three defects under "Found on the way" go with it. Measured at Calendrical `06aa274`, 2026-10-10. How a year begins is asked wherever two values are compared, and is kept once for each calendar today because Tempo knows a composite from a calendar of one rule (0.2 µs): asked of each year by the two callbacks it is 0.9 µs in the Gregorian calendar, 153 µs in the Persian, 360 µs in the Chinese and 133 µs in `Calendrical.Reform.England`. A month's days by `day_numbers/2` are quicker in the Gregorian (0.4 µs for 0.8) and in England (34 for 44) and slower in the Persian (113 for 78) and the Chinese (244 for 112), which ask the months of the year as well. A year's months by `month_numbers/1` cost the same but in England (92 µs for 23). What I would do: in Calendrical, have a calendar that is no composite answer `day_numbers/2` from `days_in_month/2` alone and a composite keep the months it has, and add an answer that takes no year for whether every year of a calendar has its months and its days numbered from 1 (as `months_in_year/0` stands beside `months_in_year/1`), which is what Tempo keeps today under the name of a composite; then Tempo asks and holds no kind.
 
 ### Deferred
@@ -252,6 +250,8 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 * [ ] **Week dates through Calendrical** — parked by the user on 2026-10-10 ("We will go back and discuss week dates (iso or calendar) later"): whether a week date is counted over the Gregorian year or the calendar's own is theirs to settle, and Calendrical's `plans/week-dates.md` holds the draft. The 7 lines that name a calendar for it compute with the pair of the Gregorian and `Calendrical.ISOWeek`: 5 in `lib/tempo/unit_values.ex`, 1 in `lib/math.ex` and 1 in `lib/enumeration/zone.ex`, which reads a date back as a week date for those two alone, since `iso_week_of_year/3` is the week of the Gregorian year in every calendar (`Calendrical.Hebrew.iso_week_of_year(5786, 3, 4)` is `{2025, 48}`, the Monday of Tempo's `5786W10`).
 
 ### Done
+
+* [x] **The Gregorian years a calendar's year runs through** — decided by the user on 2026-10-11: no new callback. `calendar.year/1` gives a year's first day and its last, and each is converted to the calendar an event is dated in (`Date.convert/2`), where `Calendrical.first_gregorian_day_of_year/2` and `last_gregorian_day_of_year/2` were called. Compared before and after on 39,404 years in 64 calendars, the 35 reform calendars from 1000 to 1950 among them, none differing. Calls into Calendrical's own modules 19. 2026-10-11.
 
 * [x] **A date's day count, asked as two questions** — decided by the user on 2026-10-11: no `iso_days/3` callback, since `valid_date?/3` and `date_to_iso_days/3` answer it between them ("validity and conversion to iso_days are separate concerns and should remain that way"). `lib/compare.ex` asks the one and then the other where it called `Calendrical.iso_days/4`, which Calendrical loses with the `iso_days/3` four lunisolar calendars had. Compared before and after on 360,944 years, months and days in 64 calendars, dates and no dates alike, none differing. The lunisolar four take two passes over a lunar year where they took one (208 µs for 112 in the Chinese calendar). Calls into Calendrical's own modules 21. 2026-10-11.
 
