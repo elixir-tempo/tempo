@@ -81,6 +81,8 @@ defmodule Tempo.RRule.Rule do
   alias Tempo.UnitValues
   alias Tempo.Validation
 
+  import Tempo.Calendars, only: [is_notation: 1]
+
   @type frequency :: :second | :minute | :hour | :day | :week | :month | :year
   @type weekday :: 1..7
 
@@ -581,7 +583,7 @@ defmodule Tempo.RRule.Rule do
   # it to. The step from year to year gave that year the month in the leap
   # month's place, as `SKIP=FORWARD` does, whatever the rule's `SKIP`.
   defp with_month_of_start(rule, written, month, %Tempo{calendar: calendar})
-       when calendar in [Calendrical.Gregorian, Calendar.ISO, nil] do
+       when is_notation(calendar) do
     if takes_month_of_start?(written) and not keeps_last_day?(written),
       do: %{rule | bymonth: [month]},
       else: rule
@@ -760,23 +762,43 @@ defmodule Tempo.RRule.Rule do
   defp push_skip(acc, _rule, _calendar), do: acc
 
   # Whether a rule states a day of the month that some month of its calendar
-  # may lack, counted from either end. In the Gregorian calendar that is a
-  # day past the 28th. Twenty-eight was taken for every calendar's, so the
-  # sixth day of an Ethiopic year's thirteenth month, which has five days or
-  # six, was not moved. How many days every month of another calendar has is
-  # that calendar's to say, and Calendrical has no one answer for it, so
-  # there a skip is written beside any day of the month: each month is asked
-  # its own days where the rule is resolved, and the skip changes nothing in
-  # a month that has the day.
+  # may lack, counted from either end: a day past the fewest days any of the
+  # calendar's months has in any year, which the calendar says with no year
+  # (28 for the Gregorian calendar, 5 for the Ethiopic, whose thirteenth
+  # month has five days or six). Where a calendar cannot say without a year,
+  # a skip is written beside any day of the month: each month is asked its
+  # own days where the rule is resolved, and the skip changes nothing in a
+  # month that has the day.
   defp moves_a_day?(%__MODULE__{freq: freq, bymonthday: days}, calendar)
-       when freq in [:month, :year] and calendar in [Calendrical.Gregorian, Calendar.ISO],
-       do: Enum.any?(List.wrap(days), &(abs(&1) > 28))
-
-  defp moves_a_day?(%__MODULE__{freq: freq, bymonthday: days}, _another_calendar)
-       when freq in [:month, :year],
-       do: List.wrap(days) != []
+       when freq in [:month, :year] do
+    case fewest_days_of_a_month(Calendars.effective(calendar)) do
+      {:ok, fewest} -> Enum.any?(List.wrap(days), &(abs(&1) > fewest))
+      :error -> List.wrap(days) != []
+    end
+  end
 
   defp moves_a_day?(_rule, _calendar), do: false
+
+  # The fewest days a month of the calendar has, of every month it may have
+  # and in every year, as `Tempo.UnitValues.in_any_year/3` reads the
+  # calendar's own answers.
+  defp fewest_days_of_a_month(calendar) do
+    case UnitValues.in_any_year(:month, [], calendar) do
+      {:ok, _every_year, months} ->
+        Enum.reduce_while(months, :error, &fewer_days(&1, &2, calendar))
+
+      {:error, _cannot_say} ->
+        :error
+    end
+  end
+
+  defp fewer_days(month, fewest, calendar) do
+    case {UnitValues.in_any_year(:day, [month: month], calendar), fewest} do
+      {{:ok, %Range{last: days}, _longest}, {:ok, fewest}} -> {:cont, {:ok, min(days, fewest)}}
+      {{:ok, %Range{last: days}, _longest}, :error} -> {:cont, {:ok, days}}
+      {{:error, _cannot_say}, _fewest} -> {:halt, :error}
+    end
+  end
 
   defp calendar_of_start(%Tempo{calendar: calendar}) when not is_nil(calendar), do: calendar
   defp calendar_of_start(_no_start), do: Calendars.default()

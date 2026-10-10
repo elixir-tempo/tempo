@@ -85,14 +85,6 @@ NAMED = {
         ('inspect', 'ISOWeek', 'W'),
         ('repeat_rule_calendar_trailer', 'ISOWeek', 'W'),
     ],
-    "lib/iso8601/group.ex": [
-        ('expand_groups', 'Gregorian', 'S'),
-        ('season_span', 'Gregorian', 'S'),
-        ('season_span', 'Gregorian', 'S'),
-        ('nth_day_of_season', 'Gregorian', 'G'),
-        ('unspecified_year_season', 'Gregorian', 'S'),
-        ('unspecified_year_season', 'Gregorian', 'S'),
-    ],
     "lib/math.ex": [
         ('weeks_by_the_calendar', 'Gregorian', 'W'),
     ],
@@ -105,7 +97,6 @@ NAMED = {
         ('kind_of_year', 'Gregorian', 'G'),
         ('no_date_in_year?', 'Gregorian', 'G'),
         ('no_date_in_year?', 'Gregorian', 'G'),
-        ('iso_day_of_week', 'ISO', 'G'),
     ],
     "lib/tempo/network/normalize.ex": [
         ('date_at', 'Gregorian', 'S'),
@@ -115,10 +106,6 @@ NAMED = {
         ('cyclic?', 'Gregorian', 'S'),
         ('gregorian_cycle', 'Gregorian', 'G'),
         ('gregorian_cycle', 'Gregorian', 'G'),
-    ],
-    "lib/tempo/rrule/rule.ex": [
-        ('with_month_of_start', 'Gregorian, ISO', 'S'),
-        ('moves_a_day?', 'Gregorian, ISO', 'S'),
     ],
     "lib/tempo/select.ex": [
         ('counted_in_another_calendar', 'Gregorian, ISOWeek', 'W'),
@@ -225,7 +212,6 @@ NUMBERS = {
     ],
     "lib/tempo/rrule/rule.ex": [
         ('', '7', 'standard'),
-        ('moves_a_day?', '28', 'gregorian'),
         ('push_wkst', '7', 'standard'),
     ],
     "lib/tempo/rrule/selection.ex": [
@@ -547,7 +533,6 @@ DECIDERS = collections.OrderedDict([
         ("lib/explain.ex", "gregorian_names?", None),
         ("lib/inspect.ex", "reads_as_gregorian?", None),
         ("lib/inspect.ex", "names?", None),
-        ("lib/tempo/rrule/rule.ex", "moves_a_day?", None),
         ("lib/tempo.ex", "kind_of_year", None),
         ("lib/enumeration/zone.ex", "in_gregorian", "Zone"),
         ("lib/enumeration/zone.ex", "in_calendar_of", "Zone"),

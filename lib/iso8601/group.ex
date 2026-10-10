@@ -1,7 +1,6 @@
 defmodule Tempo.Iso8601.Group do
   @moduledoc false
 
-  alias Calendrical.Gregorian
   alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.IntervalEndpointsError
@@ -13,6 +12,8 @@ defmodule Tempo.Iso8601.Group do
   alias Tempo.Qualification
   alias Tempo.UnitValues
   alias Tempo.Validation
+
+  import Tempo.Calendars, only: [is_notation: 1]
 
   @hours_per_day 24
 
@@ -138,7 +139,7 @@ defmodule Tempo.Iso8601.Group do
   end
 
   def expand_groups([{:year, year}, {:month, month} | rest], calendar)
-      when is_integer(year) and month in 25..32 and calendar != Gregorian do
+      when is_integer(year) and month in 25..32 and not is_notation(calendar) do
     calendar_season(year, month, rest, calendar)
   end
 
@@ -336,10 +337,13 @@ defmodule Tempo.Iso8601.Group do
   defp northern_months(23, :southern), do: 21
   defp northern_months(24, :southern), do: 22
 
-  defp season_span(year, {season, hemisphere}, Gregorian) when is_integer(year) do
+  # ISO 8601-2's seasons are the seasons of the notation's calendar, by its
+  # months.
+  defp season_span(year, {season, hemisphere}, calendar)
+       when is_integer(year) and is_notation(calendar) do
     with {:ok, start_date, end_date} <-
            gregorian_season(northern_months(season, hemisphere), year) do
-      meteorological_span(start_date, end_date, Gregorian)
+      meteorological_span(start_date, end_date, Calendars.default())
     end
   end
 
@@ -879,14 +883,16 @@ defmodule Tempo.Iso8601.Group do
   end
 
   # The day Calendrical's arithmetic reaches `day - 1` days after the
-  # season's first day, provided it falls before the season ends. Season
-  # boundaries are Gregorian dates.
-  defp nth_day_of_season(%Date{} = start_date, %Date{} = end_date, day)
+  # season's first day, provided it falls before the season ends. The
+  # season's first day is asked of its own calendar.
+  defp nth_day_of_season(%Date{calendar: calendar} = start_date, %Date{} = end_date, day)
        when is_integer(day) and day >= 1 do
-    {year, month, day_of_month} =
-      Gregorian.plus(start_date.year, start_date.month, start_date.day, :days, day - 1, [])
+    %Date{year: year, month: month, day: day_of_month} = start_date
 
-    season_date_before(Date.new(year, month, day_of_month), end_date, day)
+    {year, month, day_of_month} =
+      Calendars.effective(calendar).plus(year, month, day_of_month, :days, day - 1, [])
+
+    season_date_before(Date.new(year, month, day_of_month, calendar), end_date, day)
   end
 
   defp nth_day_of_season(_start_date, end_date, day), do: season_day_error(day, end_date)
@@ -984,13 +990,14 @@ defmodule Tempo.Iso8601.Group do
      )}
   end
 
-  defp unspecified_year_season(year, code, rest, Gregorian) when code in 21..23 do
+  defp unspecified_year_season(year, code, rest, calendar)
+       when code in 21..23 and is_notation(calendar) do
     {start_month, end_month} = meteorological_months(code)
 
     season_interval(
       [{:year, year}, {:month, start_month} | rest],
       [{:year, year}, {:month, end_month} | rest],
-      Gregorian
+      Calendars.default()
     )
   end
 

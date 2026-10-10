@@ -14852,19 +14852,14 @@ defmodule Tempo do
   end
 
   # ISO day of week (1 = Monday … 7 = Sunday) of the day a value
-  # denotes. The day of week is the same in every calendar, but a
+  # denotes. The day of week is the same in every calendar, and a
   # calendar date carries year/month/day in *its own* calendar, so the
-  # date is built in that calendar and then converted to `Calendar.ISO`
-  # before reading `Date.day_of_week/1` — ISO's default numbering is a
-  # stable Monday-based 1..7, whereas a Calendrical calendar's own
-  # `day_of_week` may use a different week start or only support the
-  # `:default` ordering. The ordinal (day-of-year) and ISO week-date
-  # forms resolve through `to_date/1`.
+  # date is built in that calendar, which is asked for its day of the week
+  # counted from Monday. The ordinal (day-of-year) and ISO week-date forms
+  # resolve through `to_date/1`.
   defp iso_day_of_week(%Tempo{} = tempo, function) do
-    with {:ok, date} <- day_date(tempo),
-         {:ok, iso_date} <- Date.convert(date, Calendar.ISO) do
-      {:ok, Date.day_of_week(iso_date)}
-    else
+    case day_date(tempo) do
+      {:ok, %Date{} = date} -> {:ok, Date.day_of_week(date, :monday)}
       _no_single_day -> {:error, not_a_day(tempo, function)}
     end
   end

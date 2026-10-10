@@ -379,6 +379,36 @@ defmodule Tempo.RRule.RscaleSkipTest do
       assert Enum.take(gregorian_starts(rule.("")), 1) == [in_gregorian(2011, 13, 6, Ethiopic)]
     end
 
+    test "has a skip written beside a day some month lacks, and no other" do
+      # The fewest days a month has is the calendar's own to say: 28 in the
+      # Gregorian calendar, 29 in the Hebrew and 5 in the Ethiopic, each
+      # counted here from the months of twenty years. A skip beside a day
+      # every month has moves nothing, and the rule is the rule without it;
+      # beside the day after it is another rule.
+      for {calendar, name, years} <- [
+            {Calendrical.Gregorian, "GREGORIAN", 2020..2040},
+            {Hebrew, "HEBREW", 5780..5800},
+            {Ethiopic, "ETHIOPIC", 2010..2030}
+          ] do
+        fewest =
+          Enum.min(
+            for year <- years,
+                month <- 1..calendar.months_in_year(year),
+                do: calendar.days_in_month(year, month)
+          )
+
+        rule = fn day, skip ->
+          RRule.parse("RSCALE=#{name};FREQ=MONTHLY;BYMONTHDAY=#{day}#{skip};COUNT=3",
+            from: ~o"2026-01-19"
+          )
+        end
+
+        assert {name, rule.(fewest, ";SKIP=FORWARD")} == {name, rule.(fewest, "")}
+        assert {name, rule.(-fewest, ";SKIP=BACKWARD")} == {name, rule.(-fewest, "")}
+        refute rule.(fewest + 1, ";SKIP=FORWARD") == rule.(fewest + 1, "")
+      end
+    end
+
     test "is RFC 7529's example of the Ethiopic thirteenth month" do
       # §4.3.2: the first day of the thirteenth month, from 6 September 2013.
       rule = RRule.parse("RSCALE=ETHIOPIC;FREQ=MONTHLY;BYMONTH=13;COUNT=5", from: ~o"2013-09-06")

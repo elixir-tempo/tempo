@@ -188,11 +188,13 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 
 ## Tasks
 
-* [ ] **The Gregorian asked, not named** — needs nothing upstream.
-
 * [ ] **Every constant Tempo defines, read** — a section of the census for each module attribute that holds a number, and each one a calendar would answer asked of it.
 
-* [ ] **What only the Gregorian has** — `SKIP` and the seasons first; the cycle is to decide.
+* [ ] **What only the Gregorian has: the cycle its years come round in** — to decide. A rule that names no date of any year is known so after 400 years (`@years_of_a_cycle`, `kind_of_year/1` and `no_date_in_year?/1` in `lib/tempo.ex`), and the network solver keeps the lengths of 400 years and counts a month as twelve to a year on its axis (`lib/tempo/network/normalize.ex`): 9 lines and 6 constants. Either a calendar is asked for its cycle by a new callback, or each is given a bound that needs none.
+
+* [ ] **The names of months and of weekdays** — `Tempo.explain/1` holds the Gregorian calendar's month names and the weekdays' in English (`@months`, `@weekdays`, `gregorian_names?/1`), where Localize names them for any calendar.
+
+* [ ] **A rule's start in the calendar it counts in** — `start_in_repeat_calendar/1` in `lib/tempo.ex` names the Gregorian and `Calendrical.ISOWeek` as the two a start needs no converting from.
 
 ### Blocked
 
@@ -203,6 +205,8 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 * [ ] **Names, traditional months and solar terms** — blocked on `cardinal_day/3` and the four callbacks of traditional months being required, and on a solar term asked of a calendar (Calendrical's `TODO.md`).
 
 ### Done
+
+* [x] **`SKIP`, the seasons and two computations asked of the calendar** — a rule's `SKIP` is written beside a day past the fewest days any month of its calendar has, which the calendar says with no year (28, 29 and 5 for the Gregorian, the Hebrew and the Ethiopic), where 28 was held for the Gregorian and any day taken for another; ISO 8601-2's seasons ask the one module whether a value is in the notation's calendar; a weekday is asked of the date's own calendar, and a season's nth day of the calendar its first day is in. The lines that name a calendar are 26 of the 128. 2026-10-10.
 
 * [x] **No fast path by name** — the 17 are gone. Fifteen clauses answered for the Gregorian what the general path answers, and are removed; a day count is turned to a date by the calendar's own `date_from_iso_days/1` in every calendar; and a step of months or years takes its short path for any calendar that does not step its own dates, where it took it for the Gregorian by name. Measured before and after, in microseconds: a day shifted by a month 7.0 and 8.0, by a year 3.1 and 4.0, by ten days 2.8 and 3.1; 36 monthly occurrences 684 and 766, 36 yearly 472 and 553; a day to its interval 3.3 and 4.2; a year extended to its day 1.1 and 1.4; a date read 14.7 and 15.4; a relation 17.2 and 18.8; and a Hebrew day shifted by a month 14.1 and 5.6. The cost is the two questions a step asks of its calendar (whether it is a composite, and where its year begins), which go when a calendar gives a period's values. 2026-10-10.
 
