@@ -94,17 +94,12 @@ NAMED = {
         ('unspecified_year_season', 'Gregorian', 'S'),
     ],
     "lib/math.ex": [
-        ('fast_add', 'Gregorian, ISO', 'F'),
-        ('stepped_by_its_calendar?', 'Gregorian, ISO', 'F'),
         ('weeks_by_the_calendar', 'Gregorian', 'W'),
     ],
     "lib/sigils/options.ex": [
         ('calendar_from', 'ISOWeek', 'W'),
     ],
     "lib/tempo.ex": [
-        ('date_units', 'Gregorian', 'F'),
-        ('day_in_calendar', 'Gregorian', 'F'),
-        ('day_in_calendar', 'Gregorian', 'F'),
         ('start_in_repeat_calendar', 'Gregorian, ISOWeek', 'S'),
         ('names_no_date_of_any_year?', 'Gregorian', 'S'),
         ('kind_of_year', 'Gregorian', 'G'),
@@ -125,21 +120,10 @@ NAMED = {
         ('with_month_of_start', 'Gregorian, ISO', 'S'),
         ('moves_a_day?', 'Gregorian, ISO', 'S'),
     ],
-    "lib/tempo/rrule/selection.ex": [
-        ('event_dates_in_year', 'Gregorian', 'F'),
-        ('event_dates_in_year', 'Gregorian', 'F'),
-        ('gregorian_year_of', 'Gregorian', 'F'),
-    ],
     "lib/tempo/select.ex": [
         ('counted_in_another_calendar', 'Gregorian, ISOWeek', 'W'),
     ],
     "lib/tempo/unit_values.ex": [
-        ('composite?', 'Gregorian, ISO', 'F'),
-        ('named_date', 'Gregorian, ISO', 'F'),
-        ('month_named_once?', 'Gregorian, ISO', 'F'),
-        ('year_named_by_its_months?', 'Gregorian, ISO', 'F'),
-        ('year_begins_with_first_month?', 'Gregorian, ISO', 'F'),
-        ('years_begin_with_first_month?', 'Gregorian, ISO', 'F'),
         ('date_from_iso_week', 'Gregorian', 'W'),
         ('date_from_iso_week', 'ISOWeek', 'W'),
         ('date_from_iso_week', 'Gregorian', 'W'),
@@ -567,7 +551,6 @@ DECIDERS = collections.OrderedDict([
         ("lib/tempo.ex", "kind_of_year", None),
         ("lib/enumeration/zone.ex", "in_gregorian", "Zone"),
         ("lib/enumeration/zone.ex", "in_calendar_of", "Zone"),
-        ("lib/tempo.ex", "day_in_calendar", None),
     ]),
     ("A calendar with a year 0", [
         ("lib/tempo/unit_values.ex", "year?", "UnitValues"),

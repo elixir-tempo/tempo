@@ -188,8 +188,6 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 
 ## Tasks
 
-* [ ] **No fast path by name** — each measured as it goes.
-
 * [ ] **The Gregorian asked, not named** — needs nothing upstream.
 
 * [ ] **Every constant Tempo defines, read** — a section of the census for each module attribute that holds a number, and each one a calendar would answer asked of it.
@@ -205,6 +203,8 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 * [ ] **Names, traditional months and solar terms** — blocked on `cardinal_day/3` and the four callbacks of traditional months being required, and on a solar term asked of a calendar (Calendrical's `TODO.md`).
 
 ### Done
+
+* [x] **No fast path by name** — the 17 are gone. Fifteen clauses answered for the Gregorian what the general path answers, and are removed; a day count is turned to a date by the calendar's own `date_from_iso_days/1` in every calendar; and a step of months or years takes its short path for any calendar that does not step its own dates, where it took it for the Gregorian by name. Measured before and after, in microseconds: a day shifted by a month 7.0 and 8.0, by a year 3.1 and 4.0, by ten days 2.8 and 3.1; 36 monthly occurrences 684 and 766, 36 yearly 472 and 553; a day to its interval 3.3 and 4.2; a year extended to its day 1.1 and 1.4; a date read 14.7 and 15.4; a relation 17.2 and 18.8; and a Hebrew day shifted by a month 14.1 and 5.6. The cost is the two questions a step asks of its calendar (whether it is a composite, and where its year begins), which go when a calendar gives a period's values. 2026-10-10.
 
 * [x] **Weeks or months, asked once** — `Tempo.week_based_calendar?/1` is the one function that asks a calendar its base: the other 15 direct calls of `calendar_base/0` ask it, as the three private copies of it do. What its callers then do with the answer is the second shape of date, which stays. 2026-10-10.
 

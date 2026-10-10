@@ -2975,10 +2975,6 @@ defmodule Tempo.RRule.Selection do
   # each, and the dates that fall in the candidate's year are the year's.
   # They are one Easter in a Hebrew year, and none or two September equinoxes
   # in a Hebrew year that begins after one or runs on to a second.
-  defp event_dates_in_year(name, year, Calendrical.Gregorian) do
-    with {:ok, date} <- event_date(name, year, Calendrical.Gregorian), do: {:ok, [date]}
-  end
-
   defp event_dates_in_year(name, year, calendar) do
     year
     |> gregorian_years(calendar)
@@ -3043,8 +3039,6 @@ defmodule Tempo.RRule.Selection do
 
   # The Gregorian year a date of `calendar` falls in, which is the year an
   # event that falls on the date is computed for.
-  defp gregorian_year_of(year, _month, _day, Calendrical.Gregorian), do: {:ok, year}
-
   defp gregorian_year_of(year, month, day, calendar) do
     with {:ok, %Date{} = date} <- Date.new(year, month, day, calendar),
          {:ok, %Date{year: gregorian_year}} <- Date.convert(date, Calendars.default()) do

@@ -2403,9 +2403,6 @@ defmodule Tempo do
   # calendar, or the week and the day of the week a week-based calendar keeps
   # in them, so its values take ISO 8601's week date shape as a parsed one does.
   @spec date_units(integer(), integer(), integer(), module()) :: keyword()
-  def date_units(year, month, day, Calendrical.Gregorian),
-    do: [year: year, month: month, day: day]
-
   def date_units(year, month, day, calendar) do
     if week_based_calendar?(calendar),
       do: [year: year, week: month, day_of_week: day],
@@ -6215,7 +6212,7 @@ defmodule Tempo do
     utc_seconds = Compare.to_utc_seconds(%{tempo | time: whole})
 
     with {:ok, offset} <- zone_offset_at(target_zone, utc_seconds),
-         {:ok, wall} <- wall_components(utc_seconds + offset, calendar, tempo) do
+         {:ok, wall} <- wall_components(utc_seconds + offset, calendar) do
       {:ok,
        %{
          tempo
@@ -6241,35 +6238,20 @@ defmodule Tempo do
 
   # A wall-clock reading in Gregorian seconds as a value's components in
   # `calendar`: the day as the calendar numbers it, and the time of day.
-  defp wall_components(seconds, calendar, tempo) do
+  # The day is the one the calendar gives the count of days it counts from
+  # (`date_from_iso_days/1`), which takes a day before year 0 on every OTP,
+  # as OTP ≤ 28's `:calendar.gregorian_seconds_to_datetime/1` does not.
+  defp wall_components(seconds, calendar) do
     time_of_day = Integer.mod(seconds, 86_400)
+    {year, month, day} = calendar.date_from_iso_days(Integer.floor_div(seconds, 86_400))
 
-    with {:ok, {year, month, day}} <-
-           day_in_calendar(Integer.floor_div(seconds, 86_400), calendar, tempo) do
-      {:ok,
-       date_units(year, month, day, calendar) ++
-         [
-           hour: div(time_of_day, 3_600),
-           minute: time_of_day |> rem(3_600) |> div(60),
-           second: rem(time_of_day, 60)
-         ]}
-    end
-  end
-
-  # The day `days` after 0000-01-01 as `calendar` numbers it. Both counts
-  # from day 0 take negative (pre-common-era) days on every OTP, which OTP
-  # ≤ 28's `:calendar.gregorian_seconds_to_datetime/1` does not.
-  defp day_in_calendar(days, Gregorian, _tempo),
-    do: {:ok, Gregorian.date_from_iso_days(days)}
-
-  defp day_in_calendar(days, calendar, tempo) do
-    case days |> Date.from_gregorian_days() |> Date.convert(calendar) do
-      {:ok, %Date{year: year, month: month, day: day}} ->
-        {:ok, {year, month, day}}
-
-      {:error, reason} ->
-        {:error, ConversionError.exception(value: tempo, target: calendar, reason: reason)}
-    end
+    {:ok,
+     date_units(year, month, day, calendar) ++
+       [
+         hour: div(time_of_day, 3_600),
+         minute: time_of_day |> rem(3_600) |> div(60),
+         second: rem(time_of_day, 60)
+       ]}
   end
 
   # The value's annotations with `zone` in place of its own zone or offset

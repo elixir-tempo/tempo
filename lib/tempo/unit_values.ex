@@ -173,8 +173,6 @@ defmodule Tempo.UnitValues do
   # days asks it.
   @composite_key {__MODULE__, :composite}
 
-  defp composite?(calendar) when calendar in [Calendrical.Gregorian, Calendar.ISO], do: false
-
   defp composite?(calendar) do
     case :persistent_term.get({@composite_key, calendar}, nil) do
       nil ->
@@ -517,10 +515,6 @@ defmodule Tempo.UnitValues do
   """
   @spec named_date(integer(), pos_integer(), pos_integer(), module()) ::
           {integer(), pos_integer(), pos_integer()}
-  def named_date(year, month, day, calendar)
-      when calendar in [Calendrical.Gregorian, Calendar.ISO],
-      do: {year, month, day}
-
   def named_date(year, month, day, calendar),
     do: {year, month_named(year, month, day, calendar), named_day(year, month, day, calendar)}
 
@@ -552,10 +546,6 @@ defmodule Tempo.UnitValues do
 
   """
   @spec month_named_once?(integer(), pos_integer(), module()) :: boolean()
-  def month_named_once?(_year, _month, calendar)
-      when calendar in [Calendrical.Gregorian, Calendar.ISO],
-      do: true
-
   def month_named_once?(year, month, calendar) when is_integer(year) and is_integer(month) do
     if exported?(calendar, :cardinal_day, 3),
       do:
@@ -596,10 +586,6 @@ defmodule Tempo.UnitValues do
 
   """
   @spec year_named_by_its_months?(integer(), module()) :: boolean()
-  def year_named_by_its_months?(_year, calendar)
-      when calendar in [Calendrical.Gregorian, Calendar.ISO],
-      do: true
-
   def year_named_by_its_months?(year, calendar) when is_integer(year) do
     with true <- exported?(calendar, :cardinal_day, 3),
          %Date.Range{first: first, last: last} <- calendar.year(year) do
@@ -1285,10 +1271,6 @@ defmodule Tempo.UnitValues do
 
   """
   @spec year_begins_with_first_month?(integer(), module()) :: boolean()
-  def year_begins_with_first_month?(_year, calendar)
-      when calendar in [Calendrical.Gregorian, Calendar.ISO],
-      do: true
-
   def year_begins_with_first_month?(year, calendar) when is_integer(year) and is_atom(calendar) do
     case year_start(calendar, year) do
       :every_year -> true
@@ -1580,10 +1562,6 @@ defmodule Tempo.UnitValues do
   # the ends of each range, and a mask or no year at all is taken to begin
   # with its first month.
   @spec years_begin_with_first_month?(term(), module()) :: boolean()
-  def years_begin_with_first_month?(_years, calendar)
-      when calendar in [Calendrical.Gregorian, Calendar.ISO],
-      do: true
-
   def years_begin_with_first_month?(year, calendar) when is_integer(year),
     do: year_begins_with_first_month?(year, calendar)
 

@@ -1263,17 +1263,16 @@ defmodule Tempo.Math do
     end
   end
 
-  # A whole number of months or of years added to a plain Gregorian date is
-  # as common, the step of every rule of months and of years, and its
-  # prelude is as empty: the value holds no mask and no annotation, is no
-  # week date and no day of the year, and its calendar's years begin with
-  # their first month, so the general path comes down to the months counted
-  # on and the day brought into the month they land in (`apply_duration/2`).
-  # It took four times a step of days.
-  defp fast_add(%Tempo{time: time, calendar: calendar} = tempo, [{unit, n}] = duration_time)
-       when unit in [:month, :year] and is_integer(n) and
-              calendar in [nil, Calendrical.Gregorian, Calendar.ISO] do
-    if plain_datetime?(time),
+  # A whole number of months or of years added to a plain date is as common,
+  # the step of every rule of months and of years, and its prelude is as
+  # empty: the value holds no mask and no annotation, is no week date and
+  # no day of the year, and its calendar does not step its own dates, so the
+  # general path comes down to the months counted on and the day brought
+  # into the month they land in (`apply_duration/2`). It took four times a
+  # step of days.
+  defp fast_add(%Tempo{time: time} = tempo, [{unit, n}] = duration_time)
+       when unit in [:month, :year] and is_integer(n) do
+    if plain_datetime?(time) and not stepped_by_its_calendar?(tempo),
       do: fast_stepped(apply_duration(tempo, duration_time)),
       else: :fallback
   end
@@ -1617,10 +1616,6 @@ defmodule Tempo.Math do
   # Whether a date of the value's calendar is stepped by the calendar: a
   # composite calendar, and one whose year does not begin with its first
   # month (`Tempo.UnitValues.stepped_by_calendar?/2`).
-  defp stepped_by_its_calendar?(%Tempo{calendar: calendar})
-       when calendar in [nil, Calendrical.Gregorian, Calendar.ISO],
-       do: false
-
   defp stepped_by_its_calendar?(%Tempo{time: time, calendar: calendar}) do
     years =
       case List.keyfind(time, :year, 0) do
@@ -1628,7 +1623,7 @@ defmodule Tempo.Math do
         _no_year -> nil
       end
 
-    UnitValues.stepped_by_calendar?(years, calendar)
+    UnitValues.stepped_by_calendar?(years, Calendars.effective(calendar))
   end
 
   # Whether a step counts elapsed time for a value in a zone whose offset
