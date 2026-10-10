@@ -5,6 +5,7 @@ defmodule Tempo.CompositeCalendarTest do
 
   alias Calendrical.Hebrew
   alias Calendrical.Reform.England
+  alias Calendrical.Reform.Japan
   alias Calendrical.Reform.Sweden
   alias Tempo.Interval
   alias Tempo.IntervalSet
@@ -291,6 +292,148 @@ defmodule Tempo.CompositeCalendarTest do
                  Date.day_of_week(date, :monday) == 1,
                  do: day(date)
                )
+    end
+  end
+
+  describe "a year that begins on another day than the first of its first month" do
+    # England's 1751 began on 25 March and ended on 31 December: its months
+    # are March to December as they are numbered, and its March is the seven
+    # days from the 25th. It is the one such year of the calendars
+    # Calendrical has, and every answer here is the calendar's own: `year/1`,
+    # `month/2` and `quarter/2` for their dates in order.
+
+    test "is 1751, and neither of the years about it" do
+      assert England.year(1751).first == ~D[1751-03-25 Calendrical.Reform.England]
+
+      refute UnitValues.year_begins_with_first_month?(1751, England)
+      assert UnitValues.year_begins_with_first_month?(1750, England)
+      assert UnitValues.year_begins_with_first_month?(1752, England)
+    end
+
+    test "starts with its first day, which the year before meets" do
+      %Date.Range{first: first, last: last} = England.year(1751)
+      before = Date.add(first, -1)
+
+      assert Tempo.relation(value("1751Y", England), day(first)) == :started_by
+      assert Tempo.relation(value("1751Y", England), day(last)) == :finished_by
+      assert Tempo.relation(value("1751Y", England), day(before)) == :met_by
+
+      assert Tempo.relation(value("1750Y", England), day(before)) == :finished_by
+      assert Tempo.relation(value("1750Y", England), day(first)) == :meets
+      assert Tempo.relation(value("1750Y", England), value("1751Y", England)) == :meets
+    end
+
+    test "has a first month that starts with the year's first day" do
+      %Date.Range{first: first, last: last} = dates = England.month(1751, 3)
+
+      assert first == England.year(1751).first
+
+      assert Tempo.relation(month(1751, 3, England), day(first)) == :started_by
+      assert Tempo.relation(month(1751, 3, England), day(last)) == :finished_by
+      assert Tempo.relation(month(1751, 3, England), day(Date.add(first, -1))) == :met_by
+      assert Tempo.relation(month(1750, 13, England), day(first)) == :meets
+
+      assert Tempo.days_in_month(month(1751, 3, England)) == Enum.count(dates)
+    end
+
+    test "is written to its month, and walked from it, by the first month it has" do
+      first_month = England.year(1751).first.month
+
+      assert Tempo.extend_resolution(value("1751Y", England), :month) ==
+               month(1751, first_month, England)
+
+      {:ok, interval} = Tempo.to_interval(value("1751Y", England))
+
+      assert Enum.to_list(interval) == Enum.to_list(value("1751Y", England))
+      assert hd(Enum.to_list(interval)) == month(1751, first_month, England)
+
+      # The month after a year's first is a month on from the year.
+      assert Tempo.shift(value("1751Y", England), month: 1) ==
+               month(1751, first_month + 1, England)
+    end
+
+    test "is at a time of day on its first day" do
+      %Date{month: month, day: day} = England.year(1751).first
+
+      assert value("1751YT10H", England) == value("1751Y#{month}M#{day}DT10H", England)
+      assert value("1751Y3MT10H", England) == value("1751Y3M#{day}DT10H", England)
+    end
+
+    test "counts a day of a quarter and of a half from the day each begins" do
+      first_quarter = Enum.to_list(England.quarter(1751, 1))
+      second_quarter = Enum.to_list(England.quarter(1751, 2))
+      first_half = first_quarter ++ second_quarter
+
+      for {text, date} <- [
+            {"1751Y1Q1D", hd(first_quarter)},
+            {"1751Y1Q#{length(first_quarter)}D", List.last(first_quarter)},
+            {"1751Y2Q1D", hd(second_quarter)},
+            {"1751Y2Q#{length(second_quarter)}D", List.last(second_quarter)},
+            {"1751Y1H1D", hd(first_half)},
+            {"1751Y1H8D", Enum.at(first_half, 7)},
+            {"1751Y1H#{length(first_half)}D", List.last(first_half)}
+          ] do
+        assert {text, value(text, England)} == {text, day(date)}
+      end
+
+      for text <- [
+            "1751Y1Q#{length(first_quarter) + 1}D",
+            "1751Y2Q#{length(second_quarter) + 1}D",
+            "1751Y1H#{length(first_half) + 1}D"
+          ] do
+        assert {^text, {:error, %Tempo.InvalidDateError{}}} =
+                 {text, Tempo.from_iso8601(text, England)}
+      end
+    end
+
+    test "counts a month of a group of years from the first month it has" do
+      months = England.year(1751) |> Enum.map(& &1.month) |> Enum.uniq()
+
+      # `1752G1YU` is the group of one year that is 1751.
+      assert {:ok, interval} = Tempo.to_interval(value("1752G1YU", England))
+      assert Interval.endpoints(interval) == {value("1751Y", England), value("1752Y", England)}
+
+      for {month, nth} <- Enum.with_index(months, 1) do
+        assert {nth, value("1752G1YU#{nth}M", England)} == {nth, month(1751, month, England)}
+      end
+
+      assert {:error, %Tempo.InvalidDateError{}} =
+               Tempo.from_iso8601("1752G1YU#{length(months) + 1}M", England)
+
+      # `104G17YU` is the seventeen years from 1751, and the month after the
+      # last of 1751 is the first of 1752.
+      assert value("104G17YU#{length(months) + 1}M", England) == month(1752, 1, England)
+    end
+
+    test "has months whose every day is the month, as in any calendar" do
+      for month <- England.year(1751) |> Enum.map(& &1.month) |> Enum.uniq() do
+        {:ok, of_every_day} = Tempo.to_interval(value("1751Y#{month}MX*D", England))
+        {:ok, of_the_month} = Tempo.to_interval(month(1751, month, England))
+
+        assert {month, Interval.endpoints(of_every_day)} ==
+                 {month, Interval.endpoints(of_the_month)}
+      end
+
+      {:ok, of_every_day} = Tempo.to_interval(~o"2026Y3MX*D")
+      assert Interval.endpoints(of_every_day) == {~o"2026Y3M", ~o"2026Y4M"}
+    end
+  end
+
+  describe "a year the calendar does not have" do
+    # Japan counted its years otherwise before 1873, and its composite has no
+    # day of the years to 1872 as the Gregorian calendar numbers them.
+    test "has no month and no day to count, and says so" do
+      assert Japan.months_in_year(1872) == 0
+      assert Japan.days_in_year(1872) == 0
+
+      # `1873G1YU` is the group of one year that is 1872.
+      for text <- ["1873G1YU1M", "1872Y1O", "1872Y1G3MU1D"] do
+        assert {^text, {:error, %Tempo.InvalidDateError{} = error}} =
+                 {text, Tempo.from_iso8601(text, Japan)}
+
+        refute Exception.message(error) =~ ".."
+        assert Exception.message(error) =~ "There are no valid values"
+      end
     end
   end
 

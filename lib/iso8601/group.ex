@@ -594,22 +594,8 @@ defmodule Tempo.Iso8601.Group do
           {:ok, {:month | :week, {:group, Range.t()}}} | {:error, :not_defined | :invalid_date}
   def year_division_group(calendar, year, division, number) do
     with {:ok, %Date.Range{first: first, last: last}} <-
-           year_division_date_range(calendar, year, division, number),
-         {:ok, first_month} <- month_of_year(first, calendar),
-         {:ok, last_month} <- month_of_year(last, calendar) do
-      {:ok, {year_division_unit(calendar), {:group, first_month..last_month//1}}}
-    end
-  end
-
-  # The month of its year a date is in: the month it names, or in a year
-  # that does not begin with its first month the one the calendar counts
-  # from the day the year begins (`Tempo.UnitValues.month_of_date/4`).
-  defp month_of_year(%Date{year: year, month: month, day: day}, calendar) do
-    if UnitValues.year_begins_with_first_month?(year, calendar) do
-      {:ok, month}
-    else
-      with {:error, :no_period} <- UnitValues.month_of_date(year, month, day, calendar),
-           do: {:error, :invalid_date}
+           year_division_date_range(calendar, year, division, number) do
+      {:ok, {year_division_unit(calendar), {:group, first.month..last.month//1}}}
     end
   end
 

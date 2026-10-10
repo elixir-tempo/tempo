@@ -847,7 +847,6 @@ defmodule Tempo.Format do
 
     time
     |> week_date_as_day(calendar)
-    |> counted_month_as_named(calendar)
     |> Enum.reduce(%{}, fn
       {k, v}, acc when is_integer(v) -> Map.put(acc, k, v)
       _other, acc -> acc
@@ -869,22 +868,6 @@ defmodule Tempo.Format do
       _not_a_week_date -> time
     end
   end
-
-  # A month written with no day, in a year that does not begin with its first
-  # month, is the month the calendar counts from the year's start, and is
-  # named as the month its first day is in: the first month of a
-  # `Calendrical.Julian.March25` year is in March.
-  defp counted_month_as_named([{:year, year}, {:month, month}] = time, calendar)
-       when is_integer(year) and is_integer(month) do
-    with false <- UnitValues.year_begins_with_first_month?(year, calendar),
-         {:ok, {year, month, _day}} <- UnitValues.first_date(time, calendar) do
-      [year: year, month: month]
-    else
-      _named_as_counted -> time
-    end
-  end
-
-  defp counted_month_as_named(time, _calendar), do: time
 
   # A value of a year before 1 is shown with its era, which the formats
   # for a date of today leave out: `-0044-03-15` is "Mar 15, 45 BC", where

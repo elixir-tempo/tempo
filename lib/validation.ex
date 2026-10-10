@@ -291,12 +291,16 @@ defmodule Tempo.Validation do
   defp with_skipped_date_units([unit | rest], calendar),
     do: [unit | with_skipped_date_units(rest, calendar)]
 
-  # A year's first day is the first of its first month, or of its first week
-  # in a calendar of weeks.
+  # A year's first day is the first of its first month, as the calendar
+  # gives them, or of its first week in a calendar of weeks.
   defp first_day_of({:year, year}, calendar) do
-    if Tempo.week_based_calendar?(calendar),
-      do: [year: group_start(year), week: 1, day_of_week: 1],
-      else: UnitValues.with_first_day([year: group_start(year), month: 1], calendar)
+    if Tempo.week_based_calendar?(calendar) do
+      [year: group_start(year), week: 1, day_of_week: 1]
+    else
+      [year: group_start(year)]
+      |> UnitValues.with_first_month(calendar)
+      |> UnitValues.with_first_day(calendar)
+    end
   end
 
   defp first_day_of({:month, month}, _calendar), do: [month: group_start(month), day: 1]
@@ -638,7 +642,7 @@ defmodule Tempo.Validation do
       |> Enum.map(&calendar.months_in_year/1)
       |> Enum.sum()
 
-    with {:ok, month} <- conform(month, 1..months_in_group),
+    with {:ok, month} <- conform(month, 1..months_in_group//1),
          {:ok, year, month} <- year_and_month(years, month, calendar) do
       resolve([{:year, year}, {:month, month} | rest], calendar)
     end
@@ -653,11 +657,11 @@ defmodule Tempo.Validation do
       when is_integer(year) and is_integer(day) do
     months_in_year = calendar.months_in_year(year)
 
-    with {:ok, _first_month} <- conform(months.first, 1..months_in_year),
+    with {:ok, _first_month} <- conform(months.first, 1..months_in_year//1),
          months = months.first..min(months.last, months_in_year)//1,
          days_in_group =
-           months |> Enum.map(&UnitValues.days_in_counted_month(year, &1, calendar)) |> Enum.sum(),
-         {:ok, day} <- conform(day, 1..days_in_group),
+           months |> Enum.map(&calendar.days_in_month(year, &1)) |> Enum.sum(),
+         {:ok, day} <- conform(day, 1..days_in_group//1),
          {:ok, month, day} <- month_and_day(year, months, day, calendar) do
       resolve([{:year, year}, {:month, month}, {:day, day} | rest], calendar)
     end
@@ -725,7 +729,7 @@ defmodule Tempo.Validation do
     last = min(last, days_in_year)
     day = if day < 0, do: last + day + 1, else: first + day - 1
 
-    if first in 1..days_in_year and day <= last do
+    if first in 1..days_in_year//1 and day <= last do
       %{year: year, month: month, day: day} =
         Calendrical.date_from_day_of_year(year, day, calendar)
 
@@ -1797,80 +1801,44 @@ defmodule Tempo.Validation do
   defp prepend_year(year, resolved), do: [{:year, year} | resolved]
 
   # The `month`th month of a group of years, counted on from the group's
-  # first month by Calendrical, so a thirteen-month year counts as the
-  # calendar numbers it.
-  #
-  # In a year that does not begin with its first month the calendar counts
-  # the year's months from the day it begins, and a date's month is not the
-  # month counted, so the months are counted through each year's own.
+  # first day by Calendrical, so a thirteen-month year counts as the
+  # calendar numbers it. A group whose first year the calendar does not
+  # have has no first day to count from.
   def year_and_month(%Range{first: first_year, last: last_year}, month, calendar) do
-    if UnitValues.year_begins_with_first_month?(first_year, calendar),
-      do: month_by_the_calendar(first_year, last_year, month, calendar),
-      else: month_counted_through(first_year, last_year, month, month, calendar)
-  end
-
-  defp month_by_the_calendar(first_year, last_year, month, calendar) do
-    case calendar.plus(first_year, 1, 1, :months, month - 1) do
-      {year, month_of_year, _day} when year >= first_year and year <= last_year ->
-        {:ok, year, month_of_year}
-
+    with {:ok, {start_year, start_month, start_day}} <- first_day_of_year(first_year, calendar),
+         {year, month_of_year, _day} when year >= first_year and year <= last_year <-
+           calendar.plus(start_year, start_month, start_day, :months, month - 1) do
+      {:ok, year, month_of_year}
+    else
       _beyond_the_group ->
         {:error, InvalidDateError.exception(unit: :month, value: month, calendar: calendar)}
     end
   end
 
-  defp month_counted_through(year, last_year, month, written, calendar) when year <= last_year do
-    case UnitValues.in_period(:month, [year: year], calendar) do
-      {:ok, %Range{last: months}} when month <= months ->
-        {:ok, year, month}
-
-      {:ok, %Range{last: months}} ->
-        month_counted_through(year + 1, last_year, month - months, written, calendar)
-
-      {:error, _reason} ->
-        {:error, InvalidDateError.exception(unit: :month, value: written, calendar: calendar)}
-    end
+  # A year's first day is the first of its first month, or the day the
+  # calendar gives where the year begins on another: a composite calendar's
+  # year of change (1751 in `Calendrical.Reform.England`, from 25 March).
+  defp first_day_of_year(year, calendar) do
+    if UnitValues.year_begins_with_first_month?(year, calendar),
+      do: {:ok, {year, 1, 1}},
+      else: UnitValues.first_date([year: year], calendar)
   end
 
-  defp month_counted_through(_year, _last_year, _month, written, calendar),
-    do: {:error, InvalidDateError.exception(unit: :month, value: written, calendar: calendar)}
-
   # The `day`th day of a group of months, counted on from the group's
-  # first day by Calendrical. The group's first day is the first of its
-  # first month, or in a year that does not begin with its first month the
-  # first date the calendar gives that month, and the day counted to is
-  # held by one of the group's months as the calendar counts them.
-  def month_and_day(year, %Range{first: first_month} = months, day, calendar) do
-    {start_year, start_month, start_day} =
-      first_of_group(year, first_month, calendar)
-
-    with {^year, month, day_of_month} <-
+  # first day by Calendrical: the first of its first month, or the first
+  # date the calendar gives that month where the year begins within it
+  # (March 1751 in `Calendrical.Reform.England` begins on the 25th). The
+  # day counted to is held by one of the group's months.
+  def month_and_day(year, %Range{first: first_month, last: last_month}, day, calendar) do
+    with {:ok, {start_year, start_month, start_day}} <-
+           UnitValues.start_date([year: year, month: first_month], calendar),
+         {^year, month, day_of_month} <-
            calendar.plus(start_year, start_month, start_day, :days, day - 1),
-         true <- month_of_group?(year, month, day_of_month, months, calendar) do
+         true <- month >= first_month and month <= last_month do
       {:ok, month, day_of_month}
     else
       _beyond_the_group ->
         {:error, InvalidDateError.exception(unit: :day, value: day, calendar: calendar)}
-    end
-  end
-
-  defp first_of_group(year, month, calendar) do
-    with false <- UnitValues.year_begins_with_first_month?(year, calendar),
-         {:ok, first} <- UnitValues.first_date([year: year, month: month], calendar) do
-      first
-    else
-      _first_of_the_month -> {year, month, 1}
-    end
-  end
-
-  defp month_of_group?(year, month, day, %Range{first: first, last: last}, calendar) do
-    if UnitValues.year_begins_with_first_month?(year, calendar) do
-      month >= first and month <= last
-    else
-      match?(
-        {:ok, counted} when counted >= first and counted <= last,
-        UnitValues.month_of_date(year, month, day, calendar)
-      )
     end
   end
 
@@ -1965,6 +1933,15 @@ defmodule Tempo.Validation do
   defp last_value(%Range{last: last}), do: last
   defp last_value(ranges) when is_list(ranges), do: ranges |> List.last() |> last_value()
 
+  # What an error says of the values a unit takes: what they are, or that
+  # there are none (a year a composite calendar does not have has no months
+  # and no days).
+  defp valid_values_text(%Range{first: first, last: last, step: step})
+       when (step > 0 and first > last) or (step < 0 and first < last),
+       do: "There are no valid values"
+
+  defp valid_values_text(valid), do: "The valid values are #{values_text(valid)}"
+
   # The values a unit takes, as an error names them: a range, or the ranges
   # of a month with days missing in it (`1..2 and 14..30`).
   defp values_text(%Range{} = range), do: inspect(range)
@@ -2033,7 +2010,7 @@ defmodule Tempo.Validation do
          valid_range: valid_range,
          reason:
            "#{inspect(value)} is not valid#{read_as_text(read_as)}. " <>
-             "The valid values are #{values_text(valid)}"
+             valid_values_text(valid)
        )},
       read_as
     )

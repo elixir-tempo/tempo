@@ -308,23 +308,12 @@ defmodule Tempo.Compare do
   def start_point(%Tempo{time: time} = value) do
     cond do
       point?(time) -> {:ok, value}
-      starts_with_its_first_value?(value) -> first_value_start(value)
+      Enumeration.names_each_value?(value) -> first_value_start(value)
       true -> converted_start(value)
     end
   end
 
   defp converted_start(value), do: value |> Tempo.to_interval() |> span_start(value)
-
-  # The walk gives a value's values in the order of their numbers, which is
-  # the order of time but in a year that does not begin with its first
-  # month: there the conversion, which puts its spans in order, is asked.
-  defp starts_with_its_first_value?(%Tempo{time: time, calendar: calendar} = value) do
-    Enumeration.names_each_value?(value) and
-      UnitValues.years_begin_with_first_month?(
-        Keyword.get(time, :year),
-        effective_calendar(calendar)
-      )
-  end
 
   # The first value is one value, and starts where it is a point or where
   # its own span does. Where the walk gives none, or cannot say, the

@@ -53,21 +53,15 @@ defmodule Tempo.ConversionError do
   * `:not_built` — the answer is one Tempo does not yet work out in the
     calendar named in `:calendar`, where it is known that it would be
     wrong, so it is refused: `:target` says what was asked for.
-    `:selection` is a selection that counts days within a month or a
-    year, `:season` a season and `:shift` a step by days from a value
-    that holds several months or years, each in a calendar whose year
-    does not begin with its first month (Calendrical's Julian `March25`,
-    `March1`, `Sept1` and `Dec25`); `:month` is a month of a year whose
-    months the calendar does not count from the day the year begins (a
-    year of `Calendrical.Reform.England` before 1751); `:rrule` is an
-    RRULE that steps or selects by a month, a year, a week of the year or
-    a day of one, for a recurrence of another calendar than the Gregorian;
-    `:week_of_month` is a week of a month in a calendar whose year
-    does not begin with its first month; and
+    `:rrule` is an RRULE that steps or selects by a month, a year, a
+    week of the year or a day of one, for a recurrence of another
+    calendar than the Gregorian; `:week_of_month` is a week selected
+    from a month where the selection cannot be placed in it; and
     `:rule_to_an_end` is a rule that holds a window (ISO 8601-2 §12.10)
     on a recurrence written with a duration and an end, whose occurrences
     run back from it, in every calendar.
-    The [operation matrix](operation-matrix.html) lists each.
+    The [operation matrix](operation-matrix.html) describes the first and
+    the last.
 
   * `:calendar_week_in_month` — a week of the calendar's own numbering
     (`w`) selected in a month, as `~o"2026Y6ML2wN"` is. Such a week is a

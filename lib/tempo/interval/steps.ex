@@ -51,18 +51,6 @@ defmodule Tempo.Interval.Steps do
   @spec fill_to_unit(Tempo.t(), atom() | nil, module()) :: Tempo.t()
   def fill_to_unit(%Tempo{} = tempo, nil, _calendar), do: tempo
 
-  # A year is filled below its months from its first day, which the calendar
-  # is asked for where the year does not begin with its first month.
-  def fill_to_unit(%Tempo{time: [{:year, year}] = time} = tempo, unit, calendar)
-      when is_integer(year) and unit not in [:year, :month, :week] do
-    with false <- UnitValues.year_begins_with_first_month?(year, calendar),
-         {:ok, {year, month, day}} <- UnitValues.start_date(time, calendar) do
-      fill_to_unit(%Tempo{tempo | time: [year: year, month: month, day: day]}, unit, calendar)
-    else
-      _from_its_first_month -> fill_by_unit(tempo, unit, calendar)
-    end
-  end
-
   def fill_to_unit(%Tempo{} = tempo, unit, calendar), do: fill_by_unit(tempo, unit, calendar)
 
   defp fill_by_unit(%Tempo{time: time} = tempo, unit, calendar) do
@@ -81,8 +69,10 @@ defmodule Tempo.Interval.Steps do
 
   defp range_first(%Range{first: first}), do: first
 
-  # A month's first day is asked of the calendar, which counts a year's
-  # months from the day the year begins (`Tempo.UnitValues.with_first_day/2`).
+  # A year's first month and a month's first day are asked of the calendar,
+  # which gives another than the first to a year that begins on another day
+  # (`Tempo.UnitValues.with_first_month/2`, `with_first_day/2`).
+  defp with_first(time, :month, 1, calendar), do: UnitValues.with_first_month(time, calendar)
   defp with_first(time, :day, 1, calendar), do: UnitValues.with_first_day(time, calendar)
   defp with_first(time, unit, minimum, _calendar), do: time ++ [{unit, minimum}]
 

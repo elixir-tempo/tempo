@@ -46,7 +46,7 @@ A day of the year is the date it names in the same way. One alone is read as its
 
 A calendar whose year begins on another day than 1 January (Calendrical's Julian `March25`, `March1`, `Sept1` and `Dec25`) counts the year's months from that day, and a date's fields are those months and their days. The first month of a `March25` year is the seven days from 25 March and its thirteenth the twenty-four before the next, so `1750Y1M` is walked by seven dates, `1750Y13M` by twenty-four, and `1750Y1M1D` is 25 March 1750, which `Tempo.to_string/2` and `Tempo.explain/1` name as it is called.
 
-A month of a composite calendar has the days its calendar has: September 1752 in `Calendrical.Reform.England`, the month England adopted the Gregorian calendar, is walked by the 1st, the 2nd and the 14th to the 30th, the day after the 2nd is the 14th, and `1752Y9M3D` is no date. Its years before 1751 began on 25 March, and the calendar numbers their months as their dates do, so no month is the days that begin the year: a month of such a year is refused, where the year, its dates and their steps are answered.
+A month of a composite calendar has the days its calendar has: September 1752 in `Calendrical.Reform.England`, the month England adopted the Gregorian calendar, is walked by the 1st, the 2nd and the 14th to the 30th, the day after the 2nd is the 14th, and `1752Y9M3D` is no date. Its years to 1750 began on 25 March and count their months from that day, as `March25` does. Its 1751 began on 25 March and ended on 31 December: the year has the months March to December as they are numbered, its March is the seven days from the 25th, and `1751Y` starts on that day, as `1751Y3M` does.
 
 ### 2.2. Explicit ranges and sets
 
