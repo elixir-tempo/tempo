@@ -3298,9 +3298,9 @@ defmodule Tempo do
   # of one. Half past ten to a quarter to one, truncated to the hour, is ten
   # to one.
   def trunc(%Interval{} = interval, truncate_to) do
-    with {:ok, %Interval{from: from, to: to} = span} <- with_its_ends(interval, "trunc/2"),
-         {:ok, from} <- end_moved(from, &trunc(&1, truncate_to)),
-         {:ok, to} <- end_moved(to, &taken_up(&1, truncate_to)) do
+    with {:ok, %Interval{} = span} <- with_its_ends(interval, "trunc/2"),
+         {:ok, from} <- end_moved(span.from, &trunc(&1, truncate_to)),
+         {:ok, to} <- end_moved(span.to, &taken_up(&1, truncate_to)) do
       %{span | from: from, to: to}
     end
   end
@@ -3367,8 +3367,11 @@ defmodule Tempo do
   # on the day New York's clocks go forward is cut to a day that begins at
   # −05:00, and was given the day at the offset of the hour.
   defp at_its_offset(%__MODULE__{} = value), do: Zone.at_its_offset(value)
-  defp at_its_offset({:ok, %__MODULE__{} = value}), do: {:ok, Zone.at_its_offset(value)}
   defp at_its_offset(other), do: other
+
+  # The same for what `extend/2` writes, which is `{:ok, value}`.
+  defp written_at_its_offset({:ok, %__MODULE__{} = value}), do: {:ok, Zone.at_its_offset(value)}
+  defp written_at_its_offset(not_written), do: not_written
 
   # A group of a set (`{1,2}G3MU`) is kept as a three-element entry that names
   # a span in each of its groups, so a value that holds one is no one value to
@@ -3595,9 +3598,9 @@ defmodule Tempo do
   # start of one already.
   def round(%Interval{} = interval, round_to) do
     with {:ok, unit} <- validate_unit(round_to),
-         {:ok, %Interval{from: from, to: to} = span} <- with_its_ends(interval, "round/2"),
-         {:ok, from} <- end_moved(from, &rounded_end(&1, unit)),
-         {:ok, to} <- end_moved(to, &rounded_end(&1, unit)) do
+         {:ok, %Interval{} = span} <- with_its_ends(interval, "round/2"),
+         {:ok, from} <- end_moved(span.from, &rounded_end(&1, unit)),
+         {:ok, to} <- end_moved(span.to, &rounded_end(&1, unit)) do
       %{span | from: from, to: to}
     end
   end
@@ -4324,7 +4327,7 @@ defmodule Tempo do
           do: extend_group(tempo),
           else: extend_by_enumeration(tempo)
 
-      extended |> as_the_clock_shows_it(tempo) |> at_its_offset()
+      extended |> as_the_clock_shows_it(tempo) |> written_at_its_offset()
     end
   end
 
