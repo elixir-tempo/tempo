@@ -50,6 +50,7 @@ defmodule Tempo.Interval do
 
   """
 
+  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.ConversionError
   alias Tempo.Duration
@@ -876,7 +877,7 @@ defmodule Tempo.Interval do
 
   """
   def next_unit_boundary(%Tempo{time: time, calendar: calendar} = tempo) do
-    calendar = Compare.effective_calendar(calendar)
+    calendar = Calendars.effective(calendar)
     time = significant_digits_as_mask(time)
 
     case List.last(time) do
@@ -2401,7 +2402,7 @@ defmodule Tempo.Interval do
          unit
        )
        when is_integer(from_year) and is_integer(to_year) and unit in [:year, :month] do
-    calendar = Compare.effective_calendar(calendar)
+    calendar = Calendars.effective(calendar)
 
     if UnitValues.stepped_by_calendar?(from_year, calendar) or
          UnitValues.stepped_by_calendar?(to_year, calendar),

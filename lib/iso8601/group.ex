@@ -2,6 +2,7 @@ defmodule Tempo.Iso8601.Group do
   @moduledoc false
 
   alias Calendrical.Gregorian
+  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.IntervalEndpointsError
   alias Tempo.InvalidDateError
@@ -22,7 +23,7 @@ defmodule Tempo.Iso8601.Group do
   #  * groups of a unit (`2G3MU`), into the range of values they cover
   #  * seasons, astronomical and meteorological
 
-  def expand_groups(tempo, calendar \\ Calendrical.Gregorian)
+  def expand_groups(tempo, calendar \\ Calendars.default())
 
   # A value is grouped in its own calendar, so a Hebrew quarter holds the
   # Hebrew months Calendrical puts in it.
@@ -251,7 +252,7 @@ defmodule Tempo.Iso8601.Group do
   @spec resolve_seasons(value, :northern | :southern) :: {:ok, term()} | {:error, Exception.t()}
         when value: term()
   def resolve_seasons(%Tempo{time: [{:year, year}, {:season, season}]} = tempo, hemisphere) do
-    case season_span(year, {season, hemisphere}, tempo.calendar || Gregorian) do
+    case season_span(year, {season, hemisphere}, Calendars.of(tempo)) do
       %Tempo.Interval{} = interval -> {:ok, as_the_value_is(interval, tempo)}
       {:error, _reason} = error -> error
     end

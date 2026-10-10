@@ -1,7 +1,7 @@
 defmodule Tempo.RRule.Encoder do
   @moduledoc false
 
-  alias Tempo.Compare
+  alias Tempo.Calendars
   alias Tempo.ConversionError
   alias Tempo.NotBuilt
   alias Tempo.RRule.Rule
@@ -186,7 +186,7 @@ defmodule Tempo.RRule.Encoder do
          repeat_rule: rule
        })
        when unit in [:month, :year] and calendar in [Calendrical.Gregorian, Calendar.ISO, nil] do
-    calendar = Compare.effective_calendar(calendar)
+    calendar = Calendars.effective(calendar)
 
     with {:ok, selection} <- selection_of(rule),
          [year, month, day] when is_integer(year) and is_integer(month) and is_integer(day) <-
@@ -556,10 +556,10 @@ defmodule Tempo.RRule.Encoder do
   # The calendar a recurrence's occurrences are counted in: that of its
   # start, and with no start that of its rule.
   defp counted_in(%Tempo.Interval{from: %Tempo{calendar: calendar}}),
-    do: Compare.effective_calendar(calendar)
+    do: Calendars.effective(calendar)
 
   defp counted_in(%Tempo.Interval{repeat_rule: %Tempo{calendar: calendar}}),
-    do: Compare.effective_calendar(calendar)
+    do: Calendars.effective(calendar)
 
   # BYDAY names weekdays, and a selection holds days of the week of its
   # rule's calendar, the last of them written `-1K`. Each is written as the
@@ -568,7 +568,7 @@ defmodule Tempo.RRule.Encoder do
   # calendar of weeks that start on Sunday. A day no week has is no weekday
   # for a BYDAY to name.
   defp weekdays_named(selection, calendar, interval) do
-    calendar = Compare.effective_calendar(calendar)
+    calendar = Calendars.effective(calendar)
 
     Enum.reduce_while(selection, {:ok, []}, fn entry, {:ok, named} ->
       case weekday_named(entry, calendar) do

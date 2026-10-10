@@ -2,6 +2,7 @@ defmodule Tempo.Enumeration.Zone do
   @moduledoc false
 
   alias Calendrical.Gregorian
+  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.Interval.Steps
   alias Tempo.TimeZoneDatabase
@@ -83,7 +84,7 @@ defmodule Tempo.Enumeration.Zone do
         } = value
       )
       when is_integer(year) and is_integer(week) and is_integer(day) do
-    calendar = Compare.effective_calendar(calendar)
+    calendar = Calendars.effective(calendar)
 
     with {:ok, %Date{} = date} <- UnitValues.date_from_iso_week(year, week, day, calendar),
          {:ok, date} <- gregorian_units(date) do
@@ -129,7 +130,7 @@ defmodule Tempo.Enumeration.Zone do
         %Tempo{time: [{:year, year}, {:month, month}, {:day, day} | clock]} = gregorian,
         %Tempo{time: [{:year, _year}, {:week, _week}, {:day_of_week, _day} | _clock]} = written
       ) do
-    with {:ok, weeks} <- calendar_of_weeks(Compare.effective_calendar(written.calendar)),
+    with {:ok, weeks} <- calendar_of_weeks(Calendars.effective(written.calendar)),
          {:ok, %Date{} = date} <- Date.new(year, month, day, Gregorian),
          {:ok, %Date{year: year, month: week, day: day}} <- Date.convert(date, weeks) do
       {:ok,

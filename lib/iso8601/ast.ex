@@ -13,6 +13,7 @@ defmodule Tempo.Iso8601.AST do
   # sets as component values. No validation happens here; the parser
   # is the validator of record for these shapes.
 
+  alias Tempo.Calendars
   alias Tempo.Duration
   alias Tempo.Interval
   alias Tempo.Qualification
@@ -33,7 +34,7 @@ defmodule Tempo.Iso8601.AST do
     * `:undefined` — returned as-is (represents an open endpoint).
 
   """
-  def build(tokens, calendar \\ Calendrical.Gregorian)
+  def build(tokens, calendar \\ Calendars.default())
 
   def build({:range, [first, last]}, calendar) do
     Tempo.Range.new(first, last, calendar)

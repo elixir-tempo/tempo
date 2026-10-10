@@ -337,6 +337,7 @@ defmodule Tempo.Select do
 
   """
 
+  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.ConversionError
   alias Tempo.Duration
@@ -691,7 +692,7 @@ defmodule Tempo.Select do
   defp with_set_metadata(error, _metadata), do: error
 
   defp day_of_week_selector(weekdays),
-    do: %Tempo{time: [day_of_week: weekdays], calendar: Calendrical.Gregorian}
+    do: %Tempo{time: [day_of_week: weekdays], calendar: Calendars.default()}
 
   # The days no holiday falls on, the holidays converted within the base.
   defp without_holidays(days, except, base) do
@@ -987,7 +988,7 @@ defmodule Tempo.Select do
        )
        when is_integer(year) do
     with true <- names_week?(selector),
-         false <- Tempo.week_based_calendar?(Compare.effective_calendar(calendar)),
+         false <- Tempo.week_based_calendar?(Calendars.effective(calendar)),
          {:ok, first} <- week_time_to_date([year: year, week: 1], calendar),
          {:ok, next} <- week_time_to_date([year: year + 1, week: 1], calendar) do
       %Interval{
@@ -1013,7 +1014,7 @@ defmodule Tempo.Select do
        when is_integer(year) and is_integer(month) do
     with true <- names_week?(selector),
          {:ok, [%Date.Range{first: first} | _weeks] = weeks} <-
-           UnitValues.weeks_of_month(year, month, Compare.effective_calendar(calendar)),
+           UnitValues.weeks_of_month(year, month, Calendars.effective(calendar)),
          %Date.Range{last: last} <- List.last(weeks),
          %Date{} = next <- Calendrical.next(last, :day) do
       %Interval{
@@ -1387,8 +1388,8 @@ defmodule Tempo.Select do
          %Tempo{time: [selection: selection], calendar: written} = rule,
          %Tempo{calendar: calendar}
        ) do
-    from = Compare.effective_calendar(written)
-    to = Compare.effective_calendar(calendar)
+    from = Calendars.effective(written)
+    to = Calendars.effective(calendar)
 
     if from == to do
       rule
@@ -1913,7 +1914,7 @@ defmodule Tempo.Select do
   # 45th is 14 February and the last 31 December. A calendar of weeks has no
   # months, and refuses a day of one where it is merged.
   defp read_in(c_time, %Interval{from: %Tempo{time: [{:year, _year}], calendar: calendar}}) do
-    if Tempo.week_based_calendar?(Compare.effective_calendar(calendar)),
+    if Tempo.week_based_calendar?(Calendars.effective(calendar)),
       do: c_time,
       else: Selection.days_of_year_where_no_month(c_time)
   end
@@ -1970,7 +1971,7 @@ defmodule Tempo.Select do
   defp each_once({:error, _reason} = error), do: error
 
   defp periods_on_axis(%Interval{from: %Tempo{time: time, calendar: calendar}} = base, c_time) do
-    if Tempo.week_based_calendar?(Compare.effective_calendar(calendar)),
+    if Tempo.week_based_calendar?(Calendars.effective(calendar)),
       do: {:ok, [base]},
       else: periods_on_axis(written_on(c_time), written_on(time), base, c_time)
   end
@@ -2187,7 +2188,7 @@ defmodule Tempo.Select do
   # and the ISO week calendar's alike, so a week written in one selects from
   # the other.
   defp one_calendar(%Interval{from: %Tempo{calendar: calendar}}, selectors) do
-    span_calendar = Compare.effective_calendar(calendar)
+    span_calendar = Calendars.effective(calendar)
 
     selectors
     |> List.wrap()
@@ -2200,7 +2201,7 @@ defmodule Tempo.Select do
   # than the span's, and `nil` for one that selects from the span.
   defp of_another_calendar(%Tempo{time: time, calendar: written} = selector, span_calendar)
        when is_list(time) do
-    written = Compare.effective_calendar(written)
+    written = Calendars.effective(written)
 
     if written != span_calendar and numbered_by_calendar?(time, written, span_calendar),
       do: {:error, another_calendar_error(selector, written, span_calendar)}
@@ -2220,7 +2221,7 @@ defmodule Tempo.Select do
 
   defp counted_in_another_calendar(from, %Tempo{calendar: written} = rule, span_calendar)
        when from in [nil, :undefined] do
-    written = Compare.effective_calendar(written)
+    written = Calendars.effective(written)
 
     if written != span_calendar,
       do: {:error, another_calendar_error(rule, written, span_calendar)}
@@ -2365,7 +2366,7 @@ defmodule Tempo.Select do
          c_time
        )
        when is_integer(year) and is_integer(month) do
-    calendar = Compare.effective_calendar(calendar)
+    calendar = Calendars.effective(calendar)
 
     c_time
     |> each_named(:week, fn -> weeks_in(year, month, calendar) end)
@@ -2419,7 +2420,7 @@ defmodule Tempo.Select do
   # week cut short does not have, select nothing, as a day a month does not
   # have does.
   defp week_of_month(%Tempo{time: time, calendar: calendar} = from, c_time) do
-    case Group.expand_groups(%{from | time: time ++ c_time}, Compare.effective_calendar(calendar)) do
+    case Group.expand_groups(%{from | time: time ++ c_time}, Calendars.effective(calendar)) do
       {:ok, selected} -> selected
       {:error, %InvalidDateError{unit: unit}} when unit in [:week, :day_of_week] -> nil
       {:error, _reason} = error -> error
@@ -2690,7 +2691,7 @@ defmodule Tempo.Select do
         if Enum.any?([:year, :month, :day, :week], &Keyword.has_key?(c_time, &1)) do
           :no
         else
-          {:ok, weekdays_named(dow, Compare.effective_calendar(selector_calendar))}
+          {:ok, weekdays_named(dow, Calendars.effective(selector_calendar))}
         end
     end
   end

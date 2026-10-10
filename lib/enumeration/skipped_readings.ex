@@ -20,6 +20,7 @@ defmodule Tempo.Enumeration.SkippedReadings do
   # the day out, and those days are kept.
 
   alias Calendrical.Gregorian
+  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.Enumeration.Zone
   alias Tempo.TimeZoneDatabase
@@ -148,7 +149,7 @@ defmodule Tempo.Enumeration.SkippedReadings do
 
   defp skipped(%{date: [years | _rest]}, zone, %Tempo{calendar: calendar}) do
     if years |> Enum.map(&Range.size/1) |> Enum.sum() <= @years_asked,
-      do: skipped_in(years, zone, Compare.effective_calendar(calendar)),
+      do: skipped_in(years, zone, Calendars.effective(calendar)),
       else: []
   end
 
@@ -209,7 +210,7 @@ defmodule Tempo.Enumeration.SkippedReadings do
   end
 
   defp units_named?(:day_of_year, [year, month, day], [years, days], %Tempo{calendar: calendar}) do
-    calendar = Compare.effective_calendar(calendar)
+    calendar = Calendars.effective(calendar)
 
     among?(year, years) and among?(calendar.day_of_year(year, month, day), days)
   end

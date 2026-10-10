@@ -41,6 +41,7 @@ defmodule Tempo.Set do
 
   """
 
+  alias Tempo.Calendars
   alias Tempo.Iso8601.AST
 
   @type filter :: :even | :odd | :leap | :common | nil
@@ -60,7 +61,7 @@ defmodule Tempo.Set do
   # Internal constructor used by the parser; users build sets by
   # parsing (`~o"[…]"` / `~o"{…}"`), so this is not public API.
   @doc false
-  def new(tokens, type, calendar \\ Calendrical.Gregorian) do
+  def new(tokens, type, calendar \\ Calendars.default()) do
     {excepts, plains} = Enum.split_with(tokens, &match?({:except, _}, &1))
     set = Enum.map(plains, &member(&1, calendar))
     except = Enum.map(excepts, fn {:except, member} -> AST.build(member, calendar) end)

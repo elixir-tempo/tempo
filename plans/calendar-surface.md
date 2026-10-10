@@ -111,7 +111,7 @@ Each is proposed, and its name and shape are Calendrical's to choose. Every cale
 
 In the order they can be done. The first three need nothing of Calendrical.
 
-* **A value always holds a calendar** — the default and `Calendar.ISO` are settled once, where a value is made, and nothing downstream asks again: 38 lines and the 8 deciders of that group, at 83 calls. Its first step is to read whether `nil` means anything today that a module could not say.
+* **A value's calendar is read through one accessor** — a value written as a struct with `nil` or `Calendar.ISO` for its calendar is still read as the notation's (the user, 2026-10-10: "Keep it, in one accessor"), and one function says so: `Tempo.Calendars.effective/1`, in the one module that may name a calendar. The 38 lines that defaulted to the Gregorian or mapped `Calendar.ISO`, and the 8 functions that did it at 83 calls, call it. A probe can go only where the calendar has passed through it.
 
 * **No probe of a required callback** — 19 probes go, and whether the module is a calendar is asked once, where it enters, of `Calendrical.validate_calendar/1`.
 
@@ -143,10 +143,11 @@ In the order they can be done. The first three need nothing of Calendrical.
 | Probes of what a calendar exports | 37 | 0 |
 | Functions called on a calendar that neither behaviour declares | 4 | 0 |
 | Functions called on a calendar that are optional | 6 | 0 |
-| Functions that decide by a calendar's kind | 55, at 259 calls | 1, at 1 call |
+| Functions that decide by a calendar's kind, the accessor apart | 47, at 176 calls | 1, at 1 call |
 | Lines that hold the days of a week | 16 | 0 |
 | Lines that hold a fact of the Gregorian calendar | 15 | 0, or in the one module |
 | Lines that hold the reader's bounds | 6 | 0 |
+| Constants that are a calendar's to answer | 13 of 250 | 0 |
 
 ## Decisions
 
@@ -157,6 +158,8 @@ Taken by the user on 2026-10-10.
 * **No constant for what a calendar answers** — "All calendars should implement `days_in_week/0` so that should NEVER be a constant in Tempo. Indeed any time we define a constant in Tempo is probably a bad smell and need to be carefully checked." Every constant Tempo defines is to be read, which is a task of its own below.
 
 * **Callbacks, not functions beside the behaviour** — `weeks_in_month` "should be a straight up `Calendrical.Behaviour` callback", where it is a function of `Calendrical.Interval`. What Tempo asks of a calendar is to be a callback wherever it is the calendar's own to answer.
+
+* **`nil` for a calendar** — "Keep it, in one accessor": a value built by hand with `calendar: nil` still reads as the Gregorian, and every place that settles it calls one function.
 
 * **The rest as recommended** — "Implement the plan until completion", so each is taken as it was recommended: a calendar of weeks stays a second shape of date, known in one function; no fast path is keyed on a calendar's name, each being removed and measured; a period's values are two new callbacks; and what only the Gregorian has is decided case by case (`SKIP` asks `days_in_month/1`, the seasons are the notation's, and the cycle of 400 years is still to decide).
 
@@ -184,7 +187,7 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 
 ## Tasks
 
-* [ ] **A value always holds a calendar** — needs nothing upstream.
+* [ ] **The guards that take `nil` for the Gregorian** — the lines that test `calendar in [Gregorian, Calendar.ISO, nil]` ask the accessor first, with the tasks for what is outside and for fast paths.
 
 * [ ] **No probe of a required callback** — needs nothing upstream.
 
@@ -209,6 +212,8 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 * [ ] **Names, traditional months and solar terms** — blocked on `cardinal_day/3` and the four callbacks of traditional months being required, and on a solar term asked of a calendar (Calendrical's `TODO.md`).
 
 ### Done
+
+* [x] **A value's calendar is read through one accessor** — `Tempo.Calendars` is the one module that names a calendar: `effective/1`, `of/1`, `settled/1`, `default/0`, `native/1` and `validated/1`, which asks `Calendrical.validate_calendar/1`. No line outside it defaults to the Gregorian or maps `Calendar.ISO`, where 38 did, and the lines that name a calendar are 89 of the 128. 2026-10-10.
 
 * [x] **`plus/6` alone** — all 19 calls are at the arity the behaviour declares and the 5 probes of `plus` are gone; the declaration of every unit is in Calendrical's `TODO.md`. 2026-10-10.
 

@@ -50,6 +50,9 @@ CALENDRICAL_OPTIONAL = {
     ("calendar_from_cldr_calendar_type", 1), ("parsing_calendars", 0),
 }
 
+# The one module that may name a calendar (`plans/calendar-surface.md`).
+ONE_MODULE = "lib/tempo/calendars.ex"
+
 # The calendar modules a line of code may name.
 CALENDARS = {
     "Calendar.ISO": "ISO", "Calendrical.Gregorian": "Gregorian", "Calendrical.ISOWeek": "ISOWeek",
@@ -71,9 +74,7 @@ NAMED = {
     "lib/compare.ex": [
         ('fields_in_day_order?', 'Gregorian, ISO', 'F'),
         ('wall_seconds', 'Gregorian', 'G'),
-        ('resolve_ymd', 'Gregorian', 'D'),
         ('gregorian_ymd', 'Gregorian', 'G'),
-        ('effective_calendar', 'Gregorian', 'D'),
         ('to_gregorian_ymd', 'Gregorian', 'F'),
         ('gregorian_seconds', 'Gregorian', 'G'),
     ],
@@ -96,25 +97,19 @@ NAMED = {
         ('first_reading', 'Gregorian', 'X'),
     ],
     "lib/event.ex": [
-        ('date', 'Gregorian', 'D'),
         ('ecclesiastical_date', 'ISO', 'X'),
         ('solar_term_date', 'ISO', 'X'),
         ('solar_term_location', 'Chinese', 'S'),
     ],
     "lib/explain.ex": [
-        ('calendar_of', 'Gregorian', 'D'),
         ('calendar_text', 'Gregorian', 'T'),
         ('gregorian_names?', 'Gregorian', 'S'),
-        ('rule_naming', 'Gregorian', 'D'),
     ],
     "lib/inspect.ex": [
-        ('to_iodata', 'Gregorian', 'D'),
         ('same_start_in_gregorian?', 'Gregorian', 'T'),
         ('gregorian_date?', 'Gregorian', 'T'),
         ('calendar_name', 'Gregorian', 'T'),
-        ('calendar_name', 'Gregorian', 'D'),
         ('calendar_name', 'Gregorian', 'T'),
-        ('inspect', 'Gregorian', 'D'),
         ('inspect', 'Gregorian', 'T'),
         ('inspect', 'ISOWeek', 'W'),
         ('inspect', 'ISOWeek', 'W'),
@@ -122,13 +117,8 @@ NAMED = {
         ('repeat_rule_calendar_trailer', 'Gregorian', 'T'),
         ('repeat_rule_calendar_trailer', 'ISOWeek', 'W'),
     ],
-    "lib/iso8601/ast.ex": [
-        ('build', 'Gregorian', 'D'),
-    ],
     "lib/iso8601/group.ex": [
-        ('expand_groups', 'Gregorian', 'D'),
         ('expand_groups', 'Gregorian', 'S'),
-        ('resolve_seasons', 'Gregorian', 'D'),
         ('season_span', 'Gregorian', 'S'),
         ('season_span', 'Gregorian', 'S'),
         ('nth_day_of_season', 'Gregorian', 'G'),
@@ -142,53 +132,31 @@ NAMED = {
         ('stepped_by_its_calendar?', 'Gregorian, ISO', 'F'),
         ('weeks_by_the_calendar', 'Gregorian', 'W'),
     ],
-    "lib/sigil.ex": [
-        ('do_sigil', 'Gregorian', 'D'),
-    ],
     "lib/sigils/options.ex": [
         ('calendar_from', 'ISOWeek', 'W'),
     ],
     "lib/tempo.ex": [
-        ('', 'Gregorian', 'D'),
-        ('calendar_iso_as_gregorian', 'Gregorian, ISO', 'I'),
-        ('quarter_to_group', 'Gregorian', 'D'),
-        ('day_of_year_to_date', 'Gregorian', 'D'),
-        ('build_tempo', 'Gregorian', 'D'),
-        ('resolve_calendar', 'Gregorian', 'D'),
-        ('resolve_calendar', 'Gregorian', 'D'),
-        ('resolve_calendar', 'Gregorian', 'D'),
         ('from_date', 'ISO', 'I'),
         ('from_date', 'Gregorian', 'F'),
         ('date_units', 'Gregorian', 'F'),
-        ('with_a_calendar', 'Gregorian', 'D'),
         ('from_naive_datetime', 'ISO', 'I'),
         ('from_naive_datetime', 'Gregorian', 'I'),
-        ('placing_calendar', 'Gregorian, ISO', 'I'),
-        ('in_calendar', 'Gregorian', 'D'),
-        ('in_calendar', 'Gregorian', 'D'),
         ('day_in_calendar', 'Gregorian', 'F'),
         ('day_in_calendar', 'Gregorian', 'F'),
-        ('calendar_of', 'Gregorian', 'D'),
-        ('native_calendar', 'Gregorian, ISO', 'I'),
         ('start_in_repeat_calendar', 'Gregorian, ISOWeek', 'S'),
         ('names_no_date_of_any_year?', 'Gregorian', 'S'),
         ('kind_of_year', 'Gregorian', 'G'),
         ('no_date_in_year?', 'Gregorian', 'G'),
         ('no_date_in_year?', 'Gregorian', 'G'),
-        ('day_of_week_tempo', 'Gregorian', 'D'),
         ('iso_day_of_week', 'ISO', 'G'),
     ],
     "lib/tempo/cron.ex": [
         ('apply_year_limit', 'Gregorian', 'X'),
     ],
-    "lib/tempo/format.ex": [
-        ('to_locale_map', 'Gregorian', 'D'),
-    ],
     "lib/tempo/network/normalize.ex": [
         ('date_at', 'Gregorian', 'S'),
         ('axis', 'Gregorian', 'S'),
         ('axis', 'Gregorian', 'S'),
-        ('single_calendar', 'Gregorian', 'D'),
         ('cyclic?', 'Gregorian', 'S'),
         ('cyclic?', 'Gregorian', 'S'),
         ('gregorian_cycle', 'Gregorian', 'G'),
@@ -207,10 +175,8 @@ NAMED = {
         ('encode_until', 'Gregorian', 'X'),
     ],
     "lib/tempo/rrule/rule.ex": [
-        ('to_selection', 'Gregorian', 'D'),
         ('with_month_of_start', 'Gregorian, ISO', 'S'),
         ('moves_a_day?', 'Gregorian, ISO', 'S'),
-        ('calendar_of_start', 'Gregorian', 'D'),
     ],
     "lib/tempo/rrule/selection.ex": [
         ('event_dates_in_year', 'Gregorian', 'F'),
@@ -219,11 +185,7 @@ NAMED = {
         ('gregorian_year_of', 'Gregorian', 'X'),
     ],
     "lib/tempo/select.ex": [
-        ('day_of_week_selector', 'Gregorian', 'D'),
         ('counted_in_another_calendar', 'Gregorian, ISOWeek', 'W'),
-    ],
-    "lib/tempo/set.ex": [
-        ('new', 'Gregorian', 'D'),
     ],
     "lib/tempo/unit_values.ex": [
         ('composite?', 'Gregorian, ISO', 'F'),
@@ -239,8 +201,6 @@ NAMED = {
         ('iso_weeks_in_year', 'ISOWeek', 'W'),
     ],
     "lib/validation.ex": [
-        ('validate', 'Gregorian', 'D'),
-        ('gregorian_for_iso', 'Gregorian, ISO', 'I'),
         ('calendar_text', 'Gregorian, ISO', 'T'),
         ('check_wall_time_in_zone', 'Gregorian, ISO', 'X'),
     ],
@@ -266,7 +226,6 @@ NUMBERS = {
         ('hours_phrase', '12', 'prose'),
         ('times_phrase', '12', 'prose'),
         ('ordinal', '13', 'prose'),
-        ('weekday_name', '7', 'week'),
     ],
     "lib/iso8601/group.ex": [
         ('expand_members', '28, 29', 'standard'),
@@ -287,22 +246,18 @@ NUMBERS = {
     ],
     "lib/iso8601/unit.ex": [
         ('', '30', 'prose'),
-        ('', '7', 'week'),
-        ('', '7', 'week'),
     ],
     "lib/jscalendar.ex": [
         ('skip', '7', 'standard'),
     ],
     "lib/tempo.ex": [
         ('month_and_day', '12, 31', 'reader'),
-        ('put_metadata', '7', 'week'),
         ('walk_too_long_error', '400', 'gregorian'),
         ('walk_too_long_error', '12', 'gregorian'),
         ('moved_by_its_zone', '30', 'zone'),
         ('moved_by_its_zone', '366', 'zone'),
         ('no_date_in_year?', '12, 31', 'gregorian'),
         ('cadence_index', '12', 'gregorian'),
-        ('selection_search_span', '7', 'week'),
     ],
     "lib/tempo/cron.ex": [
         ('', '7', 'standard'),
@@ -349,8 +304,6 @@ NUMBERS = {
     ],
     "lib/tempo/rrule/selection.ex": [
         ('application_order_key', '7', 'prose'),
-        ('normalise_day_of_week', '7', 'week'),
-        ('seven_days_from', '7', 'week'),
         ('nearest_weekday', '7', 'standard'),
         ('snap_back_to_weekday', '7', 'standard'),
     ],
@@ -358,19 +311,260 @@ NUMBERS = {
         ('days_of', '365', 'zone'),
         ('clear_in_blocks?', '366', 'zone'),
     ],
-    "lib/tempo/unit_values.ex": [
-        ('numbers_weeks_of_months?', '7', 'week'),
-        ('numbers_weeks_of_months?', '7', 'week'),
-        ('iso_weekday_from_day_of_week', '7', 'week'),
-        ('day_of_week_from_iso_weekday', '7', 'week'),
-        ('day_of_week_from_iso_weekday', '7', 'week'),
-        ('date_in_week', '7', 'week'),
-        ('weekday_in_week', '7', 'week'),
-    ],
     "lib/tempo/workdays.ex": [
         ('', '7', 'standard'),
     ],
 }
+
+CONSTANT_CLASSES = collections.OrderedDict([
+    ("calendar", "What a calendar would answer, or a calendar named. To go."),
+    ("units", "Tempo's own units, their order and the places they are written in."),
+    ("clock", "ISO 8601's time of day: the hours of a day, the minutes of an hour, the seconds of a minute and their fractions."),
+    ("standard", "A table or a number of a notation or a standard Tempo reads or writes."),
+    ("limit", "A bound Tempo sets on its own work: how much it reads, lists or walks before it stops or asks."),
+    ("zone", "A bound or a margin on what the zone database is asked, whose dates are Gregorian."),
+    ("relations", "Allen's relations and the network's, and the tables that compose them."),
+    ("options", "The names of options a function takes."),
+    ("names", "The names Tempo selects by: its events, and the words for ISO 8601-2's seasons."),
+    ("asked", "Built from what Calendrical answers when Tempo is compiled."),
+    ("text", "A string Tempo writes."),
+    ("key", "A key Tempo keeps something under."),
+    ("the one module", "The calendar of the notation, in the one module that may name it."),
+])
+
+# Every constant Tempo defines (a module attribute that is not a doc, a spec
+# or a directive), by its file and its name, in the order of the file, with
+# the class it was read as.
+CONSTANTS = {
+    "lib/compare.ex": [
+        ('unit_levels', 'units'), ('a_day_or_so', 'zone'), ('gregorian_seconds_year_1', 'zone'),
+    ],
+    "lib/enumeration.ex": [
+        ('significant_digits_limit', 'limit'), ('listed_at_once', 'limit'),
+        ('read_ahead', 'limit'), ('fixed_extent_units', 'units'), ('finest_precision', 'clock'),
+    ],
+    "lib/enumeration/skipped_readings.ex": [
+        ('seconds_in', 'clock'), ('years_asked', 'zone'), ('margin', 'zone'),
+    ],
+    "lib/enumeration/zone.ex": [
+        ('seconds_in_an_hour', 'clock'), ('a_day_or_so', 'zone'), ('seconds_in_a_day', 'clock'),
+        ('clear_of_a_change', 'zone'),
+    ],
+    "lib/event.ex": [
+        ('solar_terms', 'asked'), ('events', 'names'),
+    ],
+    "lib/explain.ex": [
+        ('times_named', 'limit'), ('half_open', 'text'), ('headline_units', 'units'),
+        ('headline_date_units', 'units'), ('precisions', 'units'), ('written_order', 'units'),
+        ('date_units', 'units'), ('season_names', 'names'), ('months', 'calendar'),
+        ('weekdays', 'calendar'),
+    ],
+    "lib/ical.ex": [
+        ('safety_cap', 'limit'),
+    ],
+    "lib/inspect.ex": [
+        ('from_iso8601', 'text'), ('sigil_o', 'text'),
+    ],
+    "lib/iso8601/ast.ex": [
+        ('date_resolution_order', 'units'),
+    ],
+    "lib/iso8601/group.ex": [
+        ('hours_per_day', 'clock'), ('divisions', 'standard'), ('most_divisions', 'limit'),
+    ],
+    "lib/iso8601/parser.ex": [
+        ('most_durations_in_a_range', 'limit'), ('measured_seconds', 'calendar'),
+        ('selected_by', 'units'), ('resolution_order', 'units'), ('qualifiers', 'standard'),
+    ],
+    "lib/iso8601/tokenizer.ex": [
+        ('max_input_bytes', 'limit'), ('max_nesting_depth', 'limit'),
+        ('max_selection_depth', 'limit'), ('max_digits', 'limit'), ('profiles', 'standard'),
+    ],
+    "lib/iso8601/tokenizer/extended.ex": [
+        ('empty_extended', 'standard'), ('u_ca', 'text'),
+    ],
+    "lib/iso8601/tokenizer/grammar.ex": [
+        ('endpoint_tags', 'standard'), ('endpoint_units', 'units'), ('bare_numbers', 'standard'),
+        ('two_digit_units', 'units'), ('time_units', 'units'),
+    ],
+    "lib/iso8601/tokenizer/helpers.ex": [
+        ('qualified_from_the_left', 'units'),
+    ],
+    "lib/iso8601/tokenizer/memo.ex": [
+        ('table', 'key'),
+    ],
+    "lib/iso8601/tokenizer/plain.ex": [
+        ('date_designators', 'standard'), ('time_designators', 'standard'),
+        ('most_digits', 'limit'),
+    ],
+    "lib/iso8601/unit.ex": [
+        ('sort_keys', 'units'), ('unit_after', 'units'), ('value_ranges', 'units'),
+        ('units', 'units'),
+    ],
+    "lib/jscalendar.ex": [
+        ('weekdays', 'standard'),
+    ],
+    "lib/math.ex": [
+        ('clock_units', 'units'), ('fixed_zones', 'zone'), ('unit_depth', 'units'),
+        ('hours_per_day', 'clock'), ('minutes_per_hour', 'clock'), ('seconds_per_minute', 'clock'),
+        ('duration_units_coarse_to_fine', 'units'), ('maskable_units', 'units'),
+        ('unit_order_coarse_to_fine', 'units'), ('calendar_units', 'units'),
+        ('counted_units', 'units'), ('microseconds_per_second', 'clock'),
+        ('seconds_in_day', 'clock'),
+    ],
+    "lib/rounding.ex": [
+        ('microseconds', 'clock'), ('day', 'clock'), ('day_units', 'units'),
+    ],
+    "lib/sigil.ex": [
+        ('modifier_to_unit', 'standard'), ('gregorian_axis', 'units'), ('iso_week_axis', 'units'),
+        ('ordinal_axis', 'units'), ('season_axis', 'units'),
+    ],
+    "lib/split.ex": [
+        ('clock_units', 'units'), ('positions', 'units'),
+    ],
+    "lib/tempo.ex": [
+        ('canonical_unit_order', 'units'), ('week_axis_units', 'units'),
+        ('gregorian_axis_units', 'units'), ('known_options', 'options'),
+        ('qualification_values', 'standard'), ('unit_order', 'units'), ('gregorian_only', 'units'),
+        ('week_only', 'units'), ('ordinal_only', 'units'), ('day_parts', 'units'),
+        ('shift_units', 'units'), ('spans_at_once', 'limit'), ('occurrence_horizon', 'limit'),
+        ('most_periods_passed_over', 'limit'), ('most_periods_reaching', 'limit'),
+        ('recurrence_safety_cap', 'limit'), ('names_a_date', 'units'), ('names_no_date', 'units'),
+        ('time_of_day', 'units'), ('years_of_a_cycle', 'calendar'),
+        ('periods_before_asking', 'calendar'), ('months_of_a_cycle', 'calendar'),
+        ('places_in_a_week', 'units'), ('places_finer_than', 'units'), ('seconds_in', 'clock'),
+        ('years_of_changes_asked', 'zone'), ('seconds_of_changes_asked', 'zone'),
+        ('kinds_of_year', 'calendar'), ('longest_run_before_asking', 'limit'),
+        ('seconds_in', 'clock'), ('periods_worth_passing_over', 'limit'),
+        ('steps_put_right', 'limit'), ('no_step', 'units'), ('rolls', 'standard'),
+        ('most_days_off_in_a_row', 'limit'), ('valid_units', 'units'),
+    ],
+    "lib/tempo/allen.ex": [
+        ('inverses', 'relations'), ('relations', 'relations'),
+    ],
+    "lib/tempo/calendars.ex": [
+        ('notation', 'the one module'),
+    ],
+    "lib/tempo/clock/test.ex": [
+        ('process_key', 'key'),
+    ],
+    "lib/tempo/cron.ex": [
+        ('aliases', 'standard'), ('month_names', 'standard'), ('dow_names', 'standard'),
+        ('cascade_order', 'units'),
+    ],
+    "lib/tempo/duration.ex": [
+        ('valid_units', 'units'), ('canonical_unit_order', 'units'),
+        ('microsecond_seconds', 'clock'), ('fixed_unit_seconds', 'calendar'),
+        ('fixed_units', 'units'),
+    ],
+    "lib/tempo/exception/interval_endpoints_error.ex": [
+        ('convert', 'text'),
+    ],
+    "lib/tempo/format.ex": [
+        ('time_units', 'units'), ('relative_units', 'units'), ('one_value_units', 'units'),
+        ('unit_order_ctf', 'units'),
+    ],
+    "lib/tempo/interval.ex": [
+        ('public_new_options', 'options'), ('iteration_units', 'units'),
+        ('hours_per_day', 'clock'), ('seconds_in_a_day', 'clock'), ('calendar_units', 'units'),
+        ('clock_units', 'units'), ('before_relations', 'relations'),
+        ('after_relations', 'relations'), ('intersecting_relations', 'relations'),
+        ('within_relations', 'relations'), ('max_placement_pairs', 'limit'),
+    ],
+    "lib/tempo/interval/composition.ex": [
+        ('composition', 'relations'), ('order', 'relations'),
+    ],
+    "lib/tempo/interval/cycle.ex": [
+        ('microseconds', 'clock'), ('seconds_per_day', 'clock'),
+    ],
+    "lib/tempo/interval/steps.ex": [
+        ('seconds_per_minute', 'clock'), ('seconds_per_hour', 'clock'),
+        ('seconds_per_day', 'clock'), ('microseconds_per_second', 'clock'),
+        ('max_precision', 'clock'), ('a_day_or_so', 'zone'),
+    ],
+    "lib/tempo/leap_seconds.ex": [
+        ('leap_second_dates', 'standard'), ('leap_second_set', 'standard'),
+    ],
+    "lib/tempo/limit.ex": [
+        ('default', 'limit'), ('values_at_once', 'limit'), ('days_off_in_a_row', 'limit'),
+    ],
+    "lib/tempo/microsecond.ex": [
+        ('max_precision', 'clock'), ('microseconds_per_second', 'clock'),
+    ],
+    "lib/tempo/network/normalize.ex": [
+        ('unit_order', 'units'), ('duration_units', 'units'), ('time_units', 'units'),
+        ('calendar_units', 'units'), ('gregorian_cycle_start', 'calendar'),
+        ('gregorian_cycle_years', 'calendar'),
+    ],
+    "lib/tempo/network/relation.ex": [
+        ('qualitative', 'relations'), ('edges', 'relations'), ('comparisons', 'relations'),
+        ('boundary_comparisons', 'relations'), ('allen', 'relations'),
+    ],
+    "lib/tempo/network/solver.ex": [
+        ('allen_relations', 'relations'),
+    ],
+    "lib/tempo/network/time_period.ex": [
+        ('options', 'options'), ('renamed', 'options'),
+    ],
+    "lib/tempo/not_built.ex": [
+        ('gregorian', 'calendar'), ('stepped_by_rrule_calendar', 'units'),
+        ('selected_by_rrule_calendar', 'units'),
+    ],
+    "lib/tempo/qualification.ex": [
+        ('units', 'units'), ('date_units', 'units'),
+    ],
+    "lib/tempo/rrule.ex": [
+        ('weekdays', 'standard'), ('freq_to_unit', 'standard'),
+    ],
+    "lib/tempo/rrule/encoder.ex": [
+        ('freq_for', 'standard'), ('rrule_tokens', 'standard'), ('weekday_code', 'standard'),
+        ('names_the_day', 'units'), ('times', 'units'), ('forbidden_at', 'standard'),
+        ('by_parts', 'units'),
+    ],
+    "lib/tempo/rrule/selection.ex": [
+        ('monday', 'standard'), ('weekdays_found_by_weeks', 'limit'),
+        ('candidates_at_once', 'limit'), ('parts_counted_in_a_date', 'units'),
+        ('places_a_day', 'units'), ('application_order', 'units'), ('application_rank', 'units'),
+        ('after_every_part', 'units'), ('unit_weight', 'units'), ('held_to', 'units'),
+        ('beside_a_week_of_month', 'units'), ('unit_canonical_order', 'units'),
+    ],
+    "lib/tempo/schedule.ex": [
+        ('finish_to_start', 'relations'), ('task_options', 'options'),
+    ],
+    "lib/tempo/select.ex": [
+        ('unit_order_coarse_to_fine', 'units'), ('most_days_off_in_a_row', 'limit'),
+        ('horizon', 'limit'), ('coarseness', 'units'), ('numbered_by_calendar', 'units'),
+        ('iso_week_calendars', 'calendar'), ('by_month', 'units'), ('gregorian_axis', 'units'),
+        ('week_axis', 'units'), ('ordinal_axis', 'units'), ('date_units', 'units'),
+    ],
+    "lib/tempo/time_zone_database.ex": [
+        ('gregorian_seconds_year_1', 'zone'), ('pre_ce_period', 'zone'),
+        ('seconds_per_day', 'zone'), ('microseconds_per_day', 'zone'),
+        ('microseconds_per_second', 'zone'), ('zone_probe_seconds', 'zone'),
+        ('decades_scanned', 'zone'), ('half_a_day', 'zone'), ('span_asked_by_its_days', 'zone'),
+        ('questions_to_find_a_block', 'zone'), ('asked_in_its_place', 'zone'),
+        ('days_in_a_block', 'zone'), ('seconds_in_a_block', 'zone'),
+        ('first_year_of_changes', 'zone'),
+    ],
+    "lib/tempo/unit_values.ex": [
+        ('composite_key', 'key'), ('counted', 'units'), ('year_start_key', 'key'),
+        ('any_year', 'calendar'), ('monday', 'standard'),
+    ],
+    "lib/validation.ex": [
+        ('hours_per_day', 'clock'), ('minutes_per_hour', 'clock'), ('rounding_precision', 'limit'),
+        ('clock_units', 'units'), ('units_of_days', 'units'), ('counted_from_one', 'units'),
+        ('most_fractions_in_a_range', 'limit'), ('most_fraction_digits', 'limit'),
+        ('fractions_shown', 'limit'), ('max_offset_minutes', 'clock'), ('shift_units', 'units'),
+        ('wall_units', 'units'),
+    ],
+}
+
+NOT_CONSTANTS = {
+    "spec", "type", "typep", "opaque", "callback", "macrocallback", "optional_callbacks", "impl",
+    "behaviour", "dialyzer", "compile", "moduledoc", "doc", "typedoc", "derive", "enforce_keys",
+    "external_resource", "before_compile", "after_compile", "on_load", "on_definition",
+    "deprecated", "since", "vsn", "nifs",
+}
+CONSTANT = re.compile(r"^\s*@([a-z_][A-Za-z0-9_]*)\s+(?!->)\S")
 
 # Functions that decide by what kind of calendar they are given. Each was
 # found by reading every predicate whose head names a calendar, every line
@@ -436,14 +630,19 @@ DECIDERS = collections.OrderedDict([
     ("A calendar with a year 0", [
         ("lib/tempo/unit_values.ex", "year?", "UnitValues"),
     ]),
-    ("No calendar given, and `Calendar.ISO`", [
-        ("lib/compare.ex", "effective_calendar", "Compare"),
-        ("lib/tempo.ex", "calendar_module?", None),
+    ("No calendar given, and `Calendar.ISO`: the one accessor and what still asks beside it", [
+        ("lib/tempo/calendars.ex", "effective", "Calendars"),
+        ("lib/tempo/calendars.ex", "of", "Calendars"),
+        ("lib/tempo/calendars.ex", "settled", "Calendars"),
+        ("lib/tempo/calendars.ex", "default", "Calendars"),
+        ("lib/tempo/calendars.ex", "native", "Calendars"),
+        ("lib/tempo/calendars.ex", "validated", "Calendars"),
+        ("lib/tempo.ex", "with_a_calendar", "Tempo"),
+        ("lib/tempo.ex", "calendar_of", None),
+        ("lib/explain.ex", "calendar_of", None),
         ("lib/validation.ex", "reading_calendar", None),
         ("lib/validation.ex", "written_calendar", None),
         ("lib/tempo.ex", "native_calendar", None),
-        ("lib/tempo.ex", "calendar_iso_as_gregorian", None),
-        ("lib/validation.ex", "gregorian_for_iso", None),
         ("lib/tempo.ex", "placing_calendar", None),
     ]),
     ("What a calendar exports", [
@@ -647,11 +846,15 @@ def read():
                 census["probes"].append((relative, number, current, match.group(2), match.group(3), int(match.group(4))))
             if APPLY.search(code) and not re.match(r"^\s*(def|defp|@spec)\s", line):
                 census["apply"].append((relative, number, current))
+            constant = CONSTANT.match(line)
+            if constant and constant.group(1) not in NOT_CONSTANTS:
+                census["constants"].append((relative, number, current, [constant.group(1)]))
             if not re.match(r"^\s*(alias|import|require|use)\s", line):
                 named = sorted({CALENDARS[resolve(m.group(1), table)] for m in MODULE.finditer(code)
                                 if resolve(m.group(1), table) in CALENDARS})
                 if named:
-                    census["named"].append((relative, number, current, named))
+                    kind = "named in the one module" if relative == ONE_MODULE else "named"
+                    census[kind].append((relative, number, current, named))
             numbers = []
             for match in NUMBER.finditer(code):
                 start = match.start()
@@ -667,9 +870,11 @@ def read():
                     for home, name, qualifier in deciders:
                         key = (home, name)
                         bare = re.search(r"(?<![\w?!.])" + re.escape(name) + r"(?=\(|/\d)", code)
-                        if relative == home and bare:
-                            defined = definition is not None and definition.group(2) == name
-                            census["defined" if defined else "called"].append((relative, number, key))
+                        defined = relative == home and definition is not None and definition.group(2) == name
+                        if defined:
+                            census["defined"].append((relative, number, key))
+                        elif relative == home and bare:
+                            census["called"].append((relative, number, key))
                         elif qualifier and re.search(r"(?<![\w.])" + qualifier + r"\." + re.escape(name) + r"(?=\(|/\d)", code):
                             census["called"].append((relative, number, key))
     census["lines"] = lines_of
@@ -689,6 +894,19 @@ def read_classes(read, rows):
         if match:
             entries.remove(match)
         classes[(relative, number)] = match[2] if match else "unread"
+    return classes
+
+
+def constant_classes(rows):
+    """The class of each constant: the first reading for its file and name not yet taken."""
+    remaining = {file: list(entries) for file, entries in CONSTANTS.items()}
+    classes = {}
+    for relative, number, _function, (name,) in rows:
+        entries = remaining.get(relative, [])
+        match = next((entry for entry in entries if entry[0] == name), None)
+        if match:
+            entries.remove(match)
+        classes[(relative, number)] = match[1] if match else "unread"
     return classes
 
 
@@ -753,6 +971,7 @@ def write(census):
         ["Calls into Erlang's `:calendar`", str(len(census["erlang"]))],
         ["Lines that hold a number a calendar would be asked for", str(len(census["numbers"]))],
         ["Lines that hold only a number of the clock (24, 60, 3,600, 86,400)", str(len(census["clock numbers"]))],
+        ["Constants Tempo defines", f"{len(census['constants'])}, of which {sum(1 for value in constant_classes(census['constants']).values() if value == 'calendar')} are a calendar's to answer"],
     ]))
     emit("")
 
@@ -769,6 +988,9 @@ def write(census):
     emit(table(["Line", "In", "Names", "Class"], [
         [site(r, n), f"`{f}`" if f else "the module", ", ".join(cs), named_class[(r, n)]]
         for r, n, f, cs in named]))
+    emit("")
+    one = census["named in the one module"]
+    emit(f"`{ONE_MODULE[4:]}` is the one module that may name a calendar, and is not counted above. It does so on {len(one)} lines: {sites([(r, n) for r, n, _f, _c in one]) or 'none'}.")
     emit("")
 
     emit("## 2. Probes of what a calendar exports")
@@ -861,6 +1083,32 @@ def write(census):
     emit("")
     leap = [(r, n) for r, n, _f, _found in numbers if r == "lib/tempo/leap_seconds.ex"]
     emit(f"The {len(leap)} lines of `lib/tempo/leap_seconds.ex` are its table, lines {leap[0][1]} to {leap[-1][1]}.")
+    emit("")
+    constants = census["constants"]
+    constant_class = constant_classes(constants)
+    by_constant_class = collections.Counter(constant_class.values())
+    emit("## 8. Every constant Tempo defines")
+    emit("")
+    emit(f"{len(constants)} module attributes are constants: every one that is not a doc, a spec or a directive. Each was read, with its whole value, and has one class. A constant is a sign that Tempo holds what it could ask, so each class says why its constants are Tempo's own to hold, but for the first, whose constants are not.")
+    emit("")
+    for name, meaning in CONSTANT_CLASSES.items():
+        emit(f"* **{name}** ({by_constant_class[name]}) — {meaning}")
+        emit("")
+    if by_constant_class["unread"]:
+        emit(f"* **unread** ({by_constant_class['unread']}) — defined since the last reading.")
+        emit("")
+    flagged = [(r, n, name) for r, n, _f, (name,) in constants if constant_class[(r, n)] in ("calendar", "unread")]
+    emit("### What a calendar would answer")
+    emit("")
+    emit(table(["Line", "Constant", "Class"], [[site(r, n), f"`@{name}`", constant_class[(r, n)]] for r, n, name in flagged]))
+    emit("")
+    emit("### The rest, by file")
+    emit("")
+    by_file = collections.OrderedDict()
+    for r, n, _f, (name,) in constants:
+        if constant_class[(r, n)] not in ("calendar", "unread"):
+            by_file.setdefault(r, []).append(f"`@{name}` {constant_class[(r, n)]}")
+    emit(table(["File", "Constants"], [[f"`{r[4:]}`", ", ".join(names)] for r, names in by_file.items()]))
     emit("")
     return "\n".join(out)
 

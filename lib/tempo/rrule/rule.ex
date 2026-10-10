@@ -75,6 +75,7 @@ defmodule Tempo.RRule.Rule do
 
   """
 
+  alias Tempo.Calendars
   alias Tempo.Iso8601.Parser
   alias Tempo.Iso8601.Unit
   alias Tempo.UnitValues
@@ -480,7 +481,7 @@ defmodule Tempo.RRule.Rule do
 
       %Tempo{
         time: [{:selection, selection} | units],
-        calendar: rule.rscale || Calendrical.Gregorian
+        calendar: Calendars.effective(rule.rscale)
       }
     end
   end
@@ -778,7 +779,7 @@ defmodule Tempo.RRule.Rule do
   defp moves_a_day?(_rule, _calendar), do: false
 
   defp calendar_of_start(%Tempo{calendar: calendar}) when not is_nil(calendar), do: calendar
-  defp calendar_of_start(_no_start), do: Calendrical.Gregorian
+  defp calendar_of_start(_no_start), do: Calendars.default()
 
   # Only emit `{:wkst, n}` for a non-default week start (WKST=MO is 1); the
   # common case keeps the AST identical and the token signals intent.

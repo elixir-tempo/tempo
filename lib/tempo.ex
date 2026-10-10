@@ -107,6 +107,7 @@ defmodule Tempo do
   alias Calendrical.Kday
   alias Localize.Territory.Hemisphere
   alias Tempo.AbstractSeasonError
+  alias Tempo.Calendars
   alias Tempo.Clock
   alias Tempo.Compare
   alias Tempo.ConversionError
@@ -159,7 +160,7 @@ defmodule Tempo do
     :shift,
     :extended,
     :qualifications,
-    calendar: Calendrical.Gregorian,
+    calendar: Calendars.default(),
     metadata: %{}
   ]
 
@@ -507,16 +508,13 @@ defmodule Tempo do
     |> new()
   end
 
+  # `Calendar.ISO`, Elixir's default calendar, enters Tempo as the calendar
+  # of its notation at the public API (`Tempo.Calendars.effective/1`), so
+  # nothing inside Tempo sees it; `to_date/1` and its kin give it back.
   defp calendar_option_as_gregorian({:calendar, calendar}),
-    do: {:calendar, calendar_iso_as_gregorian(calendar)}
+    do: {:calendar, Calendars.effective(calendar)}
 
   defp calendar_option_as_gregorian(entry), do: entry
-
-  # `Calendar.ISO`, Elixir's default calendar, enters Tempo as its
-  # Calendrical equivalent, `Calendrical.Gregorian`, at the public API, so
-  # nothing inside Tempo sees it; `to_date/1` and its kin give it back.
-  defp calendar_iso_as_gregorian(Calendar.ISO), do: Calendrical.Gregorian
-  defp calendar_iso_as_gregorian(calendar), do: calendar
 
   @doc """
   Bang variant of `new/1` — raises on invalid input.
@@ -571,9 +569,10 @@ defmodule Tempo do
   defp validate_calendar(nil), do: :ok
 
   defp validate_calendar(calendar) do
-    if calendar_module?(calendar),
-      do: :ok,
-      else: {:error, InvalidCalendarError.exception(calendar: calendar)}
+    case Calendars.validated(calendar) do
+      {:ok, _calendar} -> :ok
+      :error -> {:error, InvalidCalendarError.exception(calendar: calendar)}
+    end
   end
 
   # A zone is the name of one the time zone database has. What was given
@@ -743,7 +742,7 @@ defmodule Tempo do
         quarter_group(
           components,
           quarter,
-          Keyword.get(options, :calendar) || Calendrical.Gregorian
+          Calendars.effective(Keyword.get(options, :calendar))
         )
     end
   end
@@ -764,7 +763,7 @@ defmodule Tempo do
   # weeks is the Gregorian day of the year, as one parsed for it is, and is
   # left for the validation that converts it.
   defp day_of_year_to_date(components, options) do
-    calendar = Keyword.get(options, :calendar) || Calendrical.Gregorian
+    calendar = Calendars.effective(Keyword.get(options, :calendar))
 
     case Keyword.pop(components, :day_of_year) do
       {nil, _unchanged} ->
@@ -811,7 +810,7 @@ defmodule Tempo do
   defp build_tempo(components, options) do
     # A missing — or explicitly `nil` — calendar defaults to Gregorian, so a
     # value built through `new/1` never carries the bare-struct `nil`.
-    calendar = Keyword.get(options, :calendar) || Calendrical.Gregorian
+    calendar = Calendars.effective(Keyword.get(options, :calendar))
     zone = Keyword.get(options, :zone)
     shift = Keyword.get(options, :shift)
     qualification = Keyword.get(options, :qualification)
@@ -1245,16 +1244,16 @@ defmodule Tempo do
   #   `Calendrical.calendar_from_cldr_calendar_type/1`.
   # * Otherwise, fall back to `Calendrical.Gregorian`.
   defp resolve_calendar(:from_ixdtf_or_default, nil),
-    do: {:ok, Calendrical.Gregorian}
+    do: {:ok, Calendars.default()}
 
   defp resolve_calendar(:from_ixdtf_or_default, %{calendar: nil}),
-    do: {:ok, Calendrical.Gregorian}
+    do: {:ok, Calendars.default()}
 
   defp resolve_calendar(:from_ixdtf_or_default, %{calendar: name}) when is_atom(name),
     do: Calendrical.calendar_from_cldr_calendar_type(name)
 
   defp resolve_calendar(:from_ixdtf_or_default, _extended),
-    do: {:ok, Calendrical.Gregorian}
+    do: {:ok, Calendars.default()}
 
   # An explicit calendar always wins — but validate it is a usable
   # calendar module first. Passing a namespace like `Calendrical.Islamic`
@@ -1263,9 +1262,8 @@ defmodule Tempo do
   # What is no module at all (a string, a number) is refused the same way:
   # it raised a `FunctionClauseError`.
   defp resolve_calendar(calendar, _extended) do
-    if calendar_module?(calendar),
-      do: {:ok, calendar_iso_as_gregorian(calendar)},
-      else: {:error, InvalidCalendarError.exception(calendar: calendar)}
+    with :error <- Calendars.validated(calendar),
+         do: {:error, InvalidCalendarError.exception(calendar: calendar)}
   end
 
   @doc false
@@ -2395,15 +2393,8 @@ defmodule Tempo do
   @dialyzer {:nowarn_function, from_date: 1, from_time: 1, from_naive_datetime: 1}
 
   @spec from_date(date :: Date.t()) :: t()
-  def from_date(%{year: year, month: month, day: day, calendar: Calendar.ISO}) do
-    AST.build(year: year, month: month, day: day)
-  end
-
-  def from_date(%{year: year, month: month, day: day, calendar: Calendrical.Gregorian}) do
-    AST.build(year: year, month: month, day: day)
-  end
-
   def from_date(%{year: year, month: month, day: day, calendar: calendar}) do
+    calendar = Calendars.effective(calendar)
     AST.build(date_units(year, month, day, calendar), calendar)
   end
 
@@ -2427,10 +2418,7 @@ defmodule Tempo do
   # with `calendar: nil` is read as it, where some operations did and
   # others called `nil` as a module.
   @spec with_a_calendar(t()) :: t()
-  def with_a_calendar(%__MODULE__{calendar: nil} = value),
-    do: %{value | calendar: Calendrical.Gregorian}
-
-  def with_a_calendar(%__MODULE__{} = value), do: value
+  def with_a_calendar(%__MODULE__{} = value), do: Calendars.settled(value)
 
   @doc false
   # A calendar that numbers weeks within its year rather than months.
@@ -2612,43 +2600,11 @@ defmodule Tempo do
           hour: hour,
           minute: minute,
           second: second,
-          calendar: Calendar.ISO
-        } = naive
-      ) do
-    AST.build(
-      [year: year, month: month, day: day, hour: hour, minute: minute, second: second] ++
-        microsecond_component(naive)
-    )
-  end
-
-  def from_naive_datetime(
-        %{
-          year: year,
-          month: month,
-          day: day,
-          hour: hour,
-          minute: minute,
-          second: second,
-          calendar: Calendrical.Gregorian
-        } = naive
-      ) do
-    AST.build(
-      [year: year, month: month, day: day, hour: hour, minute: minute, second: second] ++
-        microsecond_component(naive)
-    )
-  end
-
-  def from_naive_datetime(
-        %{
-          year: year,
-          month: month,
-          day: day,
-          hour: hour,
-          minute: minute,
-          second: second,
           calendar: calendar
         } = naive
       ) do
+    calendar = Calendars.effective(calendar)
+
     AST.build(
       date_units(year, month, day, calendar) ++
         [hour: hour, minute: minute, second: second] ++ microsecond_component(naive),
@@ -2710,7 +2666,7 @@ defmodule Tempo do
           calendar: calendar
         } = dt
       ) do
-    tempo_calendar = calendar_iso_as_gregorian(calendar)
+    tempo_calendar = Calendars.effective(calendar)
 
     time =
       date_units(year, month, day, tempo_calendar) ++
@@ -3926,7 +3882,6 @@ defmodule Tempo do
 
   defp dated?(%__MODULE__{}), do: false
 
-  defp placing_calendar(%__MODULE__{calendar: Calendar.ISO}), do: Calendrical.Gregorian
   defp placing_calendar(%__MODULE__{} = value), do: calendar_of(value)
 
   # A month or a day placed on a value of a calendar of weeks keeps the error
@@ -5328,17 +5283,10 @@ defmodule Tempo do
   @spec to_calendar(t() | Interval.t() | IntervalSet.t(), module()) ::
           {:ok, t() | Interval.t() | IntervalSet.t()} | {:error, Tempo.ConversionError.t()}
   def to_calendar(value, calendar) do
-    if calendar_module?(calendar),
-      do: in_calendar(value, calendar),
-      else: {:error, not_a_calendar_error(value, calendar)}
-  end
-
-  # A calendar is a module (`Calendrical.Hebrew`), never the name of one
-  # (`:hebrew`), which would be called as a module and found to have no
-  # functions.
-  defp calendar_module?(calendar) do
-    is_atom(calendar) and Code.ensure_loaded?(calendar) and
-      function_exported?(calendar, :months_in_year, 1)
+    case Calendars.validated(calendar) do
+      {:ok, calendar} -> in_calendar(value, calendar)
+      :error -> {:error, not_a_calendar_error(value, calendar)}
+    end
   end
 
   defp not_a_calendar_error(value, calendar) do
@@ -5378,7 +5326,7 @@ defmodule Tempo do
          calendar
        )
        when is_integer(year) and is_integer(month) and is_integer(day) do
-    convert_date(value, Date.new(year, month, day, source || Calendrical.Gregorian), calendar)
+    convert_date(value, Date.new(year, month, day, Calendars.effective(source)), calendar)
   end
 
   # A week date is the day of its week: the calendar's own week in a
@@ -5413,7 +5361,7 @@ defmodule Tempo do
          {:ok, converted} <-
            convert_date(
              date,
-             Date.new(year, month, day, source || Calendrical.Gregorian),
+             Date.new(year, month, day, Calendars.effective(source)),
              calendar
            ) do
       {:ok, %{converted | time: converted.time ++ time_of_day, shift: value.shift}}
@@ -6263,7 +6211,7 @@ defmodule Tempo do
   # The moment a value's span starts at, to the second or the fraction of
   # one it is written to, on the wall clock of another zone.
   defp moment_in_zone(%Tempo{time: time} = tempo, target_zone) do
-    calendar = Compare.effective_calendar(tempo.calendar)
+    calendar = Calendars.effective(tempo.calendar)
     {whole, fraction} = Enum.split_with(time, &(not match?({:microsecond, _fraction}, &1)))
     utc_seconds = Compare.to_utc_seconds(%{tempo | time: whole})
 
@@ -6708,20 +6656,14 @@ defmodule Tempo do
   # Return the calendar module for a Tempo, defaulting to
   # Calendrical.Gregorian when nil. Centralises the fallback so
   # every accessor uses the same rule.
-  defp calendar_of(%Tempo{calendar: nil}), do: Calendrical.Gregorian
-  defp calendar_of(%Tempo{calendar: calendar}), do: calendar
+  defp calendar_of(%Tempo{} = tempo), do: Calendars.of(tempo)
 
   # The native Elixir calendar for a value at the outbound boundary
   # (`to_date/1`, `to_naive_datetime/1`, `to_elixir/1`): Tempo's internal
   # `Calendrical.Gregorian` becomes Elixir's `Calendar.ISO`, while any other
   # calendar passes through — so a non-Gregorian value converts to a native
   # type in its own calendar rather than being mislabelled ISO.
-  defp native_calendar(%Tempo{} = tempo) do
-    case calendar_of(tempo) do
-      Calendrical.Gregorian -> Calendar.ISO
-      calendar -> calendar
-    end
-  end
+  defp native_calendar(%Tempo{calendar: calendar}), do: Calendars.native(calendar)
 
   # Extract {year, month, day} from a Tempo or raise a uniform
   # error. Missing month or day default to 1 (start-of-unit) so
@@ -9742,7 +9684,7 @@ defmodule Tempo do
          cadence,
          periods
        ) do
-    Compare.effective_calendar(calendar) == Gregorian and
+    Calendars.effective(calendar) == Gregorian and
       (come_round?(cadence, periods) or
          (periods == @periods_before_asking and selects_no_date?(interval, cadence)))
   end
@@ -9781,7 +9723,7 @@ defmodule Tempo do
          %Tempo.Duration{time: [{unit, amount}]}
        )
        when is_integer(amount) and amount > 0 and is_map_key(@places_finer_than, unit) do
-    calendar = Compare.effective_calendar(calendar)
+    calendar = Calendars.effective(calendar)
     parts = Enum.drop(@places_in_a_week, Map.fetch!(@places_finer_than, unit))
     places = Enum.map(parts, &place_named(&1, selection, from, calendar))
     moved = moved_by_its_zone(from, unit, amount)
@@ -11156,7 +11098,7 @@ defmodule Tempo do
 
   defp week_year_floor(%Tempo{time: [year: year], calendar: calendar} = from, start)
        when is_integer(year) do
-    with false <- week_based_calendar?(Compare.effective_calendar(calendar)),
+    with false <- week_based_calendar?(Calendars.effective(calendar)),
          {:ok, %Date{} = monday} <- UnitValues.date_from_iso_week(year, 1, 1, calendar),
          {:ok, %Date{} = monday} <- Date.convert(monday, calendar) do
       %{from | time: [year: monday.year, month: monday.month, day: monday.day]}
@@ -11172,7 +11114,7 @@ defmodule Tempo do
          %Tempo{time: [{:year, year}, {:month, month} | _finer]} = start
        )
        when is_integer(year) and is_integer(month) do
-    case UnitValues.weeks_of_month(year, month, Compare.effective_calendar(calendar)) do
+    case UnitValues.weeks_of_month(year, month, Calendars.effective(calendar)) do
       {:ok, [%Date.Range{first: first} | _later_weeks]} ->
         %{from | time: [year: first.year, month: first.month, day: first.day]}
 
@@ -12900,7 +12842,7 @@ defmodule Tempo do
     with_units = %{selected | time: Keyword.merge(time, trailing)}
 
     with {:ok, %Tempo{} = read} <-
-           Validation.validate(with_units, Compare.effective_calendar(calendar)) do
+           Validation.validate(with_units, Calendars.effective(calendar)) do
       to_interval(read)
     end
   end
@@ -12941,7 +12883,7 @@ defmodule Tempo do
     {prefix, [{unit, {:group, {kind, members}}, size} | rest]} =
       Enum.split_while(time, &(not match?({_unit, {:group, _members}, _size}, &1)))
 
-    calendar = Compare.effective_calendar(calendar)
+    calendar = Calendars.effective(calendar)
 
     with :all <- kind,
          {:ok, groups} <- Group.groups_of_set(unit, members, size, prefix, calendar) do
@@ -14275,7 +14217,7 @@ defmodule Tempo do
   end
 
   defp day_of_week_tempo(days) when is_list(days) do
-    %Tempo{time: [day_of_week: days], calendar: Calendrical.Gregorian}
+    %Tempo{time: [day_of_week: days], calendar: Calendars.default()}
   end
 
   @doc """

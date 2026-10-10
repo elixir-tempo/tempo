@@ -28,6 +28,7 @@ defmodule Tempo.Compare do
   """
 
   alias Calendrical.Gregorian
+  alias Tempo.Calendars
   alias Tempo.ConversionError
   alias Tempo.Duration
   alias Tempo.Enumeration
@@ -486,7 +487,7 @@ defmodule Tempo.Compare do
        )
        when is_binary(zone) and zone != "" and is_integer(year) do
     if List.starts_with?(a_time, b_time) or List.starts_with?(b_time, a_time) do
-      reading = wall_seconds(a_time, year, effective_calendar(a.calendar))
+      reading = wall_seconds(a_time, year, Calendars.effective(a.calendar))
       TimeZoneDatabase.changes(zone, reading - @a_day_or_so, reading + @a_day_or_so) != []
     else
       false
@@ -567,7 +568,7 @@ defmodule Tempo.Compare do
   defp same_axis?(_axis, :none, _calendar), do: true
   defp same_axis?(_axis, _another_axis, _calendar), do: false
 
-  defp week_based?(calendar), do: effective_calendar(calendar).calendar_base() == :week
+  defp week_based?(calendar), do: Calendars.effective(calendar).calendar_base() == :week
 
   # `:week` marks the week-of-year axis only when no `:month` qualifies
   # it — `[year, month, week]` is a week *of the month*, which lives on
@@ -861,7 +862,7 @@ defmodule Tempo.Compare do
     %Tempo{time: [{:year, year} | _rest] = time, extended: extended, shift: shift} =
       point = dated_point!(value)
 
-    wall = wall_seconds(time, year, effective_calendar(point.calendar))
+    wall = wall_seconds(time, year, Calendars.effective(point.calendar))
     wall - resolve_offset_seconds(extended, shift, wall, wall_seconds_spanned(time))
   end
 
@@ -883,7 +884,7 @@ defmodule Tempo.Compare do
   @spec to_wall_seconds(Tempo.t()) :: integer() | float()
   def to_wall_seconds(%Tempo{} = value) do
     %Tempo{time: [{:year, year} | _rest] = time, calendar: calendar} = dated_point!(value)
-    wall_seconds(time, year, effective_calendar(calendar))
+    wall_seconds(time, year, Calendars.effective(calendar))
   end
 
   # A value as the point with a year it is projected from. Most values given
@@ -1001,7 +1002,7 @@ defmodule Tempo.Compare do
   defp wall_time_written(%Tempo{time: [{:year, year} | _rest] = time, calendar: calendar})
        when is_integer(year) and year >= 1 do
     if whole_units?(time),
-      do: time |> wall_seconds(year, effective_calendar(calendar)) |> wall_seconds_to_iso(),
+      do: time |> wall_seconds(year, Calendars.effective(calendar)) |> wall_seconds_to_iso(),
       else: nil
   end
 
@@ -1061,7 +1062,7 @@ defmodule Tempo.Compare do
       {:ok, %Tempo{time: [{:year, year} | _rest] = time, calendar: calendar}}
       when is_integer(year) ->
         time
-        |> wall_seconds(year, effective_calendar(calendar))
+        |> wall_seconds(year, Calendars.effective(calendar))
         |> check_wall(zone_id, stated, wall_seconds_spanned(time))
 
       _no_wall_instant ->
@@ -1138,7 +1139,7 @@ defmodule Tempo.Compare do
   # week interval report a zero-second duration. The dates come from
   # Calendrical, never from arithmetic here.
   defp resolve_ymd(time, year, calendar) do
-    calendar = calendar || Calendrical.Gregorian
+    calendar = Calendars.effective(calendar)
 
     cond do
       Keyword.has_key?(time, :week) ->
@@ -1190,18 +1191,6 @@ defmodule Tempo.Compare do
   end
 
   defp gregorian_ymd(_error, year), do: {year, 1, 1}
-
-  @doc false
-  # A hand-built `%Tempo{}` may carry `calendar: nil` (the struct default)
-  # rather than the resolved calendar a parsed or `Tempo.new/1`-built value
-  # has. Calendar dispatch (`calendar.calendar_base/0`, `Date.new/4`, …)
-  # assumes a real calendar module, so a boundary resolves `nil` to the
-  # default Gregorian implementation — the internal form of `Calendar.ISO`,
-  # which unlike `Calendar.ISO` carries the `Calendrical` behaviour callbacks
-  # — before any dispatch. Applied at the comparison, materialisation, and
-  # network-ingest choke points every public operation funnels through.
-  def effective_calendar(nil), do: Calendrical.Gregorian
-  def effective_calendar(calendar), do: calendar
 
   # Convert calendar-native `{year, month, day}` to the proleptic Gregorian
   # frame the projection assumes. Gregorian passes through untouched (fast

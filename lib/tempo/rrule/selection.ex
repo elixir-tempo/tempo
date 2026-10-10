@@ -59,6 +59,7 @@ defmodule Tempo.RRule.Selection do
   """
 
   alias Calendrical.Kday
+  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.ConversionError
   alias Tempo.Enumeration.Zone
@@ -718,8 +719,8 @@ defmodule Tempo.RRule.Selection do
        ) do
     days_of_week_in_calendar(
       selection,
-      Compare.effective_calendar(rule_calendar),
-      Compare.effective_calendar(calendar)
+      Calendars.effective(rule_calendar),
+      Calendars.effective(calendar)
     )
   end
 

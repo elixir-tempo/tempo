@@ -15,6 +15,7 @@ defmodule Tempo.Rounding do
   # zone's own days are read from where they are kept, and nothing here
   # counts a month or a year.
 
+  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.Iso8601.Unit
   alias Tempo.RoundingError
@@ -118,7 +119,7 @@ defmodule Tempo.Rounding do
   defp half_way_or_more?(%Tempo{time: time, calendar: calendar} = tempo, unit) do
     elapsed = elapsed(below(time, unit), 0)
 
-    case lengths(unit, time, Compare.effective_calendar(calendar)) do
+    case lengths(unit, time, Calendars.effective(calendar)) do
       [] ->
         {:error, UnanchoredError.exception(value: tempo, operation: :round)}
 

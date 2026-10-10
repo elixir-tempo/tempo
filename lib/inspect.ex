@@ -5,6 +5,7 @@ defmodule Tempo.Inspect do
 
   alias Calendrical.Gregorian
   alias Localize.Validity.U
+  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalSet
@@ -30,7 +31,7 @@ defmodule Tempo.Inspect do
 
   """
   @spec to_iodata(term()) :: iodata()
-  def to_iodata(value), do: to_iodata(value, Gregorian)
+  def to_iodata(value), do: to_iodata(value, Calendars.default())
 
   # The encoding with a value in `implied` left unnamed: the Gregorian
   # calendar a bare ISO 8601 string reads as, or the ISO week calendar the
@@ -265,7 +266,7 @@ defmodule Tempo.Inspect do
   # out from the calendar module, the one record a value keeps of its
   # calendar, and carried in the `extended` of the copy being written.
   defp calendar_name(%Tempo{calendar: calendar}, implied \\ Gregorian) do
-    calendar = calendar || Gregorian
+    calendar = Calendars.effective(calendar)
 
     if calendar in [Gregorian, implied], do: nil, else: faithful_name(calendar)
   end
@@ -362,7 +363,7 @@ defmodule Tempo.Inspect do
   # It was written as a call with `nil` for its calendar, which is read as
   # another value's.
   def inspect(%Tempo{calendar: nil} = tempo),
-    do: inspect(%{tempo | calendar: Calendrical.Gregorian})
+    do: inspect(Calendars.settled(tempo))
 
   def inspect(%Tempo{calendar: Calendrical.Gregorian} = tempo) do
     # `to_iso8601/1` (via `inspect_value/1`) already appends the

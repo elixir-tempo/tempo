@@ -26,6 +26,7 @@ defmodule Tempo.Interval.Cycle do
 
   """
 
+  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalEndpointsError
@@ -118,7 +119,7 @@ defmodule Tempo.Interval.Cycle do
     {from_year, from_time} = split_unspecified_year(from.time)
     {to_year, to_time} = split_unspecified_year(to.time)
 
-    case end_of_cycle(from_time, Compare.effective_calendar(from.calendar)) do
+    case end_of_cycle(from_time, Calendars.effective(from.calendar)) do
       {:ok, end_time} ->
         first = %{interval | to: %{from | time: from_year ++ end_time}}
 
@@ -254,7 +255,7 @@ defmodule Tempo.Interval.Cycle do
 
   def ends_turn?(%Interval{from: %Tempo{} = from, to: %Tempo{time: to_time}}) do
     {_year, to_units} = split_unspecified_year(to_time)
-    at_end?(to_units, Compare.effective_calendar(from.calendar))
+    at_end?(to_units, Calendars.effective(from.calendar))
   end
 
   def ends_turn?(%Interval{}), do: false

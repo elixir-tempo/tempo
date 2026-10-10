@@ -1,7 +1,7 @@
 defmodule Tempo.Enumeration do
   @moduledoc false
 
-  alias Tempo.Compare
+  alias Tempo.Calendars
   alias Tempo.ConversionError
   alias Tempo.Enumeration.Zone
   alias Tempo.InvalidDateError
@@ -74,7 +74,7 @@ defmodule Tempo.Enumeration do
   # group in it is walked as the one value it is.
   @spec walk(Tempo.t()) :: walk()
   def walk(%Tempo{calendar: calendar} = tempo) do
-    calendar = Compare.effective_calendar(calendar)
+    calendar = Calendars.effective(calendar)
     start(tempo, walked_as_written(tempo, calendar), calendar)
   end
 
@@ -85,7 +85,7 @@ defmodule Tempo.Enumeration do
   # unit to walk by.
   @spec implicit_walk(Tempo.t()) :: walk()
   def implicit_walk(%Tempo{calendar: calendar} = tempo) do
-    calendar = Compare.effective_calendar(calendar)
+    calendar = Calendars.effective(calendar)
 
     if explicitly_enumerable?(tempo),
       do: start(tempo, walked_as_written(tempo, calendar), calendar),
@@ -511,7 +511,7 @@ defmodule Tempo.Enumeration do
   # error is that error.
   @spec group_as_set(Tempo.t()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
   def group_as_set(%Tempo{time: time, calendar: calendar} = tempo) do
-    calendar = Compare.effective_calendar(calendar)
+    calendar = Calendars.effective(calendar)
     {before, [group]} = Enum.split(time, -1)
 
     with :ok <- names_a_value(walk(tempo)),
@@ -1025,7 +1025,7 @@ defmodule Tempo.Enumeration do
         {:ok, %{tempo | time: time ++ [{:microsecond, enum_values}]}}
 
       true ->
-        calendar = Compare.effective_calendar(calendar)
+        calendar = Calendars.effective(calendar)
 
         case Unit.implicit_enumerator(unit, calendar) do
           nil ->

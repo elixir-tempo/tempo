@@ -243,6 +243,7 @@ defmodule Tempo.Sigils do
 
   """
 
+  alias Tempo.Calendars
   alias Tempo.Sigils.Options
 
   @doc """
@@ -373,7 +374,7 @@ defmodule Tempo.Sigils do
     # at the same `time` prefix.
     bindings = bindings_from_modifiers(opts)
 
-    case Tempo.from_iso8601(string, Calendrical.Gregorian) do
+    case Tempo.from_iso8601(string, Calendars.default()) do
       {:ok, parsed} -> build_match_pattern(parsed, bindings)
       {:error, exception} -> raise exception
     end

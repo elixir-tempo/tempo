@@ -40,6 +40,7 @@ defmodule Tempo.Network.Normalize do
 
   """
 
+  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.Enumeration.Zone
   alias Tempo.Math
@@ -336,7 +337,7 @@ defmodule Tempo.Network.Normalize do
   # line of the network's bounds.
   defp axis(%Network{} = network) do
     bounds = network.periods |> Map.values() |> Enum.flat_map(&date_bounds/1)
-    calendars = bounds |> Enum.map(&Compare.effective_calendar(&1.calendar)) |> Enum.uniq()
+    calendars = bounds |> Enum.map(&Calendars.effective(&1.calendar)) |> Enum.uniq()
     zones = bounds |> Enum.map(&zone_key/1) |> Enum.uniq()
 
     network |> finest_unit() |> axis(calendars, zones)
@@ -367,7 +368,7 @@ defmodule Tempo.Network.Normalize do
     do: %{unit: unit, display: unit, calendar: calendar, zone: nil}
 
   defp single_calendar([calendar]), do: calendar
-  defp single_calendar(_calendars), do: Calendrical.Gregorian
+  defp single_calendar(_calendars), do: Calendars.default()
 
   # The time line a network in hours counts on: the wall clock when its
   # bounds are floating, their zone or offset when they share one, and UTC
@@ -484,7 +485,7 @@ defmodule Tempo.Network.Normalize do
 
   defp period_calendar(period, network_calendar) do
     case date_bounds(period) do
-      [%Tempo{calendar: calendar} | _rest] -> Compare.effective_calendar(calendar)
+      [%Tempo{calendar: calendar} | _rest] -> Calendars.effective(calendar)
       [] -> network_calendar
     end
   end

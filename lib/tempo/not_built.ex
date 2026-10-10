@@ -25,7 +25,7 @@ defmodule Tempo.NotBuilt do
   # numbering (`w`) under a month for good
   # (`Tempo.RRule.Selection.calendar_week_in_its_year/2`).
 
-  alias Tempo.{Compare, ConversionError, Duration, Interval}
+  alias Tempo.{Calendars, ConversionError, Duration, Interval}
 
   # The calendar RFC 5545 writes a rule in, as a value holds it.
   @gregorian [Calendrical.Gregorian, Calendar.ISO, nil]
@@ -111,7 +111,7 @@ defmodule Tempo.NotBuilt do
   @spec week_of_month(list(), Tempo.t()) :: {:error, ConversionError.t()}
   def week_of_month(selector, %Tempo{calendar: calendar} = from) when is_list(selector) do
     asked = "the selection of #{inspect(selector)} from #{inspect(from)}"
-    {:error, error(asked, :week_of_month, Compare.effective_calendar(calendar))}
+    {:error, error(asked, :week_of_month, Calendars.effective(calendar))}
   end
 
   @doc false
@@ -124,5 +124,5 @@ defmodule Tempo.NotBuilt do
   # hand is, is refused by the same name.
   @spec rule_to_an_end(Interval.t()) :: ConversionError.t()
   def rule_to_an_end(%Interval{to: %Tempo{calendar: calendar}} = recurrence),
-    do: error(recurrence, :rule_to_an_end, Compare.effective_calendar(calendar))
+    do: error(recurrence, :rule_to_an_end, Calendars.effective(calendar))
 end

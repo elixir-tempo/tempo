@@ -41,6 +41,7 @@ defmodule Tempo.Event do
   alias Calendrical.Chinese
   alias Calendrical.Ecclesiastical
   alias Calendrical.Lunisolar
+  alias Tempo.Calendars
   alias Tempo.TimeZoneDatabase
 
   # The solar terms (jié-qì) by name, each with the number Calendrical counts
@@ -176,7 +177,7 @@ defmodule Tempo.Event do
 
   """
   @spec date(String.t(), integer(), module()) :: {:ok, Date.t()} | {:error, term()}
-  def date(name, year, calendar \\ Calendrical.Gregorian)
+  def date(name, year, calendar \\ Calendars.default())
       when is_binary(name) and is_integer(year) do
     case String.split(name, "@", parts: 2) do
       [event, zone] -> zoned_date(event, zone, year)

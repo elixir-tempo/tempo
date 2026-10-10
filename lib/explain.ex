@@ -66,6 +66,7 @@ defmodule Tempo.Explain do
 
   """
 
+  alias Tempo.Calendars
   alias Tempo.Enumeration
   alias Tempo.Event
   alias Tempo.Explanation
@@ -643,8 +644,7 @@ defmodule Tempo.Explain do
   end
 
   # A value built without a calendar is Gregorian, as it is everywhere else.
-  defp calendar_of(%Tempo{calendar: nil}), do: Calendrical.Gregorian
-  defp calendar_of(%Tempo{calendar: calendar}), do: calendar
+  defp calendar_of(%Tempo{} = value), do: Calendars.of(value)
 
   # The precision a value states, the first whose units it has. Those with no
   # year at all — a recurring day-and-month (a birthday), a month, a bare day,
@@ -2106,7 +2106,7 @@ defmodule Tempo.Explain do
   # What names the months of a rule's selection: its calendar and no year,
   # since it selects in each.
   defp rule_naming(%Tempo.Interval{repeat_rule: %Tempo{} = rule}), do: {calendar_of(rule), nil}
-  defp rule_naming(%Tempo.Interval{}), do: {Calendrical.Gregorian, nil}
+  defp rule_naming(%Tempo.Interval{}), do: {Calendars.default(), nil}
 
   defp two_digit(n) when is_integer(n) and n >= 0 and n < 10, do: "0#{n}"
   defp two_digit(n) when is_integer(n), do: Integer.to_string(n)

@@ -2,6 +2,7 @@ defmodule Tempo.Math do
   @moduledoc false
 
   alias Tempo.AbstractSeasonError
+  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.ConversionError
   alias Tempo.Duration
@@ -1610,7 +1611,7 @@ defmodule Tempo.Math do
   defp week_date_stepped_as_a_date?(%Tempo{time: time, calendar: calendar}, duration_time) do
     List.keymember?(time, :week, 0) and List.keymember?(time, :day_of_week, 0) and
       Enum.any?(duration_time, &month_or_year_step?/1) and
-      not Tempo.week_based_calendar?(Compare.effective_calendar(calendar))
+      not Tempo.week_based_calendar?(Calendars.effective(calendar))
   end
 
   # Whether a date of the value's calendar is stepped by the calendar: a
@@ -2209,7 +2210,7 @@ defmodule Tempo.Math do
   # unit then holds is those values and no others, each alike in everything
   # but its units, and as the set of their spans otherwise.
   defp gathered(landed, %Tempo{time: time, calendar: calendar}, annotations) do
-    axis = written_on(time, Compare.effective_calendar(calendar))
+    axis = written_on(time, Calendars.effective(calendar))
 
     with [frame] <- landed |> Enum.map(&%{&1 | time: []}) |> Enum.uniq(),
          {:ok, time} <- landed |> Enum.map(&as_written(&1, axis)) |> one_value() do
@@ -2245,7 +2246,7 @@ defmodule Tempo.Math do
          :ordinal
        )
        when is_integer(year) and is_integer(month) and is_integer(day) do
-    calendar = Compare.effective_calendar(calendar)
+    calendar = Calendars.effective(calendar)
     [{:year, year}, {:day_of_year, calendar.day_of_year(year, month, day)} | rest]
   end
 
@@ -2259,7 +2260,7 @@ defmodule Tempo.Math do
          :week
        )
        when is_integer(year) and is_integer(month) and is_integer(day) do
-    calendar = Compare.effective_calendar(date.calendar)
+    calendar = Calendars.effective(date.calendar)
 
     with {week_year, week} when is_integer(week) <- calendar.iso_week_of_year(year, month, day),
          {weekday, _first, _last} <- calendar.day_of_week(year, month, day, :monday),

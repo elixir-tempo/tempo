@@ -41,6 +41,7 @@ defmodule Tempo.Format do
   """
 
   alias Localize.DateTime.Relative
+  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.FloatingTempoError
   alias Tempo.Interval
@@ -597,7 +598,7 @@ defmodule Tempo.Format do
     |> Compare.to_wall_seconds()
     |> floor()
     |> NaiveDateTime.from_gregorian_seconds()
-    |> NaiveDateTime.convert(Compare.effective_calendar(calendar))
+    |> NaiveDateTime.convert(Calendars.effective(calendar))
   end
 
   defp wall_date(value) do
@@ -609,7 +610,7 @@ defmodule Tempo.Format do
     utc = DateTime.from_gregorian_seconds(utc_seconds(value))
 
     case DateTime.shift_zone(utc, zone, TimeZoneDatabase.database()) do
-      {:ok, zoned} -> DateTime.convert(zoned, Compare.effective_calendar(calendar))
+      {:ok, zoned} -> DateTime.convert(zoned, Calendars.effective(calendar))
       {:error, _reason} -> {:error, UnknownZoneError.exception(zone_id: zone)}
     end
   end
@@ -664,7 +665,7 @@ defmodule Tempo.Format do
         # The rendered range spans the implicit sub-units ("Jan – Dec
         # 2026" for a year), so fill the own-resolution bounds down to
         # the interval's iteration unit before truncating.
-        calendar = Compare.effective_calendar(from.calendar)
+        calendar = Calendars.effective(from.calendar)
         unit = named_unit(unit, tempo)
         from = Steps.fill_to_unit(from, unit, calendar)
         to = Steps.fill_to_unit(to, unit, calendar)
@@ -698,7 +699,7 @@ defmodule Tempo.Format do
   # months are shown by their days: by its months it was "Mar 1750".
   defp named_unit(:month, %Tempo{time: [{:year, year} | _rest], calendar: calendar})
        when is_integer(year) do
-    if UnitValues.year_named_by_its_months?(year, Compare.effective_calendar(calendar)),
+    if UnitValues.year_named_by_its_months?(year, Calendars.effective(calendar)),
       do: :month,
       else: :day
   end
@@ -843,7 +844,7 @@ defmodule Tempo.Format do
   # Convert a Tempo to the map shape Localize accepts: flatten the
   # time keyword list into map keys and append the :calendar field.
   defp to_locale_map(%Tempo{time: time, calendar: calendar}) do
-    calendar = calendar || Calendrical.Gregorian
+    calendar = Calendars.effective(calendar)
 
     time
     |> week_date_as_day(calendar)
@@ -915,7 +916,7 @@ defmodule Tempo.Format do
   # the era CLDR's formats for a date take as read is the one today is in.
   defp before_the_era?(%Tempo{time: [{:year, year} | _units], calendar: calendar})
        when is_integer(year) do
-    calendar = Compare.effective_calendar(calendar)
+    calendar = Calendars.effective(calendar)
 
     worded_as_gregorian?(calendar) and match?({_year, 0}, calendar.year_of_era(year))
   end
@@ -1098,7 +1099,7 @@ defmodule Tempo.Format do
   defp interval_endpoints_for_format(%Tempo.Interval{} = interval) do
     case Tempo.Interval.endpoints(interval) do
       {%Tempo{} = from, %Tempo{} = to} ->
-        calendar = Compare.effective_calendar(from.calendar)
+        calendar = Calendars.effective(from.calendar)
         {from, to} = on_one_axis(from, to, calendar)
         unit = %Tempo.Interval{interval | from: from, to: to} |> shown_unit() |> named_unit(from)
         {:ok, Steps.fill_to_unit(from, unit, calendar), Steps.fill_to_unit(to, unit, calendar)}

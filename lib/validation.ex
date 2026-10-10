@@ -2,6 +2,7 @@ defmodule Tempo.Validation do
   @moduledoc false
 
   alias Localize.Utils.Math
+  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.ConversionError
   alias Tempo.Enumeration.SkippedReadings
@@ -31,7 +32,7 @@ defmodule Tempo.Validation do
   @minutes_per_hour 60
   @rounding_precision 10
 
-  def validate(tempo, calendar \\ Calendrical.Gregorian)
+  def validate(tempo, calendar \\ Calendars.default())
 
   # An unspecified year (`X*Y`) is some year and no year in particular: ISO
   # 8601-2 §4.6.2 reads `X*Y12M28D` as 28 December of an unspecified calendar
@@ -386,12 +387,9 @@ defmodule Tempo.Validation do
   # `Calendar.ISO`, which is the Gregorian calendar here.
   defp reading_calendar(calendar) do
     if Code.ensure_loaded?(calendar) and function_exported?(calendar, :parsing_calendar, 0),
-      do: gregorian_for_iso(calendar.parsing_calendar()),
+      do: Calendars.effective(calendar.parsing_calendar()),
       else: calendar
   end
-
-  defp gregorian_for_iso(Calendar.ISO), do: Calendrical.Gregorian
-  defp gregorian_for_iso(calendar), do: calendar
 
   # A date that does not exist as it is written (30 February) is an
   # `InvalidDateError` from resolving it. One that exists and cannot be
@@ -1764,7 +1762,7 @@ defmodule Tempo.Validation do
         } = tempo
       )
       when is_integer(year) and is_integer(week) and is_integer(day) do
-    calendar = Compare.effective_calendar(calendar)
+    calendar = Calendars.effective(calendar)
 
     with false <- Tempo.week_based_calendar?(calendar),
          {:ok, %Date{} = date} <- UnitValues.date_from_iso_week(year, week, day, calendar) do
@@ -1789,7 +1787,7 @@ defmodule Tempo.Validation do
           tempo
       )
       when is_integer(year) and is_integer(day) do
-    case resolve(time, Compare.effective_calendar(calendar)) do
+    case resolve(time, Calendars.effective(calendar)) do
       [{:year, _year} | _units] = dated -> %{Qualification.rewritten(tempo, dated) | time: dated}
       _no_such_day -> tempo
     end
