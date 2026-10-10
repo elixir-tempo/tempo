@@ -604,7 +604,7 @@ DEFINITION = re.compile(r"^\s*(def|defp|defmacro|defmacrop|defguard|defguardp)\s
 ALIAS_ONE = re.compile(r"^\s*alias\s+([A-Z][\w.]*)(?:\s*,\s*as:\s*([A-Z]\w*))?\s*$")
 ALIAS_MANY = re.compile(r"^\s*alias\s+([A-Z][\w.]*)\.\{([^}]*)\}")
 DYNAMIC = re.compile(r"(?<![\w.:@&])([a-z_][A-Za-z0-9_]*)\.([a-z_][A-Za-z0-9_]*[?!]?)\(")
-ON_RESULT = re.compile(r"([a-z_][A-Za-z0-9_]*)\(([^()]*)\)\.([a-z_][A-Za-z0-9_]*[?!]?)\(")
+ON_RESULT = re.compile(r"((?:[A-Z][A-Za-z0-9_]*\.)*[a-z_][A-Za-z0-9_]*)\(([^()]*)\)\.([a-z_][A-Za-z0-9_]*[?!]?)\(")
 CAPTURE = re.compile(r"&([a-z_][A-Za-z0-9_]*)\.([a-z_][A-Za-z0-9_]*[?!]?)/(\d+)")
 STATIC = re.compile(r"(?<![\w.])((?:[A-Z][A-Za-z0-9_]*\.)+)([a-z_][A-Za-z0-9_]*[?!]?)\s*\(")
 STATIC_CAPTURE = re.compile(r"&((?:[A-Z][A-Za-z0-9_]*\.)+)([a-z_][A-Za-z0-9_]*[?!]?)/(\d+)")
@@ -771,7 +771,7 @@ def read():
                 else:
                     census["other receivers"].append((relative, number, match.group(1), match.group(2)))
             for match in ON_RESULT.finditer(code):
-                if "calendar" in match.group(1):
+                if "calendar" in match.group(1) or match.group(1).startswith("Calendars."):
                     census["dynamic"].append((relative, number, current, match.group(3), arity(rest(match))))
             for match in CAPTURE.finditer(code):
                 if match.group(1) == "calendar":
@@ -875,7 +875,7 @@ def write(census):
     emit("")
     emit(f"* **{census['files']} files of `lib/`** — {sum(lines_of.values()):,} lines: {lines_of['code']:,} of code, {lines_of['doc']:,} of documentation (`@doc`, `@moduledoc` and `@typedoc`, doctests among them), {lines_of['comment']:,} of comment and {lines_of['blank']:,} blank. Only code is counted below: a calendar named in a doctest or a comment is no code path.")
     emit("")
-    emit("* **A call on a calendar** — every `receiver.function(` whose receiver is a variable, every `&receiver.function/arity` and every call on the result of a call. The receiver of every one is `calendar`, `backend`, `resolver`, `clock()` or `database()`; the first is a calendar, and the others are not.")
+    emit("* **A call on a calendar** — every `receiver.function(` whose receiver is a variable, every `&receiver.function/arity` and every call on the result of a call. The receiver of every one is `calendar`, a call of `Tempo.Calendars` or of a function named for a calendar, `backend`, `resolver`, `clock()` or `database()`; the first three are a calendar, and the others are not.")
     emit("")
     emit("* **A calendar named** — every module name in a line of code, with the file's aliases resolved, that is one of `Calendar.ISO`, `Calendrical.Gregorian`, `Calendrical.ISOWeek` and `Calendrical.Chinese`. No other calendar module is named in code.")
     emit("")
@@ -973,7 +973,7 @@ def write(census):
     base = [(r, n, f) for r, n, f, name, _c in dynamic if name == "calendar_base"]
     emit("### `calendar_base/0`, asked directly")
     emit("")
-    emit(f"The {len(base)} calls of `calendar.calendar_base()` are in section 3. Each is a branch between a calendar of weeks and one of months, in: {', '.join(sorted({f'`{f}`' for _r, _n, f in base}))}.")
+    emit(f"`calendar_base/0` is asked at {len(base)} place, in section 3: {', '.join(sorted({f'`{f}`' for _r, _n, f in base}))}. Every other branch between a calendar of weeks and one of months asks that function.")
     emit("")
 
     emit("## 5. Calls into Calendrical, Localize and Astro")

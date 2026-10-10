@@ -8,7 +8,7 @@ Every place Tempo's implementation touches a calendar, in the tree this file is 
 
 * **110 files of `lib/`** — 71,024 lines: 36,081 of code, 15,364 of documentation (`@doc`, `@moduledoc` and `@typedoc`, doctests among them), 10,826 of comment and 8,753 blank. Only code is counted below: a calendar named in a doctest or a comment is no code path.
 
-* **A call on a calendar** — every `receiver.function(` whose receiver is a variable, every `&receiver.function/arity` and every call on the result of a call. The receiver of every one is `calendar`, `backend`, `resolver`, `clock()` or `database()`; the first is a calendar, and the others are not.
+* **A call on a calendar** — every `receiver.function(` whose receiver is a variable, every `&receiver.function/arity` and every call on the result of a call. The receiver of every one is `calendar`, a call of `Tempo.Calendars` or of a function named for a calendar, `backend`, `resolver`, `clock()` or `database()`; the first three are a calendar, and the others are not.
 
 * **A calendar named** — every module name in a line of code, with the file's aliases resolved, that is one of `Calendar.ISO`, `Calendrical.Gregorian`, `Calendrical.ISOWeek` and `Calendrical.Chinese`. No other calendar module is named in code.
 
@@ -22,7 +22,7 @@ Every place Tempo's implementation touches a calendar, in the tree this file is 
 
 | What | Count |
 |---|---|
-| Calls on a calendar | 87 calls of 30 functions |
+| Calls on a calendar | 95 calls of 32 functions |
 | Of those functions, declared by neither behaviour | 2: `location/1`, `new/3` |
 | Of those functions, optional in `Calendrical` | 6: `cardinal_day/3`, `leap_month/1`, `lunar_month_of_year/2`, `months_in_year/0`, `ordinal_month_from_traditional/2`, `traditional_leap_month/1` |
 | Probes of what a calendar exports | 12 probes of 8 functions |
@@ -129,13 +129,14 @@ One more probe is of no calendar: `tempo/interval_set.ex:214`, of a set-operatio
 
 ## 3. Calls on a calendar
 
-87 calls, of 30 functions at the arities shown. "Declared" is where the function is a callback: of Elixir's `Calendar` behaviour (1.20.4, 28 callbacks, all required) or of the `Calendrical` behaviour at Calendrical `43006d7` (36 callbacks, 10 of them optional).
+95 calls, of 32 functions at the arities shown. "Declared" is where the function is a callback: of Elixir's `Calendar` behaviour (1.20.4, 28 callbacks, all required) or of the `Calendrical` behaviour at Calendrical `43006d7` (36 callbacks, 10 of them optional).
 
 | Function | Declared | Calls | Lines |
 |---|---|---|---|
 | `plus/6` | `Calendrical`, required | 19 | `math.ex:206`, `math.ex:2639`, `math.ex:2802`, `math.ex:2839`, `math.ex:2852`, `math.ex:2874`, `math.ex:2919`, `math.ex:2988`, `math.ex:2997`, `math.ex:3016`, `tempo/interval/steps.ex:309`, `tempo/interval/steps.ex:322`, `tempo/rrule/selection.ex:2340`, `tempo/rrule/selection.ex:2634`, `tempo/unit_values.ex:250`, `tempo/unit_values.ex:1808`, `tempo/unit_values.ex:1884`, `validation.ex:1812`, `validation.ex:1838` |
+| `valid_date?/3` | `Calendar`, required | 9 | `inspect.ex:157`, `math.ex:205`, `math.ex:2801`, `math.ex:2838`, `math.ex:2873`, `math.ex:2987`, `math.ex:3015`, `tempo/unit_values.ex:216`, `tempo/unit_values.ex:249` |
 | `months_in_year/1` | `Calendar`, required | 7 | `iso8601/group.ex:803`, `math.ex:2628`, `tempo/interval/steps.ex:628`, `tempo/unit_values.ex:297`, `tempo/unit_values.ex:373`, `validation.ex:640`, `validation.ex:656` |
-| `valid_date?/3` | `Calendar`, required | 7 | `math.ex:205`, `math.ex:2801`, `math.ex:2838`, `math.ex:2873`, `math.ex:2987`, `math.ex:3015`, `tempo/unit_values.ex:249` |
+| `date_to_iso_days/3` | `Calendrical`, required | 6 | `compare.ex:1180`, `compare.ex:1185`, `compare.ex:1189`, `compare.ex:1276`, `enumeration/zone.ex:634`, `tempo/interval/steps.ex:656` |
 | `day_of_week/4` | `Calendar`, required | 6 | `math.ex:2266`, `tempo.ex:6505`, `tempo/rrule/selection.ex:2378`, `tempo/rrule/selection.ex:2911`, `tempo/select.ex:1528`, `tempo/unit_values.ex:1714` |
 | `days_in_month/2` | `Calendar`, required | 6 | `iso8601/group.ex:814`, `tempo.ex:6650`, `tempo/unit_values.ex:135`, `tempo/unit_values.ex:148`, `tempo/unit_values.ex:328`, `validation.ex:995` |
 | `days_in_year/1` | `Calendrical`, required | 6 | `iso8601/group.ex:808`, `iso8601/group.ex:811`, `tempo/unit_values.ex:318`, `validation.ex:726`, `validation.ex:757`, `validation.ex:980` |
@@ -143,8 +144,8 @@ One more probe is of no calendar: `tempo/interval_set.ex:214`, of a set-operatio
 | `cldr_calendar_type/0` | `Calendrical`, required | 3 | `inspect.ex:288`, `inspect.ex:566`, `tempo/format.ex:926` |
 | `days_in_week/0` | `Calendrical`, required | 3 | `iso8601/group.ex:816`, `rounding.ex:168`, `tempo/rrule/selection.ex:2565` |
 | `leap_year?/1` | `Calendar`, required | 3 | `tempo.ex:6610`, `tempo.ex:11945`, `tempo.ex:11946` |
-| `date_to_iso_days/3` | `Calendrical`, required | 2 | `compare.ex:1180`, `tempo/interval/steps.ex:656` |
 | `iso_week_of_year/3` | `Calendrical`, required | 2 | `math.ex:2265`, `math.ex:2999` |
+| `calendar_base/0` | `Calendrical`, required | 1 | `tempo.ex:2428` |
 | `cardinal_day/3` | `Calendrical`, optional | 1 | `tempo/unit_values.ex:487` |
 | `cardinal_month/1` | `Calendrical`, required | 1 | `tempo/unit_values.ex:621` |
 | `date_from_iso_days/1` | `Calendrical`, required | 1 | `tempo/interval/steps.ex:662` |
@@ -157,6 +158,7 @@ One more probe is of no calendar: `tempo/interval_set.ex:214`, of a set-operatio
 | `months_in_year/0` | `Calendrical`, optional | 1 | `tempo/unit_values.ex:438` |
 | `new/3` | declared by neither | 1 | `validation.ex:1528` |
 | `ordinal_month_from_traditional/2` | `Calendrical`, optional | 1 | `validation.ex:1522` |
+| `parsing_calendar/0` | `Calendrical`, required | 1 | `validation.ex:391` |
 | `quarter_of_year/3` | `Calendar`, required | 1 | `tempo.ex:6578` |
 | `traditional_leap_month/1` | `Calendrical`, optional | 1 | `validation.ex:1491` |
 | `week_of_year/3` | `Calendrical`, required | 1 | `tempo/rrule/selection.ex:2352` |
@@ -274,7 +276,7 @@ One more probe is of no calendar: `tempo/interval_set.ex:214`, of a set-operatio
 
 ### `calendar_base/0`, asked directly
 
-The 0 calls of `calendar.calendar_base()` are in section 3. Each is a branch between a calendar of weeks and one of months, in: .
+`calendar_base/0` is asked at 1 place, in section 3: `week_based_calendar?`. Every other branch between a calendar of weeks and one of months asks that function.
 
 ## 5. Calls into Calendrical, Localize and Astro
 
