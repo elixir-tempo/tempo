@@ -1170,21 +1170,25 @@ defmodule Tempo.Compare do
   end
 
   # The count of a day: of a date Calendrical computed, which its own
-  # calendar counts, or of a year, a month and a day, which the value's
-  # calendar says is a date and counts in one step (`Calendrical.iso_days/4`).
-  # What is no date is counted as its numbers stand, and a date that could
-  # not be computed as the year's first: neither is raised for.
+  # calendar counts, or of a year, a month and a day, of which the value's
+  # calendar is asked two things: whether they are a date (`valid_date?/3`),
+  # and then its count (`date_to_iso_days/3`). What is no date is counted as
+  # its numbers stand, and a date that could not be computed as the year's
+  # first: neither is raised for.
   defp day_of({:ok, %Date{} = date}, year, calendar), do: day_of(date, year, calendar)
 
   defp day_of(%Date{year: year, month: month, day: day, calendar: calendar}, _year, _calendar),
     do: calendar.date_to_iso_days(year, month, day)
 
-  defp day_of({year, month, day}, _year, calendar) do
-    case Calendrical.iso_days(year, month, day, calendar) do
-      {:ok, days} -> days
-      _no_such_date -> Calendars.default().date_to_iso_days(year, month, day)
-    end
+  defp day_of({year, month, day}, _year, calendar)
+       when is_integer(year) and is_integer(month) and is_integer(day) do
+    if calendar.valid_date?(year, month, day),
+      do: calendar.date_to_iso_days(year, month, day),
+      else: Calendars.default().date_to_iso_days(year, month, day)
   end
+
+  defp day_of({year, month, day}, _year, _calendar),
+    do: Calendars.default().date_to_iso_days(year, month, day)
 
   defp day_of(_no_date, year, _calendar), do: Calendars.default().date_to_iso_days(year, 1, 1)
 
