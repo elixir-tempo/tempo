@@ -292,9 +292,6 @@ defmodule Tempo.Network.Normalize do
   # A position on the axis as a value in the axis calendar (and, on the
   # time line, its zone), at the network's unit where that loses nothing.
   @spec date_at(integer(), t()) :: {:ok, Tempo.t()} | {:error, term()}
-  def date_at(position, %{unit: :year, calendar: Calendrical.Gregorian}),
-    do: Tempo.from_iso8601("#{position}Y")
-
   def date_at(position, %{unit: :year, calendar: calendar}),
     do: Tempo.new(year: position, calendar: calendar)
 

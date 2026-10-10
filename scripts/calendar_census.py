@@ -87,7 +87,6 @@ NAMED = {
         ('no_date_in_year?', 'Gregorian', 'G'),
     ],
     "lib/tempo/network/normalize.ex": [
-        ('date_at', 'Gregorian', 'S'),
         ('axis', 'Gregorian', 'S'),
         ('axis', 'Gregorian', 'S'),
         ('cyclic?', 'Gregorian', 'S'),
