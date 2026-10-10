@@ -272,10 +272,7 @@ defmodule Tempo.Inspect do
     if calendar in [Calendars.default(), implied], do: nil, else: faithful_name(calendar)
   end
 
-  defp week_based?(calendar) do
-    Code.ensure_loaded?(calendar) and function_exported?(calendar, :calendar_base, 0) and
-      calendar.calendar_base() == :week
-  end
+  defp week_based?(calendar), do: Calendars.effective(calendar).calendar_base() == :week
 
   defp faithful_name(calendar) do
     [additional_calendar_module_name(calendar), cldr_calendar_type(calendar)]
@@ -288,11 +285,7 @@ defmodule Tempo.Inspect do
   defp names?(name, calendar),
     do: Calendrical.calendar_from_cldr_calendar_type(name) == {:ok, calendar}
 
-  defp cldr_calendar_type(calendar) do
-    if Code.ensure_loaded?(calendar) and function_exported?(calendar, :cldr_calendar_type, 0),
-      do: {:ok, calendar.cldr_calendar_type()},
-      else: :error
-  end
+  defp cldr_calendar_type(calendar), do: {:ok, calendar.cldr_calendar_type()}
 
   defp put_calendar_name(%Tempo{extended: nil} = tempo, nil), do: tempo
 
@@ -570,13 +563,7 @@ defmodule Tempo.Inspect do
     end)
   end
 
-  defp cldr_calendar_identifier(calendar) do
-    if function_exported?(calendar, :cldr_calendar_type, 0) do
-      encode_calendar(calendar.cldr_calendar_type())
-    else
-      :error
-    end
-  end
+  defp cldr_calendar_identifier(calendar), do: encode_calendar(calendar.cldr_calendar_type())
 
   # Render a recurrence's written start with its IXDTF `[u-ca=…]` calendar
   # lifted off into a separate trailing suffix, so a whole-value calendar reads

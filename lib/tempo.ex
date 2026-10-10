@@ -2423,10 +2423,7 @@ defmodule Tempo do
   @doc false
   # A calendar that numbers weeks within its year rather than months.
   @spec week_based_calendar?(module()) :: boolean()
-  def week_based_calendar?(calendar) do
-    Code.ensure_loaded?(calendar) and function_exported?(calendar, :calendar_base, 0) and
-      calendar.calendar_base() == :week
-  end
+  def week_based_calendar?(calendar), do: Calendars.effective(calendar).calendar_base() == :week
 
   # The unit of a day in a calendar's dates: the day of the week in a
   # week-based calendar.

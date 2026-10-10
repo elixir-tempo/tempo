@@ -388,9 +388,7 @@ defmodule Tempo.Validation do
   # Gregorian calendar for a calendar of weeks. Calendrical answers
   # `Calendar.ISO`, which is the Gregorian calendar here.
   defp reading_calendar(calendar) do
-    if Code.ensure_loaded?(calendar) and function_exported?(calendar, :parsing_calendar, 0),
-      do: Calendars.effective(calendar.parsing_calendar()),
-      else: calendar
+    Calendars.effective(Calendars.effective(calendar).parsing_calendar())
   end
 
   # A date that does not exist as it is written (30 February) is an

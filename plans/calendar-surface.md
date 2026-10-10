@@ -187,8 +187,6 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 
 ## Tasks
 
-* [ ] **No probe of a required callback** — needs nothing upstream.
-
 * [ ] **Weeks or months, asked once** — needs nothing upstream.
 
 * [ ] **No fast path by name** — each measured as it goes.
@@ -208,6 +206,8 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 * [ ] **Names, traditional months and solar terms** — blocked on `cardinal_day/3` and the four callbacks of traditional months being required, and on a solar term asked of a calendar (Calendrical's `TODO.md`).
 
 ### Done
+
+* [x] **No probe of a required callback** — the 19 are gone, each calendar passing through the accessor before it is asked, and a division of a year is asked of `Calendrical.Interval` by its name where it was applied by a variable. The probes that remain are of the six optional callbacks and of `location/1` and `new/3`, each waiting on Calendrical. The era of a year is asked by `year_of_era/3` of the year's first day, where `year_of_era/1`, which no behaviour declares, was probed and called. 2026-10-10.
 
 * [x] **A value placed on the time line by its own calendar** — `Tempo.Compare` asks a value's calendar for the count of its day (`date_to_iso_days/3`, and `Calendrical.iso_days/4` for a year, a month and a day), where it converted to Gregorian fields and counted in the Gregorian by name, with a fast path for it. Measured before and after: a comparison of two Gregorian days 962 and 998 ns, a relation 17.5 and 17.4 µs, a Hebrew day with a Gregorian one 7.6 and 6.6 µs. 2026-10-10.
 

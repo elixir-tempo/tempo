@@ -810,10 +810,7 @@ defmodule Tempo.RRule.Selection do
   defp in_week_terms(occurrences),
     do: Enum.map(occurrences, &map_endpoints(&1, fn unit -> month_unit_as_week(unit) end))
 
-  defp week_calendar?(calendar) do
-    Code.ensure_loaded?(calendar) and function_exported?(calendar, :calendar_base, 0) and
-      calendar.calendar_base() == :week
-  end
+  defp week_calendar?(calendar), do: Calendars.effective(calendar).calendar_base() == :week
 
   defp map_endpoints(%Interval{from: from, to: to} = interval, map_unit),
     do: %{interval | from: map_units(from, map_unit), to: map_units(to, map_unit)}
@@ -2351,7 +2348,6 @@ defmodule Tempo.RRule.Selection do
   # date in, counted among that week's year's weeks.
   defp in_calendar_week_list?(%Interval{from: %Tempo{time: time, calendar: calendar}}, weeks) do
     with {:ok, %Date{year: year, month: month, day: day}} <- date_of(time, calendar),
-         true <- Code.ensure_loaded?(calendar) and function_exported?(calendar, :week_of_year, 3),
          {week_year, week} when is_integer(week_year) and is_integer(week) <-
            calendar.week_of_year(year, month, day) do
       week in calendar_weeks_named(weeks, week_year, calendar)

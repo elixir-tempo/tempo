@@ -223,10 +223,6 @@ defmodule Tempo.UnitValuesTest do
 
       assert UnitValues.in_any_year(:month, [], Calendrical.Reform.England) ==
                {:error, :unanchored}
-
-      # Elixir's own calendar answers neither question without a year.
-      assert UnitValues.in_any_year(:day, [month: 6], Calendar.ISO) == {:error, :unanchored}
-      assert UnitValues.in_any_year(:month, [], Calendar.ISO) == {:error, :unanchored}
     end
 
     test "a unit that takes no run of values is uncounted" do

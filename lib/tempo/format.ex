@@ -918,15 +918,22 @@ defmodule Tempo.Format do
        when is_integer(year) do
     calendar = Calendars.effective(calendar)
 
-    worded_as_gregorian?(calendar) and match?({_year, 0}, calendar.year_of_era(year))
+    worded_as_gregorian?(calendar) and in_the_era_before?(year, calendar)
   end
 
   defp before_the_era?(_value), do: false
 
-  defp worded_as_gregorian?(calendar) do
-    Code.ensure_loaded?(calendar) and function_exported?(calendar, :cldr_calendar_type, 0) and
-      function_exported?(calendar, :year_of_era, 1) and
-      calendar.cldr_calendar_type() == :gregorian
+  defp worded_as_gregorian?(calendar), do: calendar.cldr_calendar_type() == :gregorian
+
+  # The era of a year is the era of its first day, which the calendar gives
+  # (`year_of_era/3`): era 0 is the one before the era dates are counted in.
+  defp in_the_era_before?(year, calendar) do
+    with {:ok, {year, month, day}} <- UnitValues.start_date([year: year], calendar),
+         {_year_of_era, 0} <- calendar.year_of_era(year, month, day) do
+      true
+    else
+      _in_the_era -> false
+    end
   end
 
   ## ---------------------------------------------------------

@@ -13,6 +13,7 @@ defmodule Tempo.UnitValues do
   alias Calendrical.Base.Common
   alias Calendrical.Interval
   alias Calendrical.Kday
+  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.Iso8601.Unit
   alias Tempo.Mask
@@ -212,8 +213,7 @@ defmodule Tempo.UnitValues do
   @doc false
   # Whether a calendar has the year. Every year but 0 is taken to be one.
   @spec year?(term(), module()) :: boolean()
-  def year?(0, calendar),
-    do: not exported?(calendar, :valid_date?, 3) or calendar.valid_date?(0, 1, 1)
+  def year?(0, calendar), do: Calendars.effective(calendar).valid_date?(0, 1, 1)
 
   def year?(_year, _calendar), do: true
 
@@ -443,7 +443,7 @@ defmodule Tempo.UnitValues do
   defp last_in_any_year(:day, context, calendar) do
     month = whole(context, :month)
 
-    if is_integer(month) and month > 0 and exported?(calendar, :days_in_month, 1),
+    if is_integer(month) and month > 0,
       do: counted_in_any_year(calendar.days_in_month(month)),
       else: {:error, :unanchored}
   end
@@ -618,10 +618,8 @@ defmodule Tempo.UnitValues do
   # (`cardinal_month/1`). A leap month is named by the calendar's own words,
   # and is its number here.
   defp month_named(year, month, day, calendar) do
-    with true <- exported?(calendar, :month_of_year, 3),
-         named when is_integer(named) <- calendar.month_of_year(year, month, day) do
-      calendar.cardinal_month(named)
-    else
+    case calendar.month_of_year(year, month, day) do
+      named when is_integer(named) -> calendar.cardinal_month(named)
       _named_by_its_number -> month
     end
   end
@@ -1319,11 +1317,9 @@ defmodule Tempo.UnitValues do
   end
 
   defp year_start_of(calendar, year) do
-    cond do
-      not exported?(calendar, :day_of_year, 3) -> :every_year
-      composite?(calendar) -> :by_year
-      true -> calendar |> first_day_of_first_month?(year) |> year_start_from()
-    end
+    if composite?(calendar),
+      do: :by_year,
+      else: calendar |> first_day_of_first_month?(year) |> year_start_from()
   end
 
   defp year_start_from(true), do: :every_year
@@ -1566,10 +1562,8 @@ defmodule Tempo.UnitValues do
   # The days the calendar gives a month of a year: its `month/2`, a callback
   # of the `Calendrical` behaviour.
   defp month_range(year, month, calendar) do
-    with true <- exported?(calendar, :month, 2),
-         %Date.Range{} = dates <- calendar.month(year, month) do
-      {:ok, dates}
-    else
+    case calendar.month(year, month) do
+      %Date.Range{} = dates -> {:ok, dates}
       _no_such_month -> {:error, :no_period}
     end
   end
@@ -1780,13 +1774,7 @@ defmodule Tempo.UnitValues do
   # short at the start or end of the year in a calendar whose weeks number
   # within their own year, or an error for a week the calendar does not
   # number.
-  def calendar_week_range(year, week, calendar) do
-    if Code.ensure_loaded?(calendar) and function_exported?(calendar, :week, 2) do
-      Interval.week(year, week, calendar)
-    else
-      {:error, :not_defined}
-    end
-  end
+  def calendar_week_range(year, week, calendar), do: Interval.week(year, week, calendar)
 
   @doc false
   # How many ISO 8601 weeks (`W`) `year` has: a week-based calendar's own
