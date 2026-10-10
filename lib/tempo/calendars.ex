@@ -25,29 +25,33 @@ defmodule Tempo.Calendars do
   # The calendar of ISO 8601's notation.
   @notation Calendrical.Gregorian
 
+  # What holds a calendar: a value, an interval's end, a duration, or any
+  # other struct or map with a `:calendar` among its keys.
+  @typep holder :: %{required(:calendar) => module() | nil, optional(atom()) => any()}
+
   @doc false
   # The calendar a value is in where none is given: the notation's. ISO
   # 8601-2's seasons are the seasons of its months, and an event of the sky
   # or of the church is dated in it.
-  @spec default() :: module()
+  @spec default() :: Calendrical.Gregorian
   def default, do: @notation
 
   @doc false
   # The calendar the zone database keeps its clocks in. A value of another
   # calendar is read on a zone's clock as the date of the same day in it.
-  @spec zone() :: module()
+  @spec zone() :: Calendrical.Gregorian
   def zone, do: @notation
 
   @doc false
   # The calendar a rule of RFC 5545, of cron or of JSCalendar counts its
   # months and its years in.
-  @spec rule() :: module()
+  @spec rule() :: Calendrical.Gregorian
   def rule, do: @notation
 
   @doc false
   # Elixir's own module for the notation's calendar, which the dates Astro
   # and Calendrical's events answer with are handed back in.
-  @spec native() :: module()
+  @spec native() :: Calendar.ISO
   def native, do: Calendar.ISO
 
   @doc false
@@ -72,13 +76,13 @@ defmodule Tempo.Calendars do
 
   @doc false
   # The calendar a value is in (`effective/1` of its `:calendar`).
-  @spec of(%{required(:calendar) => module() | nil}) :: module()
+  @spec of(holder()) :: module()
   def of(%{calendar: calendar}), do: effective(calendar)
 
   @doc false
   # A value with the calendar it is in, where it was written with `nil` or
   # `Calendar.ISO` for one.
-  @spec settled(value) :: value when value: %{required(:calendar) => module() | nil}
+  @spec settled(value) :: value when value: holder()
   def settled(%{calendar: calendar} = value) do
     case effective(calendar) do
       ^calendar -> value
