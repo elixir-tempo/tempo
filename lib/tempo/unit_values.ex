@@ -355,10 +355,9 @@ defmodule Tempo.UnitValues do
   # count of the year's months, which an astronomical calendar works out from
   # its new moons.
   defp month_of_year?(month, year, calendar) when month >= 1 do
-    case calendar.calendar_base() do
-      :week -> month <= calendar_weeks_in_year(year, calendar)
-      _month -> month <= fewest_months(calendar) or month <= last_month(year, calendar)
-    end
+    if Tempo.week_based_calendar?(calendar),
+      do: month <= calendar_weeks_in_year(year, calendar),
+      else: month <= fewest_months(calendar) or month <= last_month(year, calendar)
   end
 
   defp month_of_year?(_month, _year, _calendar), do: false
@@ -1744,14 +1743,12 @@ defmodule Tempo.UnitValues do
   end
 
   def date_from_iso_week(year, week, day, calendar) do
-    case calendar.calendar_base() do
-      :week ->
-        Date.new(year, week, day, calendar)
-
-      :month ->
-        calendar
-        |> iso_week_start(year, week)
-        |> date_in_week(day, calendar)
+    if Tempo.week_based_calendar?(calendar) do
+      Date.new(year, week, day, calendar)
+    else
+      calendar
+      |> iso_week_start(year, week)
+      |> date_in_week(day, calendar)
     end
   end
 
@@ -1762,10 +1759,9 @@ defmodule Tempo.UnitValues do
   # `7`, Sunday) among the days `Calendrical.Interval.week/3` gives the week,
   # so a week cut short at the start or end of its year has fewer.
   def date_from_calendar_week(year, week, day, calendar) do
-    case calendar.calendar_base() do
-      :week -> Date.new(year, week, day, calendar)
-      :month -> weekday_in_week(calendar_week_range(year, week, calendar), day)
-    end
+    if Tempo.week_based_calendar?(calendar),
+      do: Date.new(year, week, day, calendar),
+      else: weekday_in_week(calendar_week_range(year, week, calendar), day)
   end
 
   @doc false
@@ -1785,10 +1781,9 @@ defmodule Tempo.UnitValues do
     do: calendar_weeks_in_year(year, Calendrical.ISOWeek)
 
   def iso_weeks_in_year(year, calendar) do
-    case calendar.calendar_base() do
-      :week -> calendar_weeks_in_year(year, calendar)
-      :month -> iso_week_count(calendar, year)
-    end
+    if Tempo.week_based_calendar?(calendar),
+      do: calendar_weeks_in_year(year, calendar),
+      else: iso_week_count(calendar, year)
   end
 
   # The weeks from the first day of a year's week 1 to the first day of the

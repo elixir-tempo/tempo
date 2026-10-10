@@ -272,7 +272,7 @@ defmodule Tempo.Inspect do
     if calendar in [Calendars.default(), implied], do: nil, else: faithful_name(calendar)
   end
 
-  defp week_based?(calendar), do: Calendars.effective(calendar).calendar_base() == :week
+  defp week_based?(calendar), do: Tempo.week_based_calendar?(calendar)
 
   defp faithful_name(calendar) do
     [additional_calendar_module_name(calendar), cldr_calendar_type(calendar)]

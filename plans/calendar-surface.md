@@ -143,7 +143,8 @@ In the order they can be done. The first three need nothing of Calendrical.
 | Probes of what a calendar exports | 37 | 0 |
 | Functions called on a calendar that neither behaviour declares | 4 | 0 |
 | Functions called on a calendar that are optional | 6 | 0 |
-| Functions that decide by a calendar's kind, the accessor apart | 47, at 176 calls | 1, at 1 call |
+| Direct asks of a calendar's base | 16 | 1 |
+| Functions that decide by a calendar's kind, the accessor and the base apart | 32, at 95 calls | 0 |
 | Lines that hold the days of a week | 16 | 0 |
 | Lines that hold a fact of the Gregorian calendar | 15 | 0, or in the one module |
 | Lines that hold the reader's bounds | 6 | 0 |
@@ -187,8 +188,6 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 
 ## Tasks
 
-* [ ] **Weeks or months, asked once** — needs nothing upstream.
-
 * [ ] **No fast path by name** — each measured as it goes.
 
 * [ ] **The Gregorian asked, not named** — needs nothing upstream.
@@ -206,6 +205,8 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 * [ ] **Names, traditional months and solar terms** — blocked on `cardinal_day/3` and the four callbacks of traditional months being required, and on a solar term asked of a calendar (Calendrical's `TODO.md`).
 
 ### Done
+
+* [x] **Weeks or months, asked once** — `Tempo.week_based_calendar?/1` is the one function that asks a calendar its base: the other 15 direct calls of `calendar_base/0` ask it, as the three private copies of it do. What its callers then do with the answer is the second shape of date, which stays. 2026-10-10.
 
 * [x] **No probe of a required callback** — the 19 are gone, each calendar passing through the accessor before it is asked, and a division of a year is asked of `Calendrical.Interval` by its name where it was applied by a variable. The probes that remain are of the six optional callbacks and of `location/1` and `new/3`, each waiting on Calendrical. The era of a year is asked by `year_of_era/3` of the year's first day, where `year_of_era/1`, which no behaviour declares, was probed and called. 2026-10-10.
 

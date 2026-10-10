@@ -635,7 +635,7 @@ defmodule Tempo.Iso8601.Group do
 
   # A week-based calendar numbers its weeks in the date's `month` field.
   defp year_division_unit(calendar) do
-    if calendar.calendar_base() == :week,
+    if Tempo.week_based_calendar?(calendar),
       do: :week,
       else: :month
   end
@@ -1201,10 +1201,9 @@ defmodule Tempo.Iso8601.Group do
   ## Calendar weeks
 
   defp calendar_week(year, week, rest, calendar) do
-    case calendar.calendar_base() do
-      :week -> [{:year, year}, {:week, week} | rest]
-      :month -> month_calendar_week(year, week, rest, calendar)
-    end
+    if Tempo.week_based_calendar?(calendar),
+      do: [{:year, year}, {:week, week} | rest],
+      else: month_calendar_week(year, week, rest, calendar)
   end
 
   # A negative week counts back from the year's last, as `-1W` does.

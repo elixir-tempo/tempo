@@ -84,11 +84,9 @@ defmodule Tempo.Iso8601.Unit do
 
   """
   def implicit_enumerator(:year = unit, calendar) do
-    if calendar.calendar_base() == :month do
-      Map.get(@unit_after, unit)
-    else
-      {:week, 1..-1//1}
-    end
+    if Tempo.week_based_calendar?(calendar),
+      do: {:week, 1..-1//1},
+      else: Map.get(@unit_after, unit)
   end
 
   # A week is walked by its days, which the calendar counts.

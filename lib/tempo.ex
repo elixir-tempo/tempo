@@ -2421,7 +2421,9 @@ defmodule Tempo do
   def with_a_calendar(%__MODULE__{} = value), do: Calendars.settled(value)
 
   @doc false
-  # A calendar that numbers weeks within its year rather than months.
+  # A calendar that numbers weeks within its year rather than months, whose
+  # dates are a year, a week and a day of the week. It is the calendar's to
+  # say (`calendar_base/0`), and this is the one function that asks it.
   @spec week_based_calendar?(module()) :: boolean()
   def week_based_calendar?(calendar), do: Calendars.effective(calendar).calendar_base() == :week
 
@@ -11329,7 +11331,7 @@ defmodule Tempo do
   # of all the weeks after a masked year (`202XYXXW`) narrows it: the weeks
   # of each year, where any other unit masked whole widens to the years.
   defp every_week_follows?([{:week, week} | _rest], calendar) when week == :any or is_tuple(week),
-    do: calendar.calendar_base() != :week
+    do: not week_based_calendar?(calendar)
 
   defp every_week_follows?(_rest, _calendar), do: false
 
@@ -11358,7 +11360,7 @@ defmodule Tempo do
   # units before it. In a calendar of weeks the two are one.
   defp spans_its_values?(:week, mask, prefix, calendar) do
     narrowing_mask?(:week, mask, prefix) or
-      (prefix != [] and calendar.calendar_base() != :week)
+      (prefix != [] and not week_based_calendar?(calendar))
   end
 
   defp spans_its_values?(unit, mask, prefix, _calendar), do: narrowing_mask?(unit, mask, prefix)

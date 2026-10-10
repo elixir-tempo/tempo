@@ -685,7 +685,7 @@ defmodule Tempo.Validation do
     with {:ok, weeks} <- values_in(:week, [year: year], calendar),
          {:ok, week} <- conform(week, weeks, unit: :week, year: year, calendar: calendar),
          [day_of_week: day] <- resolve([day_of_week: day], calendar) do
-      year_week_day(year, week, day, rest, calendar.calendar_base(), calendar)
+      year_week_day(year, week, day, rest, week_dates(calendar), calendar)
     end
   end
 
@@ -1724,6 +1724,10 @@ defmodule Tempo.Validation do
     do: Enum.all?(months, &months_within?(&1, max))
 
   defp months_within?(_month, _max), do: true
+
+  # Whether a week date is kept as the calendar's own week and day, or is
+  # the date of a calendar of months.
+  defp week_dates(calendar), do: if(Tempo.week_based_calendar?(calendar), do: :week, else: :month)
 
   def year_week_day(year, week, day, rest, :month, calendar) do
     case UnitValues.date_from_iso_week(year, week, day, calendar) do

@@ -810,7 +810,7 @@ defmodule Tempo.RRule.Selection do
   defp in_week_terms(occurrences),
     do: Enum.map(occurrences, &map_endpoints(&1, fn unit -> month_unit_as_week(unit) end))
 
-  defp week_calendar?(calendar), do: Calendars.effective(calendar).calendar_base() == :week
+  defp week_calendar?(calendar), do: Tempo.week_based_calendar?(calendar)
 
   defp map_endpoints(%Interval{from: from, to: to} = interval, map_unit),
     do: %{interval | from: map_units(from, map_unit), to: map_units(to, map_unit)}
@@ -3099,7 +3099,7 @@ defmodule Tempo.RRule.Selection do
     year = time[:year]
 
     cond do
-      calendar.calendar_base() == :week ->
+      week_calendar?(calendar) ->
         expand_candidate_week_numbers(candidate, weeks, @monday, within_month?)
 
       Keyword.has_key?(time, :day) ->

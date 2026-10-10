@@ -566,7 +566,7 @@ defmodule Tempo.Compare do
   defp same_axis?(_axis, :none, _calendar), do: true
   defp same_axis?(_axis, _another_axis, _calendar), do: false
 
-  defp week_based?(calendar), do: Calendars.effective(calendar).calendar_base() == :week
+  defp week_based?(calendar), do: Tempo.week_based_calendar?(calendar)
 
   # `:week` marks the week-of-year axis only when no `:month` qualifies
   # it — `[year, month, week]` is a week *of the month*, which lives on
