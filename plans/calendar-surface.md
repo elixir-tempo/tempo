@@ -150,6 +150,55 @@ In the order they can be done. The first three need nothing of Calendrical.
 | Lines that hold the reader's bounds | 6 | 0 |
 | Constants that are a calendar's to answer | 13 of 250 | 0 |
 
+## Every call a callback
+
+The end state the user set on 2026-10-10: "Basically, all calendar calls in Tempo should be `calendar.some_callback` It really should be as simple as that." At `29b4677` Tempo calls 28 functions on a calendar at 93 places, and makes 84 calls of 35 functions in Calendrical's own modules ([calendar-surface-census.md](calendar-surface-census.md), sections 3 and 5), most of them with a calendar passed as an argument. Read one at a time, the 84 are of four kinds.
+
+### A callback exists today, and Tempo calls a wrapper of it (25 calls)
+
+These need no change in Calendrical: Tempo asks the calendar it already holds.
+
+| Tempo calls | Calls | Becomes |
+|---|---|---|
+| `Calendrical.diff(from, to, unit)` | 4 | `calendar.diff(from, to, unit)` |
+| `Calendrical.date_from_iso_days(days, calendar)` | 3 | `calendar.date_from_iso_days(days)` |
+| `Calendrical.date_to_iso_days(date)` | 2 | `calendar.date_to_iso_days(year, month, day)` |
+| `Calendrical.iso_days(year, month, day, calendar)` | 3 | `calendar.valid_date?/3`, then `calendar.date_to_iso_days/3` |
+| `Calendrical.first_day_of_year(year, calendar)` | 1 | `calendar.year(year)` |
+| `Calendrical.first_gregorian_day_of_year/2`, `last_gregorian_day_of_year/2` | 2 | `calendar.year(year)`, then `calendar.date_to_iso_days/3` |
+| `Calendrical.Interval.year(year, calendar)`, `Calendrical.Interval.quarter(year, quarter, calendar)` | 2 | `calendar.year(year)`, `calendar.quarter(year, quarter)` |
+| `Calendrical.weeks_to_days(n)` | 8 | `n * calendar.days_in_week()` |
+
+### A callback is to be added, or made required (25 calls, and the 7 probes)
+
+Each is in Calendrical's `TODO.md`, or is added to it by this section.
+
+| Tempo calls | Calls | Becomes |
+|---|---|---|
+| `Calendrical.traditional_months(year, calendar)` | 3 | `calendar.traditional_months(year)`, new |
+| `calendar.ordinal_month_from_traditional/2` behind a probe | 2 probes | the same call with no probe, the callback required of every calendar |
+| `Calendrical.Interval.weeks_in_month(year, month, calendar)`, `Calendrical.Interval.week(year, month, nth, calendar)` | 3 | `calendar.weeks_in_month(year, month)` and the dates of a month's nth week, new |
+| `Calendrical.Interval.quadrimester/3`, `Calendrical.Interval.semester/3` | 2 | `calendar.quadrimester(year, n)`, `calendar.semester(year, n)`: back on the behaviour, decided 2026-10-10 |
+| `Calendrical.named_month(year, month, calendar)` | 1 | `calendar.named_month(year, month)`, new |
+| `Calendrical.date_from_day_of_year(year, day, calendar)` | 11 | `calendar.date_from_day_of_year(year, day)`, new: the inverse of `day_of_year/3` |
+| `Calendrical.Base.Common.composite?(calendar)`, and Tempo's own deciders of a year's start | 1 | the months a year has and the days a month has, new |
+| `calendar.cardinal_day/3` and `calendar.months_in_year/0` behind probes | 4 probes | the same calls with no probe, each required |
+| `Calendrical.Gregorian.leap_year?/1`, `Calendrical.Gregorian.day_of_week/4` | 2 | the cycle a calendar's years come round in, new, and then the calendar's own `leap_year?/1` and `day_of_week/4` |
+| `Calendrical.Lunisolar.solar_term/3`, `Calendrical.Chinese.location/1`, and `calendar.location/1` behind a probe | 2, and 1 probe | a solar term asked of the calendar, which every calendar answers, decided 2026-10-10 |
+
+### A function of dates, which takes no calendar (22 calls)
+
+| Tempo calls | Calls | What it is |
+|---|---|---|
+| `Calendrical.next(date, unit)`, `Calendrical.previous(date, unit)` | 16 | the period after or before a date: the date's own calendar is asked inside it |
+| `Calendrical.Kday.kday_on_or_before/2`, `kday_on_or_after/2`, `nth_kday/3` | 6 | a weekday on or about a day, counted on the day's number |
+
+Decided 2026-10-10: the first becomes `calendar.plus/6` and the callbacks that give a period (`year/1`, `month/2`, `week/2`), with no new callback; the second stays, since it counts days of a week and asks no calendar anything.
+
+### Not a question to a calendar (12 calls)
+
+`Calendrical.additional_calendars/0` (3) and `Calendrical.calendar_from_cldr_calendar_type/1` (4) turn a name the notation carries into a module, where the notation carries one; `Calendrical.validate_calendar/1` (1) says whether a module is a calendar; `Calendrical.parse/2` (1) hands text to Localize; `Calendrical.Ecclesiastical.easter_sunday/1` and `orthodox_easter_sunday/1` (2) are events; `Calendrical.Lunisolar.solar_term_name/1` (1) is a name.
+
 ## Decisions
 
 Taken by the user on 2026-10-10.
@@ -167,6 +216,8 @@ Taken by the user on 2026-10-10.
 * **The cycle a calendar's years come round in** — asked with what each choice would answer, and chosen: a Calendrical callback. Tempo neither keeps 400 as a fact of the notation's calendar nor gives the cycle up, which would have made 30 February every year an error after 10,000 periods where it is an empty set in 20 ms, and refused a month with no fixed start where it is 28 to 31 days. Measured for the choice: a year's layout repeats after 400 years in the Gregorian and the Indian calendars, 28 in the Julian, Coptic and Ethiopic, 210 in the tabular Islamic, and not within 1,200 in the Hebrew, Persian and Umm al-Qura.
 
 * **Every call is a callback** — "Basically, all calendar calls in Tempo should be `calendar.some_callback` It really should be as simple as that." And of Calendrical: "We need the Calendrical API to be primarily standard and consistent across all calendars, added to the Calendrical.Behaviour to enforce that. We do not want Tempo - or any other consumer - to have to know anything at all about a specific individual calendar. We may tolerate some exceptions for certain classes of calendars - like lunisolar - but only after consultation." So the target for the 84 calls Tempo makes into Calendrical's own modules with a calendar in hand, and for its 7 probes, is none: each is a required callback every calendar answers. The user gave leave on the same day to make the changes in Calendrical that its `TODO.md` lists.
+
+* **Four things about "every call a callback"** — asked on 2026-10-10 with what each choice would answer, and each taken as recommended. Tempo stops calling `Calendrical.next/3` and `previous/3` and asks `calendar.plus/6` and the callbacks that give a period, and `Calendrical.Kday` stays, since it counts weekdays on day numbers and asks no calendar anything. `quadrimester/2` and `semester/2` go back on the behaviour. A solar term is answered by every calendar: a lunisolar one at its own meridian, and the default at the traditional reference Tempo uses today. An ISO-style week of a calendar of months is of that calendar's own year, by new callbacks, and `iso_week_of_year/3` keeps its meaning, the Gregorian ISO week of the day.
 
 * **The rest as recommended** — "Implement the plan until completion", so each is taken as it was recommended: a calendar of weeks stays a second shape of date, known in one function; no fast path is keyed on a calendar's name, each being removed and measured; a period's values are two new callbacks; and what only the Gregorian has is decided case by case (`SKIP` asks `days_in_month/1`, the seasons are the notation's, and the cycle of 400 years is still to decide).
 
@@ -189,6 +240,12 @@ Taken by the user on 2026-10-10.
 Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 
 ## Tasks
+
+* [ ] **Ask the calendar where a callback exists** — the 25 calls of the first table of "Every call a callback", a function at a time, each compared before and after: nothing in Calendrical changes for them.
+
+* [ ] **Calendrical's callbacks, then Tempo's calls of them** — the second table: each callback is added to `Calendrical.Behaviour` for every calendar, with leave from the user of 2026-10-10 to make the change there, and Tempo's call follows when its lock moves to it.
+
+* [ ] **The period after or before a date, asked of its calendar** — the 16 calls of `Calendrical.next/3` and `previous/3` become `calendar.plus/6` and the callbacks that give a period, each compared before and after; nothing in Calendrical changes for them. The 6 calls of `Calendrical.Kday` stay.
 
 ### Blocked
 
