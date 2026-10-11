@@ -1,35 +1,34 @@
 # A value carrying a construct with no ISO 8601 representation (a cron
 # nearest-weekday recurrence) cannot be rendered as a `~o"…"` sigil;
 # `Tempo.Inspect.inspect/1` shows it as a labelled struct view instead, so
-# rendering for humans never crashes.
+# rendering for humans never crashes. The text is written of the value as
+# Tempo works with it, whoever holds it (`Tempo.Calendars.inside/1`).
 defimpl Inspect, for: Tempo do
-  use Tempo.Border, every: true
-
-  def inspect(tempo, _opts), do: Tempo.Inspect.inspect(tempo)
+  def inspect(tempo, _opts) do
+    tempo |> Tempo.Calendars.inside() |> Tempo.Inspect.inspect()
+  end
 end
 
 defimpl Inspect, for: Tempo.Set do
-  use Tempo.Border, every: true
-
-  def inspect(set, _opts), do: Tempo.Inspect.inspect(set)
+  def inspect(set, _opts) do
+    set |> Tempo.Calendars.inside() |> Tempo.Inspect.inspect()
+  end
 end
 
 defimpl Inspect, for: Tempo.Interval do
-  use Tempo.Border, every: true
-
-  def inspect(interval, _opts), do: Tempo.Inspect.inspect(interval)
+  def inspect(interval, _opts) do
+    interval |> Tempo.Calendars.inside() |> Tempo.Inspect.inspect()
+  end
 end
 
 defimpl Inspect, for: Tempo.Duration do
-  use Tempo.Border, every: true
-
-  def inspect(duration, _opts), do: Tempo.Inspect.inspect(duration)
+  def inspect(duration, _opts) do
+    duration |> Tempo.Calendars.inside() |> Tempo.Inspect.inspect()
+  end
 end
 
 defimpl Inspect, for: Tempo.IntervalSet do
-  use Tempo.Border, every: true
-
   def inspect(set, opts) do
-    Tempo.Inspect.inspect_interval_set(set, opts)
+    set |> Tempo.Calendars.inside() |> Tempo.Inspect.inspect_interval_set(opts)
   end
 end

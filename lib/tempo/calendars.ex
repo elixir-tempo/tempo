@@ -213,6 +213,27 @@ defmodule Tempo.Calendars do
   end
 
   @doc false
+  # The function an enumeration gives each element to, where that is a
+  # caller's own: each element is given to it as the caller holds it.
+  @spec outside_reducer((term(), term() -> term())) :: (term(), term() -> term())
+  def outside_reducer(function) when is_function(function, 2) do
+    fn element, accumulator -> function.(outside(element), accumulator) end
+  end
+
+  @doc false
+  # What `Enumerable.slice/1` answers a caller with: the function it hands
+  # back gives its elements as the caller holds them.
+  @spec outside_slice({:ok, non_neg_integer(), function()} | {:error, module()}) ::
+          {:ok, non_neg_integer(), function()} | {:error, module()}
+  def outside_slice({:ok, size, slicer}) when is_function(slicer, 3) do
+    {:ok, size, fn start, length, step -> outside(slicer.(start, length, step)) end}
+  end
+
+  def outside_slice({:error, _module} = error) do
+    error
+  end
+
+  @doc false
   # A term as text a caller is to read. A message is written inside a call,
   # of what Tempo holds there, and says of a term what the caller holds:
   # every message in the library is written with this, and none with

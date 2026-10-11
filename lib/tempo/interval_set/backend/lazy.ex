@@ -31,10 +31,10 @@ defmodule Tempo.IntervalSet.Backend.Lazy do
 
   # The state: the generator, and the calendar a member that names no
   # calendar is in. The members of a lazy set are not there to be looked at
-  # until they are read, so the set says beside them how they are held: a
-  # caller holds such a member in `Calendar.ISO`, and inside a call it holds
-  # the module Tempo works with (`Tempo.Border`, which reads the one field
-  # as it reads a value's).
+  # until they are read, and a generator gives them as Tempo works with
+  # them, so the set says beside them how it is held itself: a caller holds
+  # a set whose calendar here is `Calendar.ISO`, and a member read from that
+  # one is given as the caller holds it (`Tempo.Calendars.outside/1`).
   @enforce_keys [:members, :calendar]
   defstruct [:members, :calendar]
 
@@ -56,7 +56,13 @@ defmodule Tempo.IntervalSet.Backend.Lazy do
   end
 
   @impl true
-  def walk(%__MODULE__{members: members}), do: members
+  def walk(%__MODULE__{members: members, calendar: calendar}) do
+    if Calendars.outside?(calendar) do
+      Stream.map(members, &Calendars.outside/1)
+    else
+      members
+    end
+  end
 
   @impl true
   def bounded?(_state), do: false
@@ -71,7 +77,15 @@ defmodule Tempo.IntervalSet.Backend.Lazy do
   def empty?(%__MODULE__{members: members}), do: Enum.take(members, 1) == []
 
   @impl true
-  def first(%__MODULE__{members: members}), do: members |> Enum.take(1) |> List.first()
+  def first(%__MODULE__{members: members, calendar: calendar}) do
+    first = members |> Enum.take(1) |> List.first()
+
+    if Calendars.outside?(calendar) do
+      Calendars.outside(first)
+    else
+      first
+    end
+  end
 
   # Walk only as far as the queried range reaches: members are in time
   # order, so once one starts at or beyond `hi` nothing later can

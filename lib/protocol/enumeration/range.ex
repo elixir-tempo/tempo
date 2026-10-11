@@ -1,7 +1,7 @@
 defimpl Enumerable, for: Tempo.Interval do
-  use Tempo.Border, enumerable: true
-
   @moduledoc false
+
+  import Tempo.Calendars, only: [is_outside: 1]
 
   alias Tempo.Calendars
   alias Tempo.Enumeration.Zone
@@ -53,6 +53,10 @@ defimpl Enumerable, for: Tempo.Interval do
                    elem(hd(tl(endpoint.time)), 0) == :season
 
   @impl Enumerable
+  def count(interval) when is_outside(interval) do
+    count(Calendars.inside(interval))
+  end
+
   def count(%Tempo.Interval{} = interval), do: interval |> as_it_spans() |> count_of()
 
   defp count_of(%Tempo.Interval{from: from, to: to} = interval) when season?(from) or season?(to),
@@ -83,6 +87,10 @@ defimpl Enumerable, for: Tempo.Interval do
   defp count_of(_interval), do: {:error, __MODULE__}
 
   @impl Enumerable
+  def member?(interval, element) when is_outside(interval) or is_outside(element) do
+    member?(Calendars.inside(interval), Calendars.inside(element))
+  end
+
   def member?(%Tempo.Interval{} = interval, element),
     do: interval |> as_it_spans() |> member_of?(element)
 
@@ -204,6 +212,10 @@ defimpl Enumerable, for: Tempo.Interval do
     do: Steps.whole_units?(time) and Keyword.has_key?(time, :year)
 
   @impl Enumerable
+  def slice(interval) when is_outside(interval) do
+    interval |> Calendars.inside() |> slice() |> Calendars.outside_slice()
+  end
+
   def slice(%Tempo.Interval{} = interval), do: interval |> as_it_spans() |> slice_of()
 
   defp slice_of(%Tempo.Interval{from: from, to: to} = interval) when season?(from) or season?(to),
@@ -280,6 +292,10 @@ defimpl Enumerable, for: Tempo.Interval do
   end
 
   @impl Enumerable
+  def reduce(interval, acc, fun) when is_outside(interval) do
+    reduce(Calendars.inside(interval), acc, Calendars.outside_reducer(fun))
+  end
+
   def reduce(%Tempo.Interval{} = interval, acc, fun),
     do: interval |> as_it_spans() |> reduce_as_written(acc, fun)
 

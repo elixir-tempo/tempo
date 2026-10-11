@@ -1,6 +1,4 @@
 defimpl Enumerable, for: Tempo.IntervalSet do
-  use Tempo.Border, enumerable: true
-
   @moduledoc false
 
   # An IntervalSet is a sorted, non-overlapping list of intervals.

@@ -1,6 +1,4 @@
 defmodule Tempo.IntervalSet do
-  use Tempo.Border
-
   @moduledoc """
   A sorted collection of `t:Tempo.Interval.t/0` values — the
   multi-interval counterpart to `Tempo.Interval`.
@@ -167,6 +165,14 @@ defmodule Tempo.IntervalSet do
   """
   @spec new([Interval.t()], keyword()) :: {:ok, t()} | {:error, term()}
   def new(intervals, opts \\ []) when is_list(intervals) do
+    if Calendars.outside?(intervals) do
+      intervals |> Calendars.inside() |> new(opts) |> Calendars.outside()
+    else
+      built(intervals, opts)
+    end
+  end
+
+  defp built(intervals, opts) do
     intervals = Enum.map(intervals, &Interval.resolve_duration_form/1)
 
     backend = resolve_backend(Keyword.get(opts, :backend, Backend.List))
@@ -259,13 +265,19 @@ defmodule Tempo.IntervalSet do
 
   """
   @spec from_stream(Enumerable.t(), keyword()) :: t()
-  def from_stream(enumerable, options \\ []), do: lazy(enumerable, options)
+  def from_stream(enumerable, options \\ []) do
+    enumerable
+    |> Stream.map(&Calendars.inside/1)
+    |> lazy(options)
+    |> Calendars.outside()
+  end
 
   @doc false
-  # The lazy set of the members a generator gives, as `from_stream/2` builds
-  # it, for the library's own use. A public function crosses the border, and
-  # a generator shows no value by which a call from inside is known, so the
-  # library builds its own lazy sets through this.
+  # The lazy set of the members a generator gives, for the library's own
+  # use. A generator shows no value by which a caller's can be told from
+  # one of the library's, so `from_stream/2` is the caller's, whose members
+  # are replaced as they are read, and the library builds its own lazy sets
+  # through this.
   @spec lazy(Enumerable.t(), keyword()) :: t()
   def lazy(enumerable, options \\ []) do
     %__MODULE__{
@@ -600,9 +612,13 @@ defmodule Tempo.IntervalSet do
   """
   @spec duration(t()) :: Duration.t() | {:error, Exception.t()}
   def duration(%__MODULE__{} = set) do
-    case set |> coalesce() |> members() do
-      [] -> %Duration{time: [second: 0]}
-      members -> members |> Enum.map(&Interval.duration/1) |> summed()
+    if Calendars.outside?(set) do
+      set |> Calendars.inside() |> duration()
+    else
+      case set |> coalesce() |> members() do
+        [] -> %Duration{time: [second: 0]}
+        members -> members |> Enum.map(&Interval.duration/1) |> summed()
+      end
     end
   end
 
@@ -673,13 +689,16 @@ defmodule Tempo.IntervalSet do
   end
 
   def slots(%__MODULE__{} = set, %Tempo.Duration{} = duration, options) do
-    intervals = members(set)
+    if Calendars.outside?(set) do
+      set |> Calendars.inside() |> slots(duration, options) |> Calendars.outside()
+    else
+      every = Keyword.get(options, :every, duration)
 
-    every = Keyword.get(options, :every, duration)
-
-    intervals
-    |> Enum.flat_map(&interval_slots(&1, duration, every))
-    |> new!()
+      set
+      |> members()
+      |> Enum.flat_map(&interval_slots(&1, duration, every))
+      |> new!()
+    end
   end
 
   defp interval_slots(%Interval{from: from, to: to, metadata: metadata}, duration, every) do
@@ -773,7 +792,14 @@ defmodule Tempo.IntervalSet do
   """
   @spec filter(t(), (Interval.t() -> as_boolean(any()))) :: t()
   def filter(%__MODULE__{} = set, fun) when is_function(fun, 1) do
-    with_intervals(set, set |> members() |> Enum.filter(fun))
+    if Calendars.outside?(set) do
+      set
+      |> Calendars.inside()
+      |> filter(fn member -> fun.(Calendars.outside(member)) end)
+      |> Calendars.outside()
+    else
+      with_intervals(set, set |> members() |> Enum.filter(fun))
+    end
   end
 
   @doc """
@@ -827,6 +853,14 @@ defmodule Tempo.IntervalSet do
           ]
           | {:error, term()}
   def relation_matrix(a, b) do
+    if Calendars.outside?(a) or Calendars.outside?(b) do
+      relation_matrix(Calendars.inside(a), Calendars.inside(b))
+    else
+      related(a, b)
+    end
+  end
+
+  defp related(a, b) do
     with {:ok, %__MODULE__{} = a_set} <- coerce(a),
          {:ok, %__MODULE__{} = b_set} <- coerce(b) do
       a_ivs = members(a_set)
@@ -964,7 +998,11 @@ defmodule Tempo.IntervalSet do
   """
   @spec coalesce(t()) :: t()
   def coalesce(%__MODULE__{} = set) do
-    with_intervals(set, coalesce_intervals(members(set)))
+    if Calendars.outside?(set) do
+      set |> Calendars.inside() |> coalesce() |> Calendars.outside()
+    else
+      with_intervals(set, coalesce_intervals(members(set)))
+    end
   end
 
   @doc false
@@ -1014,7 +1052,15 @@ defmodule Tempo.IntervalSet do
 
   """
   @spec covered?(t(), Tempo.t()) :: boolean()
-  def covered?(%__MODULE__{backend: backend, intervals: state} = set, %Tempo{} = point) do
+  def covered?(%__MODULE__{} = set, %Tempo{} = point) do
+    if Calendars.outside?(set) or Calendars.outside?(point) do
+      covered?(Calendars.inside(set), Calendars.inside(point))
+    else
+      covers?(set, point)
+    end
+  end
+
+  defp covers?(%__MODULE__{backend: backend, intervals: state} = set, point) do
     # The backend prunes to candidate members (an interval tree answers
     # in O(log n + k)); the exact resolution-aware containment check
     # stays here. An unanchored point has no timeline position to
@@ -1127,10 +1173,14 @@ defmodule Tempo.IntervalSet do
   def covered(set, options \\ [])
 
   def covered(%__MODULE__{} = set, options) do
-    with {:ok, threshold} <- at_least_option(options),
-         :ok <- sweepable(set),
-         {:ok, regions} <- regions_covered(members(set), threshold) do
-      {:ok, with_intervals(set, regions)}
+    if Calendars.outside?(set) do
+      set |> Calendars.inside() |> covered(options) |> Calendars.outside()
+    else
+      with {:ok, threshold} <- at_least_option(options),
+           :ok <- sweepable(set),
+           {:ok, regions} <- regions_covered(members(set), threshold) do
+        {:ok, with_intervals(set, regions)}
+      end
     end
   end
 

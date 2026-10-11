@@ -1,8 +1,9 @@
 defimpl Enumerable, for: Tempo do
-  use Tempo.Border, enumerable: true
-
   @moduledoc false
 
+  import Tempo.Calendars, only: [is_outside: 1]
+
+  alias Tempo.Calendars
   alias Tempo.Enumeration
   alias Tempo.Enumeration.Zone
   alias Tempo.Interval.Steps
@@ -24,6 +25,10 @@ defimpl Enumerable, for: Tempo do
 
   # A struct given `nil` for its calendar is walked in the default one.
   @impl Enumerable
+  def count(tempo) when is_outside(tempo) do
+    count(Calendars.inside(tempo))
+  end
+
   def count(%Tempo{} = tempo) do
     with {:ok, interval} <- single_interval(tempo),
          {:ok, _count} = counted <- Enumerable.count(interval) do
@@ -34,6 +39,10 @@ defimpl Enumerable, for: Tempo do
   end
 
   @impl Enumerable
+  def member?(tempo, element) when is_outside(tempo) or is_outside(element) do
+    member?(Calendars.inside(tempo), Calendars.inside(element))
+  end
+
   def member?(%Tempo{} = tempo, %Tempo{} = element) do
     with {:ok, interval} <- single_interval(tempo),
          {:ok, _member?} = answered <- Enumerable.member?(interval, element) do
@@ -48,6 +57,10 @@ defimpl Enumerable, for: Tempo do
   end
 
   @impl Enumerable
+  def slice(tempo) when is_outside(tempo) do
+    tempo |> Calendars.inside() |> slice() |> Calendars.outside_slice()
+  end
+
   def slice(%Tempo{} = tempo) do
     with {:ok, interval} <- single_interval(tempo),
          {:ok, _size, _slicer} = sliced <- Enumerable.slice(interval) do
@@ -85,6 +98,10 @@ defimpl Enumerable, for: Tempo do
   # `Enumerable.reduce/3` has no error to return, so a value that cannot be
   # walked raises the exception `Tempo.to_interval/2` would return for it.
   @impl Enumerable
+  def reduce(tempo, acc, fun) when is_outside(tempo) do
+    reduce(Calendars.inside(tempo), acc, Calendars.outside_reducer(fun))
+  end
+
   def reduce(%Tempo{time: time} = tempo, acc, fun) do
     # A value that holds a selection (`2026Y6ML2KN`, the Tuesdays of June
     # 2026) names the dates the selection picks, and is walked as they are.
